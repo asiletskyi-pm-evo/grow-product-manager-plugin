@@ -1,0 +1,14 @@
+{
+  "name": "grow-product-manager-plugins",
+  "owner": {
+    "name": "Andrii Siletskyi"
+  },
+  "plugins": [
+    {
+      "name": "grow-product-manager",
+      "source": ".",
+      "description": "AI assistant for Product Managers: research, concepts, brainstorming, requirements, task creation, and data analysis — integrated with Jira, Confluence, Figma, and more.",
+      "version": "0.1.0"
+    }
+  ]
+}
