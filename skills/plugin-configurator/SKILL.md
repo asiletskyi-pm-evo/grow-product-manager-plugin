@@ -5,10 +5,12 @@ description: >
   and data sources. Use when the user asks to "configure plugin", "set up plugin",
   "налаштувати плагін", "конфігурація плагіна", "set up context", "налаштувати контекст",
   "add a product", "додати продукт", "update configuration", "оновити конфігурацію",
-  "validate setup", "перевірити налаштування", or when any other skill detects
+  "validate setup", "перевірити налаштування", "show config", "покажи конфігурацію",
+  "what's in my config", "що в моєму контексті", or when any other skill detects
   that local-context.md does not exist.
-  Supports three modes: Onboarding (full initial setup), Update (modify specific sections),
-  and Validate (check that all integrations work and context is complete).
+  Supports four modes: Onboarding (full initial setup), Update (modify specific sections),
+  Validate (check that all integrations work and context is complete),
+  and View (show current configuration and allow inline edits).
 metadata:
   version: "0.1.0"
   author: "Andrii Siletskyi"
@@ -20,13 +22,14 @@ Configure the Grow Product Manager plugin for your organization. This skill coll
 
 Supports multiple organizations, products, and projects simultaneously.
 
-## Three Modes
+## Four Modes
 
 | Mode | When to use | What it does |
 |------|------------|--------------|
-| **Onboarding** | First launch, `local-context.md` doesn't exist | Full guided setup: user profile → organizations → products → teams → data sources → validation |
-| **Update** | `local-context.md` exists, user wants to change something | Edit a specific section: add product, update team, change dashboard URLs, add OKRs, etc. |
+| **Onboarding** | First launch, `local-context.md` doesn't exist | Full guided setup: user profile → organizations → products → teams → data sources → review → validation |
+| **Update** | `local-context.md` exists, user wants to change something | Edit a specific section: add product, update team, change dashboard URLs, add OKRs, etc. Always shows changelog |
 | **Validate** | User wants to check everything works | Test all MCP connections, verify data access, check context completeness, produce readiness report |
+| **View** | User asks to see current config | Display current `local-context.md` contents in a readable format, allow inline edits via dialogue |
 
 ## Auto-trigger Protocol
 
@@ -250,11 +253,61 @@ If yes:
 
 Allow free-form markdown sections with custom titles.
 
-### Step 10 — Generate and save local-context.md
+### Step 10 — Review, confirm, and save local-context.md
 
-**10a. Generate the file:**
+**10a. Compile summary for review:**
 
-Compile all collected information into a structured `local-context.md` following the schema in `references/context-schema.md`.
+Before generating the file, present ALL collected information to the user in a structured summary for confirmation:
+
+> "Ось зібрана інформація. Перевірте, будь ласка, чи все коректно:"
+
+**Summary format:**
+
+```
+## Зібрана інформація
+
+### Профіль користувача
+- Ім'я: [name]
+- Роль: [role]
+- Email: [email]
+- Jira Account ID: [id or "буде знайдено автоматично"]
+- Мова: [language]
+
+### Організація: [name]
+- Домен: [domain]
+- Jira: [instance URL]
+- Confluence: [instance URL]
+
+### Продукт: [name]
+- Опис: [description]
+- URL: [url]
+- Jira проєкт: [key]
+- Платформи: [list]
+- Локалі: [list]
+- Confluence простір: [space]
+- Ключові метрики: [list]
+- OKR: [list or "не вказано"]
+- Конкуренти: [list]
+- Аналітика: [dashboards list]
+
+### Команда: [name]
+- Учасники: [list with roles]
+
+### Custom секції
+- [if any]
+```
+
+**10b. Collect corrections:**
+
+> "Все вірно? Якщо потрібно щось виправити — скажіть що саме, і я внесу зміни."
+
+- If the user requests corrections — apply them immediately and show the updated section
+- Iterate until the user confirms: "Все ОК" / "Підтверджую"
+- Only proceed to file generation after explicit confirmation
+
+**10c. Generate the file:**
+
+Compile all confirmed information into a structured `local-context.md` following the schema in `references/context-schema.md`.
 
 Format:
 ```markdown
@@ -281,15 +334,11 @@ Format:
 ...
 ```
 
-**10b. Present to user for review:**
-
-Show the complete file to the user. Walk through each section and confirm accuracy.
-
-**10c. Save to user's workspace:**
+**10d. Save to user's workspace:**
 
 Save `local-context.md` to the user's outputs/workspace folder. Confirm the path to the user.
 
-**10d. Automatic validation:**
+**10e. Automatic validation:**
 
 After saving, automatically run a quick validation (see Validate Mode) to confirm everything works. Present the readiness report.
 
@@ -322,13 +371,35 @@ Present current sections as options via AskUserQuestion:
 
 Follow the same collection flow as Onboarding for the selected section. Pre-fill all fields with current values so the user only needs to change what's different.
 
-### U-4. Save updated file
+### U-4. Save updated file and show changelog
 
 - Update the `Updated:` timestamp
 - Preserve all sections that were not modified
 - Preserve all custom sections
 - Save to the same location
-- Show diff: what changed
+
+**Mandatory changelog — always present after ANY update:**
+
+> "Зміни збережено. Ось лог змін:"
+
+```
+## Лог змін — [date]
+
+| Секція | Було | Стало |
+|--------|------|-------|
+| Product: App → Platforms | Android, iOS, Web | Android, iOS, Web, **Admin Panel** |
+| Organization → Tableau Base URL | https://old-url.com | https://new-url.com |
+| Team: Product Team → Members | 5 members | 6 members (+Person Name, QA) |
+| Product: App → OKRs | (not set) | **Added: 2 objectives, 4 key results** |
+```
+
+The changelog must include:
+- **Section path** — which section was changed (hierarchical: Organization → Product → Field)
+- **Was** — previous value (or "not set" if new)
+- **Became** — new value (highlight additions in bold, mark deletions)
+- For added items — show "+ [item]"
+- For removed items — show "- [item]"
+- For complex sections (lists, tables) — show count change and specific additions/removals
 
 ---
 
@@ -405,6 +476,58 @@ If issues found — offer to run Update mode to fix them.
 
 ---
 
+## Workflow — View Mode
+
+View mode allows the user to see the current configuration and make inline changes through dialogue.
+
+### VW-1. Read and display current context
+
+Read `local-context.md` and present its contents in a clean, readable format — section by section:
+
+> "Ось поточна конфігурація плагіна:"
+
+Display each section with clear headings. For long sections (teams, metrics) — use tables. Show completeness indicators where fields are empty or missing.
+
+### VW-2. Ask if changes are needed
+
+> "Бажаєте щось змінити? Просто скажіть що саме — наприклад: 'зміни email', 'додай конкурента X', 'видали продукт Y'."
+
+### VW-3. Apply inline changes
+
+If the user requests changes via dialogue:
+1. Parse the user's request — identify which section and field to change
+2. Apply the change
+3. Show the changelog (same format as Update Mode U-4)
+4. Ask if there are more changes needed
+5. Repeat until the user says they're done
+
+### VW-4. Save if changes were made
+
+If any changes were applied:
+- Save the updated `local-context.md`
+- Show the complete changelog of all changes made during this View session
+- Update the `Updated:` timestamp
+
+If no changes were made — simply end the mode.
+
+---
+
+## Changelog Protocol (applies to ALL modes that modify local-context.md)
+
+Every time `local-context.md` is modified — whether by Onboarding (Step 10), Update, View, or Enrichment from other skills — the user MUST receive a changelog report showing:
+
+1. **What was added** (new fields, new sections, new items in lists)
+2. **What was changed** (previous value → new value)
+3. **What was removed** (if applicable)
+
+Format: table with columns "Секція | Було | Стало"
+
+This applies equally to:
+- Plugin Configurator modes (Onboarding, Update, View)
+- Context Enrichment by other skills (Product Research adding competitors, etc.)
+
+---
+
 ## Context-aware product selection
 
 When `local-context.md` contains **multiple products**, skills need to know which product the user is working with. The Configurator establishes the following protocol for all skills:
@@ -433,6 +556,7 @@ When a skill discovers new context:
 1. Inform the user: "Я знайшов нову інформацію, яку можна додати до контексту: [what was found]"
 2. Ask: "Бажаєте оновити local-context.md?"
 3. If yes — read current file, add new data to the appropriate section, save
+4. **Show changelog** (same format as Update Mode U-4): what was added, previous state → new state
 
 ---
 
