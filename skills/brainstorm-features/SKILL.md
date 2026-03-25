@@ -32,6 +32,17 @@ For each product: check for MCP connector → search MCP registry → fall back 
 
 Before gathering any data, also read and comply with `references/data-policy.md`. Confidential data (internal analytics, research materials) must NOT be passed to external LLMs or third parties.
 
+## Local context prerequisite
+
+**Before starting, follow `references/local-context-protocol.md` (Step 0).** Read `local-context.md`, select the active product, and load all product-specific context. If the file doesn't exist — redirect to Plugin Configurator for initial setup.
+
+Key context used by this skill:
+- `product.name`, `product.description` — for product context in brainstorm
+- `product.key_metrics`, `product.current_okrs` — for aligning hypotheses with goals
+- `product.competitors` — for competitor benchmarks
+- `product.confluence_space` — default publishing destination
+- `user.language` — for output language
+
 ## Workflow
 
 ### Step 1 — Determine context and brainstorm source
@@ -258,6 +269,7 @@ Always propose:
 
 ## Additional Resources
 
+- **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/ice-framework.md`** — detailed ICE scoring guidelines and examples
 - **`references/validation-methods.md`** — validation methods ranked by cost and reliability
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain
