@@ -22,6 +22,18 @@ For each product: check for MCP connector → search MCP registry → fall back 
 
 Before gathering any data, also read and comply with `references/data-policy.md`. Confidential data must NOT be passed to external LLMs or third parties.
 
+## Local context prerequisite
+
+**Before starting, follow `references/local-context-protocol.md` (Step 0).** Read `local-context.md`, select the active product, and load all product-specific context. If the file doesn't exist — redirect to Plugin Configurator for initial setup.
+
+Key context used by this skill:
+- `product.jira_project_key` — for finding Epics and creating tasks
+- `user.jira_account_id` — for setting Reporter on tasks
+- `team.jira_team_id` — for setting Team field
+- `team.members` — for discovering assignees and roles
+- `product.confluence_space` — for Confluence page links
+- `user.language` — for output language
+
 ## Workflow
 
 ### Step 1: Read Requirements from Confluence
@@ -267,6 +279,7 @@ This skill can work together with **Write Concept / PRD** — if a PRD was just 
 
 ## Additional Resources
 
+- **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms

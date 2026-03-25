@@ -34,6 +34,17 @@ For each product: check for MCP connector → search MCP registry → fall back 
 
 Before gathering any data, also read and comply with `references/data-policy.md`. Confidential data (Tableau metrics, internal analytics, research materials) must NOT be passed to external LLMs or third parties.
 
+## Local context prerequisite
+
+**Before starting, follow `references/local-context-protocol.md` (Step 0).** Read `local-context.md`, select the active product, and load all product-specific context. If the file doesn't exist — redirect to Plugin Configurator for initial setup.
+
+Key context used by this skill:
+- `product.name`, `product.platforms`, `product.locales` — pre-fill technical requirements
+- `product.jira_project_key` — for Epic numbering and Jira macros
+- `product.confluence_space`, `product.confluence_template_url` — for publishing and template
+- `product.key_metrics` — for metrics section
+- `user.language` — for output language
+
 ## Workflow
 
 ### Step 1 — Initialization and context gathering
@@ -301,6 +312,7 @@ If the user declines — end the workflow gracefully.
 
 ## Additional Resources
 
+- **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/requirements-template.md`** — detailed standard template with section descriptions and instructions
 - **`references/approach-recommendation.md`** — implementation approach recommendation logic (feature flag, A/B test, etc.)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)

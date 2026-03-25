@@ -31,6 +31,16 @@ For each product: check for MCP connector → search MCP registry → fall back 
 
 Before gathering any data, also read and comply with `references/data-policy.md`. Confidential data (Tableau metrics, internal analytics, research materials) must NOT be passed to external LLMs or third parties.
 
+## Local context prerequisite
+
+**Before starting, follow `references/local-context-protocol.md` (Step 0).** Read `local-context.md`, select the active product, and load all product-specific context. If the file doesn't exist — redirect to Plugin Configurator for initial setup.
+
+Key context used by this skill:
+- `product.name`, `product.description` — for product context in PRD
+- `product.confluence_space` — default publishing destination
+- `product.key_metrics`, `product.current_okrs` — for Success Metrics and Goals sections
+- `user.language` — for output language
+
 ## Workflow
 
 ### 1. Deep discovery — gather maximum context
@@ -218,6 +228,7 @@ If the user declines — end the workflow gracefully.
 
 ## Additional Resources
 
+- **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/prd-structure.md`** — detailed templates for each PRD block
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)

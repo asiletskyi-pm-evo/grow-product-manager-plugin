@@ -38,6 +38,16 @@ For each product: check for MCP connector → search MCP registry → fall back 
 
 Before gathering any data, also read and comply with `references/data-policy.md`. Confidential data (Tableau metrics, internal analytics, research materials) must NOT be passed to external LLMs or third parties.
 
+## Local context prerequisite
+
+**Before starting, follow `references/local-context-protocol.md` (Step 0).** Read `local-context.md`, select the active product, and load all product-specific context (Tableau URLs, A/B test dashboards, key metrics, OKRs). If the file doesn't exist — redirect to Plugin Configurator for initial setup.
+
+Key context used by this skill:
+- `product.name`, `product.key_metrics`, `product.current_okrs` — for analysis focus
+- `organization.tableau_base_url`, `product.ab_test_dashboards` — for A/B test and dashboard analysis
+- `product.jira_project_key` — for post-release analysis (reading Jira tasks)
+- `user.language` — for output language
+
 ## Workflow
 
 ### Step 1 — Initialization and data acquisition
@@ -549,6 +559,7 @@ The calling skill should incorporate these results into its workflow without re-
 
 - **`references/analysis-frameworks.md`** — detailed description of each analysis framework with examples
 - **`references/hypothesis-template.md`** — ICE scoring guidelines adapted for data-driven hypotheses
+- **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms

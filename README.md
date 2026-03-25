@@ -36,6 +36,11 @@ Analyze product data from any source — Tableau dashboards, Google Sheets, CSV/
 
 **Trigger phrases**: "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test", "пострелізний аналіз", "аналіз A/B тесту", "проаналізуй метрики", "розбери дашборд", "що відбувається з метриками", "знайди аномалії"
 
+### Plugin Configurator (v0.1.0)
+Configure the plugin for your organization, products, teams, and data sources. Guided setup collects all necessary context and generates `local-context.md`. Supports multiple organizations and products simultaneously. Three modes: Onboarding (full setup), Update (edit specific sections), Validate (check integrations and context completeness). Auto-triggers when any skill detects missing configuration. Includes MCP auto-discovery — proactively scans available Jira projects, Confluence spaces, and team members.
+
+**Trigger phrases**: "configure plugin", "set up plugin", "налаштувати плагін", "конфігурація", "add a product", "додати продукт", "update configuration", "validate setup", "перевірити налаштування"
+
 ## Planned Skills Roadmap
 
 | Phase | Skill | Description | Status |
@@ -46,9 +51,10 @@ Analyze product data from any source — Tableau dashboards, Google Sheets, CSV/
 | 4 | Feature and Hypothesis Requirements Creator | Structured requirements as experienced BA → Confluence/Notion/Google Docs | ✅ Done |
 | 5 | Feature Task Creator | Confluence requirements → Jira tasks by team | ✅ Done |
 | 6 | Product Analysis | Data analysis with hypothesis generation from any data source | ✅ Done |
-| 7 | Sprint Planning | Plan sprints with capacity & priority estimation | Planned |
-| 8 | Stakeholder Update | Generate status reports for different audiences | Planned |
-| 9 | Design Review | Pull Figma designs for review and handoff specs | Planned |
+| 7 | Plugin Configurator | Guided setup for organizations, products, teams, data sources | ✅ Done |
+| 8 | Sprint Planning | Plan sprints with capacity & priority estimation | Planned |
+| 9 | Stakeholder Update | Generate status reports for different audiences | Planned |
+| 10 | Design Review | Pull Figma designs for review and handoff specs | Planned |
 
 ## Integrations
 
