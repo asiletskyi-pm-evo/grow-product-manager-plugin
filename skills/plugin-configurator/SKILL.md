@@ -1,16 +1,6 @@
 ---
 name: plugin-configurator
-description: >
-  Configure the Grow Product Manager plugin for your organization, products, teams,
-  and data sources. Use when the user asks to "configure plugin", "set up plugin",
-  "налаштувати плагін", "конфігурація плагіна", "set up context", "налаштувати контекст",
-  "add a product", "додати продукт", "update configuration", "оновити конфігурацію",
-  "validate setup", "перевірити налаштування", "show config", "покажи конфігурацію",
-  "what's in my config", "що в моєму контексті", or when any other skill detects
-  that local-context.md does not exist.
-  Supports four modes: Onboarding (full initial setup), Update (modify specific sections),
-  Validate (check that all integrations work and context is complete),
-  and View (show current configuration and allow inline edits).
+description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist.
 ---
 
 # Plugin Configurator
