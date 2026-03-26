@@ -66,10 +66,32 @@ If the user agrees to the proposed improvement:
 
 1. **Identify the target file(s)** — which SKILL.md file(s) need to change
 2. **Make the edit** — update the specific section of the skill's algorithm (workflow step, condition, quality standard, or formatting requirement)
-3. **Show the change** — briefly describe what was changed and where
-4. **Re-package the plugin** — create an updated `.plugin` file and provide it to the user
+3. **Bump the skill version** — update the `version:` field in the frontmatter of each changed SKILL.md according to the versioning rules:
+   - `PATCH` (x.x.X+1) — wording fix, small content addition, formatting change
+   - `MINOR` (x.X+1.0) — new step, new section, significant workflow addition
+   - `MAJOR` (X+1.0.0) — full workflow restructure, breaking change in logic
+4. **Bump the plugin version** in `plugin.json` — use the highest-impact rule among all changed skills:
+   - Any skill PATCH → plugin PATCH
+   - Any skill MINOR → plugin MINOR
+   - Any skill MAJOR → plugin MAJOR
+5. **Update CHANGELOG.md** — add a new entry at the top in the format:
 
-If the user agrees to some improvements but not others — apply only the approved ones.
+```
+## [X.Y.Z] — YYYY-MM-DD
+
+### What changed
+- [brief description of improvement and why it was needed]
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| skill-name | old-version | new-version | patch/minor/major — what was changed |
+```
+
+6. **Show the change** — briefly describe what was changed and where
+7. **Re-package the plugin** — create an updated `.plugin` file and provide it to the user
+
+If the user agrees to some improvements but not others — apply only the approved ones, bump versions only for the applied changes.
 
 If the user declines — respect the decision and end the workflow.
 

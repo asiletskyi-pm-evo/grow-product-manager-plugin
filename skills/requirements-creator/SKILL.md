@@ -1,5 +1,6 @@
 ---
 name: requirements-creator
+version: 0.4.0
 description: Create structured feature requirements documents as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", or needs help turning a feature idea into a structured requirements document.
 ---
 

@@ -1,5 +1,6 @@
 ---
 name: plugin-configurator
+version: 0.4.0
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist.
 ---
 
@@ -301,7 +302,7 @@ Format:
 # Local Context — Grow Product Manager
 
 > Generated: [date]. Updated: [date].
-> Configurator version: 0.1.0
+> Configurator version: [current plugin version from plugin.json]
 
 ## User Profile
 - **Name:** ...
@@ -544,6 +545,53 @@ When a skill discovers new context:
 2. Ask: "Would you like to update local-context.md?"
 3. If yes — read current file, add new data to the appropriate section, save
 4. **Show changelog** (same format as Update Mode U-4): what was added, previous state → new state
+
+---
+
+## Versioning Protocol
+
+This protocol applies whenever **any skill file or plugin.json is modified** — including through the Self-Improvement workflow, manual edits, or plugin structural changes.
+
+### Skill version rules (frontmatter `version:` in SKILL.md)
+
+| Change type | Version bump | Examples |
+|-------------|-------------|---------|
+| **PATCH** | x.x.X+1 | Wording fix, small content addition, formatting change, minor clarification |
+| **MINOR** | x.X+1.0 | New step, new section, significant workflow addition, new condition |
+| **MAJOR** | X+1.0.0 | Full workflow restructure, breaking change in logic, skill renamed |
+
+### Plugin version rules (in `plugin.json`)
+
+The plugin version is bumped to reflect the **highest-impact** change among all modified skills:
+- Any skill PATCH → plugin PATCH
+- Any skill MINOR → plugin MINOR
+- Any skill MAJOR → plugin MAJOR
+- New skill added → plugin MINOR
+
+### Required steps when modifying a skill
+
+1. **Bump skill version** — update `version:` in the modified SKILL.md frontmatter
+2. **Bump plugin version** — update `"version"` in `.claude-plugin/plugin.json`
+3. **Add CHANGELOG.md entry** — create a new entry at the top of `CHANGELOG.md`:
+
+```
+## [X.Y.Z] — YYYY-MM-DD
+
+### What changed
+- [brief description of what was changed and why]
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| skill-name | old-version | new-version | patch/minor/major — what was changed |
+```
+
+4. **Re-package the plugin** — rebuild the `.plugin` archive with the new version
+5. **Confirm to the user** — show the new plugin version and the skills that were bumped
+
+### This skill's versioning
+
+This skill (`plugin-configurator`) must bump its own version when its SKILL.md is modified, following the same rules above.
 
 ---
 

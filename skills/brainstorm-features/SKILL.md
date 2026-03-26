@@ -1,5 +1,6 @@
 ---
 name: brainstorm-features
+version: 0.4.0
 description: Help Product Manager brainstorm features and hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", or needs ICE scoring, benchmarks, and validation methods.
 ---
 
