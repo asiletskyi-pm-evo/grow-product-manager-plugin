@@ -1,5 +1,6 @@
 ---
 name: product-research
+version: 0.4.0
 description: Conduct comprehensive product research — competitive analysis, user research, or market research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", or needs SWOT, TAM SAM SOM, or PESTEL analysis.
 ---
 

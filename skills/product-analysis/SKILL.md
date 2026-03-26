@@ -1,5 +1,6 @@
 ---
 name: product-analysis
+version: 0.4.0
 description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", or "analyze A/B test results".
 ---
 
