@@ -83,11 +83,11 @@ Ask the user:
 
 If the product or feature already exists (i.e., not being built from scratch), ask via AskUserQuestion:
 
-> "Чи є актуальні дизайни / макети / прототипи поточної версії цього функціоналу у Figma?"
+> "Are there current designs / mockups / prototypes of this functionality in Figma?"
 
 - **If the user provides a link** — open it via Figma MCP (`get_design_context`, `get_screenshot`) or browser fallback, read and extract: current UX flows, screens, key UI patterns. Use this as context when drafting the concept (especially for "What Changes for Users", "Proposed Solution", and "Design & UX" blocks)
 - **If the user believes designs should exist but cannot provide a link** — offer to search:
-  > "Я можу пошукати відповідні макети у Figma від вашого акаунту. Хочете щоб я пошукав?"
+  > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
   - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
     - Try to understand the structure of the design system: look for sections like "Актуальний дизайн", "Current design", "Production", "Live", "Ready for dev", "Поточний стан"
     - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
@@ -179,15 +179,15 @@ Publish via Confluence MCP (`createConfluencePage`). If unavailable — follow i
 After publishing, provide a structured report of what was done:
 
 **Report format:**
-- **Що зроблено:** brief description of the concept created (feature name, type, scope)
-- **Створені артефакти:** links to all created documents (Confluence page, local files, etc.)
-- **Ключові пункти концепції:** 3-5 key points summarizing the PRD
-- **Структура документу:** list of blocks included in the PRD
-- **Використані джерела:** list of source types used (Confluence, Google Drive, Product Research, Web, Figma, uploaded files)
+- **What was done:** brief description of the concept created (feature name, type, scope)
+- **Artifacts created:** links to all created documents (Confluence page, local files, etc.)
+- **Key concept points:** 3-5 key points summarizing the PRD
+- **Document structure:** list of blocks included in the PRD
+- **Sources used:** list of source types used (Confluence, Google Drive, Product Research, Web, Figma, uploaded files)
 
 **After presenting the report, proactively ask for feedback:**
 
-> "Чи влаштовує вас результат концепції? Можливо потрібно щось допрацювати, доповнити або змінити?"
+> "Are you satisfied with the concept? Would you like to refine, add, or change anything?"
 
 - If the user requests changes — iterate: update the PRD, re-publish, present updated report
 - If the user confirms — proceed to the next step
@@ -203,9 +203,9 @@ If the user requested corrections during review, analyze whether the skill's alg
 
 After sharing the concept summary, **always** propose transitioning to the next skill in the workflow:
 
-> "Концепцію сформовано. Що далі? Я можу передати контекст і перейти до одного з наступних кроків:
-> 1. **Brainstorm Features and Hypotheses** — згенерувати гіпотези та ідеї фіч на основі цієї концепції, оцінити їх за ICE та запропонувати методи валідації
-> 2. **Feature and Hypothesis Requirements Creator** — одразу створити задачі у Jira для реалізації фічі на основі цієї концепції"
+> "Concept is ready. What's next? I can pass the context and transition to one of the following steps:
+> 1. **Brainstorm Features and Hypotheses** — generate hypotheses and feature ideas based on this concept, evaluate them with ICE scoring and suggest validation methods
+> 2. **Feature and Hypothesis Requirements Creator** — immediately create Jira tasks for feature implementation based on this concept"
 
 If the user chooses **Brainstorm Features and Hypotheses**:
 - Pass the full concept context: Confluence page link, problem statement, goals, proposed solution, user stories, success metrics

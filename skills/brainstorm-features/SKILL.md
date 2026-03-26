@@ -46,11 +46,11 @@ Key context used by this skill:
 
 If the product or feature already exists, ask via AskUserQuestion:
 
-> "Чи є актуальні дизайни / макети / прототипи поточної версії цього функціоналу у Figma?"
+> "Are there current designs / mockups / prototypes of this functionality in Figma?"
 
 - **If the user provides a link** — open it via Figma MCP (`get_design_context`, `get_screenshot`) or browser fallback, read and extract: current UX flows, screens, key UI patterns. Use this as context for brainstorming — ideas should build on or consciously change the current state
 - **If the user believes designs should exist but cannot provide a link** — offer to search:
-  > "Я можу пошукати відповідні макети у Figma від вашого акаунту. Хочете щоб я пошукав?"
+  > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
   - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
     - Try to understand the structure of the design system: look for sections like "Актуальний дизайн", "Current design", "Production", "Live", "Ready for dev", "Поточний стан"
     - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
@@ -134,19 +134,21 @@ If the user wants brainstorming of new ideas:
 **Format each idea as a hypothesis:**
 
 ```
-Назва: [short name]
+Name: [short name]
 
-Проблема: [what problem this solves]
-Рішення: [what we propose to do]
-Очікуваний результат: [what changes for users and business]
-Цільова метрика: [which metric is impacted and by how much]
-Метод валідації: [A/B test / user interviews / feature flag / fake door / etc.]
+Problem: [what problem this solves]
+Solution: [what we propose to do]
+Expected outcome: [what changes for users and business]
+Target metric: [which metric is impacted and by how much]
+Validation method: [A/B test / user interviews / feature flag / fake door / etc.]
 
 ICE Score: Impact [X] × Confidence [X] × Ease [X] = [Score]
 
-Бенчмарки: [links to research, competitor cases, market data]
-Ризики: [what could go wrong]
+Benchmarks: [links to research, competitor cases, market data]
+Risks: [what could go wrong]
 ```
+
+> **Note:** Use the user's preferred language (`user.language`) for all field labels and content in the output document.
 
 **Grouping ideas — two layers:**
 
@@ -217,25 +219,25 @@ When the user confirms the final list of ideas/hypotheses, ask via AskUserQuesti
 After saving (or if the user decided not to save), provide a structured report of what was done:
 
 **Report format:**
-- **Що зроблено:** brief description of the brainstorm conducted (topic, number of ideas evaluated/generated, approach used)
-- **Створені артефакти:** links to all created documents (Confluence page, Google Drive doc, etc.) — if saved
-- **Результати:**
+- **What was done:** brief description of the brainstorm conducted (topic, number of ideas evaluated/generated, approach used)
+- **Artifacts created:** links to all created documents (Confluence page, Google Drive doc, etc.) — if saved
+- **Results:**
   - Number of user's ideas evaluated (if any)
   - Number of new hypotheses generated (if any)
   - Top 3 ideas by ICE score with brief descriptions
 - **ICE Summary:** quick reference table of all ideas sorted by score
-- **Використані джерела:** list of source types used (Concept/PRD, Confluence, Google Drive, Web, Figma, ChatGPT Deep Research, Gemini Deep Research)
+- **Sources used:** list of source types used (Concept/PRD, Confluence, Google Drive, Web, Figma, ChatGPT Deep Research, Gemini Deep Research)
 
 **After presenting the report, proactively ask for feedback:**
 
-> "Чи влаштовує вас результат брейншторму? Можливо потрібно щось допрацювати, додати ідеї або переглянути оцінки?"
+> "Are you satisfied with the brainstorm results? Would you like to refine anything, add more ideas, or revise the scores?"
 
 - If the user requests changes — return to Step 4 (Interactive discussion) for further iteration
 - If the user confirms — proceed to the next step
 
 **Self-improvement check** (after corrections are applied and confirmed):
 
-If the user requested corrections during review, analyze whether the skill's algorithm can be improved to prevent similar issues in the future. Follow the full protocol in `references/self-improvement.md`. In short:
+If the user requested corrections during review, follow the full protocol in `references/self-improvement.md`. In short:
 1. Analyze the root cause of the error — is this a pattern or a one-off?
 2. If it's a pattern — propose a specific improvement to the skill's conditions
 3. If the user agrees — update the SKILL.md, re-package the plugin, and provide the updated file

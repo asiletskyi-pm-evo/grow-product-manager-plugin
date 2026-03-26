@@ -62,8 +62,8 @@ This step is critical. Do NOT start research until the scope is crystal clear. U
 - Suggest relevant sources based on the research type (web, Confluence, Google Drive, Figma, Tableau, uploaded files)
 - Ask whether there are relevant documents in **Google Drive** (research reports, strategy docs, meeting notes, spreadsheets) — if yes, ask the user to share links or folder names
 - **Deep Research via external LLMs — ask about each LLM separately via AskUserQuestion:**
-  - "Чи потрібно використовувати **ChatGPT** у режимі Deep Research для глибокого дослідження?" (через браузер користувача)
-  - "Чи потрібно використовувати **Google Gemini** у режимі Deep Research для глибокого дослідження?" (через браузер користувача)
+  - "Should we use **ChatGPT** in Deep Research mode for deeper analysis?" (via the user's browser)
+  - "Should we use **Google Gemini** in Deep Research mode for deeper analysis?" (via the user's browser)
   - The user can enable one, both, or neither. If both are enabled — run Deep Research in both LLMs and cross-reference their findings
 - If the user has preferences for specific tools or databases, capture them now
 
@@ -71,11 +71,11 @@ This step is critical. Do NOT start research until the scope is crystal clear. U
 
 If the product or feature area already exists (i.e., not being built from scratch), ask via AskUserQuestion:
 
-> "Чи є актуальні дизайни / макети / прототипи поточної версії цього функціоналу у Figma?"
+> "Are there current designs / mockups / prototypes of this functionality in Figma?"
 
 - **If the user provides a link** — open it via Figma MCP (`get_design_context`, `get_screenshot`) or browser fallback, read and extract: current UX flows, screens, key UI patterns. Use this as context for the research (e.g., when analyzing competitor UX, reference the current state)
 - **If the user believes designs should exist but cannot provide a link** — offer to search:
-  > "Я можу пошукати відповідні макети у Figma від вашого акаунту. Хочете щоб я пошукав?"
+  > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
   - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
     - Try to understand the structure of the design system: look for sections like "Актуальний дизайн", "Current design", "Production", "Live", "Ready for dev", "Поточний стан"
     - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
@@ -183,7 +183,7 @@ Once confirmed, create the Confluence page using `createConfluencePage` with:
 - Structured sections matching the framework used
 - Tables for comparison data
 - A summary/TL;DR section at the top
-- **Glossary section** — at the end of the document (before Sources), add a "Глосарій" section that explains all terms, professional jargon, abbreviations, and metrics used in the report. For each term provide a concise, clear definition accessible to a reader who may not be deeply familiar with the domain. Examples: "CAC (Customer Acquisition Cost) — вартість залучення одного клієнта", "Churn rate — відсоток користувачів, які припиняють використовувати продукт за певний період", "TAM (Total Addressable Market) — загальний обсяг ринку, який теоретично доступний для продукту"
+- **Glossary section** — at the end of the document (before Sources), add a "Glossary" section that explains all terms, professional jargon, abbreviations, and metrics used in the report. For each term provide a concise, clear definition accessible to a reader who may not be deeply familiar with the domain. Examples: "CAC (Customer Acquisition Cost) — cost of acquiring one customer", "Churn rate — percentage of users who stop using the product over a given period", "TAM (Total Addressable Market) — the total market volume theoretically available to the product". Use the user's preferred language (`user.language`) for the glossary content.
 - Sources section at the bottom with links — clearly marking each source type (Web, Confluence, Google Drive, ChatGPT Deep Research, Gemini Deep Research, uploaded file, etc.)
 
 **Confluence formatting requirements — use standard (non-legacy) elements:**
@@ -209,15 +209,15 @@ If Confluence MCP is unavailable, follow the integration fallback chain. As a la
 After publishing, provide a structured report of what was done:
 
 **Report format:**
-- **Що зроблено:** brief description of the research conducted (type, scope, depth)
-- **Створені артефакти:** links to all created documents (Confluence page, local files, etc.)
-- **Ключові висновки:** 3-5 key takeaways from the research
-- **Використані джерела:** list of source types used (Web, Confluence, Google Drive, Figma, ChatGPT Deep Research, Gemini Deep Research, uploaded files)
-- **Рекомендовані наступні кроки:** suggested follow-up actions
+- **What was done:** brief description of the research conducted (type, scope, depth)
+- **Artifacts created:** links to all created documents (Confluence page, local files, etc.)
+- **Key findings:** 3-5 key takeaways from the research
+- **Sources used:** list of source types used (Web, Confluence, Google Drive, Figma, ChatGPT Deep Research, Gemini Deep Research, uploaded files)
+- **Recommended next steps:** suggested follow-up actions
 
 **After presenting the report, proactively ask for feedback:**
 
-> "Чи влаштовує вас результат дослідження? Можливо потрібно щось допрацювати, доповнити або змінити?"
+> "Are you satisfied with the research results? Would you like to refine, add, or change anything?"
 
 - If the user requests changes — iterate: update the research, re-publish, present updated report
 - If the user confirms — proceed to the next step
@@ -233,7 +233,7 @@ If the user requested corrections during review, analyze whether the skill's alg
 
 After sharing the research summary, **always** propose transitioning to the **Write Concept / PRD** skill:
 
-> "Дослідження завершено. Бажаєте на основі цих результатів сформувати концепцію (PRD) для фічі? Я можу передати весь контекст дослідження у скіл Write Concept / PRD і ми одразу почнемо формувати документ."
+> "Research is complete. Would you like to create a concept (PRD) for a feature based on these results? I can pass the full research context to the Write Concept / PRD skill and we can start drafting the document right away."
 
 If the user agrees:
 - Pass the full research context to the Write Concept / PRD skill: Confluence page link, key findings, identified opportunities, data sources used

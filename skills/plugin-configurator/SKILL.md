@@ -29,7 +29,7 @@ At the start of execution, every skill MUST check if `local-context.md` exists. 
 
 **If `local-context.md` is NOT found:**
 - Stop the current skill workflow
-- Inform the user: "Для ефективної роботи плагіну потрібно налаштувати контекст вашої організації, продуктів та інструментів. Давайте пройдемо швидке налаштування."
+- Inform the user: "To work effectively, the plugin needs to be configured with your organization, products, and tools context. Let's run a quick setup."
 - Launch the Plugin Configurator in **Onboarding** mode
 - After Onboarding completes — return to the original skill and continue its workflow with the newly created context
 
@@ -48,7 +48,7 @@ The `local-context.md` file is saved to the **user's workspace folder** (outputs
 
 **1a. Greeting and explanation:**
 
-> "Вітаю! Я допоможу налаштувати плагін Grow Product Manager під ваші потреби. Ми пройдемо через кілька кроків: профіль, організації, продукти, команди та джерела даних. Це займе ~5-10 хвилин."
+> "Welcome! I'll help you configure the Grow Product Manager plugin for your needs. We'll go through a few steps: profile, organizations, products, teams, and data sources. This will take ~5-10 minutes."
 
 **1b. MCP auto-discovery — scan what's available:**
 
@@ -66,19 +66,19 @@ Before asking questions, proactively scan the session for available MCP connecto
 
 Show the user what was found:
 
-> "Я просканував доступні підключення. Ось що знайшов:"
+> "I scanned the available connections. Here's what I found:"
 
-| Інтеграція | Статус | Деталі |
-|------------|--------|--------|
-| Jira | ✅ Підключено | Знайдено проєкти: PROJ-1, PROJ-2, ... |
-| Confluence | ✅ Підключено | Знайдено простори: SPACE-1, SPACE-2, ... |
-| Figma | ✅ Підключено | Акаунт: user@company.com |
-| Notion | ❌ Не підключено | — |
-| Tableau | ❌ Потребує URL | Налаштуємо далі |
+| Integration | Status | Details |
+|-------------|--------|---------|
+| Jira | ✅ Connected | Projects found: PROJ-1, PROJ-2, ... |
+| Confluence | ✅ Connected | Spaces found: SPACE-1, SPACE-2, ... |
+| Figma | ✅ Connected | Account: user@company.com |
+| Notion | ❌ Not connected | — |
+| Tableau | ❌ Needs URL | We'll configure this later |
 | ... | ... | ... |
 
 For missing MCP connectors — note which skills benefit from them and offer to search the MCP registry:
-> "Notion MCP не підключено. Він використовується для публікації документів як альтернатива Confluence. Бажаєте підключити?"
+> "Notion MCP is not connected. It is used for publishing documents as an alternative to Confluence. Would you like to connect it?"
 
 ### Step 2 — User Profile
 
@@ -96,7 +96,7 @@ If Jira MCP is available, use `lookupJiraAccountId` with the provided email to f
 
 **3a. Multi-org support — ask via AskUserQuestion:**
 
-> "Скільки організацій/компаній ви ведете? Плагін підтримує роботу з декількома одночасно."
+> "How many organizations/companies do you work with? The plugin supports working with multiple simultaneously."
 
 - Single organization (most common) → proceed with one
 - Multiple organizations → collect info for each, repeating Steps 3-5
@@ -115,7 +115,7 @@ If Jira MCP is available, use `lookupJiraAccountId` with the provided email to f
 **4a. Product discovery — combine auto + manual:**
 
 If Jira projects were discovered in Step 1:
-> "Я знайшов ці проєкти у Jira: [list]. Які з них є вашими продуктами? Можливо деякі проєкти відносяться до одного продукту?"
+> "I found these projects in Jira: [list]. Which of them are your products? Some projects may belong to the same product."
 
 Help the user map Jira projects → Products (may be 1:1 or many:1).
 
@@ -128,7 +128,7 @@ Help the user map Jira projects → Products (may be 1:1 or many:1).
 - Jira project key(s) — pre-filled from discovery
 
 **Platforms:**
-> "На яких платформах працює цей продукт?"
+> "Which platforms does this product run on?"
 
 Present common options + allow custom:
 - App Android
@@ -140,21 +140,21 @@ Present common options + allow custom:
 - Other (specify)
 
 **Locales/countries:**
-> "У яких країнах/локалях працює цей продукт?"
+> "In which countries/locales does this product operate?"
 
 - All locales (single market)
 - Specific locales (list them)
 
 **Confluence configuration:**
 If Confluence spaces were discovered:
-> "Який простір Confluence використовується для цього продукту? Знайдені простори: [list]"
+> "Which Confluence space is used for this product? Found spaces: [list]"
 
 - Default Confluence space
-- Requirements template URL (optional) — "Чи є у Confluence шаблон для вимог до фіч?"
+- Requirements template URL (optional) — "Is there a Confluence template for feature requirements?"
 - Requirements template name (optional)
 
 **Competitors:**
-> "Хто основні конкуренти цього продукту? (для порівняльного аналізу у дослідженнях)"
+> "Who are the main competitors of this product? (used for comparative analysis in research)"
 
 Collect: name, URL for each competitor. Minimum 2-3 recommended.
 
@@ -162,7 +162,7 @@ Collect: name, URL for each competitor. Minimum 2-3 recommended.
 
 **5a. Analytics tools:**
 
-> "Які інструменти аналітики використовує ваша організація?"
+> "Which analytics tools does your organization use?"
 
 For each tool mentioned, collect the base URL and any product-specific dashboard URLs:
 
@@ -178,7 +178,7 @@ For each tool mentioned, collect the base URL and any product-specific dashboard
 **5b. A/B test dashboards (critical for Product Analysis):**
 
 If Tableau or another A/B testing tool is used:
-> "Чи є окремі дашборди для аналізу A/B тестів? Якщо так, вкажіть URL для кожної платформи."
+> "Are there separate dashboards for A/B test analysis? If yes, please provide the URL for each platform."
 
 Collect per platform (e.g., Dashboard 1 for Web, Dashboard 2 for Mobile).
 
@@ -190,7 +190,7 @@ Collect per platform (e.g., Dashboard 1 for Web, Dashboard 2 for Mobile).
 
 ### Step 6 — Key Metrics & OKRs (per product)
 
-> "Які ключові метрики відслідковуєте для цього продукту?"
+> "What are the key metrics you track for this product?"
 
 **6a. Key metrics:**
 Collect a list of primary metrics with brief descriptions:
@@ -199,18 +199,18 @@ Collect a list of primary metrics with brief descriptions:
 - Current approximate value (if known)
 
 **6b. Current OKRs (optional):**
-> "Чи є поточні OKR (цілі на квартал) для цього продукту?"
+> "Are there current OKRs (quarterly objectives) for this product?"
 
 If yes — collect objectives and key results. These help skills align hypotheses and analysis with strategic goals.
 
 **6c. Metric targets (optional):**
-> "Чи є цільові значення для ключових метрик?"
+> "Are there target values for the key metrics?"
 
 Collect target values for metrics that have them (e.g., "Conversion Rate → +2% this quarter").
 
 ### Step 7 — Teams (per organization)
 
-> "Бажаєте налаштувати інформацію про команди? Це допоможе при створенні задач у Jira."
+> "Would you like to configure team information? This will help when creating tasks in Jira."
 
 If yes:
 
@@ -227,7 +227,7 @@ If Jira MCP is available and a product's Jira project is known:
 
 ### Step 8 — Repositories & CI/CD (per product, optional)
 
-> "Бажаєте додати інформацію про репозиторії та CI/CD? (для майбутніх скілів)"
+> "Would you like to add repository and CI/CD information? (for future skills)"
 
 If yes:
 - Repository URLs (GitHub/GitLab)
@@ -236,7 +236,7 @@ If yes:
 
 ### Step 9 — Custom Sections
 
-> "Чи є додаткова інформація, яку ви хочете зберегти у контексті плагіна? Наприклад: стратегічні документи, внутрішні правила, специфічні процеси."
+> "Is there any additional information you'd like to save in the plugin context? For example: strategy documents, internal guidelines, specific processes."
 
 Allow free-form markdown sections with custom titles.
 
@@ -246,47 +246,47 @@ Allow free-form markdown sections with custom titles.
 
 Before generating the file, present ALL collected information to the user in a structured summary for confirmation:
 
-> "Ось зібрана інформація. Перевірте, будь ласка, чи все коректно:"
+> "Here is the collected information. Please review and confirm everything is correct:"
 
 **Summary format:**
 
 ```
-## Зібрана інформація
+## Collected information
 
-### Профіль користувача
-- Ім'я: [name]
-- Роль: [role]
+### User profile
+- Name: [name]
+- Role: [role]
 - Email: [email]
-- Jira Account ID: [id or "буде знайдено автоматично"]
-- Мова: [language]
+- Jira Account ID: [id or "will be auto-discovered"]
+- Language: [language]
 
-### Організація: [name]
-- Домен: [domain]
+### Organization: [name]
+- Domain: [domain]
 - Jira: [instance URL]
 - Confluence: [instance URL]
 
-### Продукт: [name]
-- Опис: [description]
+### Product: [name]
+- Description: [description]
 - URL: [url]
-- Jira проєкт: [key]
-- Платформи: [list]
-- Локалі: [list]
-- Confluence простір: [space]
-- Ключові метрики: [list]
-- OKR: [list or "не вказано"]
-- Конкуренти: [list]
-- Аналітика: [dashboards list]
+- Jira project: [key]
+- Platforms: [list]
+- Locales: [list]
+- Confluence space: [space]
+- Key metrics: [list]
+- OKRs: [list or "not specified"]
+- Competitors: [list]
+- Analytics: [dashboards list]
 
-### Команда: [name]
-- Учасники: [list with roles]
+### Team: [name]
+- Members: [list with roles]
 
-### Custom секції
+### Custom sections
 - [if any]
 ```
 
 **10b. Collect corrections:**
 
-> "Все вірно? Якщо потрібно щось виправити — скажіть що саме, і я внесу зміни."
+> "Is everything correct? If anything needs to be fixed — tell me what, and I'll make the changes."
 
 - If the user requests corrections — apply them immediately and show the updated section
 - Iterate until the user confirms: "Все ОК" / "Підтверджую"
@@ -339,7 +339,7 @@ Read the current `local-context.md`. Parse all sections.
 
 ### U-2. Ask what to update
 
-> "Що бажаєте оновити у конфігурації плагіна?"
+> "What would you like to update in the plugin configuration?"
 
 Present current sections as options via AskUserQuestion:
 - User Profile
@@ -367,13 +367,13 @@ Follow the same collection flow as Onboarding for the selected section. Pre-fill
 
 **Mandatory changelog — always present after ANY update:**
 
-> "Зміни збережено. Ось лог змін:"
+> "Changes saved. Here is the changelog:"
 
 ```
-## Лог змін — [date]
+## Changelog — [date]
 
-| Секція | Було | Стало |
-|--------|------|-------|
+| Section | Was | Became |
+|---------|-----|--------|
 | Product: App → Platforms | Android, iOS, Web | Android, iOS, Web, **Admin Panel** |
 | Organization → Tableau Base URL | https://old-url.com | https://new-url.com |
 | Team: Product Team → Members | 5 members | 6 members (+Person Name, QA) |
@@ -401,7 +401,7 @@ Read `local-context.md` and scan all MCP connectors (same as Onboarding Step 1b)
 For each integration referenced in the context:
 
 | Integration | Test | Expected result |
-|-------------|------|----------------|
+|-------------|------|-----------------|
 | **Jira** | `getJiraIssue` with a known project key | Project accessible |
 | **Confluence** | `getConfluenceSpaces` + check configured space exists | Space accessible |
 | **Figma** | `whoami` | Account verified |
@@ -435,28 +435,28 @@ Calculate a completeness percentage per product and overall.
 Present a comprehensive report:
 
 ```
-## Звіт готовності плагіна
+## Plugin Readiness Report
 
-### MCP Підключення
-| Інтеграція | Статус | Тест |
-|------------|--------|------|
-| Jira       | ✅ OK  | Проєкт PROJ доступний |
-| Confluence | ✅ OK  | Простір SPACE доступний |
-| Figma      | ⚠️ Не підключено | Рекомендовано підключити |
-| Tableau    | ✅ OK  | Дашборд доступний |
+### MCP Connections
+| Integration | Status | Test |
+|-------------|--------|------|
+| Jira        | ✅ OK  | Project PROJ accessible |
+| Confluence  | ✅ OK  | Space SPACE accessible |
+| Figma       | ⚠️ Not connected | Recommended to connect |
+| Tableau     | ✅ OK  | Dashboard accessible |
 
-### Продукти
-| Продукт | Повнота | Деталі |
-|---------|---------|--------|
-| Product 1 | 85% | Відсутні: OKRs, competitors |
-| Product 2 | 60% | Відсутні: dashboards, team, OKRs |
+### Products
+| Product | Completeness | Details |
+|---------|-------------|---------|
+| Product 1 | 85% | Missing: OKRs, competitors |
+| Product 2 | 60% | Missing: dashboards, team, OKRs |
 
-### Рекомендації
-1. Підключити Figma MCP для роботи з дизайнами
-2. Додати OKR для Product 1 (покращить якість аналізу та концепцій)
-3. Додати конкурентів для Product 2 (потрібно для досліджень)
+### Recommendations
+1. Connect Figma MCP for working with designs
+2. Add OKRs for Product 1 (improves analysis and concept quality)
+3. Add competitors for Product 2 (required for research)
 
-### Загальна готовність: 75%
+### Overall readiness: 75%
 ```
 
 If issues found — offer to run Update mode to fix them.
@@ -471,13 +471,13 @@ View mode allows the user to see the current configuration and make inline chang
 
 Read `local-context.md` and present its contents in a clean, readable format — section by section:
 
-> "Ось поточна конфігурація плагіна:"
+> "Here is the current plugin configuration:"
 
 Display each section with clear headings. For long sections (teams, metrics) — use tables. Show completeness indicators where fields are empty or missing.
 
 ### VW-2. Ask if changes are needed
 
-> "Бажаєте щось змінити? Просто скажіть що саме — наприклад: 'зміни email', 'додай конкурента X', 'видали продукт Y'."
+> "Would you like to change anything? Just tell me what — for example: 'change email', 'add competitor X', 'remove product Y'."
 
 ### VW-3. Apply inline changes
 
@@ -507,7 +507,7 @@ Every time `local-context.md` is modified — whether by Onboarding (Step 10), U
 2. **What was changed** (previous value → new value)
 3. **What was removed** (if applicable)
 
-Format: table with columns "Секція | Було | Стало"
+Format: table with columns "Section | Was | Became"
 
 This applies equally to:
 - Plugin Configurator modes (Onboarding, Update, View)
@@ -524,7 +524,7 @@ When `local-context.md` contains **multiple products**, skills need to know whic
 1. If the user explicitly mentioned a product name → use it
 2. If only one product exists in context → use it automatically
 3. If multiple products exist and none was mentioned → ask via AskUserQuestion:
-   > "У контексті є декілька продуктів: [list]. Для якого продукту працюємо зараз?"
+   > "There are multiple products in the context: [list]. Which product are we working with now?"
 
 This question is asked once per skill session. The selected product becomes the "active product" for the duration of the skill execution.
 
@@ -540,8 +540,8 @@ Other skills can **add information** to `local-context.md` during their executio
 - **Requirements Creator** → can discover and add Confluence template URL
 
 When a skill discovers new context:
-1. Inform the user: "Я знайшов нову інформацію, яку можна додати до контексту: [what was found]"
-2. Ask: "Бажаєте оновити local-context.md?"
+1. Inform the user: "I found new information that can be added to the context: [what was found]"
+2. Ask: "Would you like to update local-context.md?"
 3. If yes — read current file, add new data to the appropriate section, save
 4. **Show changelog** (same format as Update Mode U-4): what was added, previous state → new state
 

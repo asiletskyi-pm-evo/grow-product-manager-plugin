@@ -42,7 +42,7 @@ Use this guide to provide a reasoned recommendation for the implementation appro
 ### When to recommend Without Feature Flag
 
 - ⚠️ **Always warn the user about risks:**
-  > "Реалізація без фіча прапора несе ризики: якщо функціонал зламає систему, відкат потребуватиме нового релізу. Рекомендуємо feature flag для безпечнішого розгортання."
+  > "Implementing without a feature flag carries risks: if the functionality breaks the system, a rollback will require a new release. We recommend using a feature flag for safer deployment."
 
 - Bug fixes that restore expected behavior
 - Infrastructure/performance improvements invisible to users
@@ -55,13 +55,15 @@ Use this guide to provide a reasoned recommendation for the implementation appro
 When presenting the recommendation to the user:
 
 ```
-Рекомендований підхід: [approach name]
+Recommended approach: [approach name]
 
-Обґрунтування:
+Rationale:
 - [reason 1 based on the feature context]
 - [reason 2]
 
-Альтернатива: [alternative approach] — [why it could also work or why it's less suitable]
+Alternative: [alternative approach] — [why it could also work or why it's less suitable]
 ```
+
+> **Note:** Use the user's preferred language (`user.language`) for the recommendation text in the output document.
 
 Always let the user make the final decision. The recommendation is advisory.

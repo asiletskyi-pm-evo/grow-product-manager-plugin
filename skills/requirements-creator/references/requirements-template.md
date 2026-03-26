@@ -22,15 +22,15 @@ Link to the Epic description in Confluence.
 
 ---
 
-### 2. Гіпотези (Hypotheses)
+### 2. Hypotheses
 
 Describe hypotheses: preconditions/problem, what we want to change, what we want to achieve.
 
 **Format — numbered table:**
 
-| № | Гіпотеза |
-|---|----------|
-| 1 | Якщо [precondition/problem], то [what we change], тоді [expected outcome] |
+| № | Hypothesis |
+|---|------------|
+| 1 | If [precondition/problem], then [what we change], therefore [expected outcome] |
 | 2 | ... |
 
 **Instructions:** Each hypothesis should follow the structure: IF [precondition or problem exists] → WE DO [specific change] → THEN [expected measurable outcome]. Be specific about the problem and the expected result.
@@ -39,34 +39,34 @@ Describe hypotheses: preconditions/problem, what we want to change, what we want
 
 ### 2a. A/B Test sections (only if A/B or A/B/C test is selected)
 
-#### Групи тесту (Test Groups)
+#### Test Groups
 
-| Група | Опис |
-|-------|------|
-| Контрольна (A) | Current behavior — no changes. Description of what users see now |
-| Тестова (B) | New behavior — description of what changes for users in this group |
-| Тестова (C) | *(Only for A/B/C)* Alternative behavior — description of the alternative approach |
+| Group | Description |
+|-------|-------------|
+| Control (A) | Current behavior — no changes. Description of what users see now |
+| Test (B) | New behavior — description of what changes for users in this group |
+| Test (C) | *(Only for A/B/C)* Alternative behavior — description of the alternative approach |
 
-#### Розподіл трафіку (Traffic Split)
+#### Traffic Split
 
-| Група | % трафіку |
-|-------|-----------|
-| A (контрольна) | X% |
-| B (тестова) | Y% |
-| C (тестова) | Z% *(only for A/B/C)* |
+| Group | % of traffic |
+|-------|-------------|
+| A (control) | X% |
+| B (test) | Y% |
+| C (test) | Z% *(only for A/B/C)* |
 
 **Instructions:** Standard split is 50/50 for A/B, 33/33/34 for A/B/C. Adjust based on risk tolerance and required sample size.
 
-#### Критерії успіху (Success Criteria)
+#### Success Criteria
 
-| Метрика | Поріг успіху | Коментар |
-|---------|-------------|----------|
+| Metric | Success threshold | Comment |
+|--------|------------------|---------|
 | Primary metric | +X% vs control | Minimum detectable effect |
 | Secondary metric | No degradation | Guard rail metric |
 
 **Instructions:** Define primary metric (what determines success), guard rail metrics (what must not degrade), and minimum detectable effect size.
 
-#### Очікувана тривалість (Expected Duration)
+#### Expected Duration
 
 - Estimated duration: X weeks
 - Minimum sample size considerations
@@ -74,13 +74,13 @@ Describe hypotheses: preconditions/problem, what we want to change, what we want
 
 ---
 
-### 3. Цілі (Goals)
+### 3. Goals
 
 Describe goals of the feature.
 
 **Format — numbered table:**
 
-| № | Ціль |
+| № | Goal |
 |---|------|
 | 1 | [Specific, measurable goal] |
 | 2 | ... |
@@ -89,14 +89,14 @@ Describe goals of the feature.
 
 ---
 
-### 4. Метрики (Metrics)
+### 4. Metrics
 
 Describe metrics and forecasts of their changes, usually in %.
 
 **Format — numbered table:**
 
-| № | Метрика | Очікування |
-|---|---------|-----------|
+| № | Metric | Expected change |
+|---|--------|----------------|
 | 1 | [Metric name] | [Expected change, e.g., +5%, -2%, no change] |
 | 2 | ... | ... |
 
@@ -104,22 +104,22 @@ Describe metrics and forecasts of their changes, usually in %.
 
 ---
 
-### 5. Вимоги (Requirements)
+### 5. Requirements
 
-#### 5.1 Бізнес-вимоги (Business Requirements)
+#### 5.1 Business Requirements
 
 Describe general business requirements: what should change for different user types and in the product overall.
 
 **Instructions:** Focus on WHAT should change from a business perspective, not HOW it should be implemented. Describe the expected behavior for each affected user type. Use bold text to highlight key business rules and constraints.
 
-#### 5.2 Функціональні вимоги (Functional Requirements)
+#### 5.2 Functional Requirements
 
 Describe what we want to implement/change in the product, how it should work, what business logic conditions should apply, how the functionality should work in user interfaces. Decompose requirements by blocks, screens, and stages of user interaction.
 
 **Format — numbered table:**
 
-| № | Блок / Модуль / Тема | Вимоги |
-|---|----------------------|--------|
+| № | Block / Module / Topic | Requirements |
+|---|------------------------|--------------|
 | 1 | [Block/screen name] | [Detailed functional requirements for this block] |
 | 2 | [Another block] | [Requirements] |
 
@@ -130,7 +130,7 @@ Describe what we want to implement/change in the product, how it should work, wh
 - If the feature has multiple user flows — describe each flow separately
 - Reference current Figma designs where applicable (link to specific frames)
 
-#### 5.3 Технічні вимоги (Technical Requirements)
+#### 5.3 Technical Requirements
 
 **Implementation approach:**
 - Determine the approach: without flag, under feature flag, as A/B test, A/B/C test
@@ -138,7 +138,7 @@ Describe what we want to implement/change in the product, how it should work, wh
 
 **Platforms:**
 - List all platforms where changes are needed
-- Examples: App покупця Android, App покупця iOS, WEB Портал покупця, WEB CMS продавця, App CMS продавця, адмінка, etc.
+- Examples: Buyer App Android, Buyer App iOS, WEB Buyer Portal, WEB Seller CMS, Seller CMS App, Admin panel, etc.
 - The platform list is flexible and product-specific
 
 **Locales:**
@@ -147,7 +147,7 @@ Describe what we want to implement/change in the product, how it should work, wh
   - Only on specific locales (list them)
   - On several (specify which)
 
-#### 5.4 Вимоги до UI&UX (UI&UX Requirements)
+#### 5.4 UI&UX Requirements
 
 **This section is left empty for Product Designers to fill in.**
 
@@ -155,9 +155,9 @@ Product Designers add:
 - Links to Figma mockups
 - Description of main UI&UX implementation requirements
 
-If Figma links to current (pre-change) designs were found during context gathering — include them here as reference with a note: "Актуальний стан (до змін):"
+If Figma links to current (pre-change) designs were found during context gathering — include them here as reference with a note: "Current state (before changes):"
 
-#### 5.5 Вимоги до покриття аналітикою (Analytics Coverage Requirements)
+#### 5.5 Analytics Coverage Requirements
 
 **This section is left empty for Product Analysts to fill in.**
 
@@ -167,7 +167,9 @@ Product Analysts add:
 
 ---
 
-### 6. Завдання (Tasks)
+### 6. Tasks
+
+> **Note:** Use the user's preferred language (`user.language`) for all section headings and content when publishing the requirements document.
 
 - Insert link to Epic in Jira
 - Configure Jira work items macro block:
