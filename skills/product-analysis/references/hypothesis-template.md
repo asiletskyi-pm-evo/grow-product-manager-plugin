@@ -9,20 +9,22 @@ Guidelines for generating and scoring hypotheses from Product Analysis findings.
 Every hypothesis generated from data analysis must follow this structure:
 
 ```
-Назва: [Short descriptive name]
+Name: [Short descriptive name]
 
-Знахідка: [The specific data point, trend, or anomaly that triggered this hypothesis]
-Проблема: [What problem this hypothesis addresses — grounded in data]
-Рішення: [Proposed action, experiment, or feature change]
-Очікуваний результат: [Expected outcome — with numbers where data supports it]
-Цільова метрика: [Primary metric, expected change direction and estimated magnitude]
-Метод валідації: [How to validate — A/B test, deeper analysis, user research, etc.]
+Finding: [The specific data point, trend, or anomaly that triggered this hypothesis]
+Problem: [What problem this hypothesis addresses — grounded in data]
+Solution: [Proposed action, experiment, or feature change]
+Expected outcome: [Expected outcome — with numbers where data supports it]
+Target metric: [Primary metric, expected change direction and estimated magnitude]
+Validation method: [How to validate — A/B test, deeper analysis, user research, etc.]
 
 ICE Score: Impact [X] × Confidence [X] × Ease [X] = [Score]
 
-Дані на підтримку: [Specific values, calculations, chart observations from the analysis]
-Ризики: [What could go wrong, potential negative side effects]
+Supporting data: [Specific values, calculations, chart observations from the analysis]
+Risks: [What could go wrong, potential negative side effects]
 ```
+
+> **Note:** Use the user's preferred language (`user.language`) for all field labels and content in the output document.
 
 ---
 
@@ -93,8 +95,8 @@ Based on weak signals, correlations, or analogies with other products/markets. W
 
 Present all hypotheses in a summary table sorted by total ICE score:
 
-| # | Назва | Знахідка | Цільова метрика | I | C | E | ICE | Категорія |
-|---|-------|----------|-----------------|---|---|---|-----|-----------|
+| # | Name | Finding | Target metric | I | C | E | ICE | Category |
+|---|------|---------|---------------|---|---|---|-----|----------|
 | 1 | ... | ... | ... | X | X | X | XXX | Data-Confirmed |
 | 2 | ... | ... | ... | X | X | X | XXX | Data-Suggested |
 | ... | | | | | | | | |
@@ -109,7 +111,7 @@ Every hypothesis MUST trace back to a specific finding from the analysis. This c
 Data source → Finding → Hypothesis → Proposed action → Expected impact
 ```
 
-When presenting hypotheses, always include the "Знахідка" field that links back to the specific section of the analysis (e.g., "See Anomaly #2 in the Anomalies section" or "Based on Funnel Analysis: 45% drop-off at checkout step").
+When presenting hypotheses, always include the "Finding" field that links back to the specific section of the analysis (e.g., "See Anomaly #2 in the Anomalies section" or "Based on Funnel Analysis: 45% drop-off at checkout step").
 
 This traceability ensures:
 1. Hypotheses are grounded in real data, not assumptions

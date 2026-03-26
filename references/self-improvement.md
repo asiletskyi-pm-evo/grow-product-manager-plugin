@@ -46,13 +46,13 @@ After the corrections are applied and confirmed, internally analyze:
 
 If the analysis reveals a **pattern-level issue** (something that could recur), propose a specific improvement to the user:
 
-> "Під час виконання я допустив помилку в [X]. Щоб зменшити вірогідність такої помилки в майбутньому, я можу допрацювати умови скіла [Skill Name]:
+> "During execution I made an error in [X]. To reduce the likelihood of this error in the future, I can improve the conditions of the [Skill Name] skill:
 >
-> **Поточна поведінка:** [what the skill does now]
-> **Запропоноване покращення:** [what should change]
-> **Як це допоможе:** [why this prevents the error]
+> **Current behavior:** [what the skill does now]
+> **Proposed improvement:** [what should change]
+> **How this helps:** [why this prevents the error]
 >
-> Хочете щоб я вніс це покращення в плагін?"
+> Would you like me to apply this improvement to the plugin?"
 
 **Important guidelines for proposals:**
 - Be specific — describe the exact change to the skill's algorithm, not vague "improve quality"

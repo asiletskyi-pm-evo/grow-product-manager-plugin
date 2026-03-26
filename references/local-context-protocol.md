@@ -17,7 +17,7 @@ Search in the following locations (in order):
 
 Stop the current skill workflow and inform the user:
 
-> "Для ефективної роботи плагіну потрібно налаштувати контекст вашої організації, продуктів та інструментів. Давайте пройдемо швидке налаштування (~5-10 хв)."
+> "To work effectively, the plugin needs to be configured with your organization, products, and tools context. Let's run a quick setup (~5-10 min)."
 
 Launch the **Plugin Configurator** skill in **Onboarding** mode. After Onboarding completes — return to the original skill and continue its workflow with the newly created context.
 
@@ -34,7 +34,7 @@ If the file contains **multiple products**:
 1. If the user explicitly mentioned a product name in their request → use it
 2. If only one product exists → use it automatically
 3. If multiple products exist and none was mentioned → ask via AskUserQuestion:
-   > "У контексті є декілька продуктів: [list names]. Для якого продукту працюємо зараз?"
+   > "There are multiple products in the context: [list names]. Which product are we working with now?"
 
 The selected product becomes the **active product** for the current skill session. All product-specific fields (platforms, locales, jira_project_key, Confluence space, dashboards, competitors, etc.) are read from the active product's section.
 
@@ -50,7 +50,7 @@ Each skill has specific required fields (see `references/context-schema.md` → 
 
 During execution, skills may discover new information that should be saved to `local-context.md`. When this happens:
 
-1. Inform the user: "Я знайшов нову інформацію: [description]. Бажаєте зберегти у контекст плагіна?"
+1. Inform the user: "I found new information: [description]. Would you like to save it to the plugin context?"
 2. If the user agrees:
    - Read the current `local-context.md`
    - Add the new information to the appropriate section

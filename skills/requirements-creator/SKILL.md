@@ -61,11 +61,11 @@ In both cases, proactively gather additional information from the user:
 
 If the requirements involve changing UI/UX for any user type, ask via AskUserQuestion:
 
-> "Чи є актуальні дизайни / макети / прототипи поточної версії цього функціоналу у Figma?"
+> "Are there current designs / mockups / prototypes of this functionality in Figma?"
 
 - **If the user provides a link** — open via Figma MCP (`get_design_context`, `get_screenshot`) or browser fallback. Read and extract: current UX flows, screens, key UI patterns. Use as context for writing functional requirements and understanding current state
 - **If the user believes designs should exist but cannot provide a link** — offer to search:
-  > "Я можу пошукати відповідні макети у Figma від вашого акаунту. Хочете щоб я пошукав?"
+  > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
   - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
     - Try to understand the structure of the design system: look for sections like "Актуальний дизайн", "Current design", "Production", "Live", "Ready for dev", "Поточний стан"
     - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
@@ -75,7 +75,7 @@ If the requirements involve changing UI/UX for any user type, ask via AskUserQue
 
 **1d. Requirements template — ask via AskUserQuestion:**
 
-> "По якому шаблону формуємо вимоги?"
+> "Which template should we use for the requirements?"
 
 - **Standard template** (default) — use the template defined in `references/requirements-template.md`. If a custom Confluence template URL is configured in `local-context.md` — reference it as the base
 - **Standard with modifications** — ask the user what exactly needs to change (add/remove/modify sections)
@@ -125,7 +125,7 @@ Analyze the feature's risk level, impact on metrics, scale of changes, and provi
 
 Present options to the user via AskUserQuestion:
 - **Feature flag** — recommended for moderate risk, changes to existing functionality
-- **Without feature flag** — ⚠️ warn the user: "Реалізація без фіча прапора несе ризики зламати систему у разі непередбачених проблем. Рекомендуємо використовувати feature flag або A/B тест для безпечнішого розгортання."
+- **Without feature flag** — ⚠️ warn the user: "Implementing without a feature flag carries risks of breaking the system if unexpected issues arise. We recommend using a feature flag or A/B test for safer deployment."
 - **A/B Test** — recommended for risky features impacting key metrics
 - **A/B/C Test** — recommended when comparing multiple alternative solutions
 
@@ -159,26 +159,28 @@ Generate the full requirements document following the confirmed template structu
 |---|---------|---------------|
 | — | Table of Contents | Auto-generated (Confluence ToC macro levels 1-6 / equivalent for other tools) |
 | 1 | Epic | Link to Epic description in Confluence |
-| 2 | Гіпотези | Numbered table: №, Hypothesis |
-| 3 | Цілі | Numbered table: №, Goal (can be removed if goal = metrics) |
-| 4 | Метрики | Numbered table: №, Metric, Expected change |
-| 5.1 | Бізнес-вимоги | Text with bold highlights for key theses |
-| 5.2 | Функціональні вимоги | Numbered table: №, Block/Module/Theme, Requirements |
-| 5.3 | Технічні вимоги | Implementation approach, platforms, locales |
-| 5.4 | Вимоги до UI&UX | **Empty section** — to be filled by Product Designer. If Figma links to current designs were found — include them as reference |
-| 5.5 | Вимоги до покриття аналітикою | **Empty section** — to be filled by Product Analyst |
-| 6 | Завдання | Link to Epic in Jira + Jira work items macro with JQL filter (parent = EPIC-KEY AND labels = FEATURE-CODE) |
+| 2 | Hypotheses | Numbered table: №, Hypothesis |
+| 3 | Goals | Numbered table: №, Goal (can be removed if goal = metrics) |
+| 4 | Metrics | Numbered table: №, Metric, Expected change |
+| 5.1 | Business requirements | Text with bold highlights for key theses |
+| 5.2 | Functional requirements | Numbered table: №, Block/Module/Theme, Requirements |
+| 5.3 | Technical requirements | Implementation approach, platforms, locales |
+| 5.4 | UI&UX requirements | **Empty section** — to be filled by Product Designer. If Figma links to current designs were found — include them as reference |
+| 5.5 | Analytics coverage requirements | **Empty section** — to be filled by Product Analyst |
+| 6 | Tasks | Link to Epic in Jira + Jira work items macro with JQL filter (parent = EPIC-KEY AND labels = FEATURE-CODE) |
+
+> **Note:** Use the user's preferred language (`user.language`) for all section headings and content in the published document.
 
 **Additional sections for A/B / A/B/C tests:**
 
-If A/B Test or A/B/C Test approach is selected — automatically add these sections after "Гіпотези":
+If A/B Test or A/B/C Test approach is selected — automatically add these sections after "Hypotheses":
 
 | Section | Content |
 |---------|---------|
-| Групи тесту | Description of each group: control (current behavior), test A (new behavior), test B (alternative — for A/B/C) |
-| Розподіл трафіку | Percentage split between groups (e.g., 50/50, 33/33/34) |
-| Критерії успіху | What metrics and thresholds determine if the test is successful |
-| Очікувана тривалість | Estimated test duration and minimum sample size considerations |
+| Test groups | Description of each group: control (current behavior), test A (new behavior), test B (alternative — for A/B/C) |
+| Traffic split | Percentage split between groups (e.g., 50/50, 33/33/34) |
+| Success criteria | What metrics and thresholds determine if the test is successful |
+| Expected duration | Estimated test duration and minimum sample size considerations |
 
 **Formatting — mandatory for every document:**
 
@@ -193,7 +195,7 @@ If A/B Test or A/B/C Test approach is selected — automatically add these secti
 
 **Before publishing, always present the full draft to the user for review.**
 
-> "Ось чернетка вимог. Будь ласка, перегляньте та скажіть чи потрібні правки."
+> "Here is the requirements draft. Please review it and let me know if any changes are needed."
 
 - Walk through each section
 - Collect feedback and make edits
@@ -211,7 +213,7 @@ If the user requested corrections during review, analyze whether the skill's alg
 
 **6a. Ask if the user wants to save the document:**
 
-> "Бажаєте зберегти документ з вимогами? Якщо так — в якому інструменті?"
+> "Would you like to save the requirements document? If yes — which tool should I use?"
 
 - If no — end the skill, results stay in the dialogue
 - If yes — ask where:
@@ -282,7 +284,7 @@ As a last resort for any destination — generate a local document and provide t
 
 After publishing (or if the user decided not to save), **always** propose transitioning to the next skill:
 
-> "Вимоги сформовано. Бажаєте створити задачі у Jira для реалізації цієї фічі? Я передам контекст (посилання на вимоги, Epic, платформи) у скіл Feature Task Creator."
+> "Requirements are ready. Would you like to create Jira tasks for implementing this feature? I'll pass the context (requirements link, Epic, platforms) to the Feature Task Creator skill."
 
 If the user agrees:
 - Pass the full context: requirements document link, Epic key, feature number, platforms, approach (feature flag / A/B test), locales

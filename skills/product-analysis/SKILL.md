@@ -45,7 +45,7 @@ Key context used by this skill:
 
 **1b. Mode selection — ask via AskUserQuestion:**
 
-> "В якому режимі працюємо?"
+> "Which mode should we use?"
 
 - **Interactive Q&A** — the user asks questions about the data, the skill answers and explores. Lightweight, conversational. Good for ad-hoc analysis, quick metric checks, exploratory investigation
 - **Full structured report** — systematic analysis following all frameworks, with a comprehensive report at the end. Good for periodic reviews, deep dives, pre-concept research
@@ -201,20 +201,22 @@ For each significant finding (growth opportunity, problem, anomaly), auto-genera
 **Hypothesis format:**
 
 ```
-Назва: [short name]
+Name: [short name]
 
-Знахідка: [what data point or pattern this hypothesis is based on]
-Проблема: [what problem this addresses]
-Рішення: [proposed action or experiment]
-Очікуваний результат: [expected metric impact with numbers where possible]
-Цільова метрика: [which metric, expected change direction and magnitude]
-Метод валідації: [A/B test / analysis deep-dive / user interviews / etc.]
+Finding: [what data point or pattern this hypothesis is based on]
+Problem: [what problem this addresses]
+Solution: [proposed action or experiment]
+Expected outcome: [expected metric impact with numbers where possible]
+Target metric: [which metric, expected change direction and magnitude]
+Validation method: [A/B test / analysis deep-dive / user interviews / etc.]
 
 ICE Score: Impact [X] × Confidence [X] × Ease [X] = [Score]
 
-Дані на підтримку: [specific data points from the analysis]
-Ризики: [what could go wrong]
+Supporting data: [specific data points from the analysis]
+Risks: [what could go wrong]
 ```
+
+> **Note:** Use the user's preferred language (`user.language`) for all field labels and content in the output document.
 
 See `references/hypothesis-template.md` for detailed ICE scoring guidelines adapted for data-driven hypotheses.
 
@@ -263,12 +265,12 @@ Generate a comprehensive structured report:
 8. **Hypotheses** — full hypothesis cards with ICE scores
 9. **ICE Summary Table** — sorted by score
 10. **Recommended Next Steps** — prioritized action items
-11. **Глосарій** — explain all terms, metrics, jargon used in the report (same format as Product Research glossary)
+11. **Glossary** — explain all terms, metrics, jargon used in the report (same format as Product Research glossary). Use the user's preferred language (`user.language`).
 12. **Sources** — all data sources with types marked (Tableau, Google Sheets, CSV, Confluence, Web, screenshot, PDF)
 
 **6c. Publishing — ask via AskUserQuestion:**
 
-> "Бажаєте зберегти звіт з аналізом? Якщо так — в якому інструменті?"
+> "Would you like to save the analysis report? If yes — which tool should I use?"
 
 - **Confluence** (default) → ask for space and parent page. Title: `[Analysis] Product/Feature — Date`
 - **Notion** → ask for workspace and location
@@ -290,15 +292,15 @@ Publish via appropriate MCP. If unavailable — follow integration fallback chai
 
 After saving (or if the user decided not to save), provide a structured report:
 
-- **Що зроблено:** brief description of the analysis conducted (scope, data sources, time period)
-- **Створені артефакти:** links to all created documents (Confluence page, local files, etc.)
-- **Ключові висновки:** 3-5 key findings
-- **Згенеровані гіпотези:** number of hypotheses generated, top 3 by ICE score
-- **Використані джерела:** list of data sources used (Tableau, Google Sheets, CSV, Confluence, screenshots, etc.)
+- **What was done:** brief description of the analysis conducted (scope, data sources, time period)
+- **Artifacts created:** links to all created documents (Confluence page, local files, etc.)
+- **Key findings:** 3-5 key findings
+- **Hypotheses generated:** number of hypotheses generated, top 3 by ICE score
+- **Sources used:** list of data sources used (Tableau, Google Sheets, CSV, Confluence, screenshots, etc.)
 
 **After presenting the report, proactively ask for feedback:**
 
-> "Чи влаштовує вас результат аналізу? Можливо потрібно щось допрацювати, проаналізувати глибше або змінити?"
+> "Are you satisfied with the analysis results? Would you like to dig deeper into anything or make changes?"
 
 - If the user requests changes — iterate: update the analysis, re-publish, present updated report
 - If the user confirms — proceed to the next step
@@ -314,14 +316,14 @@ If the user requested corrections during review, analyze whether the skill's alg
 
 After completing the analysis, **always** propose transitioning to the next logical skill based on the findings:
 
-> "Аналіз завершено. Що далі? На основі результатів я можу:"
+> "Analysis is complete. What's next? Based on the results, I can:"
 
 **Propose based on findings:**
 
-- **If growth opportunities found** → "Провести **брейншторм фіч та гіпотез** (Brainstorm Features) на основі знайдених можливостей для росту"
-- **If deeper research needed** → "Провести **продуктове дослідження** (Product Research) для глибшого вивчення знайдених трендів/проблем"
-- **If a clear feature idea emerged** → "Сформувати **концепцію (PRD)** (Write Concept) на основі знайдених інсайтів"
-- **If hypotheses are ready for implementation** → "Створити **вимоги до фічі** (Requirements Creator) для реалізації обраних гіпотез"
+- **If growth opportunities found** → "Run **Brainstorm Features and Hypotheses** based on the identified growth opportunities"
+- **If deeper research needed** → "Run **Product Research** to investigate the identified trends or problems further"
+- **If a clear feature idea emerged** → "Create a **Concept (PRD)** (Write Concept) based on the found insights"
+- **If hypotheses are ready for implementation** → "Create **feature requirements** (Requirements Creator) to implement the selected hypotheses"
 
 If the user chooses a skill:
 - Pass the full analysis context: report link (if published), key findings, relevant hypotheses, data sources, metrics context
@@ -408,7 +410,7 @@ Compare before vs. after periods for all identified metrics:
 6. **Platform Comparison** — if applicable: platform-by-platform analysis
 7. **Side Effects** — unexpected metric changes (positive or negative)
 8. **Conclusions and Recommendations** — keep flag on / roll back / needs more time / need investigation
-9. **Глосарій** — explain terms and metrics
+9. **Glossary** — explain terms and metrics. Use the user's preferred language (`user.language`).
 10. **Sources** — Jira tasks, Confluence requirements, Tableau dashboards used
 
 Then proceed to Step 6 (Report, save, and feedback) for publishing and feedback.
@@ -510,7 +512,7 @@ If requirements exist in Confluence — read them to extract all this context au
    - **Stop and iterate** — test did not meet success criteria, suggest what to change and re-test
    - **Stop and roll back** — test negatively impacted key metrics
 10. **Hypotheses for follow-up** — based on test results, what new hypotheses emerge? (e.g., "Test won on Web but not Mobile — hypothesis: mobile UX needs adjustment")
-11. **Глосарій** — explain terms and metrics
+11. **Glossary** — explain terms and metrics. Use the user's preferred language (`user.language`).
 12. **Sources** — Tableau dashboards used, Jira tasks, Confluence requirements, uploaded reports
 
 Then proceed to Step 6 (Report, save, and feedback) for publishing and feedback.

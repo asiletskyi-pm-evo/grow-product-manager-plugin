@@ -156,14 +156,16 @@ Examples:
 #### Description format (markdown):
 
 ```markdown
-## Завдання
+## Task
 
 {Short summary of what needs to be done for this specific work type}
 
-## Вимоги
+## Requirements
 
 [{Feature page title}]({Confluence page URL})
 ```
+
+> **Note:** Use the user's preferred language (`user.language`) for the task description content.
 
 The summary under "Завдання" should be specific to the work type:
 - **Design**: focus on UI&UX research, prototyping, Figma mockups
@@ -186,8 +188,10 @@ The summary under "Завдання" should be specific to the work type:
 #### Analytics special case — A/B Test:
 
 If the feature is an A/B test, create **2** Analytics tasks:
-1. `[Analytics] {FeatureName} - Покриття аналітикою` — for defining analytics requirements
-2. `[Analytics] {FeatureName} - Аналіз результатів тесту` — for analyzing test results after completion
+1. `[Analytics] {FeatureName} - Analytics coverage` — for defining analytics requirements
+2. `[Analytics] {FeatureName} - Test results analysis` — for analyzing test results after completion
+
+> **Note:** Use the user's preferred language (`user.language`) for analytics task titles if required by your team's conventions.
 
 ### Step 8: Set Additional Fields via Edit
 
@@ -242,7 +246,7 @@ Include:
 
 After presenting the results, proactively ask:
 
-> "Чи все створено коректно? Можливо потрібно щось виправити, додати або змінити?"
+> "Was everything created correctly? Is there anything to fix, add, or change?"
 
 - If the user requests changes — fix the tasks (edit, re-create, re-link as needed), present updated report
 - If the user confirms — proceed
@@ -256,7 +260,7 @@ If the user requested corrections during review, analyze whether the skill's alg
 
 ## Dry Run Mode
 
-If the user asks for a "тестовий режим" / "dry run" / "імітація", go through the entire workflow but:
+If the user asks for a "dry run" / "test mode" / "simulation", go through the entire workflow but:
 - Don't actually create tasks in Jira
 - Show what WOULD be created with all field values
 - Wait for user confirmation before executing for real
