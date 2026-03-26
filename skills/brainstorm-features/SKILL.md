@@ -8,9 +8,6 @@ description: >
   "які фічі можна зробити", "пошук ідей", "генерація фіч", or needs help
   structuring feature ideas with risk assessment, ICE scoring, benchmarks,
   and validation methods.
-metadata:
-  version: "0.1.0"
-  author: "Andrii Siletskyi"
 ---
 
 # Brainstorm Features and Hypotheses

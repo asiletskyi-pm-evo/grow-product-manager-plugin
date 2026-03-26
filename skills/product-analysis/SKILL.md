@@ -12,9 +12,6 @@ description: >
   interpretation, or hypothesis generation.
   Supports interactive Q&A, full structured report, post-release analysis,
   and A/B test results analysis modes.
-metadata:
-  version: "0.1.0"
-  author: "Andrii Siletskyi"
 ---
 
 # Product Analysis

@@ -8,9 +8,6 @@ description: >
   "PESTEL analysis", "провести дослідження", "аналіз конкурентів",
   "аналіз ринку", or needs help gathering and structuring product insights
   from any combination of web sources, uploaded files, and Confluence pages.
-metadata:
-  version: "0.1.0"
-  author: "Andrii Siletskyi"
 ---
 
 # Product Research

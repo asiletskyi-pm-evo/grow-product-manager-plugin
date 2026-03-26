@@ -7,9 +7,6 @@ description: >
   "створити вимоги", "написати вимоги до A/B тесту", "вимоги до гіпотези",
   or needs help turning a feature idea, hypothesis, or A/B test into a structured
   requirements document ready for implementation by product teams (BE, FE, Android, iOS, Design).
-metadata:
-  version: "0.1.0"
-  author: "Andrii Siletskyi"
 ---
 
 # Feature and Hypothesis Requirements Creator

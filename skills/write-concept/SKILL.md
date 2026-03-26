@@ -7,9 +7,6 @@ description: >
   "описати фічу", "створити концепт", or needs help turning a vague idea into
   a structured product document with goals, user stories, scope, and metrics.
   Publishes the result as a Confluence page.
-metadata:
-  version: "0.1.0"
-  author: "Andrii Siletskyi"
 ---
 
 # Write Concept (PRD)
