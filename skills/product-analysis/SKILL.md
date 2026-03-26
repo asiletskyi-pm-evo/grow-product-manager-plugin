@@ -1,17 +1,6 @@
 ---
 name: product-analysis
-description: >
-  Analyze product data — dashboards, tables, reports, metrics — to find trends,
-  anomalies, growth opportunities, and generate data-backed hypotheses.
-  Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies",
-  "explain this data", "what's happening with metrics", "analyze this report",
-  "post-release analysis", "analyze A/B test results", "пострелізний аналіз",
-  "аналіз результатів A/B тесту", "проаналізуй метрики", "розбери дашборд",
-  "що відбувається з метриками", "знайди аномалії", "проаналізуй дані",
-  or provides CSV/XLSX/screenshots/PDFs with data and wants analysis,
-  interpretation, or hypothesis generation.
-  Supports interactive Q&A, full structured report, post-release analysis,
-  and A/B test results analysis modes.
+description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", or "analyze A/B test results".
 ---
 
 # Product Analysis

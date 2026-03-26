@@ -1,12 +1,6 @@
 ---
 name: requirements-creator
-description: >
-  Create structured feature requirements documents as an experienced Business Analyst.
-  Use when the user asks to "write requirements", "describe a feature", "create feature spec",
-  "write A/B test requirements", "сформувати вимоги", "описати вимоги до фічі",
-  "створити вимоги", "написати вимоги до A/B тесту", "вимоги до гіпотези",
-  or needs help turning a feature idea, hypothesis, or A/B test into a structured
-  requirements document ready for implementation by product teams (BE, FE, Android, iOS, Design).
+description: Create structured feature requirements documents as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", or needs help turning a feature idea into a structured requirements document.
 ---
 
 # Feature and Hypothesis Requirements Creator

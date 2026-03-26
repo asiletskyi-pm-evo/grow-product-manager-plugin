@@ -1,12 +1,6 @@
 ---
 name: write-concept
-description: >
-  Write a product concept (PRD) document from a feature idea, problem statement,
-  or existing research. Use when the user asks to "write a concept", "create a PRD",
-  "describe a feature", "write a spec", "сформувати концепцію", "написати PRD",
-  "описати фічу", "створити концепт", or needs help turning a vague idea into
-  a structured product document with goals, user stories, scope, and metrics.
-  Publishes the result as a Confluence page.
+description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document.
 ---
 
 # Write Concept (PRD)

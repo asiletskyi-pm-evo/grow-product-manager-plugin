@@ -1,13 +1,6 @@
 ---
 name: brainstorm-features
-description: >
-  Help Product Manager brainstorm features and hypotheses for a product concept
-  or problem area. Use when the user asks to "brainstorm features", "generate
-  hypotheses", "come up with ideas", "find growth opportunities", "what features
-  should we build", "провести брейншторм", "згенерувати гіпотези",
-  "які фічі можна зробити", "пошук ідей", "генерація фіч", or needs help
-  structuring feature ideas with risk assessment, ICE scoring, benchmarks,
-  and validation methods.
+description: Help Product Manager brainstorm features and hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", or needs ICE scoring, benchmarks, and validation methods.
 ---
 
 # Brainstorm Features and Hypotheses

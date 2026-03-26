@@ -1,13 +1,6 @@
 ---
 name: product-research
-description: >
-  Conduct comprehensive product research — competitive analysis, user research,
-  or market research. Use when the user asks to "research competitors",
-  "analyze the market", "do competitive analysis", "synthesize user interviews",
-  "find market trends", "compare features", "SWOT analysis", "TAM SAM SOM",
-  "PESTEL analysis", "провести дослідження", "аналіз конкурентів",
-  "аналіз ринку", or needs help gathering and structuring product insights
-  from any combination of web sources, uploaded files, and Confluence pages.
+description: Conduct comprehensive product research — competitive analysis, user research, or market research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", or needs SWOT, TAM SAM SOM, or PESTEL analysis.
 ---
 
 # Product Research
