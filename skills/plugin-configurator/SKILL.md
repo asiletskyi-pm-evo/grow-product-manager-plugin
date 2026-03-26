@@ -11,9 +11,6 @@ description: >
   Supports four modes: Onboarding (full initial setup), Update (modify specific sections),
   Validate (check that all integrations work and context is complete),
   and View (show current configuration and allow inline edits).
-metadata:
-  version: "0.1.0"
-  author: "Andrii Siletskyi"
 ---
 
 # Plugin Configurator

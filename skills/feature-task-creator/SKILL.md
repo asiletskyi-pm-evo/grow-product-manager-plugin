@@ -2,9 +2,6 @@
 name: feature-task-creator
 description: |
   Creates Jira tasks for feature implementation based on requirements from a Confluence page. Use this skill whenever the user asks to: create tasks for a feature, create Jira issues from Confluence requirements, break down a feature into development tasks (FE/BE/Android/iOS/Design/Analytics), set up feature tasks in an Epic, or says something like "створи задачі для фічі", "розбий фічу на задачі", "create tasks from requirements". Also trigger when the user shares a Confluence link and asks to create Jira tasks from it. This skill handles the full workflow: reading Confluence requirements, identifying the Epic, asking clarifying questions, creating properly structured Jira issues, and linking them by dependency order.
-metadata:
-  version: "0.1.0"
-  author: "Andrii Siletskyi"
 ---
 
 # Feature Task Creator
