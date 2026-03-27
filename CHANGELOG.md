@@ -12,6 +12,19 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## [0.5.0] — 2026-03-27
+
+### Plugin
+- Added **Analyze & Improve mode** to `requirements-creator` skill
+- Translated `README.md` fully to English
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| requirements-creator | 0.4.0 | 0.5.0 | minor — new Analyze & Improve mode added (A1–A9 workflow) |
+
+---
+
 ## [0.4.0] — 2026-03-26
 
 ### Plugin

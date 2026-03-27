@@ -1,45 +1,48 @@
 # Grow Product Manager
 
-Плагін виконує роль асистента Product Manager. Спільна ціль — розвиток продуктів, пошук точок росту, вирішення проблем користувачів та покращення метрик. Реалізація продуктових змін відбувається за принципом **свідомих зважених рішень, підкріплених даними, бенчмарками та результатами досліджень**.
+The plugin acts as an AI assistant for Product Managers. The shared goal is product growth, finding improvement opportunities, solving user problems, and improving metrics. Product changes are implemented on the principle of **conscious, data-backed decisions supported by benchmarks and research results**.
 
-Інструментарій охоплює весь продуктовий цикл: від дослідження ринку та конкурентів, написання концепцій і вимог, декомпозиції фіч на задачі — до спринт-планування та звітності для стейкхолдерів. Кожен скіл інтегрується з Jira, Confluence, Figma та іншими інструментами через розумний ланцюжок підключення.
+The toolkit covers the full product lifecycle: from market and competitor research, writing concepts and requirements, decomposing features into tasks — to sprint planning and stakeholder reporting. Each skill integrates with Jira, Confluence, Figma, and other tools via a smart fallback connection chain.
 
 ## Current Skills
 
-### Product Research (v0.1.0)
+### Product Research (v0.4.0)
 Conduct competitive analysis, user research, and market research using web search, uploaded files, and Confluence pages. Results are published as structured Confluence pages with actionable insights.
 
-**Trigger phrases**: "research competitors", "analyze the market", "competitive analysis", "SWOT", "TAM SAM SOM", "user research synthesis", "аналіз конкурентів", "дослідження ринку"
+**Trigger phrases**: "research competitors", "analyze the market", "competitive analysis", "SWOT", "TAM SAM SOM", "user research synthesis"
 
-### Write Concept / PRD (v0.1.0)
+### Write Concept / PRD (v0.4.0)
 Create structured product concept documents (PRD) with adaptive structure based on feature type. Gathers context from conversation, Confluence, web, files, and Deep Research via external LLMs. Can leverage existing Product Research results. Publishes to Confluence with proper formatting (ToC, dividers, tables).
 
-**Trigger phrases**: "write a concept", "create a PRD", "describe a feature", "сформувати концепцію", "написати PRD", "описати фічу", "створити концепт"
+**Trigger phrases**: "write a concept", "create a PRD", "describe a feature", "write a spec"
 
-### Brainstorm Features and Hypotheses (v0.1.0)
+### Brainstorm Features and Hypotheses (v0.4.0)
 Interactive brainstorming assistant: evaluate user's existing ideas, generate new feature hypotheses with ICE scoring, benchmarks, risk assessment, and validation method recommendations. Supports MVP-phased approach. Saves results to Confluence or Google Drive.
 
-**Trigger phrases**: "brainstorm features", "generate hypotheses", "come up with ideas", "провести брейншторм", "згенерувати гіпотези", "які фічі можна зробити", "пошук ідей"
+**Trigger phrases**: "brainstorm features", "generate hypotheses", "come up with ideas", "find growth opportunities"
 
-### Feature and Hypothesis Requirements Creator (v0.1.0)
-Create structured feature requirements documents as an experienced Business Analyst. Supports standard template (customizable via `local-context.md`), custom templates, A/B/A/B/C test sections, implementation approach recommendations, and flexible publishing to Confluence, Notion, or Google Docs.
+### Feature and Hypothesis Requirements Creator (v0.5.0)
+Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Supports two modes:
 
-**Trigger phrases**: "write requirements", "create feature spec", "describe requirements", "A/B test requirements", "сформувати вимоги", "описати вимоги до фічі", "створити вимоги", "вимоги до A/B тесту"
+- **Create mode** — write requirements from scratch or based on a concept/research. Supports standard template (customizable via `local-context.md`), custom templates, A/B/A/B/C test sections, implementation approach recommendations, and flexible publishing to Confluence, Notion, or Google Docs.
+- **Analyze & Improve mode** — review existing requirements, assess structure and completeness against the standard template, ask clarifying questions, propose concrete improvements, and optionally run Product Research to evaluate whether the feature is worth implementing.
 
-### Feature Task Creator (v0.1.0)
+**Trigger phrases**: "write requirements", "create feature spec", "A/B test requirements", "review requirements", "analyze requirements", "improve my spec", "check requirements"
+
+### Feature Task Creator (v0.4.0)
 Break down a feature into structured Jira tasks by work type (FE/BE/Android/iOS/Design/Analytics) based on Confluence requirements. Supports grooming mode, A/B test flows, automatic task linking by dependency chain, and dry run mode.
 
-**Trigger phrases**: "create tasks for feature", "break down feature into tasks", "створи задачі для фічі", "розбий фічу на задачі", "create Jira issues from Confluence"
+**Trigger phrases**: "create tasks for feature", "break down feature into tasks", "create Jira issues from Confluence"
 
-### Product Analysis (v0.1.0)
+### Product Analysis (v0.4.0)
 Analyze product data from any source — Tableau dashboards, Google Sheets, CSV/XLSX files, screenshots, PDF reports — to find trends, anomalies, growth opportunities, and risks. Auto-generates data-backed hypotheses with ICE scoring. Supports four modes: interactive Q&A, full structured report, post-release analysis (based on Jira tasks and feature flag activation dates), and A/B test results analysis (from Tableau dashboards or user reports). Uses Python (pandas/numpy) for precise computation on tabular data. Can be invoked standalone or by other skills that need data analysis.
 
-**Trigger phrases**: "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test", "пострелізний аналіз", "аналіз A/B тесту", "проаналізуй метрики", "розбери дашборд", "що відбувається з метриками", "знайди аномалії"
+**Trigger phrases**: "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results"
 
-### Plugin Configurator (v0.1.0)
-Configure the plugin for your organization, products, teams, and data sources. Guided setup collects all necessary context and generates `local-context.md`. Supports multiple organizations and products simultaneously. Three modes: Onboarding (full setup), Update (edit specific sections), Validate (check integrations and context completeness). Auto-triggers when any skill detects missing configuration. Includes MCP auto-discovery — proactively scans available Jira projects, Confluence spaces, and team members.
+### Plugin Configurator (v0.4.0)
+Configure the plugin for your organization, products, teams, and data sources. Guided setup collects all necessary context and generates `local-context.md`. Supports multiple organizations and products simultaneously. Four modes: Onboarding (full setup), Update (edit specific sections), Validate (check integrations and context completeness), View (display and edit config inline). Auto-triggers when any skill detects missing configuration. Includes MCP auto-discovery — proactively scans available Jira projects, Confluence spaces, and team members.
 
-**Trigger phrases**: "configure plugin", "set up plugin", "налаштувати плагін", "конфігурація", "add a product", "додати продукт", "update configuration", "validate setup", "перевірити налаштування"
+**Trigger phrases**: "configure plugin", "set up plugin", "add a product", "update configuration", "validate setup", "show config"
 
 ## Planned Skills Roadmap
 
@@ -71,12 +74,12 @@ Configure the plugin for your organization, products, teams, and data sources. G
 
 ## Data Confidentiality Policy
 
-Дані, отримані з Tableau та інших аналітичних платформ, внутрішні дослідження та матеріали, що підпадають під комерційну таємницю або є конфіденційними, **не можуть**:
+Data retrieved from Tableau and other analytics platforms, internal research materials, and any data subject to commercial confidentiality **must not**:
 
-- Використовуватись для навчання будь-яких LLM
-- Передаватись третім особам у будь-якій формі
+- Be used to train any LLM
+- Be shared with third parties in any form
 
-Ці дані використовуються виключно поточним користувачем в рамках свого акаунту та поставлених ним задач. Детальні правила — у `references/data-policy.md`.
+This data is used exclusively by the current user within their own account and for their own tasks. Detailed rules are defined in `references/data-policy.md`.
 
 ## Smart Integration Strategy
 
@@ -102,6 +105,15 @@ This plugin supports organization-specific configuration via a `local-context.md
 3. `local-context.md` is gitignored — it stays local and is never committed
 
 Skills that use local context: Product Analysis (A/B test dashboards), Requirements Creator (template URLs, locales), Feature Task Creator (project examples).
+
+## Versioning
+
+Each skill carries its own version (`version:` field in SKILL.md frontmatter). The plugin version in `plugin.json` reflects the highest-impact change across all skills. All changes are documented in [CHANGELOG.md](./CHANGELOG.md).
+
+Version bump rules:
+- **PATCH** (x.x.X) — wording fix, small content addition, formatting change
+- **MINOR** (x.X.0) — new step, new section, significant workflow addition, new mode
+- **MAJOR** (X.0.0) — full workflow restructure, breaking change
 
 ## Author
 
