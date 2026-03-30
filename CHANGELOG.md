@@ -12,6 +12,19 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## [0.6.0] — 2026-03-30
+
+### Plugin
+- Added new skill **diagram-prototyper** — create diagrams, flowcharts, BPMN processes, mind maps, and UI prototypes
+- Defined inbound skill chaining: write-concept, brainstorm-features, requirements-creator, product-research, product-analysis can now invoke diagram-prototyper
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| diagram-prototyper | — | 0.6.0 | new skill |
+
+---
+
 ## [0.5.0] — 2026-03-27
 
 ### Plugin
