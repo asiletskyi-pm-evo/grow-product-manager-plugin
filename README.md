@@ -39,6 +39,20 @@ Analyze product data from any source — Tableau dashboards, Google Sheets, CSV/
 
 **Trigger phrases**: "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results"
 
+### Diagram & Prototype Creator (v0.6.0)
+Create diagrams, flowcharts, BPMN 2.0 processes, mind maps, and UI prototypes to visualize product concepts and hypotheses. Supports multiple generation tools:
+
+- **Mermaid (built-in)** — fast local generation for flowcharts, BPMN, simple diagrams
+- **Google Gemini** — image generation in Nano Banana mode via browser
+- **ChatGPT** — image generation via browser (GPT-4o or newer)
+- **NotebookLM** — presentations and mind maps via browser
+- **Figma** — prototypes and design mockups via MCP or browser
+- **Draw.io** — XML generation locally or via browser fallback
+
+Includes a quality check loop: auto-reviews generated images against requirements, auto-corrects up to 3 times, asks the user before continuing. Supports skill chaining from all other skills. Publishes to Confluence, Notion, Figma, or local files.
+
+**Trigger phrases**: "create a diagram", "draw a flowchart", "BPMN diagram", "make a prototype", "wireframe", "mockup", "visualize this process", "mind map"
+
 ### Plugin Configurator (v0.4.0)
 Configure the plugin for your organization, products, teams, and data sources. Guided setup collects all necessary context and generates `local-context.md`. Supports multiple organizations and products simultaneously. Four modes: Onboarding (full setup), Update (edit specific sections), Validate (check integrations and context completeness), View (display and edit config inline). Auto-triggers when any skill detects missing configuration. Includes MCP auto-discovery — proactively scans available Jira projects, Confluence spaces, and team members.
 
@@ -55,9 +69,10 @@ Configure the plugin for your organization, products, teams, and data sources. G
 | 5 | Feature Task Creator | Confluence requirements → Jira tasks by team | ✅ Done |
 | 6 | Product Analysis | Data analysis with hypothesis generation from any data source | ✅ Done |
 | 7 | Plugin Configurator | Guided setup for organizations, products, teams, data sources | ✅ Done |
-| 8 | Sprint Planning | Plan sprints with capacity & priority estimation | Planned |
-| 9 | Stakeholder Update | Generate status reports for different audiences | Planned |
-| 10 | Design Review | Pull Figma designs for review and handoff specs | Planned |
+| 8 | Diagram & Prototype Creator | Diagrams, flowcharts, BPMN, prototypes via Gemini/ChatGPT/Figma/Draw.io/Mermaid | ✅ Done |
+| 9 | Sprint Planning | Plan sprints with capacity & priority estimation | Planned |
+| 10 | Stakeholder Update | Generate status reports for different audiences | Planned |
+| 11 | Design Review | Pull Figma designs for review and handoff specs | Planned |
 
 ## Integrations
 
@@ -70,6 +85,10 @@ Configure the plugin for your organization, products, teams, and data sources. G
 | Google Docs | Alternative publishing destination | Via MCP registry / browser |
 | Tableau | Product metrics and dashboards | Via Product Analysis skill (browser) |
 | Google Sheets | Metrics exports and shared data | Via MCP registry / browser |
+| Google Gemini | Image generation for diagrams/prototypes | Via browser (Nano Banana mode) |
+| ChatGPT | Image generation for diagrams/prototypes | Via browser (GPT-4o) |
+| NotebookLM | Mind maps, presentations | Via browser |
+| Draw.io | Diagram creation | Local XML + browser fallback |
 | Web Search | External research data | Built-in |
 
 ## Data Confidentiality Policy
