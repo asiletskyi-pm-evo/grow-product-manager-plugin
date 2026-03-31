@@ -12,6 +12,22 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## [0.7.0] — 2026-03-31
+
+### Plugin
+- Enhanced `feature-task-creator` with two new workflow improvements
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| feature-task-creator | 0.4.0 | 0.7.0 | minor — added Step 6b (field validation with user confirmation for uncertain values) and Step 12 (post-creation verification with auto-fix) |
+
+### Details
+- **Step 6b — Validate field values before creation:** Before creating tasks, the skill now categorizes each field value by confidence level (Certain / Inferred / Uncertain / Unknown), presents inferred values for confirmation, and asks the user for uncertain or unknown values with proposed options
+- **Step 12 — Post-creation verification:** After creating all tasks, the skill reads back one task from Jira, runs 9 verification checks (title, parent, reporter, team, labels, components, description, issue type, links), reports discrepancies with severity, proposes fixes, and propagates fixes to all affected tasks
+
+---
+
 ## [0.6.0] — 2026-03-30
 
 ### Plugin
