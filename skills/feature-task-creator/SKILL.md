@@ -1,6 +1,6 @@
 ---
 name: feature-task-creator
-version: 0.4.0
+version: 0.7.0
 description: Creates Jira tasks for feature implementation based on requirements from a Confluence page. Use when the user asks to create tasks for a feature, create Jira issues from Confluence requirements, break down a feature into development tasks (FE/BE/Android/iOS/Design/Analytics), set up feature tasks in an Epic, or says something like "create tasks from requirements". Also trigger when the user shares a Confluence link and asks to create Jira tasks from it.
 ---
 
@@ -110,6 +110,41 @@ Before creating tasks, fetch project metadata to ensure correct field values:
    - Use `getJiraIssueTypeMetaWithFields` to find the field
    - Look at an existing task in the Epic to find the Team value/ID format
    - The Team field often requires a string ID (not an object), e.g. `"3eb29614-f447-45a5-8963-016f46f7dded-31"`
+
+### Step 6b: Validate field values before creation
+
+**Before creating any tasks, review ALL field values that will be used.** For each field, apply this decision logic:
+
+| Confidence level | Action |
+|-----------------|--------|
+| **Certain** — value is explicitly stated in requirements, local-context, or confirmed by user | Use the value directly |
+| **Inferred** — value is derived from context but not explicitly confirmed (e.g., Components from existing tasks, Team from Epic) | Present the inferred value to the user with explanation: "Based on [source], I plan to set [field] to [value]. Is that correct?" |
+| **Uncertain** — multiple possible values, or no clear source | Ask via AskUserQuestion with proposed options: "I'm not sure which value to use for [field]. Here are the options I found: [list]. Which one should I use?" |
+| **Unknown** — no data available to determine the value | Ask the user directly: "I couldn't determine the value for [field]. Could you provide it?" |
+
+**Fields that commonly require user confirmation:**
+
+- **Components** — if not directly available from Confluence labels, propose options from existing Epic tasks
+- **Team** — if not found in `local-context.md` or existing tasks, ask the user
+- **Issue Type** — if project has non-standard issue types (e.g., custom Design or Analytics types), confirm with user
+- **Labels** — if uncertain about the feature code format or additional labels, propose and confirm
+- **Reporter** — if multiple possible accounts found, ask user to choose
+- **Sprint** — if the user wants tasks added to a specific sprint, ask which one
+
+**Present a pre-creation summary for confirmation:**
+
+> "Here are the field values I'll use for all tasks:"
+
+| Field | Value | Source |
+|-------|-------|--------|
+| Parent (Epic) | PROJ-1234 | From Confluence page |
+| Reporter | User Name | From local-context.md |
+| Team | Team Name | Inferred from Epic — please confirm |
+| Components | component-1, component-2 | From existing Epic tasks — please confirm |
+| Labels (common) | PROJ-1234.5 | From feature code |
+| ... | ... | ... |
+
+Wait for user confirmation before proceeding to task creation.
 
 ### Step 7: Create Tasks
 
@@ -243,7 +278,70 @@ Include:
 - Any issues encountered (fields that couldn't be set, etc.)
 - A JQL link to view all created tasks: `parent={EpicKey} AND labels={FeatureCode} ORDER BY created DESC`
 
-### Step 12: Feedback and self-improvement
+### Step 12: Post-creation verification
+
+**After creating all tasks, automatically verify one task** to ensure it matches the requirements, rules, and field conventions. This is a mandatory quality gate.
+
+**12a. Select a task for verification:**
+
+Pick one of the created tasks (preferably a development task — FE or BE — as they have the most complex field set).
+
+**12b. Read the task back from Jira:**
+
+Use `getJiraIssue` to fetch the created task with all fields. This ensures we verify what was actually saved, not what we intended to send.
+
+**12c. Run verification checks:**
+
+| Check | What to verify | How to verify |
+|-------|---------------|--------------|
+| **Title format** | Matches the pattern: `[WorkType] - Grooming/A/B Test - FeatureName` | Compare with the expected title from Step 7 rules |
+| **Parent** | Linked to the correct Epic | Check `parent` field matches the Epic key |
+| **Reporter** | Set to the user's accountId | Compare with `user.jira_account_id` |
+| **Team** | Set to the correct team | Compare with the confirmed team value from Step 6b |
+| **Labels** | Contains all required labels: feature code, work type label, `a/b_test` if applicable, `grooming` if applicable | Check labels array against expected values |
+| **Components** | Matches the confirmed components | Compare with the confirmed values from Step 6b |
+| **Description** | Contains "Task" section and "Requirements" section with Confluence link | Parse description content |
+| **Issue Type** | Correct type (Task/Design/Analytics) | Check issue type field |
+| **Links** | Correct dependency links created (if linking was confirmed) | Check issue links via `getJiraIssue` |
+
+**12d. Report verification results:**
+
+**If all checks pass:**
+> "I verified task [KEY] and all fields are correct: title format, parent, reporter, team, labels, components, description, and links all match the expected values."
+
+**If issues are found:**
+
+Present a clear report to the user:
+
+> "I verified task [KEY] and found the following discrepancies:"
+
+| # | Field | Expected | Actual | Severity |
+|---|-------|----------|--------|----------|
+| 1 | Labels | `frontend`, `PROJ-1234.5` | `frontend` (missing feature code) | Critical |
+| 2 | Team | Team Name | (not set) | Critical |
+| 3 | Title | `[FE] Feature Name` | `[FE] - Feature Name` (extra dash) | Minor |
+
+Then propose fixes:
+
+> "I can fix these issues automatically. Here is what I'll do:
+> 1. Add missing label `PROJ-1234.5` to [KEY] and all other created tasks
+> 2. Set Team field on [KEY] and all other created tasks
+> 3. Update title on [KEY]
+>
+> Should I apply these fixes?"
+
+- If user confirms → apply fixes using `editJiraIssue` for ALL affected tasks (not just the verified one — the same issues likely affect all tasks)
+- If user wants to review first → show the proposed changes for each task before applying
+- After fixes are applied → re-verify the same task to confirm the fixes worked
+
+**12e. Cross-task fix propagation:**
+
+If an issue is found in the verified task, assume it may affect ALL created tasks (since they were created with the same logic). When fixing:
+- Fix the verified task first
+- Apply the same fix to all other tasks
+- Report how many tasks were fixed
+
+### Step 13: Feedback and self-improvement
 
 After presenting the results, proactively ask:
 

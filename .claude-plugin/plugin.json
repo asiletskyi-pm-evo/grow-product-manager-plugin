@@ -1,6 +1,6 @@
 {
   "name": "grow-product-manager",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "AI assistant for Product Managers: research, concepts, requirements, brainstorming, task creation, and data analysis integrated with Jira, Confluence, and Figma.",
   "author": {
     "name": "Andrii Siletskyi"
