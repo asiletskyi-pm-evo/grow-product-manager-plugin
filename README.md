@@ -53,8 +53,8 @@ Includes a quality check loop: auto-reviews generated images against requirement
 
 **Trigger phrases**: "create a diagram", "draw a flowchart", "BPMN diagram", "make a prototype", "wireframe", "mockup", "visualize this process", "mind map"
 
-### Meeting Processor (v0.8.0)
-Process meetings from any source — Fireflies, other recording tools, uploaded files, or pasted text — to extract action items, decisions, and structured meeting reports. Two modes:
+### Meeting Processor (v0.9.0)
+Process meetings from any source — Fireflies, other recording tools, uploaded files, or pasted text — to extract action items, decisions, and structured meeting reports. Enriches meeting data with calendar context (Google Calendar / Microsoft Calendar): participant list with emails and roles, agenda, attached documents and presentations. Two modes:
 
 - **Process mode** — work with a single meeting: auto-classify type (grooming, discovery, demo/retro, status, brainstorm), extract structured notes with type-specific blocks, generate Structured MoM or Short summary
 - **Search mode** — query across multiple meetings: "what did we discuss about feature X last month?" → chronological synthesis with decisions and action items

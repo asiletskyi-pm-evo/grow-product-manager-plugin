@@ -12,6 +12,24 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## [0.9.0] — 2026-04-01
+
+### Plugin
+- Enhanced `meeting-processor` with calendar integration and enriched participant context
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| meeting-processor | 0.8.0 | 0.9.0 | minor — calendar enrichment step + participant context passing |
+
+### Details
+- **Step M1d — Calendar enrichment:** After finding a meeting, optionally look up the matching calendar event (Google Calendar MCP or Microsoft Calendar MCP) to extract participants (with emails, roles, RSVP), agenda, attached documents (Google Docs, Confluence, Figma, presentations), organizer, and recurrence info. Reads attached materials for additional context
+- **Enhanced M2 data merging:** Calendar data merged with transcript data using priority rules. Discrepancies marked (invited but silent, not invited but spoke)
+- **Enhanced M9 skill chaining:** Full participant context (name, email, role, attendance status) now passed to all downstream skills. Per-skill content mapping ensures each target skill gets the data it needs (e.g., participants with roles for task assignment, speaker attribution for research)
+- **MoM template updated:** Participants table now includes Email and Status columns
+
+---
+
 ## [0.8.0] — 2026-04-01
 
 ### Plugin
