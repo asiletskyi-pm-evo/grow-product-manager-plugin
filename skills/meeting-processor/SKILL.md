@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.8.0
+version: 0.9.0
 description: Process meeting recordings, transcripts, and notes to extract action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Chains to feature-task-creator, requirements-creator, product-research, and brainstorm-features.
 ---
 
@@ -14,6 +14,8 @@ Before starting, read and follow the integration fallback chain in `references/i
 
 - **Fireflies MCP** — for searching, reading summaries, and transcripts from Fireflies.ai
 - **Other meeting tool MCPs** — if the user has connected another meeting recording tool (Otter.ai, Grain, tl;dv, Zoom, Google Meet, etc.), discover and use its MCP connector
+- **Google Calendar MCP** — for finding calendar events, extracting participants, attached documents, meeting links, and agenda
+- **Microsoft Calendar MCP** — alternative calendar connector (Outlook / Microsoft 365). If Google Calendar MCP is not available — search MCP registry for Microsoft Calendar
 - **Confluence** — for publishing meeting notes / MoM
 - **Notion** — alternative publishing destination
 - **Jira** — for creating action item tasks (via feature-task-creator chaining)
@@ -85,22 +87,97 @@ The skill is **tool-agnostic** — it accepts meetings from any source. Determin
 2. Attempt to identify speaker labels (e.g., "John:", "Speaker 1:", timestamps)
 3. If no speaker labels — proceed with unstructured text analysis
 
+### M1d — Calendar enrichment (optional)
+
+After determining the meeting source, **ask the user if they want to pull additional context from the calendar event:**
+
+> "Would you like me to check the calendar for this meeting? I can get the participant list, agenda, attached documents, and any linked materials."
+
+If the user agrees — proceed with calendar lookup. If the user declines — skip to M2.
+
+**M1d-1. Detect available calendar connector:**
+
+| Calendar | How to detect | MCP tools |
+|----------|--------------|-----------|
+| **Google Calendar** | Google Calendar MCP is connected (`gcal_list_events`, `gcal_get_event`) | Use `gcal_list_events` to search by date/title → `gcal_get_event` to read details |
+| **Microsoft Calendar** | Microsoft Calendar / Outlook MCP is connected | Use the available MCP tools to search and fetch events |
+| **No calendar** | No calendar MCP detected | Offer to search the MCP registry: "No calendar tool is connected. Would you like me to search for available calendar connectors?" |
+
+**M1d-2. Find the matching calendar event:**
+
+Search for the event using available data:
+- Meeting title (from Fireflies, file name, or user input)
+- Meeting date
+- Participant names or emails
+
+If multiple events match — present a list and ask the user to choose.
+
+**M1d-3. Extract calendar event data:**
+
+From the calendar event, extract:
+
+| Data point | Where to find | How to use |
+|-----------|--------------|-----------|
+| **Participants** | Attendee list (names + emails + RSVP status) | Enrich the participant list with full names, emails, and attendance status. Match against `team.members` from `local-context.md` to add roles |
+| **Agenda / description** | Event description / body | Use as context for understanding meeting goals and structure |
+| **Attached documents** | Event attachments or links in description (Google Docs, Confluence pages, presentations, PDFs) | Read attached materials to enrich meeting context. These may contain the agenda, pre-read materials, or relevant specs |
+| **Meeting link** | Conference URL (Google Meet, Zoom, Teams) | Use to cross-reference with Fireflies/other meeting tools if needed |
+| **Organizer** | Event organizer field | Identify the meeting owner |
+| **Recurrence** | Recurring event info | Note if this is a recurring meeting (useful for context: "weekly grooming", "bi-weekly sync") |
+
+**M1d-4. Read attached materials:**
+
+If the calendar event contains links to documents:
+- **Google Docs / Slides / Sheets** — read via Google Drive MCP or browser
+- **Confluence pages** — read via Confluence MCP (respect `noindex` label rule from `local-context.md`)
+- **Figma links** — read via Figma MCP
+- **PDF / PPTX / other files** — download and read content
+- **Other URLs** — note them as reference materials
+
+Present discovered materials to the user:
+
+> "I found the following materials attached to the calendar event:
+> 1. [Document title] — [type: Google Doc / Confluence page / etc.]
+> 2. [Document title] — [type]
+>
+> Would you like me to read them for additional context?"
+
+If the user confirms — read the materials and use their content to enrich the meeting analysis (better understanding of topics, decisions, and action items).
+
+**M1d-5. Merge calendar data with meeting data:**
+
+Combine the calendar event data with the transcript/recording data:
+- **Participants:** merge attendee list from calendar with speakers from transcript. Calendar provides full names + emails + roles; transcript provides who actually spoke
+- **Context:** use agenda/description and attached materials to better classify meeting topics and understand decisions
+- **Mark absent participants:** if someone was on the calendar invite but not in the transcript — note as "invited but did not attend" (useful for status meetings)
+
 ### M2 — Read meeting data
 
 Based on the input source, extract as much structured data as possible:
 
-| Data point | From Fireflies MCP | From transcript file/text |
-|------------|-------------------|--------------------------|
-| **Title** | From meeting metadata | From filename or first line, or ask user |
-| **Date** | From meeting metadata | From file metadata or ask user |
-| **Duration** | From meeting metadata | Estimate from timestamps if available |
-| **Participants** | From speaker tags in transcript | Parse speaker labels or ask user |
-| **Summary** | From `fireflies_get_summary` (overview) | Generate from transcript analysis |
-| **Action items** | From `fireflies_get_summary` (action_items) | Extract from transcript content |
-| **Keywords** | From `fireflies_get_summary` (keywords) | Extract from transcript analysis |
-| **Full transcript** | From `fireflies_get_transcript` (sentences with speakers) | From file content |
+| Data point | From Fireflies MCP | From transcript file/text | From calendar (M1d) |
+|------------|-------------------|--------------------------|---------------------|
+| **Title** | From meeting metadata | From filename or first line, or ask user | From event title |
+| **Date** | From meeting metadata | From file metadata or ask user | From event start time |
+| **Duration** | From meeting metadata | Estimate from timestamps if available | From event start/end time |
+| **Participants** | From speaker tags in transcript | Parse speaker labels or ask user | From attendee list (names + emails + roles + RSVP) |
+| **Agenda** | — | — | From event description |
+| **Attached materials** | — | — | From event attachments and links |
+| **Summary** | From `fireflies_get_summary` (overview) | Generate from transcript analysis | — |
+| **Action items** | From `fireflies_get_summary` (action_items) | Extract from transcript content | — |
+| **Keywords** | From `fireflies_get_summary` (keywords) | Extract from transcript analysis | — |
+| **Full transcript** | From `fireflies_get_transcript` (sentences with speakers) | From file content | — |
+| **Organizer** | — | — | From event organizer field |
+| **Recurrence** | — | — | From recurring event info |
 
 If the source provides a pre-built summary (like Fireflies) — use it as a starting point but always cross-reference with the full transcript for completeness.
+
+**Data merging priority:** When the same data point is available from multiple sources, use this priority:
+1. **Calendar** — for participants (most complete: names, emails, roles, attendance)
+2. **Meeting tool** (Fireflies etc.) — for transcript content, summary, action items
+3. **File/text** — as fallback for content
+
+Mark discrepancies: if a participant is on the calendar but not in the transcript → "invited, did not speak". If a speaker is in the transcript but not on the calendar → "not on invite, but participated".
 
 ### M3 — Classify meeting type
 
@@ -234,9 +311,9 @@ Generate the meeting report using the user's preferred language (`user.language`
 ---
 
 ### Participants
-| Name | Role |
-|------|------|
-| [name] | [role or "—"] |
+| Name | Role | Email | Status |
+|------|------|-------|--------|
+| [name] | [role or "—"] | [email] | Attended / Invited, did not speak / Not on invite |
 
 ---
 
@@ -328,10 +405,27 @@ After publishing (or if the user decided not to save), offer the next step **bas
 | **Demo / Retro** | Improvement proposals extracted | "Would you like to brainstorm solutions for the identified improvements?" → invoke `brainstorm-features` |
 | **Any type** | Complex process discussed | "Would you like to visualize the discussed process as a diagram?" → invoke `diagram-prototyper` |
 
-When invoking another skill, pass:
-- Full meeting context (title, date, participants)
-- Relevant extracted content (action items, insights, ideas — depending on the target skill)
-- Meeting type classification
+**Context to pass when invoking another skill:**
+
+Every skill invocation from meeting-processor must include the **full participant context** and relevant meeting data:
+
+| Context element | What to pass | Why |
+|----------------|-------------|-----|
+| **Participants** | Full list: name, email, role (from `team.members` match), attendance status (spoke / invited but silent / not invited but participated) | Feature-task-creator uses participants for task assignment; product-research uses for interview attribution; brainstorm-features uses for idea ownership |
+| **Meeting metadata** | Title, date, duration, type(s), organizer, recurrence info | Context for all downstream skills |
+| **Meeting source link** | Fireflies link, calendar event link, or file reference | For traceability in created documents |
+| **Extracted content** | Depends on target skill (see table below) | Core input for the target skill |
+| **Attached materials** | Links to agenda, pre-read docs, presentations found in calendar | Additional context for requirements, research, concepts |
+
+**Content to pass per target skill:**
+
+| Target skill | What to pass |
+|-------------|-------------|
+| **feature-task-creator** | Action items (who, what, deadline), task estimates, priorities, Epic reference if mentioned, participants with roles for task assignment |
+| **requirements-creator** | Feature discussion fragments, functional requirements mentioned, user scenarios discussed, participants as stakeholders |
+| **product-research** | User insights, quotes with speaker attribution, pain points, needs, participants as interview subjects |
+| **brainstorm-features** | Ideas, hypotheses, evaluation criteria, voting results, participants as idea owners |
+| **diagram-prototyper** | Process descriptions, flow logic, architecture discussed, participants as actors in diagrams |
 
 If no chaining is relevant or the user declines — end the workflow gracefully.
 
