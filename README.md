@@ -53,6 +53,16 @@ Includes a quality check loop: auto-reviews generated images against requirement
 
 **Trigger phrases**: "create a diagram", "draw a flowchart", "BPMN diagram", "make a prototype", "wireframe", "mockup", "visualize this process", "mind map"
 
+### Meeting Processor (v0.8.0)
+Process meetings from any source — Fireflies, other recording tools, uploaded files, or pasted text — to extract action items, decisions, and structured meeting reports. Two modes:
+
+- **Process mode** — work with a single meeting: auto-classify type (grooming, discovery, demo/retro, status, brainstorm), extract structured notes with type-specific blocks, generate Structured MoM or Short summary
+- **Search mode** — query across multiple meetings: "what did we discuss about feature X last month?" → chronological synthesis with decisions and action items
+
+Tool-agnostic: works with Fireflies MCP, other meeting tool MCPs, uploaded files (audio/video/text/srt), or pasted text. Chains to feature-task-creator (action items → Jira), product-research (interview insights), requirements-creator, brainstorm-features, and diagram-prototyper.
+
+**Trigger phrases**: "summarize meeting", "meeting notes", "MoM", "action items from meeting", "what was discussed about", "search meetings", "find decisions about"
+
 ### Plugin Configurator (v0.4.0)
 Configure the plugin for your organization, products, teams, and data sources. Guided setup collects all necessary context and generates `local-context.md`. Supports multiple organizations and products simultaneously. Four modes: Onboarding (full setup), Update (edit specific sections), Validate (check integrations and context completeness), View (display and edit config inline). Auto-triggers when any skill detects missing configuration. Includes MCP auto-discovery — proactively scans available Jira projects, Confluence spaces, and team members.
 
@@ -70,7 +80,8 @@ Configure the plugin for your organization, products, teams, and data sources. G
 | 6 | Product Analysis | Data analysis with hypothesis generation from any data source | ✅ Done |
 | 7 | Plugin Configurator | Guided setup for organizations, products, teams, data sources | ✅ Done |
 | 8 | Diagram & Prototype Creator | Diagrams, flowcharts, BPMN, prototypes via Gemini/ChatGPT/Figma/Draw.io/Mermaid | ✅ Done |
-| 9 | Sprint Planning | Plan sprints with capacity & priority estimation | Planned |
+| 9 | Meeting Processor | Process meetings from any source → structured notes, action items, decisions | ✅ Done |
+| 10 | Sprint Planning | Plan sprints with capacity & priority estimation | Planned |
 | 10 | Stakeholder Update | Generate status reports for different audiences | Planned |
 | 11 | Design Review | Pull Figma designs for review and handoff specs | Planned |
 
@@ -85,6 +96,7 @@ Configure the plugin for your organization, products, teams, and data sources. G
 | Google Docs | Alternative publishing destination | Via MCP registry / browser |
 | Tableau | Product metrics and dashboards | Via Product Analysis skill (browser) |
 | Google Sheets | Metrics exports and shared data | Via MCP registry / browser |
+| Fireflies | Meeting transcripts and summaries | Connected via Fireflies MCP |
 | Google Gemini | Image generation for diagrams/prototypes | Via browser (Nano Banana mode) |
 | ChatGPT | Image generation for diagrams/prototypes | Via browser (GPT-4o) |
 | NotebookLM | Mind maps, presentations | Via browser |

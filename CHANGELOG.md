@@ -12,6 +12,26 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## [0.8.0] — 2026-04-01
+
+### Plugin
+- Added new skill **meeting-processor** — process meetings from any source to extract action items, decisions, and structured reports
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| meeting-processor | — | 0.8.0 | new skill |
+
+### Details
+- **Two modes:** Process (single meeting → structured MoM or short summary) and Search (cross-meeting query → chronological synthesis)
+- **Tool-agnostic input:** Fireflies MCP, other meeting tool MCPs, uploaded files (audio/video/text/srt), pasted text
+- **Auto-classification:** 5 meeting types (Grooming, Discovery, Demo/Retro, Status, Brainstorm) with multi-type support, user confirmation
+- **Type-adaptive extraction:** common blocks (participants, topics, decisions, action items, open questions) + type-specific blocks (estimates for grooming, quotes for discovery, etc.)
+- **Skill chaining:** Grooming → feature-task-creator, Discovery → product-research/requirements-creator, Brainstorm → brainstorm-features, Any → diagram-prototyper
+- **Publishing:** Confluence, Notion, local file
+
+---
+
 ## [0.7.0] — 2026-03-31
 
 ### Plugin
