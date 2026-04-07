@@ -1,12 +1,12 @@
 ---
 name: diagram-prototyper
-version: 0.6.0
-description: Create diagrams, flowcharts, BPMN processes, and UI prototypes to visualize product concepts and hypotheses. Use when the user asks to "create a diagram", "draw a flowchart", "visualize this process", "make a prototype", "BPMN diagram", "wireframe", "mockup", or when another skill suggests visualizing a concept. Supports generation via Gemini, ChatGPT, NotebookLM, Figma, Draw.io, and built-in Mermaid.
+version: 0.7.0
+description: Create diagrams, flowcharts, BPMN processes, UI prototypes, and infographics to visualize product concepts and hypotheses. Use when the user asks to "create a diagram", "draw a flowchart", "visualize this process", "make a prototype", "create an infographic", "BPMN diagram", "wireframe", "mockup", or when another skill suggests visualizing a concept. Supports generation via Gemini, ChatGPT, NotebookLM, Figma, Draw.io, and built-in Mermaid/HTML.
 ---
 
 # Diagram & Prototype Creator
 
-Create diagrams, flowcharts, BPMN processes, mind maps, and UI prototypes to improve understanding of product concepts and hypotheses. The skill acts as a visual communication assistant — it gathers context, selects the right tool, generates the visual artifact, validates quality, and publishes the result.
+Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to improve understanding of product concepts and hypotheses. The skill acts as a visual communication assistant — it gathers context, selects the right tool, generates the visual artifact, validates quality, and publishes the result.
 
 ## Integration prerequisite
 
@@ -49,6 +49,7 @@ Key context used by this skill:
 | **Diagram** | Processes, logic, flows, architecture | User flow, order lifecycle, system interaction, decision tree |
 | **Prototype** | UI screens, interface layouts, components | Product page layout, new feature mockup, checkout flow screens |
 | **Mind Map** | Concept exploration, idea mapping, brainstorming results | Feature decomposition, stakeholder map, competitive landscape |
+| **Infographic** | Data visualization, metric storytelling, comparisons, step-by-step guides | Funnel metrics overview, feature comparison, onboarding steps, A/B test results summary, market research highlights |
 | **Presentation** | Visual summary of a concept or research | Concept pitch slides, research highlights |
 
 **1c. Gather detailed requirements:**
@@ -72,6 +73,14 @@ Based on the visualization type, ask targeted questions:
 - What is the central topic?
 - What are the main branches?
 - What level of depth is needed?
+
+**For infographics:**
+- What is the main story or message the infographic should convey?
+- What data or metrics should be included? (numbers, percentages, comparisons)
+- Who is the target audience? (internal team, stakeholders, external users, social media)
+- What is the intended use? (presentation insert, standalone document, Confluence page, social sharing)
+- Are there specific data points, KPIs, or comparisons to highlight?
+- What approximate dimensions? (vertical scroll, A4 page, slide-sized, social media format)
 
 **For presentations:**
 - What concept or research to visualize?
@@ -118,6 +127,27 @@ Provide a recommendation based on context:
 - Concept phase, brainstorming → recommend Lo-fi
 - Requirements phase, stakeholder review → recommend Mid-fi
 
+### Step 3b — Infographic style selection (for infographics only)
+
+If the user chose "Infographic" in Step 1, ask for the visual style via AskUserQuestion:
+
+> "What style should the infographic have?"
+
+| Style | When to recommend | Description |
+|-------|------------------|-------------|
+| **Data-driven** | Metrics, KPIs, A/B test results, analytics | Charts, numbers, progress bars, comparisons. Focus on quantitative data storytelling |
+| **Process / timeline** | Onboarding flows, roadmaps, release timelines, step-by-step guides | Sequential steps, numbered stages, timeline with milestones. Focus on progression |
+| **Comparison** | Feature comparison, competitive analysis, before/after, plan tiers | Side-by-side layouts, comparison tables, pros/cons. Focus on evaluating options |
+| **Informational / educational** | Product overviews, how-it-works explanations, market research summaries | Icons, illustrations, text blocks, visual hierarchy. Focus on communicating a concept |
+| **Statistical / report** | Quarterly reports, market size, survey results | Pie charts, bar charts, stat callouts, percentages. Focus on presenting research findings |
+
+Provide a recommendation based on context:
+- Analytics data, metrics review → recommend Data-driven
+- User journey, onboarding, roadmap → recommend Process / timeline
+- Competitive research, feature evaluation → recommend Comparison
+- Concept explanation, product overview → recommend Informational / educational
+- Research results, survey data, quarterly numbers → recommend Statistical / report
+
 ### Step 4 — Tool selection
 
 Ask the user which tool to use via AskUserQuestion:
@@ -129,8 +159,9 @@ Present options based on the visualization type. Not all tools are suitable for 
 | Tool | Best for | How it works |
 |------|----------|-------------|
 | **Mermaid (built-in)** | Flowcharts, BPMN, simple diagrams | Generated locally by the skill as Mermaid code → rendered as SVG/image. No external LLM needed. Fastest option |
-| **Google Gemini** | Prototypes, complex diagrams, mind maps | Browser → gemini.google.com (Nano Banana mode for image generation). Uses the strongest available model |
-| **ChatGPT** | Prototypes, diagrams, mind maps | Browser → chatgpt.com. Uses the strongest available model (GPT-4o or newer) |
+| **HTML/CSS (built-in)** | Infographics, data visualizations | Generated locally as a single HTML file with inline CSS and SVG. No external LLM needed. Full control over layout and styling |
+| **Google Gemini** | Prototypes, complex diagrams, mind maps, infographics | Browser → gemini.google.com (Nano Banana mode for image generation). Uses the strongest available model |
+| **ChatGPT** | Prototypes, diagrams, mind maps, infographics | Browser → chatgpt.com. Uses the strongest available model (GPT-4o or newer) |
 | **NotebookLM** | Mind maps, presentations | Browser → notebooklm.google.com. Uses Presentations and Mind Map features |
 | **Figma** | Prototypes, design mockups | Via Figma MCP or browser → figma.com. Best for high-fidelity prototypes |
 | **Draw.io** | Flowcharts, BPMN, architecture diagrams | Priority: generate .drawio XML file locally. Fallback: browser → app.diagrams.net |
@@ -144,6 +175,9 @@ Present options based on the visualization type. Not all tools are suitable for 
 | Lo-fi wireframe | Gemini or ChatGPT | Image generation with structure |
 | Mid-fi mockup | Figma or Gemini | Higher fidelity capability |
 | Mind map | NotebookLM or Gemini | Built-in mind map features |
+| Infographic (data-driven, statistical) | HTML/CSS (built-in) | Full control over charts, numbers, layout. Renders as a standalone file |
+| Infographic (process, comparison, informational) | HTML/CSS (built-in) or Gemini | HTML for structured layouts; Gemini for more illustrative style |
+| Infographic (highly visual / illustrative) | Gemini or ChatGPT | Image generation for icon-heavy or artistic infographics |
 | Presentation | NotebookLM | Built-in presentation generation |
 
 Mark the recommended option with "(Recommended)" in the AskUserQuestion options.
@@ -155,12 +189,13 @@ Based on all gathered context, construct a detailed prompt for the selected tool
 **5a. Core elements for every prompt:**
 
 1. **Goal** — what is being visualized and why (concept pitch, technical flow, user journey, etc.)
-2. **Type** — diagram / prototype / mind map / presentation
+2. **Type** — diagram / prototype / mind map / infographic / presentation
 3. **Notation** (for diagrams) — flowchart / BPMN 2.0 / simple schema
 4. **Fidelity** (for prototypes) — lo-fi / mid-fi
-5. **Content** — the actual information to visualize (process steps, screen elements, nodes, etc.)
-6. **Text locale** — language for all labels and text on the image
-7. **Visual style** — clean, professional, minimalistic. Consistent color scheme. High contrast for readability
+5. **Style** (for infographics) — data-driven / process / comparison / informational / statistical
+6. **Content** — the actual information to visualize (process steps, screen elements, nodes, data points, etc.)
+7. **Text locale** — language for all labels and text on the image
+8. **Visual style** — clean, professional, minimalistic. Consistent color scheme. High contrast for readability
 
 **5b. Additional elements based on type:**
 
@@ -182,6 +217,23 @@ Based on all gathered context, construct a detailed prompt for the selected tool
 - Level of depth (2-3 levels typical)
 - Key relationships between nodes
 
+**For infographics:**
+- **Main headline / title** — the key takeaway or topic
+- **Data points and metrics** — specific numbers, percentages, KPIs to display
+- **Visual hierarchy** — what should be the most prominent element, secondary elements, supporting details
+- **Section structure** — logical sections of the infographic (e.g., "Problem → Solution → Results" or "Before → After")
+- **Chart types** (for data-driven/statistical) — bar charts, pie charts, donut charts, progress bars, stat callouts, sparklines
+- **Icons and visual elements** — use simple geometric icons or emoji-style markers; describe each icon's meaning
+- **Color scheme** — suggest 2-3 primary colors that match the topic or brand; use color to encode meaning (e.g., green = positive, red = negative)
+- **Dimensions / format** — vertical scroll (800px wide), A4-like (portrait), slide-sized (16:9), social media format (1080x1080)
+- **Footer** — source attribution, date, product name if applicable
+- **Style-specific guidance:**
+  - Data-driven: emphasize numbers with large font sizes, use progress bars and chart visualizations, include trend indicators (arrows up/down)
+  - Process / timeline: use numbered steps or timeline dots, clear directional flow (top-to-bottom or left-to-right), connector lines between stages
+  - Comparison: use columns or side-by-side blocks, checkmarks/crosses for feature presence, consistent structure across compared items
+  - Informational: balance text and visuals, use icon+text pairs, group related information in visual blocks
+  - Statistical: lead with the most impactful stat, use chart diversity (don't repeat the same chart type), include context for numbers (benchmarks, periods)
+
 **For presentations:**
 - Number of slides
 - Key messages per slide
@@ -196,12 +248,21 @@ Always include:
 - "White or light background for readability"
 - "No decorative elements that don't convey information"
 
+**Additional quality instructions for infographics:**
+- "Maintain clear visual hierarchy — the most important data/message should be the most visually prominent"
+- "Use whitespace generously to avoid visual clutter"
+- "Ensure all data visualizations are accurately proportioned (e.g., bar heights match actual values)"
+- "Include units and labels for all data points"
+- "Use a consistent icon style throughout (all outline, all filled, or all emoji)"
+
 **5d. Data confidentiality in prompts:**
 
 When constructing prompts for external LLMs:
 - **DO NOT include**: internal URLs, API endpoints, Tableau dashboard links, internal metric values, employee names, Jira project keys, Confluence page IDs
 - **DO include**: general product descriptions, feature concepts described in abstract terms, user flow logic, UI structure descriptions
 - If the user's requirements contain confidential data — generalize it before including in the prompt. Inform the user: "I've generalized some internal details for the prompt to comply with the data policy."
+
+**Note for infographics with confidential data:** If the user wants to include internal metrics or KPIs in the infographic and the selected tool is an external LLM (Gemini/ChatGPT), warn the user and recommend switching to the **HTML/CSS (built-in)** tool, which processes data locally and does not send it externally. If the user insists on using an external tool — replace real numbers with placeholder values and note this in the output.
 
 ### Step 6 — Generation
 
@@ -216,6 +277,30 @@ Execute the generation based on the selected tool:
 5. Skip to Step 7 (no LLM quality loop needed)
 
 For BPMN 2.0 in Mermaid — use `flowchart` with subgraphs for lanes and styled nodes for events/gateways.
+
+**6a2. HTML/CSS (built-in) — for infographics:**
+
+1. Generate a single self-contained HTML file with:
+   - Inline CSS for styling (no external dependencies)
+   - SVG elements for charts and icons (or use simple CSS shapes)
+   - Responsive layout that looks good at the target dimensions
+   - Print-friendly styles (if the infographic is for A4/PDF)
+2. **HTML structure guidelines for infographics:**
+   - Use a fixed-width container (e.g., `max-width: 800px; margin: 0 auto`)
+   - Structure with semantic sections: header (title + subtitle), body sections, footer
+   - Use CSS Grid or Flexbox for layout
+   - For charts: use inline SVG with `<rect>`, `<circle>`, `<text>`, `<path>` elements — no external charting libraries required
+   - For icons: use simple SVG icons or Unicode symbols (e.g., ✓, ✗, ▲, ▼, ●)
+   - For progress bars: use simple `<div>` elements with percentage-based widths
+   - Include `@media print` styles for clean printing
+3. **Color and typography:**
+   - Define a color palette at the top of the `<style>` block as CSS variables (`--color-primary`, `--color-secondary`, `--color-accent`, `--color-bg`, `--color-text`)
+   - Use system fonts or Google Fonts (import via `<link>`)
+   - Minimum font size: 12px for body, 14px for labels, 24px+ for headline stats
+4. Validate the HTML (check for unclosed tags, valid CSS)
+5. Save as `.html` file in the user's workspace
+6. Present the result to the user (the HTML file will render in the chat)
+7. Skip to Step 7 (no LLM quality loop needed)
 
 **6b. Google Gemini (via browser):**
 
@@ -281,11 +366,12 @@ After receiving the result from any external tool (Gemini, ChatGPT, NotebookLM, 
 
 | Check | What to verify |
 |-------|---------------|
-| **Content accuracy** | All required elements present? Process steps match? UI elements correct? |
+| **Content accuracy** | All required elements present? Process steps match? UI elements correct? Data points accurate? |
 | **Text correctness** | All labels in the correct locale? No truncated or garbled text? |
 | **Visual quality** | Clean layout? No overlapping elements? Readable text? Consistent styling? |
 | **Notation compliance** | (For BPMN/flowcharts) Correct symbols used? Proper flow direction? |
-| **Completeness** | No missing branches, screens, or nodes? Start/end conditions present? |
+| **Data integrity** | (For infographics) Numbers match source data? Charts proportional? Units labeled? |
+| **Completeness** | No missing branches, screens, nodes, or data sections? Start/end conditions present? |
 
 3. **If issues found — auto-correct:**
    - Construct a follow-up prompt describing exactly what needs to be fixed
@@ -304,7 +390,7 @@ After receiving the result from any external tool (Gemini, ChatGPT, NotebookLM, 
 
 **7a. Show the result in the chat:**
 
-- Display the generated image/diagram/prototype
+- Display the generated image/diagram/prototype/infographic
 - Provide a brief description of what was created
 - Highlight key elements
 
@@ -328,7 +414,7 @@ Present options via AskUserQuestion:
 | **Confluence** | Upload image to a Confluence page (existing or new). Add caption and context |
 | **Notion** | Upload image to a Notion page (existing or new) |
 | **Figma** | Upload to Figma workspace (if not already created there) |
-| **Local file** | Save as PNG/SVG/drawio/mermaid in the user's workspace folder |
+| **Local file** | Save as PNG/SVG/drawio/mermaid/html in the user's workspace folder |
 | **No** | End the skill, result stays in the chat |
 
 **8b. Confluence publishing:**
@@ -353,7 +439,20 @@ Present options via AskUserQuestion:
 
 - Save the file to the user's workspace folder
 - Provide a download link
-- Format: PNG for raster images, SVG for vector diagrams, .drawio for Draw.io files, .mermaid for Mermaid code
+- Format: PNG for raster images, SVG for vector diagrams, .drawio for Draw.io files, .mermaid for Mermaid code, .html for infographics
+
+**8f. Additional export for infographics:**
+
+After saving the primary format, offer additional export options:
+> "Would you also like to export this infographic as a different format?"
+
+| Format | When useful |
+|--------|------------|
+| **PNG** | For embedding in presentations, Confluence pages, or sharing via chat |
+| **PDF** | For printing or formal document attachments |
+| **HTML** | For interactive viewing in a browser (if not already HTML) |
+
+If the user selects PNG or PDF — use browser rendering or a conversion tool to generate from HTML.
 
 ### Step 9 — Skill chaining
 
@@ -365,8 +464,11 @@ After publishing (or if the user decided not to save), offer the next step based
 **If the visualization was for requirements:**
 > "Would you like to create Jira tasks for this feature? I'll pass the context to the Feature Task Creator skill."
 
+**If the infographic was for product analysis or research:**
+> "Would you like to create a presentation that includes this infographic? I'll pass the context to the Presentation Creator skill."
+
 **If standalone:**
-> "Would you like to create another diagram or prototype? Or continue with a different task?"
+> "Would you like to create another diagram, prototype, or infographic? Or continue with a different task?"
 
 ---
 
@@ -381,15 +483,15 @@ After completing their main workflow, the following skills should offer visualiz
 | **write-concept** | After concept is published | Flowchart of the main user flow, prototype of key screens |
 | **brainstorm-features** | After hypotheses are scored | Mind map of feature ideas, diagrams of top hypotheses |
 | **requirements-creator** | After requirements are published | BPMN of the process, prototype of UI changes |
-| **product-research** | After research is published | Mind map of competitive landscape, diagram of market positioning |
-| **product-analysis** | After analysis is complete | Flowchart of user funnel, diagram of metric relationships |
+| **product-research** | After research is published | Mind map of competitive landscape, diagram of market positioning, **infographic of key research findings** |
+| **product-analysis** | After analysis is complete | Flowchart of user funnel, diagram of metric relationships, **infographic of key metrics and trends** |
 
 **Transition prompt template:**
-> "Would you like to create a visual diagram or prototype for [brief description]? This can help communicate the concept more effectively."
+> "Would you like to create a visual diagram, prototype, or infographic for [brief description]? This can help communicate the concept more effectively."
 
 When invoking this skill from another skill, pass:
 - Full context from the parent skill (concept, requirements, research results, hypotheses)
-- Suggested visualization type (diagram / prototype / mind map)
+- Suggested visualization type (diagram / prototype / mind map / infographic)
 - The specific element to visualize
 
 ---
@@ -397,12 +499,14 @@ When invoking this skill from another skill, pass:
 ## Quality standards
 
 - Every generated visual must be reviewed for accuracy, completeness, and readability
-- Text on diagrams/prototypes must match the user's chosen locale
+- Text on diagrams/prototypes/infographics must match the user's chosen locale
 - Prompts for external LLMs must comply with `references/data-policy.md` — no confidential data in prompts
 - Mermaid code must be syntactically valid before presenting to the user
 - Draw.io XML must be structurally valid and openable in Draw.io
+- HTML infographics must be valid, self-contained, and render correctly in modern browsers
 - BPMN 2.0 diagrams must use correct notation (events, gateways, lanes)
 - Prototype fidelity must match the selected level (lo-fi or mid-fi)
+- Infographic data visualizations must be accurately proportioned and labeled
 - Maximum 3 auto-correction iterations before asking the user
 - Always present the result to the user before publishing
 
