@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.5.0
+version: 0.5.1
 description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one.
 ---
 
@@ -171,19 +171,19 @@ Generate the full requirements document following the confirmed template structu
 
 **Standard template structure** (from `references/requirements-template.md`):
 
-| # | Section | Skill behavior |
-|---|---------|---------------|
+| Section | Skill behavior |
+|---------|---------------|
 | — | Table of Contents | Auto-generated (Confluence ToC macro levels 1-6 / equivalent for other tools) |
-| 1 | Epic | Link to Epic description in Confluence |
-| 2 | Hypotheses | Numbered table: №, Hypothesis |
-| 3 | Goals | Numbered table: №, Goal (can be removed if goal = metrics) |
-| 4 | Metrics | Numbered table: №, Metric, Expected change |
+| Epic | Link to Epic description in Confluence |
+| Hypotheses | Numbered table: №, Hypothesis |
+| Goals | Numbered table: №, Goal (can be removed if goal = metrics) |
+| Metrics | Numbered table: №, Metric, Expected change |
 | 5.1 | Business requirements | Text with bold highlights for key theses |
 | 5.2 | Functional requirements | Numbered table: №, Block/Module/Theme, Requirements |
 | 5.3 | Technical requirements | Implementation approach, platforms, locales |
 | 5.4 | UI&UX requirements | **Empty section** — to be filled by Product Designer. If Figma links to current designs were found — include them as reference |
 | 5.5 | Analytics coverage requirements | **Empty section** — to be filled by Product Analyst |
-| 6 | Tasks | Link to Epic in Jira + Jira work items macro with JQL filter (parent = EPIC-KEY AND labels = FEATURE-CODE) |
+| Tasks | Link to Epic in Jira + Jira work items macro with JQL filter (parent = EPIC-KEY AND labels = FEATURE-CODE) |
 
 > **Note:** Use the user's preferred language (`user.language`) for all section headings and content in the published document.
 
@@ -200,7 +200,7 @@ If A/B Test or A/B/C Test approach is selected — automatically add these secti
 
 **Formatting — mandatory for every document:**
 
-1. **Headings** — H1/H2/H3 hierarchy for all sections and subsections
+1. **Headings** — H1/H2/H3 hierarchy for all sections and subsections. Headings must NOT be numbered (no "1. Epic", "2. Hypotheses" etc — just "Epic", "Hypotheses").
 2. **Dividers** — horizontal rule between all major sections
 3. **Bold text** — highlight key theses, important conclusions, critical data points
 4. **Tables** — use for all structured data: hypotheses, goals, metrics, functional requirements, risk/mitigation pairs
@@ -510,3 +510,4 @@ If the user agrees — invoke Feature Task Creator with full context.
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
+
