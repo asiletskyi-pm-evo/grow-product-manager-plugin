@@ -14,7 +14,7 @@ When publishing to non-Confluence tools (Notion, Google Docs, etc.), adapt the s
 
 ---
 
-### 1. Epic
+### Epic
 
 Link to the Epic description in Confluence.
 
@@ -22,7 +22,7 @@ Link to the Epic description in Confluence.
 
 ---
 
-### 2. Hypotheses
+### Hypotheses
 
 Describe hypotheses: preconditions/problem, what we want to change, what we want to achieve.
 
@@ -37,7 +37,7 @@ Describe hypotheses: preconditions/problem, what we want to change, what we want
 
 ---
 
-### 2a. A/B Test sections (only if A/B or A/B/C test is selected)
+### A/B Test sections (only if A/B or A/B/C test is selected)
 
 #### Test Groups
 
@@ -74,7 +74,7 @@ Describe hypotheses: preconditions/problem, what we want to change, what we want
 
 ---
 
-### 3. Goals
+### Goals
 
 Describe goals of the feature.
 
@@ -89,7 +89,7 @@ Describe goals of the feature.
 
 ---
 
-### 4. Metrics
+### Metrics
 
 Describe metrics and forecasts of their changes, usually in %.
 
@@ -104,15 +104,15 @@ Describe metrics and forecasts of their changes, usually in %.
 
 ---
 
-### 5. Requirements
+### Requirements
 
-#### 5.1 Business Requirements
+#### Business Requirements
 
 Describe general business requirements: what should change for different user types and in the product overall.
 
 **Instructions:** Focus on WHAT should change from a business perspective, not HOW it should be implemented. Describe the expected behavior for each affected user type. Use bold text to highlight key business rules and constraints.
 
-#### 5.2 Functional Requirements
+#### Functional Requirements
 
 Describe what we want to implement/change in the product, how it should work, what business logic conditions should apply, how the functionality should work in user interfaces. Decompose requirements by blocks, screens, and stages of user interaction.
 
@@ -130,7 +130,7 @@ Describe what we want to implement/change in the product, how it should work, wh
 - If the feature has multiple user flows — describe each flow separately
 - Reference current Figma designs where applicable (link to specific frames)
 
-#### 5.3 Technical Requirements
+#### Technical Requirements
 
 **Implementation approach:**
 - Determine the approach: without flag, under feature flag, as A/B test, A/B/C test
@@ -147,7 +147,7 @@ Describe what we want to implement/change in the product, how it should work, wh
   - Only on specific locales (list them)
   - On several (specify which)
 
-#### 5.4 UI&UX Requirements
+#### UI&UX Requirements
 
 **This section is left empty for Product Designers to fill in.**
 
@@ -157,7 +157,7 @@ Product Designers add:
 
 If Figma links to current (pre-change) designs were found during context gathering — include them here as reference with a note: "Current state (before changes):"
 
-#### 5.5 Analytics Coverage Requirements
+#### Analytics Coverage Requirements
 
 **This section is left empty for Product Analysts to fill in.**
 
@@ -167,7 +167,7 @@ Product Analysts add:
 
 ---
 
-### 6. Tasks
+### Tasks
 
 > **Note:** Use the user's preferred language (`user.language`) for all section headings and content when publishing the requirements document.
 
