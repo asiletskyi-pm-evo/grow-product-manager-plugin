@@ -12,6 +12,23 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## [1.2.1] — 2026-04-08
+
+**Plugin summary:** Remove heading numbering from requirements-creator skill and template.
+
+| Skill | Version | Change |
+|-------|---------|--------|
+| requirements-creator | 0.5.0 → 0.5.1 | Remove heading numbering |
+
+### Details
+
+**requirements-creator (v0.5.1)**
+- Removed numbered `# | Section` column from the Step 4 template table — sections are now listed without sequential numbers
+- Added formatting rule: headings must NOT be numbered (no "1. Epic", "2. Hypotheses" etc)
+- Updated `references/requirements-template.md`: removed numbering from all section headings (e.g., "### 1. Epic" → "### Epic", "#### 5.1 Business Requirements" → "#### Business Requirements")
+- Version bump: 0.5.0 → 0.5.1
+
+
 ## [1.2.0] — 2026-04-07
 
 ### Plugin
