@@ -31,7 +31,7 @@ Interactive brainstorming assistant: evaluate user's existing ideas, generate ne
 **Trigger phrases**: "brainstorm features", "generate hypotheses", "come up with ideas", "find growth opportunities"
 
 
-### Feature and Hypothesis Requirements Creator (v0.5.0)
+### Feature and Hypothesis Requirements Creator (v0.5.1)
 Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Supports two modes:
 
 
