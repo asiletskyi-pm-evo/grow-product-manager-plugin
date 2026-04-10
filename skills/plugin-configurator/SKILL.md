@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 0.4.0
+version: 0.6.0
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist.
 ---
 
@@ -14,7 +14,7 @@ Supports multiple organizations, products, and projects simultaneously.
 
 | Mode | When to use | What it does |
 |------|------------|--------------|
-| **Onboarding** | First launch, `local-context.md` doesn't exist | Full guided setup: user profile → organizations → products → teams → data sources → review → validation |
+| **Onboarding** | First launch, `local-context.md` doesn't exist | Full guided setup: user profile → organizations → products → teams → data sources → CJM → Knowledge Library → review → validation |
 | **Update** | `local-context.md` exists, user wants to change something | Edit a specific section: add product, update team, change dashboard URLs, add OKRs, etc. Always shows changelog |
 | **Validate** | User wants to check everything works | Test all MCP connections, verify data access, check context completeness, produce readiness report |
 | **View** | User asks to see current config | Display current `local-context.md` contents in a readable format, allow inline edits via dialogue |
@@ -235,15 +235,88 @@ If yes:
 - CI/CD pipeline URLs
 - Environment URLs (staging, production)
 
-### Step 9 — Custom Sections
+### Step 9 — CJM Configuration (per product, optional)
+
+> "Do you use Customer Journey Map (CJM) analysis in your product work? This enables funnel analysis, anomaly detection, and improvement hypothesis generation."
+
+If no → skip to Step 10.
+
+If yes:
+
+**9a. Select funnel template:**
+
+> "Which funnel template fits your product? Available templates:"
+>
+> - **E-commerce** — Start/Listing → Product Page → Cart/Checkout → Payment/Post-Purchase
+> - **SaaS** — Awareness → Signup/Trial → Activation → Engagement → Conversion → Retention
+> - **Marketplace** — Search/Browse → Listing Page → Contact/Booking → Transaction → Review
+> - **Custom** — define your own stages
+
+See `references/funnel-templates.md` for full template definitions.
+
+**Communicate the selection:**
+> "Using the **[template name]** template with stages: [list]. You can change this at any time."
+
+**9b. If Custom template selected:**
+1. Ask: "How many stages does your funnel have?"
+2. For each stage: collect name, key metrics (at least 1)
+3. Confirm the complete funnel
+
+**9c. Map dashboards to stages:**
+
+For each funnel stage:
+> "Which dashboard shows data for **[Stage name]**?"
+
+Collect dashboard URLs (Tableau, GA, or other). If the user already provided dashboard URLs in Step 5 — suggest mapping those first.
+
+**9d. Set baseline conversions:**
+
+> "Do you know the current conversion rates for each stage? (used as baseline for anomaly detection)"
+
+- If yes → collect per-stage conversion rates
+- If no → "We can read baselines from dashboards during the first CJM analysis."
+
+**9e. Configure anomaly thresholds:**
+
+> "Anomaly detection thresholds (you can use defaults or customize):"
+
+| Level | Default | Your value |
+|-------|---------|-----------|
+| Warning | 10% deviation | [ask] |
+| Critical | 25% deviation | [ask] |
+
+**9f. Default analysis settings:**
+
+| Setting | Default | Ask user |
+|---------|---------|---------|
+| Comparison baseline | Previous period | Previous period / Previous year / Target / Custom |
+| Default platforms | All configured | All / Specific |
+| Default search modes | Library + Internet | User selects from available modes |
+
+### Step 10 — Knowledge Library Setup (optional)
+
+> "Would you like to set up a Knowledge Library? It stores curated sources (articles, benchmarks, UX best practices) that enrich CJM analysis and research."
+
+If no → skip to Step 11.
+
+If yes → delegate to `knowledge-library` skill onboarding workflow (KL-1 through KL-6). The Knowledge Library skill handles:
+1. Directory structure initialization
+2. Source import (if user provides URLs or files)
+3. Baymard Premium configuration
+4. Default search modes
+5. Confluence and Google Drive search validation
+
+After Knowledge Library setup completes, continue with Step 11.
+
+### Step 11 — Custom Sections
 
 > "Is there any additional information you'd like to save in the plugin context? For example: strategy documents, internal guidelines, specific processes."
 
 Allow free-form markdown sections with custom titles.
 
-### Step 10 — Review, confirm, and save local-context.md
+### Step 12 — Review, confirm, and save local-context.md
 
-**10a. Compile summary for review:**
+**12a. Compile summary for review:**
 
 Before generating the file, present ALL collected information to the user in a structured summary for confirmation:
 
@@ -277,15 +350,22 @@ Before generating the file, present ALL collected information to the user in a s
 - OKRs: [list or "not specified"]
 - Competitors: [list]
 - Analytics: [dashboards list]
+- CJM: [template name, stages count, thresholds or "not configured"]
 
 ### Team: [name]
 - Members: [list with roles]
+
+### Knowledge Library
+- Status: [initialized / not configured]
+- Sources: [count or "empty"]
+- Search modes: [list or "N/A"]
+- Baymard: [yes/no]
 
 ### Custom sections
 - [if any]
 ```
 
-**10b. Collect corrections:**
+**12b. Collect corrections:**
 
 > "Is everything correct? If anything needs to be fixed — tell me what, and I'll make the changes."
 
@@ -293,7 +373,7 @@ Before generating the file, present ALL collected information to the user in a s
 - Iterate until the user confirms: "Все ОК" / "Підтверджую"
 - Only proceed to file generation after explicit confirmation
 
-**10c. Generate the file:**
+**12c. Generate the file:**
 
 Compile all confirmed information into a structured `local-context.md` following the schema in `references/context-schema.md`.
 
@@ -315,20 +395,104 @@ Format:
 ### Product: [Name]
 ...
 
+### CJM Configuration
+...
+
 ### Team: [Name]
+...
+
+### Knowledge Library
 ...
 
 ## Custom Sections
 ...
 ```
 
-**10d. Save to user's workspace:**
+**CJM Configuration section format in local-context.md:**
+
+```markdown
+### CJM Configuration
+
+#### Funnel Template
+- Template: [e-commerce / saas / marketplace / custom]
+- Custom template name: [if custom, user-provided name]
+
+#### Funnel Stages
+| Stage | Name | Dashboard URL | Baseline Conversion |
+|-------|------|---------------|-------------------|
+| 1 | [name] | [URL] | [%] |
+| 2 | [name] | [URL] | [%] |
+| ... | ... | ... | ... |
+
+#### Anomaly Thresholds
+- Warning: [X]% deviation from baseline
+- Critical: [Y]% deviation from baseline
+
+#### Default Analysis Settings
+- Comparison baseline: [previous period / previous year / target]
+- Default platforms: [all / specific list]
+- Default search modes: [library, internet, confluence, gdrive]
+
+#### Health-Check Notifications
+- Channels: [slack / email / local / confluence]
+- Frequency: [weekly / custom]
+```
+
+**Knowledge Library Configuration section format:**
+
+```markdown
+### Knowledge Library
+
+#### Settings
+- Library path: [workspace/knowledge-library/]
+- Default search modes: [library, internet]
+- Trust re-evaluation schedule: monthly
+- Minimum trust threshold: 0.5
+
+#### Baymard Premium
+- Access: [yes/no]
+- URL: [if yes]
+
+#### Configured Confluence Spaces (for CJM search)
+- [Space key]: [description]
+
+#### Configured Google Drive Folders (for CJM search)
+- [Folder ID]: [description]
+```
+
+**12d. Save to user's workspace:**
 
 Save `local-context.md` to the user's outputs/workspace folder. Confirm the path to the user.
 
-**10e. Automatic validation:**
+**12e. Automatic validation:**
 
 After saving, automatically run a quick validation (see Validate Mode) to confirm everything works. Present the readiness report.
+
+**12f. Template Library invitation:**
+
+After the validation report, always offer the next setup step:
+
+> "Plugin configured and ready! One more optional step: **Template Library** — set up reusable templates for your team's artifacts (requirements, concepts, presentations, Jira tasks)."
+>
+> "Do you want to set up templates now? Options:"
+> - **Yes, import from Confluence** — I'll pull your existing requirement/concept templates from Confluence
+> - **Yes, create a presentation template** — I'll help you build a branded .pptx template from your Figma brand assets or website
+> - **Yes, start with an empty library** — I'll set it up now and you can add templates later
+> - **Skip for now** — you can invoke Template Library at any time
+
+If the user chooses any "Yes" option → chain to the `template-library` skill with the appropriate action pre-selected:
+- "import from Confluence" → template-library in Import mode
+- "create a presentation template" → template-library in Create New mode with type=presentation pre-selected
+- "start with empty library" → template-library initializes an empty `_registry.json` and confirms setup
+
+**After template setup completes**, return confirmation:
+> "Setup complete. Here's a summary of what's configured:"
+> - Plugin context: ✅ local-context.md saved
+> - Integrations: [validation results summary]
+> - CJM: [configured / not configured]
+> - Knowledge Library: [initialized with N sources / not configured]
+> - Templates: [number] templates saved / library initialized / skipped
+> "You're ready to start! Try: 'brainstorm features for [product]' or 'write requirements for [feature name]'"
 
 ---
 
@@ -351,6 +515,8 @@ Present current sections as options via AskUserQuestion:
 - Teams
 - Analytics & Data Sources
 - Key Metrics & OKRs
+- CJM Configuration
+- Knowledge Library Settings
 - Repositories
 - Custom Sections
 - Add new custom section
@@ -358,6 +524,18 @@ Present current sections as options via AskUserQuestion:
 ### U-3. Update the selected section
 
 Follow the same collection flow as Onboarding for the selected section. Pre-fill all fields with current values so the user only needs to change what's different.
+
+**For CJM Configuration updates:**
+- Allow changing funnel template (with remapping prompt)
+- Allow adding/removing/editing stages
+- Allow changing thresholds and default settings
+- Allow changing notification channels
+
+**For Knowledge Library updates:**
+- Allow changing default search modes
+- Allow changing Baymard configuration
+- Allow adding/removing Confluence spaces and Google Drive folders
+- For source management → redirect to `knowledge-library` skill in Manage mode
 
 ### U-4. Save updated file and show changelog
 
@@ -379,6 +557,9 @@ Follow the same collection flow as Onboarding for the selected section. Pre-fill
 | Organization → Tableau Base URL | https://old-url.com | https://new-url.com |
 | Team: Product Team → Members | 5 members | 6 members (+Person Name, QA) |
 | Product: App → OKRs | (not set) | **Added: 2 objectives, 4 key results** |
+| CJM → Funnel Template | e-commerce | **saas** |
+| CJM → Anomaly Thresholds | Warning: 10%, Critical: 25% | Warning: **8%**, Critical: **20%** |
+| Knowledge Library → Search modes | library, internet | library, internet, **confluence** |
 ```
 
 The changelog must include:
@@ -416,6 +597,7 @@ For each product in the context:
 - Try to search Jira issues in the configured project: `searchJiraIssuesUsingJql` with `project = PROJECT_KEY ORDER BY created DESC` (limit 1)
 - Try to access the configured Confluence space: `getConfluenceSpaces` and verify the space key exists
 - If dashboard URLs are configured — try to navigate and take a screenshot to verify access
+- If CJM dashboards are configured — verify each stage dashboard is accessible
 
 ### V-4. Check context completeness
 
@@ -423,11 +605,13 @@ Score each product's context completeness:
 
 | Category | Fields | Weight |
 |----------|--------|--------|
-| **Core** (required) | product name, description, platforms, jira_project_key | 40% |
+| **Core** (required) | product name, description, platforms, jira_project_key | 35% |
 | **Publishing** | confluence_space, confluence_template | 15% |
-| **Analytics** | key_metrics, dashboards, ab_test_dashboards | 20% |
+| **Analytics** | key_metrics, dashboards, ab_test_dashboards | 15% |
 | **Team** | team name, members, jira_team_id | 15% |
 | **Strategy** | OKRs, competitors, metric_targets | 10% |
+| **CJM** | funnel template, stages, dashboards, thresholds | 5% |
+| **Knowledge Library** | initialized, sources count, search modes | 5% |
 
 Calculate a completeness percentage per product and overall.
 
@@ -452,10 +636,25 @@ Present a comprehensive report:
 | Product 1 | 85% | Missing: OKRs, competitors |
 | Product 2 | 60% | Missing: dashboards, team, OKRs |
 
+### CJM Readiness
+| Product | Template | Stages | Dashboards mapped | Status |
+|---------|----------|--------|-------------------|--------|
+| Product 1 | e-commerce | 4/4 | 3/4 | ⚠️ Stage 4 dashboard missing |
+| Product 2 | — | — | — | ❌ Not configured |
+
+### Knowledge Library
+| Metric | Value |
+|--------|-------|
+| Status | ✅ Initialized |
+| Sources | 37 |
+| Avg trust | 0.78 |
+| Search modes | library, internet, confluence |
+
 ### Recommendations
 1. Connect Figma MCP for working with designs
 2. Add OKRs for Product 1 (improves analysis and concept quality)
 3. Add competitors for Product 2 (required for research)
+4. Map Stage 4 dashboard for Product 1 CJM analysis
 
 ### Overall readiness: 75%
 ```
@@ -474,11 +673,11 @@ Read `local-context.md` and present its contents in a clean, readable format —
 
 > "Here is the current plugin configuration:"
 
-Display each section with clear headings. For long sections (teams, metrics) — use tables. Show completeness indicators where fields are empty or missing.
+Display each section with clear headings. For long sections (teams, metrics) — use tables. Show completeness indicators where fields are empty or missing. Include CJM Configuration and Knowledge Library sections.
 
 ### VW-2. Ask if changes are needed
 
-> "Would you like to change anything? Just tell me what — for example: 'change email', 'add competitor X', 'remove product Y'."
+> "Would you like to change anything? Just tell me what — for example: 'change email', 'add competitor X', 'remove product Y', 'switch CJM template to SaaS'."
 
 ### VW-3. Apply inline changes
 
@@ -497,114 +696,3 @@ If any changes were applied:
 - Update the `Updated:` timestamp
 
 If no changes were made — simply end the mode.
-
----
-
-## Changelog Protocol (applies to ALL modes that modify local-context.md)
-
-Every time `local-context.md` is modified — whether by Onboarding (Step 10), Update, View, or Enrichment from other skills — the user MUST receive a changelog report showing:
-
-1. **What was added** (new fields, new sections, new items in lists)
-2. **What was changed** (previous value → new value)
-3. **What was removed** (if applicable)
-
-Format: table with columns "Section | Was | Became"
-
-This applies equally to:
-- Plugin Configurator modes (Onboarding, Update, View)
-- Context Enrichment by other skills (Product Research adding competitors, etc.)
-
----
-
-## Context-aware product selection
-
-When `local-context.md` contains **multiple products**, skills need to know which product the user is working with. The Configurator establishes the following protocol for all skills:
-
-**At the start of any skill execution (after reading local-context.md):**
-
-1. If the user explicitly mentioned a product name → use it
-2. If only one product exists in context → use it automatically
-3. If multiple products exist and none was mentioned → ask via AskUserQuestion:
-   > "There are multiple products in the context: [list]. Which product are we working with now?"
-
-This question is asked once per skill session. The selected product becomes the "active product" for the duration of the skill execution.
-
----
-
-## Enrichment Protocol
-
-Other skills can **add information** to `local-context.md` during their execution:
-
-- **Product Research** → can add discovered competitors
-- **Product Analysis** → can update current metric values
-- **Feature Task Creator** → can discover and add team member Jira accountIds
-- **Requirements Creator** → can discover and add Confluence template URL
-
-When a skill discovers new context:
-1. Inform the user: "I found new information that can be added to the context: [what was found]"
-2. Ask: "Would you like to update local-context.md?"
-3. If yes — read current file, add new data to the appropriate section, save
-4. **Show changelog** (same format as Update Mode U-4): what was added, previous state → new state
-
----
-
-## Versioning Protocol
-
-This protocol applies whenever **any skill file or plugin.json is modified** — including through the Self-Improvement workflow, manual edits, or plugin structural changes.
-
-### Skill version rules (frontmatter `version:` in SKILL.md)
-
-| Change type | Version bump | Examples |
-|-------------|-------------|---------|
-| **PATCH** | x.x.X+1 | Wording fix, small content addition, formatting change, minor clarification |
-| **MINOR** | x.X+1.0 | New step, new section, significant workflow addition, new condition |
-| **MAJOR** | X+1.0.0 | Full workflow restructure, breaking change in logic, skill renamed |
-
-### Plugin version rules (in `plugin.json`)
-
-The plugin version is bumped to reflect the **highest-impact** change among all modified skills:
-- Any skill PATCH → plugin PATCH
-- Any skill MINOR → plugin MINOR
-- Any skill MAJOR → plugin MAJOR
-- New skill added → plugin MINOR
-
-### Required steps when modifying a skill
-
-1. **Bump skill version** — update `version:` in the modified SKILL.md frontmatter
-2. **Bump plugin version** — update `"version"` in `.claude-plugin/plugin.json`
-3. **Add CHANGELOG.md entry** — create a new entry at the top of `CHANGELOG.md`:
-
-```
-## [X.Y.Z] — YYYY-MM-DD
-
-### What changed
-- [brief description of what was changed and why]
-
-### Skills changed
-| Skill | From | To | Change type |
-|-------|------|----|-------------|
-| skill-name | old-version | new-version | patch/minor/major — what was changed |
-```
-
-4. **Re-package the plugin** — rebuild the `.plugin` archive with the new version
-5. **Confirm to the user** — show the new plugin version and the skills that were bumped
-
-### This skill's versioning
-
-This skill (`plugin-configurator`) must bump its own version when its SKILL.md is modified, following the same rules above.
-
----
-
-## Quality Standards
-
-- Never overwrite user-provided data without confirmation
-- Always show what was discovered vs. what the user needs to provide manually
-- Pre-fill fields from auto-discovery, but always confirm with the user
-- Preserve custom sections during updates
-- Use Ukrainian or English based on user's language preference (ask in Step 2 if Onboarding, read from context if Update/Validate)
-
-## Additional Resources
-
-- **`references/context-schema.md`** — complete schema definition with field descriptions, required/optional status, and which skills use each field
-- **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
-- **`references/self-improvement.md`** — self-improvement protocol

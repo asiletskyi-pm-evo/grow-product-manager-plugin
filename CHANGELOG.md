@@ -12,6 +12,30 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## [1.3.0] — 2026-04-10
+
+### What changed
+- Added `knowledge-library` skill (v0.1.0) — local source management with trust scoring, multi-mode search (library, Confluence, Google Drive, Baymard, internet), and bulk import. Service skill for CJM enrichment with direct user management capabilities.
+- Added `references/cjm-protocol.md` — shared CJM standards: anomaly severity levels, funnel impact calculation formula, health score formula, cross-platform comparison methodology, hypothesis verification checklist.
+- Added `references/funnel-templates.md` — standard funnel stage templates for e-commerce, SaaS, marketplace, and custom product types with recommended metrics and anomaly thresholds.
+- Updated `plugin-configurator` (v0.5.0 → v0.6.0) — added CJM Configuration (Step 9) with funnel template selection, stage-dashboard mapping, anomaly thresholds, and default analysis settings. Added Knowledge Library onboarding (Step 10) with source import, Baymard configuration, and search mode setup. Added CJM and Knowledge Library sections to Update, Validate, and View modes.
+- Updated `references/local-context-protocol.md` — added Step 0f (CJM configuration check for CJM skills) and Step 0g (Knowledge Library availability check). Added CJM and Knowledge Library fields to context usage guidelines.
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| knowledge-library | — | 0.1.0 | new — local knowledge source management with trust scoring and multi-mode search |
+| plugin-configurator | 0.5.0 | 0.6.0 | minor — added CJM Configuration and Knowledge Library onboarding steps |
+
+### References changed
+| Reference | Change |
+|-----------|--------|
+| `cjm-protocol.md` | new — CJM shared standards |
+| `funnel-templates.md` | new — funnel stage templates by product type |
+| `local-context-protocol.md` | updated — CJM and Knowledge Library support |
+
+---
+
 ## [1.2.1] — 2026-04-08
 
 **Plugin summary:** Remove heading numbering from requirements-creator skill and template.
