@@ -1,3 +1,17 @@
+## [1.4.0] — 2026-04-10
+
+### What changed
+- Updated product-analysis (v0.4.0 → v0.5.0) — added CJM Funnel Analysis mode with stage-by-stage anomaly detection, health score calculation, cross-platform comparison, and structured output for CJM Research pipeline. References cjm-protocol.md and funnel-templates.md.
+- Updated product-research (v0.4.0 → v0.5.0) — added Knowledge Library as data source with trust score filtering. Added UX Benchmark Research type with benchmark matrix, gap analysis, and best practice catalog. Added structured return payload for CJM Research pipeline.
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|-----|-------------|
+| product-analysis | 0.4.0 | 0.5.0 | minor — added CJM Funnel Analysis mode |
+| product-research | 0.4.0 | 0.5.0 | minor — added Knowledge Library source and UX Benchmark Research |
+
+---
+
 # Changelog — Grow Product Manager Plugin
 
 All notable changes to this plugin are documented here.
