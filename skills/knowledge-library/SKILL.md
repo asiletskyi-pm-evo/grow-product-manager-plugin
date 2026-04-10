@@ -1,6 +1,6 @@
 ---
 name: knowledge-library
-version: 0.1.0
+version: 0.2.0
 description: Manage a local library of curated knowledge sources (articles, benchmarks, research) with categorization, trust scoring, and multi-mode search. Use when the user asks to "manage sources", "add to library", "search knowledge", "import sources", "show library", or when another skill needs to search for enrichment data. Also triggers when user says "add this article", "save this source", "what sources do we have on [topic]".
 ---
 
@@ -28,6 +28,9 @@ workspace/knowledge-library/
 ├── trust-scores.yaml     # Trust scores and metadata for auto-calculation
 ├── sources/              # Individual source detail files (for rich insights)
 │   ├── baymard-checkout-flow.md
+│   └── ...
+├── trust-reports/        # Monthly trust re-evaluation reports
+│   ├── 2026-04-07.md
 │   └── ...
 └── health-checks/        # Stored CJM health-check snapshots
     ├── 2026-04-07.md
@@ -114,6 +117,7 @@ Optional — created for sources with rich insights:
 | **Import** | User: "import sources", "add these URLs" | Bulk import from URL list, CSV, or structured text |
 | **Export** | User: "export library" | Export as markdown table, CSV, or YAML |
 | **Verify** | Scheduled or user: "check sources" | Re-check freshness, validate URLs, recalculate trust |
+| **Scheduled Trust Re-evaluation** | Auto: monthly task (via `schedule` skill) | Monthly automated recalculation of trust scores for all sources; validates URLs, applies freshness decay, generates report. No user intervention needed; results delivered as report. |
 
 ---
 
@@ -466,6 +470,216 @@ Update `library.md` trust column.
 
 ---
 
+## Workflow — Scheduled Trust Re-evaluation Mode
+
+Auto-triggered monthly via `schedule` skill. This is an extended verification that includes:
+- Automated freshness decay recalculation for all sources
+- URL validation with HTTP HEAD requests
+- Trust score recomputation using adjusted formula
+- Automated report generation
+- User notification of changes
+
+### TR-1. Load all sources
+
+1. Read `library.md` — extract all source rows into a working set
+2. Read `trust-scores.yaml` — load all source metadata
+3. Validate that both files are synchronized (same source IDs); warn if mismatches found
+
+**Prerequisites check:**
+- Confirm `knowledge-library/` directory exists
+- Confirm `library.md` and `trust-scores.yaml` exist and are readable
+
+### TR-2. Recalculate freshness component
+
+For each source, compute freshness decay:
+
+```
+days_since_added = (today - date_added)
+freshness = max(0, 1 - (days_since_added / 730))
+```
+
+Where:
+- `date_added` is the source's "Added" date from `library.md`
+- 730 days = 2 year decay window
+- Freshness ranges from 1.0 (just added) to 0.0 (2+ years old)
+
+Store intermediate freshness value for use in TR-4.
+
+### TR-3. Validate URLs
+
+For each source:
+
+1. **Fetch URL** — attempt HTTP HEAD request to the source URL
+   - Use browser fetch (preferred) or web fetch tool
+   - Timeout: 5 seconds per URL
+   - Log success/failure for each URL
+
+2. **Mark broken links** — if URL unreachable (404, 500, timeout, DNS failure):
+   - Set flag `url_broken: true` in `trust-scores.yaml`
+   - Note the failure reason (404, timeout, DNS error, etc.) in `failure_reason` field
+   - **Do not delete the source** — keep it in library with broken flag
+
+3. **Apply penalty** — if URL broken, reduce trust by 0.2 (applied in TR-4)
+
+### TR-4. Recalculate final trust score
+
+For each source, apply adjusted trust formula:
+
+```
+trust = (source_authority × 0.4) + (evidence_quality × 0.3) + (freshness × 0.2) + (citation_count × 0.1)
+```
+
+Where:
+- **source_authority** = type base score (from Trust Score Calculation section) minus any URL broken penalty (−0.2 if broken)
+- **evidence_quality** = from type base score (same as source_authority in this context)
+- **freshness** = computed value from TR-2
+- **citation_count** = number of other sources in library that reference this source's URL (from TR-3 validation or manual count from sources/*.md files)
+
+**Special handling:**
+- If `trust_override` exists in `trust-scores.yaml` → skip recalculation, preserve override
+- Clamp final trust to [0.0, 1.0]
+- Track "old trust" and "new trust" separately for the report
+
+### TR-5. Update trust-scores.yaml
+
+For each source, update:
+1. `trust_score` → new calculated value (or preserve override)
+2. `last_verified` → today's date
+3. `url_broken` → true/false from TR-3
+4. `failure_reason` → (optional) failure details if URL broken
+5. `freshness_component` → computed freshness value from TR-2
+
+Update file header:
+```yaml
+last_recalculated: [today's date in YYYY-MM-DD format]
+```
+
+### TR-6. Update library.md
+
+For each source row in the table:
+1. Update the `Trust` column with new trust score from TR-4
+2. If URL broken → append ⚠️ symbol to the Trust cell (e.g., `0.65 ⚠️`)
+3. Update header stats:
+   - Last updated: [today's date]
+   - Average trust: [recalculated average of all sources]
+
+### TR-7. Flag sources below threshold
+
+For each source where trust_score < 0.5 after recalculation:
+1. Add tag `stale` to the source in `library.md` (in the Tags column)
+2. In `trust-scores.yaml`, set `needs_review: true`
+3. Collect these sources for the report (see TR-8)
+
+### TR-8. Generate re-evaluation report
+
+Create a new markdown file: `knowledge-library/trust-reports/[YYYY-MM-DD].md`
+
+**Report template:**
+
+```markdown
+# Knowledge Library Trust Re-evaluation Report
+
+**Run date:** [YYYY-MM-DD HH:MM UTC]  
+**Frequency:** Monthly (auto-triggered)
+
+---
+
+## Summary
+
+| Metric | Value |
+|--------|-------|
+| Total sources evaluated | [N] |
+| Sources with updated trust | [N] |
+| URLs validated | [N] |
+| Broken links found | [N] |
+| Sources flagged as stale (trust < 0.5) | [N] |
+| Average trust score (before) | [X.XX] |
+| Average trust score (after) | [X.XX] |
+
+---
+
+## Sources with changes
+
+Only sources where `old_trust ≠ new_trust` are listed:
+
+| Source | Category | Old Trust | New Trust | Reason | Status |
+|--------|----------|-----------|-----------|--------|--------|
+| [Title] | [cat] | 0.80 | 0.76 | Freshness decay (−0.04) | — |
+| [Title] | [cat] | 0.70 | 0.50 | Broken link (−0.2), freshness (−0.0) | ⚠️ Flagged for review |
+| [Title] | [cat] | 0.75 | 0.75 | No change | — |
+
+---
+
+## Broken links
+
+[N] URLs could not be reached:
+
+| Source | URL | Failure | |
+|--------|-----|---------|---|
+| [Title] | [url] | 404 Not Found | Recommend removing or finding updated URL |
+| [Title] | [url] | Connection timeout | May be temporary; check manually |
+
+---
+
+## Sources flagged for review
+
+These sources dropped below the 0.5 threshold and should be reviewed for removal or curation:
+
+- [Source 1] (trust: 0.48, reason: freshness + broken URL)
+- [Source 2] (trust: 0.42, reason: freshness decay)
+
+---
+
+## Recommendations
+
+1. Remove sources with trust < 0.3 (low confidence)
+2. Investigate broken links — try finding updated URLs
+3. For sources flagged as stale (0.5 < trust < 0.6) — review relevance and consider refreshing
+
+---
+
+## Next run
+
+Next scheduled re-evaluation: [date + 1 month]  
+To adjust frequency: user can reconfigure the scheduled task via the `schedule` skill or Plugin Configurator.
+```
+
+### TR-9. Notify user
+
+After report generation:
+
+1. **Save report to disk** at `knowledge-library/trust-reports/[YYYY-MM-DD].md`
+2. **Display summary** in user-facing output (if task is triggered during a session):
+   ```
+   Knowledge Library: Monthly Trust Re-evaluation Complete
+   
+   Evaluated [N] sources — [M] updated, [K] broken links found.
+   Flagged [Z] sources for review (trust < 0.5).
+   
+   Full report: knowledge-library/trust-reports/[YYYY-MM-DD].md
+   ```
+3. **If triggered as background task** (scheduled) — still save report; if task is configured to notify, include the summary above
+
+---
+
+## Workflow — Scheduled Trust Re-evaluation (user-initiated "check sources" vs. monthly auto)
+
+### User-initiated verification:
+
+When user says "check sources", "verify library", or "run verification":
+1. Run the full Scheduled Trust Re-evaluation workflow (TR-1 through TR-9)
+2. Display final summary in chat
+3. Offer to show full report or specific sections (broken links, sources flagged, etc.)
+
+### Monthly auto-triggered:
+
+When the scheduled task runs (via `schedule` skill):
+1. Run full workflow in background
+2. Save report to `trust-reports/[date].md`
+3. Send notification to user (if configured in Schedule setup section)
+
+---
+
 ## Trust Score Calculation
 
 ### Formula
@@ -651,14 +865,127 @@ If the user provides sources → run Import workflow.
 
 ---
 
+## Schedule Setup (Automated Monthly Trust Re-evaluation)
+
+On first initialization or when the user requests "set up monthly verification", the Knowledge Library offers to establish a recurring automated trust re-evaluation task.
+
+### KL-7. Propose schedule setup
+
+When Knowledge Library is first initialized (Step 5 of Onboarding), after confirming the library is ready, ask:
+
+> "Would you like to set up **monthly automated trust re-evaluation**? This will:"
+> - Recalculate trust scores for all sources based on freshness decay
+> - Validate that all source URLs are still reachable
+> - Flag sources below the minimum trust threshold
+> - Generate a monthly report
+>
+> This runs automatically every month at no cost to your interaction budget. **Recommended: yes.**
+
+If user declines → note in config, can be enabled later.
+
+### KL-8. Configure schedule parameters
+
+If user says yes, present configuration options:
+
+> "Configure the monthly trust re-evaluation:"
+
+**Frequency** (default: monthly, i.e., "0 9 * * 0" = every Sunday at 9 AM)
+- Monthly (recommended)
+- Bi-weekly
+- Weekly
+- Custom (user provides cron expression)
+
+**Notification channel** (default: report saved, no active notification)
+- Save report only (silent background run)
+- Notify me of summary (user receives notification with summary)
+- Notify me + show full report (user sees full report in chat)
+
+**Auto-remove stale sources** (default: no)
+- No — flag for review, keep in library (recommended for safety)
+- Yes — automatically remove sources with trust < 0.3 (aggressive)
+
+### KL-9. Create scheduled task
+
+Call `schedule` skill to create a recurring task:
+
+**Task details:**
+- **Task ID:** `knowledge-library-monthly-trust-reeval`
+- **Description:** "Monthly automated trust re-evaluation for Knowledge Library"
+- **Trigger:** cron expression (from KL-8 Frequency selection)
+- **Prompt:** See block below
+- **Notify on completion:** yes (if user selected notification in KL-8)
+
+**Scheduled task prompt template:**
+
+```
+You are running the monthly Knowledge Library trust re-evaluation.
+
+**Context:**
+- User workspace folder: [path from local-context.md]
+- Library location: workspace/knowledge-library/
+- Config: See local-context.md → Knowledge Library Configuration
+
+**Task:**
+
+Run the **Scheduled Trust Re-evaluation workflow** from the Knowledge Library skill:
+
+1. Load all sources from library.md and trust-scores.yaml
+2. For each source:
+   - Recalculate freshness: freshness = max(0, 1 - (days_since_added / 730))
+   - Validate URLs with HTTP HEAD requests; mark broken ones
+   - Recalculate trust using adjusted formula: 
+     trust = (source_authority × 0.4) + (evidence_quality × 0.3) + (freshness × 0.2) + (citation_count × 0.1)
+   - If trust < 0.5 → flag as stale; if trust < 0.3 and auto-remove enabled → remove source
+3. Update trust-scores.yaml and library.md
+4. Generate report at knowledge-library/trust-reports/[YYYY-MM-DD].md
+5. [If notification enabled] Display summary to user
+
+See SKILL.md → Scheduled Trust Re-evaluation Mode for detailed step-by-step (TR-1 through TR-9).
+
+**Report location:** workspace/knowledge-library/trust-reports/[date].md
+
+[End of prompt]
+```
+
+### KL-10. Confirm setup
+
+After task creation:
+
+> "Monthly trust re-evaluation scheduled ✓
+>
+> - **Frequency:** [selected frequency]
+> - **Notification:** [selected notification level]
+> - **Auto-remove stale:** [yes/no]
+> - **First run:** [date of next scheduled run]
+>
+> You can reconfigure anytime via: _"Reconfigure trust re-evaluation"_ or Plugin Configurator."
+
+---
+
+## Reconfiguring the schedule
+
+If user later requests to adjust the schedule:
+
+1. List current schedule config (frequency, notification, auto-remove)
+2. Ask which settings to change
+3. Call `schedule` skill with `update_scheduled_task` to modify:
+   - `cronExpression` for frequency changes
+   - `notifyOnCompletion` for notification changes
+   - Update prompt if auto-remove setting changed
+4. Confirm new settings
+
+---
+
 ## Quality Standards
 
-- Never delete sources without user confirmation
+- Never delete sources without user confirmation (except when auto-remove enabled in scheduled task, which requires prior explicit user config)
 - Always show auto-categorization for user review before saving
 - Preserve user trust overrides during verification/recalculation
 - Use the user's preferred language for all communications (from `local-context.md`)
 - Follow `data-policy.md` — internal source content (Confluence, GDrive) is confidential and must not be sent to external LLMs
 - When Baymard requires login — always inform the user, never attempt to bypass authentication
+- Scheduled trust re-evaluation runs non-intrusively in background; save reports to `trust-reports/` directory without blocking user workflows
+- URL validation in scheduled tasks uses lightweight HEAD requests (no full page fetch) to minimize bandwidth
 
 ## Additional Resources
 

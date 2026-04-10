@@ -1,4 +1,36 @@
-——→——————→—→———## [1.4.0] — 2026-04-10
+## [1.6.0] — 2026-04-10
+
+### Added
+- **cjm-research** v0.1.0 → v0.2.0: Schedule integration for health-check mode — automatic periodic funnel monitoring via `schedule` skill with configurable frequency (weekly/biweekly/monthly/custom), multi-channel notifications (Slack, Email, Confluence, local save), and delta comparison logic (stage-by-stage conversion tracking, new/resolved/persistent anomaly detection, health score trend with >10% critical alert threshold, escalation to full CJM mode)
+- **knowledge-library** v0.1.0 → v0.2.0: Scheduled trust re-evaluation — monthly automated trust score recalculation via `schedule` skill with freshness decay formula, URL validation (HTTP HEAD), broken link flagging, stale source detection (trust < 0.5), auto-generated trust reports saved to `knowledge-library/trust-reports/`, configurable auto-remove for low-trust sources
+- **references/local-context-protocol.md** updated: Added Step 0f (optional sections handling) — CJM Configuration and Knowledge Library Configuration sections are now explicitly documented as optional, with automatic redirect to Plugin Configurator when needed by CJM-related skills
+
+### Changed
+- cjm-research modes table: health-check description updated to "Scheduled periodic check with delta"
+- cjm-research skill chaining: added health-check → schedule (config update) and health-check (critical) → full mode (escalation)
+- knowledge-library quality standards: added scheduled task guidance (non-intrusive background execution, lightweight HEAD requests)
+- local-context-protocol: added CJM Research to context enrichment examples, added `product.cjm_configuration` to context usage list
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|-----|-------------|
+| cjm-research | 0.1.0 | 0.2.0 | minor — schedule integration, health-check delta |
+| knowledge-library | 0.1.0 | 0.2.0 | minor — scheduled trust re-evaluation |
+
+## [1.5.0] — 2026-04-10
+
+### What changed
+- **NEW** cjm-research (v0.1.0) — CJM Research orchestrator with 5 modes (anomalies, hypotheses, full, health-check, comparison) and 12-step pipeline. Delegates to product-analysis (CJM mode), knowledge-library, product-research, and brainstorm-features (CJM mode). Includes independent verification via subagent (Step 10), risk assessment (Step 11), end-to-end funnel impact calculation (Step 9), and 5 report formats. Chains to presentation-creator, requirements-creator, feature-task-creator, diagram-prototyper.
+- Updated brainstorm-features (v0.4.0 → v0.5.0) — added CJM Hypotheses mode with structured hypothesis format, funnel position-weighted ICE scoring, evidence-based confidence boost, funnel impact model, and hypothesis categorization. Added structured return payload for CJM Research pipeline consumption.
+- **NEW** references/verification-checklist.md — checklist for CJM Research Step 10 independent verification with 6 criteria and 3 status levels.
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|-----|-------------|
+| cjm-research | — | 0.1.0 | new — CJM Research orchestrator with 5 modes, 12-step pipeline |
+| brainstorm-features | 0.4.0 | 0.5.0 | minor — added CJM Hypotheses mode with funnel impact modeling |
+
+## [1.4.0] — 2026-04-10
 
 ### What changed
 - Updated product-analysis (v0.4.0 → v0.5.0) — added CJM Funnel Analysis mode with stage-by-stage anomaly detection, health score calculation, cross-platform comparison, and structured output for CJM Research pipeline. References cjm-protocol.md and funnel-templates.md.
