@@ -46,6 +46,31 @@ Each skill has specific required fields (see `references/context-schema.md` → 
   1. Run **Plugin Configurator** in Update mode to add missing data
   2. Proceed without the missing context (skill will ask for this info manually during execution)
 
+### 0f. Check for CJM configuration (CJM skills only)
+
+**This step applies only to:** `cjm-research`, `product-analysis` (when invoked in CJM mode), `brainstorm-features` (when invoked in CJM mode).
+
+Check if `local-context.md` contains a **CJM Configuration** section for the active product:
+
+**If CJM Configuration is missing:**
+- Inform the user: "CJM analysis requires funnel configuration (stages, dashboards, thresholds). Would you like to set it up now?"
+- If yes → launch Plugin Configurator in Update mode, specifically Step 9 (CJM Configuration)
+- If no → the skill cannot proceed in CJM mode. Offer to run in a non-CJM mode if available, or end.
+
+**If CJM Configuration is present:**
+- Read funnel template type, stages, dashboards, thresholds, default settings
+- Communicate the active template to the user: "Using **[template name]** template with [N] stages."
+
+### 0g. Check Knowledge Library availability (optional)
+
+**This step is informational — not blocking.** Skills that support Knowledge Library enrichment should check:
+
+1. Does `knowledge-library/` directory exist in the workspace?
+2. Does `library.md` contain any sources?
+
+If initialized and non-empty — note availability internally (used when proposing enrichment to user).
+If not initialized — no action needed, the skill continues normally without library access.
+
 ## Context Enrichment
 
 During execution, skills may discover new information that should be saved to `local-context.md`. When this happens:
@@ -62,6 +87,7 @@ Examples of discoverable context:
 - **Product Analysis** → current metric values from dashboards
 - **Feature Task Creator** → Jira team IDs, member accountIds discovered from existing tasks
 - **Requirements Creator** → Confluence template URL discovered during publishing
+- **CJM Research** → updated baseline conversions read from dashboards
 
 ## Using context in skills
 
@@ -79,3 +105,8 @@ Once the context is loaded and active product selected, skills should:
 - Use `user.language` for output language preference
 - Use `user.jira_account_id` for setting Reporter on Jira tasks
 - Use `team.jira_team_id` for setting Team field on Jira tasks
+- Use `product.cjm_configuration.funnel_stages` for CJM funnel analysis
+- Use `product.cjm_configuration.anomaly_thresholds` for anomaly detection
+- Use `product.cjm_configuration.default_search_modes` for Knowledge Library search
+- Use `knowledge_library.configured_confluence_spaces` for Confluence CJM search scope
+- Use `knowledge_library.configured_gdrive_folders` for Google Drive CJM search scope

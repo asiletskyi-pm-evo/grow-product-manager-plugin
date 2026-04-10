@@ -82,3 +82,16 @@ Process meetings from any source — Fireflies, other recording tools, uploaded 
 
 
 Tool-agnostic: works with Fireflies MCP, other meeting tool MCPs, uploaded files (audio/video/text/srt), or pasted text. Chains to feature-task-creator (action items → Jira), product-research (interview insights), requirements-creator, brainstorm-features, and diagram-prototyper.
+
+
+
+### Knowledge Library (v0.1.0) — NEW
+Manage a local library of curated knowledge sources (articles, benchmarks, research) with trust scoring, categorization, and multi-mode search (local library, Confluence, Google Drive, Baymard, internet). Service skill for CJM enrichment.
+
+**Trigger phrases**: "add source", "search knowledge", "import sources", "show library", "what sources do we have on [topic]"
+
+---
+
+## Planned Skills
+
+- **CJM Research** — CJM analysis orchestrator with 5 modes: anomaly detection, hypothesis generation, full analysis, health-check, cross-platform comparison (Phase 3)
