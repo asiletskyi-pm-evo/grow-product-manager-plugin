@@ -1,4 +1,4 @@
-## [1.4.0] — 2026-04-10
+——→——————→—→———## [1.4.0] — 2026-04-10
 
 ### What changed
 - Updated product-analysis (v0.4.0 → v0.5.0) — added CJM Funnel Analysis mode with stage-by-stage anomaly detection, health score calculation, cross-platform comparison, and structured output for CJM Research pipeline. References cjm-protocol.md and funnel-templates.md.
