@@ -1,4 +1,4 @@
-——————————# Grow Product Manager
+—————————————————————# Grow Product Manager
 
 The plugin acts as an AI assistant for Product Managers. The shared goal is product growth, finding improvement opportunities, solving user problems, and improving metrics. Product changes are implemented on the principle of conscious, data-backed decisions supported by benchmarks and research results.
 
