@@ -1,7 +1,181 @@
 ---
 name: cjm-research
 version: 0.1.0
-description: CJM Research orchestrator — analyze Customer Journey Map funnels, detect anomalies, generate data-backed hypotheses with funnel impact modeling, and produce structured CJM reports. Use when the user asks to "analyze CJM", "CJM research", "funnel research", "find funnel problems", "CJM health check", or "compare platforms". Orchestrates product-analysis, product-research, brainstorm-features, and knowledge-library.
+---
+name: cjm-research
+version: 0.2.0
+description: CJM Research orchestrator — analyze Customer Journey Map funnels, detect anomalies, generate data-backed hypotheses with funnel impact modeling, and produce structured CJM reports. Use when the user asks to "analyze CJM", "CJM research", "funnel research", "find funnel problems", "CJM health check", "schedule health checks", or "compare platforms". Orchestrates product-analysis, product-research, brainstorm-features, schedule, and knowledge-library.
+---
+
+# CJM Research
+
+Central orchestrator for the CJM (Customer Journey Map) research pipeline. This skill does NOT perform analysis itself — it delegates to specialized skills and assembles the final report. Supports five modes: anomaly detection, hypothesis generation, full CJM analysis, scheduled health checks, and cross-platform comparison.
+
+## Integration prerequisite
+
+Before starting, read and follow the integration fallback chain in `references/integration-strategy.md`. For this skill, the typical external products needed are:
+
+- **Tableau** — primary source of funnel metrics and dashboards (via product-analysis delegation)
+- - **Knowledge Library** — curated UX/product knowledge sources with trust scoring (via knowledge-library skill)
+  - - **Confluence** — for reading previous CJM reports, internal experiment results, post-mortems (via knowledge-library and product-research delegation)
+    - - **Google Drive** — for research presentations, NPS exports, user feedback (via knowledge-library delegation)
+      - - **Jira** — for creating backlog from hypotheses in `full` mode (via feature-task-creator chaining)
+        - - **Figma** — for design context when analyzing UX-related funnel stages (via product-research delegation)
+          - - **Web** — always available via WebSearch for benchmarks and industry context (via product-research delegation)
+            -
+            - For each product: check for MCP connector → search MCP registry → fall back to browser.
+            -
+            - Before gathering any data, also read and comply with `references/data-policy.md`. Confidential data (Tableau metrics, internal analytics, research materials) must NOT be passed to external LLMs or third parties.
+            -
+            - ## Local context prerequisite
+            -
+            - **Before starting, follow `references/local-context-protocol.md` (Step 0).** Read `local-context.md`, select the active product, and load all product-specific context. If the file doesn't exist — redirect to Plugin Configurator for initial setup.
+            -
+            - Key context used by this skill:
+            - - `product.name`, `product.key_metrics`, `product.current_okrs` — for analysis focus and goal alignment
+              - - `product.cjm_configuration` — **required** for this skill: funnel stages, dashboard URLs, baseline conversions, anomaly thresholds, default analysis settings
+                - - `product.cjm_configuration.funnel_template` — funnel template type (e-commerce, SaaS, marketplace, or custom)
+                  - - `product.cjm_configuration.platforms` — configured platforms for comparison mode
+                    - - `product.cjm_configuration.search_modes` — default knowledge source modes per CJM research mode
+                      - - `organization.tableau_base_url` — for dashboard navigation
+                        - - `product.confluence_space` — for publishing reports and searching internal sources
+                          - - `user.language` — for output language
+                            -
+                            - **CJM configuration check (mandatory):**
+                            - Verify that `cjm_configuration` exists in the active product's context. If missing — redirect to Plugin Configurator (CJM Configuration section) before proceeding. The skill cannot operate without funnel stage definitions.
+                            -
+                            - ## Modes of operation
+                            -
+                            - | Mode | Description | Pipeline steps | Output |
+                            - |------|-------------|---------------|--------|
+                            - | `anomalies` | Anomaly detection only | 1–4 | Short report: anomalies by funnel stage |
+                            - | `hypotheses` | Improvement hypotheses | 1–7, 8–9 | Hypotheses with ICE + funnel impact |
+                            - | `full` | Complete CJM analysis | 1–12 | Full report + Jira backlog proposal |
+                            - | `health-check` | Scheduled periodic check with delta | 1–4 (auto), 12 (delta) | Health summary + delta vs previous + escalation option |
+                            - | `comparison` | Cross-platform comparison | 1–4 per platform | Anomaly comparison WEB vs APP |
+                            -
+                            - ## Pipeline steps
+                            -
+                            - ### Step 1 — Initialization
+                            -
+                            - - Read `local-context.md` (mandatory, per `local-context-protocol.md`)
+                              - - Read CJM configuration: funnel stages, dashboard URLs, baseline metrics, anomaly thresholds
+                                - - If CJM config is missing → redirect to `plugin-configurator` (CJM onboarding)
+                                  - - Load funnel template from `references/funnel-templates.md` based on `cjm_configuration.funnel_template`
+                                    - - Load severity classification and health score formula from `references/cjm-protocol.md`
+                                      -
+                                      - Communicate the active template to the user:
+                                      -
+                                      - > "Starting CJM Research for **[product.name]** using **[template_type]** funnel template with **[N]** stages: [stage names]. Baseline end-to-end conversion: [X%]."
+                                        >
+                                        > ### Step 2 — Clarify scope with user
+                                        >
+                                        > Ask via AskUserQuestion:
+                                        >
+                                        > **2a. Mode selection:**
+                                        > > "Which CJM research mode should we use?"
+                                        > >
+                                        > > - **Anomalies** — quick anomaly scan across funnel stages. Fast, lightweight. Good for weekly monitoring
+                                        > > - - **Hypotheses** — find anomalies + generate improvement hypotheses with ICE scoring and funnel impact modeling. Good for quarterly planning
+                                        > >   - - **Full** — complete CJM analysis: anomalies → enrichment → hypotheses → verification → risk assessment → prioritized backlog. Good for deep dives and roadmap planning
+                                        > >     - - **Health-check** — automated periodic check with delta comparison. Good for scheduled monitoring (chains to `schedule` skill)
+                                        > >       - - **Comparison** — cross-platform funnel comparison (e.g., Web vs App). Good for platform-specific optimization
+                                        > >         -
+                                        > >         - **2b. Scope parameters:**
+                                        > >         - - **Target funnel stages:** all stages or specific ones? (list stages from CJM config)
+                                        > >           - - **Time period:** what date range to analyze?
+                                        > >             - - **Comparison baseline:** previous period / same period last year / OKR target / custom
+                                        > >               - - **Platforms:** all configured or specific (for `comparison` mode — select platforms to compare)
+                                        > >                 -
+                                        > >                 - **2c. Output format:**
+                                        > >                 - - **Confluence page** (default) — structured report published to configured space
+                                        > >                   - - **Local markdown** — saved to workspace
+                                        > >                     - - **Presentation** — chains to `presentation-creator` after report generation
+                                        > >                       -
+                                        > >                       - **2d. Mode-specific options:**
+                                        > >                       - - For `health-check`: confirm schedule → chain to `schedule` skill for recurring execution
+                                        > >                         - - For `comparison`: select exactly which platforms to compare
+                                        > >                           - - For `full`: confirm that creating Jira backlog is desired (default: propose at end)
+                                        > >                             -
+                                        > >                             - **2e. Knowledge source modes** (for `hypotheses` and `full` modes):
+                                        > >                             -
+                                        > >                             - Show the default source combination from CJM config and allow override:
+                                        > >                             -
+                                        > >                             - | Mode | Default sources |
+                                        > >                             - |------|----------------|
+                                        > >                             - | `anomalies` | library only (fast) |
+                                        > >                             - | `hypotheses` | library + internet |
+                                        > >                             - | `full` | library + internet + confluence + gdrive |
+                                        > >                             - | `health-check` | library only (fast) |
+                                        > >                             - | `comparison` | library + internet |
+                                        > >                             -
+                                        > >                             - > "Default knowledge sources for [mode]: [sources]. Would you like to adjust?"
+                                        > >                               >
+                                        > >                               > ### Step 3 — Load CJM data → delegates to `product-analysis` (CJM Funnel Analysis mode)
+                                        > >                               >
+                                        > >                               > Invoke `product-analysis` in CJM Funnel Analysis mode with the following context:
+                                        > >                               >
+                                        > >                               > **Pass to product-analysis:**
+                                        > >                               > - Dashboard URLs from CJM configuration (per stage)
+                                        > >                               > - - Target funnel stages (from Step 2)
+                                        > >                               >   - - Time period and comparison baseline (from Step 2)
+                                        > >                               >     - - Platforms (from Step 2, or all configured)
+                                        > >                               >       - - Anomaly thresholds from CJM configuration
+                                        > >                               >         -
+                                        > >                               >         - **Receive from product-analysis:**
+                                        > >                               >         - - Quantitative funnel data: conversion rates per stage, drop-off rates, trends
+                                        > >                               >           - - Raw anomaly list with severity classification (critical / warning / info)
+                                        > >                               >             - - Per-stage health scores (0–100)
+                                        > >                               >               - - Overall funnel health score
+                                        > >                               >                 - - Structured CJM output (both user-facing summary and machine-readable data)
+                                        > >                               >                   -
+                                        > >                               >                   - Validate received data:
+                                        > >                               >                   - - Confirm all requested stages have data
+                                        > >                               >                     - - Flag any stages with missing or incomplete data
+                                        > >                               >                       - - Present funnel overview to the user with key numbers
+                                        > >                               >                         -
+                                        > >                               >                         - ### Step 4 — Anomaly detection → uses output from `product-analysis`
+                                        > >                               >                         -
+                                        > >                               >                         - Process the anomaly data received from product-analysis:
+                                        > >                               >                         -
+                                        > >                               >                         - **4a. Organize anomalies by funnel stage:**
+                                        > >                               >                         - - Group anomalies by stage
+                                        > >                               >                           - - Sort within each stage by severity (critical → warning → info)
+                                        > >                               >                             - - For each anomaly: stage, metric, baseline value, actual value, deviation %, severity, trend direction
+                                        > >                               >                               -
+                                        > >                               >                               - **4b. Cross-stage pattern detection:**
+                                        > >                               >                               - - Identify cascading anomalies (problem at stage N causing drop at stage N+1)
+                                        > >                               >                                 - - Identify correlated anomalies across stages
+                                        > >                               >                                   - - Flag anomalies that appear across multiple platforms (for `comparison` mode)
+                                        > >                               >                                     -
+                                        > >                               >                                     - **4c. Anomaly prioritization:**
+                                        > >                               >                                     - - Rank by: severity × funnel position weight (earlier stages have higher weight due to cascading effect)
+                                        > >                               >                                       - - Per `references/cjm-protocol.md`: use the funnel impact multiplier formula
+                                        > >                               >                                         -
+                                        > >                               >                                         - **For modes `anomalies` and `health-check`: skip to Step 11 (Report assembly).**
+                                        > >                               >                                         -
+                                        > >                               >                                         - ### Step 5 — External enrichment → delegates to `knowledge-library` + `product-research`
+                                        > >                               >                                         -
+                                        > >                               >                                         - For each significant anomaly (critical and warning severity), gather external context:
+                                        > >                               >                                         -
+                                        > >                               >                                         - **5a. Knowledge Library search** → invoke `knowledge-library` `search` operation:
+                                        > >                               >                                         - - Search by: anomaly's funnel stage category + relevant UX area tags
+                                        > >                               >                                           - - Example: anomaly at "Cart / Checkout" stage → search categories `cart-checkout`, `abandonment`, `forms`
+                                        > >                               >                                             - - Include sources with `trust_score >= 0.5`
+                                        > >                               >                                               - - Receive: matching sources with key insights, trust scores, URLs
+                                        > >                               >                                                 -
+                                        > >                               >                                                 - **5b. Web research** → invoke `product-research` for each anomaly cluster:
+                                        > >                               >                                                 - - Search for: industry benchmarks for the affected metric, competitor approaches, UX best practices
+                                        > >                               >                                                   - - If UX Benchmark Research is relevant — invoke product-research in UX Benchmark mode
+                                        > >                               >                                                     - - Receive: benchmark data, competitor examples, best practice recommendations
+                                        > >                               >                                                       -
+                                        > >                               >                                                       - **5c. Baymard search** (if configured in CJM config):
+                                        > >                               >                                                       - - Search knowledge-library for sources tagged `baymard` matching anomaly categories
+                                        > >                               >                                                         - - If Baymard Premium access is configured — invoke browser-based search (notify user about login requirement)
+                                        > >                               >                                                           -
+                                        > >                               >                                                           - **5d. Merge external enrichment:**
+                                        > >                               >                                                           - - For each anomaly: attach relevant external insights with source attribution
+                                        > >                               >                                                             - - Note confidence boost: anomalies supported by Baymard/benchmark evidence get higher confidence in later ICE scoringdescription: CJM Research orchestrator — analyze Customer Journey Map funnels, detect anomalies, generate data-backed hypotheses with funnel impact modeling, and produce structured CJM reports. Use when the user asks to "analyze CJM", "CJM research", "funnel research", "find funnel problems", "CJM health check", or "compare platforms". Orchestrates product-analysis, product-research, brainstorm-features, and knowledge-library.
 ---
 
 # CJM Research
