@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 0.6.0
+version: 0.7.0
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist.
 ---
 
@@ -10,38 +10,180 @@ Configure the Grow Product Manager plugin for your organization. This skill coll
 
 Supports multiple organizations, products, and projects simultaneously.
 
-## Four Modes
+## Five Modes
 
 | Mode | When to use | What it does |
 |------|------------|--------------|
-| **Onboarding** | First launch, `local-context.md` doesn't exist | Full guided setup: user profile → organizations → products → teams → data sources → CJM → Knowledge Library → review → validation |
+| **Onboarding** | First launch, `local-context.md` doesn't exist anywhere | Full guided setup: user profile → organizations → products → teams → data sources → CJM → Knowledge Library → review → validation. Saves all data to `~/.grow-pm/` |
+| **Reinstall / Migration** | Plugin reinstalled, `~/.grow-pm/` contains existing data | Detect existing data, show to user, ask: use as-is / reconfigure / start fresh. Migrate schema if needed |
 | **Update** | `local-context.md` exists, user wants to change something | Edit a specific section: add product, update team, change dashboard URLs, add OKRs, etc. Always shows changelog |
 | **Validate** | User wants to check everything works | Test all MCP connections, verify data access, check context completeness, produce readiness report |
 | **View** | User asks to see current config | Display current `local-context.md` contents in a readable format, allow inline edits via dialogue |
+
+## Persistent Storage
+
+All user data is stored in **`~/.grow-pm/`** (user's home directory). This location is independent of the plugin installation and survives plugin uninstalls, reinstalls, and updates.
+
+See **`references/persistent-storage.md`** for the complete protocol, directory structure, backup and migration details.
+
+### Directory structure
+
+```
+~/.grow-pm/
+├── local-context.md              # Main configuration
+├── .schema-version               # Schema version marker
+├── template-library/             # User's templates
+├── knowledge-library/            # Curated sources
+└── backups/                      # Auto-backups before migrations
+```
 
 ## Auto-trigger Protocol
 
 **This section is for ALL other skills in the plugin.**
 
-At the start of execution, every skill MUST check if `local-context.md` exists. Search for it in the following locations (in order):
-1. Plugin root directory (relative: `../../local-context.md` from skill folder)
-2. User's workspace/outputs folder
-3. Session working directory
+At the start of execution, every skill MUST follow `references/local-context-protocol.md` — Step 0. Search for `local-context.md` in priority order:
 
-**If `local-context.md` is NOT found:**
+1. **`~/.grow-pm/local-context.md`** — persistent home directory (primary)
+2. Plugin root directory (relative: `../../local-context.md` from skill folder) — legacy
+3. User's workspace/outputs folder — legacy
+4. Session working directory — fallback
+
+**If `local-context.md` is NOT found anywhere:**
 - Stop the current skill workflow
 - Inform the user: "To work effectively, the plugin needs to be configured with your organization, products, and tools context. Let's run a quick setup."
 - Launch the Plugin Configurator in **Onboarding** mode
 - After Onboarding completes — return to the original skill and continue its workflow with the newly created context
 
-**If `local-context.md` IS found:**
+**If found in `~/.grow-pm/`:**
 - Read it at the start of every skill execution
 - Use the context throughout the skill workflow
-- If the file exists but is missing fields needed by the current skill — inform the user and offer to run Plugin Configurator in **Update** mode to add missing data, or proceed without that context
+- If missing fields for the current skill — offer Update mode or proceed without
 
-## Context File Location
+**If found in a legacy location (2-4) but NOT in `~/.grow-pm/`:**
+- This is pre-v1.4.0 data → offer migration to `~/.grow-pm/` (see Reinstall / Migration mode)
+- If user agrees → migrate, then continue
+- If user declines → use in-place, warn about persistence risk
 
-The `local-context.md` file is saved to the **user's workspace folder** (outputs directory). This ensures it persists between sessions and is accessible to the user. The file is personal — it contains organization-specific configuration and should not be shared in public repositories.
+## Workflow — Reinstall / Migration Mode
+
+This mode runs automatically when the Plugin Configurator detects existing user data in `~/.grow-pm/` but is launched as if it were a fresh install (e.g., after plugin reinstall or update). It also handles legacy data migration from pre-v1.4.0 locations.
+
+### RM-1. Detect existing data
+
+Check if `~/.grow-pm/` exists:
+
+- **Does not exist** → check legacy locations (plugin root, workspace, session dir)
+  - **Legacy data found** → proceed to RM-2 (legacy migration)
+  - **No data anywhere** → proceed to Onboarding mode
+- **Exists** → proceed to RM-2 (reinstall recovery)
+
+### RM-2. Inventory existing data
+
+Scan `~/.grow-pm/` (or legacy location) and build an inventory:
+
+| Component | Check | Details to show |
+|-----------|-------|-----------------|
+| `local-context.md` | Exists? Read "Updated:" timestamp | Last updated date, user name, product count |
+| `.schema-version` | Exists? Read version | Version string |
+| `template-library/` | Exists? Count templates in `_registry.json` | N templates in M categories |
+| `knowledge-library/` | Exists? Read `library.md` header stats | N sources, avg trust score |
+| `backups/` | Exists? Count backup folders | N previous backups |
+
+### RM-3. Present findings and ask user
+
+Show the inventory:
+
+> "I found existing Grow Product Manager data from a previous installation:"
+>
+> | Component | Status | Details |
+> |-----------|--------|---------|
+> | Configuration | ✅ Found | [user name], [N] products (updated: [date]) |
+> | Template Library | ✅ Found | [N] templates |
+> | Knowledge Library | ✅ Found | [N] sources, avg trust: [score] |
+> | Schema version | [version] | Current plugin version: [current] |
+
+Present options via AskUserQuestion:
+
+- **Use existing data** — validate compatibility, migrate schema if needed, start using immediately
+- **Use existing + reconfigure** — keep data but re-run configuration to review and update all sections
+- **Start fresh** — archive current data to `~/.grow-pm/backups/` and run full Onboarding
+- **View config first** — show current configuration in detail before deciding
+
+### RM-4. Schema compatibility check
+
+If user chose "Use existing data" or "Use existing + reconfigure":
+
+**4a. Read `.schema-version`** (or "unknown" if missing)
+
+**4b. Compare with current plugin version:**
+
+| Scenario | Action |
+|----------|--------|
+| Same version | No migration needed → proceed to RM-5 |
+| Minor version difference (e.g., 1.3.0 → 1.4.0) | Auto-migrate: add new fields with defaults, update `.schema-version` |
+| Major version difference (e.g., 1.x → 2.x) | Guided migration: show breaking changes, ask for input on each |
+| Data newer than plugin | Warn: data from newer version, some features may not be available |
+| No `.schema-version` | Legacy data: run full compatibility scan, create `.schema-version` |
+
+**4c. Before any migration — create backup:**
+
+```
+~/.grow-pm/backups/pre-migration-[current-plugin-version]-[date]/
+```
+
+Copy all current files to backup. Keep last 3 backups (delete oldest if exceeds).
+
+**4d. Auto-migration (minor changes):**
+
+1. Read current `local-context.md`
+2. Identify fields present in current schema but missing from file → add with sensible defaults
+3. Identify deprecated fields → remove or rename
+4. Update `> Configurator version:` line
+5. Update `.schema-version`
+6. Show migration changelog to user:
+
+> "Schema migrated from [old] to [new]. Changes:"
+>
+> | Change | Details |
+> |--------|---------|
+> | Added field | `product.new_field` — default: [value] |
+> | Removed field | `product.old_field` — no longer used |
+
+**4e. Guided migration (major changes):**
+
+1. Show complete list of breaking changes
+2. For each change requiring user input — ask via AskUserQuestion
+3. Apply changes
+4. Show complete changelog
+5. Run validation
+
+### RM-5. Legacy location migration
+
+If data was found in a legacy location (not `~/.grow-pm/`):
+
+1. Inform user: "Your plugin data is stored in [location]. Starting with v1.4.0, the plugin stores data in ~/.grow-pm/ to preserve it across reinstalls. Would you like to migrate?"
+2. If yes:
+   - Create `~/.grow-pm/` directory
+   - Copy `local-context.md` → `~/.grow-pm/local-context.md`
+   - Copy `knowledge-library/` → `~/.grow-pm/knowledge-library/` (if exists)
+   - Copy `template-library/` → `~/.grow-pm/template-library/` (if exists)
+   - Create `.schema-version` with best-match version
+   - Run schema migration if needed (RM-4)
+3. If no:
+   - Continue using legacy location for this session
+   - Warn: "Data in the workspace folder may be lost if the plugin is reinstalled. You can migrate later by running 'configure plugin'."
+
+### RM-6. Post-migration validation
+
+After migration completes:
+1. Run Validate mode (V-1 through V-5)
+2. Report results
+3. If user chose "Use existing + reconfigure" → continue to Update mode
+4. If user chose "Use existing data" → complete, show summary
+
+> "Your existing configuration has been successfully [validated / migrated and validated]. Everything is ready to use."
+
+---
 
 ## Workflow — Onboarding Mode
 
@@ -444,7 +586,7 @@ Format:
 ### Knowledge Library
 
 #### Settings
-- Library path: [workspace/knowledge-library/]
+- Library path: [~/.grow-pm/knowledge-library/]
 - Default search modes: [library, internet]
 - Trust re-evaluation schedule: monthly
 - Minimum trust threshold: 0.5
@@ -460,9 +602,12 @@ Format:
 - [Folder ID]: [description]
 ```
 
-**12d. Save to user's workspace:**
+**12d. Save to persistent storage:**
 
-Save `local-context.md` to the user's outputs/workspace folder. Confirm the path to the user.
+1. Create `~/.grow-pm/` directory if it doesn't exist (with permissions 700 on Unix)
+2. Save `local-context.md` to `~/.grow-pm/local-context.md`
+3. Create `~/.grow-pm/.schema-version` with the current plugin version
+4. Confirm to the user: "Configuration saved to ~/.grow-pm/. This data will persist across plugin reinstalls and updates."
 
 **12e. Automatic validation:**
 
@@ -542,7 +687,7 @@ Follow the same collection flow as Onboarding for the selected section. Pre-fill
 - Update the `Updated:` timestamp
 - Preserve all sections that were not modified
 - Preserve all custom sections
-- Save to the same location
+- Save to `~/.grow-pm/local-context.md` (always use persistent storage)
 
 **Mandatory changelog — always present after ANY update:**
 
@@ -691,8 +836,125 @@ If the user requests changes via dialogue:
 ### VW-4. Save if changes were made
 
 If any changes were applied:
-- Save the updated `local-context.md`
+- Save the updated `local-context.md` to `~/.grow-pm/local-context.md`
 - Show the complete changelog of all changes made during this View session
 - Update the `Updated:` timestamp
 
 If no changes were made — simply end the mode.
+
+---
+
+## Changelog Protocol (applies to ALL modes that modify local-context.md)
+
+Every time `local-context.md` is modified — whether by Onboarding (Step 12), Update, View, or Enrichment from other skills — the user MUST receive a changelog report showing:
+
+1. **What was added** (new fields, new sections, new items in lists)
+2. **What was changed** (previous value → new value)
+3. **What was removed** (if applicable)
+
+Format: table with columns "Section | Was | Became"
+
+This applies equally to:
+- Plugin Configurator modes (Onboarding, Update, View)
+- Context Enrichment by other skills (Product Research adding competitors, etc.)
+
+---
+
+## Context-aware product selection
+
+When `local-context.md` contains **multiple products**, skills need to know which product the user is working with. The Configurator establishes the following protocol for all skills:
+
+**At the start of any skill execution (after reading local-context.md):**
+
+1. If the user explicitly mentioned a product name → use it
+2. If only one product exists in context → use it automatically
+3. If multiple products exist and none was mentioned → ask via AskUserQuestion:
+   > "There are multiple products in the context: [list]. Which product are we working with now?"
+
+This question is asked once per skill session. The selected product becomes the "active product" for the duration of the skill execution.
+
+---
+
+## Enrichment Protocol
+
+Other skills can **add information** to `local-context.md` during their execution:
+
+- **Product Research** → can add discovered competitors
+- **Product Analysis** → can update current metric values
+- **Feature Task Creator** → can discover and add team member Jira accountIds
+- **Requirements Creator** → can discover and add Confluence template URL
+- **CJM Research** → can update baseline conversions from dashboard data
+
+When a skill discovers new context:
+1. Inform the user: "I found new information that can be added to the context: [what was found]"
+2. Ask: "Would you like to update local-context.md?"
+3. If yes — read current file, add new data to the appropriate section, save
+4. **Show changelog** (same format as Update Mode U-4): what was added, previous state → new state
+
+---
+
+## Versioning Protocol
+
+This protocol applies whenever **any skill file or plugin.json is modified** — including through the Self-Improvement workflow, manual edits, or plugin structural changes.
+
+### Skill version rules (frontmatter `version:` in SKILL.md)
+
+| Change type | Version bump | Examples |
+|-------------|-------------|---------|
+| **PATCH** | x.x.X+1 | Wording fix, small content addition, formatting change, minor clarification |
+| **MINOR** | x.X+1.0 | New step, new section, significant workflow addition, new condition |
+| **MAJOR** | X+1.0.0 | Full workflow restructure, breaking change in logic, skill renamed |
+
+### Plugin version rules (in `plugin.json`)
+
+The plugin version is bumped to reflect the **highest-impact** change among all modified skills:
+- Any skill PATCH → plugin PATCH
+- Any skill MINOR → plugin MINOR
+- Any skill MAJOR → plugin MAJOR
+- New skill added → plugin MINOR
+
+### Required steps when modifying a skill
+
+1. **Bump skill version** — update `version:` in the modified SKILL.md frontmatter
+2. **Bump plugin version** — update `"version"` in `.claude-plugin/plugin.json`
+3. **Add CHANGELOG.md entry** — create a new entry at the top of `CHANGELOG.md`:
+
+```
+## [X.Y.Z] — YYYY-MM-DD
+
+### What changed
+- [brief description of what was changed and why]
+
+### Skills changed
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| skill-name | old-version | new-version | patch/minor/major — what was changed |
+```
+
+4. **Re-package the plugin** — rebuild the `.plugin` archive with the new version
+5. **Confirm to the user** — show the new plugin version and the skills that were bumped
+
+### This skill's versioning
+
+This skill (`plugin-configurator`) must bump its own version when its SKILL.md is modified, following the same rules above.
+
+---
+
+## Quality Standards
+
+- Never overwrite user-provided data without confirmation
+- Always show what was discovered vs. what the user needs to provide manually
+- Pre-fill fields from auto-discovery, but always confirm with the user
+- Preserve custom sections during updates
+- Use Ukrainian or English based on user's language preference (ask in Step 2 if Onboarding, read from context if Update/Validate)
+- When communicating CJM template selection — always name the template and list the stages
+
+## Additional Resources
+
+- **`references/persistent-storage.md`** — persistent storage protocol (`~/.grow-pm/`), migration, backup, legacy data handling
+- **`references/context-schema.md`** — complete schema definition with field descriptions, required/optional status, and which skills use each field
+- **`references/local-context-protocol.md`** — how all skills read and use `local-context.md`
+- **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
+- **`references/self-improvement.md`** — self-improvement protocol
+- **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, health score
+- **`references/funnel-templates.md`** — standard funnel stage templates by product type
