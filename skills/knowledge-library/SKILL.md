@@ -1,6 +1,6 @@
 ---
 name: knowledge-library
-version: 0.1.0
+version: 0.2.0
 description: Manage a local library of curated knowledge sources (articles, benchmarks, research) with categorization, trust scoring, and multi-mode search. Use when the user asks to "manage sources", "add to library", "search knowledge", "import sources", "show library", or when another skill needs to search for enrichment data. Also triggers when user says "add this article", "save this source", "what sources do we have on [topic]".
 ---
 
@@ -14,15 +14,16 @@ This is a **service skill** — it provides search capabilities to other skills 
 
 Before any operation, follow these shared references:
 - **`references/local-context-protocol.md`** — read `local-context.md` for Knowledge Library configuration
+- **`references/persistent-storage.md`** — persistent storage protocol (`~/.grow-pm/`)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain
 - **`references/data-policy.md`** — confidentiality rules (internal sources stay internal)
 
 ## Library Storage
 
-The library is stored in the user's workspace folder:
+The library is stored in the user's **persistent home directory** to survive plugin reinstalls:
 
 ```
-workspace/knowledge-library/
+~/.grow-pm/knowledge-library/
 ├── library.md            # Master index — markdown table of all sources
 ├── categories.md         # Category definitions (default + custom)
 ├── trust-scores.yaml     # Trust scores and metadata for auto-calculation
@@ -33,6 +34,8 @@ workspace/knowledge-library/
     ├── 2026-04-07.md
     └── ...
 ```
+
+**Legacy location:** `workspace/knowledge-library/`. If data is found here but not in `~/.grow-pm/`, offer migration (see `references/persistent-storage.md`).
 
 ### library.md format
 
@@ -611,7 +614,7 @@ If no → skip, library can be set up later.
 
 ### KL-2. Initialize directory structure
 
-Create the `knowledge-library/` directory with empty `library.md`, `categories.md` (with defaults), and `trust-scores.yaml`.
+Create the `~/.grow-pm/knowledge-library/` directory with empty `library.md`, `categories.md` (with defaults), and `trust-scores.yaml`.
 
 ### KL-3. Source import
 
@@ -662,6 +665,7 @@ If the user provides sources → run Import workflow.
 
 ## Additional Resources
 
+- **`references/persistent-storage.md`** — persistent storage protocol (`~/.grow-pm/`), migration, backup
 - **`references/cjm-protocol.md`** — anomaly severity, funnel impact formulas, health score
 - **`references/funnel-templates.md`** — standard funnel stage templates
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain
