@@ -2,24 +2,32 @@
 
 This document defines how every skill in the plugin reads and uses `local-context.md`. **All skills MUST follow this protocol at the start of execution.**
 
+For persistent storage details, see **`references/persistent-storage.md`**.
+
 ## Step 0 — Check and read local-context.md (MANDATORY)
 
 Before any other action, the skill MUST:
 
 ### 0a. Search for local-context.md
 
-Search in the following locations (in order):
-1. Plugin root directory (relative: `../../local-context.md` from skill folder)
-2. User's workspace/outputs folder (the mounted folder or outputs directory)
-3. Session working directory
+Search in the following locations (in priority order):
 
-### 0b. If NOT found → redirect to Plugin Configurator
+1. **`~/.grow-pm/local-context.md`** — persistent home directory (primary, survives plugin reinstalls)
+2. Plugin root directory (relative: `../../local-context.md` from skill folder) — legacy location
+3. User's workspace/outputs folder (the mounted folder or outputs directory) — legacy location
+4. Session working directory — fallback
+
+**If found in a legacy location (2-4) but NOT in `~/.grow-pm/`:** the file is from a pre-v1.4.0 install. Before proceeding, offer to migrate it to `~/.grow-pm/` (see `references/persistent-storage.md` → Legacy Data Discovery). If the user agrees — migrate, then continue. If the user declines — use it in-place but warn that data may be lost on plugin reinstall.
+
+**When saving:** ALWAYS write to `~/.grow-pm/local-context.md`. Never save to legacy locations.
+
+### 0b. If NOT found (anywhere) → redirect to Plugin Configurator
 
 Stop the current skill workflow and inform the user:
 
 > "To work effectively, the plugin needs to be configured with your organization, products, and tools context. Let's run a quick setup (~5-10 min)."
 
-Launch the **Plugin Configurator** skill in **Onboarding** mode. After Onboarding completes — return to the original skill and continue its workflow with the newly created context.
+Launch the **Plugin Configurator** skill in **Onboarding** mode. The Configurator will create `~/.grow-pm/` and save all data there. After Onboarding completes — return to the original skill and continue its workflow with the newly created context.
 
 ### 0c. If found → read and parse
 
@@ -65,9 +73,11 @@ Check if `local-context.md` contains a **CJM Configuration** section for the act
 
 **This step is informational — not blocking.** Skills that support Knowledge Library enrichment should check:
 
-1. Does `knowledge-library/` directory exist in the workspace?
-2. Does `library.md` contain any sources?
+1. Does `~/.grow-pm/knowledge-library/` directory exist? (primary)
+2. If not — does `workspace/knowledge-library/` exist? (legacy location)
+3. Does `library.md` contain any sources?
 
+If found in legacy location only — note this for potential migration prompt.
 If initialized and non-empty — note availability internally (used when proposing enrichment to user).
 If not initialized — no action needed, the skill continues normally without library access.
 
@@ -77,10 +87,10 @@ During execution, skills may discover new information that should be saved to `l
 
 1. Inform the user: "I found new information: [description]. Would you like to save it to the plugin context?"
 2. If the user agrees:
-   - Read the current `local-context.md`
+   - Read the current `~/.grow-pm/local-context.md`
    - Add the new information to the appropriate section
    - Update the "Updated:" timestamp
-   - Save the file
+   - Save the file back to `~/.grow-pm/local-context.md`
 
 Examples of discoverable context:
 - **Product Research** → new competitors found during research
