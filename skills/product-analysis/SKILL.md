@@ -1,12 +1,12 @@
 ---
 name: product-analysis
-version: 0.4.0
-description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", or "analyze A/B test results".
+version: 0.5.0
+description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", or "CJM funnel analysis".
 ---
 
 # Product Analysis
 
-Analyze product data from any source — dashboards, tables, reports, metrics exports — to surface key trends, anomalies, growth opportunities, and risks. Generate data-backed hypotheses with ICE scoring. Supports four modes: interactive Q&A, full structured report, post-release analysis, and A/B test results analysis.
+Analyze product data from any source — dashboards, tables, reports, metrics exports — to surface key trends, anomalies, growth opportunities, and risks. Generate data-backed hypotheses with ICE scoring. Supports five modes: interactive Q&A, full structured report, post-release analysis, A/B test results analysis, and CJM funnel analysis.
 
 ## Integration prerequisite
 
@@ -33,6 +33,7 @@ Key context used by this skill:
 - `product.name`, `product.key_metrics`, `product.current_okrs` — for analysis focus
 - `organization.tableau_base_url`, `product.ab_test_dashboards` — for A/B test and dashboard analysis
 - `product.jira_project_key` — for post-release analysis (reading Jira tasks)
+- CJM Configuration section — funnel stages, dashboard URLs, baselines, thresholds (for CJM mode)
 - `user.language` — for output language
 
 ## Workflow
@@ -52,12 +53,13 @@ Key context used by this skill:
 - **Full structured report** — systematic analysis following all frameworks, with a comprehensive report at the end. Good for periodic reviews, deep dives, pre-concept research
 - **Post-release analysis** — analyze how a released feature affected product metrics. Based on feature requirements, Jira tasks, and release/flag activation dates. See dedicated section: **Post-Release Analysis Mode**
 - **A/B test results analysis** — comprehensive analysis of A/B test outcomes. Based on user-provided reports or Tableau A/B test dashboards. See dedicated section: **A/B Test Results Analysis Mode**
+- **CJM Funnel Analysis** — analyze funnel conversion rates per stage, detect anomalies, and segment by platform. Invoked by `cjm-research` or directly by the user. See dedicated section: **CJM Funnel Analysis Mode**
 
-Interactive Q&A and Full Report modes follow the same analysis engine (Step 2) but differ in output format. Post-Release and A/B Test modes have specialized workflows described in their dedicated sections below.
+Interactive Q&A and Full Report modes follow the same analysis engine (Step 2) but differ in output format. Post-Release, A/B Test, and CJM Funnel modes have specialized workflows described in their dedicated sections below.
 
 **1c. Invocation context — determine how the skill was triggered:**
 
-- **Transition from another skill** (Product Research / Write Concept / Brainstorm Features / Requirements Creator) → context was passed from the previous skill. Understand what specific data analysis is needed and what context is already known. Use passed context as the starting point
+- **Transition from another skill** (Product Research / Write Concept / Brainstorm Features / Requirements Creator / **CJM Research**) → context was passed from the previous skill. Understand what specific data analysis is needed and what context is already known. Use passed context as the starting point
 - **Standalone launch** → gather context from scratch
 
 **1d. Maximum context gathering — ask via AskUserQuestion what is known:**
@@ -325,12 +327,145 @@ After completing the analysis, **always** propose transitioning to the next logi
 - **If deeper research needed** → "Run **Product Research** to investigate the identified trends or problems further"
 - **If a clear feature idea emerged** → "Create a **Concept (PRD)** (Write Concept) based on the found insights"
 - **If hypotheses are ready for implementation** → "Create **feature requirements** (Requirements Creator) to implement the selected hypotheses"
+- **If funnel anomalies detected** → "Run **CJM Research** for comprehensive funnel analysis with enrichment and hypothesis generation"
 
 If the user chooses a skill:
 - Pass the full analysis context: report link (if published), key findings, relevant hypotheses, data sources, metrics context
 - The receiving skill will use analysis results as evidence base
 
 If the user declines — end the workflow gracefully.
+
+---
+
+## CJM Funnel Analysis Mode
+
+Specialized mode for analyzing Customer Journey Map funnel data. Segments metrics by funnel stage, detects anomalies against baselines, and returns structured data for `cjm-research` to consume. Can also be invoked directly by the user for quick funnel checks.
+
+### CJM-1. Read CJM configuration
+
+Follow `references/local-context-protocol.md` — Step 0f:
+- Read CJM Configuration section from `local-context.md`
+- Load: funnel template, stages with dashboard URLs, baseline conversions, anomaly thresholds
+- If CJM Configuration is missing → inform user, offer to chain to `plugin-configurator`
+
+Read shared standards from `references/cjm-protocol.md`:
+- Anomaly severity thresholds
+- Funnel impact calculation formulas
+- Health score formula
+
+### CJM-2. Determine scope
+
+**If invoked by `cjm-research`:**
+- Use passed context: target stages, time period, baseline, platforms, thresholds
+- Skip user questions — all parameters already specified
+
+**If invoked directly by user:**
+- Ask via AskUserQuestion:
+  - Which funnel stages to analyze? (all / specific)
+  - Time period? (last week / month / quarter / custom)
+  - Comparison baseline? (previous period / previous year / target)
+  - Platforms? (all / specific)
+
+### CJM-3. Load funnel data from dashboards
+
+For each funnel stage in scope:
+
+1. **Navigate to the stage's dashboard URL** (from CJM config)
+   - Follow `references/integration-strategy.md` fallback chain: Tableau MCP → browser
+   - When using browser: navigate to URL, apply filters (time period, platforms), take screenshots, read data tables
+
+2. **Extract per-stage metrics:**
+   - **Conversion rate** — percentage of users who complete this stage (relative to previous stage or entry)
+   - **Absolute values** — number of users at this stage
+   - **Drop-off rate** — percentage lost between this stage and the previous
+   - **Trends** — period-over-period change in conversion rate
+   - **Segment data** (if available) — breakdown by platform, locale, user type
+
+3. **Handle missing data:**
+   - If a dashboard URL is not configured for a stage → note gap, skip stage
+   - If dashboard is inaccessible → try browser fallback, note if still inaccessible
+   - If data is partially available → use what's available, note limitations
+
+### CJM-4. Calculate anomalies per stage
+
+For each stage, apply anomaly detection per `references/cjm-protocol.md`:
+
+**4a. Deviation calculation:**
+
+```
+deviation = ((actual_conversion - baseline_conversion) / baseline_conversion) × 100
+```
+
+Where `baseline_conversion` comes from:
+- Previous period (default)
+- Previous year (if selected)
+- Target values (from CJM config)
+- Custom baseline (user-specified)
+
+**4b. Severity classification:**
+
+| Severity | Condition | Visual |
+|----------|-----------|--------|
+| **Critical** | Negative deviation > configured critical threshold (default 25%) | 🔴 |
+| **Warning** | Negative deviation between configured warning (default 10%) and critical thresholds | 🟡 |
+| **Info** | Negative deviation below warning threshold | ⚪ |
+| **Positive** | Positive deviation > 10% (improvement) | 🟢 |
+
+**4c. Trend analysis per stage:**
+
+- Is the anomaly worsening, stable, or improving over the analysis period?
+- When did the deviation first appear? (if possible to determine from available data)
+- Are there seasonal patterns to consider?
+
+**4d. Cross-stage impact:**
+
+- If a significant anomaly exists in an early stage → downstream stages may be affected
+- Note cascading effects: if Stage 1 drops by X%, all subsequent stages see fewer users even if their conversion rates are unchanged
+
+### CJM-5. Compile CJM output
+
+**If returning results to `cjm-research` (delegation):**
+
+Return structured data:
+
+```
+Funnel Overview:
+- Template: [e-commerce / saas / marketplace / custom]
+- Stages analyzed: [N]
+- Time period: [start] to [end]
+- Comparison baseline: [type]
+- Overall funnel conversion: [current] vs [baseline] ([deviation]%)
+
+Stage Data:
+| Stage | Name | Baseline Conv | Actual Conv | Deviation | Severity | Trend | Absolute Users |
+|-------|------|---------------|-------------|-----------|----------|-------|---------------|
+
+Anomalies:
+| Stage | Metric | Baseline | Actual | Deviation | Severity | Since | Trend |
+
+Data Quality Notes:
+- [Any gaps, limitations, or data freshness issues]
+```
+
+**If invoked directly by user (standalone):**
+
+Present a formatted report:
+
+1. **Funnel Overview** — visual representation with stage conversions and health indicators
+2. **Stage-by-Stage Breakdown** — for each stage: metrics, trends, comparison to baseline
+3. **Anomalies Detected** — table sorted by severity
+4. **Cross-Stage Impact** — cascading effects analysis
+5. **Recommendations** — brief next steps for each critical/warning anomaly
+6. **Glossary** — explain terms and metrics
+7. **Sources** — dashboards and data sources used
+
+Then proceed to Step 6 (Report, save, and feedback) for publishing and feedback.
+
+**After standalone CJM analysis, offer skill chaining:**
+
+> "Funnel analysis complete. Would you like to:"
+> - "Run **CJM Research** (hypotheses mode) to generate improvement hypotheses with enrichment from knowledge sources"
+> - "Run **CJM Research** (full mode) for a comprehensive analysis with verification and backlog"
 
 ---
 
@@ -522,7 +657,7 @@ Then proceed to Step 6 (Report, save, and feedback) for publishing and feedback.
 
 ## Returning results to calling skills
 
-When Product Analysis is invoked by another skill (Product Research, Write Concept, Brainstorm Features, Requirements Creator), return results in a structured format that the calling skill can incorporate:
+When Product Analysis is invoked by another skill (Product Research, Write Concept, Brainstorm Features, Requirements Creator, **CJM Research**), return results in a structured format that the calling skill can incorporate:
 
 **Return payload:**
 - **Key metrics and values** — specific numbers the calling skill requested
@@ -530,6 +665,7 @@ When Product Analysis is invoked by another skill (Product Research, Write Conce
 - **Anomalies** — any unexpected findings relevant to the calling skill's context
 - **Relevant hypotheses** — data-backed hypotheses that fit the calling skill's scope
 - **Data quality notes** — caveats, limitations, data freshness
+- **CJM-specific data** (when returning to `cjm-research`) — structured per-stage anomaly list with severity, deviation, and trend
 
 The calling skill should incorporate these results into its workflow without re-analyzing the same data.
 
@@ -548,6 +684,8 @@ The calling skill should incorporate these results into its workflow without re-
 
 - **`references/analysis-frameworks.md`** — detailed description of each analysis framework with examples
 - **`references/hypothesis-template.md`** — ICE scoring guidelines adapted for data-driven hypotheses
+- **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, health score formula
+- **`references/funnel-templates.md`** — standard funnel stage templates by product type
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
