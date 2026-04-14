@@ -1,6 +1,6 @@
 # Grow Product Manager
 
-**Version:** 1.5.0
+**Version:** 1.6.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows.
 
@@ -234,6 +234,32 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
+## Obsidian Vault Integration (Optional)
+
+The plugin can optionally integrate with [Obsidian](https://obsidian.md/) to create a persistent knowledge graph that accumulates artifacts over time and improves skill results.
+
+### What it does
+- Saves results of every skill (research, concepts, requirements, analyses, meetings, decisions) as structured .md files in your Obsidian Vault
+- Links related artifacts with wikilinks (research → concept → requirements → A/B results)
+- Searches your accumulated knowledge before starting new tasks to provide historical context
+- Tracks hypothesis lifecycle: proposed → testing → validated/rejected
+- Auto-generates Maps of Content (Dashboard, Product MOC, Timeline) for navigation
+
+### Three-level operation
+| Level | Condition | Capabilities |
+|-------|-----------|-------------|
+| L0 | No vault configured | Plugin works as before, no vault features |
+| L1 | Vault path configured | Read/write artifacts, file-based search |
+| L2 | Vault + Obsidian MCP | L1 + full-text search, graph traversal, backlinks |
+
+### Multi-vault support
+Configure one default vault for all products or separate vaults per product.
+
+### Setup
+Run Plugin Configurator → Obsidian Vault step, or say "connect Obsidian Vault".
+
+---
+
 ## Persistent Data Storage
 
 All user configuration, templates, and knowledge library files are stored in `~/.grow-pm/` in the user's home directory. This data persists across plugin uninstalls, reinstalls, and updates.
@@ -251,12 +277,21 @@ All user configuration, templates, and knowledge library files are stored in `~/
 │   ├── articles/              # Imported articles
 │   ├── benchmarks/            # Industry benchmarks
 │   └── competitive/           # Competitor intelligence
+├── vault/                     # Obsidian Vault artifacts (if configured)
+│   ├── dashboard/             # Dashboards and MOCs
+│   ├── products/              # Product-specific artifacts
+│   ├── research/              # Research and analysis
+│   ├── concepts/              # Concept documents and PRDs
+│   ├── requirements/          # Requirement specs
+│   ├── decisions/             # Decisions and A/B test results
+│   └── hypotheses/            # Hypotheses and lifecycle tracking
 └── templates/                 # Custom templates and outputs
 ```
 
 **Key Features:**
 - Configuration files in `~/.grow-pm/config/`
 - Knowledge library in `~/.grow-pm/knowledge-library/`
+- Vault artifacts in `~/.grow-pm/vault/` (optional)
 - Automatic backups before migrations
 - Schema versioning for data compatibility
 - Legacy data migration on first launch
@@ -276,6 +311,8 @@ The plugin includes reference materials for product management best practices an
 - Competitive analysis templates
 - CJM mapping guides
 - Meeting templates and agendas
+- `vault-protocol.md` — Obsidian Vault integration protocol (detection, search, save, MOC updates)
+- `vault-schema.md` — Vault artifact schema (frontmatter, types, tags, folder structure, templates)
 
 See the plugin's `references/` folder for the complete list of available materials.
 
@@ -307,6 +344,7 @@ The Grow Product Manager plugin integrates with:
 - **Google Calendar / Microsoft Calendar** — Meeting context and scheduling
 - **Fireflies.ai** — Meeting recording and transcription
 - **Google Drive** — Document storage and collaboration
+- **Obsidian** — Persistent knowledge graph (optional)
 - **ChatGPT / Google Gemini** — Image and content generation (optional)
 
 ---
@@ -316,5 +354,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii  
-**Version:** 1.5.0  
+**Version:** 1.6.0  
 **Last Updated:** April 2026
