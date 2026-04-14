@@ -3,6 +3,7 @@
 This document defines how every skill in the plugin reads and uses `local-context.md`. **All skills MUST follow this protocol at the start of execution.**
 
 For persistent storage details, see **`references/persistent-storage.md`**.
+For Vault integration details, see **`references/vault-protocol.md`**.
 
 ## Step 0 — Check and read local-context.md (MANDATORY)
 
@@ -81,6 +82,37 @@ If found in legacy location only — note this for potential migration prompt.
 If initialized and non-empty — note availability internally (used when proposing enrichment to user).
 If not initialized — no action needed, the skill continues normally without library access.
 
+### 0h. Detect Vault level (optional)
+
+**This step is informational — not blocking.** Detect Obsidian Vault integration level for use in Step 0.5 and vault_save operations.
+
+Follow the detection algorithm from `references/vault-protocol.md` → "Vault Level Detection":
+
+1. Check if `local-context.md` contains an **Obsidian Vaults** section
+2. If section is missing or no vault paths configured → `vault_level = L0` (disabled, skip silently)
+3. If vault path(s) configured → validate directories exist → `vault_level = L1` (file system)
+4. If MCP detection is enabled → try Obsidian MCP ping → if responds `vault_level = L2` (file + MCP)
+
+Store `vault_level` and `vault_configs` in session context for use by Step 0.5 and vault_save.
+
+**If vault_level is L0** — no further vault-related actions in this session. All vault operations will be silently skipped.
+
+## Step 0.5 — Vault Context Search (OPTIONAL)
+
+**Applies to all skills.** Inserted between Step 0 and Step 1. If `vault_level == L0` — skip this step silently without any output.
+
+Follow the full protocol from `references/vault-protocol.md` → "Step 0.5 — Vault Context Search":
+
+1. Determine relevant artifact types for this skill (see `vault-protocol.md` → SKILL_CONTEXT_MAP)
+2. Search the vault for matching artifacts (product, types, tags, status: active/draft)
+3. If multi-vault: search all configured vaults, merge results
+4. If results found — present to user:
+   > "Found {N} related artifacts in your knowledge base: [brief list]. Use as context? [Yes / Select specific / Skip]"
+5. If user accepts — read full content of selected artifacts and include as additional context
+6. If user skips or no results — continue normally
+
+**Important:** This step should be brief. Read only frontmatter + Summary section for preview. Full content is loaded only for artifacts the user selects.
+
 ## Context Enrichment
 
 During execution, skills may discover new information that should be saved to `local-context.md`. When this happens:
@@ -98,6 +130,23 @@ Examples of discoverable context:
 - **Feature Task Creator** → Jira team IDs, member accountIds discovered from existing tasks
 - **Requirements Creator** → Confluence template URL discovered during publishing
 - **CJM Research** → updated baseline conversions read from dashboards
+
+## Vault Save (after skill output)
+
+**Applies to all skills that produce artifacts.** Executed after the skill delivers its main output to the user.
+
+If `vault_level == L0` — skip silently. Otherwise, follow the full protocol from `references/vault-protocol.md` → "Vault Save":
+
+1. Resolve target vault for the current product
+2. Build file path using naming convention from `vault-schema.md`
+3. Build frontmatter with appropriate type-specific fields
+4. Ensure mandatory `## Summary` section (2-5 sentences)
+5. Link to related artifacts (if auto-link enabled)
+6. Write file to vault
+7. Update MOC indexes (if auto-update enabled)
+8. Inform user: "Saved to Vault: {path}"
+
+**This step is non-blocking.** Any vault save error should be logged and reported but must NOT prevent the skill from completing its main workflow.
 
 ## Using context in skills
 
@@ -118,5 +167,6 @@ Once the context is loaded and active product selected, skills should:
 - Use `product.cjm_configuration.funnel_stages` for CJM funnel analysis
 - Use `product.cjm_configuration.anomaly_thresholds` for anomaly detection
 - Use `product.cjm_configuration.default_search_modes` for Knowledge Library search
-- Use `knowledge_library.configured_confluence_spaces` for Confluence CJM search scope
-- Use `knowledge_library.configured_gdrive_folders` for Google Drive CJM search scope
+- Use `knowledge_library.configured_confluence_spaces` for Confluence CJM search
+- Use `knowledge_library.configured_gdrive_folders` for Google Drive CJM search
+- Use vault context (from Step 0.5) to enrich analysis with historical data and prior decisions
