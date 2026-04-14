@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.5.0
+version: 0.6.0
 description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", or "CJM funnel analysis".
 ---
 
@@ -35,6 +35,10 @@ Key context used by this skill:
 - `product.jira_project_key` — for post-release analysis (reading Jira tasks)
 - CJM Configuration section — funnel stages, dashboard URLs, baselines, thresholds (for CJM mode)
 - `user.language` — for output language
+
+### Vault context prerequisite
+
+**After local context (Step 0) is loaded, read and follow the vault integration in `references/vault-protocol.md` and `references/vault-schema.md`.** If vault is configured and vault_level > L0, you will use vault context search and save throughout this workflow.
 
 ## Workflow
 
@@ -112,6 +116,35 @@ The skill accepts data from multiple sources simultaneously. Ask the user which 
 - Helps correlate metric changes with UI/UX state
 
 Summarize all gathered data sources back to the user and confirm before proceeding to analysis.
+
+### Step 0.5: Vault Context Search (Optional)
+
+> Requires: `references/vault-protocol.md` → Step 0.5
+
+IF vault_level > L0 (detected during Step 0h):
+
+1. Search vault for relevant prior artifacts:
+   - Types: `cjm-analysis`, `ab-test-results`, `metrics-review`, `post-release`, `hypothesis`
+   - Product: active product
+   - Tags: metric names, analysis type keywords
+   - Status: `active`, `draft`
+   - Sort: `created DESC`, limit: 10
+
+2. IF results found:
+   - Display: "Found {N} related analysis artifacts in your knowledge base:"
+   - Show: title, type, date, key metrics or test results
+   - Ask: "Use as context? [Yes / Select specific / Skip]"
+
+3. IF user accepts:
+   - Read full content of selected artifacts
+   - Use as context:
+     - Previous metrics reviews → compare trends, identify recurring patterns
+     - Prior A/B test results → reference when analyzing related metrics
+     - CJM analyses → understand funnel context for current metrics
+     - Hypotheses → link metrics changes to tested/untested hypotheses
+   - Note in analysis: "Comparison with previous analysis from {date}"
+
+4. IF user skips OR no results → continue normally
 
 ### Step 2 — Analysis engine
 
@@ -314,6 +347,72 @@ If the user requested corrections during review, analyze whether the skill's alg
 1. Analyze the root cause of the error — is this a pattern or a one-off?
 2. If it's a pattern — propose a specific improvement to the skill's conditions
 3. If the user agrees — update the SKILL.md, re-package the plugin, and provide the updated file
+
+### Vault Save (Optional — after output delivery)
+
+> Requires: `references/vault-protocol.md` → Vault Save
+
+IF vault_level > L0 AND vault sync_mode != "off":
+
+1. Determine artifact type based on analysis mode:
+   - Interactive Q&A / Full structured report → type: `metrics-review`
+   - A/B Test Results Analysis → type: `ab-test-results`
+   - Post-Release Analysis → type: `post-release`
+   - CJM Funnel Analysis → type: `cjm-analysis` (delegated from cjm-research, usually saved by that skill)
+
+2. Build artifact:
+   ```
+   vault_save({
+     type: determined_type,
+     product: active_product,
+     skill: "product-analysis",
+     skill_version: "0.6.0",
+     tags: [metric names analyzed, platforms, analysis_mode],
+     content: full_analysis_markdown,
+     related: [source hypothesis, source requirements, previous analyses from Step 0.5],
+     extra_frontmatter: {
+       // For ab-test-results:
+       test_name: test_name,
+       test_duration_days: duration,
+       sample_size: total_sample,
+       primary_metric: primary_metric_name,
+       primary_metric_change: "+X.X%" or "-X.X%",
+       statistical_significance: significance_value,
+       result: "winner" | "loser" | "inconclusive",
+       tested_hypothesis: "[[Hypotheses/product/hypothesis-name]]" (if linked),
+       
+       // For metrics-review:
+       review_period: "YYYY-MM-DD to YYYY-MM-DD",
+       key_metrics_analyzed: [metric_names],
+       anomalies_detected: count,
+       trend_direction: "up" | "down" | "stable",
+       
+       // For post-release:
+       feature_name: feature_name,
+       release_date: release_date,
+       metrics_impacted: [metric_names],
+       overall_impact: "positive" | "negative" | "neutral",
+       
+       // Common:
+       published_to: url_if_published,
+       confluence_page_id: page_id_if_applicable
+     }
+   })
+   ```
+
+3. **Special: Hypothesis Lifecycle Update for A/B Test Results**
+   
+   IF type == "ab-test-results" AND a tested hypothesis is linked:
+   
+   Follow `references/vault-protocol.md` → "Hypothesis Lifecycle Updates":
+   - Read the linked hypothesis from Vault
+   - Update `hypothesis_status`: winner → `validated`, loser → `rejected`, inconclusive → `inconclusive`
+   - Set `test_result` and `validated_by` fields
+   - If rejected: set `confidence` to 0.2
+   - Update `last_reviewed` to today
+   - Log: "Updated hypothesis status to {status} based on A/B test results"
+
+4. Display: "Saved to Vault: Analysis/{product}/..."
 
 ### Step 7 — Skill chaining
 
@@ -690,3 +789,5 @@ The calling skill should incorporate these results into its workflow without re-
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
+- **`references/vault-protocol.md`** — vault integration protocol: storing, searching, and retrieving analysis artifacts
+- **`references/vault-schema.md`** — vault schema definition for analysis artifact types and metadata
