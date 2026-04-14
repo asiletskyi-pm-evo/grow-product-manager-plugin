@@ -1,12 +1,12 @@
 ---
 name: brainstorm-features
-version: 0.4.0
-description: Help Product Manager brainstorm features and hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", or needs ICE scoring, benchmarks, and validation methods.
+version: 0.5.0
+description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis.
 ---
 
 # Brainstorm Features and Hypotheses
 
-Help Product Manager conduct a structured brainstorm to generate, evaluate, and prioritize feature ideas and hypotheses. This is an interactive, dialogue-driven skill — ideas are discussed live, iterated on, and only saved when the user is ready.
+Help Product Manager conduct a structured brainstorm to generate, evaluate, and prioritize feature ideas and hypotheses. Supports two main modes: standard interactive brainstorm and CJM Hypotheses mode for funnel-driven hypothesis generation. This is an interactive, dialogue-driven skill — ideas are discussed live, iterated on, and only saved when the user is ready.
 
 ## Integration prerequisite
 
@@ -18,6 +18,8 @@ Before gathering data, read and follow the integration fallback chain in `refere
 - **Web** — always available via WebSearch for benchmarks, competitor analysis, research
 - **ChatGPT / Gemini** — for Deep Research via browser when deeper analysis is needed
 - **Product Analysis skill** — for data-backed hypothesis generation and metric analysis (invoked when brainstorm needs quantitative evidence)
+- **Knowledge Library** — for searching curated sources (benchmarks, UX best practices) that enrich hypotheses with pre-vetted evidence
+- **CJM Research skill** — provides CJM anomaly data and enrichment context for CJM Hypotheses mode
 
 For each product: check for MCP connector → search MCP registry → fall back to browser.
 
@@ -33,6 +35,8 @@ Key context used by this skill:
 - `product.competitors` — for competitor benchmarks
 - `product.confluence_space` — default publishing destination
 - `user.language` — for output language
+- CJM Configuration section — funnel stages, baselines, thresholds (for CJM Hypotheses mode)
+- Knowledge Library section — search modes, available sources count
 
 ## Workflow
 
@@ -76,6 +80,11 @@ Identify which starting situation applies:
 - Propose conducting research first via the **Product Research** skill to build an evidence base
 - After research — propose creating a concept via the **Write Concept / PRD** skill
 - If the user wants to skip these steps — work with whatever context is available
+
+**Situation D — Invoked by CJM Research (CJM Hypotheses mode):**
+- Context was passed from `cjm-research`: anomaly list with severity, enrichment data from Knowledge Library and product-research
+- Skip all manual context gathering — use passed data
+- Proceed directly to **Step 3C — CJM Hypothesis Generation**
 
 **Regardless of situation, additionally clarify via AskUserQuestion:**
 - Which **product metrics** are we targeting? (conversion, retention, revenue, engagement, etc.)
@@ -168,6 +177,99 @@ Risks: [what could go wrong]
 
 Present the **ICE summary table** sorted by score descending — giving the user a clear priority view.
 
+### Step 3C — CJM Hypothesis Generation (CJM mode)
+
+This step runs when invoked by `cjm-research` or when the user explicitly requests CJM-based brainstorming.
+
+**Input required:**
+- Anomaly list from `product-analysis` (CJM mode): stage, metric, baseline, actual, deviation, severity
+- World enrichment from `knowledge-library` / `product-research`: benchmarks, best practices, competitor approaches
+- Internal enrichment: Confluence experiment results, user feedback, previous research
+
+**3C-1. Generate hypotheses from anomalies:**
+
+For each anomaly (prioritize by severity: Critical first, then Warning):
+
+```
+Name: [short descriptive name]
+
+Data Trigger: [anomaly details — stage, metric, deviation from baseline]
+Feedback Match: [correlated user feedback, support tickets, NPS verbatims — from internal enrichment]
+Heuristic Match: [matching UX best practice or benchmark — from Knowledge Library with trust score]
+
+Solution: [proposed change to address the anomaly]
+Expected Impact: [estimated conversion lift % for the affected stage]
+Target Metric: [stage conversion rate, expected change direction and magnitude]
+Validation Method: [A/B test / feature flag / user interviews / analytics deep-dive]
+
+ICE Score: Impact [X] × Confidence [X] × Ease [X] = [Score]
+
+Funnel Stage Impact: current [X]% → projected [Y]% (+Z%)
+
+Benchmarks: [supporting evidence with trust scores — from Knowledge Library and web]
+Risks: [what could go wrong, negative side effects]
+```
+
+> Use the user's preferred language (`user.language`) for all field labels and content.
+
+**3C-2. ICE scoring with CJM-specific weighting:**
+
+Enhanced ICE scoring for CJM hypotheses:
+
+**Impact** — weighted by funnel stage position (per `references/cjm-protocol.md`):
+| Stage position | Multiplier | Rationale |
+|---------------|-----------|-----------|
+| Stage 1 (entry) | ×1.5 | Improvements at entry affect all downstream stages |
+| Stage 2 | ×1.3 | High leverage — feeds middle funnel |
+| Stage 3 | ×1.1 | Important but narrower audience |
+| Stage 4+ | ×1.0 | Baseline — affects only late-stage users |
+
+**Confidence** — boosted by evidence quality:
+- Baymard/academic evidence supports hypothesis → +1–2 points
+- Internal A/B test confirmed similar approach → +2–3 points
+- Only blog/article evidence → +0 (no boost)
+- Contradicting internal evidence → -2–3 points
+
+**Ease** — based on technical complexity, team capacity, dependencies
+
+**3C-3. Funnel impact calculation:**
+
+For each hypothesis, calculate the per-stage conversion impact:
+```
+new_stage_conversion = current_stage_conversion × (1 + expected_lift_percent / 100)
+```
+
+Calculate end-to-end funnel impact if all hypotheses in a stage are implemented:
+```
+stage_combined_lift = 1 - product(1 - lift_i for each hypothesis_i in stage)
+new_stage_conversion = current × (1 + stage_combined_lift)
+```
+
+**3C-4. Categorize hypotheses:**
+
+| Category | Criteria | Typical timeline |
+|----------|----------|-----------------|
+| **Low-hanging fruit** | Ease ≥ 7, moderate Impact, can be A/B tested quickly | 1–2 sprints |
+| **Structural changes** | High Impact, Ease < 5, requires significant development | 1–2 quarters |
+| **Business logic changes** | Requires stakeholder alignment, pricing/policy changes | Cross-functional initiative |
+
+**3C-5. Present results:**
+
+Show hypotheses grouped by category, sorted by ICE score within each group.
+
+Present ICE summary table:
+| # | Name | Stage | Trigger | ICE | Stage Impact | Category |
+|---|------|-------|---------|-----|-------------|----------|
+
+**3C-6. Return results to cjm-research:**
+
+When returning to `cjm-research`, include:
+- Full hypothesis list with all fields
+- ICE scores with stage multipliers applied
+- Per-hypothesis funnel stage impact
+- Category assignments
+- Evidence references (Knowledge Library sources, web sources)
+
 ### Step 4 — Interactive discussion
 
 This skill is a live dialogue, not a one-shot generation. Actively engage the user:
@@ -175,7 +277,7 @@ This skill is a live dialogue, not a one-shot generation. Actively engage the us
 - Propose discussing specific ideas in more detail to find better solutions
 - If the user wants to develop an idea — help by asking the right questions, suggesting alternatives, playing devil's advocate
 - Iterate: add new ideas, remove weak ones, regroup, re-score
-- Can return to Step 3B to generate more ideas if needed
+- Can return to Step 3B or 3C to generate more ideas if needed
 - Help the user make trade-off decisions between competing ideas
 
 ### Step 5 — Finalize and optionally save results
@@ -250,6 +352,7 @@ Always propose:
 - Proceed to creating detailed requirements for selected ideas via the **Feature and Hypothesis Requirements Creator** skill
 - Recommend which specific ideas from the final list to take into work first — based on ICE score ranking
 - If no concept exists yet — suggest creating one via **Write Concept / PRD** before moving to requirements
+- If CJM Hypotheses mode was used → also offer: "Run full **CJM Research** to verify these hypotheses, assess risks, and build a prioritized backlog"
 
 ## Quality standards
 
@@ -268,3 +371,5 @@ Always propose:
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain
 - **`references/data-policy.md`** — data confidentiality policy
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
+- **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, stage position multipliers
+- **`references/funnel-templates.md`** — standard funnel stage templates by product type

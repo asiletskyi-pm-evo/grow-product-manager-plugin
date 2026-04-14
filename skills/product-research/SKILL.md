@@ -1,7 +1,7 @@
 ---
 name: product-research
-version: 0.4.0
-description: Conduct comprehensive product research — competitive analysis, user research, or market research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", or needs SWOT, TAM SAM SOM, or PESTEL analysis.
+version: 0.5.0
+description: Conduct comprehensive product research — competitive analysis, user research, market research, or UX benchmark research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks", "search knowledge library", or needs SWOT, TAM SAM SOM, or PESTEL analysis.
 ---
 
 # Product Research
@@ -16,6 +16,7 @@ Before gathering data, read and follow the integration fallback chain in `refere
 - **Google Drive** — for reading internal documents, research materials, reports, and any files stored in the team's Drive
 - **Figma** — for pulling design context if researching UI/UX topics
 - **Product Analysis skill** — for analyzing product metrics, dashboards, and data (invoked when research needs quantitative data analysis)
+- **Knowledge Library** — for searching curated sources (articles, benchmarks, best practices) that enrich research with pre-vetted knowledge
 - **Web** — always available via WebSearch
 
 For each product: check for MCP connector → search MCP registry → fall back to browser.
@@ -33,6 +34,13 @@ Key context used by this skill:
 - `organization.domain` — for understanding company context
 - `user.language` — for output language
 
+**Knowledge Library context** (if initialized):
+- `knowledge_library.status` — whether Knowledge Library is initialized (`~/.grow-pm/knowledge-library/`)
+- `knowledge_library.sources_count` — number of curated sources available
+- `knowledge_library.search_modes` — available search modes (semantic, keyword, hybrid)
+- `knowledge_library.baymard_access` — access to Baymard UX benchmarks (if configured)
+- `knowledge_library.confluence_spaces` — integrated Confluence spaces for knowledge enrichment
+
 ## Workflow
 
 ### 1. Deep discovery — gather maximum context before research
@@ -45,7 +53,7 @@ This step is critical. Do NOT start research until the scope is crystal clear. U
 - **New or existing functionality?** — Is this research for completely new functionality we are planning to build, or for existing functionality we are developing/modifying? (if not clear — ask explicitly)
 
 **Research scope:**
-- Research type: competitive analysis, user research, market research, or a combination
+- Research type: competitive analysis, user research, market research, UX benchmark research, or a combination
 - Subject: specific product, feature area, market segment, or user persona
 - Depth: quick overview (1-2 pages) or deep dive (5+ pages)
 - Goal: what decision will this research inform? (e.g., launch/no-launch, feature prioritization, market entry)
@@ -67,6 +75,15 @@ This step is critical. Do NOT start research until the scope is crystal clear. U
   - "Should we use **Google Gemini** in Deep Research mode for deeper analysis?" (via the user's browser)
   - The user can enable one, both, or neither. If both are enabled — run Deep Research in both LLMs and cross-reference their findings
 - If the user has preferences for specific tools or databases, capture them now
+
+**Knowledge Library check:**
+
+Follow `references/local-context-protocol.md` — Step 0g:
+- Check if Knowledge Library is initialized (`~/.grow-pm/knowledge-library/`)
+- If available and contains sources relevant to the research topic (≥3 matching sources), inform the user:
+  > "Knowledge Library has [N] sources relevant to [topic]. Would you like to include them in the research?"
+- If user confirms → library sources will be included in Step 2
+- If not available → skip, no impact on workflow
 
 **Figma designs check — if researching existing product or existing functionality:**
 
@@ -97,6 +114,14 @@ Pull information from every source agreed upon in Step 1. For each external prod
 - News, funding announcements, partnership deals
 
 **Uploaded files** — if the user provides files (interview transcripts, survey results, reports), read them with the Read tool and extract key data points.
+
+**Knowledge Library** (if user confirmed in Step 1):
+- Call `knowledge-library` in Search mode with research topic keywords
+- Include sources with trust_score >= 0.5
+- For each matching source: include URL, key insights, trust score, source type
+- Mark library sources in the final output's Sources section as "Source: Knowledge Library"
+- If sources contain benchmark data → use in competitive analysis matrices
+- Library sources complement (not replace) web search — they provide pre-vetted, curated knowledge
 
 **Confluence** — search existing Confluence pages for internal knowledge:
 - Previous research, decision logs, meeting notes
@@ -169,6 +194,14 @@ Apply the appropriate framework(s) based on research type. See `references/frame
 
 **Market research** → Market sizing (TAM/SAM/SOM), trends, PESTEL factors, opportunities & threats, growth drivers
 
+**UX Benchmark Research** → Feature/practice comparison against industry benchmarks, UX best practices matrix, gap analysis between current state and industry standards, recommendations ranked by impact
+
+**Important for UX Benchmark Research type:**
+- Primary source: Knowledge Library (if initialized with UX sources)
+- Secondary source: web search for fresh benchmarks
+- Output format: benchmark matrix (practice, industry standard, our current state, gap, priority)
+- This type is commonly used by `cjm-research` during enrichment steps
+
 ### 4. Confirm Confluence location and publish
 
 **Before creating the page**, if the user has not already specified where to publish, use AskUserQuestion to clarify:
@@ -185,7 +218,7 @@ Once confirmed, create the Confluence page using `createConfluencePage` with:
 - Tables for comparison data
 - A summary/TL;DR section at the top
 - **Glossary section** — at the end of the document (before Sources), add a "Glossary" section that explains all terms, professional jargon, abbreviations, and metrics used in the report. For each term provide a concise, clear definition accessible to a reader who may not be deeply familiar with the domain. Examples: "CAC (Customer Acquisition Cost) — cost of acquiring one customer", "Churn rate — percentage of users who stop using the product over a given period", "TAM (Total Addressable Market) — the total market volume theoretically available to the product". Use the user's preferred language (`user.language`) for the glossary content.
-- Sources section at the bottom with links — clearly marking each source type (Web, Confluence, Google Drive, ChatGPT Deep Research, Gemini Deep Research, uploaded file, etc.)
+- Sources section at the bottom with links — clearly marking each source type (Web, Confluence, Google Drive, Knowledge Library, ChatGPT Deep Research, Gemini Deep Research, uploaded file, etc.)
 
 **Confluence formatting requirements — use standard (non-legacy) elements:**
 
@@ -213,7 +246,7 @@ After publishing, provide a structured report of what was done:
 - **What was done:** brief description of the research conducted (type, scope, depth)
 - **Artifacts created:** links to all created documents (Confluence page, local files, etc.)
 - **Key findings:** 3-5 key takeaways from the research
-- **Sources used:** list of source types used (Web, Confluence, Google Drive, Figma, ChatGPT Deep Research, Gemini Deep Research, uploaded files)
+- **Sources used:** list of source types used (Web, Confluence, Google Drive, Knowledge Library, Figma, ChatGPT Deep Research, Gemini Deep Research, uploaded files)
 - **Recommended next steps:** suggested follow-up actions
 
 **After presenting the report, proactively ask for feedback:**
@@ -230,16 +263,24 @@ If the user requested corrections during review, analyze whether the skill's alg
 2. If it's a pattern — propose a specific improvement to the skill's conditions
 3. If the user agrees — update the SKILL.md, re-package the plugin, and provide the updated file
 
-### 6. Propose next step — Write Concept / PRD
+### 6. Propose next step — Write Concept / PRD / CJM Research
 
-After sharing the research summary, **always** propose transitioning to the **Write Concept / PRD** skill:
+After sharing the research summary, **always** propose transitioning to the next step:
 
 > "Research is complete. Would you like to create a concept (PRD) for a feature based on these results? I can pass the full research context to the Write Concept / PRD skill and we can start drafting the document right away."
 
-If the user agrees:
+If UX Benchmark Research was conducted, also offer:
+> "Run **CJM Research** to analyze your funnel using these benchmarks as evidence"
+
+If the user agrees to Write Concept:
 - Pass the full research context to the Write Concept / PRD skill: Confluence page link, key findings, identified opportunities, data sources used
 - The Write Concept skill will use these research results as primary input (Step 2 of its workflow)
 - No need to re-gather the same data — the research is already done
+
+If the user agrees to CJM Research:
+- Invoke CJM Research skill with the benchmark data and gap analysis
+- Pass the benchmark matrix and current state analysis
+- CJM Research will use these findings to enrich the journey analysis with evidence-backed insights
 
 If the user declines — end the workflow gracefully.
 
@@ -258,3 +299,4 @@ If the user declines — end the workflow gracefully.
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
+- **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas (relevant when research supports CJM analysis)
