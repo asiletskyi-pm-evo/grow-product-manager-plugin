@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.4.0
+version: 0.5.0
 description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document.
 ---
 
@@ -32,6 +32,35 @@ Key context used by this skill:
 - `product.confluence_space` — default publishing destination
 - `product.key_metrics`, `product.current_okrs` — for Success Metrics and Goals sections
 - `user.language` — for output language
+
+### Step 0.5: Vault Context Search (Optional)
+
+> Requires: `references/vault-protocol.md` → Step 0.5
+
+IF vault_level > L0 (detected during Step 0h):
+
+1. Search vault for relevant prior artifacts:
+   - Types: `competitive-analysis`, `market-research`, `ux-benchmark`, `hypothesis`, `decision`, `requirements`
+   - Product: active product
+   - Tags: keywords from user's feature idea or problem statement
+   - Status: `active`, `draft`
+   - Sort: `created DESC`, limit: 10
+
+2. IF results found:
+   - Display: "Found {N} related artifacts in your knowledge base that may inform this concept:"
+   - Show: title, type, date, brief summary
+   - Ask: "Use as context? [Yes / Select specific / Skip]"
+
+3. IF user accepts:
+   - Read full content of selected artifacts
+   - Use as input for the concept:
+     - Research findings → feed into Problem Statement and Proposed Solution
+     - Prior hypotheses → reference as basis for the concept
+     - Decisions → respect previous decisions, reference in rationale
+     - Existing requirements → avoid duplication, reference as related work
+   - Include "Informed by" section in concept metadata
+
+4. IF user skips OR no results → continue normally
 
 ## Workflow
 
@@ -218,9 +247,42 @@ If the user chooses **Feature and Hypothesis Requirements Creator**:
 
 If the user declines — end the workflow gracefully.
 
+### 7.5: Save to Vault (Optional)
+
+> Requires: `references/vault-protocol.md` → Vault Save
+
+IF vault_level > L0 AND vault sync_mode != "off":
+
+1. Build artifact:
+   ```
+   vault_save({
+     type: "concept",
+     product: active_product,
+     skill: "write-concept",
+     skill_version: "0.5.0",
+     tags: [feature area keywords, affected platforms, goal keywords],
+     content: full_prd_markdown,
+     related: [source research from Step 0.5, source hypotheses, related decisions],
+     extra_frontmatter: {
+       scope: "mvp" or "full" (based on phasing decision),
+       phase_count: number_of_phases,
+       estimated_effort: effort_estimate_if_discussed,
+       published_to: confluence_or_notion_url (if published),
+       confluence_page_id: page_id (if published to Confluence)
+     }
+   })
+   ```
+
+2. IF concept was informed by hypotheses from Vault (Step 0.5):
+   - Update those hypotheses: add this concept as `children` link
+
+3. Display: "Saved to Vault: Concepts/{product}/..."
+
 ## Additional Resources
 
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
+- **`references/vault-protocol.md`** — vault context search and save protocols
+- **`references/vault-schema.md`** — vault artifact schema and metadata structure
 - **`references/prd-structure.md`** — detailed templates for each PRD block
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
@@ -238,8 +300,3 @@ Detailed templates for each standard block are in `references/prd-structure.md`.
 - If information is insufficient for a block, state gaps and suggest how to fill them
 - Use Ukrainian or English based on user's language preference
 - Maintain consistent formatting: headings, bold highlights, tables, dividers
-
-## Additional Resources
-
-- **`references/prd-structure.md`** — detailed templates for each PRD block
-- **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
