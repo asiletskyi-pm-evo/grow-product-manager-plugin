@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.1.0
+version: 0.2.0
 description: Conduct CJM (Customer Journey Map) research — detect funnel anomalies, generate improvement hypotheses, and build prioritized backlogs. Use when the user asks to "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", or needs end-to-end funnel analysis with enrichment from knowledge sources.
 ---
 
@@ -19,6 +19,8 @@ Before starting, read and follow these shared references:
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain
 - **`references/data-policy.md`** — data confidentiality: internal analytics stay internal, external searches use public info only
 - **`references/persistent-storage.md`** — persistent storage protocol (`~/.grow-pm/`)
+- **`references/vault-protocol.md`** — vault context search, artifact storage, and lifecycle management
+- **`references/vault-schema.md`** — vault artifact schema, metadata structure, and query syntax
 
 Key context used by this skill:
 - `product.name`, `product.platforms`, `product.locales` — for scoping the analysis
@@ -70,6 +72,42 @@ If mode is `health-check` or `full`:
 - Check `~/.grow-pm/knowledge-library/health-checks/` for previous snapshots
 - Load the most recent one for delta comparison
 - If no previous check exists → this will be the baseline
+
+**1e. Detect vault level (for all modes):**
+
+Follow `references/vault-protocol.md` — Step 0.5:
+- Detect vault_level from `local-context.md` (L0, L1, L2, L3)
+- If vault_level > L0 → note that vault context search will be available in Step 1.5
+- If vault_level = L0 or vault sync_mode = "off" → vault steps will be skipped
+
+### Step 1.5: Vault Context Search (Optional)
+
+> Requires: `references/vault-protocol.md` → Step 0.5
+
+IF vault_level > L0 (detected during Step 1e):
+
+1. Search vault for relevant prior artifacts:
+   - Types: `cjm-analysis`, `cjm-health-check`, `funnel-anomaly`, `ab-test-results`, `hypothesis`
+   - Product: active product
+   - Tags: CJM-related tags from user's request
+   - Status: `active`, `draft`
+   - Sort: `created DESC`, limit: 10
+
+2. IF results found:
+   - Display: "Found {N} related CJM artifacts in your knowledge base:"
+   - Show: title, type, date, health_score (if health-check), key tags
+   - Ask: "Use as context for this analysis? [Yes / Select specific / Skip]"
+
+3. IF user accepts:
+   - Read full content of selected artifacts
+   - Use as baseline context:
+     - Previous health scores → compare with current
+     - Previous anomalies → check if still present or resolved
+     - Tested hypotheses → mark as already tested, show results
+     - Prior CJM analyses → identify trends across time
+   - Note in report header: "This analysis is informed by {N} previous artifacts from Vault"
+
+4. IF user skips OR no results → continue normally
 
 ### Step 2 — Clarify scope with user
 
@@ -533,6 +571,45 @@ If the user requested corrections during review, follow the full protocol in `re
 2. If it's a pattern — propose a specific improvement to the skill
 3. If the user agrees — update SKILL.md, bump version, update CHANGELOG.md
 
+### Step 12.5: Save to Vault (Optional)
+
+> Requires: `references/vault-protocol.md` → Vault Save
+
+IF vault_level > L0 AND vault sync_mode != "off":
+
+1. Determine artifact type based on mode:
+   - `anomalies` mode → type: `cjm-health-check`
+   - `hypotheses` mode → type: `cjm-analysis`
+   - `full` mode → type: `cjm-analysis`
+   - `health-check` mode → type: `cjm-health-check`
+   - `comparison` mode → type: `cjm-analysis`
+
+2. Build artifact:
+   ```
+   vault_save({
+     type: determined_type,
+     product: active_product,
+     skill: "cjm-research",
+     skill_version: "0.2.0",
+     tags: [detected funnel stages, anomaly types, platforms analyzed],
+     content: full_report_markdown,
+     related: [previous health checks used, related hypotheses, source data references],
+     extra_frontmatter: {
+       health_score: calculated_score (if health-check mode),
+       anomalies_found: count,
+       critical_anomalies: critical_count,
+       comparison_baseline: analysis_setting,
+       previous_health_check: "[[path_to_previous]]" (if found in Step 1.5)
+     }
+   })
+   ```
+
+3. IF mode was `health-check` and previous health check exists in Vault:
+   - Update previous health check's `status` to `superseded`
+   - Set `superseded_by` to link to new health check
+
+4. Display: "Saved to Vault: CJM/{product}/..."
+
 ---
 
 ## Skill Chaining (post-report)
@@ -605,3 +682,5 @@ When `health-check` mode is configured for automation:
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain
 - **`references/data-policy.md`** — data confidentiality rules
 - **`references/self-improvement.md`** — self-improvement protocol
+- **`references/vault-protocol.md`** — vault context search, artifact storage, and lifecycle management
+- **`references/vault-schema.md`** — vault artifact schema, metadata structure, and query syntax
