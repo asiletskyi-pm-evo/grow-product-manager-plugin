@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 0.7.0
+version: 0.8.0
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist.
 ---
 
@@ -14,10 +14,10 @@ Supports multiple organizations, products, and projects simultaneously.
 
 | Mode | When to use | What it does |
 |------|------------|--------------|
-| **Onboarding** | First launch, `local-context.md` doesn't exist anywhere | Full guided setup: user profile → organizations → products → teams → data sources → CJM → Knowledge Library → review → validation. Saves all data to `~/.grow-pm/` |
+| **Onboarding** | First launch, `local-context.md` doesn't exist anywhere | Full guided setup: user profile → organizations → products → teams → data sources → CJM → Knowledge Library → Obsidian Vault (optional) → review → validation. Saves all data to `~/.grow-pm/` |
 | **Reinstall / Migration** | Plugin reinstalled, `~/.grow-pm/` contains existing data | Detect existing data, show to user, ask: use as-is / reconfigure / start fresh. Migrate schema if needed |
-| **Update** | `local-context.md` exists, user wants to change something | Edit a specific section: add product, update team, change dashboard URLs, add OKRs, etc. Always shows changelog |
-| **Validate** | User wants to check everything works | Test all MCP connections, verify data access, check context completeness, produce readiness report |
+| **Update** | `local-context.md` exists, user wants to change something | Edit a specific section: add product, update team, change dashboard URLs, add OKRs, manage Obsidian Vaults, etc. Always shows changelog |
+| **Validate** | User wants to check everything works | Test all MCP connections, verify data access, check context completeness, validate Obsidian Vault connectivity, produce readiness report |
 | **View** | User asks to see current config | Display current `local-context.md` contents in a readable format, allow inline edits via dialogue |
 
 ## Persistent Storage
@@ -34,7 +34,8 @@ See **`references/persistent-storage.md`** for the complete protocol, directory 
 ├── .schema-version               # Schema version marker
 ├── template-library/             # User's templates
 ├── knowledge-library/            # Curated sources
-└── backups/                      # Auto-backups before migrations
+├── backups/                      # Auto-backups before migrations
+└── obsidian-vaults/              # Vault configuration cache (optional)
 ```
 
 ## Auto-trigger Protocol
@@ -450,15 +451,68 @@ If yes → delegate to `knowledge-library` skill onboarding workflow (KL-1 throu
 
 After Knowledge Library setup completes, continue with Step 11.
 
-### Step 11 — Custom Sections
+### Step 11 — Obsidian Vault (Optional)
+
+> Requires: `references/vault-protocol.md`, `references/vault-schema.md`
+
+Present the Vault option to the user:
+
+> "Would you like to connect an Obsidian Vault to accumulate knowledge over time? This is optional — the plugin works fully without it."
+
+Options via AskUserQuestion:
+- **Yes, connect Vault** → proceed with vault setup
+- **Skip for now** → complete onboarding without Vault section
+- **What is this?** → brief explanation, then re-ask
+
+**IF user chooses to connect:**
+
+1. **Ask for Vault path:**
+   > "What is the absolute path to your Obsidian Vault folder? This is the root folder that contains the `.obsidian/` subfolder."
+   - Validate: directory exists
+   - Validate: `.obsidian/` subdirectory exists (warning if not — may not be an Obsidian vault)
+
+2. **Ask for Plugin folder name** (default: `GrowPM`):
+   - Validate: no special characters except `-` and `_`
+
+3. **Ask for Products binding:**
+   - If single product → auto-bind to `all`
+   - If multiple products → ask: "Should this vault store artifacts for all products, or specific ones?"
+     - `all` → this vault handles everything
+     - Specific → select which products
+
+4. **Ask for Sync mode** via AskUserQuestion:
+   - **Auto (recommended)** — save artifacts automatically after each skill
+   - **Manual** — ask before each save
+   - **Read-only** — only search vault for context, don't write
+
+5. **Ask about additional vaults:**
+   > "Do you want to add another Vault? (e.g., a separate vault for a specific product)"
+   - If yes → repeat steps 1-4 for next vault
+   - If no → proceed
+
+6. **Execute vault initialization** (per `references/vault-protocol.md` → Vault Initialization):
+   - Create folder structure in each configured vault
+   - Create product subfolders for bound products
+   - Write template files
+   - Create initial Dashboard MOC
+   - Copy local-context.md as reference
+   - Migrate existing knowledge-library files (if found in `~/.grow-pm/knowledge-library/`)
+   - Create `.vault-schema-version` file
+
+7. **Save to local-context.md** — add the `## Obsidian Vaults (Optional)` section with all configured vaults
+
+8. **Display summary:**
+   > "Vault connected! Created {N} folders and {M} templates at {path}/{folder}/. Your artifacts will now be automatically saved to this vault."
+
+### Step 12 — Custom Sections
 
 > "Is there any additional information you'd like to save in the plugin context? For example: strategy documents, internal guidelines, specific processes."
 
 Allow free-form markdown sections with custom titles.
 
-### Step 12 — Review, confirm, and save local-context.md
+### Step 13 — Review, confirm, and save local-context.md
 
-**12a. Compile summary for review:**
+**13a. Compile summary for review:**
 
 Before generating the file, present ALL collected information to the user in a structured summary for confirmation:
 
@@ -503,11 +557,17 @@ Before generating the file, present ALL collected information to the user in a s
 - Search modes: [list or "N/A"]
 - Baymard: [yes/no]
 
+### Obsidian Vaults
+- Status: [configured / not connected]
+- Vaults: [list with paths or "none"]
+- Products bound: [all / specific list or "N/A"]
+- Sync mode: [auto / manual / read-only or "N/A"]
+
 ### Custom sections
 - [if any]
 ```
 
-**12b. Collect corrections:**
+**13b. Collect corrections:**
 
 > "Is everything correct? If anything needs to be fixed — tell me what, and I'll make the changes."
 
@@ -515,7 +575,7 @@ Before generating the file, present ALL collected information to the user in a s
 - Iterate until the user confirms: "Все ОК" / "Підтверджую"
 - Only proceed to file generation after explicit confirmation
 
-**12c. Generate the file:**
+**13c. Generate the file:**
 
 Compile all confirmed information into a structured `local-context.md` following the schema in `references/context-schema.md`.
 
@@ -544,6 +604,9 @@ Format:
 ...
 
 ### Knowledge Library
+...
+
+### Obsidian Vaults (Optional)
 ...
 
 ## Custom Sections
@@ -602,18 +665,41 @@ Format:
 - [Folder ID]: [description]
 ```
 
-**12d. Save to persistent storage:**
+**Obsidian Vaults Configuration section format:**
+
+```markdown
+### Obsidian Vaults (Optional)
+
+#### Status
+- Connected: [yes/no]
+- Total vaults: [N]
+
+#### Vaults
+| # | Vault Path | Folder Name | Products | Sync Mode | Last Artifact |
+|---|------------|------------|----------|-----------|--------------|
+| 1 | [path] | [folder] | [all/specific] | [auto/manual/read-only] | [date or never] |
+| 2 | [path] | [folder] | [all/specific] | [auto/manual/read-only] | [date or never] |
+
+#### Vault Initialization
+- Status: [initialized / pending / error]
+- Templates created: [N]
+- MOC created: [yes/no]
+- Knowledge library migrated: [yes/no]
+- Schema version: [X.Y.Z]
+```
+
+**13d. Save to persistent storage:**
 
 1. Create `~/.grow-pm/` directory if it doesn't exist (with permissions 700 on Unix)
 2. Save `local-context.md` to `~/.grow-pm/local-context.md`
 3. Create `~/.grow-pm/.schema-version` with the current plugin version
 4. Confirm to the user: "Configuration saved to ~/.grow-pm/. This data will persist across plugin reinstalls and updates."
 
-**12e. Automatic validation:**
+**13e. Automatic validation:**
 
 After saving, automatically run a quick validation (see Validate Mode) to confirm everything works. Present the readiness report.
 
-**12f. Template Library invitation:**
+**13f. Template Library invitation:**
 
 After the validation report, always offer the next setup step:
 
@@ -636,6 +722,7 @@ If the user chooses any "Yes" option → chain to the `template-library` skill w
 > - Integrations: [validation results summary]
 > - CJM: [configured / not configured]
 > - Knowledge Library: [initialized with N sources / not configured]
+> - Obsidian Vaults: [N vaults connected / not configured]
 > - Templates: [number] templates saved / library initialized / skipped
 > "You're ready to start! Try: 'brainstorm features for [product]' or 'write requirements for [feature name]'"
 
@@ -662,6 +749,7 @@ Present current sections as options via AskUserQuestion:
 - Key Metrics & OKRs
 - CJM Configuration
 - Knowledge Library Settings
+- Obsidian Vault Management
 - Repositories
 - Custom Sections
 - Add new custom section
@@ -681,6 +769,20 @@ Follow the same collection flow as Onboarding for the selected section. Pre-fill
 - Allow changing Baymard configuration
 - Allow adding/removing Confluence spaces and Google Drive folders
 - For source management → redirect to `knowledge-library` skill in Manage mode
+
+**For Obsidian Vault Management:**
+
+When user wants to manage Vault settings, offer these options via AskUserQuestion:
+
+- **Connect Vault** — if no Vault section exists, run the onboarding Vault step
+- **Add another Vault** — add additional vault to the list
+- **Change Vault path** — update path for existing vault (check if artifacts exist at old path → offer to move them)
+- **Change sync mode** — update sync mode for a vault
+- **Change product binding** — update which products a vault handles
+- **Re-initialize** — recreate folder structure + templates without losing existing artifact files
+- **Disconnect Vault** — remove vault from config (files remain on disk, inform user)
+- **Vault health check** — verify folder structure integrity, count artifacts by type, find orphaned files, check for broken wikilinks
+- **Backup Vault** — create .zip archive of vault plugin folder to `~/.grow-pm/backups/vault-{date}.zip`
 
 ### U-4. Save updated file and show changelog
 
@@ -705,6 +807,7 @@ Follow the same collection flow as Onboarding for the selected section. Pre-fill
 | CJM → Funnel Template | e-commerce | **saas** |
 | CJM → Anomaly Thresholds | Warning: 10%, Critical: 25% | Warning: **8%**, Critical: **20%** |
 | Knowledge Library → Search modes | library, internet | library, internet, **confluence** |
+| Obsidian Vaults → Added | (not configured) | **1 vault connected: /path/to/vault, sync: auto** |
 ```
 
 The changelog must include:
@@ -760,7 +863,22 @@ Score each product's context completeness:
 
 Calculate a completeness percentage per product and overall.
 
-### V-5. Produce readiness report
+### V-5. Validate Vault connectivity
+
+IF `local-context.md` contains Obsidian Vaults section:
+
+For each configured vault:
+1. Check vault path exists → ✅ or ❌
+2. Check plugin folder exists → ✅ or ❌
+3. Check folder structure completeness → ✅ or "Missing: [list]"
+4. Count artifacts by type → display summary table
+5. Check .vault-schema-version → compatible or needs migration
+6. Check MCP availability (if not disabled) → ✅ L2 available or ℹ️ L1 only
+7. Verify last save timestamp → "Last artifact saved: [date]"
+
+Add to the validation report output.
+
+### V-6. Produce readiness report
 
 Present a comprehensive report:
 
@@ -795,6 +913,12 @@ Present a comprehensive report:
 | Avg trust | 0.78 |
 | Search modes | library, internet, confluence |
 
+### Obsidian Vaults
+| Vault | Path | Status | Artifacts | Last Save |
+|-------|------|--------|-----------|-----------|
+| Primary | /Users/name/Vault | ✅ Connected | 23 files | 2026-04-14 |
+| Product A | /Users/name/VaultA | ✅ Connected | 8 files | 2026-04-12 |
+
 ### Recommendations
 1. Connect Figma MCP for working with designs
 2. Add OKRs for Product 1 (improves analysis and concept quality)
@@ -818,11 +942,11 @@ Read `local-context.md` and present its contents in a clean, readable format —
 
 > "Here is the current plugin configuration:"
 
-Display each section with clear headings. For long sections (teams, metrics) — use tables. Show completeness indicators where fields are empty or missing. Include CJM Configuration and Knowledge Library sections.
+Display each section with clear headings. For long sections (teams, metrics) — use tables. Show completeness indicators where fields are empty or missing. Include CJM Configuration, Knowledge Library, and Obsidian Vaults sections.
 
 ### VW-2. Ask if changes are needed
 
-> "Would you like to change anything? Just tell me what — for example: 'change email', 'add competitor X', 'remove product Y', 'switch CJM template to SaaS'."
+> "Would you like to change anything? Just tell me what — for example: 'change email', 'add competitor X', 'remove product Y', 'switch CJM template to SaaS', 'connect a vault'."
 
 ### VW-3. Apply inline changes
 
@@ -846,7 +970,7 @@ If no changes were made — simply end the mode.
 
 ## Changelog Protocol (applies to ALL modes that modify local-context.md)
 
-Every time `local-context.md` is modified — whether by Onboarding (Step 12), Update, View, or Enrichment from other skills — the user MUST receive a changelog report showing:
+Every time `local-context.md` is modified — whether by Onboarding (Step 13), Update, View, or Enrichment from other skills — the user MUST receive a changelog report showing:
 
 1. **What was added** (new fields, new sections, new items in lists)
 2. **What was changed** (previous value → new value)
@@ -958,3 +1082,5 @@ This skill (`plugin-configurator`) must bump its own version when its SKILL.md i
 - **`references/self-improvement.md`** — self-improvement protocol
 - **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, health score
 - **`references/funnel-templates.md`** — standard funnel stage templates by product type
+- **`references/vault-protocol.md`** — Obsidian Vault initialization, folder structure, artifact management
+- **`references/vault-schema.md`** — Vault schema definition, template formats, metadata storage
