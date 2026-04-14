@@ -12,6 +12,24 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.6.0 (2026-04-14)
+
+### Added
+- **Obsidian Vault Integration (Phase 1)** — optional persistent knowledge graph for accumulating artifacts across sessions
+  - New `references/vault-protocol.md` — shared protocol for vault detection, search, save, and MOC management
+  - New `references/vault-schema.md` — frontmatter schema, type taxonomy (16 types), tag taxonomy, folder structure, templates
+  - Multi-vault support with per-product vault binding
+  - Three-level fallback: L0 (no vault), L1 (file system), L2 (file + Obsidian MCP)
+
+### Changed
+- **local-context-protocol.md** — added Step 0h (vault detection) and Step 0.5 (vault context search)
+- **plugin-configurator** `0.7.0 → 0.8.0` — new Obsidian Vault section in Onboarding, Update, and Validate modes
+- **cjm-research** `0.1.0 → 0.2.0` — added Step 1.5 (vault context) and Step 12.5 (vault save)
+- **write-concept** `0.4.0 → 0.5.0` — added Step 0.5 (vault context) and Step 7.5 (vault save)
+- **product-analysis** `0.5.0 → 0.6.0` — added Step 0.5 (vault context) and Vault Save with A/B test hypothesis lifecycle updates
+
+---
+
 ## [1.5.0] — 2026-04-14
 
 ### What changed
