@@ -1,7 +1,7 @@
 {
   "name": "grow-product-manager",
-  "version": "1.5.0",
-  "description": "AI assistant for Product Managers: research, concepts, requirements, brainstorming, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, and knowledge library — integrated with Jira, Confluence, and Figma.",
+  "version": "1.7.0",
+  "description": "AI assistant for Product Managers: research, concepts, requirements, brainstorming, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, knowledge library, and Obsidian Vault integration — integrated with Jira, Confluence, Figma, and more.",
   "author": {
     "name": "Andrii Siletskyi"
   }
