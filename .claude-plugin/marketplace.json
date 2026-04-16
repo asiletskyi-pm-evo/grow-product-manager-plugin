@@ -1,5 +1,7 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "grow-product-manager-plugins",
+  "description": "Personal marketplace with Grow Product Manager plugin — an AI assistant for Product Managers.",
   "owner": {
     "name": "Andrii Siletskyi"
   },
@@ -7,8 +9,8 @@
     {
       "name": "grow-product-manager",
       "source": ".",
-      "description": "AI assistant for Product Managers: research, concepts, requirements, brainstorming, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, knowledge library, meeting processing, and Obsidian Vault integration — integrated with Jira, Confluence, Figma, and more.",
-      "version": "1.8.0"
+      "description": "AI assistant for Product Managers: research, concepts, brainstorming, requirements, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, and knowledge library — integrated with Jira, Confluence, and Figma.",
+      "category": "productivity"
     }
   ]
 }
