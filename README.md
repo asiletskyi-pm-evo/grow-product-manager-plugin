@@ -1,6 +1,6 @@
 # Grow Product Manager
 
-**Version:** 1.7.0
+**Version:** 1.8.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows.
 
@@ -14,7 +14,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.2.0) — NEW
+### 1. CJM Research (v0.2.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -76,7 +76,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 5. Write Concept (v0.4.0)
+### 5. Write Concept (v0.5.0)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -173,33 +173,37 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 - Agenda and attached documents
 - Presentation materials
 
-**Chaining:** Connects to Feature Task Creator (action items → Jira), Product Research (interview insights), Requirements Creator, Brainstorm Features, and Diagram Prototypes
+**Chaining:** Connects to Feature Task Creator (action items → Jira), Product Research (interview insights), Requirements Creator, Brainstorm Features, and Diagram Prototyper
 
 **Trigger phrases:** "summarize meeting", "meeting notes", "action items"
 
 ---
 
-### 10. Plugin Configurator (v0.9.0)
+### 10. Plugin Configurator (v0.10.0)
 
-**Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, and user preferences.
+**Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
 **Configuration Areas:**
+- Storage location selection (Obsidian Vault or custom folder)
 - Organization and product settings
 - Team structure and roles
 - Data source connections (Jira, Confluence, Figma, etc.)
 - Knowledge library settings
+- CJM funnel configuration
+- Obsidian Vault integration
 - Output preferences and defaults
 
 **Trigger phrases:** "configure plugin", "set up plugin"
 
 ---
 
-### 11. Knowledge Library (v0.3.0) — NEW
+### 11. Knowledge Library (v0.4.0)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
 **Features:**
-- Local storage in `~/.grow-pm/knowledge-library/`
+- User-controlled storage location (Obsidian Vault or custom folder)
+- Per-product library support
 - Trust scoring and source evaluation
 - Multi-mode search capability
 - Categorization by topic and type
@@ -220,17 +224,17 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.2.0 | Customer Journey Map analysis and hypothesis validation (NEW) |
+| CJM Research | v0.2.0 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.6.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.5.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.5.0 | Interactive feature ideation with ICE scoring |
-| Write Concept | v0.4.0 | Write product concept documents (PRDs) |
+| Write Concept | v0.5.0 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.5.1 | Create and analyze feature requirements |
 | Feature Task Creator | v0.7.0 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.7.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Meeting Processor | v0.9.0 | Process meetings and extract action items |
-| Plugin Configurator | v0.9.0 | Configure plugin for your organization |
-| Knowledge Library | v0.3.0 | Manage curated knowledge sources (NEW) |
+| Plugin Configurator | v0.10.0 | Configure plugin for your organization |
+| Knowledge Library | v0.4.0 | Manage curated knowledge sources |
 
 ---
 
@@ -262,39 +266,34 @@ Run Plugin Configurator → Obsidian Vault step, or say "connect Obsidian Vault"
 
 ## Persistent Data Storage
 
-All user configuration, templates, and knowledge library files are stored in `~/.grow-pm/` in the user's home directory. This data persists across plugin uninstalls, reinstalls, and updates.
+All user data is stored in a **user-controlled location** — either your Obsidian Vault (recommended) or a custom folder you choose during setup.
 
-**Directory Structure:**
+**How it works:**
+- `~/.grow-pm/` contains only a pointer file (`.storage-pointer.yaml`) that tells the plugin where your actual data lives
+- Two storage modes: **Vault** (Obsidian vault = primary storage) or **Custom** (user-chosen folder)
+- When Obsidian is configured, the vault IS the primary storage — no separate copy needed
+- Data persists across plugin uninstalls, reinstalls, and updates
+
+**Storage structure (at your chosen location):**
 
 ```
-~/.grow-pm/
-├── config/                    # Configuration files
-│   ├── plugin-settings.json   # Plugin-wide settings
-│   ├── products.json          # Product configurations
-│   └── teams.json             # Team and role mappings
+<your-storage-location>/
+├── local-context.md           # Plugin configuration
 ├── knowledge-library/         # Curated knowledge sources
-│   ├── sources.json           # Source registry with trust scores
+│   ├── sources.md             # Source registry with trust scores
 │   ├── articles/              # Imported articles
 │   ├── benchmarks/            # Industry benchmarks
 │   └── competitive/           # Competitor intelligence
-├── vault/                     # Obsidian Vault artifacts (if configured)
-│   ├── dashboard/             # Dashboards and MOCs
-│   ├── products/              # Product-specific artifacts
-│   ├── research/              # Research and analysis
-│   ├── concepts/              # Concept documents and PRDs
-│   ├── requirements/          # Requirement specs
-│   ├── decisions/             # Decisions and A/B test results
-│   └── hypotheses/            # Hypotheses and lifecycle tracking
 └── templates/                 # Custom templates and outputs
 ```
 
 **Key Features:**
-- Configuration files in `~/.grow-pm/config/`
-- Knowledge library in `~/.grow-pm/knowledge-library/`
-- Vault artifacts in `~/.grow-pm/vault/` (optional)
+- User chooses storage location during onboarding (Step 0)
+- Per-product Knowledge Library support
+- Pointer-based resolution with recovery flow
+- Change storage location at any time via Plugin Configurator
 - Automatic backups before migrations
 - Schema versioning for data compatibility
-- Legacy data migration on first launch
 
 ---
 
@@ -311,8 +310,11 @@ The plugin includes reference materials for product management best practices an
 - Competitive analysis templates
 - CJM mapping guides
 - Meeting templates and agendas
+- `persistent-storage.md` — Pointer + User-Controlled Storage protocol
 - `vault-protocol.md` — Obsidian Vault integration protocol (detection, search, save, MOC updates)
 - `vault-schema.md` — Vault artifact schema (frontmatter, types, tags, folder structure, templates)
+- `cjm-protocol.md` — CJM shared standards (anomaly severity, funnel impact, health score)
+- `funnel-templates.md` — Standard funnel stage templates by product type
 
 See the plugin's `references/` folder for the complete list of available materials.
 
@@ -328,8 +330,9 @@ For detailed version history, release notes, and changelog information, see [CHA
 
 1. **Install the plugin** from the Claude Code plugin marketplace
 2. **Configure the plugin** using the Plugin Configurator skill
-3. **Connect your data sources** (Jira, Confluence, Figma, etc.)
-4. **Start using skills** by typing trigger phrases in your Claude Code session
+3. **Choose your storage location** — Obsidian Vault (recommended) or custom folder
+4. **Connect your data sources** (Jira, Confluence, Figma, etc.)
+5. **Start using skills** by typing trigger phrases in your Claude Code session
 
 ---
 
@@ -354,6 +357,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii  
-**Version:** 1.7.0  
+**Version:** 1.8.0  
 **Last Updated:** April 2026
-
