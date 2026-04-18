@@ -1,6 +1,6 @@
 # Grow Product Manager
 
-**Version:** 1.8.0
+**Version:** 1.9.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows.
 
@@ -14,7 +14,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.2.0)
+### 1. CJM Research (v0.3.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -33,7 +33,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 2. Product Analysis (v0.6.0)
+### 2. Product Analysis (v0.7.0)
 
 **Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
 
@@ -48,7 +48,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 3. Product Research (v0.5.0)
+### 3. Product Research (v0.6.0)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -62,7 +62,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 4. Brainstorm Features (v0.5.0)
+### 4. Brainstorm Features (v0.6.0)
 
 **Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation.
 
@@ -76,7 +76,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 5. Write Concept (v0.5.0)
+### 5. Write Concept (v0.6.0)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -86,7 +86,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 6. Requirements Creator (v0.5.1)
+### 6. Requirements Creator (v0.6.0)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -100,7 +100,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 7. Feature Task Creator (v0.7.0)
+### 7. Feature Task Creator (v0.8.0)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -114,7 +114,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 8. Diagram & Prototype Creator (v0.7.0)
+### 8. Diagram & Prototype Creator (v0.8.0)
 
 **Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
 
@@ -145,7 +145,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 9. Meeting Processor (v0.9.0)
+### 9. Meeting Processor (v0.10.0)
 
 **Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
 
@@ -179,7 +179,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 10. Plugin Configurator (v0.10.0)
+### 10. Plugin Configurator (v1.0.0)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -220,21 +220,38 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
+### 12. Template Library (v0.1.0)
+
+**Description:** Manage a multilingual library of artifact templates (concepts, requirements, research, CJM, epics, tasks, meeting notes, presentations). Templates are stored in your Obsidian vault or custom folder, scoped per-product, and consumed automatically by other skills through the Step T — Template Resolution protocol.
+
+**Features:**
+- Three-tier scope: built-in → user-global → product-specific (with inheritance)
+- Single-file multilingual storage (`<!-- lang:uk --> ... <!-- /lang:uk -->` blocks)
+- Registry-backed resolution with scoring (scope, subtype, language, usage_count)
+- 11 actions: list, show, add, clone, update, delete, restore, import, export, validate, rebuild-registry
+- Three-tier backup: per-template archive, pack backups, manual backup/restore
+- Ships with 9 built-in templates in Ukrainian + English (see `templates/built-in/`)
+
+**Trigger phrases:** "manage templates", "add template", "list templates", "template library", "clone template", "import templates", "restore template"
+
+---
+
 ## Skills Summary
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.2.0 | Customer Journey Map analysis and hypothesis validation |
-| Product Analysis | v0.6.0 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.5.0 | Competitive analysis, user research, market trends, UX benchmarking |
-| Brainstorm Features | v0.5.0 | Interactive feature ideation with ICE scoring |
-| Write Concept | v0.5.0 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.5.1 | Create and analyze feature requirements |
-| Feature Task Creator | v0.7.0 | Create Jira tasks from requirements |
-| Diagram & Prototype Creator | v0.7.0 | Visualize concepts with diagrams, prototypes, infographics |
-| Meeting Processor | v0.9.0 | Process meetings and extract action items |
-| Plugin Configurator | v0.10.0 | Configure plugin for your organization |
+| CJM Research | v0.3.0 | Customer Journey Map analysis and hypothesis validation |
+| Product Analysis | v0.7.0 | Analyze metrics, dashboards, and A/B test results |
+| Product Research | v0.6.0 | Competitive analysis, user research, market trends, UX benchmarking |
+| Brainstorm Features | v0.6.0 | Interactive feature ideation with ICE scoring |
+| Write Concept | v0.6.0 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.6.0 | Create and analyze feature requirements |
+| Feature Task Creator | v0.8.0 | Create Jira tasks from requirements |
+| Diagram & Prototype Creator | v0.8.0 | Visualize concepts with diagrams, prototypes, infographics |
+| Meeting Processor | v0.10.0 | Process meetings and extract action items |
+| Plugin Configurator | v1.0.0 | Configure plugin for your organization |
 | Knowledge Library | v0.4.0 | Manage curated knowledge sources |
+| Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
 
 ---
 
@@ -284,7 +301,13 @@ All user data is stored in a **user-controlled location** — either your Obsidi
 │   ├── articles/              # Imported articles
 │   ├── benchmarks/            # Industry benchmarks
 │   └── competitive/           # Competitor intelligence
-└── templates/                 # Custom templates and outputs
+└── Templates/                 # Multilingual artifact templates
+    ├── _registry.json         # Template index with scoring metadata
+    ├── _backups/              # Pack backups (last 5 before bulk ops)
+    ├── _archive/              # Per-template version history (last 10)
+    ├── built-in/              # Templates shipped with plugin
+    ├── user/                  # User-global templates (all products)
+    └── product/<product_id>/  # Product-scoped overrides
 ```
 
 **Key Features:**
@@ -294,6 +317,87 @@ All user data is stored in a **user-controlled location** — either your Obsidi
 - Change storage location at any time via Plugin Configurator
 - Automatic backups before migrations
 - Schema versioning for data compatibility
+
+---
+
+## Multilingual Artifact Templates
+
+The plugin ships with a built-in template library that every skill uses to produce structured, consistent artifacts — concepts, requirements, research reports, CJM analyses, epics, tasks, meeting notes, and presentation outlines. Templates are multilingual (all languages live in a single `.md` file), scoped per product, and resolved automatically with user opt-in.
+
+### How templates are used
+
+When you invoke a skill that produces a deliverable (e.g., `write-concept`, `requirements-creator`, `product-research`, `cjm-research`, `feature-task-creator`, `product-analysis` in report mode, `diagram-prototyper` for decks, `meeting-processor` for MoMs, `brainstorm-features` when saving), the skill runs **Step T — Template Resolution** before starting the workflow. Step T:
+
+1. Reads your `templates.preference` (`auto`, `always_ask`, or `smart` — default `smart`).
+2. Queries the template registry for candidates matching the artifact type, subtype, current product, and your language.
+3. Scores candidates by scope (+5 product-specific, +3 user-global, +1 built-in), subtype match, language match, and usage count.
+4. Either auto-picks the top candidate, asks you to choose, or silently uses it — based on your preference.
+5. Uses the template as the artifact skeleton, filling in variables as the workflow progresses.
+6. Tags the saved artifact with `<!-- template: {template_id}@{version} -->` for traceability.
+
+### Three-tier scope
+
+| Scope | Location | Applies to |
+|-------|----------|-----------|
+| **built-in** | `Templates/built-in/` | All products (shipped with plugin, read-only) |
+| **user-global** | `Templates/user/` | All products in your library (overrides built-in) |
+| **product-specific** | `Templates/product/<product_id>/` | One product only (overrides user-global + built-in) |
+
+### Multilingual single-file format
+
+Every template is a single `.md` file with one YAML frontmatter block and one or more language blocks delimited by HTML comments (Obsidian-compatible):
+
+```markdown
+---
+id: concept-builtin-default
+version: 1.0.0
+artifact_type: concept
+subtype: default
+scope: built-in
+languages: [uk, en]
+variables: [feature_name, problem_statement, ...]
+---
+
+<!-- lang:uk -->
+# Концепт: {{feature_name}}
+## Проблема
+{{problem_statement}}
+...
+<!-- /lang:uk -->
+
+<!-- lang:en -->
+# Concept: {{feature_name}}
+## Problem
+{{problem_statement}}
+...
+<!-- /lang:en -->
+```
+
+### Built-in templates (shipped in v1.9.0)
+
+9 seed templates, each in Ukrainian + English:
+
+- `concept/default-v1` — PRD skeleton
+- `requirements/default-v1` — general feature requirements
+- `requirements/ab-test-v1` — A/B test spec
+- `research/competitive-v1` — competitive analysis + SWOT
+- `research/user-research-v1` — user research synthesis
+- `cjm/funnel-v1` — CJM funnel analysis with ICE table
+- `epic/default-v1` — Jira epic description
+- `task/default-v1` — Jira task with DoD and AC
+- `presentation/feature-v1` — 10-slide feature deck outline
+
+### Managing your library
+
+The **Template Library** skill provides 11 actions: `list`, `show`, `add`, `clone`, `update`, `delete`, `restore`, `import`, `export`, `validate`, `rebuild-registry`. Trigger with phrases like "add template", "list templates", "clone template", "restore template", etc.
+
+### Backup protection
+
+Three-tier backup system to prevent data loss:
+
+1. **Per-template archive** — every template edit saves the previous version (last 10 versions kept per template)
+2. **Pack backup** — before bulk operations (import, bulk delete, migration), the whole library is snapshotted (last 5 kept)
+3. **Manual backup/restore** — trigger at any time via the Template Library skill
 
 ---
 
@@ -315,6 +419,7 @@ The plugin includes reference materials for product management best practices an
 - `vault-schema.md` — Vault artifact schema (frontmatter, types, tags, folder structure, templates)
 - `cjm-protocol.md` — CJM shared standards (anomaly severity, funnel impact, health score)
 - `funnel-templates.md` — Standard funnel stage templates by product type
+- `template-protocol.md` — Multilingual template resolution protocol (Step T-0 → T-5, scoring, fallbacks, backup invariants)
 
 See the plugin's `references/` folder for the complete list of available materials.
 
@@ -357,5 +462,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii  
-**Version:** 1.8.0  
+**Version:** 1.9.0  
 **Last Updated:** April 2026

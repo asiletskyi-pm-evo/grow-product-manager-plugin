@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.6.0
+version: 0.7.0
 description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", or "CJM funnel analysis".
 ---
 
@@ -39,6 +39,42 @@ Key context used by this skill:
 ### Vault context prerequisite
 
 **After local context (Step 0) is loaded, read and follow the vault integration in `references/vault-protocol.md` and `references/vault-schema.md`.** If vault is configured and vault_level > L0, you will use vault context search and save throughout this workflow.
+
+## Step T — Template Resolution (when producing a structured report)
+
+Runs before Step 1 of the workflow, but only when the user requests a deliverable artifact (Full structured report, Post-Release Analysis report, A/B Test Results report, or CJM Funnel Analysis report). **Skip Step T for Interactive Q&A mode** — no artifact is being produced, so no template is needed.
+
+Follow `references/template-protocol.md`:
+
+- `artifact_type: research`
+- `subtype`: inferred from selected mode
+  - Full structured report → `metrics-analysis`
+  - Post-Release Analysis → `post-release`
+  - A/B Test Results → `ab-test-results`
+  - CJM Funnel Analysis → `cjm-funnel`
+- `product_id`: from local-context.md active product
+- `language`: from `user.language` in local-context.md
+
+Run Steps T-1 → T-5 from `references/template-protocol.md`:
+
+1. **T-1 (Check preference):** read `templates.preference` from local-context.md (`auto` | `always_ask` | `smart`, default `smart`).
+2. **T-2 (Query registry):** call template-library helper `resolve({artifact_type, subtype, product_id, language})`; get ranked candidates.
+3. **T-3 (Decide):** per preference mode, either auto-select top candidate, always ask, or ask only when multiple strong candidates exist.
+4. **T-4 (Render):** if a template was selected, use it as the report skeleton; collect required variables during Step 1 data gathering; if no suitable template exists, fall back to the skill's built-in structure (see mode-specific sections below).
+5. **T-5 (Mark):** when saving the final report (Confluence / Notion / vault), append:
+   ```
+   <!-- template: {template_id}@{version} -->
+   ```
+
+**Fallbacks** (when registry returns no match):
+- `metrics-analysis` → built-in structure defined in Step 7
+- `post-release` → built-in structure in Post-Release Analysis Mode section
+- `ab-test-results` → built-in structure in A/B Test Results Analysis Mode section
+- `cjm-funnel` → `cjm-builtin-funnel` (shared with `cjm-research`)
+
+**Escape hatch:** if the user says "don't use a template" or "blank slate", skip Step T entirely and use the built-in skeleton.
+
+**Chained invocation:** if this skill is invoked from `cjm-research`, `cjm-research` has already resolved the CJM template; this skill receives the resolved template id in passed context and skips T-2.
 
 ## Workflow
 

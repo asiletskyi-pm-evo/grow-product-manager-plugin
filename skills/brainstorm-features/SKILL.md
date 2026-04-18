@@ -1,6 +1,6 @@
 ---
 name: brainstorm-features
-version: 0.5.0
+version: 0.6.0
 description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis.
 ---
 
@@ -37,6 +37,30 @@ Key context used by this skill:
 - `user.language` — for output language
 - CJM Configuration section — funnel stages, baselines, thresholds (for CJM Hypotheses mode)
 - Knowledge Library section — search modes, available sources count
+
+## Step T — Template Resolution (when saving brainstorm output)
+
+The brainstorm itself is interactive and dialogue-driven — no template is needed for in-chat iteration. Step T runs only when the user asks to **save** or **publish** the result as a structured artifact.
+
+At save time, determine the artifact type the user wants:
+- "Save as hypothesis list / backlog" → `artifact_type: research`, `subtype: hypothesis-list`
+- "Turn top hypothesis into a concept" → `artifact_type: concept` (delegate to `write-concept` which runs its own Step T)
+- "Turn top hypothesis into requirements" → `artifact_type: requirements` (delegate to `requirements-creator`)
+- "Keep in chat only" → skip Step T
+
+When staying in this skill and producing a structured document:
+
+Follow `references/template-protocol.md`.
+
+Declare:
+- `artifact_type: research` (default for brainstorm output)
+- `subtype: hypothesis-list` (or `cjm-hypotheses` for CJM Hypotheses mode)
+- `product_id: {from local-context.md active product}`
+- `language: {from local-context.md}`
+
+Run Steps T-1 → T-5. Append `<!-- template: {template_id} version: {version} -->` at the end.
+
+If the user says "do not use a template" → skip Step T and use the skill's internal structure.
 
 ## Workflow
 

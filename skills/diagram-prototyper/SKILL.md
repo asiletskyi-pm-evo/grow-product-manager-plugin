@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.7.0
+version: 0.8.0
 description: Create diagrams, flowcharts, BPMN processes, UI prototypes, and infographics to visualize product concepts and hypotheses. Use when the user asks to "create a diagram", "draw a flowchart", "visualize this process", "make a prototype", "create an infographic", "BPMN diagram", "wireframe", "mockup", or when another skill suggests visualizing a concept. Supports generation via Gemini, ChatGPT, NotebookLM, Figma, Draw.io, and built-in Mermaid/HTML.
 ---
 
@@ -28,6 +28,35 @@ Key context used by this skill:
 - `product.name`, `product.platforms` — understand the product scope for prototypes
 - `product.confluence_space` — for publishing diagrams to Confluence
 - `user.language` — for text localization on diagrams and prototypes
+
+---
+
+## Step T — Template Resolution (presentations only)
+
+This skill is primarily **visual-artifact-oriented** — diagrams, flowcharts, prototypes, and mind maps don't use markdown document templates. **Skip Step T** for those types.
+
+However, when the visualization type (resolved in Step 1b) is **Presentation**, the slide outline itself IS a document artifact and benefits from a template. In that case, follow `references/template-protocol.md`:
+
+- `artifact_type: presentation`
+- `subtype`: inferred from the source context
+  - Concept pitch → `feature` (fallback `presentation-builtin-feature`)
+  - Research highlights → `research-highlights`
+  - A/B test results → `ab-test-readout`
+  - Post-release readout → `release-readout`
+- `product_id`: from local-context.md active product
+- `language`: from `user.language` in local-context.md
+
+Run Steps T-1 → T-5 from `references/template-protocol.md`:
+
+1. **T-1:** read `templates.preference`.
+2. **T-2:** call template-library helper `resolve({artifact_type, subtype, product_id, language})`.
+3. **T-3:** auto / ask / smart per preference.
+4. **T-4:** if a template was selected, use its slide outline as the structure for Step 3 (generation); collect variables from passed context; fall back to `presentation-builtin-feature` if no match.
+5. **T-5:** when publishing the deck/outline, append `<!-- template: {template_id}@{version} -->` to the outline markdown (not to the rendered .pptx).
+
+**Escape hatch:** if the user says "don't use a template" or "free-form deck", skip Step T and use a blank outline.
+
+**Chained invocation:** if invoked from `write-concept`, the concept template is already resolved; request a presentation-specific template separately here (Step T is about the deck artifact, not the source concept).
 
 ---
 
