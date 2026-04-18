@@ -12,6 +12,83 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.9.0 (2026-04-17)
+
+### Added — Multilingual Artifact Template System
+
+**Problem:** Every concept, spec, research report, and MoM was starting from a blank page. No reuse of proven document structures across products. Users in different language markets (Ukrainian, English, Spanish, etc.) needed the same artifact in multiple languages without duplicating files.
+
+**Solution:** Introduced a first-class template library with three-tier scope (built-in → user-global → product-specific), single-file multilingual storage (language blocks inside one template via `<!-- lang:xx -->` HTML comments), registry-backed resolution with scoring, skill-driven resolution with user opt-in, and three-tier backup protection.
+
+#### Core architecture
+
+- **Scope tiers:** built-in (ships with plugin) → user-global (shared across all products) → product-specific (per-product override), with inheritance and subtype matching.
+- **Multilingual format:** single `.md` file contains all language variants as `<!-- lang:uk --> … <!-- /lang:uk -->` blocks. Obsidian-friendly, preserves link integrity, easy to diff.
+- **Storage location:** `{storage_root}/Templates/` — lives in the Obsidian vault if configured (primary), or in the user's chosen custom folder. Survives plugin reinstalls.
+- **Registry:** `Templates/_registry.json` indexes all templates with metadata (id, version, scope, artifact_type, subtype, languages, usage_count, checksum).
+- **Resolution protocol (T-0 → T-5):** scoring by scope (+5/+3/+1), subtype match (+3/+1), language match (+2/+1), usage_count; tie-breakers by recency.
+- **User preference:** `templates.preference` in local-context.md — `auto` (silent use of top match), `always_ask` (list candidates every time), `smart` (ask only when multiple strong candidates exist; default).
+- **Three-tier backup:** per-template archive (last 10 versions per template), full pack backups (last 5 before bulk ops), and manual user-triggered backup/restore.
+
+#### Files added
+
+- **references/template-protocol.md** — resolution protocol (T-0 → T-5 with scoring), frontmatter schema, skill integration pattern, edge cases, registry schema, backup invariants.
+- **skills/template-library/SKILL.md** (`v0.1.0`) — 11 actions (list / show / add / clone / update / delete / restore / import / export / validate / rebuild-registry), plus backup/restore; wizards for add, add-language, import, update; helper routines `resolve()` and `render()`.
+- **templates/built-in/** — 9 seed templates shipped with the plugin:
+  - `concept/default-v1.md` — concept (PRD) skeleton (uk + en)
+  - `requirements/default-v1.md` — general feature requirements (uk + en)
+  - `requirements/ab-test-v1.md` — A/B test spec (uk + en)
+  - `research/competitive-v1.md` — competitive analysis + SWOT (uk + en)
+  - `research/user-research-v1.md` — user research synthesis (uk + en)
+  - `cjm/funnel-v1.md` — CJM funnel analysis with ICE table (uk + en)
+  - `epic/default-v1.md` — Jira epic description (uk + en)
+  - `task/default-v1.md` — Jira task with DoD and AC (uk + en)
+  - `presentation/feature-v1.md` — 10-slide feature deck outline (uk + en)
+
+#### Skill integrations
+
+All consumer skills now include a `## Step T — Template Resolution` section that runs before the first workflow step. Each skill declares its `artifact_type` and subtype inference rules, honors the user's `templates.preference`, and falls back to a built-in structure if no template matches.
+
+| Skill | From | To | Step T artifact_type / subtype |
+|-------|------|----|------------------------------|
+| write-concept | 0.5.0 | 0.6.0 | `concept` / `default` |
+| requirements-creator | 0.5.1 | 0.6.0 | `requirements` / `default` \| `ab-test` \| `bugfix` (Create mode only) |
+| product-research | 0.5.0 | 0.6.0 | `research` / `competitive` \| `user-research` \| `market` \| `ux-benchmark` |
+| cjm-research | 0.2.0 | 0.3.0 | `cjm` / `funnel` (health-check uses silent auto) |
+| feature-task-creator | 0.7.0 | 0.8.0 | `task` + `epic` (resolved once per subtype in batch mode) |
+| brainstorm-features | 0.5.0 | 0.6.0 | `research` / `hypothesis-list` \| `cjm-hypotheses` (on save) |
+| product-analysis | 0.6.0 | 0.7.0 | `research` / `metrics-analysis` \| `post-release` \| `ab-test-results` \| `cjm-funnel` (non-interactive modes) |
+| diagram-prototyper | 0.7.0 | 0.8.0 | `presentation` / `feature` \| `research-highlights` \| `ab-test-readout` \| `release-readout` (decks only) |
+| meeting-processor | 0.9.0 | 0.10.0 | `meeting-notes` / `grooming` \| `planning` \| `retro` \| `discovery` \| `status` \| `decision` \| `brainstorm` \| `review` (delegates to downstream skill's Step T when chaining) |
+
+#### Onboarding
+
+- **plugin-configurator** `0.10.0 → 1.0.0` — added **Step O-T — Template Library Setup** between Knowledge Library (Step 10) and Obsidian Vault (Step 11). O-T walks the user through: storage location (reuses Knowledge Library decision), copying built-in templates to their library, setting `templates.preference`, and scheduling a first-use template walkthrough.
+- **knowledge-library** `0.3.0 → 0.4.0` — added routing section at top explaining when to use `knowledge-library` (external sources: articles, benchmarks) vs `template-library` (artifact skeletons). Added `template-library` to sibling-skill list.
+
+#### Backup
+
+Before the v1.9.0 changes were written to `v1.9.0-staging/`, full backups were taken of the plugin, local-context, and knowledge library (preserved in session backup directory).
+
+### Skills changed
+
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| template-library (new) | — | 0.1.0 | new — CRUD + resolve + render + backup/restore |
+| plugin-configurator | 0.10.0 | 1.0.0 | minor — Step O-T onboarding + template library update mode |
+| knowledge-library | 0.3.0 | 0.4.0 | minor — routing to template-library, sibling skill section |
+| write-concept | 0.5.0 | 0.6.0 | minor — Step T |
+| requirements-creator | 0.5.1 | 0.6.0 | minor — Step T (Create mode) |
+| product-research | 0.5.0 | 0.6.0 | minor — Step T |
+| cjm-research | 0.2.0 | 0.3.0 | minor — Step T |
+| feature-task-creator | 0.7.0 | 0.8.0 | minor — Step T (task + epic) |
+| brainstorm-features | 0.5.0 | 0.6.0 | minor — Step T (on save) |
+| product-analysis | 0.6.0 | 0.7.0 | minor — Step T (structured reports) |
+| diagram-prototyper | 0.7.0 | 0.8.0 | minor — Step T (presentations) |
+| meeting-processor | 0.9.0 | 0.10.0 | minor — Step T (MoM) + delegation pattern |
+
+---
+
 ## v1.8.0 (2026-04-16)
 
 ### Changed â User-Controlled Storage

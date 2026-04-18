@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.5.1
+version: 0.6.0
 description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one.
 ---
 
@@ -49,6 +49,28 @@ At the start of execution, determine which mode to use — ask via AskUserQuesti
 If the user provides a Confluence link, file, or pastes existing requirements text — automatically enter **Analyze & Improve** mode.
 
 If the user describes a new feature idea with no existing document — automatically enter **Create** mode.
+
+---
+
+## Step T — Template Resolution (Create mode only)
+
+In Create mode, before writing requirements, resolve which template to use.
+
+Follow `references/template-protocol.md`.
+
+Declare:
+- `artifact_type: requirements`
+- `subtype: {inferred — "ab-test" when user mentions A/B test / experiment, "bugfix" when describing a bugfix spec, null otherwise}`
+- `product_id: {from local-context.md active product}`
+- `language: {from local-context.md → user.language or product.default_language}`
+
+Run Steps T-1 → T-5 via the `template-library` helper routines. Render the result and append `<!-- template: {template_id} version: {version} -->` at the end.
+
+If the user says "do not use a template" → skip Step T and use the skill's internal structure.
+
+If no template applies → fall back to the built-in `requirements-builtin-default` (or `requirements-builtin-ab-test` if subtype matched); if both are missing, use the skill's internal structure below.
+
+In **Analyze & Improve** mode, Step T is NOT run — the input document's structure drives the analysis.
 
 ---
 

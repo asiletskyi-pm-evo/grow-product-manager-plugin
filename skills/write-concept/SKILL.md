@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.5.0
+version: 0.6.0
 description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document.
 ---
 
@@ -61,6 +61,31 @@ IF vault_level > L0 (detected during Step 0h):
    - Include "Informed by" section in concept metadata
 
 4. IF user skips OR no results → continue normally
+
+## Step T — Template Resolution
+
+Before writing the concept, resolve which template to use.
+
+Follow `references/template-protocol.md`.
+
+Declare:
+- `artifact_type: concept`
+- `subtype: {null | inferred from user input, e.g. "lightweight", "technical-spec"}`
+- `product_id: {from local-context.md active product}`
+- `language: {from local-context.md → user.language or product.default_language}`
+
+Run Steps T-1 → T-5 via the `template-library` helper routines:
+- T-1 Load registry from `{storage_root}/Templates/_registry.json`
+- T-2 Score candidates (product > user-global > built-in; subtype match; language match)
+- T-3 Decide based on `templates.preference` (`auto` / `always_ask` / `smart`)
+- T-4 Collect variables via `AskUserQuestion`
+- T-5 Render and append `<!-- template: {template_id} version: {version} -->` to the output
+
+If the user explicitly says "do not use a template" → skip Step T and use the skill's internal structure (the workflow below).
+
+If no template applies → fall back to the built-in `concept-builtin-default` template; if that's also missing, use the skill's internal structure.
+
+The resolved template may reshape the sections and questions of the workflow below. Variables from the template take precedence over the generic discovery questions for overlapping fields.
 
 ## Workflow
 

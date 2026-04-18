@@ -1,6 +1,6 @@
 {
   "name": "grow-product-manager",
-  "description": "AI assistant for Product Managers: research, concepts, requirements, brainstorming, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, and knowledge library — integrated with Jira, Confluence, and Figma.",
+  "description": "AI assistant for Product Managers: research, concepts, requirements, brainstorming, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, knowledge library, and multilingual artifact templates — integrated with Jira, Confluence, and Figma.",
   "author": {
     "name": "Andrii Siletskyi"
   }

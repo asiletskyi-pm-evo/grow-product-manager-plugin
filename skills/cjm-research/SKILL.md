@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.2.0
+version: 0.3.0
 description: Conduct CJM (Customer Journey Map) research — detect funnel anomalies, generate improvement hypotheses, and build prioritized backlogs. Use when the user asks to "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", or needs end-to-end funnel analysis with enrichment from knowledge sources.
 ---
 
@@ -27,6 +27,24 @@ Key context used by this skill:
 - CJM Configuration section — funnel template, stages, dashboards, thresholds, default settings
 - Knowledge Library section — search modes, Baymard access, Confluence spaces, Google Drive folders
 - `user.language` — for output language
+
+## Step T — Template Resolution
+
+Before producing a CJM report (modes `anomalies`, `hypotheses`, `full`, `comparison`), resolve which template to use.
+
+Follow `references/template-protocol.md`.
+
+Declare:
+- `artifact_type: cjm`
+- `subtype: {inferred from mode — "funnel" | "comparison" | "health-check" | null}`
+- `product_id: {from local-context.md active product}`
+- `language: {from local-context.md → user.language or product.default_language}`
+
+Run Steps T-1 → T-5 via the `template-library` helper routines. Render and append `<!-- template: {template_id} version: {version} -->` at the end of the report.
+
+For `health-check` mode (automated), use the top-ranked template silently regardless of `templates.preference` to avoid prompting in background runs.
+
+If no template applies → fall back to `cjm-builtin-funnel`; if that's also missing, use the skill's internal report structure.
 
 ## Modes of Operation
 

@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.5.0
+version: 0.6.0
 description: Conduct comprehensive product research — competitive analysis, user research, market research, or UX benchmark research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks", "search knowledge library", or needs SWOT, TAM SAM SOM, or PESTEL analysis.
 ---
 
@@ -40,6 +40,24 @@ Key context used by this skill:
 - `knowledge_library.search_modes` — available search modes (semantic, keyword, hybrid)
 - `knowledge_library.baymard_access` — access to Baymard UX benchmarks (if configured)
 - `knowledge_library.confluence_spaces` — integrated Confluence spaces for knowledge enrichment
+
+## Step T — Template Resolution
+
+Before producing the research report, resolve which template to use.
+
+Follow `references/template-protocol.md`.
+
+Declare:
+- `artifact_type: research`
+- `subtype: {inferred from research type — "competitive" | "user-research" | "market" | "ux-benchmark" | null}`
+- `product_id: {from local-context.md active product}`
+- `language: {from local-context.md → user.language or product.default_language}`
+
+Run Steps T-1 → T-5 via the `template-library` helper routines. Render the result and append `<!-- template: {template_id} version: {version} -->` at the end.
+
+If the user says "do not use a template" → skip Step T and use the skill's internal structure.
+
+If no template applies → fall back to built-in `research-builtin-competitive` (for competitive), `research-builtin-user-research` (for user research), or skill's internal structure for other subtypes.
 
 ## Workflow
 

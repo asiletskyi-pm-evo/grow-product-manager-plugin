@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.9.0
+version: 0.10.0
 description: Process meeting recordings, transcripts, and notes to extract action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Chains to feature-task-creator, requirements-creator, product-research, and brainstorm-features.
 ---
 
@@ -33,6 +33,41 @@ Key context used by this skill:
 - `product.name`, `product.jira_project_key` — for linking action items to the product context
 - `product.confluence_space` — for publishing meeting notes
 - `user.language` — for output language
+
+---
+
+## Step T — Template Resolution (MoM report only)
+
+Follow `references/template-protocol.md`, but with meeting-specific semantics:
+
+- `artifact_type: meeting-notes`
+- `subtype`: inferred from meeting classification in Step M3
+  - Grooming / backlog refinement → `grooming`
+  - Planning / sprint planning → `planning`
+  - Retrospective → `retro`
+  - Discovery / user interview → `discovery`
+  - Status / sync → `status`
+  - Decision meeting → `decision`
+  - Brainstorm → `brainstorm`
+  - Stakeholder review → `review`
+- `product_id`: from local-context.md active product
+- `language`: from `user.language` in local-context.md
+
+Run Steps T-1 → T-5 from `references/template-protocol.md`:
+
+1. **T-1 (Preference):** read `templates.preference` from local-context.md.
+2. **T-2 (Query registry):** call template-library helper `resolve({artifact_type: "meeting-notes", subtype, product_id, language})`.
+3. **T-3 (Decide):** per preference mode.
+4. **T-4 (Render):** if a template was selected, use it as the MoM structure for Step M6 (Generate output); collect variables from Step M5 extraction; if no match, use the built-in structure described in Step M4 per meeting type.
+5. **T-5 (Mark):** when publishing to Confluence / Notion, append `<!-- template: {template_id}@{version} -->` to the body.
+
+**When to run Step T:** between Step M4 (Choose output format) and Step M5 (Extract content) — once meeting type is known, resolve the template so that Step M5 can collect variables that the template expects.
+
+**Chained invocation (delegation pattern):** when the user routes the output to another skill (Step M9 — Skill chaining: e.g., "turn action items into Jira tasks" → `feature-task-creator`, "write a concept from this discovery" → `write-concept`, "draft requirements from this spec meeting" → `requirements-creator`, "research these hypotheses" → `product-research`, "brainstorm this further" → `brainstorm-features`), **each downstream skill runs its OWN Step T** for its own artifact type. Meeting-processor's Step T is only for the MoM/meeting-notes artifact itself. Pass the raw extracted content to the downstream skill; do NOT pre-apply templates intended for downstream artifacts.
+
+**Escape hatch:** if the user says "just a quick summary" or "plain notes, no template", skip Step T and use a lightweight bullet-list output.
+
+**Fallback** (when registry returns no match for any meeting subtype): use the built-in structure for that meeting type described in Step M4.
 
 ---
 

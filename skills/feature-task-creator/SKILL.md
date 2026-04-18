@@ -1,6 +1,6 @@
 ---
 name: feature-task-creator
-version: 0.7.0
+version: 0.8.0
 description: Creates Jira tasks for feature implementation based on requirements from a Confluence page. Use when the user asks to create tasks for a feature, create Jira issues from Confluence requirements, break down a feature into development tasks (FE/BE/Android/iOS/Design/Analytics), set up feature tasks in an Epic, or says something like "create tasks from requirements". Also trigger when the user shares a Confluence link and asks to create Jira tasks from it.
 ---
 
@@ -30,6 +30,32 @@ Key context used by this skill:
 - `team.members` — for discovering assignees and roles
 - `product.confluence_space` — for Confluence page links
 - `user.language` — for output language
+
+## Step T — Template Resolution
+
+This skill creates Jira tasks (and sometimes Epics). When generating the task **description / body** and when filling Epic fields, resolve templates for each artifact.
+
+Follow `references/template-protocol.md`. Run Step T twice:
+
+**T-A. For each task being created:**
+- `artifact_type: task`
+- `subtype: {FE | BE | iOS | Android | Design | Analytics | QA | DevOps}` (map from the task's work type)
+- `product_id: {from local-context.md active product}`
+- `language: {from local-context.md}`
+
+**T-B. If the Epic is being created or modified:**
+- `artifact_type: epic`
+- `subtype: null`
+- `product_id: {from local-context.md active product}`
+- `language: {from local-context.md}`
+
+In batch mode (creating many tasks at once), resolve templates ONCE per subtype at the start of the run and reuse — do not re-ask the user per task. Use `templates.preference=auto` semantics for batch runs regardless of the global setting.
+
+Append `<!-- template: {template_id} version: {version} -->` at the end of each generated description.
+
+Fall back to built-in `task-builtin-default` and `epic-builtin-default` when no user template applies.
+
+If the user says "do not use a template" → skip Step T and use the skill's internal fallback structure.
 
 ## Workflow
 
