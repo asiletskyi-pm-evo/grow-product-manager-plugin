@@ -21,7 +21,7 @@ This protocol activates **only when the user provides corrections or feedback** 
 - The user provides feedback that suggests the skill missed something it should have caught
 
 **Do NOT trigger if:**
-- The user simply confirms "OK" / "все добре"
+- The user simply confirms "OK" / "all good"
 - The corrections are purely content-specific (unique to this particular task, not a pattern)
 - The user explicitly says not to change the plugin
 

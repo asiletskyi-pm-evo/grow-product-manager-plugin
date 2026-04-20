@@ -68,7 +68,7 @@ When the user provides a Confluence link:
    - **Feature name** — from the page title (after the code prefix, e.g. "Feature Name Description" from "PROJ-1234.5 - Feature Name Description")
    - **Feature code** — the code in the page title (e.g. `PROJ-1234.5`). Pattern: `EPICKEY-NUMBER.NUMBER`
    - **Epic link** — usually under an "Epic" heading, a link to the Epic's Confluence page or directly a Jira issue key
-   - **Technical requirements** — look for mentions of "A/B Test", "під прапором", platform restrictions
+   - **Technical requirements** — look for mentions of "A/B Test", "feature flag", platform restrictions
    - **Functional requirements** — what needs to be built
    - **Confluence page URL** — for linking in task descriptions
 
@@ -103,7 +103,7 @@ Before creating tasks, ask the user using AskUserQuestion:
    - Design
    - Analytics
 
-2. **Task purpose** — are these tasks for development ("розробка") or for grooming ("грумінг")?
+2. **Task purpose** — are these tasks for development or for grooming?
    - **Development** (default) — standard tasks for implementation
    - **Grooming** — preparatory tasks for estimation and discussion. When grooming is selected:
      - Add `grooming` to Labels on all development tasks (FE, BE, Android, iOS)
@@ -229,7 +229,7 @@ Examples:
 
 > **Note:** Use the user's preferred language (`user.language`) for the task description content.
 
-The summary under "Завдання" should be specific to the work type:
+The summary under "Task" should be specific to the work type:
 - **Design**: focus on UI&UX research, prototyping, Figma mockups
 - **BE**: focus on API, business logic, data models, feature flags
 - **Analytics**: focus on event tracking, metrics, data coverage (or A/B test analysis for the second analytics task)

@@ -89,7 +89,7 @@ Search for user data in this priority order:
    a. Check known vault paths from:
       - Cowork session memory (auto memory)
       - Previous conversation context
-      - Common locations: ~/Documents/Проєкти/*/GrowPM/_System/
+      - Common locations: ~/Documents/Projects/*/GrowPM/_System/
    b. Search for _System/local-context.md in discovered vaults
    c. Search for Knowledge/library.md in discovered vaults
    → FOUND: inform user, offer restore (see VR-2 in persistent-storage.md)
@@ -710,7 +710,7 @@ Before generating the file, present ALL collected information to the user in a s
 > "Is everything correct? If anything needs to be fixed — tell me what, and I'll make the changes."
 
 - If the user requests corrections — apply them immediately and show the updated section
-- Iterate until the user confirms: "Все ОК" / "Підтверджую"
+- Iterate until the user confirms: "OK" / "Confirmed"
 - Only proceed to file generation after explicit confirmation
 
 **13c. Generate the file:**

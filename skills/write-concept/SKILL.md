@@ -144,7 +144,7 @@ If the product or feature already exists (i.e., not being built from scratch), a
 - **If the user believes designs should exist but cannot provide a link** — offer to search:
   > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
   - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
-    - Try to understand the structure of the design system: look for sections like "Актуальний дизайн", "Current design", "Production", "Live", "Ready for dev", "Поточний стан"
+    - Try to understand the structure of the design system: look for sections like "Current design", "Production", "Live", "Ready for dev", "Latest state"
     - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
   - If Figma MCP is unavailable — follow `references/integration-strategy.md` fallback chain
 - **If no designs exist** — note this and proceed without design context
@@ -307,28 +307,28 @@ IF vault_level > L0 AND vault sync_mode != "off":
 
 > Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
 
-Після успішного publish, автоматично запропонуй design-bridge для design-related deliverables. Через `AskUserQuestion`:
+After successful publishing, automatically propose design-bridge for design-related deliverables. Via `AskUserQuestion`:
 
 > "Concept published. Create a design-side deliverable from it?"
-> 1. **Presentation deck** — pitch for direction review (10 slides, Prom brand) — recommended для concepts що йдуть на stakeholder-level review
-> 2. **UI prototype** — lo-fi Mermaid flow or mid-fi HTML mockup, щоб візуалізувати proposed solution
-> 3. **Skip** — не потрібно зараз
+> 1. **Presentation deck** — pitch for direction review (10 slides) — recommended for concepts going to stakeholder-level review
+> 2. **UI prototype** — lo-fi Mermaid flow or mid-fi HTML mockup to visualize the proposed solution
+> 3. **Skip** — not needed right now
 
 IF user selects 1 → invoke `design-bridge` with:
 - `intent: deck`
 - `subtype: feature-concept`
-- `source: confluence_page_url` (published у Step 6)
+- `source: confluence_page_url` (published in Step 6)
 - `audience: inferred from user's next-step context` (default `direction_review`)
 - `language: active user.language`
 
 IF user selects 2 → invoke `design-bridge` with:
 - `intent: prototype`
 - `source: confluence_page_url`
-- `fidelity: lo-fi` (default; upgrade до mid-fi за запитом)
+- `fidelity: lo-fi` (default; upgrade to mid-fi upon request)
 
-Якщо concept уже має Figma-посилання (Step 1: "Figma designs check"), передай його у `design-bridge` → embed у Step 4g.
+If the concept already has a Figma link (Step 1: "Figma designs check"), pass it to `design-bridge` for embedding.
 
-Fallback: якщо `design-bridge` не встановлений — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Не блокуй workflow.
+Fallback: if `design-bridge` is not installed — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Do not block the workflow.
 
 ## Additional Resources
 

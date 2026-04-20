@@ -1,7 +1,7 @@
 ---
 name: template-library
 version: 0.1.0
-description: Manage artifact templates (concepts, requirements, research, CJM, epics, tasks, presentations) — create, clone, update, delete, import, export, validate. Use when the user asks to "manage templates", "add a template", "create a template", "edit a template", "import templates from a folder", "show templates", "backup templates", or when another skill needs to render an artifact with Step T of `references/template-protocol.md`. Also triggers on "shablone", "шаблон", "темплейт".
+description: Manage artifact templates (concepts, requirements, research, CJM, epics, tasks, presentations) — create, clone, update, delete, import, export, validate. Use when the user asks to "manage templates", "add a template", "create a template", "edit a template", "import templates from a folder", "show templates", "backup templates", or when another skill needs to render an artifact with Step T of `references/template-protocol.md`. Also triggers on template-related requests.
 ---
 
 # Template Library
@@ -213,7 +213,7 @@ Tags: ab-test, growth
 
 Preview (uk):
   # {{feature_name}}
-  ## Гіпотеза
+  ## Hypothesis
   {{hypothesis}}
   …
 ```

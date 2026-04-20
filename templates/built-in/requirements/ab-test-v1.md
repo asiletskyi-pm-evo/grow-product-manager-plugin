@@ -1,178 +1,73 @@
 ---
 template_id: requirements-builtin-ab-test
 schema_version: 1
-name:
-  uk: "Вимоги до A/B-тесту"
-  en: "A/B Test Requirements"
+name: "A/B Test Requirements"
 artifact_type: requirements
 subtype: ab-test
 scope: built-in
 products: []
-default_language: uk
-available_languages: [uk, en]
+default_language: en
+available_languages: [en]
 version: "1.0.0"
 author: "grow-pm"
 created: 2026-04-17
 updated: 2026-04-17
 tags: [requirements, ab-test, experiment, growth]
-description:
-  uk: "Вимоги до A/B-експерименту — гіпотеза, варіанти, метрики, критерії зупинки"
-  en: "A/B experiment requirements — hypothesis, variants, metrics, stopping criteria"
+description: "A/B experiment requirements — hypothesis, variants, metrics, stopping criteria"
 status: active
 min_plugin_version: "1.9.0"
 variables:
   - name: experiment_name
     type: string
     required: true
-    label:
-      uk: "Назва експерименту"
-      en: "Experiment name"
+    label: "Experiment name"
   - name: hypothesis
     type: text
     required: true
-    label:
-      uk: "Гіпотеза"
-      en: "Hypothesis"
-    hint:
-      uk: "Якщо <зміна>, то <метрика> зміниться на <величина>, бо <причина>"
-      en: "If <change>, then <metric> will change by <amount>, because <reason>"
+    label: "Hypothesis"
+    hint: "If <change>, then <metric> will change by <amount>, because <reason>"
   - name: primary_metric
     type: string
     required: true
-    label:
-      uk: "Первинна метрика"
-      en: "Primary metric"
+    label: "Primary metric"
   - name: secondary_metrics
     type: list
     required: false
-    label:
-      uk: "Вторинні метрики"
-      en: "Secondary metrics"
+    label: "Secondary metrics"
   - name: guardrail_metrics
     type: list
     required: false
-    label:
-      uk: "Guardrail метрики"
-      en: "Guardrail metrics"
+    label: "Guardrail metrics"
   - name: audience
     type: text
     required: true
-    label:
-      uk: "Аудиторія / сегментація"
-      en: "Audience / segmentation"
+    label: "Audience / segmentation"
   - name: control_description
     type: text
     required: true
-    label:
-      uk: "Опис контрольної групи (A)"
-      en: "Control description (A)"
+    label: "Control description (A)"
   - name: variant_description
     type: text
     required: true
-    label:
-      uk: "Опис тестової групи (B)"
-      en: "Variant description (B)"
+    label: "Variant description (B)"
   - name: split_ratio
     type: string
     required: false
-    label:
-      uk: "Розподіл трафіку"
-      en: "Traffic split"
+    label: "Traffic split"
     default: "50/50"
   - name: mde
     type: string
     required: false
-    label:
-      uk: "MDE (мінімальний ефект, що ми хочемо виявити)"
-      en: "MDE (minimum detectable effect)"
+    label: "MDE (minimum detectable effect)"
   - name: duration_estimate
     type: string
     required: false
-    label:
-      uk: "Орієнтовна тривалість"
-      en: "Estimated duration"
+    label: "Estimated duration"
   - name: stopping_criteria
     type: list
     required: true
-    label:
-      uk: "Критерії зупинки / прийняття рішення"
-      en: "Stopping / decision criteria"
+    label: "Stopping / decision criteria"
 ---
-
-<!-- lang:uk -->
-# A/B Test: {{experiment_name}}
-
-## 1. Гіпотеза
-
-{{hypothesis}}
-
-## 2. Аудиторія
-
-{{audience}}
-
-## 3. Варіанти
-
-### Контроль (A)
-{{control_description}}
-
-### Варіант (B)
-{{variant_description}}
-
-**Розподіл трафіку:** {{split_ratio}}
-
-## 4. Метрики
-
-### Первинна
-- **{{primary_metric}}**
-
-### Вторинні
-{{#if secondary_metrics}}
-{{#each secondary_metrics}}
-- {{this}}
-{{/each}}
-{{else}}
-- TBD
-{{/if}}
-
-### Guardrails
-{{#if guardrail_metrics}}
-{{#each guardrail_metrics}}
-- {{this}}
-{{/each}}
-{{else}}
-- TBD
-{{/if}}
-
-## 5. Параметри експерименту
-
-- **MDE:** {{#if mde}}{{mde}}{{else}}TBD{{/if}}
-- **Орієнтовна тривалість:** {{#if duration_estimate}}{{duration_estimate}}{{else}}TBD{{/if}}
-- **Рівень значущості:** 95%
-- **Потужність:** 80%
-
-## 6. Критерії зупинки / прийняття рішення
-
-{{#each stopping_criteria}}
-- {{this}}
-{{/each}}
-
-## 7. Аналітика / трекінг
-
-- Події: TBD
-- Дашборд: TBD
-- Сегменти для аналізу: TBD
-
-## 8. Ризики
-
-- TBD
-
-## 9. План пост-експерименту
-
-- Якщо виграв B: TBD
-- Якщо виграв A або нічия: TBD
-- Якщо guardrails порушено: TBD
-
-<!-- /lang:uk -->
 
 <!-- lang:en -->
 # A/B Test: {{experiment_name}}
