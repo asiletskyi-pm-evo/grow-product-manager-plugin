@@ -1,8 +1,8 @@
 # Grow Product Manager
 
-**Version:** 1.9.0
+**Version:** 1.10.0
 
-AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows.
+AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into Prom DS-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates.
 
 ---
 
@@ -48,7 +48,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 3. Product Research (v0.6.0)
+### 3. Product Research (v0.7.0)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -62,7 +62,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 4. Brainstorm Features (v0.6.0)
+### 4. Brainstorm Features (v0.7.0)
 
 **Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation.
 
@@ -76,7 +76,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 5. Write Concept (v0.6.0)
+### 5. Write Concept (v0.7.0)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -86,7 +86,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 6. Requirements Creator (v0.6.0)
+### 6. Requirements Creator (v0.7.0)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -230,9 +230,34 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 - Registry-backed resolution with scoring (scope, subtype, language, usage_count)
 - 11 actions: list, show, add, clone, update, delete, restore, import, export, validate, rebuild-registry
 - Three-tier backup: per-template archive, pack backups, manual backup/restore
-- Ships with 9 built-in templates in Ukrainian + English (see `templates/built-in/`)
+- Ships with 12 built-in templates in Ukrainian + English (9 original + 3 new presentation templates added in v1.10.0)
 
 **Trigger phrases:** "manage templates", "add template", "list templates", "template library", "clone template", "import templates", "restore template"
+
+---
+
+### 13. Design Bridge (v0.1.0) — NEW in v1.10.0
+
+**Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into Prom DS-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
+
+**Intents:**
+- **deck** — render a Google Slides-compatible `.pptx` (10×5.625") from `base_prom.pptx` using the Prom DS theme. 4 subtypes: feature-concept (10 slides), research-highlights (10 slides), ab-test-readout (6 slides), release-readout (7 slides)
+- **prototype** — lo-fi / mid-fi / hi-fi prototype brief for Figma
+- **handoff** — developer-ready handoff spec (tokens, components, states, responsive breakpoints) with WCAG 2.1 AA a11y audit as blocker
+- **research-enrichment** — pull UI screenshots, competitor visuals, or DS references to augment research
+
+**Design plugin integration:** hooks 7 design skills (research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) via optional delegation, plus Figma MCP for DS sync (fileKey `bbjJ91HSixA5WCN0HMMJFz`).
+
+**Prom DS (confirmed from `base_prom.pptx` XML):**
+- Primary purple: `#7B04DF`
+- Dark hero bg: `#222223`
+- Typography: Montserrat + Montserrat ExtraBold
+- Canvas: 10×5.625" (Google Slides 16:9)
+- 11 real slide layouts in base template (title, section, two-col, metric, chart, quote, cta, etc.)
+
+**A11y gates (WCAG 2.1 AA):** contrast 4.5:1 normal / 3.0:1 large, 44×44 touch targets, keyboard nav, screen-reader labels, motion controls. Handoff intent has a11y as blocker; deck intent has contrast as blocker + warnings for the rest.
+
+**Trigger phrases:** "create deck", "design handoff", "build prototype", "research enrichment", "apply Prom brand to deck", "run a11y audit"
 
 ---
 
@@ -242,16 +267,17 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 |-------|---------|-------------|
 | CJM Research | v0.3.0 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.7.0 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.6.0 | Competitive analysis, user research, market trends, UX benchmarking |
-| Brainstorm Features | v0.6.0 | Interactive feature ideation with ICE scoring |
-| Write Concept | v0.6.0 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.6.0 | Create and analyze feature requirements |
+| Product Research | v0.7.0 | Competitive analysis, user research, market trends, UX benchmarking |
+| Brainstorm Features | v0.7.0 | Interactive feature ideation with ICE scoring |
+| Write Concept | v0.7.0 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.7.0 | Create and analyze feature requirements |
 | Feature Task Creator | v0.8.0 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.8.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Meeting Processor | v0.10.0 | Process meetings and extract action items |
 | Plugin Configurator | v1.0.0 | Configure plugin for your organization |
 | Knowledge Library | v0.4.0 | Manage curated knowledge sources |
 | Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
+| Design Bridge | v0.1.0 | Orchestrate Prom DS-themed decks, prototypes, handoffs, and research enrichment |
 
 ---
 
@@ -373,9 +399,9 @@ variables: [feature_name, problem_statement, ...]
 <!-- /lang:en -->
 ```
 
-### Built-in templates (shipped in v1.9.0)
+### Built-in templates (shipped in v1.9.0 + v1.10.0)
 
-9 seed templates, each in Ukrainian + English:
+12 seed templates, each in Ukrainian + English:
 
 - `concept/default-v1` — PRD skeleton
 - `requirements/default-v1` — general feature requirements
@@ -385,7 +411,10 @@ variables: [feature_name, problem_statement, ...]
 - `cjm/funnel-v1` — CJM funnel analysis with ICE table
 - `epic/default-v1` — Jira epic description
 - `task/default-v1` — Jira task with DoD and AC
-- `presentation/feature-v1` — 10-slide feature deck outline
+- `presentation/feature-v1` — 10-slide feature-concept deck outline
+- `presentation/research-highlights-v1` — 10-slide research-highlights deck (**new in v1.10.0**)
+- `presentation/ab-test-readout-v1` — 6-slide A/B-test readout deck (**new in v1.10.0**)
+- `presentation/release-readout-v1` — 7-slide release / sprint readout deck (**new in v1.10.0**)
 
 ### Managing your library
 
@@ -398,6 +427,46 @@ Three-tier backup system to prevent data loss:
 1. **Per-template archive** — every template edit saves the previous version (last 10 versions kept per template)
 2. **Pack backup** — before bulk operations (import, bulk delete, migration), the whole library is snapshotted (last 5 kept)
 3. **Manual backup/restore** — trigger at any time via the Template Library skill
+
+---
+
+## Design Bridge — Prom DS Integration (v1.10.0)
+
+The plugin now ships with a first-class integration with Claude's Design plugin, fronted by the `design-bridge` skill. Four upstream skills gained an optional **Step D** hook that offers to hand off results to design-bridge:
+
+| Upstream skill | Design Bridge offers |
+|----------------|----------------------|
+| `write-concept` | deck (feature-concept) or prototype (lo-fi / mid-fi) |
+| `requirements-creator` | handoff (a11y audit blocker) or prototype (hi-fi) or deck |
+| `brainstorm-features` | lo-fi prototype for top-1 hypothesis, or brainstorm readout deck |
+| `product-research` | research-highlights deck or research-enrichment (screenshots, DS refs) |
+
+### Prom DS source of truth
+
+- **Figma DS file key:** `bbjJ91HSixA5WCN0HMMJFz` (Prom Design System) — see `local-context.md` → Figma section
+- **Offline YAML cache:** `design-integration/02-prom-design-system-spec.yaml` — primary reference (Figma MCP View seat has rate limits)
+- **pptx render base:** `design-integration/assets/base_prom.pptx` — official Prom.ua template (16.8 MB, 16 slides, 11 real Google Slides layouts)
+- **Theme spec:** `design-integration/06-pptx-theme-prom.yaml` — 7 logical layouts mapped to real ones, typography scales, chart palette
+
+### Confirmed brand tokens
+
+- Primary purple: `#7B04DF`
+- Dark hero background: `#222223`
+- Typography: Montserrat (body) + Montserrat ExtraBold (display)
+- Canvas: 10×5.625" (Google Slides 16:9)
+- Chart palette: control `#5F6368`, treatment `#7B04DF`
+
+### A11y gates
+
+All design deliverables pass WCAG 2.1 AA QA before publish (see `skills/design-bridge/references/a11y-checklist.md`). Blocker rules by intent:
+
+| Intent | A11y scope |
+|--------|------------|
+| deck | contrast on primary text + CTA is blocker; rest = warnings |
+| prototype (lo-fi) | contrast + touch targets = warnings only |
+| prototype (mid-fi / hi-fi) | full WCAG 2.1 AA blocker |
+| handoff | full WCAG 2.1 AA + AAA stretches = blocker |
+| research-enrichment | not audited |
 
 ---
 
@@ -420,6 +489,12 @@ The plugin includes reference materials for product management best practices an
 - `cjm-protocol.md` — CJM shared standards (anomaly severity, funnel impact, health score)
 - `funnel-templates.md` — Standard funnel stage templates by product type
 - `template-protocol.md` — Multilingual template resolution protocol (Step T-0 → T-5, scoring, fallbacks, backup invariants)
+
+**Design Bridge references (new in v1.10.0):**
+- `skills/design-bridge/references/deck-subtypes.yaml` — slide-by-slide outlines for all 4 deck subtypes
+- `skills/design-bridge/references/figma-playbook.md` — Figma MCP auth, rate limits, common patterns
+- `skills/design-bridge/references/a11y-checklist.md` — WCAG 2.1 AA checklist + Prom pre-computed contrast pairs
+- `design-integration/` — 6 spec files + `assets/base_prom.pptx` render base
 
 See the plugin's `references/` folder for the complete list of available materials.
 
@@ -447,12 +522,13 @@ The Grow Product Manager plugin integrates with:
 
 - **Jira** — Task and issue management
 - **Confluence** — Document collaboration and publishing
-- **Figma** — Design and prototyping
+- **Figma** — Design and prototyping (Prom DS fileKey `bbjJ91HSixA5WCN0HMMJFz` preconfigured for design-bridge)
 - **Tableau / Looker** — Data visualization and metrics
 - **Google Calendar / Microsoft Calendar** — Meeting context and scheduling
 - **Fireflies.ai** — Meeting recording and transcription
 - **Google Drive** — Document storage and collaboration
 - **Obsidian** — Persistent knowledge graph (optional)
+- **Claude Design plugin** — 7 design skills (user-research, research-synthesis, ux-copy, accessibility-review, design-system, design-critique, design-handoff) hooked via `design-bridge` (new in v1.10.0)
 - **ChatGPT / Google Gemini** — Image and content generation (optional)
 
 ---

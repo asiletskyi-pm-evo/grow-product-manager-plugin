@@ -12,6 +12,91 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.10.0 (2026-04-20)
+
+### Added — Design Bridge Integration
+
+**Problem:** Claude's new Design plugin ships 7 strong skills (user-research, research-synthesis, ux-copy, accessibility-review, design-system, design-critique, design-handoff) but they don't know Prom.ua's brand tokens, don't hook into the PM pipeline (concept → requirements → research → brainstorm), and don't produce Prom-branded presentations. PMs still had to hand-assemble decks in Google Slides and manually copy brand colors/fonts.
+
+**Solution:** Introduced `design-bridge` — an orchestrator skill that acts as the single entry point for design deliverables (deck, prototype, handoff, research-enrichment), owns the Prom Design System (DS) theme, and is invoked as an **optional Step D hook** from four upstream skills. Presentations render from a Google Slides-sized base template (`base_prom.pptx`, 10×5.625", 11 real Prom layouts) so output matches what stakeholders expect in their shared drive.
+
+#### Core architecture — 3 layers
+
+1. **Narrative** (from upstream skill: concept body, requirements, research themes, hypotheses)
+2. **Template** (from Template Library: deck outline with Handlebars variables, bilingual uk/en)
+3. **DS theme** (from `design-integration/06-pptx-theme-prom.yaml`: colors, fonts, layouts, chart palette) — applied to `base_prom.pptx` via `slide_layouts.get_by_name`
+
+Each layer is independently versioned and swappable. Narrative changes don't invalidate the DS; DS updates don't rewrite templates.
+
+#### Files added — design-integration/ (spec + assets)
+
+- **01-integration-plan.md** — architecture, 3-layer model, skill hooks, rollout phases
+- **02-prom-design-system-spec.yaml** — Prom DS tokens (confirmed from base_prom.pptx XML): primary `#7B04DF`, dark `#222223`, Montserrat + Montserrat ExtraBold, neutral scale, chart palette, spacing, radii
+- **03-figma-mcp-config.md** — Figma MCP setup, auth, rate limits (View seat limitations on Pro plan), fileKey discovery
+- **04-local-context-design-section.md** — how to extend `local-context.md` with Design System settings
+- **05-presentation-logic.md** — decision tree, 3-layer model, slide-layout selection, failure modes
+- **06-pptx-theme-prom.yaml** — Prom theme for python-pptx renderer: 10×5.625" canvas, 7 logical layouts mapped to 11 real Google Slides layouts in `base_prom.pptx`, typography scales, chart palette
+- **assets/base_prom.pptx** — official Prom.ua template (16.8 MB, 16 slides, 11 layouts). Used by design-bridge as the render base; never modified in place.
+
+#### Files added — skills/design-bridge/
+
+- **SKILL.md** (`v0.1.0`) — orchestrator with 4 intents (deck, prototype, handoff, research-enrichment), Integration prerequisite, Local context prerequisite, Step T, 9-step workflow with 7 design-skill hooks (research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff, Figma), pptx rendering via `base_prom.pptx` + `slide_layouts.get_by_name`, WCAG 2.1 AA QA gate, publish, vault save, end-to-end example
+- **references/deck-subtypes.yaml** — 4 deck subtypes with slide-by-slide outlines: feature-concept (10), research-highlights (10), ab-test-readout (6), release-readout (7)
+- **references/figma-playbook.md** — Auth/permissions (View vs Full seat, rate limits), how to find fileKey + nodeId, common patterns (sync tokens, embed screenshot, concept→prototype, handoff), policy, Prom DS specifics (fileKey `bbjJ91HSixA5WCN0HMMJFz`)
+- **references/a11y-checklist.md** — WCAG 2.1 AA checklist with Prom-specific pre-computed contrast pairs, touch targets (44×44), keyboard nav, screen reader, motion, forms, deck-specific checks, QA output YAML schema
+
+#### Templates added — templates/built-in/presentation/
+
+- **research-highlights-v1.md** — 10 slides (cover / exec summary / method & sample / theme 1 / quote 1 / theme 2 / quote 2 / theme 3 / quantitative findings / recommendations). Bilingual uk + en. Variables: research_title, research_type, research_period, exec_summary, method, sample, themes, quotes, quantitative_findings, recommendations.
+- **ab-test-readout-v1.md** — 6 slides (cover / hypothesis & setup / primary metric / guardrails / interpretation / decision). Bilingual. Variables: test_name, date_range, platform, segment, hypothesis, success_metric, traffic_split, sample_size, primary_result, guardrails_results, interpretation, decision, rollout_plan.
+- **release-readout-v1.md** — 7 slides (cover / scope / key metrics / wins & learnings / incidents / what's next / ask). Bilingual. Variables: release_name, date_range, scope_shipped, key_metrics, wins, learnings, incidents, whats_next, ask.
+
+#### Skill integrations — Step D hook
+
+Four upstream skills gained an optional `## Step D — Design Bridge handoff (Optional)` step that offers to hand results to design-bridge:
+
+| Skill | From | To | Offers (intent / subtype) |
+|-------|------|----|---------------------------|
+| write-concept | 0.6.0 | 0.7.0 | deck / feature-concept OR prototype (lo-fi / mid-fi) |
+| requirements-creator | 0.6.0 | 0.7.0 | handoff (a11y_audit=true) OR prototype (hi-fi) OR deck |
+| brainstorm-features | 0.6.0 | 0.7.0 | prototype (lo-fi) for top-1 hypothesis OR deck (8-slide brainstorm readout) |
+| product-research | 0.6.0 | 0.7.0 | deck / research-highlights OR research-enrichment (Figma screenshots, competitor UI) |
+
+Step D is always skippable — user can say "no thanks" and the skill finishes as before.
+
+#### Updated — local-context.md
+
+- **Design System section** rewritten with confirmed Prom tokens: primary `#7B04DF`, dark `#222223`, Montserrat + Montserrat ExtraBold, neutral scale, radii, spacing, chart palette, tone of voice, `base_prom.pptx` path.
+- **Figma section** now has the real Prom DS fileKey: `bbjJ91HSixA5WCN0HMMJFz` (Prom Design System, provided 2026-04-20). Documented rate-limit caveat on View seat.
+
+#### Known limitations (MVP)
+
+- Figma sync (`get_variable_defs`, `search_design_system`) runs against View seat → rate limits are easy to hit. Offline YAML cache (`02-prom-design-system-spec.yaml`) is the primary reference; Figma fetch is opportunistic.
+- Handoff intent for enterprise components needs manual owner review — design-bridge will flag ambiguous tokens rather than guess.
+- `ab-test-readout` deck rendering uses built-in chart placeholders (Chart.js via python-pptx); live Tableau embeds are deferred to a future release.
+
+### Skills changed
+
+| Skill | From | To | Change type |
+|-------|------|----|-------------|
+| design-bridge (new) | — | 0.1.0 | new — orchestrator for 4 design intents with 7 design-skill hooks |
+| write-concept | 0.6.0 | 0.7.0 | minor — Step D hook after vault save |
+| requirements-creator | 0.6.0 | 0.7.0 | minor — Step D hook (offers a11y handoff for Create mode) |
+| brainstorm-features | 0.6.0 | 0.7.0 | minor — Step D hook (top-1 hypothesis prototype or brainstorm readout deck) |
+| product-research | 0.6.0 | 0.7.0 | minor — Step D hook (research-highlights deck or research-enrichment) |
+
+### Documentation
+
+- README.md — version bumped to 1.10.0; new Design Bridge section added; 3 new templates listed under built-in; Figma and base_prom.pptx mentioned under Integration Points.
+- CHANGELOG.md — this entry.
+- plugin.json + marketplace.json descriptions updated to mention design-bridge capability.
+
+### Backup
+
+Before v1.10.0 writes, backups were taken of the plugin, local-context, and template library (preserved in session backup directory).
+
+---
+
 ## v1.9.0 (2026-04-17)
 
 ### Added — Multilingual Artifact Template System

@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.6.0
+version: 0.7.0
 description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document.
 ---
 
@@ -302,6 +302,33 @@ IF vault_level > L0 AND vault sync_mode != "off":
    - Update those hypotheses: add this concept as `children` link
 
 3. Display: "Saved to Vault: Concepts/{product}/..."
+
+### Step 8 — Design Bridge handoff (Optional)
+
+> Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
+
+Після успішного publish, автоматично запропонуй design-bridge для design-related deliverables. Через `AskUserQuestion`:
+
+> "Concept published. Create a design-side deliverable from it?"
+> 1. **Presentation deck** — pitch for direction review (10 slides, Prom brand) — recommended для concepts що йдуть на stakeholder-level review
+> 2. **UI prototype** — lo-fi Mermaid flow or mid-fi HTML mockup, щоб візуалізувати proposed solution
+> 3. **Skip** — не потрібно зараз
+
+IF user selects 1 → invoke `design-bridge` with:
+- `intent: deck`
+- `subtype: feature-concept`
+- `source: confluence_page_url` (published у Step 6)
+- `audience: inferred from user's next-step context` (default `direction_review`)
+- `language: active user.language`
+
+IF user selects 2 → invoke `design-bridge` with:
+- `intent: prototype`
+- `source: confluence_page_url`
+- `fidelity: lo-fi` (default; upgrade до mid-fi за запитом)
+
+Якщо concept уже має Figma-посилання (Step 1: "Figma designs check"), передай його у `design-bridge` → embed у Step 4g.
+
+Fallback: якщо `design-bridge` не встановлений — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Не блокуй workflow.
 
 ## Additional Resources
 

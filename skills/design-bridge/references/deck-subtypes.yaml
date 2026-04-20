@@ -1,0 +1,92 @@
+# Deck Subtypes — slide-by-slide outlines for all 4 supported subtypes.
+# Read by design-bridge Step 3 when Deck IR is constructed.
+# Each slide lists: layout (matches Part 6), required slots, recommended media, speaker-notes hint.
+# --------------------------------------------------------------------
+
+meta:
+  version: "1.0.0"
+  source: "design-integration/05-presentation-logic.md §5"
+  referenced_theme: "design-integration/06-pptx-theme-prom.yaml"
+
+subtypes:
+
+  # --------------------------------------------------------------------
+  # 1. FEATURE-CONCEPT — pitch нової фічі для direction review
+  # --------------------------------------------------------------------
+  feature-concept:
+    name:
+      uk: "Презентація фічі"
+      en: "Feature Concept Pitch"
+    target_length: 10
+    max_length: 15
+    typical_audience: [direction_review, team, product_leads]
+    slides:
+      - { index: 1,  layout: title,    role: "Cover",              required: [title, subtitle, presenter, date],              media: "optional logo" }
+      - { index: 2,  layout: section,  role: "Context / why now",  required: [title, body],                                    media: "optional icon" }
+      - { index: 3,  layout: section,  role: "Problem statement",  required: [title, body(3-5 bullets)],                       media: "optional evidence quote" }
+      - { index: 4,  layout: section,  role: "Users / segments",   required: [title, body],                                    media: "optional persona icons" }
+      - { index: 5,  layout: metric,   role: "Evidence / data",    required: [title, tiles(2-3: value+label+delta)],           media: "caption with source" }
+      - { index: 6,  layout: section,  role: "Proposed solution",  required: [title, body(2-4 key points)],                    media: "optional flow diagram" }
+      - { index: 7,  layout: two-col,  role: "What changes for users", required: [title, col_left(before), col_right(after)], media: "Figma screenshot (before/after)" }
+      - { index: 8,  layout: metric,   role: "Success metrics",    required: [title, tiles(2-3: KPI + target)],                 media: "caption: source dashboard" }
+      - { index: 9,  layout: section,  role: "Plan / phasing",     required: [title, body(phased bullets або mini-timeline)],   media: "optional timeline chart" }
+      - { index: 10, layout: cta,      role: "Ask / next steps",   required: [title, actions(1-3), owner_line],                 media: null }
+
+  # --------------------------------------------------------------------
+  # 2. RESEARCH-HIGHLIGHTS — дамп user research / UX benchmark / market
+  # --------------------------------------------------------------------
+  research-highlights:
+    name:
+      uk: "Дослідження: ключові інсайти"
+      en: "Research Highlights"
+    target_length: 10
+    max_length: 14
+    typical_audience: [team, product_leads, stakeholders]
+    slides:
+      - { index: 1,  layout: title,    role: "Cover",                        required: [title, subtitle("Research type / period"), presenter, date], media: null }
+      - { index: 2,  layout: section,  role: "Executive summary",            required: [title, body(3-5 bullets)],                                     media: null }
+      - { index: 3,  layout: section,  role: "Method & sample",              required: [title, body(method, N participants, period, sources)],         media: null }
+      - { index: 4,  layout: section,  role: "Theme 1",                      required: [title(theme), body(insight)],                                  media: "optional supporting chart" }
+      - { index: 5,  layout: quote,    role: "User quote (theme 1)",         required: [quote_text, attribution],                                      media: null }
+      - { index: 6,  layout: section,  role: "Theme 2",                      required: [title, body],                                                  media: "optional chart" }
+      - { index: 7,  layout: quote,    role: "User quote (theme 2)",         required: [quote_text, attribution],                                      media: null }
+      - { index: 8,  layout: section,  role: "Theme 3 (if applicable)",      required: [title, body],                                                  media: null }
+      - { index: 9,  layout: metric,   role: "Quantitative findings",        required: [title, tiles(2-3 key numbers)],                                media: "caption: source" }
+      - { index: 10, layout: cta,      role: "Recommendations / next steps", required: [title, actions(ranked 1-3), owner_line],                       media: null }
+
+  # --------------------------------------------------------------------
+  # 3. AB-TEST-READOUT — результати експерименту
+  # --------------------------------------------------------------------
+  ab-test-readout:
+    name:
+      uk: "Результати A/B-тесту"
+      en: "A/B Test Readout"
+    target_length: 6
+    max_length: 8
+    typical_audience: [team, product_leads, experimentation_board]
+    slides:
+      - { index: 1, layout: title,   role: "Cover",                   required: [title("Test name"), subtitle("Date range, platform, segment"), presenter, date], media: null }
+      - { index: 2, layout: section, role: "Hypothesis & setup",      required: [title, body(hypothesis, success metric, traffic split, duration, sample size)],  media: null }
+      - { index: 3, layout: chart,   role: "Primary metric",          required: [title("Primary: <metric>"), chart_area(bar: control vs treatment + CI), legend], media: "caption: p-value, CI" }
+      - { index: 4, layout: chart,   role: "Secondary / guardrails",  required: [title, chart_area(multi-bar: several secondary metrics), legend],                media: null }
+      - { index: 5, layout: section, role: "Interpretation",          required: [title, body(observations, segments, surprises)],                                  media: null }
+      - { index: 6, layout: cta,     role: "Decision & rollout",      required: [title, actions(decision: ship/kill/iterate), owner_line, timeline],               media: null }
+
+  # --------------------------------------------------------------------
+  # 4. RELEASE-READOUT — підсумки релізу / спринта
+  # --------------------------------------------------------------------
+  release-readout:
+    name:
+      uk: "Підсумки релізу / спринта"
+      en: "Release / Sprint Readout"
+    target_length: 7
+    max_length: 10
+    typical_audience: [team, product_leads, stakeholders]
+    slides:
+      - { index: 1, layout: title,   role: "Cover",                         required: [title("Release vX.Y / Sprint N"), subtitle(dates), presenter, date], media: null }
+      - { index: 2, layout: section, role: "Scope shipped",                 required: [title, body(bullets of features/tickets)],                            media: "optional thumbs grid" }
+      - { index: 3, layout: metric,  role: "Key metrics impact",            required: [title, tiles(3 metrics: baseline → current → delta)],                  media: "caption: source" }
+      - { index: 4, layout: two-col, role: "Wins / Learnings",              required: [title, col_left(wins), col_right(learnings)],                         media: null }
+      - { index: 5, layout: section, role: "Issues / incidents (if any)",   required: [title, body(incidents + resolution)],                                  media: null }
+      - { index: 6, layout: section, role: "What's next",                   required: [title, body(next sprint themes / upcoming)],                           media: null }
+      - { index: 7, layout: cta,     role: "Ask / risks",                   required: [title, actions(what team needs), owner_line],                          media: null }
