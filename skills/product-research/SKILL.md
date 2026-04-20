@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.6.0
+version: 0.7.0
 description: Conduct comprehensive product research — competitive analysis, user research, market research, or UX benchmark research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks", "search knowledge library", or needs SWOT, TAM SAM SOM, or PESTEL analysis.
 ---
 
@@ -301,6 +301,31 @@ If the user agrees to CJM Research:
 - CJM Research will use these findings to enrich the journey analysis with evidence-backed insights
 
 If the user declines — end the workflow gracefully.
+
+### Step D — Design Bridge handoff (Optional)
+
+> Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
+
+Research синтез природно конвертується у research-highlights deck для розповсюдження серед команди / stakeholders. Через `AskUserQuestion`:
+
+> "Research published. Create a design-side deliverable?"
+> 1. **Research highlights deck** — 10-slide dump з key themes, quotes, numbers — recommended для user research / UX benchmark результатів
+> 2. **Research-enrichment through design:research-synthesis** — пропустити raw interview notes через Claude Design's research-synthesis для deeper themes (якщо було user research з raw transcripts)
+> 3. **Skip**
+
+IF user selects 1 → invoke `design-bridge` with:
+- `intent: deck`
+- `subtype: research-highlights`
+- `source: confluence_research_page_url`
+- `audience: team` (default; upgrade до `c-level` за запитом)
+- `length: 10`
+
+IF user selects 2 → invoke `design-bridge` with:
+- `intent: research-enrichment`
+- `source: raw interviews / survey responses`
+- design-bridge поверне structured themes — додай як appendix до research page
+
+Fallback: якщо `design-bridge` не встановлений — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Не блокуй workflow.
 
 ## Quality standards
 

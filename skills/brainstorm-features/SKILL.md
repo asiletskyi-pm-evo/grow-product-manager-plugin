@@ -1,6 +1,6 @@
 ---
 name: brainstorm-features
-version: 0.6.0
+version: 0.7.0
 description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis.
 ---
 
@@ -377,6 +377,32 @@ Always propose:
 - Recommend which specific ideas from the final list to take into work first — based on ICE score ranking
 - If no concept exists yet — suggest creating one via **Write Concept / PRD** before moving to requirements
 - If CJM Hypotheses mode was used → also offer: "Run full **CJM Research** to verify these hypotheses, assess risks, and build a prioritized backlog"
+
+### Step 8 — Design Bridge handoff (Optional)
+
+> Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
+
+Після ICE-ranking top-3 hypotheses — часто корисно швидко прототипувати або сформувати А/В-readout deck. Через `AskUserQuestion`:
+
+> "Top hypotheses ranked. Create a design-side deliverable?"
+> 1. **Low-fi prototype for top hypothesis** — Mermaid flow або ASCII wireframe, щоб візуалізувати ідею перед вкладенням у розробку (recommended для topi1 hypothesis)
+> 2. **Brainstorm readout deck** — 8-slide summary для обговорення з product leads
+> 3. **Skip**
+
+IF user selects 1 → invoke `design-bridge` with:
+- `intent: prototype`
+- `fidelity: lo-fi`
+- `source: top-1 hypothesis (description + user goal + expected outcome)`
+- `language: active user.language`
+
+IF user selects 2 → invoke `design-bridge` with:
+- `intent: deck`
+- `subtype: research-highlights` (найближчий — hypothesis list це теж research output)
+- `source: full_brainstorm_output`
+- `audience: product_leads`
+- `length: 8`
+
+Fallback: якщо `design-bridge` не встановлений — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Не блокуй workflow.
 
 ## Quality standards
 

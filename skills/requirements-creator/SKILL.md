@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.6.0
+version: 0.7.0
 description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one.
 ---
 
@@ -329,6 +329,37 @@ If the user agrees:
 - The Feature Task Creator skill will use these requirements as the source for creating Jira issues
 
 If the user declines — end the workflow gracefully.
+
+### Step 8 — Design Bridge handoff (Optional)
+
+> Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
+
+Requirements часто є вхідною точкою для developer handoff та для low-fi prototype. Через `AskUserQuestion`:
+
+> "Requirements published. Create a design-side deliverable?"
+> 1. **Developer handoff spec** — повна специфікація для фронту (tokens, components, states, breakpoints, a11y) — recommended якщо requirements включали UI changes
+> 2. **Low-fi UI prototype** — для візуальної валідації перед розробкою
+> 3. **Deck для dev-review** — 6-8 слайдів зі scope + UI flow + edge cases
+> 4. **Skip**
+
+IF user selects 1 → invoke `design-bridge` with:
+- `intent: handoff`
+- `source: requirements_page_url`
+- `a11y_audit: true` (обов'язково для handoff)
+- `figma_context: from requirements_page OR ask user`
+
+IF user selects 2 → invoke `design-bridge` with:
+- `intent: prototype`
+- `source: requirements_page_url`
+- `fidelity: lo-fi | mid-fi` (ask)
+
+IF user selects 3 → invoke `design-bridge` with:
+- `intent: deck`
+- `subtype: feature-concept` (найближчий до requirements pitch)
+- `audience: dev_handoff`
+- `length: 6-8`
+
+Fallback: якщо `design-bridge` не встановлений — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Не блокуй workflow.
 
 ---
 

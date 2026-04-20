@@ -1,0 +1,501 @@
+# Prom — pptx theme spec
+# --------------------------------------------------------------------
+# Повний map Prom DS токенів (Part 2) на параметри python-pptx.
+# Читається design-bridge Step 5 для побудови Deck IR → .pptx.
+#
+# v1.1.0 — синхронізовано з реальним brand template
+# (design-integration/assets/base_prom.pptx, колишній шаблони.pptx).
+# Джерело для fonts, size, brand color — XML оригінального
+# файлу (Google Slides export, 10" × 5.625").
+# --------------------------------------------------------------------
+
+meta:
+  name: "Prom Deck Theme"
+  version: "1.1.0"
+  ds_source: "design-integration/02-prom-design-system-spec.yaml"
+  base_pptx: "design-integration/assets/base_prom.pptx"
+  target_library: "python-pptx"
+  slide_format: "16:9"
+  slide_size:
+    inches:  { width: 10.0,  height: 5.625 }
+    cm:      { width: 25.4,  height: 14.29 }
+    emu:     { width: 9144000, height: 5143500 }
+    origin:  "Google Slides default (інваріант template-файлу)"
+  language_default: uk
+  localization: { uk: true, en: true, kz: false }
+
+# --------------------------------------------------------------------
+# 1. Colors — від DS (Part 2) до pptx palette
+#    Brand color підтверджений з template XML: #7B04DF (purple).
+# --------------------------------------------------------------------
+colors:
+  # Primary palette (Office-like "accent1..6")
+  accent1:              { hex: "7B04DF", ds_ref: "colors.brand.prom_primary",         usage: "CTA, primary actions, brand bar" }
+  accent1_hover:        { hex: "6803B8", ds_ref: "colors.brand.prom_primary_hover",   usage: "on hover preview" }
+  accent1_subtle:       { hex: "F0E5FC", ds_ref: "colors.brand.prom_primary_subtle",  usage: "highlight blocks, metric backgrounds" }
+  accent_success:       { hex: "2AA746", ds_ref: "colors.semantic.success",           usage: "positive chart bars, checks" }
+  accent_warning:       { hex: "F4A523", ds_ref: "colors.semantic.warning",           usage: "caution, flags" }
+  accent_error:         { hex: "D43A2F", ds_ref: "colors.semantic.error",             usage: "negative chart bars, risk items" }
+  accent_info:          { hex: "2F6DF0", ds_ref: "colors.semantic.info",              usage: "info callouts" }
+  # Neutrals (template-confirmed)
+  text_primary:         { hex: "222223", ds_ref: "colors.neutrals.text_primary",      note: "з template XML (5×), deeper ніж pure-black" }
+  text_secondary:       { hex: "5F6368", ds_ref: "colors.neutrals.text_secondary" }
+  text_on_accent:       { hex: "FFFFFF", ds_ref: "colors.neutrals.surface_primary" }
+  text_on_dark:         { hex: "FFFFFF", ds_ref: "colors.neutrals.surface_primary",   usage: "на dark-слайдах у template" }
+  background_light:     { hex: "FFFFFF", ds_ref: "colors.neutrals.surface_primary" }
+  background_section:   { hex: "F5F6F7", ds_ref: "colors.neutrals.surface_secondary" }
+  background_dark:      { hex: "222223", ds_ref: "colors.neutrals.prom_dark",         usage: "cover + section dividers (match template motif)" }
+  background_accent:    { hex: "7B04DF", ds_ref: "colors.brand.prom_primary",         usage: "branded hero slides" }
+  border_default:       { hex: "E3E5E8", ds_ref: "colors.neutrals.border_default" }
+  divider:              { hex: "EDEEF0", ds_ref: "colors.neutrals.divider" }
+
+chart_palette:
+  # Для chart slides. Control завжди нейтральний, treatment — акцентний (prom purple).
+  sequence:
+    - { role: "control",    hex: "5F6368", label: "Control / Baseline" }
+    - { role: "treatment",  hex: "7B04DF", label: "Variant A (treatment)" }
+    - { role: "treatment2", hex: "F4A523", label: "Variant B" }
+    - { role: "treatment3", hex: "2F6DF0", label: "Variant C" }
+  positive: "2AA746"
+  negative: "D43A2F"
+  neutral:  "B1B4B8"
+  grid:     "EDEEF0"
+  axis:     "5F6368"
+
+# --------------------------------------------------------------------
+# 2. Typography — підтверджено з template (Montserrat 216×, ExtraBold 160×)
+# --------------------------------------------------------------------
+typography:
+  families:
+    primary:
+      name: "Montserrat"
+      fallback: ["Segoe UI", "Helvetica Neue", "Arial", "sans-serif"]
+      ds_ref: "typography.font_family.primary"
+      status: confirmed      # з template XML
+      weights_used: [400, 500, 600, 700]
+    display:
+      name: "Montserrat ExtraBold"
+      fallback: ["Montserrat Black", "Impact", "Arial Black"]
+      ds_ref: "typography.font_family.display"
+      status: confirmed      # з template XML (160×)
+      usage: "slide_title, hero numbers, section dividers"
+    mono:
+      name: "Menlo"
+      fallback: ["Consolas", "Courier New", "monospace"]
+      usage: "код/змінні у tech decks (рідко)"
+  # Presentation-specific scale (відрізняється від web body)
+  # Scales переглянуті під 10" × 5.625" канвас — трохи більші, ніж на web.
+  scale:
+    slide_title:
+      size: 36
+      weight: 800
+      family: display       # Montserrat ExtraBold
+      line_height: 1.15
+      color_token: text_primary
+      ds_ref: "typography.scale.h1"
+      note: "для dark cover-слайдів color_token=text_on_dark"
+    section_title:
+      size: 26
+      weight: 700
+      family: primary
+      line_height: 1.2
+      color_token: text_primary
+      ds_ref: "typography.scale.h2"
+    subtitle:
+      size: 18
+      weight: 500
+      family: primary
+      color_token: text_secondary
+    body_large:
+      size: 16
+      weight: 400
+      family: primary
+      line_height: 1.4
+      color_token: text_primary
+    body:
+      size: 14
+      weight: 400
+      family: primary
+      color_token: text_primary
+    caption:
+      size: 10
+      weight: 400
+      family: primary
+      color_token: text_secondary
+    metric_value:
+      size: 44
+      weight: 800
+      family: display       # Montserrat ExtraBold
+      color_token: accent1
+    metric_label:
+      size: 12
+      weight: 500
+      family: primary
+      color_token: text_secondary
+    quote:
+      size: 20
+      weight: 400
+      family: primary
+      italic: true
+      color_token: text_primary
+    cta:
+      size: 18
+      weight: 700
+      family: primary
+      color_token: accent1
+
+# --------------------------------------------------------------------
+# 3. Spacing (in inches for python-pptx Inches())
+#    Переглянуто під 10" × 5.625" канвас (раніше був 13.33 × 7.5).
+# --------------------------------------------------------------------
+spacing:
+  page_margin:      0.5    # на 10" slide 1" margin з'їдає 20% ширини — 0.5" оптимально
+  gutter:           0.35
+  block_inner:      0.25
+  bullet_indent:    0.22
+  between_blocks:   0.3
+  title_to_body:    0.22
+  footer_margin:    0.22
+
+# --------------------------------------------------------------------
+# 4. Master slide layouts — specs for python-pptx
+#    ⚠️ Slide canvas: 10.0 × 5.625 inches (Google Slides default).
+#    Content area при margin 0.5": 9.0 × 4.625 inches.
+# --------------------------------------------------------------------
+layouts:
+  title:
+    id: layout_title
+    description: "Cover — назва deck, presenter, date. У template — dark bg + purple accents."
+    background: background_dark          # match template motif
+    text_default_color: text_on_dark
+    elements:
+      - role: brand_bar
+        shape: rectangle
+        fill: accent1
+        rect: { left: 0.0, top: 0.0, width: 10.0, height: 0.15 }
+      - role: title
+        type: text
+        style: slide_title
+        rect: { left: 0.5, top: 1.8, width: 9.0, height: 1.4 }
+        align: left
+        color_override: text_on_dark
+      - role: subtitle
+        type: text
+        style: subtitle
+        rect: { left: 0.5, top: 3.2, width: 9.0, height: 0.6 }
+        color_override: text_on_dark
+      - role: presenter
+        type: text
+        style: caption
+        rect: { left: 0.5, top: 4.95, width: 6.0, height: 0.3 }
+        color_override: text_on_dark
+      - role: date
+        type: text
+        style: caption
+        rect: { left: 7.5, top: 4.95, width: 2.0, height: 0.3 }
+        align: right
+        color_override: text_on_dark
+      - role: logo
+        type: image
+        optional: true
+        rect: { left: 8.5, top: 0.35, width: 1.1, height: 0.4 }
+
+  section:
+    id: layout_section
+    description: "Paragraph + bullets або section divider"
+    background: background_light
+    elements:
+      - role: title
+        type: text
+        style: section_title
+        rect: { left: 0.5, top: 0.55, width: 9.0, height: 0.7 }
+      - role: body
+        type: text
+        style: body_large
+        rect: { left: 0.5, top: 1.45, width: 9.0, height: 3.5 }
+        bullets_max: 5
+      - role: footer_meta
+        type: text
+        style: caption
+        rect: { left: 0.5, top: 5.25, width: 9.0, height: 0.22 }
+
+  two-col:
+    id: layout_two_col
+    description: "Проблема/Рішення, Before/After, In/Out"
+    background: background_light
+    elements:
+      - role: title
+        type: text
+        style: section_title
+        rect: { left: 0.5, top: 0.55, width: 9.0, height: 0.7 }
+      - role: col_left
+        type: composite
+        rect: { left: 0.5, top: 1.45, width: 4.3, height: 3.7 }
+        children:
+          - { role: col_title, type: text, style: subtitle }
+          - { role: col_body,  type: text, style: body, bullets_max: 4 }
+      - role: col_right
+        type: composite
+        rect: { left: 5.2, top: 1.45, width: 4.3, height: 3.7 }
+        children:
+          - { role: col_title, type: text, style: subtitle }
+          - { role: col_body_or_image, type: text_or_image, style: body }
+      - role: gutter_line
+        shape: line
+        stroke: divider
+        rect: { left: 5.0, top: 1.7, width: 0, height: 3.2 }
+
+  metric:
+    id: layout_metric
+    description: "Up to 3 metric tiles"
+    background: background_light
+    elements:
+      - role: title
+        type: text
+        style: section_title
+        rect: { left: 0.5, top: 0.55, width: 9.0, height: 0.7 }
+      - role: tile_1
+        type: metric_block
+        rect: { left: 0.5, top: 1.7, width: 2.85, height: 2.8 }
+        parts: [value, label, delta]
+        fill: accent1_subtle
+      - role: tile_2
+        type: metric_block
+        rect: { left: 3.575, top: 1.7, width: 2.85, height: 2.8 }
+        fill: accent1_subtle
+      - role: tile_3
+        type: metric_block
+        rect: { left: 6.65, top: 1.7, width: 2.85, height: 2.8 }
+        fill: accent1_subtle
+
+  chart:
+    id: layout_chart
+    description: "Chart slide (bar / line / column)"
+    background: background_light
+    elements:
+      - role: title
+        type: text
+        style: section_title
+        rect: { left: 0.5, top: 0.55, width: 9.0, height: 0.7 }
+      - role: chart_area
+        type: chart
+        rect: { left: 0.5, top: 1.45, width: 9.0, height: 3.3 }
+        chart_types_allowed: [bar, column, line]
+      - role: legend
+        type: text
+        style: caption
+        rect: { left: 0.5, top: 4.85, width: 9.0, height: 0.3 }
+
+  quote:
+    id: layout_quote
+    description: "User quote для research decks"
+    background: background_section
+    elements:
+      - role: quote_mark
+        shape: accent_rectangle
+        fill: accent1
+        rect: { left: 0.5, top: 1.4, width: 0.12, height: 2.5 }
+      - role: quote_text
+        type: text
+        style: quote
+        rect: { left: 0.95, top: 1.4, width: 8.55, height: 2.5 }
+      - role: attribution
+        type: text
+        style: caption
+        rect: { left: 0.95, top: 4.05, width: 8.55, height: 0.35 }
+
+  cta:
+    id: layout_cta
+    description: "Ask / Next steps / Discussion slide"
+    background: background_light
+    elements:
+      - role: title
+        type: text
+        style: section_title
+        rect: { left: 0.5, top: 0.55, width: 9.0, height: 0.7 }
+      - role: cta_list
+        type: text
+        style: cta
+        rect: { left: 0.5, top: 1.55, width: 9.0, height: 3.0 }
+        bullets_max: 3
+      - role: owner_line
+        type: text
+        style: caption
+        rect: { left: 0.5, top: 4.85, width: 9.0, height: 0.3 }
+
+# --------------------------------------------------------------------
+# 5. Chart defaults
+# --------------------------------------------------------------------
+charts:
+  default_type: bar
+  style:
+    gridlines: true
+    gridline_color: "EDEEF0"
+    axis_color: "5F6368"
+    data_labels: true
+    legend_position: bottom
+  ab_test_chart:
+    type: bar
+    orientation: horizontal
+    use_error_bars: true
+    ci_level: 0.95
+    series_mapping:
+      - { label: "Control",   color_role: "control" }
+      - { label: "Treatment", color_role: "treatment" }
+
+# --------------------------------------------------------------------
+# 6. Footer (присутній на всіх слайдах крім title & section dividers)
+# --------------------------------------------------------------------
+footer:
+  left_text: "{{product.name}} • {{team.name}}"
+  center_text: "{{deck.subtitle}}"
+  right_text: "{{slide.index}} / {{slide.total}}"
+  style: caption
+  top_divider:
+    shape: line
+    stroke: divider
+    offset_from_bottom: 0.35
+
+# --------------------------------------------------------------------
+# 7. Slide master header helpers
+# --------------------------------------------------------------------
+header_defaults:
+  title_to_content_gap: 0.9
+  content_max_lines_body: 10
+  content_max_bullets: 5
+  character_limit:
+    title: 72
+    body_bullet: 120
+    caption: 110
+
+# --------------------------------------------------------------------
+# 8. python-pptx implementation hints
+# --------------------------------------------------------------------
+implementation_hints:
+  base_file: |
+    У репозиторії плагіна лежить підтверджений brand template:
+      design-integration/assets/base_prom.pptx
+    Це оригінальний Prom.ua template (16 slides, Google Slides export).
+    Renderer повинен СПОЧАТКУ спробувати:
+      prs = Presentation("design-integration/assets/base_prom.pptx")
+    ...і робити clone-operation над існуючими slide_layouts.
+    Fallback (якщо файл відсутній): blank Presentation() + явне
+    розставляння shapes за rect-координатами з секції `layouts`.
+
+  creating_theme: |
+    python-pptx не редагує theme.xml напряму, тому стратегія:
+    1. Завантажити base_prom.pptx (одноразово підготовлений).
+    2. Використовувати prs.slide_layouts[n] за їхніми індексами.
+    3. Для нестандартних layout (metric, chart) створювати blank
+       slide + додавати shapes вручну з цієї YAML-специфікації.
+
+  layout_mapping: |
+    У deck IR кожен slide має "layout" — це ім'я з секції `layouts`.
+    Renderer:
+      1. Знаходить відповідний slide_layout у base pptx master
+         (по name або index, mapping у slide_layout_index).
+      2. Якщо не знайдено — створює blank slide і малює елементи
+         за rect.
+    Для MVP працюємо через blank + явне позиціонування (простіше
+    дебажити). У v1.11 — підключення master layouts.
+
+  slide_layout_index:
+    # Mapping до slide_layouts у base_prom.pptx (підтверджено через python-pptx).
+    # Base pptx містить 11 layouts (стандартний Google Slides set).
+    # ⚠️ Резолвимо за name, не за index — так надійніше (index може мінятись
+    # якщо brand-team додасть кастомний layout).
+    resolution: by_name
+    mapping:
+      title:    "TITLE"                         # наш cover (dark bg + brand accent)
+      section:  "TITLE_AND_BODY"                # title + content
+      two-col:  "TITLE_AND_TWO_COLUMNS"         # Before/After, Problem/Solution
+      metric:   "BIG_NUMBER"                    # single big metric
+      chart:    "BLANK"                         # chart малюємо програмно на blank
+      quote:    "MAIN_POINT"                    # коротка теза / quote
+      cta:      "BLANK"                         # CTA малюємо програмно
+    # Додаткові native layouts template, які можуть знадобитись у v1.11:
+    extra_available:
+      - "SECTION_HEADER"                        # section divider
+      - "TITLE_ONLY"                            # title без body
+      - "ONE_COLUMN_TEXT"                       # long-form
+      - "SECTION_TITLE_AND_DESCRIPTION"         # section intro
+      - "CAPTION_ONLY"                          # image + caption
+    total_layouts_in_base: 11
+    total_slides_in_base:  16
+
+  fonts_loading: |
+    Montserrat & Montserrat ExtraBold — Google Font, безкоштовний.
+    На системі має бути встановлений (або embedded у pptx).
+    У python-pptx на shape.text_frame:
+      run.font.name = 'Montserrat'
+      run.font.bold = True   # для ExtraBold use display family
+    Якщо font недоступний на reader-машині — PowerPoint substitute.
+    Renderer додає у footer warning, якщо font-check не проходить.
+
+  image_handling: |
+    - Figma screenshots → тимчасова папка → slide.shapes.add_picture().
+    - Target resolution: 2x display (retina) для чіткості.
+    - Максимум per slide: 2 images (one per col).
+    - Для hero slides у template — замінюваний 3D asset placeholder.
+
+# --------------------------------------------------------------------
+# 9. QA rules (виконуються у Step 6)
+# --------------------------------------------------------------------
+qa_rules:
+  contrast:
+    enabled: true
+    min_normal: 4.5
+    min_large: 3.0
+    pairs_to_check:
+      - { fg: text_primary,    bg: background_light }
+      - { fg: text_on_accent,  bg: accent1 }
+      - { fg: text_on_dark,    bg: background_dark }
+      - { fg: text_secondary,  bg: background_section }
+  slide_count:
+    max_over_preference_ratio: 1.2
+  bullets_per_slide:
+    max: 5
+  title_length:
+    max_chars: 72
+  brand_usage:
+    min_primary_color_slides: 2       # хоча б 2 слайди з brand purple
+  dark_cover_check:
+    enabled: true
+    rule: "cover slide повинен мати background_dark та text_on_dark"
+  font_check:
+    required_fonts: ["Montserrat", "Montserrat ExtraBold"]
+    on_missing: "warn_in_footer"
+  empty_slot_detection:
+    patterns:
+      - "{{"
+      - "TODO"
+      - "TBD"
+      - "_(to be filled)_"
+      - "Тут може бути твій заголовок"    # placeholder з template
+      - "Lorem ipsum"
+
+# --------------------------------------------------------------------
+# 10. Validation checklist (проти оригінального template)
+# --------------------------------------------------------------------
+template_parity:
+  source_file: "design-integration/assets/base_prom.pptx"
+  confirmed_from_xml:
+    - { element: "brand_color",    value: "#7B04DF", occurrences_in_template: 6 }
+    - { element: "neutral_dark",   value: "#222223", occurrences_in_template: 5 }
+    - { element: "font_primary",   value: "Montserrat",           occurrences_in_template: 216 }
+    - { element: "font_display",   value: "Montserrat ExtraBold", occurrences_in_template: 160 }
+    - { element: "slide_size_emu", value: "9144000 × 5143500",    note: "10\" × 5.625\" Google Slides default" }
+    - { element: "slide_count",    value: 16,                      note: "16 демо-слайдів, більшість із placeholder-ом 'Тут може бути твій заголовок'" }
+    - { element: "layouts_count",  value: 11,                      note: "стандартний Google Slides layout set" }
+  known_quirks:
+    all_slides_use_title_layout: |
+      Експорт з Google Slides призводить до того, що всі 16 демо-слайдів
+      мають slide_layout='TITLE' у XML, попри різну верстку на екрані.
+      Для renderer це означає: brand-тема зав'язується на slide_layouts[],
+      а не на існуючі slides[] base файлу. Demo-слайди лишаємо у файлі
+      як reference, але не клонуємо їх — створюємо нові через
+      prs.slides.add_slide(prs.slide_layouts[N]).
+  open_questions:
+    - "Чи є brand icon (Prom лого) як .svg/.png у assets? → Експортувати з Figma DS."
+    - "Logo білого кольору для dark-cover? Treat наявність як v1.11."
+    - "Semantic colors (success/warning/error) — узгодити з web DS через Figma MCP."
