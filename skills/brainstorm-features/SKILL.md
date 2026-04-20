@@ -81,7 +81,7 @@ If the product or feature already exists, ask via AskUserQuestion:
 - **If the user believes designs should exist but cannot provide a link** — offer to search:
   > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
   - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
-    - Try to understand the structure of the design system: look for sections like "Актуальний дизайн", "Current design", "Production", "Live", "Ready for dev", "Поточний стан"
+    - Try to understand the structure of the design system: look for sections like "Current design", "Production", "Live", "Ready for dev", "Latest state"
     - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
   - If Figma MCP is unavailable — follow `references/integration-strategy.md` fallback chain
 - **If no designs exist** — note this and proceed without design context
@@ -382,11 +382,11 @@ Always propose:
 
 > Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
 
-Після ICE-ranking top-3 hypotheses — часто корисно швидко прототипувати або сформувати А/В-readout deck. Через `AskUserQuestion`:
+After ICE-ranking top-3 hypotheses — often useful to quickly prototype or create an A/B readout deck. Via `AskUserQuestion`:
 
 > "Top hypotheses ranked. Create a design-side deliverable?"
-> 1. **Low-fi prototype for top hypothesis** — Mermaid flow або ASCII wireframe, щоб візуалізувати ідею перед вкладенням у розробку (recommended для topi1 hypothesis)
-> 2. **Brainstorm readout deck** — 8-slide summary для обговорення з product leads
+> 1. **Low-fi prototype for top hypothesis** — Mermaid flow or ASCII wireframe to visualize the idea before development investment (recommended for top-1 hypothesis)
+> 2. **Brainstorm readout deck** — 8-slide summary for discussion with product leads
 > 3. **Skip**
 
 IF user selects 1 → invoke `design-bridge` with:
@@ -397,12 +397,12 @@ IF user selects 1 → invoke `design-bridge` with:
 
 IF user selects 2 → invoke `design-bridge` with:
 - `intent: deck`
-- `subtype: research-highlights` (найближчий — hypothesis list це теж research output)
+- `subtype: research-highlights` (closest match — hypothesis list is also a research output)
 - `source: full_brainstorm_output`
 - `audience: product_leads`
 - `length: 8`
 
-Fallback: якщо `design-bridge` не встановлений — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Не блокуй workflow.
+Fallback: if `design-bridge` is not installed — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Do not block the workflow.
 
 ## Quality standards
 

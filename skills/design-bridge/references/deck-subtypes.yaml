@@ -1,43 +1,42 @@
 # Deck Subtypes — slide-by-slide outlines for all 4 supported subtypes.
 # Read by design-bridge Step 3 when Deck IR is constructed.
-# Each slide lists: layout (matches Part 6), required slots, recommended media, speaker-notes hint.
+# Each slide lists: layout (must match the layout names in your pptx theme yaml),
+# required slots, recommended media, and a speaker-notes hint.
 # --------------------------------------------------------------------
 
 meta:
-  version: "1.0.0"
-  source: "design-integration/05-presentation-logic.md §5"
-  referenced_theme: "design-integration/06-pptx-theme-prom.yaml"
+  version: "1.1.0"
+  source: "skills/design-bridge/SKILL.md (Step 3 / Deck IR)"
+  referenced_theme: "<product.pptx_theme from local-context.md>"
 
 subtypes:
 
   # --------------------------------------------------------------------
-  # 1. FEATURE-CONCEPT — pitch нової фічі для direction review
+  # 1. FEATURE-CONCEPT — pitch a new feature for direction review
   # --------------------------------------------------------------------
   feature-concept:
     name:
-      uk: "Презентація фічі"
       en: "Feature Concept Pitch"
     target_length: 10
     max_length: 15
     typical_audience: [direction_review, team, product_leads]
     slides:
-      - { index: 1,  layout: title,    role: "Cover",              required: [title, subtitle, presenter, date],              media: "optional logo" }
-      - { index: 2,  layout: section,  role: "Context / why now",  required: [title, body],                                    media: "optional icon" }
-      - { index: 3,  layout: section,  role: "Problem statement",  required: [title, body(3-5 bullets)],                       media: "optional evidence quote" }
-      - { index: 4,  layout: section,  role: "Users / segments",   required: [title, body],                                    media: "optional persona icons" }
-      - { index: 5,  layout: metric,   role: "Evidence / data",    required: [title, tiles(2-3: value+label+delta)],           media: "caption with source" }
-      - { index: 6,  layout: section,  role: "Proposed solution",  required: [title, body(2-4 key points)],                    media: "optional flow diagram" }
-      - { index: 7,  layout: two-col,  role: "What changes for users", required: [title, col_left(before), col_right(after)], media: "Figma screenshot (before/after)" }
-      - { index: 8,  layout: metric,   role: "Success metrics",    required: [title, tiles(2-3: KPI + target)],                 media: "caption: source dashboard" }
-      - { index: 9,  layout: section,  role: "Plan / phasing",     required: [title, body(phased bullets або mini-timeline)],   media: "optional timeline chart" }
-      - { index: 10, layout: cta,      role: "Ask / next steps",   required: [title, actions(1-3), owner_line],                 media: null }
+      - { index: 1,  layout: title,    role: "Cover",                  required: [title, subtitle, presenter, date],              media: "optional logo" }
+      - { index: 2,  layout: section,  role: "Context / why now",      required: [title, body],                                    media: "optional icon" }
+      - { index: 3,  layout: section,  role: "Problem statement",      required: [title, body(3-5 bullets)],                       media: "optional evidence quote" }
+      - { index: 4,  layout: section,  role: "Users / segments",       required: [title, body],                                    media: "optional persona icons" }
+      - { index: 5,  layout: metric,   role: "Evidence / data",        required: [title, tiles(2-3: value+label+delta)],           media: "caption with source" }
+      - { index: 6,  layout: section,  role: "Proposed solution",      required: [title, body(2-4 key points)],                    media: "optional flow diagram" }
+      - { index: 7,  layout: two-col,  role: "What changes for users", required: [title, col_left(before), col_right(after)],      media: "Figma screenshot (before/after)" }
+      - { index: 8,  layout: metric,   role: "Success metrics",        required: [title, tiles(2-3: KPI + target)],                media: "caption: source dashboard" }
+      - { index: 9,  layout: section,  role: "Plan / phasing",         required: [title, body(phased bullets or mini-timeline)],   media: "optional timeline chart" }
+      - { index: 10, layout: cta,      role: "Ask / next steps",       required: [title, actions(1-3), owner_line],                media: null }
 
   # --------------------------------------------------------------------
-  # 2. RESEARCH-HIGHLIGHTS — дамп user research / UX benchmark / market
+  # 2. RESEARCH-HIGHLIGHTS — user research / UX benchmark / market dump
   # --------------------------------------------------------------------
   research-highlights:
     name:
-      uk: "Дослідження: ключові інсайти"
       en: "Research Highlights"
     target_length: 10
     max_length: 14
@@ -55,11 +54,10 @@ subtypes:
       - { index: 10, layout: cta,      role: "Recommendations / next steps", required: [title, actions(ranked 1-3), owner_line],                       media: null }
 
   # --------------------------------------------------------------------
-  # 3. AB-TEST-READOUT — результати експерименту
+  # 3. AB-TEST-READOUT — experiment results
   # --------------------------------------------------------------------
   ab-test-readout:
     name:
-      uk: "Результати A/B-тесту"
       en: "A/B Test Readout"
     target_length: 6
     max_length: 8
@@ -73,11 +71,10 @@ subtypes:
       - { index: 6, layout: cta,     role: "Decision & rollout",      required: [title, actions(decision: ship/kill/iterate), owner_line, timeline],               media: null }
 
   # --------------------------------------------------------------------
-  # 4. RELEASE-READOUT — підсумки релізу / спринта
+  # 4. RELEASE-READOUT — release / sprint summary
   # --------------------------------------------------------------------
   release-readout:
     name:
-      uk: "Підсумки релізу / спринта"
       en: "Release / Sprint Readout"
     target_length: 7
     max_length: 10

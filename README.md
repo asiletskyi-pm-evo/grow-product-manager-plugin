@@ -1,8 +1,8 @@
 # Grow Product Manager
 
-**Version:** 1.10.0
+**Version:** 1.11.0
 
-AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into Prom DS-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates.
+AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
@@ -236,28 +236,28 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 13. Design Bridge (v0.1.0) — NEW in v1.10.0
+### 13. Design Bridge (v0.2.0) — NEW in v1.10.0, brand-agnostic since v1.11.0
 
-**Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into Prom DS-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
+**Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into brand-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
 
 **Intents:**
-- **deck** — render a Google Slides-compatible `.pptx` (10×5.625") from `base_prom.pptx` using the Prom DS theme. 4 subtypes: feature-concept (10 slides), research-highlights (10 slides), ab-test-readout (6 slides), release-readout (7 slides)
+- **deck** — render a Google Slides-compatible `.pptx` (10×5.625") from the base template you configure in `local-context.md` (`product.base_pptx`). 4 subtypes: feature-concept (10 slides), research-highlights (10 slides), ab-test-readout (6 slides), release-readout (7 slides)
 - **prototype** — lo-fi / mid-fi / hi-fi prototype brief for Figma
 - **handoff** — developer-ready handoff spec (tokens, components, states, responsive breakpoints) with WCAG 2.1 AA a11y audit as blocker
 - **research-enrichment** — pull UI screenshots, competitor visuals, or DS references to augment research
 
-**Design plugin integration:** hooks 7 design skills (research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) via optional delegation, plus Figma MCP for DS sync (fileKey `bbjJ91HSixA5WCN0HMMJFz`).
+**Design plugin integration:** hooks 7 design skills (research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) via optional delegation, plus Figma MCP for DS sync. Your Figma DS `fileKey` lives in `local-context.md` → `product.figma.ds_file_key`.
 
-**Prom DS (confirmed from `base_prom.pptx` XML):**
-- Primary purple: `#7B04DF`
-- Dark hero bg: `#222223`
-- Typography: Montserrat + Montserrat ExtraBold
-- Canvas: 10×5.625" (Google Slides 16:9)
-- 11 real slide layouts in base template (title, section, two-col, metric, chart, quote, cta, etc.)
+**Brand configuration (from `local-context.md`):**
+- `product.brand.primary`, `product.brand.dark`, `product.brand.font_primary`, `product.brand.font_display`
+- `product.design_system_spec` — path to your DS token yaml
+- `product.pptx_theme` — path to your pptx theme yaml
+- `product.base_pptx` — path to your base pptx template
+- Canvas defaults to 10×5.625" (Google Slides 16:9)
 
 **A11y gates (WCAG 2.1 AA):** contrast 4.5:1 normal / 3.0:1 large, 44×44 touch targets, keyboard nav, screen-reader labels, motion controls. Handoff intent has a11y as blocker; deck intent has contrast as blocker + warnings for the rest.
 
-**Trigger phrases:** "create deck", "design handoff", "build prototype", "research enrichment", "apply Prom brand to deck", "run a11y audit"
+**Trigger phrases:** "create deck", "design handoff", "build prototype", "research enrichment", "apply brand to deck", "run a11y audit"
 
 ---
 
@@ -277,7 +277,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Plugin Configurator | v1.0.0 | Configure plugin for your organization |
 | Knowledge Library | v0.4.0 | Manage curated knowledge sources |
 | Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
-| Design Bridge | v0.1.0 | Orchestrate Prom DS-themed decks, prototypes, handoffs, and research enrichment |
+| Design Bridge | v0.2.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 
 ---
 
@@ -380,16 +380,9 @@ version: 1.0.0
 artifact_type: concept
 subtype: default
 scope: built-in
-languages: [uk, en]
+languages: [en]
 variables: [feature_name, problem_statement, ...]
 ---
-
-<!-- lang:uk -->
-# Концепт: {{feature_name}}
-## Проблема
-{{problem_statement}}
-...
-<!-- /lang:uk -->
 
 <!-- lang:en -->
 # Concept: {{feature_name}}
@@ -397,11 +390,13 @@ variables: [feature_name, problem_statement, ...]
 {{problem_statement}}
 ...
 <!-- /lang:en -->
+
+<!-- Add additional languages as needed, e.g. <!-- lang:es --> ... <!-- /lang:es --> -->
 ```
 
-### Built-in templates (shipped in v1.9.0 + v1.10.0)
+### Built-in templates (shipped in v1.9.0 + v1.10.0 + v1.11.0)
 
-12 seed templates, each in Ukrainian + English:
+12 seed templates, shipped in English; localize via additional `<!-- lang:xx -->` blocks:
 
 - `concept/default-v1` — PRD skeleton
 - `requirements/default-v1` — general feature requirements
@@ -430,9 +425,9 @@ Three-tier backup system to prevent data loss:
 
 ---
 
-## Design Bridge — Prom DS Integration (v1.10.0)
+## Design Bridge — Brand Integration (v1.11.0)
 
-The plugin now ships with a first-class integration with Claude's Design plugin, fronted by the `design-bridge` skill. Four upstream skills gained an optional **Step D** hook that offers to hand off results to design-bridge:
+The plugin ships with a first-class integration with Claude's Design plugin, fronted by the `design-bridge` skill. Four upstream skills gain an optional **Step D** hook that offers to hand off results to design-bridge:
 
 | Upstream skill | Design Bridge offers |
 |----------------|----------------------|
@@ -441,20 +436,17 @@ The plugin now ships with a first-class integration with Claude's Design plugin,
 | `brainstorm-features` | lo-fi prototype for top-1 hypothesis, or brainstorm readout deck |
 | `product-research` | research-highlights deck or research-enrichment (screenshots, DS refs) |
 
-### Prom DS source of truth
+### Bring-your-own brand
 
-- **Figma DS file key:** `bbjJ91HSixA5WCN0HMMJFz` (Prom Design System) — see `local-context.md` → Figma section
-- **Offline YAML cache:** `design-integration/02-prom-design-system-spec.yaml` — primary reference (Figma MCP View seat has rate limits)
-- **pptx render base:** `design-integration/assets/base_prom.pptx` — official Prom.ua template (16.8 MB, 16 slides, 11 real Google Slides layouts)
-- **Theme spec:** `design-integration/06-pptx-theme-prom.yaml` — 7 logical layouts mapped to real ones, typography scales, chart palette
+All brand specifics live **outside this repo** in your own `local-context.md`. The plugin reads:
 
-### Confirmed brand tokens
+- `product.figma.ds_file_key` — Figma `fileKey` of your brand's Design System file
+- `product.design_system_spec` — path to your DS tokens yaml (colors, typography, components, contrast pairs)
+- `product.pptx_theme` — path to your pptx theme yaml (logical layouts → real layouts, scales, palette)
+- `product.base_pptx` — path to your base pptx template (Google Slides–compatible 10×5.625" recommended)
+- `product.brand.primary`, `product.brand.dark`, `product.brand.font_primary`, `product.brand.font_display` — fallback tokens when the DS yaml is unavailable or partial
 
-- Primary purple: `#7B04DF`
-- Dark hero background: `#222223`
-- Typography: Montserrat (body) + Montserrat ExtraBold (display)
-- Canvas: 10×5.625" (Google Slides 16:9)
-- Chart palette: control `#5F6368`, treatment `#7B04DF`
+See `local-context.example.md` → **Design System** section for the full schema. If no brand config is set, design-bridge falls back to a neutral default (dark text on white, 4.5:1 contrast).
 
 ### A11y gates
 
@@ -490,11 +482,10 @@ The plugin includes reference materials for product management best practices an
 - `funnel-templates.md` — Standard funnel stage templates by product type
 - `template-protocol.md` — Multilingual template resolution protocol (Step T-0 → T-5, scoring, fallbacks, backup invariants)
 
-**Design Bridge references (new in v1.10.0):**
+**Design Bridge references:**
 - `skills/design-bridge/references/deck-subtypes.yaml` — slide-by-slide outlines for all 4 deck subtypes
 - `skills/design-bridge/references/figma-playbook.md` — Figma MCP auth, rate limits, common patterns
-- `skills/design-bridge/references/a11y-checklist.md` — WCAG 2.1 AA checklist + Prom pre-computed contrast pairs
-- `design-integration/` — 6 spec files + `assets/base_prom.pptx` render base
+- `skills/design-bridge/references/a11y-checklist.md` — WCAG 2.1 AA checklist + contrast pair schema
 
 See the plugin's `references/` folder for the complete list of available materials.
 
@@ -522,7 +513,7 @@ The Grow Product Manager plugin integrates with:
 
 - **Jira** — Task and issue management
 - **Confluence** — Document collaboration and publishing
-- **Figma** — Design and prototyping (Prom DS fileKey `bbjJ91HSixA5WCN0HMMJFz` preconfigured for design-bridge)
+- **Figma** — Design and prototyping (configure your brand's DS `fileKey` in `local-context.md` → `product.figma.ds_file_key`)
 - **Tableau / Looker** — Data visualization and metrics
 - **Google Calendar / Microsoft Calendar** — Meeting context and scheduling
 - **Fireflies.ai** — Meeting recording and transcription
@@ -537,6 +528,6 @@ The Grow Product Manager plugin integrates with:
 
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
-**Plugin Author:** Andrii  
-**Version:** 1.9.0  
+**Plugin Author:** Andrii Siletskyi  
+**Version:** 1.11.0  
 **Last Updated:** April 2026

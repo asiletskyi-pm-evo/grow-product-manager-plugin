@@ -113,7 +113,7 @@ If the product or feature area already exists (i.e., not being built from scratc
 - **If the user believes designs should exist but cannot provide a link** — offer to search:
   > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
   - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
-    - Try to understand the structure of the design system: look for sections like "Актуальний дизайн", "Current design", "Production", "Live", "Ready for dev", "Поточний стан"
+    - Try to understand the structure of the design system: look for sections like "Current design", "Production", "Live", "Ready for dev", "Latest state"
     - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
   - If Figma MCP is unavailable — follow `references/integration-strategy.md` fallback chain
 - **If no designs exist** — note this and proceed without design context
@@ -306,26 +306,26 @@ If the user declines — end the workflow gracefully.
 
 > Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
 
-Research синтез природно конвертується у research-highlights deck для розповсюдження серед команди / stakeholders. Через `AskUserQuestion`:
+Research synthesis naturally converts into a research-highlights deck for distribution among the team and stakeholders. Via `AskUserQuestion`:
 
 > "Research published. Create a design-side deliverable?"
-> 1. **Research highlights deck** — 10-slide dump з key themes, quotes, numbers — recommended для user research / UX benchmark результатів
-> 2. **Research-enrichment through design:research-synthesis** — пропустити raw interview notes через Claude Design's research-synthesis для deeper themes (якщо було user research з raw transcripts)
+> 1. **Research highlights deck** — 10-slide summary with key themes, quotes, and numbers — recommended for user research or UX benchmark results
+> 2. **Research-enrichment through design:research-synthesis** — pass raw interview notes through Claude Design's research-synthesis for deeper thematic analysis (if user research included raw transcripts)
 > 3. **Skip**
 
 IF user selects 1 → invoke `design-bridge` with:
 - `intent: deck`
 - `subtype: research-highlights`
 - `source: confluence_research_page_url`
-- `audience: team` (default; upgrade до `c-level` за запитом)
+- `audience: team` (default; upgrade to `c-level` upon request)
 - `length: 10`
 
 IF user selects 2 → invoke `design-bridge` with:
 - `intent: research-enrichment`
 - `source: raw interviews / survey responses`
-- design-bridge поверне structured themes — додай як appendix до research page
+- design-bridge will return structured themes — add as appendix to research page
 
-Fallback: якщо `design-bridge` не встановлений — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Не блокуй workflow.
+Fallback: if `design-bridge` is not installed — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Do not block the workflow.
 
 ## Quality standards
 

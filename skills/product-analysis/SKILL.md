@@ -633,7 +633,7 @@ Specialized mode for analyzing how a released feature affected product metrics. 
 ### PR-2. Gather metrics data
 
 **Identify affected metrics:**
-- From the requirements document: extract expected metric changes (from the "Метрики" section)
+- From the requirements document: extract expected metric changes (from the "Metrics" section)
 - From the feature scope: identify product-level metrics and funnels that could be affected (even if not explicitly listed in requirements)
 - Proactively suggest additional metrics that might be affected based on the nature of the change
 

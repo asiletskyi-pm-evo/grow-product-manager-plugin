@@ -105,7 +105,7 @@ If the requirements involve changing UI/UX for any user type, ask via AskUserQue
 - **If the user believes designs should exist but cannot provide a link** — offer to search:
   > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
   - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
-    - Try to understand the structure of the design system: look for sections like "Актуальний дизайн", "Current design", "Production", "Live", "Ready for dev", "Поточний стан"
+    - Try to understand the structure of the design system: look for sections like "Current design", "Production", "Live", "Ready for dev", "Latest state"
     - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
   - If Figma MCP is unavailable — follow `references/integration-strategy.md` fallback chain
 - **If no designs exist** — note this and proceed without design context
@@ -183,7 +183,7 @@ Ask the user via AskUserQuestion. Default options:
 
 **3d. Epic and feature numbering — combined approach:**
 
-- If Epic is known from context (passed from another skill or mentioned by user) → read Epic from Jira using `getJiraIssue`, count existing features in the tree using `searchJiraIssuesUsingJql` (JQL: `parent = EPIC-KEY`), determine next number → propose to user for confirmation (e.g., "Наступний номер фічі: PROJ-1234.3. Підтверджуєте?")
+- If Epic is known from context (passed from another skill or mentioned by user) → read Epic from Jira using `getJiraIssue`, count existing features in the tree using `searchJiraIssuesUsingJql` (JQL: `parent = EPIC-KEY`), determine next number → propose to user for confirmation (e.g., "Next feature number: PROJ-1234.3. Confirm?")
 - If Epic is unknown → ask the user for Epic key and feature number
 - Always show the proposed number to the user for confirmation before using it
 
@@ -238,7 +238,7 @@ If A/B Test or A/B/C Test approach is selected — automatically add these secti
 - Walk through each section
 - Collect feedback and make edits
 - May require multiple iterations
-- Only proceed to publishing after the user confirms "ОК"
+- Only proceed to publishing after the user confirms "OK"
 
 **Self-improvement check** (after corrections are applied and confirmed):
 
@@ -334,18 +334,18 @@ If the user declines — end the workflow gracefully.
 
 > Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
 
-Requirements часто є вхідною точкою для developer handoff та для low-fi prototype. Через `AskUserQuestion`:
+Requirements often serve as the entry point for developer handoff and low-fi prototypes. Via `AskUserQuestion`:
 
 > "Requirements published. Create a design-side deliverable?"
-> 1. **Developer handoff spec** — повна специфікація для фронту (tokens, components, states, breakpoints, a11y) — recommended якщо requirements включали UI changes
-> 2. **Low-fi UI prototype** — для візуальної валідації перед розробкою
-> 3. **Deck для dev-review** — 6-8 слайдів зі scope + UI flow + edge cases
+> 1. **Developer handoff spec** — complete specification for front-end (tokens, components, states, breakpoints, a11y) — recommended if requirements included UI changes
+> 2. **Low-fi UI prototype** — for visual validation before development
+> 3. **Deck for dev-review** — 6-8 slides with scope + UI flow + edge cases
 > 4. **Skip**
 
 IF user selects 1 → invoke `design-bridge` with:
 - `intent: handoff`
 - `source: requirements_page_url`
-- `a11y_audit: true` (обов'язково для handoff)
+- `a11y_audit: true` (mandatory for handoff)
 - `figma_context: from requirements_page OR ask user`
 
 IF user selects 2 → invoke `design-bridge` with:
@@ -355,11 +355,11 @@ IF user selects 2 → invoke `design-bridge` with:
 
 IF user selects 3 → invoke `design-bridge` with:
 - `intent: deck`
-- `subtype: feature-concept` (найближчий до requirements pitch)
+- `subtype: feature-concept` (closest match to requirements pitch)
 - `audience: dev_handoff`
 - `length: 6-8`
 
-Fallback: якщо `design-bridge` не встановлений — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Не блокуй workflow.
+Fallback: if `design-bridge` is not installed — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Do not block the workflow.
 
 ---
 

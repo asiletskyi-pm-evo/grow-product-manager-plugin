@@ -26,7 +26,7 @@ Starting with v1.9.0, the plugin has two sibling service skills:
 - **`knowledge-library`** (this skill) — curated **source material** (articles, benchmarks, research insights, internal docs)
 - **`template-library`** — **artifact templates** that shape generated outputs (concept, requirements, research, CJM, epic, task, presentation)
 
-If the user says anything about **templates** ("шаблон", "templates", "темплейт", "template for requirements"), delegate to `template-library`. If the user says anything about **sources / knowledge** ("sources", "джерело", "knowledge", "add this article"), stay here.
+If the user says anything about **templates** ("templates", "template for requirements"), delegate to `template-library`. If the user says anything about **sources / knowledge** ("sources", "knowledge", "add this article"), stay here.
 
 When ambiguous (e.g. "add this") ask one question via `AskUserQuestion`:
 > "Is this a **source** (article / research / benchmark) for the Knowledge Library, or a **template** for the Template Library?"
@@ -131,7 +131,7 @@ Optional — created for sources with rich insights:
 | **Export** | User: "export library" | Export as markdown table, CSV, or YAML |
 | **Verify** | Scheduled or user: "check sources" | Re-check freshness, validate URLs, recalculate trust |
 
-If the user says "template", "шаблон", "темплейт", or asks about generated artifact structure — delegate to `template-library` immediately. Do NOT add templates as "sources".
+If the user says "template" or asks about generated artifact structure — delegate to `template-library` immediately. Do NOT add templates as "sources".
 
 ---
 

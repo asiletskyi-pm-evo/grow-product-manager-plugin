@@ -269,18 +269,18 @@ Analyze the transcript (or summary + transcript) to extract structured informati
 
 **Decisions:**
 - Extract explicit decisions: statements where participants agreed on something
-- Look for language patterns: "we decided", "agreed to", "let's go with", "the decision is", "вирішили", "домовились", "обрали варіант"
+- Look for language patterns: "we decided", "agreed to", "let's go with", "the decision is"
 - For each decision: what was decided, context/rationale, who was responsible (if mentioned)
 
 **Action items:**
 - Extract tasks that someone committed to doing
-- Look for language patterns: "I'll do", "take this", "action item", "TODO", "зроблю", "візьму", "треба зробити"
+- Look for language patterns: "I'll do", "take this", "action item", "TODO"
 - For each action item: what needs to be done, who owns it, deadline (if mentioned)
 - Cross-reference with Fireflies action_items if available — merge, don't duplicate
 
 **Open questions:**
 - Extract unresolved discussions, questions left without a clear answer
-- Look for: "we need to figure out", "let's discuss later", "open question", "TBD", "треба з'ясувати", "повернемось до цього"
+- Look for: "we need to figure out", "let's discuss later", "open question", "TBD"
 
 **M5b. Type-specific blocks:**
 

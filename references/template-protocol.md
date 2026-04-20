@@ -215,7 +215,6 @@ Skills MUST NOT reimplement template search logic. All ranking / ask / render lo
       "version": "1.0.0",
       "tags": ["ab-test", "growth"],
       "name": {
-        "uk": "Вимоги до A/B-тесту",
         "en": "A/B Test Requirements"
       },
       "description": "A/B test requirements focused on checkout",

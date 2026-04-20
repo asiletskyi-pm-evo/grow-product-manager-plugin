@@ -1,150 +1,52 @@
 ---
 template_id: cjm-builtin-funnel
 schema_version: 1
-name:
-  uk: "CJM-звіт: аналіз воронки"
-  en: "CJM Report: Funnel Analysis"
+name: "CJM Report: Funnel Analysis"
 artifact_type: cjm
 subtype: funnel
 scope: built-in
 products: []
-default_language: uk
-available_languages: [uk, en]
+default_language: en
+available_languages: [en]
 version: "1.0.0"
 author: "grow-pm"
 created: 2026-04-17
 updated: 2026-04-17
 tags: [cjm, funnel, analysis]
-description:
-  uk: "Шаблон звіту CJM з кроками воронки, аномаліями та гіпотезами"
-  en: "CJM report template with funnel steps, anomalies, and hypotheses"
+description: "CJM report template with funnel steps, anomalies, and hypotheses"
 status: active
 min_plugin_version: "1.9.0"
 variables:
   - name: funnel_name
     type: string
     required: true
-    label:
-      uk: "Назва воронки"
-      en: "Funnel name"
+    label: "Funnel name"
   - name: product
     type: string
     required: false
-    label:
-      uk: "Продукт"
-      en: "Product"
+    label: "Product"
   - name: platform
     type: enum
     required: false
     options: [web, ios, android, all]
-    label:
-      uk: "Платформа"
-      en: "Platform"
+    label: "Platform"
   - name: period
     type: string
     required: true
-    label:
-      uk: "Період аналізу"
-      en: "Analysis period"
+    label: "Analysis period"
   - name: funnel_steps
     type: list
     required: true
-    label:
-      uk: "Кроки воронки (в порядку)"
-      en: "Funnel steps (in order)"
+    label: "Funnel steps (in order)"
   - name: anomalies
     type: list
     required: false
-    label:
-      uk: "Виявлені аномалії"
-      en: "Detected anomalies"
+    label: "Detected anomalies"
   - name: hypotheses
     type: list
     required: false
-    label:
-      uk: "Гіпотези покращення"
-      en: "Improvement hypotheses"
+    label: "Improvement hypotheses"
 ---
-
-<!-- lang:uk -->
-# CJM / Воронка: {{funnel_name}}
-
-**Період:** {{period}}
-{{#if product}}**Продукт:** {{product}}{{/if}}
-{{#if platform}}**Платформа:** {{platform}}{{/if}}
-
-## 1. Контекст
-
-Опис воронки, гіпотези, які перевіряємо, і джерела даних.
-
-## 2. Кроки воронки
-
-{{#each funnel_steps}}
-### {{@index}}. {{this}}
-- Вхід: TBD
-- Конверсія до наступного кроку: TBD %
-- Очікування (benchmark): TBD %
-- Δ: TBD
-
-{{/each}}
-
-## 3. Загальна воронка
-
-| Крок | Користувачі | Конверсія крок→крок | Загальна конверсія |
-|------|-------------|---------------------|--------------------|
-{{#each funnel_steps}}
-| {{this}} | TBD | TBD % | TBD % |
-{{/each}}
-
-## 4. Аномалії
-
-{{#if anomalies}}
-{{#each anomalies}}
-### {{this}}
-
-- Крок: TBD
-- Метрика: TBD
-- Відхилення: TBD
-- Потенційна причина: TBD
-
-{{/each}}
-{{else}}
-TBD.
-{{/if}}
-
-## 5. Порівняння з benchmarks / джерелами знань
-
-- TBD (з бібліотеки знань / CJM-протоколу)
-
-## 6. Гіпотези покращення
-
-{{#if hypotheses}}
-{{#each hypotheses}}
-- {{this}}
-{{/each}}
-{{else}}
-- TBD
-{{/if}}
-
-## 7. Пріоритизація (ICE)
-
-| Гіпотеза | Impact | Confidence | Ease | Score |
-|----------|--------|------------|------|-------|
-{{#if hypotheses}}
-{{#each hypotheses}}
-| {{this}} | TBD | TBD | TBD | TBD |
-{{/each}}
-{{/if}}
-
-## 8. Рекомендації
-
-- TBD
-
-## 9. Наступні кроки
-
-- TBD
-
-<!-- /lang:uk -->
 
 <!-- lang:en -->
 # CJM / Funnel: {{funnel_name}}

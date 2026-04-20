@@ -1,98 +1,97 @@
 # Figma Playbook
 
-Практичні рецепти, як design-bridge працює з Figma MCP. Deep-dive див. `design-integration/03-figma-mcp-config.md`.
+Practical recipes for how `design-bridge` works with the Figma MCP.
 
 ## Auth & permissions
 
 - Authenticate check: `whoami` (tool: `mcp__figma__whoami`).
-- Kiosk output містить: `email`, `handle`, `plans[]` (team keys, seat).
+- Response includes: `email`, `handle`, `plans[]` (team keys, seat).
 - Seat levels:
-  - **View** — читання: `get_screenshot`, `get_design_context`, `get_metadata`, `get_libraries`, `search_design_system`, `get_variable_defs`. Немає редагування.
-  - **Full / Editor** — усе вище + `use_figma` (створення frames), `add_code_connect_map`, `create_new_file`.
-- Andrii зараз має View на Prom + UAPROM LLC, Full на My drafts.
-- Для hi-fi prototype у Prom workspace → потрібна ескалація до Full seat або робота у My drafts.
+  - **View** — read-only: `get_screenshot`, `get_design_context`, `get_metadata`, `get_libraries`, `search_design_system`, `get_variable_defs`. No editing.
+  - **Full / Editor** — all of the above plus `use_figma` (create frames), `add_code_connect_map`, `create_new_file`.
+- If your seat in the brand workspace is **View**, hi-fi prototypes require either a seat upgrade to Full or doing the work in your personal "My drafts" space.
 
-## Знайти fileKey
+## Finding a `fileKey`
 
-**Figma MCP не має `list_team_files`.** Усі інструменти потребують вже відомого `fileKey`.
+**The Figma MCP does not expose `list_team_files`.** Every tool requires a known `fileKey`.
 
-Шляхи отримати `fileKey`:
+Ways to get a `fileKey`:
 
-1. **Manual** (основний путь): відкрий файл у браузері → URL вигляду `https://www.figma.com/design/<FILE_KEY>/<file-name>` або `/file/<FILE_KEY>/` → скопіюй сегмент після `/design/` чи `/file/`.
-2. **З web search** — спрацьовує тільки якщо файл публічний у Figma Community (Prom DS — приватний, не підійде).
-3. **Від людини** — попроси дизайнера/дизайн-ліда.
+1. **Manual** (main path): open the file in a browser → URL looks like `https://www.figma.com/design/<FILE_KEY>/<file-name>` or `/file/<FILE_KEY>/` → copy the segment after `/design/` or `/file/`.
+2. **Web search** — works only if the file is public in the Figma Community (most private DS files won't qualify).
+3. **Ask a human** — a designer or design lead.
 
-Коли отримаєш — додай у `local-context.md`:
+Once obtained, add it to `local-context.md` under the active product's Design System section:
 ```
-- **Design System file key:** ABC123xyz...
+- **Design System file key:** <FILE_KEY>
 - **Last DS sync:** YYYY-MM-DD
 ```
 
-## Поширені виклики
+## Common patterns
 
-### Sync brand tokens з DS
+### Sync brand tokens from the DS
+
 ```
-# Step 1: знайти libraries
-get_libraries(fileKey=DS_FILE_KEY) → повертає list libraries з library_key
-# Step 2: шукати colors / typography
+# Step 1: find libraries
+get_libraries(fileKey=DS_FILE_KEY) → returns list of libraries with library_key
+# Step 2: search colors / typography
 search_design_system(query="colors", fileKey=DS_FILE_KEY,
                      includeLibraryKeys=[DS_LIB_KEY],
                      includeVariables=true, includeStyles=true)
-# Step 3: отримати value defs
+# Step 3: get value defs
 get_variable_defs(fileKey=DS_FILE_KEY, variableIds=[...])
 ```
-Порівняй з `02-prom-design-system-spec.yaml` → статус `confirmed` якщо match; `placeholder` якщо розходиться → підніми PR-apдейт у yaml.
+Compare with the DS yaml at `product.design_system_spec` → status `confirmed` if values match; `placeholder` if drift → open a PR-style update against the yaml.
 
-### Embed screenshot у deck
+### Embed a screenshot in a deck
 
 ```
-get_design_context(nodeId=<node>, fileKey=<key>)  → TEXT контекст (layer names, variants)
+get_design_context(nodeId=<node>, fileKey=<key>)  → TEXT context (layer names, variants)
 get_screenshot(nodeId=<node>, fileKey=<key>)      → PNG, 2x resolution
 → store in temp, path passed to pptx add_picture()
 ```
 
-Рекомендація — разом з `get_screenshot` завжди запитати `get_design_context` для speaker-notes generation (назви шарів = контекст, що на слайді).
+Recommendation: alongside `get_screenshot`, always call `get_design_context` for speaker-notes generation (layer names are great context for what's on the slide).
 
 ### Concept → Prototype (hi-fi)
 
-Тільки з Full seat.
+Full seat only.
 ```
 use_figma(command="create_frame",
           fileKey=<target_file>,
           content=<generated spec>)
 ```
-Якщо seat=View → пропустити, запропонувати mid-fi HTML прототип (fallback через `diagram-prototyper`).
+If seat = View → skip and propose a mid-fi HTML prototype instead (fallback via `diagram-prototyper`).
 
 ### Handoff context
 
 ```
 get_metadata(fileKey=<key>, nodeId=<frame>)     → component names, variables used, styles
-get_variable_defs(fileKey=<key>, variableIds)   → точні tokens
+get_variable_defs(fileKey=<key>, variableIds)   → exact tokens
 ```
 
-Output → включаємо у `design:design-handoff` input як structured context.
+Pipe the output into `design:design-handoff` as structured context.
 
 ## Policy nuances
 
-- **Private files**: embed screenshots тільки у internal decks. Не публікуємо у external-facing deliverables.
-- **Competitor decks**: ніколи не ембедимо Figma з конкурентних досліджень, навіть якщо є посилання.
-- **Permission errors (403/404)** → graceful fallback placeholder: `[Дизайн: див. Figma {{url}}]` + warning у outline footer.
-- **Rate limits**: кешуй результати `get_screenshot` у temp; не викликай двічі для того самого `nodeId`.
+- **Private files**: embed screenshots only in internal decks. Never publish to external-facing deliverables.
+- **Competitor decks**: never embed Figma frames from competitive research, even if a link is provided.
+- **Permission errors (403/404)** → graceful fallback placeholder: `[Design: see Figma {{url}}]` + warning in the outline footer.
+- **Rate limits**: cache `get_screenshot` results in temp; do not call twice for the same `nodeId`.
 
-## Prom DS specifics
+## Brand DS configuration
 
-- `fileKey`: _TODO_ (див. local-context.md, потребує manual input)
-- `library_key`: _TODO_ (отримується після fileKey через `get_libraries`)
-- Brand invariants (підтверджені з `base_prom.pptx`):
-  - Primary: `#7B04DF`
-  - Dark: `#222223`
-  - Font primary: Montserrat
-  - Font display: Montserrat ExtraBold
-- Ці значення вже hardcoded у `02-prom-design-system-spec.yaml` зі статусом `confirmed`, тому відсутність fileKey НЕ блокує MVP.
+Brand-specific values live in `local-context.md` (not in this repo). The expected schema:
+
+- `product.figma.ds_file_key` — the Figma `fileKey` of the brand Design System file
+- `product.figma.library_key` — obtained via `get_libraries(fileKey)` on first sync
+- `product.brand.primary`, `product.brand.dark`, `product.brand.font_primary`, `product.brand.font_display` — brand tokens used when the DS yaml is unavailable or missing fields
+
+See `local-context.example.md` → Design System section for the full schema.
 
 ## Known limitations
 
-- `use_figma` не підтримує всі property сетти; перевіряй у docs на кожен виклик.
-- `get_screenshot` іноді повертає низький res для великих frames → використовуй `get_screenshot` для компактних node, а не entire page.
-- Components з variants потребують `variant` prop — якщо не заданий, фігма поверне default.
-- Ukrainian font characters: Montserrat + ExtraBold мають повний Cyrillic set, але іноді Figma підставляє Arial fallback — перевіряй screenshot на мові зберігання.
+- `use_figma` does not support every property setter; check the docs for each call.
+- `get_screenshot` sometimes returns low-res output for large frames → prefer calling it on compact nodes rather than an entire page.
+- Components with variants need a `variant` prop — if unset, Figma returns the default.
+- Non-Latin characters: verify that the brand font covers the target language's glyph set (e.g., Cyrillic, Greek, CJK). If the font falls back to a system default, screenshots may not match the design.
