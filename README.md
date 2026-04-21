@@ -531,3 +531,4 @@ For questions, issues, or feature requests, please refer to the plugin documenta
 **Plugin Author:** Andrii Siletskyi  
 **Version:** 1.11.0  
 **Last Updated:** April 2026
+
