@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 1.0.0
+version: 2.0.0
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist.
 ---
 
@@ -10,15 +10,18 @@ Configure the Grow Product Manager plugin for your organization. This skill coll
 
 Supports multiple organizations, products, and projects simultaneously.
 
-## Five Modes
+## Six Modes
 
 | Mode | When to use | What it does |
 |------|------------|--------------|
-| **Onboarding** | First launch, `local-context.md` doesn't exist anywhere | Full guided setup: user profile → organizations → products → teams → data sources → CJM → Knowledge Library → Obsidian Vault (optional) → review → validation. Saves all data to `~/.grow-pm/` |
+| **Onboarding (Basic)** | First launch, `local-context.md` doesn't exist anywhere; user picks Basic in Step 2 | Minimal guided setup: user profile → organizations → core product fields → connector pre-check → review → save. Other sections (CJM, Vault, Knowledge Library, Templates, Teams, etc.) are deferred — saved in `onboarding.deferred_steps` and can be added later. ~3-5 min. |
+| **Onboarding (Extended)** | First launch, user picks Extended in Step 2 | Full guided setup: every section configured (CJM, Knowledge Library, Templates, Obsidian Vault, Teams, Repos, full Tableau analytics). ~15-25 min. |
+| **Onboarding (Test sandbox)** | User invokes `dry-run onboarding` / picks Test in Step 2 | Walks the user through onboarding with all writes redirected to `~/.grow-pm-sandbox/`. Real data is untouched. Ends with a diff vs. real config and Discard / Promote / Keep menu. |
 | **Reinstall / Migration** | Plugin reinstalled, `~/.grow-pm/` contains existing data | Detect existing data, show to user, ask: use as-is / reconfigure / start fresh. Migrate schema if needed |
 | **Update** | `local-context.md` exists, user wants to change something | Edit a specific section: add product, update team, change dashboard URLs, add OKRs, manage Obsidian Vaults, etc. Always shows changelog |
 | **Validate** | User wants to check everything works | Test all MCP connections, verify data access, check context completeness, validate Obsidian Vault connectivity, produce readiness report |
 | **View** | User asks to see current config | Display current `local-context.md` contents in a readable format, allow inline edits via dialogue |
+| **Test (sandbox)** | User invokes `dry-run onboarding`, `test mode`, `тестовий режим`, or picks Test in Onboarding Step 2 | Walks the full Onboarding flow with all writes redirected to `~/.grow-pm-sandbox/`. Real `~/.grow-pm/` is NEVER touched. Ends with a diff vs. real config and a Discard / Promote / Keep menu. |
 
 ## Persistent Storage
 
@@ -64,6 +67,92 @@ At the start of execution, every skill MUST follow `references/local-context-pro
 - This is pre-v1.4.0 data → offer migration to `~/.grow-pm/` (see Reinstall / Migration mode)
 - If user agrees → migrate, then continue
 - If user declines → use in-place, warn about persistence risk
+
+## Workflow — Test Mode (sandbox)
+
+Test Mode lets the maintainer (and any user who wants to preview onboarding) walk through the full configuration flow without touching real plugin data. All writes are redirected to `~/.grow-pm-sandbox/`. The real `~/.grow-pm/` directory is **never** read or modified during a Test Mode run.
+
+### TM-0. Trigger detection
+
+Test Mode is entered when:
+- The user types one of: `dry-run onboarding`, `test mode`, `sandbox onboarding`, `тестовий режим`, `пройти налаштування без змін`.
+- The user picks **Test mode (sandbox)** in Onboarding Step 2.
+- The user explicitly invokes `configure plugin → test mode` from the Configurator menu.
+
+When Test Mode is detected, set `selected_mode = test` in session memory. Show a banner that persists across all subsequent steps:
+
+> "🧪 **TEST RUN** — All writes redirected to `~/.grow-pm-sandbox/`. Your real `~/.grow-pm/` is not touched."
+
+### TM-1. Sandbox isolation rules
+
+The following invariants MUST hold throughout a Test Mode session:
+
+| Operation | Production path | Test path |
+|-----------|----------------|-----------|
+| `local-context.md` | `~/.grow-pm/local-context.md` | `~/.grow-pm-sandbox/local-context.md` |
+| `.schema-version` | `~/.grow-pm/.schema-version` | `~/.grow-pm-sandbox/.schema-version` |
+| Knowledge Library | `~/.grow-pm/knowledge-library/` | `~/.grow-pm-sandbox/knowledge-library/` |
+| Template Library | `~/.grow-pm/template-library/` | `~/.grow-pm-sandbox/template-library/` |
+| Backups | `~/.grow-pm/backups/` | `~/.grow-pm-sandbox/backups/` |
+| Vault Mirror | enabled (mirrors to user's vault) | **fully skipped** — no Vault writes occur in Test Mode |
+
+Real `~/.grow-pm/` must NOT be read during Test Mode (otherwise Reinstall mode would trigger unwanted recovery flows). The sandbox is fully self-contained.
+
+The `local-context.md` produced in Test Mode has its title changed to:
+
+```markdown
+# Local Context — Grow Product Manager (TEST RUN)
+```
+
+so it is visually unambiguous if the user opens the file later.
+
+### TM-2. Walk through Onboarding (steps 1-16)
+
+Run the full Onboarding workflow (Steps 1-16) exactly as in production, but with the path mapping from TM-1. The user experiences the real flow — same questions, same connector pre-checks, same validation — only writes go to the sandbox.
+
+In Step 16 (Review + Save), the storage root is `~/.grow-pm-sandbox/`. The `Onboarding Status` section is populated with `last_test_run_at: {now}` (instead of `basic_completed_at` / `extended_completed_at`).
+
+**Skip Step 17 (Quick Wins)** in Test Mode — instead, proceed to TM-3 (the Test Mode finale).
+
+### TM-3. Test Mode finale — diff and decision
+
+After save:
+
+1. **Compute diff** vs. real config (if `~/.grow-pm/local-context.md` exists):
+   - Run `diff -u ~/.grow-pm/local-context.md ~/.grow-pm-sandbox/local-context.md` (or equivalent reading via the Read tool).
+   - Render the diff as a readable markdown block with `+` / `-` / context lines.
+   - Highlight high-impact differences: any change to required fields (`User Profile`, `Organization`, core `Product` fields, `Onboarding Status.mode`).
+
+2. **Present three options** via `AskUserQuestion`:
+
+   - **Discard sandbox (Recommended)** — delete `~/.grow-pm-sandbox/` entirely. Real config is unchanged. Inform: "Sandbox discarded. Your real configuration is unchanged."
+   - **Promote to real** — replace `~/.grow-pm/` content with sandbox content. **Before promoting, create a safety backup** at `~/.grow-pm/backups/pre-promote-{timestamp}/` containing the current real config. Then copy sandbox files over. Inform: "Promoted sandbox to `~/.grow-pm/`. A safety backup of your previous config is at `~/.grow-pm/backups/pre-promote-{timestamp}/`."
+   - **Keep sandbox for later** — leave `~/.grow-pm-sandbox/` in place. Future `dry-run onboarding` calls can re-use or re-overwrite it. Inform: "Sandbox kept at `~/.grow-pm-sandbox/`. You can re-run Test Mode any time."
+
+3. **Reset session memory** — clear `selected_mode = test` flag at the end so subsequent Configurator runs do not accidentally inherit Test Mode behavior.
+
+### TM-4. Safety guarantees
+
+- If any step in TM-2 fails, the failure must be confined to the sandbox. Real config remains intact.
+- If the user aborts mid-flow (Cancel / Quit), the sandbox is left as-is and the user is informed they can resume later or run `discard sandbox` to clean up.
+- The "TEST RUN" banner must be shown at least once in every visible message during Test Mode so the user never confuses Test Mode for a real run.
+- If Test Mode is invoked while a previous sandbox already exists, ask up front: "Continue from existing sandbox / Start fresh sandbox / Cancel".
+
+### TM-5. Verification matrix (for maintainers)
+
+After implementing or modifying Test Mode, verify each invariant:
+
+| # | Invariant | How to check |
+|---|-----------|--------------|
+| 1 | Real `~/.grow-pm/` is not modified | `stat -c %y ~/.grow-pm/local-context.md` before and after Test Mode — timestamp unchanged |
+| 2 | Sandbox `~/.grow-pm-sandbox/` exists after run | `test -d ~/.grow-pm-sandbox/` returns 0 |
+| 3 | Sandbox `local-context.md` has TEST RUN title | `grep "TEST RUN" ~/.grow-pm-sandbox/local-context.md` matches |
+| 4 | Onboarding Status mode = `last_test_run_at` set | `grep "Last test run at" ~/.grow-pm-sandbox/local-context.md` shows recent timestamp |
+| 5 | Vault Mirror was skipped | No new files in user's vault `_System/` folder |
+| 6 | Discard removes sandbox cleanly | `! test -e ~/.grow-pm-sandbox/` returns 0 |
+| 7 | Promote creates safety backup | `ls ~/.grow-pm/backups/pre-promote-*` shows new folder |
+
+---
 
 ## Workflow — Reinstall / Migration Mode
 
@@ -226,43 +315,109 @@ After migration completes:
 
 ## Workflow — Onboarding Mode
 
-### Step 1 — Welcome and auto-discovery
+### Step 1 — Welcome and onboarding map
 
-**1a. Greeting and explanation:**
+**1a. Greeting:**
 
-> "Welcome! I'll help you configure the Grow Product Manager plugin for your needs. We'll go through a few steps: profile, organizations, products, teams, and data sources. This will take ~5-10 minutes."
+> "Welcome! This configurator gets the plugin ready to work for your organization, products, and tools. Here's what we'll go through:"
 
-**1b. MCP auto-discovery — scan what's available:**
+**1b. Print the full onboarding map:**
 
-Before asking questions, proactively scan the session for available MCP connectors:
+| # | Step | Type | Basic | Extended | Approx. time |
+|---|------|------|-------|----------|--------------|
+| 1 | Welcome + map | info | — | — | 30 sec |
+| 2 | Basic vs Extended | choice | ✅ | ✅ | 30 sec |
+| 3 | Connector pre-check | auto | ✅ | ✅ | 30 sec |
+| 4 | User Profile | required | ✅ | ✅ | 1 min |
+| 5 | Organization | required | ✅ | ✅ | 1 min |
+| 6 | Product (core fields) | required | ✅ | ✅ | 1-2 min |
+| 6+ | Product (extended fields) | optional | — | ✅ | +2-3 min |
+| 7 | Analytics & Data Sources | hybrid | base URL | full | 1-3 min |
+| 8 | Key Metrics & OKRs | optional | — | ✅ | 1-2 min |
+| 9 | Teams | optional | ⏭️ later | ✅ | 1-3 min |
+| 10 | Repositories | optional | ⏭️ later | ✅ | 1 min |
+| 11 | CJM | optional | ⏭️ later | ✅ | 3-5 min |
+| 12 | Knowledge Library | optional | ⏭️ later | ✅ | 1-2 min |
+| 13 | Templates | optional | ⏭️ later (built-in only) | ✅ | 1-2 min |
+| 14 | Obsidian Vault | optional | ⏭️ later | ✅ | 3-5 min |
+| 15 | Custom Sections | optional | ⏭️ skip | ✅ | free-form |
+| 16 | Review + Save | required | ✅ | ✅ | 30 sec |
+| 17 | Quick Wins | info | ✅ | ✅ | 30 sec |
 
-- Check for Jira MCP → if found, try `getVisibleJiraProjects` to list available projects
-- Check for Confluence MCP → if found, try `getConfluenceSpaces` to list available spaces
-- Check for Figma MCP → if found, try `whoami` to verify access
-- Check for Notion MCP → if found, try `notion-get-teams` to verify access
-- Check for Google Calendar MCP → if found, note availability
-- Check for Gmail MCP → if found, note availability
-- Check for any other MCP connectors available in the session
+**Legend:**
+- ✅ — will be asked
+- ⏭️ later — skipped in Basic, can be added later via `configure plugin → add [section]`
+- ⏭️ skip — not asked at all in Basic
+- — — no user input
 
-**1c. Present discovery results:**
+> "Basic mode takes ~3-5 minutes; the plugin is immediately usable for `write-concept`, `requirements-creator`, `write-spec`, `brainstorm-features`, and `product-research`.
+> Extended mode takes ~15-25 minutes and configures every feature including CJM, Vault, and full Tableau analytics."
 
-Show the user what was found:
+**1c. Tip:**
 
-> "I scanned the available connections. Here's what I found:"
+> "I'd recommend starting with Basic. Any deferred step can be added later by saying `configure plugin → upgrade to Extended`, or by adding a single section like `add CJM` or `connect Obsidian`."
 
-| Integration | Status | Details |
-|-------------|--------|---------|
-| Jira | ✅ Connected | Projects found: PROJ-1, PROJ-2, ... |
-| Confluence | ✅ Connected | Spaces found: SPACE-1, SPACE-2, ... |
-| Figma | ✅ Connected | Account: user@company.com |
-| Notion | ❌ Not connected | — |
-| Tableau | ❌ Needs URL | We'll configure this later |
-| ... | ... | ... |
+### Step 2 — Choose mode
 
-For missing MCP connectors — note which skills benefit from them and offer to search the MCP registry:
-> "Notion MCP is not connected. It is used for publishing documents as an alternative to Confluence. Would you like to connect it?"
+Ask via AskUserQuestion:
 
-### Step 2 — User Profile
+- **Basic (Recommended)** — required steps only. Everything else is deferred and can be added later.
+- **Extended** — full setup of every feature.
+- **Test mode (sandbox)** — walk through onboarding without touching real data. All writes are redirected to `~/.grow-pm-sandbox/`. See "Workflow — Test Mode" below.
+- **Quit and read docs** — show README and exit.
+
+**Save the choice in session memory** as `selected_mode`. Each subsequent step reads this and decides whether to execute or defer.
+
+If `selected_mode == test` — switch all storage paths from `~/.grow-pm/` to `~/.grow-pm-sandbox/` for the rest of this session. Real data is never touched. See the Test Mode workflow for details.
+
+### Step 3 — Connector pre-check
+
+**3a. Scan available MCP connectors** in the session.
+
+For each known connector, attempt a lightweight ping:
+
+| Connector | Ping call | What it confirms |
+|-----------|-----------|------------------|
+| Jira | `getVisibleJiraProjects` | Auth + access |
+| Confluence | `getConfluenceSpaces` | Auth + access |
+| Figma | `whoami` | Auth |
+| Notion | `notion-get-teams` | Auth + workspace access |
+| Tableau | `search-content` (no terms, limit 1) | Auth + server reachable |
+| Fireflies | `fireflies_get_user` | Auth |
+| Google Calendar | `list_calendars` | Auth |
+| Gmail | `list_labels` | Auth |
+| Google Drive | `list_recent_files` | Auth |
+| Slack | (any read tool) | Auth |
+
+**3b. Score connectors against required-for-mode:**
+
+Build the readiness table:
+
+| Connector | Status | Required for Basic | Required for Extended | Used by skills |
+|-----------|--------|--------------------|-----------------------|----------------|
+| Jira | ✅/❌ | ⭐ Strongly recommended | ✅ Mandatory | `feature-task-creator`, `requirements-creator`, `write-spec` |
+| Confluence | ✅/❌ | ⭐ Strongly recommended | ✅ Mandatory | publishing skills |
+| Tableau | ✅/❌ | — | ⭐ Strongly recommended for CJM/AB | `product-analysis`, `cjm-research` |
+| Figma | ✅/❌ | — | optional | `product-research`, `design-bridge` |
+| Notion | ✅/❌ | optional | optional | publishing alternative |
+| Fireflies | ✅/❌ | — | optional | `meeting-processor` |
+| Google Drive | ✅/❌ | optional | optional | `product-research` |
+| Slack | ✅/❌ | — | optional | notifications |
+
+**3c. Action proposals:**
+
+If a `Mandatory` connector is missing for the chosen mode → propose `search_mcp_registry` + `suggest_connectors` BEFORE proceeding. Offer:
+- **Connect now** — Configurator pauses, the user makes the connection, then says "continue" → Configurator re-runs the ping for that connector and continues.
+- **Continue without** — Configurator records `deferred_connectors: [...]` in session memory; surface the gap in Step 17 Quick Wins.
+- **Quit and finish later** — exit; next launch enters Reinstall mode and re-asks.
+
+If only `Strongly recommended` connectors are missing → mention them as warnings, do not block.
+
+**3d. Persist findings:**
+
+Save in session memory: `connector_inventory: { connected: [...], missing: [...], blocking: [...] }`. Used by Step 7 (Analytics) and Step 17 (Quick Wins).
+
+### Step 4 — User Profile
 
 Ask via AskUserQuestion:
 
@@ -274,7 +429,7 @@ Ask via AskUserQuestion:
 **Auto-discover Jira account:**
 If Jira MCP is available, use `lookupJiraAccountId` with the provided email to find and store the user's Jira accountId.
 
-### Step 3 — Organizations
+### Step 5 — Organizations
 
 **3a. Multi-org support — ask via AskUserQuestion:**
 
@@ -292,11 +447,14 @@ If Jira MCP is available, use `lookupJiraAccountId` with the provided email to f
 | Jira instance URL | Auto from MCP, confirm with user | ✅ Extract from Jira MCP base URL |
 | Confluence instance URL | Auto from MCP, confirm with user | ✅ Extract from Confluence MCP base URL |
 
-### Step 4 — Products (per organization)
+### Step 6 — Products (per organization)
+
+> **Mode gate:** **Basic** mode collects only core product fields (name, description, platforms, Jira project key, Confluence space). Extended fields (locales, OKRs, metric_targets, competitors, custom dashboards, A/B test dashboards) are deferred. **Extended** mode collects every field.
+
 
 **4a. Product discovery — combine auto + manual:**
 
-If Jira projects were discovered in Step 1:
+If Jira projects were discovered in Step 3:
 > "I found these projects in Jira: [list]. Which of them are your products? Some projects may belong to the same product."
 
 Help the user map Jira projects → Products (may be 1:1 or many:1).
@@ -340,7 +498,10 @@ If Confluence spaces were discovered:
 
 Collect: name, URL for each competitor. Minimum 2-3 recommended.
 
-### Step 5 — Analytics & Data Sources (per organization)
+### Step 7 — Analytics & Data Sources (per organization)
+
+> **Mode gate:** **Basic** mode collects only the Tableau base URL (and analytics tool names if mentioned by the user). All extended fields — datasource URLs, Pulse metric IDs, A/B test dashboards per platform, Google Sheets, Amplitude/Mixpanel/Custom BI — are deferred (`onboarding.deferred_steps += ['tableau-full', 'analytics-extended']`). **Extended** mode collects every field below.
+
 
 **5a. Analytics tools:**
 
@@ -350,12 +511,32 @@ For each tool mentioned, collect the base URL and any product-specific dashboard
 
 | Tool | What to collect |
 |------|----------------|
-| **Tableau** | Base URL, A/B test dashboard URLs (per platform), main product dashboards |
+| **Tableau** | Base URL, Site Name (if non-default), A/B test dashboard URLs (per platform), main product dashboards, Datasource URLs (for `query-datasource`), Pulse metric IDs (for `list-pulse-metrics-*`) |
 | **Google Analytics** | Property IDs or dashboard URLs |
 | **Amplitude** | Workspace URL |
 | **Mixpanel** | Project URL |
 | **Custom BI** | Dashboard URLs |
 | **Google Sheets** | Key shared spreadsheets with metrics |
+
+**5a-Tableau. Tableau full setup (Extended mode only):**
+
+If the user added Tableau in Step 5a, collect the additional fields below. **Skip in Basic mode** — they go to `onboarding.deferred_steps` as `tableau-full`.
+
+If Tableau MCP is available:
+1. Try `search-content` with no terms (limit 1) — verify the connector responds.
+2. Confirm the resolved Server URL and Site Name with the user (auto-fill `tableau_base_url`, `tableau_site_name`).
+
+For all users (regardless of MCP availability):
+
+| Field | What to ask | local-context.md key |
+|-------|-------------|----------------------|
+| Site Name (optional) | "Is your Tableau site the default site, or do you use a named site?" | `organization.tableau_site_name` |
+| Datasource URLs (optional) | "Do you have key published datasources with product metrics? Paste the URL for 1-3 of them with a friendly name." | `organization.tableau_datasource_urls` (map: name → URL) |
+| Pulse Metric IDs (optional) | "If your Tableau Pulse is enabled — would you like to wire 2-3 key metrics for fast health checks? I can list available metrics and you pick." | `organization.tableau_pulse_metric_ids` (map: name → metric ID) |
+
+For Pulse Metric IDs — if Tableau MCP is available and the admin has enabled Pulse, call `list-all-pulse-metric-definitions` and present the user with a multi-select to pick the most relevant metrics; save selected definition IDs.
+
+If Tableau MCP is NOT available — skip Datasource URLs and Pulse Metric IDs (they require MCP to be useful) and note this in `onboarding.deferred_steps` as `tableau-mcp-required`.
 
 **5b. A/B test dashboards (critical for Product Analysis):**
 
@@ -370,7 +551,10 @@ Collect per platform (e.g., Dashboard 1 for Web, Dashboard 2 for Mobile).
 - Figma workspace/team URL
 - Notion workspace (if used alongside Confluence)
 
-### Step 6 — Key Metrics & OKRs (per product)
+### Step 8 — Key Metrics & OKRs (per product)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `key-metrics` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
 
 > "What are the key metrics you track for this product?"
 
@@ -390,7 +574,10 @@ If yes — collect objectives and key results. These help skills align hypothese
 
 Collect target values for metrics that have them (e.g., "Conversion Rate → +2% this quarter").
 
-### Step 7 — Teams (per organization)
+### Step 9 — Teams (per organization)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `teams` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
 
 > "Would you like to configure team information? This will help when creating tasks in Jira."
 
@@ -407,7 +594,10 @@ If Jira MCP is available and a product's Jira project is known:
 - Extract common assignees and their roles
 - Present to user for confirmation
 
-### Step 8 — Repositories & CI/CD (per product, optional)
+### Step 10 — Repositories & CI/CD (per product, optional)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `repos` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
 
 > "Would you like to add repository and CI/CD information? (for future skills)"
 
@@ -416,11 +606,14 @@ If yes:
 - CI/CD pipeline URLs
 - Environment URLs (staging, production)
 
-### Step 9 — CJM Configuration (per product, optional)
+### Step 11 — CJM Configuration (per product, optional)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `cjm` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
 
 > "Do you use Customer Journey Map (CJM) analysis in your product work? This enables funnel analysis, anomaly detection, and improvement hypothesis generation."
 
-If no → skip to Step 10.
+If no → skip to Step 12.
 
 If yes:
 
@@ -448,7 +641,7 @@ See `references/funnel-templates.md` for full template definitions.
 For each funnel stage:
 > "Which dashboard shows data for **[Stage name]**?"
 
-Collect dashboard URLs (Tableau, GA, or other). If the user already provided dashboard URLs in Step 5 — suggest mapping those first.
+Collect dashboard URLs (Tableau, GA, or other). If the user already provided dashboard URLs in Step 7 — suggest mapping those first.
 
 **9d. Set baseline conversions:**
 
@@ -474,11 +667,14 @@ Collect dashboard URLs (Tableau, GA, or other). If the user already provided das
 | Default platforms | All configured | All / Specific |
 | Default search modes | Library + Internet | User selects from available modes |
 
-### Step 10 — Knowledge Library Setup (optional)
+### Step 12 — Knowledge Library Setup (optional)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `knowledge-library` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
 
 > "Would you like to set up a Knowledge Library? It stores curated sources (articles, benchmarks, UX best practices) that enrich CJM analysis and research."
 
-If no → skip to Step 11.
+If no → skip to Step 14.
 
 If yes → delegate to `knowledge-library` skill onboarding workflow (KL-1 through KL-6). The Knowledge Library skill handles:
 1. Directory structure initialization
@@ -487,9 +683,12 @@ If yes → delegate to `knowledge-library` skill onboarding workflow (KL-1 throu
 4. Default search modes
 5. Confluence and Google Drive search validation
 
-After Knowledge Library setup completes, continue with Step O-T.
+After Knowledge Library setup completes, continue with Step 13.
 
-### Step O-T — Template Library Setup (optional)
+### Step 13 — Template Library Setup (optional)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `templates` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
 
 > Requires: `references/template-protocol.md` (full resolution protocol) and `skills/template-library/SKILL.md` (CRUD actions)
 
@@ -580,68 +779,46 @@ templates:
 
 > "Template Library initialized at {storage_root}/Templates/. Registry: {N} built-in + {K} user templates. Preference: {smart|auto|always_ask}."
 
-Then proceed to Step 11.
+Then proceed to Step 14.
 
-### Step 11 — Obsidian Vault (Optional)
+### Step 14 — Obsidian Vault (Optional)
 
-> Requires: `references/vault-protocol.md`, `references/vault-schema.md`
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `obsidian-vault` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
 
-Present the Vault option to the user:
 
-> "Would you like to connect an Obsidian Vault to accumulate knowledge over time? This is optional — the plugin works fully without it."
+> Requires: `references/obsidian-setup-guide.md`, `references/vault-protocol.md`, `references/vault-schema.md`
 
-Options via AskUserQuestion:
-- **Yes, connect Vault** → proceed with vault setup
-- **Skip for now** → complete onboarding without Vault section
-- **What is this?** → brief explanation, then re-ask
+This step is fully delegated to the **Obsidian Setup Guide** (`references/obsidian-setup-guide.md`), which provides step-by-step instructions with explicit ✅/⚠️/❌ validation at every substep:
 
-**IF user chooses to connect:**
+1. **P-1**: Pre-flight — does the user have Obsidian installed?
+2. **P-2**: Create vault (if needed)
+3. **P-3**: Pre-flight summary
+4. **S-1**: Vault path with validation (directory exists, `.obsidian/` exists)
+5. **S-2**: Plugin folder name (regex validation)
+6. **S-3**: Write/read permission test (creates `.write-test`, reads back, deletes)
+7. **S-4**: Products binding (single product auto-binds; multi-product asks)
+8. **S-5**: Sync mode (auto / manual / read-only)
+9. **S-6**: Optional Obsidian MCP detection (L1 vs L2)
+10. **S-7**: Folder initialization (per `vault-protocol.md`)
+11. **S-8**: Smoke test (read-back validation)
+12. **S-9**: Save `## Obsidian Vaults` section to `local-context.md` and run Vault Mirror Protocol
 
-1. **Ask for Vault path:**
-   > "What is the absolute path to your Obsidian Vault folder? This is the root folder that contains the `.obsidian/` subfolder."
-   - Validate: directory exists
-   - Validate: `.obsidian/` subdirectory exists (warning if not — may not be an Obsidian vault)
+The guide also includes a Common errors and recovery table for each likely failure mode (path missing, no `.obsidian/`, permission denied, MCP ping failed, partial init, smoke test fails).
 
-2. **Ask for Plugin folder name** (default: `GrowPM`):
-   - Validate: no special characters except `-` and `_`
+**Multi-vault support**: after S-9 completes, ask via `AskUserQuestion`: "Add another vault?" — if yes, repeat the full P-1..S-9 cycle for the next vault.
 
-3. **Ask for Products binding:**
-   - If single product → auto-bind to `all`
-   - If multiple products → ask: "Should this vault store artifacts for all products, or specific ones?"
-     - `all` → this vault handles everything
-     - Specific → select which products
+**On completion**, show the user a single summary card listing all configured vaults, paths, sync modes, and vault levels. Then proceed to Step 15.
 
-4. **Ask for Sync mode** via AskUserQuestion:
-   - **Auto (recommended)** — save artifacts automatically after each skill
-   - **Manual** — ask before each save
-   - **Read-only** — only search vault for context, don't write
+### Step 15 — Custom Sections
 
-5. **Ask about additional vaults:**
-   > "Do you want to add another Vault? (e.g., a separate vault for a specific product)"
-   - If yes → repeat steps 1-4 for next vault
-   - If no → proceed
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `custom-sections` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
 
-6. **Execute vault initialization** (per `references/vault-protocol.md` → Vault Initialization):
-   - Create folder structure in each configured vault
-   - Create product subfolders for bound products
-   - Write template files
-   - Create initial Dashboard MOC
-   - Copy local-context.md as reference
-   - Migrate existing knowledge-library files (if found in `~/.grow-pm/knowledge-library/`)
-   - Create `.vault-schema-version` file
-
-7. **Save to local-context.md** — add the `## Obsidian Vaults (Optional)` section with all configured vaults
-
-8. **Display summary:**
-   > "Vault connected! Created {N} folders and {M} templates at {path}/{folder}/. Your artifacts will now be automatically saved to this vault."
-
-### Step 12 — Custom Sections
 
 > "Is there any additional information you'd like to save in the plugin context? For example: strategy documents, internal guidelines, specific processes."
 
 Allow free-form markdown sections with custom titles.
 
-### Step 13 — Review, confirm, and save local-context.md
+### Step 16 — Review, confirm, and save local-context.md
 
 **13a. Compile summary for review:**
 
@@ -728,6 +905,17 @@ Format:
 - **Name:** ...
 - **Role:** ...
 ...
+
+## Onboarding Status
+
+<!-- This section is auto-managed by Plugin Configurator. Do not edit manually. -->
+
+- **Mode:** [basic | extended]
+- **Basic completed at:** [timestamp]
+- **Extended completed at:** [timestamp or "not yet"]
+- **Last test run at:** [timestamp or "never"]
+- **Deferred steps:** [list of step keys deferred — e.g., obsidian-vault, cjm, templates]
+- **Skip nudges:** [true | false]
 
 ## Organization: [Name]
 ...
@@ -828,14 +1016,26 @@ Format:
 
 **13d. Save to persistent storage:**
 
-1. Create `~/.grow-pm/` directory if it doesn't exist (with permissions 700 on Unix)
-2. Save `local-context.md` to `~/.grow-pm/local-context.md`
-3. Create `~/.grow-pm/.schema-version` with the current plugin version
-4. Confirm to the user: "Configuration saved to ~/.grow-pm/. This data will persist across plugin reinstalls and updates."
+1. Determine storage root:
+   - **Test mode** (`selected_mode == test`) → `~/.grow-pm-sandbox/` (real `~/.grow-pm/` is NEVER touched)
+   - **All other modes** → `~/.grow-pm/`
+2. Create the storage root directory if it doesn't exist (with permissions 700 on Unix)
+3. Save `local-context.md` to `{storage_root}/local-context.md`
+4. Create `{storage_root}/.schema-version` with the current plugin version
+5. **Stamp the Onboarding Status section** in `local-context.md`:
+   - `mode: basic` or `mode: extended` (from `selected_mode`)
+   - `basic_completed_at: {now}` if mode is basic
+   - `extended_completed_at: {now}` if mode is extended (and `basic_completed_at` if not already set)
+   - `last_test_run_at: {now}` if mode is test
+   - `deferred_steps: [...]` from session memory
+   - `skip_nudges: false` (default)
+6. Confirm to the user:
+   - Production: "Configuration saved to `~/.grow-pm/`. This data will persist across plugin reinstalls and updates."
+   - Test mode: "TEST RUN — configuration saved to `~/.grow-pm-sandbox/`. Your real configuration was not touched. Continue to Test Mode finale for diff and Discard / Promote / Keep options."
 
 **13e. Vault Mirror Sync:**
 
-After saving to `~/.grow-pm/`, if Obsidian Vault is configured (Step 11 was completed):
+After saving to `~/.grow-pm/`, if Obsidian Vault is configured (Step 14 was completed):
 1. Execute Vault Mirror Protocol (VM-1 through VM-3 from `references/persistent-storage.md`)
 2. Copy `local-context.md` → `{vault}/{plugin_folder}/_System/local-context.md`
 3. Copy `.schema-version` → `{vault}/{plugin_folder}/_System/.schema-version`
@@ -848,15 +1048,15 @@ This ensures the vault always has an up-to-date copy of all user context, servin
 
 After saving, automatically run a quick validation (see Validate Mode) to confirm everything works. Present the readiness report.
 
-**13g. Template Library final invitation (only if user skipped Step O-T earlier):**
+**13g. Template Library final invitation (only if user skipped Step 13 earlier):**
 
-If `onboarding.templates_setup_completed` is `false` (user chose "Skip for now" during Step O-T), offer one more nudge after validation:
+If `onboarding.templates_setup_completed` is `false` (user chose "Skip for now" during Step 13), offer one more nudge after validation:
 
 > "Plugin configured and ready! The built-in templates are available out of the box. If you want to set up custom templates now, you can: import from a folder, import from Confluence, or create a new one. Otherwise just say 'manage templates' any time later."
 
 If the user confirms → delegate to `template-library` with the chosen action.
 
-If Step O-T was already completed (user set up Template Library in Step O-T), skip this step and go directly to the final summary.
+If Step 13 was already completed (user set up Template Library in Step 13), skip this step and go directly to the final summary.
 
 **After template setup completes**, return confirmation:
 > "Setup complete. Here's a summary of what's configured:"
@@ -867,6 +1067,25 @@ If Step O-T was already completed (user set up Template Library in Step O-T), sk
 > - Obsidian Vaults: [N vaults connected / not configured]
 > - Templates: [number] templates saved / library initialized / skipped
 > "You're ready to start! Try: 'brainstorm features for [product]' or 'write requirements for [feature name]'"
+
+---
+
+### Step 17 — Quick Wins
+
+After successful save and validation, present 2-3 concrete next-step recommendations the user can act on immediately.
+
+**Generate from session context:**
+
+- If `connector_inventory.missing` includes `Tableau` → "Connect the Tableau MCP connector — it unlocks `product-analysis` and `cjm-research` with native data access."
+- If at least one product has a Jira project key → "Try: `create requirements for [feature]` — I'll generate a Confluence-ready spec."
+- If `onboarding.mode == basic` → "When you want full setup later, say: `configure plugin → upgrade to Extended`. Or add one section: `add CJM`, `connect Obsidian`, `set up templates`."
+- If `onboarding.mode == basic` and `cjm` is in `deferred_steps` → "Want to run CJM analysis without setting it up first? Just say `analyze CJM funnel for [product]` — I'll ask for the basics and offer to save them as your CJM config at the end."
+- If `vault_level == L0` (Obsidian Vault not configured) → "When you have 5 minutes, connect an Obsidian Vault — your concepts, requirements, research, and CJM reports will mirror into your knowledge base automatically."
+- If `connector_inventory.missing` includes `Confluence` → "Connect Confluence MCP — it unlocks publishing of requirements and concepts."
+
+Present each recommendation as an option in `AskUserQuestion` so the user can immediately invoke the suggested action without typing the command.
+
+**End of Onboarding workflow.**
 
 ---
 
@@ -975,7 +1194,7 @@ The changelog must include:
 
 ### V-1. Read context and scan
 
-Read `local-context.md` and scan all MCP connectors (same as Onboarding Step 1b).
+Read `local-context.md` and scan all MCP connectors (same as Onboarding Step 3a).
 
 ### V-2. Test MCP connections
 
@@ -987,7 +1206,7 @@ For each integration referenced in the context:
 | **Confluence** | `getConfluenceSpaces` + check configured space exists | Space accessible |
 | **Figma** | `whoami` | Account verified |
 | **Notion** | `notion-get-teams` | Workspace accessible |
-| **Tableau** | Navigate to dashboard URL via browser | Page loads |
+| **Tableau** | If Tableau MCP available: `search-content` (no terms, limit 1) returns metadata. Else navigate to dashboard URL via browser | Connector responds / page loads |
 | **Google Sheets** | Navigate to sheet URL via browser | Sheet loads |
 
 ### V-3. Test data access
@@ -1121,7 +1340,7 @@ If no changes were made — simply end the mode.
 
 ## Changelog Protocol (applies to ALL modes that modify local-context.md)
 
-Every time `local-context.md` is modified — whether by Onboarding (Step 13), Update, View, or Enrichment from other skills — the user MUST receive a changelog report showing:
+Every time `local-context.md` is modified — whether by Onboarding (Step 16), Update, View, or Enrichment from other skills — the user MUST receive a changelog report showing:
 
 1. **What was added** (new fields, new sections, new items in lists)
 2. **What was changed** (previous value → new value)
@@ -1221,7 +1440,7 @@ This skill (`plugin-configurator`) must bump its own version when its SKILL.md i
 - Always show what was discovered vs. what the user needs to provide manually
 - Pre-fill fields from auto-discovery, but always confirm with the user
 - Preserve custom sections during updates
-- Use Ukrainian or English based on user's language preference (ask in Step 2 if Onboarding, read from context if Update/Validate)
+- Use Ukrainian or English based on user's language preference (ask in Step 4 if Onboarding, read from context if Update/Validate)
 - When communicating CJM template selection — always name the template and list the stages
 
 ## Additional Resources
@@ -1235,5 +1454,5 @@ This skill (`plugin-configurator`) must bump its own version when its SKILL.md i
 - **`references/funnel-templates.md`** — standard funnel stage templates by product type
 - **`references/vault-protocol.md`** — Obsidian Vault initialization, folder structure, artifact management
 - **`references/vault-schema.md`** — Vault schema definition, template formats, metadata storage
-- **`references/template-protocol.md`** — template resolution protocol used by Step O-T and consumer skills
+- **`references/template-protocol.md`** — template resolution protocol used by Step 13 and consumer skills
 - **`skills/template-library/SKILL.md`** — CRUD actions and wizards for the Template Library

@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.3.0
+version: 0.3.1
 description: Conduct CJM (Customer Journey Map) research — detect funnel anomalies, generate improvement hypotheses, and build prioritized backlogs. Use when the user asks to "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", or needs end-to-end funnel analysis with enrichment from knowledge sources.
 ---
 
@@ -71,11 +71,21 @@ Follow `references/local-context-protocol.md` — Step 0:
 
 **1b. CJM configuration check (mandatory):**
 
-Follow `references/local-context-protocol.md` — Step 0f:
-- Read CJM Configuration section from `local-context.md`
-- Load: funnel template, stages with dashboard URLs, baseline conversions, anomaly thresholds, default analysis settings
-- If CJM Configuration is missing → inform user and chain to `plugin-configurator` in Update mode:
-  > "CJM is not configured for this product yet. Let's set it up — it takes ~2 minutes."
+Follow `references/local-context-protocol.md` — Step 0f.
+
+**If CJM Configuration is present:** load funnel template, stages with dashboard URLs, baseline conversions, anomaly thresholds, default analysis settings; continue.
+
+**If CJM Configuration is missing:** present three options via `AskUserQuestion`:
+
+1. **Run Plugin Configurator → Step 11 (full CJM setup)** — ~3-5 min, saves permanently.
+2. **Quick CJM setup (Recommended)** — collect ad-hoc config for this run, then offer to save it to `local-context.md` before running the analysis. See Quick CJM setup in `references/local-context-protocol.md` Step 0f.
+3. **Skip CJM mode** — exit gracefully; the user can re-invoke later.
+
+For Quick CJM setup: collect funnel template/stages, dashboard URLs (propose mapping any URL the user already pasted), thresholds (defaults Warning 10%, Critical 25%), comparison baseline, platforms. Before launching the analysis, ask:
+
+> "I've assembled a CJM configuration for this analysis. Save it to `local-context.md` so I don't have to ask next time?"
+
+If the user accepts → invoke the Enrichment Protocol from `references/local-context-protocol.md`, write the CJM Configuration section, and show the changelog. Proceed with the analysis regardless of save decision.
 
 **1c. Knowledge Library availability check (optional):**
 
@@ -441,7 +451,7 @@ Assemble the final report based on the selected mode. Use the user's preferred l
    | Stage | Metric | Baseline | Actual | Deviation | Severity | Trend |
 4. Recommendations (brief next steps for each critical/warning anomaly)
 5. Glossary (explain all terms, metrics, jargon)
-6. Sources (data sources used: Tableau, Google Sheets, etc.)
+6. Sources (data sources used, grouped by type. Tableau-sourced data marked as `tableau-mcp` or `tableau-web` so the user can audit the retrieval method)
 ```
 
 ### Report Format — Health-Check Summary (mode: `health-check`)
@@ -561,7 +571,7 @@ After publishing, provide a structured summary:
 - **Key findings:** top 3-5 findings
 - **Hypotheses generated:** count, top 3 by ICE score (if applicable)
 - **Health score:** current score and delta vs previous (if applicable)
-- **Sources used:** list by type (Tableau, Knowledge Library, Web, Baymard, Confluence, GDrive)
+- **Sources used:** list by type (Tableau [`tableau-mcp` / `tableau-web`], Knowledge Library, Web, Baymard, Confluence, GDrive)
 
 **After presenting the report, proactively ask for feedback:**
 

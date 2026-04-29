@@ -7,6 +7,7 @@ This document defines the complete structure of `local-context.md` — the organ
 ```
 local-context.md
 ├── User Profile
+├── Onboarding Status (auto-managed)
 ├── Organizations (1+)
 │   ├── Organization metadata
 │   ├── Integrations & Data Sources
@@ -38,6 +39,19 @@ local-context.md
 | jira_account_id | optional | Feature Task Creator | Jira accountId (auto-discovered if Jira MCP available) |
 | language | ✅ | All skills | Preferred language for skill output (uk/en) |
 
+### Onboarding Status (required, auto-managed by Configurator)
+
+| Field | Required | Used by | Description |
+|-------|----------|---------|-------------|
+| onboarding.mode | ✅ | All skills | `basic` or `extended` (managed by Configurator) |
+| onboarding.basic_completed_at | ✅ | Configurator | Timestamp when Basic onboarding finished |
+| onboarding.extended_completed_at | optional | Configurator | Timestamp when Extended onboarding finished |
+| onboarding.last_test_run_at | optional | Configurator | Timestamp of last Test (sandbox) run |
+| onboarding.deferred_steps | optional | All skills | List of step keys deferred during Basic (`cjm`, `knowledge-library`, `templates`, `obsidian-vault`, `teams`, `okrs`, `competitors`, `tableau-full`, `repos`, `custom-sections`) |
+| onboarding.skip_nudges | optional | All skills | If `true`, suppress upgrade-to-Extended nudges from skills (default `false`) |
+
+Skills check `onboarding.mode` and `onboarding.deferred_steps` to decide whether to nudge the user toward Extended setup before running. The Configurator manages this section automatically — users do not edit it directly.
+
 ### Organization (required, 1+)
 
 | Field | Required | Used by | Description |
@@ -52,6 +66,9 @@ local-context.md
 | Field | Required | Used by | Description |
 |-------|----------|---------|-------------|
 | tableau_base_url | optional | Product Analysis | Tableau server URL (e.g., https://tableau.company.dev) |
+| tableau_site_name | optional | Product Analysis | Tableau site name (only if non-default site is used) |
+| tableau_datasource_urls | optional | Product Analysis | Map of datasource name → URL (used by `query-datasource`) |
+| tableau_pulse_metric_ids | optional | Product Analysis | Map of metric name → Pulse metric ID (used by `list-pulse-metrics-*`, `generate-pulse-insight-brief`) |
 | ab_test_dashboards | optional | Product Analysis (A/B Test mode) | List of A/B test dashboard URLs with platform labels |
 | google_sheets_sources | optional | Product Analysis | Key Google Sheets with metrics |
 | figma_workspace | optional | Product Research, Write Concept, Brainstorm | Figma workspace/team URL |
@@ -134,6 +151,7 @@ Users can add any additional sections with free-form markdown content. The confi
 1. User profile: name, role, email, language
 2. At least 1 organization with name
 3. At least 1 product with: name, description, platforms, jira_project_key
+4. Onboarding Status: `mode` (basic/extended) and `basic_completed_at` (auto-set by Configurator)
 
 ### Optional but recommended
 1. Confluence space (for publishing)

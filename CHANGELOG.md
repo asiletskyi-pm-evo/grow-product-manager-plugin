@@ -12,6 +12,78 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.12.0 (2026-04-29)
+
+### Added — Tableau MCP-First Integration
+
+The plugin now uses the Tableau MCP connector as the **default** path for all Tableau interactions, with browser as a true fallback. Concrete tools (`get-view-data`, `query-datasource`, `get-view-image`, `search-content`, `list-pulse-metrics-*`, `generate-pulse-insight-*`) replaced generic "Tableau MCP → browser" prose in three skills.
+
+**What changed:**
+- **`references/integration-strategy.md`** — added a Tableau row to the connector table with explicit MCP tool patterns; new "Per-product tool guidance — Tableau" subsection mapping every common task to the right tool. Added a `tableau-mcp` / `tableau-web` source-marker convention.
+- **`skills/product-analysis/SKILL.md`** `0.7.0 → 0.8.0` — rewrote 4 sections (Step 1e Tableau/Analytics, CJM-3 Load funnel data, PR-2 Post-Release Data acquisition, AB-2 A/B Test Tableau dashboards) to make MCP the default and browser the fallback. Each section now logs its source as `tableau-mcp` or `tableau-web` for auditability.
+- **`skills/cjm-research/SKILL.md`** `0.3.0 → 0.3.1` — Sources sections now mark Tableau-derived data with `tableau-mcp` / `tableau-web` so users can audit the retrieval method per datapoint.
+
+**New optional `local-context.md` fields** (Tableau section):
+- `organization.tableau_site_name` — for non-default Tableau sites
+- `organization.tableau_datasource_urls` — map name → URL, used by `query-datasource`
+- `organization.tableau_pulse_metric_ids` — map name → metric ID, used by Pulse tools
+
+### Added — Onboarding 2.0 (Basic / Extended / Test modes)
+
+Onboarding redesign addressing first-user feedback that setup felt long and uncertain.
+
+**What changed in `skills/plugin-configurator/SKILL.md`** `1.0.0 → 2.0.0` (MAJOR):
+- **New Step 1 — Welcome and onboarding map** showing all 17 steps with type, mode applicability, and time estimates so the user always sees where they are.
+- **New Step 2 — Choose mode** with three options: Basic (~3-5 min), Extended (~15-25 min), Test mode (sandbox).
+- **New Step 3 — Connector pre-check** — proactive ping of Jira / Confluence / Figma / Notion / Tableau / Fireflies / Calendar / Gmail / GDrive / Slack with a readiness table mapping connectors to skills they unlock. Mandatory connectors block; recommended only warn.
+- **Reordered subsequent steps** so Vault precedes Templates and Knowledge Library — Templates and Knowledge can now use the Vault as their storage root from day one.
+- **Mode gates** added to every Extended-only step (Step 8 Metrics & OKRs, Step 9 Teams, Step 10 Repos, Step 11 CJM, Step 12 Knowledge, Step 13 Templates, Step 14 Vault, Step 15 Custom). Basic mode silently appends each skipped key to `onboarding.deferred_steps`.
+- **New Step 17 — Quick Wins** showing 2-3 actionable next-step recommendations driven from session context (missing Tableau → "connect Tableau MCP", deferred CJM → "run CJM via Quick setup", etc.).
+- **New Test Mode workflow** (`Workflow — Test Mode (sandbox)`) — full 5-step procedure (TM-0..TM-5) with sandbox isolation rules, finale diff, Discard / Promote / Keep menu, and a verification matrix for maintainers. Triggers: "dry-run onboarding", "test mode", "тестовий режим", or Step 2 selection.
+- **Test Mode redirects all writes** to `~/.grow-pm-sandbox/` (peer of `~/.grow-pm/`). Real config is never read or written. Vault Mirror is fully skipped during sandbox runs.
+- **Modes table at the top** updated from "Five Modes" to "Six Modes" — Onboarding (Basic), Onboarding (Extended), Onboarding (Test sandbox), Reinstall / Migration, Update, Validate, View, plus the standalone Test mode entry.
+
+### Added — Obsidian Setup Guide reference (new file)
+
+**`skills/plugin-configurator/references/obsidian-setup-guide.md`** — canonical step-by-step procedure shared by Step 14 (Onboarding) and Update → Vault Management → Connect Vault. Pre-flight checks (Obsidian installed?), 9 setup steps with explicit ✅/⚠️/❌ validation per substep (path validation, `.obsidian/` check, write/read permission test, products binding, sync mode, Obsidian MCP detection, folder init, smoke test, save-to-context), plus a Common errors and recovery table.
+
+### Added — CJM save-offer for ad-hoc invocation
+
+**`references/local-context-protocol.md` Step 0f rewritten** — when a CJM skill (`cjm-research`, `product-analysis` CJM mode, `brainstorm-features` CJM mode) starts without CJM Configuration in `local-context.md`, the user is now offered three options instead of two:
+
+1. Run Plugin Configurator → Step 11 (full setup)
+2. **Quick CJM setup (Recommended)** — collect ad-hoc config, then offer to save it before running analysis
+3. Skip CJM mode
+
+The Quick CJM setup workflow collects only what the analysis needs (template/stages, dashboards, thresholds, baseline, platforms) and explicitly asks "Save this to `local-context.md`?" before running. If accepted, this becomes equivalent to a full Configurator setup. Hooks added to `cjm-research/SKILL.md` and `product-analysis/SKILL.md` CJM-1.
+
+### Schema additions (`context-schema.md`)
+
+- New **Onboarding Status** section in `local-context.md` (auto-managed by Configurator): `mode`, `basic_completed_at`, `extended_completed_at`, `last_test_run_at`, `deferred_steps`, `skip_nudges`. Backward compatible — old `local-context.md` files get auto-fill on next save.
+- 3 new optional Tableau fields under organization (see above).
+
+### Files changed
+
+| File | Type | Skill version |
+|------|------|---------------|
+| `references/integration-strategy.md` | modified | n/a |
+| `references/local-context-protocol.md` | modified (Step 0f) | n/a |
+| `skills/product-analysis/SKILL.md` | modified (5 sections) | 0.7.0 → 0.8.0 (MINOR) |
+| `skills/cjm-research/SKILL.md` | modified (Sources marker, CJM-1 hook) | 0.3.0 → 0.3.1 (PATCH) |
+| `skills/plugin-configurator/SKILL.md` | major restructure | 1.0.0 → 2.0.0 (MAJOR) |
+| `skills/plugin-configurator/references/context-schema.md` | modified (Onboarding Status, 3 Tableau fields) | n/a |
+| `skills/plugin-configurator/references/obsidian-setup-guide.md` | **NEW** | n/a |
+| `local-context.example.md` | modified (Tableau extended fields, Onboarding Status example) | n/a |
+| `README.md` | version bump + onboarding modes mention | n/a |
+
+### Migration
+
+`local-context.md` files generated by previous versions remain fully functional. On next save (any Configurator mode), the missing **Onboarding Status** section is added with sensible defaults (`mode: extended`, `extended_completed_at: <now>`, empty `deferred_steps`).
+
+No breaking changes to skill outputs. Tableau-using skills continue to work even if the new MCP-specific fields are not set — they fall back to browser as before.
+
+---
+
 ## v1.11.0 (2026-04-20)
 
 ### Changed — Brand-Agnostic Refactor (public-repo hygiene)
