@@ -59,16 +59,42 @@ Each skill has specific required fields (see `references/context-schema.md` → 
 
 **This step applies only to:** `cjm-research`, `product-analysis` (when invoked in CJM mode), `brainstorm-features` (when invoked in CJM mode).
 
-Check if `local-context.md` contains a **CJM Configuration** section for the active product:
-
-**If CJM Configuration is missing:**
-- Inform the user: "CJM analysis requires funnel configuration (stages, dashboards, thresholds). Would you like to set it up now?"
-- If yes → launch Plugin Configurator in Update mode, specifically Step 9 (CJM Configuration)
-- If no → the skill cannot proceed in CJM mode. Offer to run in a non-CJM mode if available, or end.
+Check if `local-context.md` contains a **CJM Configuration** section for the active product.
 
 **If CJM Configuration is present:**
 - Read funnel template type, stages, dashboards, thresholds, default settings
 - Communicate the active template to the user: "Using **[template name]** template with [N] stages."
+- Continue with the skill workflow.
+
+**If CJM Configuration is missing**, present three options via `AskUserQuestion`:
+
+1. **Run Plugin Configurator → Step 11 (CJM Configuration)** — full guided setup (~3-5 min). Saves a complete CJM config to `local-context.md` for permanent reuse.
+2. **Quick CJM setup (Recommended)** — collect ad-hoc configuration for this analysis only, then offer to save it to `local-context.md` at the end before running the analysis. If the user accepts the save, this becomes equivalent to a full Configurator setup.
+3. **Skip CJM mode** — run the skill in a non-CJM mode if one is available, or end gracefully.
+
+**Quick CJM setup workflow:**
+
+Collect only what's needed for the current analysis:
+
+| Field | Notes |
+|-------|-------|
+| Funnel template (or custom stages) | Use the standard templates from `references/funnel-templates.md`, or let the user define custom stages inline |
+| Dashboard URLs for stages | If the user pasted URLs in the original request, propose mapping them to stages |
+| Baselines (optional) | If unknown — note "to be read from dashboards on first run" |
+| Thresholds | Default to Warning 10%, Critical 25%; ask only if the user wants to customize |
+| Comparison baseline | Previous period (default) / previous year / target / custom |
+| Platforms | All configured (default) / specific |
+
+**Before launching the analysis** — present the collected config and ask:
+
+> "I've assembled a CJM configuration for this analysis. Save it to `local-context.md` so I don't have to ask next time?"
+
+Options via `AskUserQuestion`:
+- **Yes, save** — invoke Enrichment (see "Context Enrichment" below) and write a full CJM Configuration section to `local-context.md`. Show a changelog of what was added.
+- **No, just for this session** — keep the config in session memory only; do not persist.
+- **Save partially** — let the user pick which fields to keep (e.g., dashboards yes, thresholds session-only).
+
+After the save decision, proceed with the analysis using the collected config (regardless of whether it was persisted).
 
 ### 0g. Check Knowledge Library availability (optional)
 

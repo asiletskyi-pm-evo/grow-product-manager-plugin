@@ -1,6 +1,6 @@
 # Grow Product Manager
 
-**Version:** 1.11.0
+**Version:** 1.12.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
@@ -8,13 +8,15 @@ AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figm
 
 ## Overview
 
+**New in v1.12.0** — Onboarding has two modes: **Basic** (3-5 min, mandatory fields only — usable immediately for concept/requirements/research/brainstorm/spec) and **Extended** (15-25 min, full setup of CJM, Vault, Templates, Knowledge Library, Teams, full Tableau analytics). A third **Test mode (sandbox)** lets you walk through onboarding without modifying real data — say `dry-run onboarding` any time. See `skills/plugin-configurator/SKILL.md` for the full Step 1 onboarding map.
+
 The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed to accelerate product management workflows. It provides skills for research, analysis, brainstorming, documentation, task creation, and visualization across your entire product lifecycle.
 
 ---
 
 ## Skills
 
-### 1. CJM Research (v0.3.0)
+### 1. CJM Research (v0.3.1)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -33,7 +35,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 2. Product Analysis (v0.7.0)
+### 2. Product Analysis (v0.8.0)
 
 **Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
 
@@ -179,7 +181,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 10. Plugin Configurator (v1.0.0)
+### 10. Plugin Configurator (v2.0.0)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 

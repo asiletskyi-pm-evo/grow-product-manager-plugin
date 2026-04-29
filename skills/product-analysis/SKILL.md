@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.7.0
+version: 0.8.0
 description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", or "CJM funnel analysis".
 ---
 
@@ -117,10 +117,26 @@ Interactive Q&A and Full Report modes follow the same analysis engine (Step 2) b
 The skill accepts data from multiple sources simultaneously. Ask the user which sources to use:
 
 **Tableau / Analytics dashboards:**
-- Follow integration fallback chain: Tableau MCP → search MCP registry → browser fallback
-- When using browser: navigate to the dashboard URL, take screenshots using `computer`, read data tables using `get_page_text`
-- Extract: metric values, trends, charts, filters applied, date ranges
-- **Important**: Tableau data is confidential per `data-policy.md` — do not pass to external services
+
+Follow `references/integration-strategy.md` → Tableau row + the "Per-product tool guidance — Tableau" section.
+
+**MCP-first default (recommended path):**
+- If `mcp__*__query-datasource` is available → use it for tabular metrics; pass SQL against a published datasource (URL from `local-context.md` → `organization.tableau_datasource_urls` or from context).
+- If `mcp__*__get-view-data` is available → when an existing view already has the right filters; pull tabular data directly.
+- If `mcp__*__get-view-image` is available → for embedding a dashboard image into a report or presentation.
+- If `mcp__*__search-content` is available → when the user named a dashboard but the URL/ID is unknown.
+- If Tableau Pulse metric IDs are configured (`organization.tableau_pulse_metric_ids`) → `list-pulse-metrics-from-metric-ids` + `generate-pulse-insight-brief` for health checks.
+
+**Browser fallback** — use ONLY when:
+- The Tableau MCP connector is not available in the session (Step 1 of fallback chain has been exhausted), OR
+- A view has a complex interactive filter that does not accept API parameters, OR
+- The user provided only a URL with no parsing surface.
+
+When using browser: navigate to the dashboard URL, take screenshots using `computer`, read data tables using `get_page_text`. Extract metric values, trends, charts, filters applied, date ranges.
+
+**Mark the source method in the report's Sources section** as `tableau-mcp` or `tableau-web` so the user can audit which method retrieved each datapoint.
+
+**Important**: Tableau data is confidential per `data-policy.md` — do not pass to external services regardless of the retrieval method.
 
 **Google Sheets:**
 - Follow integration fallback chain: Google Sheets MCP → registry → browser
@@ -478,10 +494,21 @@ Specialized mode for analyzing Customer Journey Map funnel data. Segments metric
 
 ### CJM-1. Read CJM configuration
 
-Follow `references/local-context-protocol.md` — Step 0f:
-- Read CJM Configuration section from `local-context.md`
-- Load: funnel template, stages with dashboard URLs, baseline conversions, anomaly thresholds
-- If CJM Configuration is missing → inform user, offer to chain to `plugin-configurator`
+Follow `references/local-context-protocol.md` — Step 0f.
+
+**If CJM Configuration is present:** load funnel template, stages with dashboard URLs, baseline conversions, anomaly thresholds, default settings; continue to CJM-2.
+
+**If CJM Configuration is missing:** present three options via `AskUserQuestion`:
+
+1. **Run Plugin Configurator → Step 11 (full CJM setup)** — ~3-5 min, permanent save.
+2. **Quick CJM setup (Recommended)** — collect ad-hoc config now, offer to save it before running analysis. See Quick CJM setup workflow in `references/local-context-protocol.md` Step 0f.
+3. **Skip CJM mode** — return early; the user can re-invoke later.
+
+For Quick CJM setup: collect funnel template/stages, dashboard URLs (suggest mapping any URL the user already pasted), thresholds (defaults Warning 10%, Critical 25%), comparison baseline, platforms. Before running CJM-3 onward, ask:
+
+> "I've assembled a CJM configuration for this analysis. Save it to `local-context.md` so I don't have to ask next time?"
+
+If the user accepts → invoke Enrichment Protocol from `references/local-context-protocol.md`, write the CJM Configuration section, and show the changelog. Proceed to CJM-2 regardless of save decision.
 
 Read shared standards from `references/cjm-protocol.md`:
 - Anomaly severity thresholds
@@ -505,9 +532,13 @@ Read shared standards from `references/cjm-protocol.md`:
 
 For each funnel stage in scope:
 
-1. **Navigate to the stage's dashboard URL** (from CJM config)
-   - Follow `references/integration-strategy.md` fallback chain: Tableau MCP → browser
-   - When using browser: navigate to URL, apply filters (time period, platforms), take screenshots, read data tables
+1. **Load data for the stage** — follow `references/integration-strategy.md` → Tableau guidance.
+   - **MCP-first (default)**:
+     - `get-view-data` for tabular metrics of the stage with the relevant filters (time period, platforms)
+     - `get-view-image` if the visual is needed for the final report
+     - `query-datasource` with SQL if the stage has a configured `datasource_url` and a single query can return conversion/absolute/dropoff in one call
+   - **Browser fallback** — only if the MCP connector is not available, or the stage requires complex interactive filters that the API cannot accept. When using browser: navigate to URL, apply filters (time period, platforms), take screenshots, read data tables.
+   - **Log the retrieval method** in the report's Sources section as `tableau-mcp` or `tableau-web` for transparency and reproducibility.
 
 2. **Extract per-stage metrics:**
    - **Conversion rate** — percentage of users who complete this stage (relative to previous stage or entry)
@@ -638,13 +669,23 @@ Specialized mode for analyzing how a released feature affected product metrics. 
 - Proactively suggest additional metrics that might be affected based on the nature of the change
 
 **Data acquisition from Tableau / analytics:**
-- Navigate to relevant Tableau dashboards via browser (follow integration fallback chain)
-- Set filters for: the correct product, platforms, date ranges (before vs. after)
-- Take screenshots and extract data for both periods
-- Focus on:
-  - **Product-level metrics**: conversion, revenue, traffic, retention, engagement
-  - **Feature-level metrics**: specific funnel steps, feature usage, feature-specific KPIs
-  - **Platform-specific metrics**: compare platforms where the feature was released vs. not yet released (natural control group)
+
+Follow `references/integration-strategy.md` → Tableau guidance.
+
+**MCP-first (default):** for each metric
+- If `query-datasource` is available and a `datasource_url` is configured → one SQL query returns before/after period values with platform/date filters in a single call
+- If `get-view-data` is available and the view already has the right filters → pull tabular data for both periods
+- If a screenshot is needed for the report → `get-view-image` with the appropriate filter params
+- If Pulse metrics are configured for affected metrics → `list-pulse-metrics-from-metric-ids` + `generate-pulse-metric-value-insight-bundle`
+
+**Browser fallback:** if the MCP connector is unavailable or you need to drive a complex interactive filter — navigate via `navigate`/`computer`, set filters (product, platform, period), take screenshots, read tables via `get_page_text`.
+
+**Mark each datapoint** in the report's Sources as `tableau-mcp` or `tableau-web`.
+
+Focus on:
+- **Product-level metrics**: conversion, revenue, traffic, retention, engagement
+- **Feature-level metrics**: specific funnel steps, feature usage, feature-specific KPIs
+- **Platform-specific metrics**: compare platforms where the feature was released vs. not yet released (natural control group)
 
 ### PR-3. Analyze impact
 
@@ -717,19 +758,30 @@ If requirements exist in Confluence — read them to extract all this context au
 - Extract: group metrics, sample sizes, confidence intervals, significance levels
 
 **Option 2: Tableau A/B test dashboards**
-- Navigate to the appropriate A/B test dashboard via browser:
-  - Use the A/B test dashboard URLs configured in `local-context.md` (see `local-context.example.md` for setup)
-  - Select the appropriate dashboard based on the platform where the test was conducted
-  - If `local-context.md` is not configured or dashboards are not specified — ask the user for the dashboard URL
-- **Set the test name / feature flag name** as the filter parameter in the dashboard
-- **Comprehensive parameter exploration** — systematically go through ALL available filters, dimensions, and views in the dashboard:
-  - Try different date ranges
-  - Try different metric breakdowns
-  - Try different segments (platform, country, user type, new vs returning, etc.)
-  - Try different views/tabs available in the workbook
-  - Take screenshots of each meaningful view
-  - Extract data tables where possible using `get_page_text`
-- **Important**: Do not stop at the first view — explore the dashboard comprehensively to capture all relevant data dimensions
+
+Follow `references/integration-strategy.md` → Tableau guidance. **MCP-first default:**
+
+1. **Resolve the dashboard:**
+   - If `local-context.md` → `product.ab_test_dashboards` has a URL for the test platform → use it.
+   - If the URL is not configured → `search-content` with `terms="<feature_flag_name>"` and `filter.contentTypes=["view","workbook"]` to find the right view.
+   - If a URL is configured but the view-id is unknown → `list-workbooks` filtered by `contentUrl`.
+   - If neither MCP nor configured URL is available — ask the user for the dashboard URL.
+
+2. **Extract the data:**
+   - **Primary**: `get-view-data` with the `feature_flag_name` (test name) filter and the relevant date range. Returns tabular data with all metrics and segments at once.
+   - **Systematically iterate dimensions**: for each value of platform / country / user-type / new-vs-returning, repeat `get-view-data` with different filters. This replaces "clicking through filters in a browser" with a series of API calls.
+   - **For the report/presentation**: `get-view-image` with key filters for embedding in the final document.
+   - **If Pulse metrics are tied to the test**: `list-pulse-metrics-from-metric-ids` + `generate-pulse-metric-value-insight-bundle`.
+
+3. **Browser fallback:**
+   - If the MCP connector is unavailable, OR the dashboard has a custom JS-driven filter that the API does not accept — navigate via browser as before.
+   - Set the test name / feature flag name as the filter parameter.
+   - Comprehensively explore all filters, dimensions, and views — try different date ranges, metric breakdowns, segments, views/tabs. Take screenshots and extract tables via `get_page_text`.
+   - In the Sources section log "Browser fallback used because: [reason]".
+
+**Mark each datapoint** in the report's Sources as `tableau-mcp` or `tableau-web`.
+
+**Important**: Do not stop at the first view — exhaustively iterate dimensions as described above.
 
 **Option 3: Both** — combine user reports with Tableau dashboard data for cross-validation
 

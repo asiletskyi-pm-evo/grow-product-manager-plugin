@@ -21,6 +21,7 @@ Check if an MCP connector for the target product is already available in the cur
 | Google Drive | `mcp__*__*drive*`, `mcp__*__*gdrive*` | `list_files`, `read_file`, `search_files` |
 | Figma | `mcp__*__get_screenshot`, `mcp__*__get_design_context` | `get_screenshot`, `get_metadata` |
 | Notion | `mcp__*__notion-*` | `notion-search`, `notion-create-pages` |
+| Tableau | `mcp__*__list-workbooks`, `mcp__*__query-datasource`, `mcp__*__get-view-data`, `mcp__*__get-view-image` | `list-workbooks`, `query-datasource`, `get-view-data`, `get-view-image`, `search-content`, `list-pulse-metric-definitions-from-definition-ids`, `list-pulse-metrics-from-metric-ids`, `generate-pulse-insight-brief`, `generate-pulse-metric-value-insight-bundle` |
 | Google Calendar | `mcp__*__gcal_*` | `gcal_list_events`, `gcal_create_event` |
 | Gmail | `mcp__*__gmail_*` | `gmail_search_messages`, `gmail_create_draft` |
 | Fireflies | `mcp__*__fireflies_*` | `fireflies_get_transcripts`, `fireflies_search` |
@@ -86,6 +87,24 @@ Need to interact with [Product X]
     │
     └─ Use Claude in Chrome browser tools 🌐
 ```
+
+## Per-product tool guidance — Tableau
+
+If the Tableau MCP connector is available, choose the tool by task:
+
+| Task | Tool | When to use |
+|------|------|-------------|
+| Find a workbook/dashboard by name | `search-content` (filter `contentTypes=workbook,view`) | User named the dashboard in words, ID unknown |
+| List workbooks in a project | `list-workbooks` (filter `projectName`) | Inventory, validating URLs from `local-context.md` |
+| Pull tabular data from a view | `get-view-data` | A/B test results, funnel metrics, exact numbers |
+| Pull a dashboard image | `get-view-image` | Export into a report/handoff/presentation |
+| Run an SQL query against a published datasource | `query-datasource` | Custom slice not exposed in any view |
+| List Pulse metrics for the product | `list-pulse-metric-definitions-from-definition-ids` + `list-pulse-metrics-from-metric-ids` | Health check, monitoring of key metrics |
+| Insights for a Pulse metric | `generate-pulse-insight-brief` / `generate-pulse-metric-value-insight-bundle` | "What's interesting about [metric] right now?" |
+
+**Browser fallback** is still used for interactive dashboards with complex filters that cannot be set through Tableau API parameters, and when the user provided only a URL with no parsing surface.
+
+When logging the data source in any report's Sources section, mark Tableau-sourced data as `tableau-mcp` (used MCP) or `tableau-web` (used browser fallback) so the user can audit which method retrieved each datapoint.
 
 ---
 
