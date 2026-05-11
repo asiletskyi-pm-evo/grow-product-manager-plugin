@@ -198,3 +198,67 @@ All CJM reports (regardless of mode) should include these sections where applica
 | Roadmap | full | Phased implementation recommendation |
 | Sources | all | All sources with type labels |
 | Glossary | full | Terms and abbreviations used in the report |
+
+---
+
+## Data Integrity Gate (v1.13.0+)
+
+All CJM-related skills MUST execute the Data Integrity Gate before reporting any metric. See `references/data-integrity-protocol.md` for the full protocol.
+
+**Quick reference — 5 mandatory checks:**
+
+1. **Period/Context Completeness** — detect incomplete-period extracts; normalize or exclude
+2. **Seasonal/Cultural Screening** — flag anomaly windows that overlap with holiday periods (Ukraine: Week 1 Jan, Mar 7-8, Easter, May 1-3, BF, Dec 22-31); verify geographic relevance of external benchmarks
+3. **Multi-Source Cross-Validation** — ≥ 2 independent sources for critical metrics; ≥ 3 sources for extreme values (drop > 25% / lift > 50% / sensational claims)
+4. **Period Definition Lock + Inline Annotation** — every cited metric carries inline period annotation (12mo rolling, YoY, snapshot, normalized, etc.)
+5. **Source Type Marker** — mark every source with type (`tableau-mcp`, `tableau-web`, `glint-live`, `ga-snapshot`, `baymard-premium`, `web-search`, `kb-source`, `competitor-website`, `user-research`)
+
+**Output statuses:** ✅ Verified / ⚠️ Caveat / ❌ Blocked.
+
+**Blocked metrics** must not appear in final reports without resolution.
+
+---
+
+## Holiday Screening Windows
+
+For Ukraine-default products (Prom-context):
+
+| Window | Effect | Action |
+|--------|--------|--------|
+| Week 1 (Jan 1-7) | Heavy holiday effect, low purchase | **Never cite as YoY trend** — search sustained pattern in non-holiday weeks |
+| Mar 7-8 | Gift-purchase spike | Cite with context |
+| Easter ± 1 week (variable) | Seasonal shift | Cite with context |
+| May 1-3 | Holiday effect | Cite with context |
+| BF week (4th Thursday of November) | Promotional spike | Cite with context |
+| Dec 22-31 | Pre-New Year spike, then drop | Cite with context |
+
+For global products, also screen: Chinese New Year, Diwali, Ramadan, US Thanksgiving / BF / Cyber Monday, Boxing Day.
+
+---
+
+## Anomaly Verification Checklist (drop > 25% / lift > 50%)
+
+**MANDATORY before reporting any extreme deviation:**
+
+- [ ] Period completeness checked (Gate Check 1)
+- [ ] Holiday window screening (Gate Check 2)
+- [ ] ≥ 3 independent sources (Gate Check 3 — extreme-value rule)
+- [ ] Methodology change check (DT-* / DATA-* tickets in the period)
+- [ ] Reference period analysis (full YoY table, not single cell)
+- [ ] Inline-period annotation (Gate Check 4)
+
+If any check fails → mark as ⚠️ Caveat or ❌ Blocked, do not report as fact.
+
+---
+
+## Recommended reference sources catalog
+
+Each product/organization should build a metric → sources mapping in `local-context.md` under `data_sources_catalog`. Example structure:
+
+| Metric | Primary source | Cross-validation source | Methodology doc |
+|--------|----------------|------------------------|-----------------|
+| (e.g.) Listing GMV YoY | Tableau workbook X (YtoY view) | Tableau workbook Y / GA / Glint | Attribution change ticket |
+| (e.g.) Catalog CR | Listing metrics workbook | Master CJM workbook | — |
+| (e.g.) Funnel stages | Master CJM workbook | Per-stage workbooks | — |
+
+This catalog enables Gate Check 3 (Multi-Source Cross-Validation) to operate automatically — the skill knows which secondary source to query for each metric.
