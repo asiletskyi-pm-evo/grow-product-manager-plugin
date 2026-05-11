@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.7.0
+version: 0.8.0
 description: Conduct comprehensive product research — competitive analysis, user research, market research, or UX benchmark research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks", "search knowledge library", or needs SWOT, TAM SAM SOM, or PESTEL analysis.
 ---
 
@@ -121,7 +121,95 @@ If the product or feature area already exists (i.e., not being built from scratc
 
 Summarize the full research brief back to the user and get confirmation before proceeding.
 
+### 1.5 — Source Validation Gate (MANDATORY, v0.8.0+)
+
+**Internal logic (product-research).** Executes before Step 2 (Gather data). Every external source pulled in Step 2 will be validated against 5 universal gate checks per `references/data-integrity-protocol.md`. Apply these checks **as sources are gathered**, before citing in the final report.
+
+**Why this exists:** historic incidents where stale benchmarks, geographically mismatched data (US benchmark cited for UA market), or sensational claims from a single source produced misleading research conclusions. See `data-integrity-protocol.md` for the full incident catalog.
+
+**1.5.a — Recency Check (date relevance):**
+
+For each external source, determine publication / data collection date. Apply recency thresholds:
+
+| Data type | Recency threshold |
+|-----------|-------------------|
+| E-commerce CR / AOV benchmarks | ≤ 2 years |
+| UX best practices, fundamental research | ≤ 5 years |
+| Market trends, sizing | ≤ 1 year |
+| Competitor pricing / UX details | ≤ 6 months |
+| Technology stacks, platform changes | ≤ 6 months |
+
+- ✅ Recent → use freely
+- ⚠️ Aging → use for stable patterns only (UX best practices); cite with year caveat
+- ❌ Stale → do not cite; request newer source
+
+**Special case — Baymard guidelines:** check `research_id` and year. Foundational UX patterns (#253, #261, etc.) stay valid for 5+ years; specific metric values need recency check.
+
+**1.5.b — Geographic/Cultural Context Check:**
+
+For each external source — determine geography and cultural relevance to the active product's market.
+
+For Ukraine-default products (Prom-context):
+- ✅ Direct fit (UA-specific): Rozetka, OLX, Allo, Epicentrk, Kasta, Makeup.com.ua
+- ✅ CIS/EE comparable: Allegro (PL), eMag (RO), Wildberries/Ozon (RU — political caveat)
+- ⚠️ Global with adaptation: Amazon, eBay, AliExpress (cite with adaptation note)
+- ⚠️ Western mature markets: ASOS, Sephora, IKEA (good for UX patterns, caveat CR/AOV)
+- ❌ Heavily local (do not use as-is): US-only retailers without adaptation
+
+**Action when citing non-target geography:** explicit caveat about cultural fit + propose A/B-validation for the target market.
+
+**1.5.c — Multi-Source Cross-Validation (especially for extreme claims):**
+
+For every critical research finding that will appear in the final report:
+- ≥ 2 independent sources (Knowledge Library + web, Baymard + Confluence, 2 competitor sources, etc.)
+- Variance > 25% between sources → flag for resolution
+- Avoid double-citing: 2 articles from the same site = 1 source
+
+**Special case — sensational claims:**
+- "X has 25% CR" (extreme for e-commerce)
+- "Y grew 10× in N months"
+- "Best practice: do Z" (new claim, not from Baymard)
+- "#1 in industry" / "only player"
+
+→ Auto-promote to ≥ 3 sources, original primary source check (not secondhand reporting), date + methodology + sample-size verification.
+
+**1.5.d — Bias Screening:**
+
+Detect potential bias sources:
+- Vendor reports = marketing, not neutral analysis (e.g., Shopify state-of-commerce reports)
+- Industry-sponsored research = conflict of interest
+- Single competitor PR = biased self-reporting
+- Social-media data = selection bias (loud minority)
+
+**Action:** when citing the above — explicit caveat about potential bias in the final report.
+
+**1.5.e — Source Type Marker + Inline Annotation:**
+
+Tag every external source by type:
+- `baymard-premium` — Baymard Premium UX-Query / guidelines (include guideline #N)
+- `web-search` — general web search (include domain, year)
+- `kb-source` — Knowledge Library source (include trust score)
+- `competitor-website` — direct from competitor's site (include URL snapshot date)
+- `user-research` — user research synthesis (include N interviews, date, persona type)
+- `deep-research-llm` — ChatGPT/Gemini Deep Research (cross-checked with second source)
+
+Inline-annotation convention:
+- `(Baymard Premium, Guideline #N, YYYY research)`
+- `(Source domain, YYYY, geography)`
+- `(Competitor name, YYYY snapshot, source URL)`
+- `(N interviews YYYY-MM, persona-type)`
+
+### Output of Step 1.5
+
+Every external source receives: ✅ Verified / ⚠️ Caveat / ❌ Blocked.
+
+If Blocked sources > 0 for critical findings:
+- Return to Step 2 to gather additional sources OR
+- Inform user that research cannot proceed with insufficient evidence on key claims
+
 ### 2. Gather data from all available sources
+
+**Pre-condition (v0.8.0+):** Step 1.5 (Source Validation Gate) applies to each source as it is gathered. Skip ❌ Blocked sources. For ⚠️ Caveat sources — inherit the caveat into the final report (do not silently drop the qualifier).
 
 Pull information from every source agreed upon in Step 1. For each external product, follow the integration fallback chain from `references/integration-strategy.md`.
 
@@ -334,12 +422,17 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 - Flag data that is older than 12 months
 - If data is insufficient, explicitly state gaps and suggest how to fill them
 - Use Ukrainian or English based on user's language preference
+- **(v0.8.0+) Inline source annotation MANDATORY** — every cited metric / benchmark / claim from external source carries inline annotation with source name, year, geography per Gate Check 4 of `data-integrity-protocol.md`
+- **(v0.8.0+) Caveat propagation** — Step 1.5 ⚠️ Caveat sources surface their qualifier in the final report (recency caveat, geographic fit caveat, single-source caveat, bias caveat). Do not hide under generic "based on industry research"
+- **(v0.8.0+) Extreme claims disclosure** — any sensational claim (+200%, 10×, #1 in industry) must include "verified across N sources" disclosure
+- **(v0.8.0+) Source type markers** — every cited source in Sources section tagged (`baymard-premium` / `web-search` / `kb-source` / `competitor-website` / `user-research` / `deep-research-llm`); include recency + geography for each
 
 ## Additional Resources
 
+- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.8.0+)** — 5 universal gate checks for any cited external source (Step 1.5)
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/frameworks.md`** — detailed templates for each research framework
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
-- **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas (relevant when research supports CJM analysis)
+- **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, holiday windows, anomaly verification checklist (relevant when research supports CJM analysis)

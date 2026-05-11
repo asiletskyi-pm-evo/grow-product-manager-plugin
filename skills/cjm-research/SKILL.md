@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.3.1
+version: 0.4.0
 description: Conduct CJM (Customer Journey Map) research — detect funnel anomalies, generate improvement hypotheses, and build prioritized backlogs. Use when the user asks to "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", or needs end-to-end funnel analysis with enrichment from knowledge sources.
 ---
 
@@ -14,7 +14,8 @@ This skill does NOT perform analysis itself — it delegates to specialized skil
 
 Before starting, read and follow these shared references:
 - **`references/local-context-protocol.md`** — Step 0: read `local-context.md`, select active product, load product-specific context
-- **`references/cjm-protocol.md`** — shared CJM standards: anomaly severity levels, funnel impact formulas, health score formula, verification checklist
+- **`references/cjm-protocol.md`** — shared CJM standards: anomaly severity levels, funnel impact formulas, health score formula, verification checklist, Data Integrity Gate reference
+- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.4.0+)** — 5 universal gate checks for any cited metric, executed at Step 3.5
 - **`references/funnel-templates.md`** — standard funnel stage templates (e-commerce, SaaS, marketplace, custom)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain
 - **`references/data-policy.md`** — data confidentiality: internal analytics stay internal, external searches use public info only
@@ -209,7 +210,77 @@ Receive from `product-analysis`:
 
 For `comparison` mode: invoke `product-analysis` separately for each platform being compared.
 
+### Step 3.5 — Data Integrity Gate (MANDATORY, v0.4.0+)
+
+**Internal logic (cjm-research).** Executes before Step 4 (Anomaly detection). Every metric from Step 3 passes 5 universal gate checks per `references/data-integrity-protocol.md`. Without passing the gate, the metric MUST NOT be used in anomaly detection or reporting.
+
+**Why this exists:** historic incidents where uncritical citation of raw data points produced cascading errors (incomplete-period extrapolation, Week-1 holiday zriz cited as YoY trend, derived claims propagated without re-verification, missing inline-period annotation). The gate prevents these patterns systematically. See `data-integrity-protocol.md` for the full incident catalog and anti-pattern examples.
+
+**3.5.a — Period/Context Completeness Check:**
+
+For each timeseries metric loaded in Step 3:
+- Verify Tableau/dashboard extract date against the last data point in the series
+- If `last_point_date + period_length > extract_date` → the last point is INCOMPLETE
+- Action: normalize on full period (raw × full_days / actual_days), OR exclude the partial point from analysis, OR wait for end-of-period
+- **This is a blocker for PoP comparison.** Do not compare an incomplete period against complete periods without normalization.
+
+**3.5.b — Seasonal/Cyclical Screening:**
+
+Detect overlap of analysis period with known holiday/seasonal windows (per `cjm-protocol.md` → Holiday Screening Windows):
+
+- Ukraine default: Week 1 (Jan 1-7), Mar 7-8, Easter ± 1 week, May 1-3, BF week, Dec 22-31
+- Global products: also Chinese NY, Diwali, Ramadan, US Thanksgiving / BF, Boxing Day
+
+If an anomaly week aligns with a holiday window:
+- ⚠️ FLAG: "Holiday-affected period — interpretation is week-specific, not a trend"
+- Search for sustained pattern in non-holiday weeks
+- For YoY comparison: never cite a holiday week as a year-trend; always read the full YoY table
+
+**3.5.c — Multi-Source Cross-Validation:**
+
+For every critical CR / GMV / Order / Revenue / Retention metric:
+- Require ≥ 2 independent sources (two different Tableau workbooks, or Tableau + Glint, or Tableau + GA, etc.)
+- Variance tolerance ≤ 15% between sources
+- Variance > 15% → ⚠️ FLAG, resolve before reporting
+
+**Special case — extreme values (drop > 25% or lift > 50% or sensational claim):**
+- Auto-promote to ≥ 3 sources (not 2)
+- Methodology change check (read DT-* / DATA-* tickets in the analysis period)
+- Reference period analysis (full YoY/PoP table, never single cell)
+
+**3.5.d — Period Definition Lock + Inline Annotation:**
+
+Pre-compute inline-annotation strings for every metric per Gate Check 4 of `data-integrity-protocol.md`. Examples:
+
+- `Catalog CR 0.99% (12mo rolling, 1.05.2025 → 7.05.2026)`
+- `Listing GMV +20% YoY (May 2025 → May 2026, weeks 18-19, non-holiday window)`
+- `Brand pages ~48K sessions/month (normalized to 30 days from 7-day extract, May 2026)`
+
+Methodology section at the top of the report is **not sufficient** — readers copy individual numbers into Slack, slides, follow-up docs without surrounding context.
+
+**3.5.e — Source Type Marker:**
+
+Tag every source with type per Gate Check 5 of `data-integrity-protocol.md`:
+
+- Internal: `tableau-mcp`, `tableau-web`, `glint-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `confluence-internal`, `jira-internal`
+- This enables audit trail in the final Sources section
+
+**Output of Step 3.5:**
+
+Every metric receives a status:
+- ✅ **Verified** — passed all 5 checks; ready for Step 4 (Anomaly detection)
+- ⚠️ **Caveat** — passed with limitations (normalized, holiday-affected, single-source pending cross-validation); inherit caveat into downstream steps and report
+- ❌ **Blocked** — failed a critical check; either return to Step 3 to gather additional sources, or inform user that analysis cannot proceed without resolution
+
+**If Blocked metrics > 0:**
+- Halt the pipeline before Step 4 OR
+- Inform user explicitly: "Cannot proceed with anomaly detection — N metrics are blocked. Need: [list of required resolutions]"
+
+**Reference sources catalog:** Use `cjm-protocol.md` → Recommended reference sources catalog (or `local-context.md` → `data_sources_catalog` for product-specific mappings) to identify which secondary source to query for each metric.
+
 ### Step 4 — Anomaly detection
+
+**Pre-condition:** Step 3.5 (Data Integrity Gate) must be completed. Skip anomaly detection on metrics with status ❌ Blocked. For metrics with status ⚠️ Caveat — inherit the caveat into the anomaly report (do not silently drop the qualifier).
 
 **Continue delegation to `product-analysis` (CJM mode).**
 
@@ -700,10 +771,15 @@ When `health-check` mode is configured for automation:
 - Use the user's preferred language (`user.language`) for all output
 - Follow `data-policy.md` strictly — internal analytics never leave the session
 - When comparing periods — always state which periods and the data freshness
+- **(v0.4.0+) Inline period annotation MANDATORY** — every cited metric in TL;DR, Executive Summary, tables, bullets carries inline annotation per Gate Check 4 of `data-integrity-protocol.md` (`12mo rolling`, `YoY`, `snapshot`, `normalized`, etc.). Methodology section at the top is not sufficient — readers copy individual numbers into Slack and slides.
+- **(v0.4.0+) Caveat propagation** — Step 3.5 ⚠️ Caveat metrics surface their qualifier in the final report (e.g., "single-source pending cross-validation", "normalized from N-day extract", "holiday-affected period")
+- **(v0.4.0+) Anomaly disclosure** — for any reported anomaly: source count (≥ 2; ≥ 3 for extreme), period definition, holiday-screening status, methodology change check status
+- **(v0.4.0+) Source type markers** — every cited number in Sources section tagged (`tableau-mcp` / `tableau-web` / `glint-live` / `ga-snapshot` / `confluence-internal`)
 
 ## Additional Resources
 
-- **`references/cjm-protocol.md`** — anomaly severity, funnel impact formulas, health score, verification checklist
+- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.4.0+)** — 5 universal gate checks for any cited metric
+- **`references/cjm-protocol.md`** — anomaly severity, funnel impact formulas, health score, verification checklist, holiday windows, anomaly verification checklist, reference sources catalog
 - **`references/funnel-templates.md`** — standard funnel templates by product type
 - **`references/persistent-storage.md`** — `~/.grow-pm/` storage protocol
 - **`references/local-context-protocol.md`** — Step 0: reading and using local-context.md
