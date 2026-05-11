@@ -12,6 +12,78 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.13.0 (2026-05-11)
+
+### Added — Data Integrity Gate across analytical skills
+
+Universal verification gate for all skills that cite metrics, benchmarks, or claims. Born from a real incident (May 2026 Prom.ua Catalog research project) where 4 progressive errors propagated into 5+ artifacts before user-side detection. Root cause: uncritical citation of raw data points without period verification, multi-source cross-validation, or context annotation.
+
+**Failure patterns this release prevents:**
+
+1. **Incomplete-period extrapolation** — Tableau monthly view extracted mid-month, last cell treated as full month, "-77% PoP" reported as real anomaly (was 7-day partial period)
+2. **Week-1 holiday zriz cited as YoY trend** — single weekly comparison from Jan 1-7 propagated as full-year YoY decline ("Listings GMV -29% YoY, Portal -8.6% YoY"); reality across 18 of 19 weeks was both growing +20%/+42%
+3. **Cascading derived claims** — "3.4× faster degradation" derived from #2 propagated into 5+ artifacts without re-verification
+4. **Missing inline period annotation** — metrics like "CR 0.99%" cited without period context, losing meaning when copied to Slack/slides
+
+**What changed:**
+
+- **`references/data-integrity-protocol.md`** **(NEW)** — universal protocol with 5 gate checks: Period/Context Completeness, Seasonal/Cultural Screening, Multi-Source Cross-Validation (≥2 sources, ≥3 for extreme values), Period Definition Lock + Inline Annotation, Source Type Marker. Defines output statuses (✅ Verified / ⚠️ Caveat / ❌ Blocked) and anti-pattern catalog from real incidents.
+
+- **`references/cjm-protocol.md`** — extended with three new sections: Data Integrity Gate quick reference, Holiday Screening Windows (Ukraine + Global), Anomaly Verification Checklist (mandatory checks for drop > 25% / lift > 50%), recommended reference sources catalog structure.
+
+- **`skills/cjm-research/SKILL.md`** `0.3.1 → 0.4.0` (MINOR) — new **Step 3.5 — Data Integrity Gate (MANDATORY)** between Step 3 (Load CJM data) and Step 4 (Anomaly detection). Step 4 inherits gate status (skip Blocked, propagate Caveat). Quality Standards extended with inline-annotation requirement, caveat propagation, anomaly disclosure, source type markers.
+
+- **`skills/product-analysis/SKILL.md`** `0.8.0 → 0.9.0` (MINOR) — new **Step 1.5 — Data Integrity Gate (MANDATORY)** between Step 1 (Initialization and data acquisition) and Step 2 (Analysis engine). Mode-specific extra checks for Post-Release Analysis (release date + flag activation verification, before/after period balance) and A/B Test Results (sample-size power check, statistical significance reporting, selection bias check, novelty-effect screening). Quality Standards extended; explicit rule: never declare A/B winner/loser without sample-size power check + p-value + holiday-screening + segment-level review.
+
+- **`skills/product-research/SKILL.md`** `0.7.0 → 0.8.0` (MINOR) — new **Step 1.5 — Source Validation Gate (MANDATORY)** between Step 1 (Deep discovery) and Step 2 (Gather data). External-source specific checks: recency thresholds per data type, geographic/cultural context (Ukraine default catalog of direct-fit vs adaptation-required competitors), sensational-claim verification (≥3 sources), bias screening (vendor reports, single competitor PR, social-media). Quality Standards extended with caveat propagation and extreme-claims disclosure.
+
+### Files changed
+
+| File | Type | Skill version |
+|------|------|---------------|
+| `references/data-integrity-protocol.md` | **NEW** | n/a |
+| `references/cjm-protocol.md` | modified (3 new sections appended) | n/a |
+| `skills/cjm-research/SKILL.md` | modified (Step 3.5 added, Step 4 + Quality Standards updated) | 0.3.1 → 0.4.0 (MINOR) |
+| `skills/product-analysis/SKILL.md` | modified (Step 1.5 added, Step 2 + Quality Standards updated) | 0.8.0 → 0.9.0 (MINOR) |
+| `skills/product-research/SKILL.md` | modified (Step 1.5 added, Step 2 + Quality Standards updated) | 0.7.0 → 0.8.0 (MINOR) |
+
+### Migration
+
+No breaking changes. Existing `local-context.md` files remain fully functional. The gate operates with built-in defaults if no `data_sources_catalog` is configured.
+
+**Optional new `local-context.md` field** (recommended for full benefit of Gate Check 3):
+
+```yaml
+data_sources_catalog:
+  - metric: "Listing GMV YoY"
+    primary: "Tableau workbook 285 YtoY view"
+    cross_validation: "Orders Dashboard v2 Portal vs Sites"
+    methodology_doc: "DT-1773 attribution"
+  - metric: "Catalog CR"
+    primary: "Listing metrics workbook 285 Overview"
+    cross_validation: "Master CJM workbook 125 + Glint live"
+  # ... more entries
+```
+
+This catalog enables Gate Check 3 (Multi-Source Cross-Validation) to operate automatically — the skill knows which secondary source to query for each metric without user prompting.
+
+### Compatibility
+
+- All three modified skills remain backwards compatible with existing invocation patterns.
+- The new gate steps run automatically; users do not need to invoke them explicitly.
+- For ⚠️ Caveat metrics, the skill will surface the qualifier in the final report instead of blocking the workflow.
+- For ❌ Blocked metrics, the skill will halt with a clear explanation rather than silently producing potentially-wrong output.
+
+### Validation
+
+Each skill version has been validated against the 4 root-cause patterns from the May 2026 incident:
+
+1. ✅ Incomplete-period extrapolation — Gate Check 1 catches this at the source
+2. ✅ Week-1 holiday zriz — Gate Check 2 flags holiday windows, forces full-table review
+3. ✅ Cascading derived claims — Caveat propagation surfaces qualifiers throughout the report
+4. ✅ Missing inline annotation — Gate Check 4 + Quality Standards make annotation mandatory
+
+---
 ## v1.12.0 (2026-04-29)
 
 ### Added — Tableau MCP-First Integration

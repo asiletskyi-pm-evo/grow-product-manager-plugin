@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.8.0
+version: 0.9.0
 description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", or "CJM funnel analysis".
 ---
 
@@ -169,6 +169,81 @@ When using browser: navigate to the dashboard URL, take screenshots using `compu
 
 Summarize all gathered data sources back to the user and confirm before proceeding to analysis.
 
+### Step 1.5 — Data Integrity Gate (MANDATORY, v0.9.0+)
+
+**Internal logic (product-analysis).** Executes before Step 2 (Analysis engine). Every data source loaded in Step 1 (Tableau, Google Sheets, CSV, screenshots, PDF, A/B reports) passes 5 universal gate checks per `references/data-integrity-protocol.md`. Without passing the gate, the metric MUST NOT be used in the analysis engine or final report.
+
+**Why this exists:** historic incidents where uncritical citation of raw data points produced cascading errors. Specific to this skill: A/B test verdicts and post-release classifications are particularly high-stakes — a "winner" label on insufficient data leads to wrong rollout decisions. See `data-integrity-protocol.md` for the full incident catalog.
+
+**1.5.a — Period/Context Completeness Check:**
+
+- **Tableau:** verify extract date vs last timeseries point. Incomplete period → normalize, exclude, or wait.
+- **CSV/uploaded:** verify max(date) in data vs declared analysis scope.
+- **A/B test results:** verify test duration matches declared, sample size is sufficient for power.
+- **Screenshots:** ask user about extract date and scope if unclear.
+
+**This is a blocker for PoP / before-after comparisons.**
+
+**1.5.b — Seasonal/Cyclical Screening:**
+
+Auto-screen analyzed periods against holiday windows (per `cjm-protocol.md` → Holiday Screening Windows):
+- Ukraine: Week 1 (Jan 1-7), Mar 7-8, Easter ± 1 week, May 1-3, BF, Dec 22-31
+- Global products: also Chinese NY, Diwali, Ramadan, US Thanksgiving / BF, Boxing Day
+
+If anomaly aligns with holiday window:
+- ⚠️ FLAG: "Holiday-affected period"
+- Search for sustained pattern in non-holiday weeks
+- **For post-release / A/B test: check if test period overlapped holidays → if yes, extrapolation is risky; consider extending the test past the holiday window**
+
+**1.5.c — Multi-Source Cross-Validation:**
+
+For critical CR / GMV / Order / Revenue / Retention metrics:
+- ≥ 2 independent sources (two Tableau workbooks, or Tableau + Glint, or Tableau + GA, or CSV + Tableau)
+- Variance ≤ 15% tolerated; > 15% → flag, resolve
+
+**Special case — extreme values:**
+- Drop > 25% (negative)
+- Lift > 50% (positive)
+- Sensational claims (10× growth, +200%)
+- A/B test result with Δ% > expected by 2× — likely novelty effect or selection bias
+
+→ Auto-promote to ≥ 3 sources, methodology change check (DT-* / DATA-* / Jira release tickets), reference period analysis (full table, not single cell).
+
+**For A/B test specifically:**
+- Sample size check vs power analysis — insufficient → inconclusive verdict, do not declare winner/loser
+- Statistical significance reporting (p-value, confidence interval) — never just Δ%
+- Selection bias check (traffic split balanced? opt-in vs random?)
+- Novelty effect screening (week-1 lift might fade by week 4)
+- Segment results (overall winner but losing on Mobile = flag, not blanket rollout)
+
+**For post-release specifically:**
+- Verify release date + flag activation date from ≥ 2 sources (Jira deployment + Confluence release note + metric inflection point)
+- Before/after periods — equal duration, holiday-balanced
+- Per-platform rollout → analyze each platform's timeline separately
+- Side-effects check on metrics outside requirements
+
+**1.5.d — Period Definition Lock + Inline Annotation:**
+
+Pre-compute inline-annotation for every metric. Examples:
+
+- `Conversion +12% YoY (May 2025 → May 2026, weeks 18-19, non-holiday window)`
+- `A/B test +8.5% primary metric (pilot Q1 2026, 50/50 split, 21-day duration, p=0.03)`
+- `Post-release: ATC rate 12.4% → 13.8% (before: 1.04-15.04; after: 22.04-12.05, both holiday-free)`
+
+Methodology section at the top is **not sufficient** — readers copy individual numbers into Slack and slides.
+
+**1.5.e — Source Type Marker:**
+
+Tag every source: `tableau-mcp`, `tableau-web`, `glint-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `pdf-upload`, `confluence-internal`, `jira-internal`, `user-text`.
+
+### Output of Step 1.5
+
+Every metric receives status: ✅ Verified / ⚠️ Caveat / ❌ Blocked.
+
+If Blocked metrics > 0:
+- Return to Step 1 to gather additional sources OR
+- Inform user explicitly that analysis cannot proceed without resolution
+
 ### Step 0.5: Vault Context Search (Optional)
 
 > Requires: `references/vault-protocol.md` → Step 0.5
@@ -199,6 +274,8 @@ IF vault_level > L0 (detected during Step 0h):
 4. IF user skips OR no results → continue normally
 
 ### Step 2 — Analysis engine
+
+**Pre-condition (v0.9.0+):** Step 1.5 (Data Integrity Gate) must be completed. Skip analysis on metrics with status ❌ Blocked. For metrics with status ⚠️ Caveat — inherit the caveat into all downstream outputs (do not silently drop the qualifier).
 
 Apply the appropriate analysis frameworks based on the data and context. See `references/analysis-frameworks.md` for detailed descriptions of each framework.
 
@@ -866,12 +943,18 @@ The calling skill should incorporate these results into its workflow without re-
 - Use Ukrainian or English based on user's language preference
 - When comparing periods — always state which periods are being compared
 - Statistical claims must be backed by actual computation, not intuition
+- **(v0.9.0+) Inline period annotation MANDATORY** — every cited metric in TL;DR, Executive Summary, A/B verdict, post-release classification, tables, bullets carries inline annotation per Gate Check 4 of `data-integrity-protocol.md`. Methodology section at the top is not sufficient — readers copy individual numbers into Slack and slides.
+- **(v0.9.0+) Caveat propagation** — Step 1.5 ⚠️ Caveat metrics surface their qualifier in the final report
+- **(v0.9.0+) Anomaly/A-B disclosure** — for any reported anomaly or A/B verdict: source count (≥ 2; ≥ 3 for extreme), period definition, holiday-screening status, methodology change check status, sample-size and power adequacy
+- **(v0.9.0+) Source type markers** — every cited number in Sources section tagged (`tableau-mcp` / `tableau-web` / `glint-live` / `ga-snapshot` / `csv-upload` / `screenshot-user` / `pdf-upload` / `confluence-internal` / `jira-internal`)
+- **(v0.9.0+) Never declare A/B winner/loser without:** sample-size power check, p-value or confidence interval, holiday-screening pass, segment-level review (Mobile vs Web, country, user-type)
 
 ## Additional Resources
 
+- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.9.0+)** — 5 universal gate checks for any cited metric (Step 1.5)
 - **`references/analysis-frameworks.md`** — detailed description of each analysis framework with examples
 - **`references/hypothesis-template.md`** — ICE scoring guidelines adapted for data-driven hypotheses
-- **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, health score formula
+- **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, health score formula, holiday windows, reference sources catalog
 - **`references/funnel-templates.md`** — standard funnel stage templates by product type
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)

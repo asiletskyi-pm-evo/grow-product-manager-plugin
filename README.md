@@ -8,6 +8,8 @@ AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figm
 
 ## Overview
 
+**New in v1.13.0** — **Data Integrity Gate** across `cjm-research`, `product-analysis`, and `product-research`. New universal verification gate that catches incomplete-period extrapolation, holiday windows cited as YoY trends, single-source cascading claims, and missing inline period annotation. See [`references/data-integrity-protocol.md`](references/data-integrity-protocol.md) and CHANGELOG v1.13.0.
+
 **New in v1.12.0** — Onboarding has two modes: **Basic** (3-5 min, mandatory fields only — usable immediately for concept/requirements/research/brainstorm/spec) and **Extended** (15-25 min, full setup of CJM, Vault, Templates, Knowledge Library, Teams, full Tableau analytics). A third **Test mode (sandbox)** lets you walk through onboarding without modifying real data — say `dry-run onboarding` any time. See `skills/plugin-configurator/SKILL.md` for the full Step 1 onboarding map.
 
 The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed to accelerate product management workflows. It provides skills for research, analysis, brainstorming, documentation, task creation, and visualization across your entire product lifecycle.
@@ -16,7 +18,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.3.1)
+### 1. CJM Research (v0.4.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -35,7 +37,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 2. Product Analysis (v0.8.0)
+### 2. Product Analysis (v0.9.0)
 
 **Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
 
@@ -50,7 +52,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 3. Product Research (v0.7.0)
+### 3. Product Research (v0.8.0)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
