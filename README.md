@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.12.0
+**Version:** 1.14.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.14.0** — **Team Ops Reporter** skill (5 modes): sprint plan, sprint review, quarter review, initiative status, and team-member review — built directly on Jira (custom-field map, status-history throughput, per-Assignee/Developer breakdowns, charts). Output goes to Confluence and/or local md+xlsx (asked each run). Five built-in templates under `templates/built-in/ops-report/`. See `skills/team-ops-reporter/SKILL.md` and CHANGELOG v1.14.0.
 
 **New in v1.13.0** — **Data Integrity Gate** across `cjm-research`, `product-analysis`, and `product-research`. New universal verification gate that catches incomplete-period extrapolation, holiday windows cited as YoY trends, single-source cascading claims, and missing inline period annotation. See [`references/data-integrity-protocol.md`](references/data-integrity-protocol.md) and CHANGELOG v1.13.0.
 
@@ -234,7 +236,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 - Registry-backed resolution with scoring (scope, subtype, language, usage_count)
 - 11 actions: list, show, add, clone, update, delete, restore, import, export, validate, rebuild-registry
 - Three-tier backup: per-template archive, pack backups, manual backup/restore
-- Ships with 12 built-in templates in Ukrainian + English (9 original + 3 new presentation templates added in v1.10.0)
+- Ships with 17 built-in templates in Ukrainian + English (9 original + 3 presentation templates (v1.10.0) + 5 ops-report templates (v1.14.0))
 
 **Trigger phrases:** "manage templates", "add template", "list templates", "template library", "clone template", "import templates", "restore template"
 
@@ -265,6 +267,23 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
+### 14. Team Ops Reporter (v0.1.0) — NEW in v1.14.0
+
+**Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
+
+**Modes:**
+- **sprint-plan** — directions → features → tasks, summary (total / carried / new / SP), per-Assignee and per-Developer distribution, key-focus table
+- **sprint-review** — closed tasks (Done incl. `Ready`), releases by stream (app / catalog-ui / backend / company-stats), flags ON/OFF, task list, closed-per-member
+- **quarter-review** — plan vs actual by direction, epics/features fully closed, releases (fetched per month — full-quarter JQL times out)
+- **initiative-status** — mission/epic/feature % done, status breakdown, per sub-feature, blockers (Flagged / On hold / blocked-by)
+- **member-review** — role-aware: closed / SP / passed-to-test (`status CHANGED TO "Ready for test" BY <member>`) / passed-to-review / tested, plus dynamics across days/weeks/sprints/months/quarters/years
+
+**Output:** asked each run — Confluence (your space) and/or local `md` + `xlsx`. Visualizations are proposed (burndown, SP dynamics, status donut, load distribution) and built on accept. Built-in templates live in `templates/built-in/ops-report/`; custom ones via Template Library (`artifact_type: ops-report`).
+
+**Trigger phrases:** "sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points"
+
+---
+
 ## Skills Summary
 
 | Skill | Version | Description |
@@ -282,6 +301,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Knowledge Library | v0.4.0 | Manage curated knowledge sources |
 | Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.2.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
+| Team Ops Reporter | v0.1.0 | Operational team reports from Jira: sprint plan/review, quarter review, initiative status, member review |
 
 ---
 
@@ -352,11 +372,11 @@ All user data is stored in a **user-controlled location** — either your Obsidi
 
 ## Multilingual Artifact Templates
 
-The plugin ships with a built-in template library that every skill uses to produce structured, consistent artifacts — concepts, requirements, research reports, CJM analyses, epics, tasks, meeting notes, and presentation outlines. Templates are multilingual (all languages live in a single `.md` file), scoped per product, and resolved automatically with user opt-in.
+The plugin ships with a built-in template library that every skill uses to produce structured, consistent artifacts — concepts, requirements, research reports, CJM analyses, epics, tasks, meeting notes, presentation outlines, and operational team reports (sprint/quarter/initiative/member). Templates are multilingual (all languages live in a single `.md` file), scoped per product, and resolved automatically with user opt-in.
 
 ### How templates are used
 
-When you invoke a skill that produces a deliverable (e.g., `write-concept`, `requirements-creator`, `product-research`, `cjm-research`, `feature-task-creator`, `product-analysis` in report mode, `diagram-prototyper` for decks, `meeting-processor` for MoMs, `brainstorm-features` when saving), the skill runs **Step T — Template Resolution** before starting the workflow. Step T:
+When you invoke a skill that produces a deliverable (e.g., `write-concept`, `requirements-creator`, `product-research`, `cjm-research`, `feature-task-creator`, `product-analysis` in report mode, `diagram-prototyper` for decks, `meeting-processor` for MoMs, `brainstorm-features` when saving, `team-ops-reporter` for ops reports), the skill runs **Step T — Template Resolution** before starting the workflow. Step T:
 
 1. Reads your `templates.preference` (`auto`, `always_ask`, or `smart` — default `smart`).
 2. Queries the template registry for candidates matching the artifact type, subtype, current product, and your language.
@@ -533,6 +553,6 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.11.0  
-**Last Updated:** April 2026
+**Version:** 1.14.0  
+**Last Updated:** June 2026
 

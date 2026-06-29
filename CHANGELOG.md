@@ -12,6 +12,45 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.14.0 (2026-06-29)
+
+### Added — Team Ops Reporter skill
+
+New skill `team-ops-reporter` (v0.1.0) — operational team reports built directly on Jira, with five modes: **sprint-plan**, **sprint-review**, **quarter-review**, **initiative-status**, **member-review**. Designed and validated against live SHOPEX/Prom data during bring-up.
+
+**What it does:**
+- Pulls issues via JQL, processes in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer), renders from a template, and offers charts.
+- Output destination is asked each run: Confluence and/or local `md` + `xlsx`. Visualizations are proposed (burndown, SP dynamics over periods, status donut, load distribution) and built on accept.
+- Built-in templates ship under `templates/built-in/ops-report/` (5 subtypes); custom templates via Template Library (`artifact_type: ops-report`, Step T resolution).
+
+**Modes & validated mechanics:**
+- **sprint-plan** — directions -> features -> tasks; total / carried / new + SP; per-Assignee and per-Developer breakdowns; key-focus table with per-direction summaries.
+- **sprint-review** — closed work (`statusCategory = Done`, **includes the `Ready` status**); releases grouped by stream (app / catalog-ui / backend / company-stats), windowed by `releaseDate`; feature flags ON/OFF (FLAG field + "Випилити прапор" cleanup tasks); closed-per-member; full task list with links.
+- **member-review** — role-aware throughput via changelog-backed JQL (`status CHANGED TO "Ready for test" BY "<accountId>" DURING (...)`); delivery metrics from `resolutiondate` + SP; dynamics at any granularity (day/week/sprint/month/quarter/year); matplotlib chart.
+- **initiative-status** — % done from `statusCategory` over the epic's `cf[10014]` child tree; status donut; per sub-feature (`X.Y` code in summary); blockers (Flagged `customfield_10021` / `On hold` / blocked-by links).
+- **quarter-review** — plan-vs-actual by direction, epics/features fully closed, releases; **fetched per month** because the full-quarter `resolved` JQL times out (>180 s) on this Jira.
+
+**Files:**
+
+| File | Type | Version |
+|---|---|---|
+| `skills/team-ops-reporter/SKILL.md` | new skill | v0.1.0 |
+| `skills/team-ops-reporter/references/jira-data-protocol.md` | new reference | n/a |
+| `templates/built-in/ops-report/sprint-plan-v1.md` | new template | v1.0.0 |
+| `templates/built-in/ops-report/sprint-review-v1.md` | new template | v1.0.0 |
+| `templates/built-in/ops-report/member-review-v1.md` | new template | v1.0.0 |
+| `templates/built-in/ops-report/initiative-status-v1.md` | new template | v1.0.0 |
+| `templates/built-in/ops-report/quarter-review-v1.md` | new template | v1.0.0 |
+| `README.md` | version bump 1.14.0 + skill #14 + templates list | n/a |
+
+### Jira data protocol (SHOPEX defaults, in `jira-data-protocol.md`)
+Custom-field map: Team `customfield_10001`, Story Points `customfield_10036`, Developer `customfield_10041`, QA `customfield_10037`, Epic Link `customfield_10014`, Sprint `customfield_10020`, FLAG `customfield_10043`. Large markdown JQL responses (descriptions inflate them past the token cap) are parsed via `grep -o` compact patterns; pagination via `nextPageToken`. Confluence publishing via `createConfluencePage` (HTML; `parentId` may be a folder id).
+
+### Backwards compatibility
+Additive only. Existing skills and `local-context.md` files are unaffected. The new skill requires the Jira MCP (already a plugin prerequisite) and optionally Confluence for publishing.
+
+---
+
 ## v1.13.0 (2026-05-11)
 
 ### Added — Data Integrity Gate across analytical skills
