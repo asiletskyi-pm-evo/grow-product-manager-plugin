@@ -1,6 +1,6 @@
 ---
 name: design-bridge
-version: 0.2.0
+version: 0.2.1
 description: Orchestrate Claude's Design skills (user-research, research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline. Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact.
 ---
 
@@ -16,7 +16,7 @@ All brand-specific values (Design System spec, pptx theme, base template, brand 
 
 | Upstream skill | Trigger | Default intent |
 |---|---|---|
-| `write-concept` | after Step 7 (publish) | `deck: subtype=feature-concept` |
+| `write-concept` | after Step 7 (publish) | `deck: subtype=feature` |
 | `requirements-creator` | after Step 5 (publish) | `handoff: components + copy + a11y` |
 | `brainstorm-features` | after ICE ranking top-3 | `prototype: lo-fi per top hypothesis` |
 | `product-research` | after Step 6 (synthesis) | `deck: subtype=research-highlights` |
@@ -65,11 +65,11 @@ Runs only when `intent = deck`. For other intents, skip.
 
 Follow `references/template-protocol.md`:
 - `artifact_type: presentation`
-- `subtype: {feature-concept | research-highlights | ab-test-readout | release-readout}` (set in Step 1)
+- `subtype: {feature | research-highlights | ab-test-readout | release-readout}` (set in Step 1)
 - `product_id: {active product}`
 - `language: {en|uk|…}`
 
-T-1..T-5 via `template-library`. If none found, fall back to `presentation-builtin-{subtype}-v1` (shipped in `templates/built-in/presentation/`). If that's also missing, produce an ad-hoc outline using this SKILL.
+T-1..T-5 via `template-library`. If none found, fall back to `presentation-builtin-{subtype}` (shipped in `templates/built-in/presentation/`). If that's also missing, produce an ad-hoc outline using this SKILL.
 
 ## Workflow
 
@@ -91,7 +91,7 @@ Via `AskUserQuestion` if not passed from an upstream skill:
 - research-enrichment (run sources through `design:research-synthesis` and append to the upstream artifact)
 
 **Q2 (deck only). Which deck subtype?**
-- feature-concept (feature pitch — 10 slides, typical for direction review)
+- feature (feature pitch — 10 slides, typical for direction review)
 - research-highlights (research dump — 8–12 slides)
 - ab-test-readout (A/B test results — 6 slides)
 - release-readout (release / sprint summary — 6–8 slides)
@@ -301,7 +301,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.2.0",
+  skill_version: "0.2.1",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],
@@ -342,7 +342,7 @@ vault_save({
 | Failure | Behavior |
 |---|---|
 | `product.base_pptx` unset or missing | blank `Presentation()` + explicit shape positioning from theme yaml rect coords |
-| Template not found | fall back to `presentation-builtin-{subtype}-v1`; if that's missing too — ad-hoc outline |
+| Template not found | fall back to `presentation-builtin-{subtype}`; if that's missing too — ad-hoc outline |
 | DS yaml won't parse | fall back to brand tokens in `product.brand.*`; if those are missing — neutral defaults (dark text on white) |
 | Figma MCP 403 / seat=View | skip hi-fi; embed only screenshots (if `get_screenshot` works); on fail — placeholder |
 | `design:*` plugin missing | propose install; fall back to native rewrite (ux-copy), manual critique outline |
@@ -359,11 +359,11 @@ vault_save({
 design-bridge:
   Step 0  → load local-context + DS yaml (from product.design_system_spec)
             + theme yaml (from product.pptx_theme)
-  Step 1  → intent=deck (user explicit), subtype=feature-concept
+  Step 1  → intent=deck (user explicit), subtype=feature
   Step 2  → audience=direction_review (default), language=en, length=10,
             brand=brand_default, embeds=ask
-  Step T  → template-library.resolve(presentation, feature-concept, <product>, en)
-            → selected: presentation-builtin-feature-concept-v1@1.0.0
+  Step T  → template-library.resolve(presentation, feature, <product>, en)
+            → selected: presentation-builtin-feature@1.0.0
   Step 3  → parse Confluence PROJ-1234 page → Deck IR populated:
               title="Q&A on Product Page", subtitle="Direction review",
               problem, solution, metrics, ask, scope, phases
@@ -381,7 +381,7 @@ design-bridge:
   Step 7  → attach to PROJ-1234 Confluence page as attachment
             → comment in Jira PROJ-1234 with computer:// link
             → update Obsidian Vault: Presentations/<product>/2026-04-20/
-  Step 8  → vault_save(type=presentation, subtype=feature-concept, …)
+  Step 8  → vault_save(type=presentation, subtype=feature, …)
   → output: "[View deck](computer://…/2026-04-20-qa-product-page-direction.pptx)"
 ```
 
