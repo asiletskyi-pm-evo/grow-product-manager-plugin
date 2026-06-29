@@ -1,10 +1,10 @@
 ---
-name: feature-task-creator
+name: task-creator
 version: 0.8.0
 description: Creates Jira tasks for feature implementation based on requirements from a Confluence page. Use when the user asks to create tasks for a feature, create Jira issues from Confluence requirements, break down a feature into development tasks (FE/BE/Android/iOS/Design/Analytics), set up feature tasks in an Epic, or says something like "create tasks from requirements". Also trigger when the user shares a Confluence link and asks to create Jira tasks from it.
 ---
 
-# Feature Task Creator
+# Task Creator
 
 Automate creation of Jira tasks for feature implementation based on requirements from a Confluence page. Handles the full lifecycle: reading requirements, creating structured tasks per work type, filling all required fields, and linking tasks by dependency logic.
 

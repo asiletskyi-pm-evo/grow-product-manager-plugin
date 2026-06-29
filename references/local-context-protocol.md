@@ -153,7 +153,7 @@ During execution, skills may discover new information that should be saved to `l
 Examples of discoverable context:
 - **Product Research** → new competitors found during research
 - **Product Analysis** → current metric values from dashboards
-- **Feature Task Creator** → Jira team IDs, member accountIds discovered from existing tasks
+- **Task Creator** → Jira team IDs, member accountIds discovered from existing tasks
 - **Requirements Creator** → Confluence template URL discovered during publishing
 - **CJM Research** → updated baseline conversions read from dashboards
 

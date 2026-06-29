@@ -322,11 +322,11 @@ As a last resort for any destination — generate a local document and provide t
 
 After publishing (or if the user decided not to save), **always** propose transitioning to the next skill:
 
-> "Requirements are ready. Would you like to create Jira tasks for implementing this feature? I'll pass the context (requirements link, Epic, platforms) to the Feature Task Creator skill."
+> "Requirements are ready. Would you like to create Jira tasks for implementing this feature? I'll pass the context (requirements link, Epic, platforms) to the Task Creator skill."
 
 If the user agrees:
 - Pass the full context: requirements document link, Epic key, feature number, platforms, approach (feature flag / A/B test), locales
-- The Feature Task Creator skill will use these requirements as the source for creating Jira issues
+- The Task Creator skill will use these requirements as the source for creating Jira issues
 
 If the user declines — end the workflow gracefully.
 
@@ -540,7 +540,7 @@ After publishing, always offer the next step:
 
 > "Requirements are improved and saved. Would you like to create Jira tasks for implementing this feature?"
 
-If the user agrees — invoke Feature Task Creator with full context.
+If the user agrees — invoke Task Creator with full context.
 
 ---
 

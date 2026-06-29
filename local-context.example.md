@@ -194,3 +194,50 @@ contrast_pairs:
 
 <!-- Add any additional context that your team needs -->
 <!-- Examples: internal processes, naming conventions, sprint cadence, etc. -->
+
+<!-- Додай цю секцію у local-context.example.md (і у свій робочий local-context.md). -->
+
+## Planning (planning-suite)
+
+Конфіг для `quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`.
+
+```yaml
+planning:
+  jira_board_id: 123                 # дошка для спринтів/velocity (browser-pull)
+  sprint:
+    cadence_weeks: 2
+    anchor: { name: "Sprint 55", start: "2026-06-29" }   # якір для прогнозу сітки
+  capacity:
+    baseline_sp_per_sprint: 10       # на інженера; калібрується по факту
+    availability_default: 0.9        # 10% резерв на відпустки/хвороби
+    techdebt_reserve: 0.15
+    gate_target: 0.85                # ціль завантаження (буфер ризиків)
+    team:                            # хто рахується у стелю (per платформа/роль)
+      BE: { members: [Surname1, Surname2], note: "TL <Name> — інші тех.задачі, не рахуємо" }
+      FE: { members: [Surname3, Surname4], note: "TL <Name> — не рахуємо" }
+      iOS: { members: [Surname5, Surname6, Surname7] }   # TL як dev
+      Android: { members: [Surname8, Surname9, Surname10] }
+      Design: { members: [Surname11] }
+      Analytics: { members: [Surname12] }
+      QA: { members: [Surname13], support: true }
+  goal_map:                          # епік → Ціль (Atlas Goals не запитуються через MCP)
+    PROJ-25: [101, 102, 103, 104, 105, 106, 107]
+    PROJ-3:  [108, 106]
+    PROJ-22: [109]
+    PROJ-24: [110]
+    feedback-ecosystem: [111, 112, 113, 114]
+  estimate_tshirt: { S: 3, M: 5, L: 8, XL: 13 }   # авто-оцінка за аналогією
+  development_flow:                  # збирається на онбордингу (Planning setup)
+    work_types: [Requirements, Design, BE, Analytics, Client, QA, Release]
+    sequence:
+      Design: [Requirements]
+      BE: [Design]
+      Analytics: [Design]
+      Client: [BE, Analytics]
+      QA: [Client]
+      Release: [QA]
+    parallel: [[BE, Analytics]]
+    ready_threshold: [on review, in test, ready for test, done, closed]
+    platform_notes: "iOS/Android client залежать від BE"
+    exceptions: ""
+```

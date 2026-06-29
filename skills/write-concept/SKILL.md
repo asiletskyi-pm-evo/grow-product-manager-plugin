@@ -254,7 +254,7 @@ If the user requested corrections during review, analyze whether the skill's alg
 2. If it's a pattern — propose a specific improvement to the skill's conditions
 3. If the user agrees — update the SKILL.md, re-package the plugin, and provide the updated file
 
-### 7. Propose next step — Brainstorm Features or Feature Task Creator
+### 7. Propose next step — Brainstorm Features or Task Creator
 
 After sharing the concept summary, **always** propose transitioning to the next skill in the workflow:
 
@@ -268,7 +268,7 @@ If the user chooses **Brainstorm Features and Hypotheses**:
 
 If the user chooses **Feature and Hypothesis Requirements Creator**:
 - Pass the full concept context: Confluence page link, scope, phasing, technical considerations
-- The Feature Task Creator skill will use this concept as the requirements source
+- The Task Creator skill will use this concept as the requirements source
 
 If the user declines — end the workflow gracefully.
 
@@ -284,7 +284,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.5.0",
+     skill_version: "0.7.0",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],
