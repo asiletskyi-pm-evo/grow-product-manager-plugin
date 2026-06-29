@@ -13,7 +13,7 @@
         "path": ".",
         "ref": "main"
       },
-      "description": "AI assistant for Product Managers: research, concepts, brainstorming, requirements, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, knowledge library, multilingual artifact templates, and design-bridge (brand-themed decks, prototypes, handoffs, research enrichment, WCAG 2.1 AA a11y gates — bring your own Design System via local-context.md) — integrated with Jira, Confluence, Figma, and Tableau.",
+      "description": "AI assistant for Product Managers: research, concepts, brainstorming, requirements, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, knowledge library, multilingual artifact templates, and design-bridge (brand-themed decks, prototypes, handoffs, research enrichment, WCAG 2.1 AA a11y gates — bring your own Design System via local-context.md) — integrated with Jira, Confluence, Figma, and Tableau. Now includes Team Ops Reporter for Jira-based operational reports (sprint plan/review, quarter review, initiative status, member review).",
       "category": "productivity"
     }
   ]
