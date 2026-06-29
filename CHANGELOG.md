@@ -14,6 +14,39 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди цей блок у CHANGELOG.md одразу після хедера, перед "## v1.14.0". -->
 
+<!-- Препенди у CHANGELOG.md після хедера, перед "## v1.15.0". -->
+
+## v1.16.0 (2026-06-29)
+
+### Fixed — audit quick-fixes (batch 1)
+
+- **`skills/design-bridge/SKILL.md`** `0.2.0 → 0.2.1` (PATCH) — виправлено невідповідність subtype/template_id, що **ламала Step T** (резолв шаблону завжди промахувався → ad-hoc): `subtype=feature-concept` → `feature`; fallback id `presentation-builtin-feature-concept-v1` / `presentation-builtin-{subtype}-v1` → `presentation-builtin-feature` / `presentation-builtin-{subtype}` (узгоджено з реальним `template_id: presentation-builtin-feature`, `subtype: feature`).
+- **`references/capacity-model.md`** — виправлено висяче посилання `data-pipeline.md` → `jira-data-protocol.md` (data-pipeline свідомо не створювався; реюз протоколу team-ops-reporter).
+
+### Added — testing infrastructure у репо
+
+- **`testing/Testing-process.md`** — процес тестування плагіна: 6 стадій (backup → static lint → trigger eval → scenario walk → integration → regression → sign-off), формат тест-кейсів, backup-протокол, релізна петля, оркестрація субагентами, Definition of Done.
+- **`testing/skill_lint.py`** — автоматична Stage 1: frontmatter, `name`==тека, semver, резолв `references/*`, **skill_version у тілі == frontmatter**, і (v1.16) **dangling refs у тілах reference-файлів** (backticked `*.md`).
+- **`testing/test-cases.md`** — реєстр тест-кейсів по стадіях, оновлюється кожен реліз.
+
+### Files
+
+| File | Type | Version |
+|---|---|---|
+| `skills/design-bridge/SKILL.md` | modified (subtype/template_id fix) | 0.2.0 → 0.2.1 |
+| `references/capacity-model.md` | modified (ref fix) | n/a |
+| `testing/Testing-process.md` | NEW | n/a |
+| `testing/skill_lint.py` | NEW | n/a |
+| `testing/test-cases.md` | NEW | n/a |
+| `README.md` | version bump 1.16.0 | n/a |
+
+### Deferred
+- `product-analysis` фантомний Step 0h + порядок кроків → v1.17 (потребує обережної інспекції файла).
+- Решта аудит-фіксів (team-ops-reporter sprint-id, template-library лічба, plugin-configurator дублі/нумерація) → v1.17/v1.18.
+
+### Backwards compatibility
+Additive + bugfix. Безпечно для Claude; тригер-фрази збережено.
+
 ## v1.15.0 (2026-06-29)
 
 ### Added — Planning Suite (4 skills) + planning core references
