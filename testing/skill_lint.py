@@ -53,6 +53,8 @@ for sf in skill_files:
 for rp in ref_paths:
     t = open(rp, encoding="utf-8").read()
     for m in set(re.findall(r"`([\w-]+\.md)`", t)):
+        if re.search(r"\d{4}-\d{2}-\d{2}", m):   # приклад артефакта (датоване імʼя) — не reference
+            continue
         if m not in refs and m not in IGNORE_MD:
             warns.append(f"{os.path.basename(rp)}: backticked '{m}' не резолвиться як reference")
 

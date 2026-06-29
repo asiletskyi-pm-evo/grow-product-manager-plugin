@@ -28,7 +28,7 @@ Before any operation, follow these shared references:
 
 ## Actions
 
-The skill dispatches on the user's request into one of 11 actions. If ambiguous, ask via `AskUserQuestion`.
+The skill dispatches on the user's request into one of 12 actions. If ambiguous, ask via `AskUserQuestion`.
 
 | Action | Trigger phrases | Purpose |
 |--------|-----------------|---------|
