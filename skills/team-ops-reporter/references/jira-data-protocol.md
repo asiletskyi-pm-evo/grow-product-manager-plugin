@@ -17,7 +17,7 @@ How to fetch and parse Jira data reliably for ops reports. SHOPEX/Prom defaults 
 | fixVersions | `fixVersions` | releases (`name`, `releaseDate`, `released`) |
 | resolutiondate | `resolutiondate` | use for "closed in period" |
 
-Cloud ID: `4a0df834-655a-4a18-8b2a-5ec2c9dec994`. Sprint 55 id `14979` (active), 54 `14978`, 53 `14977` (closed).
+Cloud ID: `4a0df834-655a-4a18-8b2a-5ec2c9dec994`. **Sprint ids are NOT hardcoded** — resolve them at runtime: use `openSprints()` / `closedSprints()` in JQL, or read `customfield_10020` (`{id,name,state,…}`) from issues, or query the board's sprints, then map name → id. (Example only, do NOT use as defaults: at one point sprint 55 ≈ `14979` active, 54 ≈ `14978`, 53 ≈ `14977` closed — these go stale every sprint.)
 
 ## Per-mode JQL
 
