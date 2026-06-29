@@ -1,6 +1,6 @@
 # Grow Product Manager
 
-**Version:** 1.14.0
+**Version:** 1.15.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
@@ -106,7 +106,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 7. Feature Task Creator (v0.8.0)
+### 7. Task Creator (v0.8.0)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -179,7 +179,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 - Agenda and attached documents
 - Presentation materials
 
-**Chaining:** Connects to Feature Task Creator (action items → Jira), Product Research (interview insights), Requirements Creator, Brainstorm Features, and Diagram Prototyper
+**Chaining:** Connects to Task Creator (action items → Jira), Product Research (interview insights), Requirements Creator, Brainstorm Features, and Diagram Prototyper
 
 **Trigger phrases:** "summarize meeting", "meeting notes", "action items"
 
@@ -294,7 +294,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Brainstorm Features | v0.7.0 | Interactive feature ideation with ICE scoring |
 | Write Concept | v0.7.0 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.7.0 | Create and analyze feature requirements |
-| Feature Task Creator | v0.8.0 | Create Jira tasks from requirements |
+| Task Creator | v0.8.0 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.8.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Meeting Processor | v0.10.0 | Process meetings and extract action items |
 | Plugin Configurator | v1.0.0 | Configure plugin for your organization |
@@ -376,7 +376,7 @@ The plugin ships with a built-in template library that every skill uses to produ
 
 ### How templates are used
 
-When you invoke a skill that produces a deliverable (e.g., `write-concept`, `requirements-creator`, `product-research`, `cjm-research`, `feature-task-creator`, `product-analysis` in report mode, `diagram-prototyper` for decks, `meeting-processor` for MoMs, `brainstorm-features` when saving, `team-ops-reporter` for ops reports), the skill runs **Step T — Template Resolution** before starting the workflow. Step T:
+When you invoke a skill that produces a deliverable (e.g., `write-concept`, `requirements-creator`, `product-research`, `cjm-research`, `task-creator`, `product-analysis` in report mode, `diagram-prototyper` for decks, `meeting-processor` for MoMs, `brainstorm-features` when saving, `team-ops-reporter` for ops reports), the skill runs **Step T — Template Resolution** before starting the workflow. Step T:
 
 1. Reads your `templates.preference` (`auto`, `always_ask`, or `smart` — default `smart`).
 2. Queries the template registry for candidates matching the artifact type, subtype, current product, and your language.
@@ -553,6 +553,17 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.14.0  
+**Version:** 1.15.0  
 **Last Updated:** June 2026
 
+
+## Planning Suite (v1.15.0)
+
+Планувальний шар поверх звітності team-ops-reporter (доповнює, не дублює; спільний `jira-data-protocol.md`).
+
+- **Roadmap Architect (v0.1.0)** — структура roadmap: мапінг Ціль→Initiative→Епік→Фіча, розмітка, дерево, розриви (audit/map/tree/onboard).
+- **Project Planning (v0.1.0)** — арка проєкту: обсяг, залежності+критичний шлях, прогноз тривалості під % зайнятості, мульти-квартальний roadmap, rolling-reforecast (forecast/sequence/roadmap/whatif/replan).
+- **Quarterly Planning (v0.1.0)** — квартальний roadmap з capacity-gate і retro (retro/plan/full/refresh).
+- **Sprint Planning (v0.1.0)** — передпланування спринта: готовність, ризик, призначення (groom/plan/review/forecast).
+
+Нові references: `capacity-model.md`, `dependency-model.md`, `planning-core.md`, `roadmap-artifacts.md`.

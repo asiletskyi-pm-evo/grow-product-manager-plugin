@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.0.0
+version: 2.1.0
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist.
 ---
 
@@ -395,7 +395,7 @@ Build the readiness table:
 
 | Connector | Status | Required for Basic | Required for Extended | Used by skills |
 |-----------|--------|--------------------|-----------------------|----------------|
-| Jira | ✅/❌ | ⭐ Strongly recommended | ✅ Mandatory | `feature-task-creator`, `requirements-creator`, `write-spec` |
+| Jira | ✅/❌ | ⭐ Strongly recommended | ✅ Mandatory | `task-creator`, `requirements-creator`, `write-spec` |
 | Confluence | ✅/❌ | ⭐ Strongly recommended | ✅ Mandatory | publishing skills |
 | Tableau | ✅/❌ | — | ⭐ Strongly recommended for CJM/AB | `product-analysis`, `cjm-research` |
 | Figma | ✅/❌ | — | optional | `product-research`, `design-bridge` |
@@ -1375,7 +1375,7 @@ Other skills can **add information** to `local-context.md` during their executio
 
 - **Product Research** → can add discovered competitors
 - **Product Analysis** → can update current metric values
-- **Feature Task Creator** → can discover and add team member Jira accountIds
+- **Task Creator** → can discover and add team member Jira accountIds
 - **Requirements Creator** → can discover and add Confluence template URL
 - **CJM Research** → can update baseline conversions from dashboard data
 
@@ -1456,3 +1456,26 @@ This skill (`plugin-configurator`) must bump its own version when its SKILL.md i
 - **`references/vault-schema.md`** — Vault schema definition, template formats, metadata storage
 - **`references/template-protocol.md`** — template resolution protocol used by Step 13 and consumer skills
 - **`skills/template-library/SKILL.md`** — CRUD actions and wizards for the Template Library
+
+<!-- Додай як новий крок у skills/plugin-configurator/SKILL.md (Extended onboarding, після Teams/CJM, перед Templates). Бамп версії 2.0.0 → 2.1.0. -->
+
+## Step — Planning setup (Extended)
+
+Налаштування planning-suite (`quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`). Пише секцію `planning` у local-context (схема — `local-context.example.md` → Planning). Mode-gate: Extended; у Basic — додати ключ у `onboarding.deferred_steps`.
+
+Збирається через `AskUserQuestion`/діалог:
+
+1. **Команда й capacity** — склад по платформах/ролях; **хто рахується** у стелю (TL як dev чи ні); baseline SP/спринт (дефолт 10); резерв техборгу (дефолт 15%); ціль завантаження (дефолт 85%). Метчинг учасників із Jira-профілями.
+2. **Спринти** — каденс (дефолт 2 тижні), якір (назва+дата найближчого, напр. `SEX 55 = 2026-06-29`), Jira board id.
+3. **Мапа цілей** — епік → Ціль (EVOCO1-XX), бо Atlas Goals не запитуються через MCP.
+4. **Пороги gate** — warning/critical (дефолт 85/100%); рубрика t-shirt→SP.
+5. **Development Flow (опитування про флоу розробки)** — якщо секції ще немає:
+   - типова послідовність work-types (дефолт `Requirements → Design → {BE, Analytics} → Client → QA → Release`; дати переставити/додати/прибрати);
+   - що йде паралельно;
+   - залежності-передумови (ребра DAG) + платформні нюанси;
+   - поріг готовності (з якого статусу передумова пройдена; дефолт on review/in test/done);
+   - особливості/винятки логіки команди (вільний ввід).
+
+Запропонувати зберегти все у local-context (`planning` секція). Усі planning-скіли читають це; `update config` оновлює.
+
+Перевірка наявності: якщо `planning.development_flow` уже є → не перепитувати, лише запропонувати перегляд/оновлення.

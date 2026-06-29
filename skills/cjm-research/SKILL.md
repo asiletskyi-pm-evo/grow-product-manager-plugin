@@ -689,7 +689,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.2.0",
+     skill_version: "0.4.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
@@ -720,7 +720,7 @@ After report assembly, offer the user next actions based on the mode:
 
 **From `hypotheses` and `full` modes:**
 - → **Requirements Creator** — "Write detailed requirements for the top hypothesis"
-- → **Feature Task Creator** — "Create Jira tasks for the prioritized backlog"
+- → **Task Creator** — "Create Jira tasks for the prioritized backlog"
 
 **From `full` mode additionally:**
 - → **Diagram & Prototype Creator** — "Create a presentation deck from this report"

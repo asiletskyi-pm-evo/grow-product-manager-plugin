@@ -1,7 +1,7 @@
 ---
 name: meeting-processor
 version: 0.10.0
-description: Process meeting recordings, transcripts, and notes to extract action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Chains to feature-task-creator, requirements-creator, product-research, and brainstorm-features.
+description: Process meeting recordings, transcripts, and notes to extract action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Chains to task-creator, requirements-creator, product-research, and brainstorm-features.
 ---
 
 # Meeting Processor
@@ -18,7 +18,7 @@ Before starting, read and follow the integration fallback chain in `references/i
 - **Microsoft Calendar MCP** — alternative calendar connector (Outlook / Microsoft 365). If Google Calendar MCP is not available — search MCP registry for Microsoft Calendar
 - **Confluence** — for publishing meeting notes / MoM
 - **Notion** — alternative publishing destination
-- **Jira** — for creating action item tasks (via feature-task-creator chaining)
+- **Jira** — for creating action item tasks (via task-creator chaining)
 
 For each product: check for MCP connector → search MCP registry → fall back to browser.
 
@@ -63,7 +63,7 @@ Run Steps T-1 → T-5 from `references/template-protocol.md`:
 
 **When to run Step T:** between Step M4 (Choose output format) and Step M5 (Extract content) — once meeting type is known, resolve the template so that Step M5 can collect variables that the template expects.
 
-**Chained invocation (delegation pattern):** when the user routes the output to another skill (Step M9 — Skill chaining: e.g., "turn action items into Jira tasks" → `feature-task-creator`, "write a concept from this discovery" → `write-concept`, "draft requirements from this spec meeting" → `requirements-creator`, "research these hypotheses" → `product-research`, "brainstorm this further" → `brainstorm-features`), **each downstream skill runs its OWN Step T** for its own artifact type. Meeting-processor's Step T is only for the MoM/meeting-notes artifact itself. Pass the raw extracted content to the downstream skill; do NOT pre-apply templates intended for downstream artifacts.
+**Chained invocation (delegation pattern):** when the user routes the output to another skill (Step M9 — Skill chaining: e.g., "turn action items into Jira tasks" → `task-creator`, "write a concept from this discovery" → `write-concept`, "draft requirements from this spec meeting" → `requirements-creator`, "research these hypotheses" → `product-research`, "brainstorm this further" → `brainstorm-features`), **each downstream skill runs its OWN Step T** for its own artifact type. Meeting-processor's Step T is only for the MoM/meeting-notes artifact itself. Pass the raw extracted content to the downstream skill; do NOT pre-apply templates intended for downstream artifacts.
 
 **Escape hatch:** if the user says "just a quick summary" or "plain notes, no template", skip Step T and use a lightweight bullet-list output.
 
@@ -432,11 +432,11 @@ After publishing (or if the user decided not to save), offer the next step **bas
 
 | Meeting type | Condition | Offer |
 |-------------|-----------|-------|
-| **Grooming / Planning** | Action items with task assignments extracted | "Would you like to create Jira tasks for the discussed items? I'll pass the context to Feature Task Creator." → invoke `feature-task-creator` |
+| **Grooming / Planning** | Action items with task assignments extracted | "Would you like to create Jira tasks for the discussed items? I'll pass the context to Task Creator." → invoke `task-creator` |
 | **Discovery / Interview** | User insights and quotes extracted | "Would you like to synthesize these interview insights into a research report? I'll pass the context to Product Research." → invoke `product-research` |
 | **Discovery / Interview** | Feature ideas or requirements discussed | "Would you like to write requirements based on the discussed feature? I'll pass the context to Requirements Creator." → invoke `requirements-creator` |
 | **Brainstorm** | Ideas and hypotheses extracted | "Would you like to score and prioritize these ideas? I'll pass the context to Brainstorm Features." → invoke `brainstorm-features` |
-| **Status / Agreements** | Agreements with deadlines | "Would you like to create Jira tasks for the agreed action items?" → invoke `feature-task-creator` |
+| **Status / Agreements** | Agreements with deadlines | "Would you like to create Jira tasks for the agreed action items?" → invoke `task-creator` |
 | **Demo / Retro** | Improvement proposals extracted | "Would you like to brainstorm solutions for the identified improvements?" → invoke `brainstorm-features` |
 | **Any type** | Complex process discussed | "Would you like to visualize the discussed process as a diagram?" → invoke `diagram-prototyper` |
 
@@ -456,7 +456,7 @@ Every skill invocation from meeting-processor must include the **full participan
 
 | Target skill | What to pass |
 |-------------|-------------|
-| **feature-task-creator** | Action items (who, what, deadline), task estimates, priorities, Epic reference if mentioned, participants with roles for task assignment |
+| **task-creator** | Action items (who, what, deadline), task estimates, priorities, Epic reference if mentioned, participants with roles for task assignment |
 | **requirements-creator** | Feature discussion fragments, functional requirements mentioned, user scenarios discussed, participants as stakeholders |
 | **product-research** | User insights, quotes with speaker attribution, pain points, needs, participants as interview subjects |
 | **brainstorm-features** | Ideas, hypotheses, evaluation criteria, voting results, participants as idea owners |
@@ -542,7 +542,7 @@ Compile results into a chronological synthesis:
 Show the synthesis to the user. Offer follow-up actions:
 - "Would you like to see the full transcript of any of these meetings?" → switch to Process mode for the selected meeting
 - "Would you like to publish this summary?" → publish to Confluence/Notion
-- "Would you like to create tasks from the action items?" → invoke feature-task-creator
+- "Would you like to create tasks from the action items?" → invoke task-creator
 
 ---
 
