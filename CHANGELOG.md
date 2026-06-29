@@ -16,6 +16,37 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.15.0". -->
 
+<!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
+
+## v1.17.0 (2026-06-29)
+
+### Fixed — audit quick-fixes (batch 2)
+
+- **`skills/team-ops-reporter/references/jira-data-protocol.md`** — прибрано захардкоджені sprint-id (`55=14979` тощо), що протухають щоспринта. Замінено на динамічне резолвлення в рантаймі (`openSprints()`/`closedSprints()` у JQL, або `customfield_10020`, або sprints дошки → map name→id). Числа лишено лише як позначений «приклад, не дефолт».
+- **`skills/template-library/SKILL.md`** — виправлено лічбу: «one of **11** actions» → «**12** actions» (у таблиці Actions фактично 12 рядків, включно з `backup` / `restore --from`).
+
+### Changed — lint denoise
+
+- **`testing/skill_lint.py`** — у перевірці dangling-refs у тілах reference-файлів тепер **ігноруються імена-приклади з датою** (`YYYY-MM-DD`, напр. артефакти волту у `vault-schema.md`/`vault-protocol.md`). Прибрало 18 хибних WARN, gate лишається високосигнальним.
+
+### Verified — not a bug
+- `product-analysis` крос-реф «Step 0h» — **коректний** (Step 0h = vault detection реально існує в `references/local-context-protocol.md`, під-крок Step 0). Аудит-флаг знято.
+
+### Deferred → v1.18
+- `product-analysis` косметичний порядок Step 0.5/Step 1.5 (переміщення блоку) — разом із `plugin-configurator` рефактором (обережна інспекція великих файлів).
+
+### Files
+
+| File | Type |
+|---|---|
+| `skills/team-ops-reporter/references/jira-data-protocol.md` | modified (sprint-id → dynamic) |
+| `skills/template-library/SKILL.md` | modified (11 → 12 actions) |
+| `testing/skill_lint.py` | modified (denoise dated examples) |
+| `README.md` | version bump 1.17.0 |
+
+### Backwards compatibility
+Additive + doc/tooling fixes. Безпечно для Claude; тригер-фрази й поведінка незмінні.
+
 ## v1.16.0 (2026-06-29)
 
 ### Fixed — audit quick-fixes (batch 1)
