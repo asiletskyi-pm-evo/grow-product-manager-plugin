@@ -495,7 +495,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "product-analysis",
-     skill_version: "0.6.0",
+     skill_version: "0.9.0",
      tags: [metric names analyzed, platforms, analysis_mode],
      content: full_analysis_markdown,
      related: [source hypothesis, source requirements, previous analyses from Step 0.5],
