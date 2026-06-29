@@ -12,6 +12,64 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+<!-- Препенди цей блок у CHANGELOG.md одразу після хедера, перед "## v1.14.0". -->
+
+## v1.15.0 (2026-06-29)
+
+### Added — Planning Suite (4 skills) + planning core references
+
+Новий планувальний/прогнозний шар поверх наявної звітності `team-ops-reporter`. Чотири скіли за рівнями абстракції roadmap + чотири спільні references. **Доповнює** team-ops-reporter (він — описовий «що є/було»; планування — «що має бути»), не дублює: спільний Jira-плумбінг реюзиться з `team-ops-reporter/references/jira-data-protocol.md`.
+
+**Дві осі планування на спільному фундаменті:**
+- Фундамент — `roadmap-architect` (структура, поза часом).
+- Вертикаль — `project-planning` (один напрямок крізь час).
+- Горизонталь — `quarterly-planning` + `sprint-planning` (період через усі напрямки).
+Звʼязок ос — спільний `% зайнятості напрямком` і `capacity-model`.
+
+**Нові скіли:**
+- **`quarterly-planning` (v0.1.0)** — квартальний roadmap: retro попереднього кварталу (делегує `team-ops-reporter` `quarter-review`) → capacity (4 входи з gate) → драфт + capacity-gate на платформних слайсах → корекція скоупу → артефакти (Confluence + живий дашборд + лейби q{N}). Режими: retro/plan/full/refresh.
+- **`project-planning` (v0.1.0)** — арка проєкту поза кварталами: обсяг + граф залежностей/критичний шлях + прогноз тривалості під % зайнятості + мульти-квартальний roadmap + **rolling-reforecast** (`replan`: факт+перенесене → перенос на майбутнє + дрейф vs baseline). Режими: forecast/sequence/roadmap/whatif/replan.
+- **`sprint-planning` (v0.1.0)** — передпланування спринта: фокуси з roadmap → per-member capacity → carryover-risk (делегує `sprint-review`+`member-review`) → сканування готовності (work-type DAG) → детекція порушень послідовності → наповнення + pull-forward → пропозиція виконавців. Режими: groom/plan/review/forecast.
+- **`roadmap-architect` (v0.1.0)** — структурна гігієна: мапінг Ціль→Initiative→Епік→Фіча, enforce розмітки, дерево, звіт розривів. Режими: audit/map/tree/onboard.
+
+**Нові references (спільне ядро):**
+- `references/capacity-model.md` — формула стелі, per-member, baseline+калібрування, доступність, техборг, **allocation %**, платформні слайси, авто-оцінка за аналогією, пороги gate (85/100%), quarter↔sprint масштабування, hook прогнозу тривалості.
+- `references/dependency-model.md` — DAG двох рівнів (епік/фіча + work-type), топосорт, критичний шлях, цикли, **правило готовності** (поріг on review/in test/done), джерела з Jira-лінків.
+- `references/planning-core.md` — канон-ієрархія, конвенція розмітки (назви/лейби), нормалізація статусів, мапа цілей, **Development Flow** (флоу розробки команди з онбордингу).
+- `references/roadmap-artifacts.md` — формати планувальних артефактів (quarterly roadmap, project arc, дерево структури, capacity-gate, живий дашборд) + демаркація з ops-report.
+
+**Змінено:**
+- `skills/plugin-configurator/SKILL.md` `2.0.0 → 2.1.0` (MINOR) — нова **Planning setup** + опитування **Development Flow** (типова послідовність робіт, паралелізм, залежності, поріг готовності) у Extended-онбордингу; пише Planning-секцію в local-context.
+- `local-context.example.md` — нова **Planning** секція (склад команди+capacity-правила, спринти каденс+якір+board, baseline, мапа цілей, пороги gate, development_flow).
+- `README.md` — версія 1.15.0, скіли #14–17, нові references.
+
+### Changed — rename Feature Task Creator → Task Creator
+- `skills/feature-task-creator/` → `skills/task-creator/`; `name: feature-task-creator → task-creator`, title «Feature Task Creator» → «Task Creator», опис узагальнено (не лише «feature»). Усі внутрішні посилання у плагіні оновлено find/replace (CHANGELOG-історія збережена). **Тригер-фрази збережено** — інвокація за фразою у Claude не ламається.
+
+**Валідовано** наскрізним прогоном на живих даних SHOPEX/Prom (Q2-факт → capacity Q3 (SEX 55–61) → драфт → 2 ітерації корекції + платформні слайси → опублікований roadmap стор. 3046473735 + живий дашборд).
+
+### Files
+
+| File | Type | Version |
+|---|---|---|
+| `references/capacity-model.md` | NEW | n/a |
+| `references/dependency-model.md` | NEW | n/a |
+| `references/planning-core.md` | NEW | n/a |
+| `references/roadmap-artifacts.md` | NEW | n/a |
+| `skills/quarterly-planning/SKILL.md` | NEW | v0.1.0 |
+| `skills/project-planning/SKILL.md` | NEW | v0.1.0 |
+| `skills/sprint-planning/SKILL.md` | NEW | v0.1.0 |
+| `skills/roadmap-architect/SKILL.md` | NEW | v0.1.0 |
+| `skills/plugin-configurator/SKILL.md` | modified (Planning setup + Development Flow) | 2.0.0 → 2.1.0 |
+| `local-context.example.md` | modified (Planning section) | n/a |
+| `README.md` | version + 4 skills + references | n/a |
+
+### Fixed — skill_version sync (audit quick-fix)
+Синхронізовано `skill_version` у тілі (vault_save) з frontmatter: cjm-research 0.2.0→0.4.0, product-analysis 0.6.0→0.9.0, write-concept 0.5.0→0.7.0. Виявлено lint-gate'ом під час релізу. Без зміни поведінки.
+
+### Backwards compatibility
+Additive only. Наявні скіли й `local-context.md` не зачеплені. Планувальні скіли потребують Jira MCP (вже prerequisite) і опційно Confluence/calendar; делегують факт у team-ops-reporter, не дублюючи fetch.
+
 ## v1.14.0 (2026-06-29)
 
 ### Added — Team Ops Reporter skill

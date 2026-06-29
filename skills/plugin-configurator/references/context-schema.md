@@ -35,8 +35,8 @@ local-context.md
 |-------|----------|---------|-------------|
 | name | ✅ | All skills | User's display name |
 | role | ✅ | All skills | User's role (e.g., Product Manager, Senior PM) |
-| email | ✅ | Feature Task Creator | For Jira account lookup |
-| jira_account_id | optional | Feature Task Creator | Jira accountId (auto-discovered if Jira MCP available) |
+| email | ✅ | Task Creator | For Jira account lookup |
+| jira_account_id | optional | Task Creator | Jira accountId (auto-discovered if Jira MCP available) |
 | language | ✅ | All skills | Preferred language for skill output (uk/en) |
 
 ### Onboarding Status (required, auto-managed by Configurator)
@@ -58,7 +58,7 @@ Skills check `onboarding.mode` and `onboarding.deferred_steps` to decide whether
 |-------|----------|---------|-------------|
 | name | ✅ | All skills | Organization name |
 | domain | optional | Product Research | Company domain (e.g., company.com) |
-| jira_instance | optional | Feature Task Creator, Requirements Creator | Jira cloud URL (e.g., company.atlassian.net) |
+| jira_instance | optional | Task Creator, Requirements Creator | Jira cloud URL (e.g., company.atlassian.net) |
 | confluence_instance | optional | All publishing skills | Confluence cloud URL |
 
 ### Integrations & Data Sources (per organization)
@@ -83,9 +83,9 @@ Skills check `onboarding.mode` and `onboarding.deferred_steps` to decide whether
 | name | ✅ | All skills | Product name (e.g., "Marketplace App") |
 | description | ✅ | Product Research, Write Concept | Brief product description |
 | url | optional | Product Research | Product URL |
-| platforms | ✅ | Requirements Creator, Feature Task Creator | List: Android, iOS, Web Portal, Web CMS, Admin, etc. |
+| platforms | ✅ | Requirements Creator, Task Creator | List: Android, iOS, Web Portal, Web CMS, Admin, etc. |
 | locales | optional | Requirements Creator | Countries/locales where product operates |
-| jira_project_key | ✅ | Feature Task Creator, Requirements Creator | Jira project key (e.g., PROJ) |
+| jira_project_key | ✅ | Task Creator, Requirements Creator | Jira project key (e.g., PROJ) |
 | confluence_space | optional | All publishing skills | Default Confluence space for this product |
 | confluence_template_url | optional | Requirements Creator | URL to requirements template in Confluence |
 | confluence_template_name | optional | Requirements Creator | Template display name |
@@ -125,9 +125,9 @@ Skills check `onboarding.mode` and `onboarding.deferred_steps` to decide whether
 
 | Field | Required | Used by | Description |
 |-------|----------|---------|-------------|
-| name | ✅ | Feature Task Creator | Team name |
-| jira_team_id | optional | Feature Task Creator | Team ID in Jira custom field |
-| members | optional | Feature Task Creator | List of members with name, role, jira_account_id |
+| name | ✅ | Task Creator | Team name |
+| jira_team_id | optional | Task Creator | Team ID in Jira custom field |
+| members | optional | Task Creator | List of members with name, role, jira_account_id |
 
 ### Custom Sections
 
@@ -139,7 +139,7 @@ Users can add any additional sections with free-form markdown content. The confi
 |-------|-----------------|-----------------|
 | **Product Analysis** | product.name | tableau URLs, ab_test_dashboards, key_metrics, OKRs |
 | **Requirements Creator** | product.name, jira_project_key, platforms | confluence_template_url, locales, key_metrics |
-| **Feature Task Creator** | product.name, jira_project_key | team, members with jira_account_id, confluence_space |
+| **Task Creator** | product.name, jira_project_key | team, members with jira_account_id, confluence_space |
 | **Product Research** | product.name | competitors, domain, product.url |
 | **Write Concept** | product.name | confluence_space, key_metrics, OKRs |
 | **Brainstorm Features** | product.name | key_metrics, competitors, OKRs |
