@@ -18,6 +18,32 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
 
+## v1.22.0 (2026-06-30)
+
+### Added — subagent delegation for fan-out skills
+
+Heavy read / fan-out steps can now delegate to parallel subagents, keeping the main agent's context clean and running independent reads concurrently.
+
+- **`references/subagent-delegation.md`** (NEW) — shared pattern: when to delegate (many items / independent searches), how (split into batches → spawn subagents in parallel → each returns a compact structured result → main agent aggregates), what subagents return, data-policy compliance, batch caps, and inline fallback. Includes a per-skill fan-out table.
+- **`skills/meeting-processor/SKILL.md`** `0.10.0 → 0.11.0` — Search mode: delegate per-meeting reads across many meetings.
+- **`skills/knowledge-library/SKILL.md`** `0.4.0 → 0.5.0` — Search: delegate per-source / per-mode reads.
+- **`skills/team-ops-reporter/SKILL.md`** `0.1.0 → 0.2.0` — Jira fetch (member/quarter-review): delegate paginated/per-period fetches.
+
+Each skill gained a short "Subagent delegation (large fan-out)" note in its Search/fetch step pointing to the shared reference. **Additive only** — the note is optional guidance and an inline fallback preserves prior behavior; output formats unchanged.
+
+### Files
+
+| File | Type | Version |
+|---|---|---|
+| `references/subagent-delegation.md` | NEW | n/a |
+| `skills/meeting-processor/SKILL.md` | modified (delegation note) | 0.10.0 → 0.11.0 |
+| `skills/knowledge-library/SKILL.md` | modified (delegation note) | 0.4.0 → 0.5.0 |
+| `skills/team-ops-reporter/SKILL.md` | modified (delegation note) | 0.1.0 → 0.2.0 |
+| `README.md` | version bump 1.22.0 | n/a |
+
+### Backwards compatibility
+Additive — no behavior removed; inline fallback if subagents are unavailable. Safe for Claude.
+
 ## v1.21.0 (2026-06-30)
 
 ### Changed — dedup wave (2): Self-improvement normalization
