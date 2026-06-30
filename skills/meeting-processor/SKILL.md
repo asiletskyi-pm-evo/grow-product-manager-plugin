@@ -397,9 +397,7 @@ Generate a concise summary (3-5 sentences) covering:
 - If the user adds context the transcript missed — incorporate it
 - If the user confirms "OK" — proceed to publishing
 
-**Self-improvement check** (after corrections are applied and confirmed):
-
-If the user requested corrections during review, analyze whether the skill's algorithm can be improved to prevent similar issues in the future. Follow the full protocol in `references/self-improvement.md`.
+**Self-improvement check** (after corrections are applied and confirmed): follow `references/self-improvement.md` — analyze whether the correction is a pattern, and if so propose a SKILL.md improvement (version bump + CHANGELOG).
 
 ### M8 — Publishing
 
