@@ -18,6 +18,30 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
 
+## v1.21.0 (2026-06-30)
+
+### Changed — dedup wave (2): Self-improvement normalization
+
+Normalized the remaining divergent inline "Self-improvement check" blocks to the same pointer to `references/self-improvement.md` introduced in v1.20, so all skills now share one consistent self-improvement instruction. Behavior unchanged — each block already directed to the same reference.
+
+**Normalized (3):** `brainstorm-features`, `cjm-research`, `meeting-processor`.
+
+**Skipped (1):** `team-ops-reporter` — its Step 7 already states the self-improvement step as a one-line pointer to the reference; replacing it would clobber the unrelated "summary + iterate" instructions in the same sentence. Left as-is.
+
+After v1.20 + v1.21 the Self-improvement check is consolidated to the reference across every skill that had a full inline block (8 skills); no per-skill version bumps (consistency cleanup, no behavior change).
+
+### Files
+
+| File | Type |
+|---|---|
+| `skills/brainstorm-features/SKILL.md` | modified (block → pointer) |
+| `skills/cjm-research/SKILL.md` | modified (block → pointer) |
+| `skills/meeting-processor/SKILL.md` | modified (block → pointer) |
+| `README.md` | version bump 1.21.0 |
+
+### Backwards compatibility
+Housekeeping only — no behavior change. Safe for Claude.
+
 ## v1.20.0 (2026-06-30)
 
 ### Changed — dedup wave (1): Self-improvement check → reference pointer

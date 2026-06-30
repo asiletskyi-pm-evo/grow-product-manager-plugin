@@ -362,12 +362,7 @@ After saving (or if the user decided not to save), provide a structured report o
 - If the user requests changes — return to Step 4 (Interactive discussion) for further iteration
 - If the user confirms — proceed to the next step
 
-**Self-improvement check** (after corrections are applied and confirmed):
-
-If the user requested corrections during review, follow the full protocol in `references/self-improvement.md`. In short:
-1. Analyze the root cause of the error — is this a pattern or a one-off?
-2. If it's a pattern — propose a specific improvement to the skill's conditions
-3. If the user agrees — update the SKILL.md, re-package the plugin, and provide the updated file
+**Self-improvement check** (after corrections are applied and confirmed): follow `references/self-improvement.md` — analyze whether the correction is a pattern, and if so propose a SKILL.md improvement (version bump + CHANGELOG).
 
 ### Step 7 — Transition to next stage
 
