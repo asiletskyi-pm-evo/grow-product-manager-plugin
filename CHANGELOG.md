@@ -18,6 +18,25 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
 
+## v1.19.0 (2026-06-29)
+
+### Fixed — product-analysis step order
+- **`skills/product-analysis/SKILL.md`** `0.9.0 → 0.9.1` (PATCH) — moved the `Step 0.5: Vault Context Search` block to sit **before** `Step 1.5 — Data Integrity Gate` (it was physically placed below 1.5). Cosmetic ordering fix; no logic change. Closes the last concrete audit item.
+
+### Assessed — dedup pilot
+- **Figma-context-check** dedup (write-concept ↔ requirements-creator) was assessed and **skipped**: the two blocks are not cleanly identical (only a 3-bullet middle fragment is verbatim; extracting it would split one logical block across an inline section and a reference). Conservative call — not worth the fragility.
+- **Identified clean dedup target for v1.20:** the "Self-improvement check" paragraph is identical across `write-concept`, `requirements-creator`, and `product-analysis` and is already backed by `references/self-improvement.md` — replacing the inline paragraphs with a pointer is the safe, high-payoff dedup.
+
+### Files
+
+| File | Type |
+|---|---|
+| `skills/product-analysis/SKILL.md` | modified (Step 0.5 reorder + 0.9.1) |
+| `README.md` | version bump 1.19.0 |
+
+### Backwards compatibility
+Cosmetic reorder only — no behavior change. Safe for Claude.
+
 ## v1.18.0 (2026-06-29)
 
 ### Changed — i18n: planning suite + tooling translated to English
