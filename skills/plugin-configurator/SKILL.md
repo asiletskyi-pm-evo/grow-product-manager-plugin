@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.3.0
+version: 2.3.1
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist. Українською: "налаштувати плагін", "сетап плагіна", "налаштувати контекст", "додати продукт", "оновити конфігурацію", "перевірити налаштування", "показати конфіг".
 ---
 
@@ -350,14 +350,14 @@ If Jira MCP is available, use `lookupJiraAccountId` with the provided email to f
 
 ### Step 5 — Organizations
 
-**3a. Multi-org support — ask via AskUserQuestion:**
+**5a. Multi-org support — ask via AskUserQuestion:**
 
 > "How many organizations/companies do you work with? The plugin supports working with multiple simultaneously."
 
 - Single organization (most common) → proceed with one
 - Multiple organizations → collect info for each, repeating Steps 3-5
 
-**3b. For each organization, collect:**
+**5b. For each organization, collect:**
 
 | Field | How to collect | Auto-discovery |
 |-------|---------------|----------------|
@@ -371,14 +371,14 @@ If Jira MCP is available, use `lookupJiraAccountId` with the provided email to f
 > **Mode gate:** **Basic** mode collects only core product fields (name, description, platforms, Jira project key, Confluence space). Extended fields (locales, OKRs, metric_targets, competitors, custom dashboards, A/B test dashboards) are deferred. **Extended** mode collects every field.
 
 
-**4a. Product discovery — combine auto + manual:**
+**6a. Product discovery — combine auto + manual:**
 
 If Jira projects were discovered in Step 3:
 > "I found these projects in Jira: [list]. Which of them are your products? Some projects may belong to the same product."
 
 Help the user map Jira projects → Products (may be 1:1 or many:1).
 
-**4b. For each product, collect via AskUserQuestion (section by section):**
+**6b. For each product, collect via AskUserQuestion (section by section):**
 
 **Basic info:**
 - Product name
@@ -422,7 +422,7 @@ Collect: name, URL for each competitor. Minimum 2-3 recommended.
 > **Mode gate:** **Basic** mode collects only the Tableau base URL (and analytics tool names if mentioned by the user). All extended fields — datasource URLs, Pulse metric IDs, A/B test dashboards per platform, Google Sheets, Amplitude/Mixpanel/Custom BI — are deferred (`onboarding.deferred_steps += ['tableau-full', 'analytics-extended']`). **Extended** mode collects every field below.
 
 
-**5a. Analytics tools:**
+**7a. Analytics tools:**
 
 > "Which analytics tools does your organization use?"
 
@@ -437,9 +437,9 @@ For each tool mentioned, collect the base URL and any product-specific dashboard
 | **Custom BI** | Dashboard URLs |
 | **Google Sheets** | Key shared spreadsheets with metrics |
 
-**5a-Tableau. Tableau full setup (Extended mode only):**
+**7a-Tableau. Tableau full setup (Extended mode only):**
 
-If the user added Tableau in Step 5a, collect the additional fields below. **Skip in Basic mode** — they go to `onboarding.deferred_steps` as `tableau-full`.
+If the user added Tableau in Step 7a, collect the additional fields below. **Skip in Basic mode** — they go to `onboarding.deferred_steps` as `tableau-full`.
 
 If Tableau MCP is available:
 1. Try `search-content` with no terms (limit 1) — verify the connector responds.
@@ -457,14 +457,14 @@ For Pulse Metric IDs — if Tableau MCP is available and the admin has enabled P
 
 If Tableau MCP is NOT available — skip Datasource URLs and Pulse Metric IDs (they require MCP to be useful) and note this in `onboarding.deferred_steps` as `tableau-mcp-required`.
 
-**5b. A/B test dashboards (critical for Product Analysis):**
+**7b. A/B test dashboards (critical for Product Analysis):**
 
 If Tableau or another A/B testing tool is used:
 > "Are there separate dashboards for A/B test analysis? If yes, please provide the URL for each platform."
 
 Collect per platform (e.g., Dashboard 1 for Web, Dashboard 2 for Mobile).
 
-**5c. Other data sources:**
+**7c. Other data sources:**
 
 - Google Drive folders with research/strategy docs
 - Figma workspace/team URL
@@ -477,18 +477,18 @@ Collect per platform (e.g., Dashboard 1 for Web, Dashboard 2 for Mobile).
 
 > "What are the key metrics you track for this product?"
 
-**6a. Key metrics:**
+**8a. Key metrics:**
 Collect a list of primary metrics with brief descriptions:
 - Metric name (e.g., "Conversion Rate", "DAU", "Revenue per User")
 - What it measures
 - Current approximate value (if known)
 
-**6b. Current OKRs (optional):**
+**8b. Current OKRs (optional):**
 > "Are there current OKRs (quarterly objectives) for this product?"
 
 If yes — collect objectives and key results. These help skills align hypotheses and analysis with strategic goals.
 
-**6c. Metric targets (optional):**
+**8c. Metric targets (optional):**
 > "Are there target values for the key metrics?"
 
 Collect target values for metrics that have them (e.g., "Conversion Rate → +2% this quarter").
@@ -502,12 +502,12 @@ Collect target values for metrics that have them (e.g., "Conversion Rate → +2%
 
 If yes:
 
-**7a. For each team, collect:**
+**9a. For each team, collect:**
 - Team name
 - Jira team ID (auto-discover from existing tasks if possible)
 - Members: name, role (FE, BE, Android, iOS, Design, Analytics, QA, PM), Jira accountId (auto-discover via `lookupJiraAccountId`)
 
-**7b. Auto-discovery from Jira:**
+**9b. Auto-discovery from Jira:**
 If Jira MCP is available and a product's Jira project is known:
 - Search for recent tasks to discover team field values
 - Extract common assignees and their roles
@@ -536,7 +536,7 @@ If no → skip to Step 12.
 
 If yes:
 
-**9a. Select funnel template:**
+**11a. Select funnel template:**
 
 > "Which funnel template fits your product? Available templates:"
 >
@@ -550,26 +550,26 @@ See `references/funnel-templates.md` for full template definitions.
 **Communicate the selection:**
 > "Using the **[template name]** template with stages: [list]. You can change this at any time."
 
-**9b. If Custom template selected:**
+**11b. If Custom template selected:**
 1. Ask: "How many stages does your funnel have?"
 2. For each stage: collect name, key metrics (at least 1)
 3. Confirm the complete funnel
 
-**9c. Map dashboards to stages:**
+**11c. Map dashboards to stages:**
 
 For each funnel stage:
 > "Which dashboard shows data for **[Stage name]**?"
 
 Collect dashboard URLs (Tableau, GA, or other). If the user already provided dashboard URLs in Step 7 — suggest mapping those first.
 
-**9d. Set baseline conversions:**
+**11d. Set baseline conversions:**
 
 > "Do you know the current conversion rates for each stage? (used as baseline for anomaly detection)"
 
 - If yes → collect per-stage conversion rates
 - If no → "We can read baselines from dashboards during the first CJM analysis."
 
-**9e. Configure anomaly thresholds:**
+**11e. Configure anomaly thresholds:**
 
 > "Anomaly detection thresholds (you can use defaults or customize):"
 
@@ -578,7 +578,7 @@ Collect dashboard URLs (Tableau, GA, or other). If the user already provided das
 | Warning | 10% deviation | [ask] |
 | Critical | 25% deviation | [ask] |
 
-**9f. Default analysis settings:**
+**11f. Default analysis settings:**
 
 | Setting | Default | Ask user |
 |---------|---------|---------|
@@ -739,7 +739,7 @@ Allow free-form markdown sections with custom titles.
 
 ### Step 16 — Review, confirm, and save local-context.md
 
-**13a. Compile summary for review:**
+**16a. Compile summary for review:**
 
 Before generating the file, present ALL collected information to the user in a structured summary for confirmation:
 
@@ -801,7 +801,7 @@ Before generating the file, present ALL collected information to the user in a s
 - [if any]
 ```
 
-**13b. Collect corrections:**
+**16b. Collect corrections:**
 
 > "Is everything correct? If anything needs to be fixed — tell me what, and I'll make the changes."
 
@@ -809,7 +809,7 @@ Before generating the file, present ALL collected information to the user in a s
 - Iterate until the user confirms: "OK" / "Confirmed"
 - Only proceed to file generation after explicit confirmation
 
-**13c. Generate the file:**
+**16c. Generate the file:**
 
 Compile all confirmed information into a structured `local-context.md` following the schema in `references/context-schema.md`.
 
@@ -864,7 +864,7 @@ Format:
 
 **Obsidian Vaults Configuration section format:** See `references/context-schema.md` → Obsidian Vaults Configuration section format.
 
-**13d. Save to persistent storage:**
+**16d. Save to persistent storage:**
 
 1. Determine storage root:
    - **Test mode** (`selected_mode == test`) → `~/.grow-pm-sandbox/` (real `~/.grow-pm/` is NEVER touched)
@@ -883,7 +883,7 @@ Format:
    - Production: "Configuration saved to `~/.grow-pm/`. This data will persist across plugin reinstalls and updates."
    - Test mode: "TEST RUN — configuration saved to `~/.grow-pm-sandbox/`. Your real configuration was not touched. Continue to Test Mode finale for diff and Discard / Promote / Keep options."
 
-**13e. Vault Mirror Sync:**
+**16e. Vault Mirror Sync:**
 
 After saving to `~/.grow-pm/`, if Obsidian Vault is configured (Step 14 was completed):
 1. Execute Vault Mirror Protocol (VM-1 through VM-3 from `references/persistent-storage.md`)
@@ -894,11 +894,11 @@ After saving to `~/.grow-pm/`, if Obsidian Vault is configured (Step 14 was comp
 
 This ensures the vault always has an up-to-date copy of all user context, serving as a secondary backup.
 
-**13f. Automatic validation:**
+**16f. Automatic validation:**
 
 After saving, automatically run a quick validation (see Validate Mode) to confirm everything works. Present the readiness report.
 
-**13g. Template Library final invitation (only if user skipped Step 13 earlier):**
+**16g. Template Library final invitation (only if user skipped Step 13 earlier):**
 
 If `onboarding.templates_setup_completed` is `false` (user chose "Skip for now" during Step 13), offer one more nudge after validation:
 
