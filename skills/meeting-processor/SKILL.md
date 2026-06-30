@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.10.0
+version: 0.11.0
 description: Process meeting recordings, transcripts, and notes to extract action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Chains to task-creator, requirements-creator, product-research, and brainstorm-features. Українською: "підсумувати зустріч", "нотатки зустрічі", "що обговорювали", "action items", "MoM", "опрацювати транскрипт зустрічі".
 ---
 
@@ -465,6 +465,8 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 ---
 
 ## Mode: Search — Workflow
+
+> **Subagent delegation (large fan-out).** When the query spans many meetings, delegate per `references/subagent-delegation.md`: split the meetings into batches, spawn subagents in parallel, each returns a compact structured result (per-meeting decisions / action items / relevant quotes + link), and the main agent aggregates (merge, dedupe, rank). Falls back to inline if subagents are unavailable.
 
 ### S1 — Understand the query
 
