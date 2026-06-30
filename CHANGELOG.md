@@ -18,6 +18,28 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
 
+## v1.25.0 (2026-06-30)
+
+### Changed — plugin-configurator refactor (pass 2)
+
+Second slimming pass on the configurator. Behavior unchanged.
+
+- Extracted 3 self-contained `local-context.md` format/schema blocks — **CJM Configuration**, **Knowledge Library Configuration**, **Obsidian Vaults Configuration** — from `skills/plugin-configurator/SKILL.md` into `skills/plugin-configurator/references/context-schema.md` (verbatim, under a new "local-context.md Section Formats" heading). The skill now points to them (bold lead-in preserved for discoverability).
+- `plugin-configurator` `2.2.0 → 2.3.0` (MINOR). SKILL.md ≈ −69 lines (≈ −150 across passes 1+2).
+
+**Deferred to pass 3:** substep-numbering cleanup (Step 5/6/7/8/9/11/16 carry mislabeled `3a/4a/…` substeps). Not done here because of ambiguous duplicate labels (`3a` exists in both Step 3 and Step 5) and live cross-references to the old labels — unsafe for literal replacement; needs a dedicated coordinated pass.
+
+### Files
+
+| File | Type | Version |
+|---|---|---|
+| `skills/plugin-configurator/references/context-schema.md` | modified (+3 format blocks) | n/a |
+| `skills/plugin-configurator/SKILL.md` | modified (3 blocks → pointers) | 2.2.0 → 2.3.0 |
+| `README.md` | version bump 1.25.0 | n/a |
+
+### Backwards compatibility
+Refactor only — no behavior change (formats reachable via context-schema.md). Safe for Claude.
+
 ## v1.24.0 (2026-06-30)
 
 ### Changed — plugin-configurator refactor (pass 1)

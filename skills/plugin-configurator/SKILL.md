@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.2.0
+version: 2.3.0
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist. Українською: "налаштувати плагін", "сетап плагіна", "налаштувати контекст", "додати продукт", "оновити конфігурацію", "перевірити налаштування", "показати конфіг".
 ---
 
@@ -858,80 +858,11 @@ Format:
 ...
 ```
 
-**CJM Configuration section format in local-context.md:**
+**CJM Configuration section format in local-context.md:** See `references/context-schema.md` → CJM Configuration section format.
 
-```markdown
-### CJM Configuration
+**Knowledge Library Configuration section format:** See `references/context-schema.md` → Knowledge Library Configuration section format.
 
-#### Funnel Template
-- Template: [e-commerce / saas / marketplace / custom]
-- Custom template name: [if custom, user-provided name]
-
-#### Funnel Stages
-| Stage | Name | Dashboard URL | Baseline Conversion |
-|-------|------|---------------|-------------------|
-| 1 | [name] | [URL] | [%] |
-| 2 | [name] | [URL] | [%] |
-| ... | ... | ... | ... |
-
-#### Anomaly Thresholds
-- Warning: [X]% deviation from baseline
-- Critical: [Y]% deviation from baseline
-
-#### Default Analysis Settings
-- Comparison baseline: [previous period / previous year / target]
-- Default platforms: [all / specific list]
-- Default search modes: [library, internet, confluence, gdrive]
-
-#### Health-Check Notifications
-- Channels: [slack / email / local / confluence]
-- Frequency: [weekly / custom]
-```
-
-**Knowledge Library Configuration section format:**
-
-```markdown
-### Knowledge Library
-
-#### Settings
-- Library path: [~/.grow-pm/knowledge-library/]
-- Default search modes: [library, internet]
-- Trust re-evaluation schedule: monthly
-- Minimum trust threshold: 0.5
-
-#### Baymard Premium
-- Access: [yes/no]
-- URL: [if yes]
-
-#### Configured Confluence Spaces (for CJM search)
-- [Space key]: [description]
-
-#### Configured Google Drive Folders (for CJM search)
-- [Folder ID]: [description]
-```
-
-**Obsidian Vaults Configuration section format:**
-
-```markdown
-### Obsidian Vaults (Optional)
-
-#### Status
-- Connected: [yes/no]
-- Total vaults: [N]
-
-#### Vaults
-| # | Vault Path | Folder Name | Products | Sync Mode | Last Artifact |
-|---|------------|------------|----------|-----------|--------------|
-| 1 | [path] | [folder] | [all/specific] | [auto/manual/read-only] | [date or never] |
-| 2 | [path] | [folder] | [all/specific] | [auto/manual/read-only] | [date or never] |
-
-#### Vault Initialization
-- Status: [initialized / pending / error]
-- Templates created: [N]
-- MOC created: [yes/no]
-- Knowledge library migrated: [yes/no]
-- Schema version: [X.Y.Z]
-```
+**Obsidian Vaults Configuration section format:** See `references/context-schema.md` → Obsidian Vaults Configuration section format.
 
 **13d. Save to persistent storage:**
 
