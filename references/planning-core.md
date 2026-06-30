@@ -1,96 +1,96 @@
 # planning-core.md
 
-> Спільний reference planning-suite. Канонічна модель сутностей, конвенція розмітки, нормалізація статусів, мапа цілей і Development Flow. Споживають усі чотири скіли suite. `roadmap-architect` — enforce; решта — read.
+> Shared planning-suite reference. Canonical entity model, marking convention, status normalization, goal map, and Development Flow. Consumed by all four skills of the suite. `roadmap-architect` — enforce; the rest — read.
 
 ---
 
-## 1. Канонічна ієрархія
+## 1. Canonical hierarchy
 
 ```
-Місія / Ціль (Atlas Goal, напр. EVOCO1-XX)
-  └── Initiative / Напрямок (логічна група; опційно — Jira issue type Initiative, lvl вище Epic)
-        └── Епік (Jira, hierarchy level 1)
-              └── Фіча (Confluence-сторінка з лейбою + код у назві)
+Mission / Goal (Atlas Goal, e.g. EVOCO1-XX)
+  └── Initiative / Direction (logical group; optionally — Jira issue type Initiative, level above Epic)
+        └── Epic (Jira, hierarchy level 1)
+              └── Feature (Confluence page with label + code in the name)
 ```
 
-Задачі рівня Story/Task **поза скоупом roadmap** (вони — рівень sprint-planning, work-type усередині фічі).
+Story/Task-level issues are **out of roadmap scope** (they are the sprint-planning level, work-type inside a feature).
 
 ---
 
-## 2. Конвенція розмітки (єдине джерело правди для авто-збірки)
+## 2. Marking convention (single source of truth for auto-assembly)
 
-**Фіча (Confluence page):**
-- Назва: `{PROJ}-{епік}.{фіча}[.{суб}] - {людська назва}` (напр. `SHOPEX-6610.5 - Q&A - YouTube у тредах`).
-- Лейби: `feature`, `q{N}-{рік}` (квартал, де ведеться/планується робота; може бути кілька), командна лейба.
-- Поле статусу в тілі: рядок `Статус: {значення}` з контрольованого словника (розд. 3).
+**Feature (Confluence page):**
+- Name: `{PROJ}-{epic}.{feature}[.{sub}] - {human name}` (e.g. `SHOPEX-6610.5 - Q&A - YouTube in threads`).
+- Labels: `feature`, `q{N}-{year}` (quarter where the work is run/planned; may be several), team label.
+- Status field in the body: line `Status: {value}` from a controlled vocabulary (section 3).
 
-**Епік (Confluence page + Jira issue):**
-- Confluence-назва: `Epic - {PROJ}-{епік} - {назва}`; лейби `epic`, `q{N}-{рік}`.
-- Jira: лейба `q{N}-{рік}` на епіку (для читабельності кварталу з Jira).
+**Epic (Confluence page + Jira issue):**
+- Confluence name: `Epic - {PROJ}-{epic} - {name}`; labels `epic`, `q{N}-{year}`.
+- Jira: label `q{N}-{year}` on the epic (for quarter readability from Jira).
 
-**Парсинг коду з назви фічі:** `^(?:Epic - )?{PROJ}-(\d+)((?:\.\d+)*)\s*-\s*(.+)$` → `epicKey`, `featureCode`, `name`.
+**Parsing the code from the feature name:** `^(?:Epic - )?{PROJ}-(\d+)((?:\.\d+)*)\s*-\s*(.+)$` → `epicKey`, `featureCode`, `name`.
 
-> Якщо у сутності бракує кварталу/цілі/коду — це **розрив розмітки** (флаг від `roadmap-architect`), а не привід вигадувати звʼязок.
+> If an entity is missing the quarter/goal/code — this is a **marking gap** (flag from `roadmap-architect`), not a reason to invent a link.
 
 ---
 
-## 3. Нормалізація статусів (контрольований словник)
+## 3. Status normalization (controlled vocabulary)
 
-Тіла фіч/епіків містять різні формулювання → зводити до 4 канонів:
+Feature/epic bodies contain various phrasings → reduce to 4 canons:
 
-| Канон | Сигнали |
+| Canon | Signals |
 | --- | --- |
-| `done` | Done, Готово, Закінчено, «запущено на 100%», Closed |
-| `in_progress` | в розробці, Запущено (rollout/A-B), Розкатується, In dev |
-| `planned` | Draft, Requirements, «не починали», готується, To Do |
-| `blocked` | «чекаємо деталей», заблоковано, явні перешкоди |
+| `done` | Done, Готово, Закінчено, "launched at 100%", Closed |
+| `in_progress` | in dev, Launched (rollout/A-B), rolling out, In dev |
+| `planned` | Draft, Requirements, "not started", in preparation, To Do |
+| `blocked` | "waiting for details", blocked, explicit obstacles |
 
-Jira-статус епіка береться з `statusCategory.key`: `done`→done, `indeterminate`→in_progress, `new`→planned.
+The epic's Jira status is taken from `statusCategory.key`: `done`→done, `indeterminate`→in_progress, `new`→planned.
 
 ---
 
-## 4. Мапа цілей (епік → Ціль)
+## 4. Goal map (epic → Goal)
 
-Atlas Goals не запитуються через MCP → тримати мапу в local-context (Planning → goal_map). Приклад (FET):
+Atlas Goals are not queryable via MCP → keep the map in local-context (Planning → goal_map). Example (FET):
 
-| Ціль | Епіки |
+| Goal | Epics |
 | --- | --- |
-| EVOCO1-25 (Конверсія/каталог/бренди) | 10272, 5783, 4950, 10452, 7930, 11300, 11240 |
-| EVOCO1-3 (Відгуки про товари) | 3080, 11300 |
+| EVOCO1-25 (Conversion/catalog/brands) | 10272, 5783, 4950, 10452, 7930, 11300, 11240 |
+| EVOCO1-3 (Product reviews) | 3080, 11300 |
 | EVOCO1-22 (Q&A) | 6610 |
-| EVOCO1-23 (Порівняння товарів) | (епік порівняння) |
-| EVOCO1-24 (Новий сегмент) | 4750 |
+| EVOCO1-23 (Product comparison) | (comparison epic) |
+| EVOCO1-24 (New segment) | 4750 |
 | — Feedback Ecosystem | 3930, 9534, 9557, 9294 |
 
 ---
 
-## 5. Development Flow (флоу розробки команди)
+## 5. Development Flow (the team's development flow)
 
-Збирається на онбордингу (`plugin-configurator` → Planning setup), зберігається в local-context → Planning → development_flow. Структура:
+Collected at onboarding (`plugin-configurator` → Planning setup), stored in local-context → Planning → development_flow. Structure:
 
 ```yaml
 development_flow:
   work_types: [Requirements, Design, BE, Analytics, Client, QA, Release]
-  sequence:                      # ребра DAG: передумова → наступник
+  sequence:                      # DAG edges: prerequisite → successor
     Design: [Requirements]
     BE: [Design]
     Analytics: [Design]
     Client: [BE, Analytics]
     QA: [Client]
     Release: [QA]
-  parallel: [[BE, Analytics]]    # що йде одночасно
+  parallel: [[BE, Analytics]]    # what runs simultaneously
   ready_threshold: [on review, in test, ready for test, done, closed]
-  platform_notes: "iOS/Android client залежать від BE"
-  exceptions: "..."              # вільний ввід особливостей команди
+  platform_notes: "iOS/Android client depend on BE"
+  exceptions: "..."              # free-form input of team specifics
 ```
 
-Споживають: `sprint-planning` (готовність/порушення), `project-planning` (макро-залежності), `dependency-model.md` (апарат). `update config` оновлює — детекція підлаштовується автоматично.
+Consumers: `sprint-planning` (readiness/violations), `project-planning` (macro dependencies), `dependency-model.md` (machinery). `update config` updates it — detection adjusts automatically.
 
 ---
 
-## 6. Якість / застороги
+## 6. Quality / caveats
 
-- Тільки розмічені сутності йдуть у авто-збірку; розриви — підсвічувати, не домислювати.
-- Конвенції (назви/лейби/статуси/флоу) override-яться у local-context; не хардкодити в скілах.
-- Фічі у будь-якому артефакті — списком `код — назва`, не голими номерами.
-- Рекомендації розмітки маркувати «на підтвердження PM».
+- Only marked entities go into auto-assembly; gaps — surface, do not infer.
+- Conventions (names/labels/statuses/flow) are overridden in local-context; do not hardcode in skills.
+- Features in any artifact — as a list of `code — name`, not bare numbers.
+- Mark marking recommendations "pending PM confirmation".

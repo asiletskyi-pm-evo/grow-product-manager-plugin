@@ -199,35 +199,35 @@ contrast_pairs:
 
 ## Planning (planning-suite)
 
-Конфіг для `quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`.
+Config for `quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`.
 
 ```yaml
 planning:
-  jira_board_id: 425                 # дошка для спринтів/velocity (browser-pull)
+  jira_board_id: 425                 # board for sprints/velocity (browser-pull)
   sprint:
     cadence_weeks: 2
-    anchor: { name: "SEX 55", start: "2026-06-29" }   # якір для прогнозу сітки
+    anchor: { name: "SEX 55", start: "2026-06-29" }   # anchor for forecasting the grid
   capacity:
-    baseline_sp_per_sprint: 10       # на інженера; калібрується по факту
-    availability_default: 0.9        # 10% резерв на відпустки/хвороби
+    baseline_sp_per_sprint: 10       # per engineer; calibrated against actuals
+    availability_default: 0.9        # 10% reserve for vacations/sick leave
     techdebt_reserve: 0.15
-    gate_target: 0.85                # ціль завантаження (буфер ризиків)
-    team:                            # хто рахується у стелю (per платформа/роль)
-      BE: { members: [Antipenko, Drovnin], note: "TL Maksym — інші тех.задачі, не рахуємо" }
-      FE: { members: [Sivashova, Shynkarenko], note: "TL Ievgenii — не рахуємо" }
-      iOS: { members: [Pashchenko, Savran, Neskoromna] }   # TL як dev
+    gate_target: 0.85                # load target (risk buffer)
+    team:                            # who counts toward the ceiling (per platform/role)
+      BE: { members: [Antipenko, Drovnin], note: "TL Maksym — other tech tasks, not counted" }
+      FE: { members: [Sivashova, Shynkarenko], note: "TL Ievgenii — not counted" }
+      iOS: { members: [Pashchenko, Savran, Neskoromna] }   # TL as dev
       Android: { members: [Surzhykova, Venchyk, Hramushniak] }
       Design: { members: [Romanenko] }
       Analytics: { members: [Shakhovska] }
       QA: { members: [Iatsyv], support: true }
-  goal_map:                          # епік → Ціль (Atlas Goals не запитуються через MCP)
+  goal_map:                          # epic → Goal (Atlas Goals not queryable via MCP)
     EVOCO1-25: [10272, 5783, 4950, 10452, 7930, 11300, 11240]
     EVOCO1-3:  [3080, 11300]
     EVOCO1-22: [6610]
     EVOCO1-24: [4750]
     feedback-ecosystem: [3930, 9534, 9557, 9294]
-  estimate_tshirt: { S: 3, M: 5, L: 8, XL: 13 }   # авто-оцінка за аналогією
-  development_flow:                  # збирається на онбордингу (Planning setup)
+  estimate_tshirt: { S: 3, M: 5, L: 8, XL: 13 }   # auto-estimate by analogy
+  development_flow:                  # collected during onboarding (Planning setup)
     work_types: [Requirements, Design, BE, Analytics, Client, QA, Release]
     sequence:
       Design: [Requirements]
@@ -238,6 +238,6 @@ planning:
       Release: [QA]
     parallel: [[BE, Analytics]]
     ready_threshold: [on review, in test, ready for test, done, closed]
-    platform_notes: "iOS/Android client залежать від BE"
+    platform_notes: "iOS/Android client depend on BE"
     exceptions: ""
 ```

@@ -1,52 +1,52 @@
 # roadmap-artifacts.md
 
-> Спільний reference planning-suite. Формати **планувальних** артефактів (рішення/прогноз). Це НЕ звіти team-ops-reporter (ops-report templates) — ті описують факт; ці фіксують план. Споживають: `quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`.
+> Shared planning-suite reference. Formats of **planning** artifacts (decision/forecast). These are NOT team-ops-reporter reports (ops-report templates) — those describe fact; these capture the plan. Consumers: `quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`.
 
 ---
 
-## 1. Квартальний roadmap (Confluence-сторінка)
+## 1. Quarterly roadmap (Confluence page)
 
-Секції (валідовано прогоном Q3 FET):
-1. **Панель-шапка** — артефакт/команда/період/автор + метод (CQL за лейбою + статуси Jira + capacity).
-2. **Capacity кварталу** — таблиця по платформах: demand / стеля / стан (status-лозенги green/yellow/red); панель про платформну гранулярність (FE-слайси → наступний квартал).
-3. **Основні фокуси** — таблиця фокус / чому.
-4. **Roadmap-таймлайн** — Gantt-таблиця по спринтах (`<td colspan>` = смуга напрямку; status-лозенга «у роботі»/«план»).
-5. **Основні напрямки** — дерево Ціль → Initiative → Епік → Фіча; **фічі списком `код — назва`** у клітинці (`<ul><li>`), не голими номерами; колонка статусу — лозенги.
-6. **Перенесено в наступний період** — таблиця фіч (списком) + причина.
-7. **Метод** — панель-note.
+Sections (validated by a run of Q3 FET):
+1. **Header panel** — artifact/team/period/author + method (CQL by label + Jira statuses + capacity).
+2. **Quarter capacity** — table by platform: demand / ceiling / state (status-lozenges green/yellow/red); panel on platform granularity (FE slices → next quarter).
+3. **Main focuses** — focus / why table.
+4. **Roadmap timeline** — Gantt table by sprint (`<td colspan>` = initiative bar; status-lozenge "in progress"/"planned").
+5. **Main initiatives** — Goal → Initiative → Epic → Feature tree; **features as a list of `code — name`** in the cell (`<ul><li>`), not bare numbers; status column — lozenges.
+6. **Carried over to the next period** — feature table (as a list) + reason.
+7. **Method** — note panel.
 
-HTML через `updateConfluencePage`/`createConfluencePage` (`contentFormat: html`): status — `<span data-type="status" data-color="...">`, панелі — `<div data-type="panel-info|success|note">`, `colspan` у таблицях працює.
+HTML via `updateConfluencePage`/`createConfluencePage` (`contentFormat: html`): status — `<span data-type="status" data-color="...">`, panels — `<div data-type="panel-info|success|note">`, `colspan` in tables works.
 
-## 2. Живий дашборд (cowork artifact)
+## 2. Live dashboard (cowork artifact)
 
-Self-contained HTML (light mode, `:root{color-scheme:light}`). Статичне: capacity-смуги (ціль 85% / стеля 100% мітки), Gantt-таймлайн. Живе (при відкритті): статуси епіків ← `getJiraIssue` per-key; інвентар фіч ← CQL за лейбою кварталу. Реєструється через `create_artifact` з `mcp_tools`; кнопка оновлення — у шапці панелі (не дублювати).
+Self-contained HTML (light mode, `:root{color-scheme:light}`). Static: capacity bars (target 85% / ceiling 100% markers), Gantt timeline. Live (on open): epic statuses ← `getJiraIssue` per-key; feature inventory ← CQL by quarter label. Registered via `create_artifact` with `mcp_tools`; the refresh button — in the panel header (do not duplicate).
 
-## 3. Roadmap проєкту (арка, project-planning)
+## 3. Project roadmap (arc, project-planning)
 
-Мульти-квартальний Gantt однієї ініціативи: епіки/фічі смугами через квартали, **критичний шлях** виділено, прогнозна дата завершення, **дрейф vs baseline** (для `replan`), what-if по % allocation. Формат — HTML-дашборд або Confluence-таблиця.
+Multi-quarter Gantt of a single initiative: epics/features as bars across quarters, **critical path** highlighted, forecast completion date, **drift vs baseline** (for `replan`), what-if by allocation %. Format — HTML dashboard or Confluence table.
 
-## 4. Дерево структури (roadmap-architect)
+## 4. Structure tree (roadmap-architect)
 
-Ціль → Initiative → Епік → Фіча (вся структура, без квартального скоупу). Плюс **звіт розривів розмітки** (фічі/епіки без кварталу/цілі/коду). Формат — Confluence-сторінка або markdown.
+Goal → Initiative → Epic → Feature (the whole structure, without quarter scope). Plus a **marking-gaps report** (features/epics without quarter/goal/code). Format — Confluence page or markdown.
 
-## 5. Інтерактивний capacity-gate (corrections)
+## 5. Interactive capacity-gate (corrections)
 
-Екран зі смугами завантаження по платформах + перемикачі фіч/платформних слайсів у наступний період; перерахунок наживо; кнопка «зафіксувати скоуп» (через `sendPrompt`). Для фази корекції скоупу.
+A screen with per-platform load bars + feature/platform-slice toggles into the next period; live recompute; "lock scope" button (via `sendPrompt`). For the scope-correction phase.
 
-## 6. Конвенції (усі артефакти)
+## 6. Conventions (all artifacts)
 
-- Фічі — завжди `код — назва` списком, не голі номери/діапазони.
-- Кожне число — з inline-періодом (квартал/спринт, к-сть спринтів, нормалізовано/ні).
-- AI-оцінки — маркер «на підтвердження TL»; рішення PM.
-- **Драфт ≠ фінал:** запис у Confluence/Jira — лише після явного апруву PM; драфт і фінал — окремі файли.
-- Збереження: workspace + бібліотека (`persistent-storage.md`).
-- Мова — `user.language`.
+- Features — always `code — name` as a list, not bare numbers/ranges.
+- Every number — with an inline period (quarter/sprint, number of sprints, normalized/not).
+- AI estimates — "pending TL confirmation" marker; the decision is the PM's.
+- **Draft ≠ final:** writing to Confluence/Jira — only after explicit PM approval; draft and final — separate files.
+- Storage: workspace + library (`persistent-storage.md`).
+- Language — `user.language`.
 
-## 7. Демаркація з team-ops-reporter
+## 7. Demarcation from team-ops-reporter
 
-| Артефакт | Чий |
+| Artifact | Whose |
 | --- | --- |
-| ops-report (sprint/quarter/initiative/member review) | team-ops-reporter (факт) |
-| quarterly roadmap, project arc, structure tree, capacity-gate, живий дашборд | planning-suite (план/прогноз) |
+| ops-report (sprint/quarter/initiative/member review) | team-ops-reporter (fact) |
+| quarterly roadmap, project arc, structure tree, capacity-gate, live dashboard | planning-suite (plan/forecast) |
 
-Спільне джерело Jira-даних — `jira-data-protocol.md`. Планувальний артефакт може містити блок «факт», зрендерений делегуванням у team-ops-reporter.
+The shared Jira-data source — `jira-data-protocol.md`. A planning artifact may contain a "fact" block, rendered by delegating to team-ops-reporter.
