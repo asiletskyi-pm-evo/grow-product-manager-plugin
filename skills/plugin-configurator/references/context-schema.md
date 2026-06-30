@@ -165,3 +165,82 @@ Users can add any additional sections with free-form markdown content. The confi
 3. Test queries succeed (Jira project exists, Confluence space accessible)
 4. Dashboard URLs are reachable (if configured)
 5. Completeness score: X/Y fields populated
+
+## local-context.md Section Formats
+
+The blocks below are the exact `local-context.md` output formats the Plugin Configurator writes when generating the file (Onboarding Step 16). They are referenced from `skills/plugin-configurator/SKILL.md`. Moved here verbatim from the skill in v1.25 (pass 2 refactor).
+
+### CJM Configuration section format
+
+```markdown
+### CJM Configuration
+
+#### Funnel Template
+- Template: [e-commerce / saas / marketplace / custom]
+- Custom template name: [if custom, user-provided name]
+
+#### Funnel Stages
+| Stage | Name | Dashboard URL | Baseline Conversion |
+|-------|------|---------------|-------------------|
+| 1 | [name] | [URL] | [%] |
+| 2 | [name] | [URL] | [%] |
+| ... | ... | ... | ... |
+
+#### Anomaly Thresholds
+- Warning: [X]% deviation from baseline
+- Critical: [Y]% deviation from baseline
+
+#### Default Analysis Settings
+- Comparison baseline: [previous period / previous year / target]
+- Default platforms: [all / specific list]
+- Default search modes: [library, internet, confluence, gdrive]
+
+#### Health-Check Notifications
+- Channels: [slack / email / local / confluence]
+- Frequency: [weekly / custom]
+```
+
+### Knowledge Library Configuration section format
+
+```markdown
+### Knowledge Library
+
+#### Settings
+- Library path: [~/.grow-pm/knowledge-library/]
+- Default search modes: [library, internet]
+- Trust re-evaluation schedule: monthly
+- Minimum trust threshold: 0.5
+
+#### Baymard Premium
+- Access: [yes/no]
+- URL: [if yes]
+
+#### Configured Confluence Spaces (for CJM search)
+- [Space key]: [description]
+
+#### Configured Google Drive Folders (for CJM search)
+- [Folder ID]: [description]
+```
+
+### Obsidian Vaults Configuration section format
+
+```markdown
+### Obsidian Vaults (Optional)
+
+#### Status
+- Connected: [yes/no]
+- Total vaults: [N]
+
+#### Vaults
+| # | Vault Path | Folder Name | Products | Sync Mode | Last Artifact |
+|---|------------|------------|----------|-----------|--------------|
+| 1 | [path] | [folder] | [all/specific] | [auto/manual/read-only] | [date or never] |
+| 2 | [path] | [folder] | [all/specific] | [auto/manual/read-only] | [date or never] |
+
+#### Vault Initialization
+- Status: [initialized / pending / error]
+- Templates created: [N]
+- MOC created: [yes/no]
+- Knowledge library migrated: [yes/no]
+- Schema version: [X.Y.Z]
+```
