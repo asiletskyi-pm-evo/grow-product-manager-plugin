@@ -1,7 +1,7 @@
 ---
 name: meeting-processor
 version: 0.10.0
-description: Process meeting recordings, transcripts, and notes to extract action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Chains to task-creator, requirements-creator, product-research, and brainstorm-features.
+description: Process meeting recordings, transcripts, and notes to extract action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Chains to task-creator, requirements-creator, product-research, and brainstorm-features. Українською: "підсумувати зустріч", "нотатки зустрічі", "що обговорювали", "action items", "MoM", "опрацювати транскрипт зустрічі".
 ---
 
 # Meeting Processor

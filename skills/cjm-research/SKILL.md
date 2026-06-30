@@ -1,7 +1,7 @@
 ---
 name: cjm-research
 version: 0.4.0
-description: Conduct CJM (Customer Journey Map) research — detect funnel anomalies, generate improvement hypotheses, and build prioritized backlogs. Use when the user asks to "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", or needs end-to-end funnel analysis with enrichment from knowledge sources.
+description: Conduct CJM (Customer Journey Map) research — detect funnel anomalies, generate improvement hypotheses, and build prioritized backlogs. Use when the user asks to "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", or needs end-to-end funnel analysis with enrichment from knowledge sources. Українською: "проаналізувати CJM", "знайти аномалії у воронці", "CJM дослідження", "health-check воронки", "порівняти платформи", "CJM гіпотези".
 ---
 
 # CJM Research
