@@ -18,6 +18,32 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
 
+## v1.20.0 (2026-06-30)
+
+### Changed — dedup wave (1): Self-improvement check → reference pointer
+
+Removed a verbatim-duplicated inline "Self-improvement check" block (≈540 chars, identical byte-for-byte) from 5 skills and replaced it with a single pointer to `references/self-improvement.md`, which already holds the full protocol (trigger conditions, 4 steps, improvement types, constraints). No behavior change — the trigger condition and the version-bump/CHANGELOG outcome are preserved via the reference.
+
+**Deduped (5):** `write-concept`, `requirements-creator`, `product-analysis`, `product-research`, `task-creator`.
+
+**Skipped (conservative — wording differs, left intact):** `brainstorm-features`, `cjm-research`, `meeting-processor`, `team-ops-reporter` — these carry slightly divergent inline blocks; a wording-normalization pass for them is deliberately out of scope (separate future change).
+
+**No per-skill version bumps** — additive cleanup, skills already cited `self-improvement.md`; behavior unchanged.
+
+### Files
+
+| File | Type |
+|---|---|
+| `skills/write-concept/SKILL.md` | modified (block → pointer) |
+| `skills/requirements-creator/SKILL.md` | modified (block → pointer) |
+| `skills/product-analysis/SKILL.md` | modified (block → pointer) |
+| `skills/product-research/SKILL.md` | modified (block → pointer) |
+| `skills/task-creator/SKILL.md` | modified (block → pointer) |
+| `README.md` | version bump 1.20.0 |
+
+### Backwards compatibility
+Housekeeping only — no behavior change. Safe for Claude.
+
 ## v1.19.0 (2026-06-29)
 
 ### Fixed — product-analysis step order
