@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.8.0
+version: 0.9.0
 description: Conduct comprehensive product research — competitive analysis, user research, market research, or UX benchmark research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks", "search knowledge library", or needs SWOT, TAM SAM SOM, or PESTEL analysis. Українською: "дослідити конкурентів", "проаналізувати ринок", "конкурентний аналіз", "синтез інтервʼю з користувачами", "знайти ринкові тренди", "порівняти з галузевими бенчмарками", "пошук у бібліотеці знань".
 ---
 
@@ -208,6 +208,9 @@ If Blocked sources > 0 for critical findings:
 - Inform user that research cannot proceed with insufficient evidence on key claims
 
 ### 2. Gather data from all available sources
+
+> **Subagent delegation (large fan-out).** For many competitors / web sources / knowledge-library sources, delegate per `references/subagent-delegation.md`: split into batches (by competitor / source group), spawn subagents in parallel, each returns a compact structured result (per source: key finding, source type, trust/recency marker + source link), and the main agent aggregates (dedupe, rank) and runs Step 1.5 validation. Falls back to inline if subagents are unavailable.
+
 
 **Pre-condition (v0.8.0+):** Step 1.5 (Source Validation Gate) applies to each source as it is gathered. Skip ❌ Blocked sources. For ⚠️ Caveat sources — inherit the caveat into the final report (do not silently drop the qualifier).
 
