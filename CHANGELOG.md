@@ -18,6 +18,33 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
 
+## v1.24.0 (2026-06-30)
+
+### Changed — plugin-configurator refactor (pass 1)
+
+First conservative slimming pass on the plugin's largest skill (≈1459 lines), following the team-ops-reporter "thin skill + thick reference" pattern. Behavior unchanged.
+
+- Extracted the **Test Mode (sandbox)** workflow (≈83 lines: TM-0..TM-5, sandbox isolation rules, finale diff, Discard/Promote/Keep menu, verification matrix) from `skills/plugin-configurator/SKILL.md` into **`references/test-mode.md`** (NEW); the skill now keeps the section heading + triggers and points to the reference. Content moved verbatim — every TM step/rule/table preserved.
+- Removed a **duplicate "Test (sandbox)" row** from the modes table (kept the `Onboarding (Test sandbox)` row, which is grouped with the other onboarding variants and referenced by Onboarding Step 2).
+- `plugin-configurator` `2.1.0 → 2.2.0` (MINOR). SKILL.md ≈ −81 lines.
+
+Deferred to later passes: extracting format/schema blocks into `context-schema.md`, and the broader substep-numbering cleanup (kept out of this pass to stay safe).
+
+### Changed — release convention
+- The plugin **Description** (`.claude-plugin/plugin.json` + `marketplace.json`) is now stamped with the version and release date on every release — suffix ` — v{version} (released {date})` (idempotent: the previous stamp is replaced).
+
+### Files
+
+| File | Type | Version |
+|---|---|---|
+| `.claude-plugin/plugin.json` + `marketplace.json` | description stamped (v1.24.0 + date) | n/a |
+| `references/test-mode.md` | NEW (extracted) | n/a |
+| `skills/plugin-configurator/SKILL.md` | modified (Test Mode → pointer, dup row removed) | 2.1.0 → 2.2.0 |
+| `README.md` | version bump 1.24.0 | n/a |
+
+### Backwards compatibility
+Refactor only — no behavior change (Test Mode triggers and full procedure remain reachable via the reference). Safe for Claude.
+
 ## v1.23.0 (2026-06-30)
 
 ### Added — subagent delegation for research / analytics skills
