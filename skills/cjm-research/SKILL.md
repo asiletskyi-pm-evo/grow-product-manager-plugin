@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.4.0
+version: 0.5.0
 description: Conduct CJM (Customer Journey Map) research — detect funnel anomalies, generate improvement hypotheses, and build prioritized backlogs. Use when the user asks to "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", or needs end-to-end funnel analysis with enrichment from knowledge sources. Українською: "проаналізувати CJM", "знайти аномалії у воронці", "CJM дослідження", "health-check воронки", "порівняти платформи", "CJM гіпотези".
 ---
 
@@ -318,6 +318,9 @@ Every metric receives a status:
 - For `hypotheses` and `full` modes → **continue to Step 5**
 
 ### Step 5 — Enrich with WORLD sources
+
+> **Subagent delegation (large fan-out).** For many world enrichment sources (library + internet + Baymard across all detected anomalies), delegate per `references/subagent-delegation.md`: split into batches (by anomaly / funnel stage / search mode), spawn subagents in parallel, each returns a compact structured result (per source: key insight, source type, trust score + source link), and the main agent aggregates (group by stage, dedupe, rank). The same pattern applies to Step 6 INTERNAL enrichment (Confluence + GDrive). Falls back to inline if subagents are unavailable.
+
 
 **Delegate to `knowledge-library` (search modes: library + internet + baymard) and `product-research`.**
 
@@ -684,7 +687,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.4.0",
+     skill_version: "0.5.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
