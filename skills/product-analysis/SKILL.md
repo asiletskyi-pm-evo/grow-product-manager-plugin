@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.9.0
+version: 0.9.1
 description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", or "CJM funnel analysis". Українською: "проаналізувати метрики", "подивитись дашборд", "знайти аномалії", "пояснити ці дані", "аналіз після релізу", "аналіз результатів A/B-тесту", "аналіз CJM-воронки".
 ---
 
@@ -169,6 +169,35 @@ When using browser: navigate to the dashboard URL, take screenshots using `compu
 
 Summarize all gathered data sources back to the user and confirm before proceeding to analysis.
 
+### Step 0.5: Vault Context Search (Optional)
+
+> Requires: `references/vault-protocol.md` → Step 0.5
+
+IF vault_level > L0 (detected during Step 0h):
+
+1. Search vault for relevant prior artifacts:
+   - Types: `cjm-analysis`, `ab-test-results`, `metrics-review`, `post-release`, `hypothesis`
+   - Product: active product
+   - Tags: metric names, analysis type keywords
+   - Status: `active`, `draft`
+   - Sort: `created DESC`, limit: 10
+
+2. IF results found:
+   - Display: "Found {N} related analysis artifacts in your knowledge base:"
+   - Show: title, type, date, key metrics or test results
+   - Ask: "Use as context? [Yes / Select specific / Skip]"
+
+3. IF user accepts:
+   - Read full content of selected artifacts
+   - Use as context:
+     - Previous metrics reviews → compare trends, identify recurring patterns
+     - Prior A/B test results → reference when analyzing related metrics
+     - CJM analyses → understand funnel context for current metrics
+     - Hypotheses → link metrics changes to tested/untested hypotheses
+   - Note in analysis: "Comparison with previous analysis from {date}"
+
+4. IF user skips OR no results → continue normally
+
 ### Step 1.5 — Data Integrity Gate (MANDATORY, v0.9.0+)
 
 **Internal logic (product-analysis).** Executes before Step 2 (Analysis engine). Every data source loaded in Step 1 (Tableau, Google Sheets, CSV, screenshots, PDF, A/B reports) passes 5 universal gate checks per `references/data-integrity-protocol.md`. Without passing the gate, the metric MUST NOT be used in the analysis engine or final report.
@@ -243,35 +272,6 @@ Every metric receives status: ✅ Verified / ⚠️ Caveat / ❌ Blocked.
 If Blocked metrics > 0:
 - Return to Step 1 to gather additional sources OR
 - Inform user explicitly that analysis cannot proceed without resolution
-
-### Step 0.5: Vault Context Search (Optional)
-
-> Requires: `references/vault-protocol.md` → Step 0.5
-
-IF vault_level > L0 (detected during Step 0h):
-
-1. Search vault for relevant prior artifacts:
-   - Types: `cjm-analysis`, `ab-test-results`, `metrics-review`, `post-release`, `hypothesis`
-   - Product: active product
-   - Tags: metric names, analysis type keywords
-   - Status: `active`, `draft`
-   - Sort: `created DESC`, limit: 10
-
-2. IF results found:
-   - Display: "Found {N} related analysis artifacts in your knowledge base:"
-   - Show: title, type, date, key metrics or test results
-   - Ask: "Use as context? [Yes / Select specific / Skip]"
-
-3. IF user accepts:
-   - Read full content of selected artifacts
-   - Use as context:
-     - Previous metrics reviews → compare trends, identify recurring patterns
-     - Prior A/B test results → reference when analyzing related metrics
-     - CJM analyses → understand funnel context for current metrics
-     - Hypotheses → link metrics changes to tested/untested hypotheses
-   - Note in analysis: "Comparison with previous analysis from {date}"
-
-4. IF user skips OR no results → continue normally
 
 ### Step 2 — Analysis engine
 
@@ -495,7 +495,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "product-analysis",
-     skill_version: "0.9.0",
+     skill_version: "0.9.1",
      tags: [metric names analyzed, platforms, analysis_mode],
      content: full_analysis_markdown,
      related: [source hypothesis, source requirements, previous analyses from Step 0.5],
