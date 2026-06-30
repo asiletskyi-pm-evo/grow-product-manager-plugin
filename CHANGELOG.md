@@ -18,6 +18,32 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
 
+## v1.23.0 (2026-06-30)
+
+### Added — subagent delegation for research / analytics skills
+
+Extends v1.22's fan-out delegation to the heaviest research/analytics passes. Same shared pattern (`references/subagent-delegation.md`), now applied where many sources / competitors / dashboards are read in parallel.
+
+- **`skills/product-research/SKILL.md`** `0.8.0 → 0.9.0` — "Gather data" step: delegate per-competitor / per-source-group reads, aggregate, then run the validation gate.
+- **`skills/cjm-research/SKILL.md`** `0.4.0 → 0.5.0` — enrichment fan-out (Step 5 world sources; pattern carries to Step 6 internal): delegate per anomaly / stage / search mode.
+- **`skills/product-analysis/SKILL.md`** `0.9.x → 0.10.0` — data acquisition: delegate per dashboard / funnel stage / segment, aggregate, then run the validation gate.
+- **`references/subagent-delegation.md`** — fan-out table extended with these three skills.
+
+Additive only — optional guidance with an inline fallback; existing workflows and output formats unchanged.
+
+### Files
+
+| File | Type | Version |
+|---|---|---|
+| `references/subagent-delegation.md` | modified (fan-out table +3 rows) | n/a |
+| `skills/product-research/SKILL.md` | modified (delegation note) | 0.8.0 → 0.9.0 |
+| `skills/cjm-research/SKILL.md` | modified (delegation note) | 0.4.0 → 0.5.0 |
+| `skills/product-analysis/SKILL.md` | modified (delegation note) | → 0.10.0 |
+| `README.md` | version bump 1.23.0 | n/a |
+
+### Backwards compatibility
+Additive — inline fallback preserves prior behavior. Safe for Claude.
+
 ## v1.22.0 (2026-06-30)
 
 ### Added — subagent delegation for fan-out skills

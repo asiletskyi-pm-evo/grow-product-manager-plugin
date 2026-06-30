@@ -39,5 +39,8 @@ Do NOT delegate trivial single reads, or work that needs tight back-and-forth wi
 | `meeting-processor` | Search mode (query across many meetings) | meeting | per-meeting: decisions, action items, relevant quotes + link |
 | `knowledge-library` | Search (multi-mode / many sources) | source group / mode | per-source: title, key insight, trust score, link |
 | `team-ops-reporter` | Jira fetch for member-review / quarter-review (paginated, per period) | page / month / member | extracted rows (status, SP, transitions) per the data protocol |
+| `product-research` | Gather data (competitive / market / web / library) | competitor / source group | per source: key finding, source type, trust/recency + link |
+| `cjm-research` | Enrich (world Step 5 + internal Step 6) | anomaly / stage / mode | per source: key insight, source type, trust score + link |
+| `product-analysis` | Data acquisition (dashboards / funnel stages) | dashboard / stage / segment | per source: metric, trend, period, source-type marker + link |
 
 > The fan-out is an efficiency layer, not a logic change: the same data is gathered, just off the main context. Each skill names its own fan-out points and keeps its existing output format.
