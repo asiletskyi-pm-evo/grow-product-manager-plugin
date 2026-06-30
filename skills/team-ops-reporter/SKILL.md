@@ -1,7 +1,7 @@
 ---
 name: team-ops-reporter
 version: 0.1.0
-description: Create operational team reports from Jira — sprint plan, sprint review, quarter review, initiative status, and team-member review. Use when the user asks to "build a sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", or "report on releases / flags / story points".
+description: Create operational team reports from Jira — sprint plan, sprint review, quarter review, initiative status, and team-member review. Use when the user asks to "build a sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", or "report on releases / flags / story points". Українською: "зібрати звіт по спринту (план/рев'ю)", "результати кварталу", "статус епіка/фічі/місії", "скільки <людина> закрила за період", "операційний звіт команди", "звіт по релізах / флагах / стори-поінтах".
 ---
 
 # Team Ops Reporter

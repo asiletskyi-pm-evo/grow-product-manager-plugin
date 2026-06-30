@@ -1,7 +1,7 @@
 ---
 name: knowledge-library
 version: 0.4.0
-description: Manage a local library of curated knowledge sources (articles, benchmarks, research) with categorization, trust scoring, and multi-mode search. Use when the user asks to "manage sources", "add to library", "search knowledge", "import sources", "show library", or when another skill needs to search for enrichment data. Also triggers when user says "add this article", "save this source", "what sources do we have on [topic]".
+description: Manage a local library of curated knowledge sources (articles, benchmarks, research) with categorization, trust scoring, and multi-mode search. Use when the user asks to "manage sources", "add to library", "search knowledge", "import sources", "show library", or when another skill needs to search for enrichment data. Also triggers when user says "add this article", "save this source", "what sources do we have on [topic]". Українською: "керувати джерелами", "додати в бібліотеку", "пошук у знаннях", "імпортувати джерела", "показати бібліотеку", "додай цю статтю", "збережи це джерело", "які джерела маємо по темі".
 ---
 
 # Knowledge Library

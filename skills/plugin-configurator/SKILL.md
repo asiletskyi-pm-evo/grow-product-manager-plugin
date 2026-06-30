@@ -1,7 +1,7 @@
 ---
 name: plugin-configurator
 version: 2.1.0
-description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist.
+description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist. Українською: "налаштувати плагін", "сетап плагіна", "налаштувати контекст", "додати продукт", "оновити конфігурацію", "перевірити налаштування", "показати конфіг".
 ---
 
 # Plugin Configurator
@@ -1461,21 +1461,21 @@ This skill (`plugin-configurator`) must bump its own version when its SKILL.md i
 
 ## Step — Planning setup (Extended)
 
-Налаштування planning-suite (`quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`). Пише секцію `planning` у local-context (схема — `local-context.example.md` → Planning). Mode-gate: Extended; у Basic — додати ключ у `onboarding.deferred_steps`.
+Configures the planning suite (`quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`). Writes the `planning` section into local-context (schema — `local-context.example.md` → Planning). Mode-gate: Extended; in Basic — add the key to `onboarding.deferred_steps`.
 
-Збирається через `AskUserQuestion`/діалог:
+Collected via `AskUserQuestion`/dialog:
 
-1. **Команда й capacity** — склад по платформах/ролях; **хто рахується** у стелю (TL як dev чи ні); baseline SP/спринт (дефолт 10); резерв техборгу (дефолт 15%); ціль завантаження (дефолт 85%). Метчинг учасників із Jira-профілями.
-2. **Спринти** — каденс (дефолт 2 тижні), якір (назва+дата найближчого, напр. `SEX 55 = 2026-06-29`), Jira board id.
-3. **Мапа цілей** — епік → Ціль (EVOCO1-XX), бо Atlas Goals не запитуються через MCP.
-4. **Пороги gate** — warning/critical (дефолт 85/100%); рубрика t-shirt→SP.
-5. **Development Flow (опитування про флоу розробки)** — якщо секції ще немає:
-   - типова послідовність work-types (дефолт `Requirements → Design → {BE, Analytics} → Client → QA → Release`; дати переставити/додати/прибрати);
-   - що йде паралельно;
-   - залежності-передумови (ребра DAG) + платформні нюанси;
-   - поріг готовності (з якого статусу передумова пройдена; дефолт on review/in test/done);
-   - особливості/винятки логіки команди (вільний ввід).
+1. **Team and capacity** — composition by platforms/roles; **who counts** toward the ceiling (TL as a dev or not); baseline SP/sprint (default 10); tech-debt reserve (default 15%); load target (default 85%). Match members against Jira profiles.
+2. **Sprints** — cadence (default 2 weeks), anchor (name+date of the nearest one, e.g. `SEX 55 = 2026-06-29`), Jira board id.
+3. **Goal map** — epic → Goal (EVOCO1-XX), since Atlas Goals are not queryable via MCP.
+4. **Gate thresholds** — warning/critical (default 85/100%); t-shirt→SP rubric.
+5. **Development Flow (survey about the development flow)** — if the section does not yet exist:
+   - typical work-type sequence (default `Requirements → Design → {BE, Analytics} → Client → QA → Release`; can be reordered/added/removed);
+   - what runs in parallel;
+   - prerequisite dependencies (DAG edges) + platform nuances;
+   - readiness threshold (from which status a prerequisite is considered passed; default on review/in test/done);
+   - team logic specifics/exceptions (free input).
 
-Запропонувати зберегти все у local-context (`planning` секція). Усі planning-скіли читають це; `update config` оновлює.
+Offer to save everything into local-context (`planning` section). All planning skills read this; `update config` updates it.
 
-Перевірка наявності: якщо `planning.development_flow` уже є → не перепитувати, лише запропонувати перегляд/оновлення.
+Existence check: if `planning.development_flow` already exists → do not re-ask, only offer review/update.

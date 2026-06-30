@@ -1,78 +1,78 @@
 ---
 name: sprint-planning
-version: 0.1.0
-description: Допомагає PM ефективно оцінити й провести попереднє планування спринта — формує фокуси з квартального roadmap/місій/проєктів, підсвічує що ГОТОВЕ взяти вже зараз (залежності пройдені), ловить порушення послідовності робіт (напр. клієнтську розробку планують раніше за аналітичне покриття), збирає per-member capacity, аналізує ризик недоробки з минулого спринта, пропонує виконавців для незакріплених задач і наповнює спринт під capacity. Use when "спланувати спринт", "передпланування спринта", "що можна взяти у SEX N", "що готове з беклогу", "перевір залежності спринта", "сформуй фокуси спринта", "розподілити спринт", "хто візьме задачі".
+version: 0.1.1
+description: Helps the PM efficiently estimate and run sprint pre-planning — derives focuses from the quarterly roadmap/missions/projects, highlights what's READY to pull right now (dependencies cleared), catches work-sequence violations (e.g. client-side work planned ahead of analytics coverage), gathers per-member capacity, analyzes carryover risk from the last sprint, suggests assignees for unowned tasks, and fills the sprint to capacity. Use when "plan the sprint", "sprint pre-planning", "what can we pull into SEX N", "what's ready from the backlog", "check sprint dependencies", "build sprint focuses", "distribute the sprint", "who takes the tasks". Українською: "спланувати спринт", "передпланування спринта", "що можна взяти у SEX N", "що готове з беклогу", "перевір залежності спринта", "сформуй фокуси спринта", "розподілити спринт", "хто візьме задачі".
 ---
 
 # Sprint Planning
 
-Консультант PM на передплануванні спринта (найтонший зріз). Не просто наповнює спринт — **підсвічує готовність і порушення порядку робіт**, рахує capacity по людях, враховує ризик недоробки й пропонує виконавців. **Рішення — за PM.**
+PM advisor for sprint pre-planning (finest slice). It doesn't just fill the sprint — it **highlights readiness and work-order violations**, computes per-person capacity, accounts for carryover risk, and suggests assignees. **The PM decides.**
 
-Частина planning-suite: бере скоуп із `quarterly-planning` і пріоритет напрямків із `project-planning`; задачі → `task-creator`. Інтегрується з `team-ops-reporter` (минулий спринт ← `sprint-review`+`member-review`; затверджений план → рендериться як `sprint-plan` звіт).
+Part of the planning-suite: takes scope from `quarterly-planning` and direction priority from `project-planning`; tasks → `task-creator`. Integrates with `team-ops-reporter` (last sprint ← `sprint-review`+`member-review`; approved plan → rendered as a `sprint-plan` report).
 
 ## Prerequisites
-- `references/local-context-protocol.md` — Step 0 + Planning (capacity-правила, каденс+якір спринтів, board, Development Flow).
-- `references/planning-core.md` — модель, розмітка, статуси, Development Flow.
-- `references/capacity-model.md` — per-member capacity (розд. 3), carryover-risk, авто-оцінка, спринтова стеля (розд. 9).
-- `references/dependency-model.md` — **work-type DAG + правило готовності** (розд. 4), порушення.
-- `references/roadmap-artifacts.md` — формат sprint-плану (демаркація з ops-report).
-- `skills/team-ops-reporter/references/jira-data-protocol.md` — Jira-плумбінг (реюз).
+- `references/local-context-protocol.md` — Step 0 + Planning (capacity rules, sprint cadence + anchor, board, Development Flow).
+- `references/planning-core.md` — model, labeling, statuses, Development Flow.
+- `references/capacity-model.md` — per-member capacity (sec. 3), carryover-risk, auto-estimation, sprint ceiling (sec. 9).
+- `references/dependency-model.md` — **work-type DAG + readiness rule** (sec. 4), violations.
+- `references/roadmap-artifacts.md` — sprint-plan format (demarcation from ops-report).
+- `skills/team-ops-reporter/references/jira-data-protocol.md` — Jira plumbing (reuse).
 - `references/integration-strategy.md`, `references/persistent-storage.md`, `references/template-protocol.md`.
 
 ## Step T — Template Resolution
-`artifact_type: roadmap`, `subtype: sprint-plan`, `product_id`, `language`. (Звітний sprint-plan — у team-ops-reporter; тут — планувальний.)
+`artifact_type: roadmap`, `subtype: sprint-plan`, `product_id`, `language`. (The reporting sprint-plan lives in team-ops-reporter; this is the planning one.)
 
 ## Modes
 
-| Mode | Вихід |
-|------|-------|
-| `groom` | Передпланування: оцінка + готовність + перевірка залежностей (до коміту) |
-| `plan` | Наповнити наступний спринт під capacity + ціль |
-| `review` | committed vs done + перенесення (живить carryover-risk) |
-| `forecast` | У які спринти ляже залишок кварталу |
+| Mode | Output |
+|------|--------|
+| `groom` | Pre-planning: estimate + readiness + dependency check (before commit) |
+| `plan` | Fill the next sprint to capacity + goal |
+| `review` | committed vs done + carryover (feeds carryover-risk) |
+| `forecast` | Which sprints the quarter's remainder lands in |
 
 ## Pipeline
 
 ### Step 0 — Local context
-Per `local-context-protocol.md` + Planning + Development Flow (work-type послідовність, поріг готовності).
+Per `local-context-protocol.md` + Planning + Development Flow (work-type sequence, readiness threshold).
 
-### Step 1 — Scope (3 джерела кандидатів)
-Який спринт (дефолт наступний). **Джерела:** (а) беклог; (б) затверджений roadmap кварталу (`quarterly-planning`); (в) **майбутні спринти** — задачі, розкидані по наступних SEX (Ready можна підтягнути раніше / перебалансувати). Jira board id.
+### Step 1 — Scope (3 candidate sources)
+Which sprint (default: next). **Sources:** (a) backlog; (b) approved quarterly roadmap (`quarterly-planning`); (c) **future sprints** — tasks spread across upcoming SEX (Ready ones can be pulled forward / rebalanced). Jira board id.
 
-### Step 2 — Фокуси спринта
-Вивести з активного квартального roadmap + арок проєктів (`project-planning`): які напрямки тягнемо цей спринт і чому. **Gate.**
+### Step 2 — Sprint focuses
+Derive from the active quarterly roadmap + project arcs (`project-planning`): which directions we pull this sprint and why. **Gate.**
 
-### Step 3 — Per-sprint capacity по людях
-Зібрати у PM прогноз **робочих днів / capacity кожного** (відпустки, частковий день, паралельні напрямки) — `capacity-model` розд. 3. **Gate.**
+### Step 3 — Per-sprint per-member capacity
+Gather from the PM a forecast of **working days / capacity for each person** (time off, partial days, parallel directions) — `capacity-model` sec. 3. **Gate.**
 
-### Step 3b — Carryover-risk (минулий спринт)
-**Делегувати `team-ops-reporter` `sprint-review`+`member-review`** для committed vs done і throughput по людях. Порахувати ризик недоробки (`capacity-model` розд. 3: capacity ÷ залишок) → знизити завантаження ризикових, підсвітити хронічні перевантаження.
+### Step 3b — Carryover-risk (last sprint)
+**Delegate `team-ops-reporter` `sprint-review`+`member-review`** for committed vs done and per-person throughput. Compute carryover risk (`capacity-model` sec. 3: capacity ÷ remainder) → reduce load on at-risk members, flag chronic overload.
 
-### Step 4 — Сканування готовності
-Для кожного кандидата перевірити статус передумов по **work-type DAG** (`dependency-model` розд. 4) → **Ready** (передумови пройдені) / **Blocked** (чим і до якого статусу). Приклад: BE+Design+Analytics на ревʼю/в тесті → клієнтська реалізація = Ready.
+### Step 4 — Readiness scan
+For each candidate check the status of prerequisites along the **work-type DAG** (`dependency-model` sec. 4) → **Ready** (prerequisites cleared) / **Blocked** (by what and up to which status). Example: BE+Design+Analytics in review/testing → client-side implementation = Ready.
 
-### Step 5 — Порушення послідовності
-Якщо downstream-кандидат планується, а upstream нижче порогу готовності (напр. клієнт раніше за аналітику зі скоупу фічі) → **підсвітити порушення** з поясненням; свідоме підтвердження PM, не жорстке блокування.
+### Step 5 — Sequence violations
+If a downstream candidate is planned while upstream is below the readiness threshold (e.g. client-side ahead of analytics within the feature scope) → **highlight the violation** with an explanation; conscious PM confirmation, not a hard block.
 
-### Step 6 — Оцінка + наповнення
-Авто-оцінка відсутніх (аналогія); наповнення до спринтової стелі по платформах/людях лише з **Ready**-кандидатів; **sprint-gate** (не перевищувати стелю платформи); ціль спринту. Вільна capacity → **pull-forward** Ready-задач з майбутніх спринтів (зсув синхронізувати з `project-planning` арками).
+### Step 6 — Estimate + fill
+Auto-estimate missing ones (analogy); fill to the sprint ceiling by platform/person from **Ready** candidates only; **sprint-gate** (don't exceed the platform ceiling); sprint goal. Free capacity → **pull-forward** Ready tasks from future sprints (sync the shift with `project-planning` arcs).
 
-### Step 6b — Пропозиція виконавців
-Для задач без виконавця — запропонувати призначення, **пріоритет тим, у кого ще нема задач / є вільна capacity**; матчинг ролі-платформи; урахування per-member бюджету (Step 3) і ризику (Step 3b). Запис assignee у Jira — **gate**; поважає конвенцію команди (де assignee лишають пустим до взяття в роботу — пропозиція в плані, не в задачі).
+### Step 6b — Assignee suggestion
+For unowned tasks — propose assignment, **prioritizing those with no tasks yet / free capacity**; role-platform matching; account for the per-member budget (Step 3) and risk (Step 3b). Writing assignee to Jira — **gate**; respect team convention (where assignee is left empty until work starts — the suggestion stays in the plan, not on the task).
 
-### Step 7 — Цикл корекції з PM
-Показати, що не влазить / заблоковано → вибір. Перерахунок наживо.
+### Step 7 — Correction loop with PM
+Show what doesn't fit / is blocked → choice. Live recompute.
 
-### Step 8 — Артефакти
-Sprint-план (Confluence / призначення у Jira-спринт) — **gate перед записом у Jira**. Затверджений план → може рендеритись як `sprint-plan` звіт через team-ops-reporter.
+### Step 8 — Artifacts
+Sprint plan (Confluence / assignment into the Jira sprint) — **gate before writing to Jira**. Approved plan → can be rendered as a `sprint-plan` report via team-ops-reporter.
 
 ## Quality Standards
-- Тільки Ready-кандидати у наповнення; Blocked — з поясненням, не тихо.
-- Порушення послідовності — завжди підсвічувати, рішення за PM.
-- Per-member: не подвоювати (Assignee/Developer/QA окремо — `jira-data-protocol`).
-- Оцінки/призначення — маркер «на підтвердження TL»; рішення за PM.
-- Work-type флоу й поріг готовності — з Development Flow команди, не хардкод.
-- Запис у Jira — лише після апруву. Мова — `user.language`.
+- Only Ready candidates go into the fill; Blocked — with an explanation, not silently.
+- Sequence violations — always highlight; the PM decides.
+- Per-member: don't double-count (Assignee/Developer/QA separate — `jira-data-protocol`).
+- Estimates/assignments — marked "pending TL confirmation"; the PM decides.
+- Work-type flow and readiness threshold — from the team's Development Flow, not hardcoded.
+- Write to Jira only after approval. Language — `user.language`.
 
 ## Additional Resources
 `references/capacity-model.md`, `dependency-model.md`, `planning-core.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`; `skills/team-ops-reporter/references/jira-data-protocol.md`.
