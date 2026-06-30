@@ -663,12 +663,7 @@ Follow the Enrichment Protocol from `plugin-configurator`:
 2. Ask: "Would you like to update local-context.md?"
 3. If yes — update the appropriate sections, show changelog
 
-**Self-improvement check** (after corrections are applied and confirmed):
-
-If the user requested corrections during review, follow the full protocol in `references/self-improvement.md`:
-1. Analyze the root cause — is this a pattern or a one-off?
-2. If it's a pattern — propose a specific improvement to the skill
-3. If the user agrees — update SKILL.md, bump version, update CHANGELOG.md
+**Self-improvement check** (after corrections are applied and confirmed): follow `references/self-improvement.md` — analyze whether the correction is a pattern, and if so propose a SKILL.md improvement (version bump + CHANGELOG).
 
 ### Step 12.5: Save to Vault (Optional)
 
