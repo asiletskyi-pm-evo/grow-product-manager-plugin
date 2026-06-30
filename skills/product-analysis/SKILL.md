@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.9.1
+version: 0.10.0
 description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", or "CJM funnel analysis". Українською: "проаналізувати метрики", "подивитись дашборд", "знайти аномалії", "пояснити ці дані", "аналіз після релізу", "аналіз результатів A/B-тесту", "аналіз CJM-воронки".
 ---
 
@@ -79,6 +79,9 @@ Run Steps T-1 → T-5 from `references/template-protocol.md`:
 ## Workflow
 
 ### Step 1 — Initialization and data acquisition
+
+> **Subagent delegation (large fan-out).** For many dashboards / funnel stages / data sources, delegate per `references/subagent-delegation.md`: split into batches (by dashboard / stage / segment), spawn subagents in parallel, each returns a compact structured result (per source: metric values, trend, period definition, source-type marker + source link), and the main agent aggregates and runs Step 1.5 validation. Falls back to inline if subagents are unavailable.
+
 
 **1a. Product and feature context — clarify via AskUserQuestion if not clear from context:**
 
@@ -490,7 +493,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "product-analysis",
-     skill_version: "0.9.1",
+     skill_version: "0.10.0",
      tags: [metric names analyzed, platforms, analysis_mode],
      content: full_analysis_markdown,
      related: [source hypothesis, source requirements, previous analyses from Step 0.5],
