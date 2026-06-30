@@ -18,6 +18,40 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
 
+## v1.25.1 (2026-06-30)
+
+### Fixed — plugin-configurator refactor (pass 3): substep-numbering cleanup
+
+Closes the item deferred from v1.25.0. Documentation-only; **no behavior change** (substep labels are navigation aids, not logic).
+
+Substep prefixes in `skills/plugin-configurator/SKILL.md` now match their parent Step:
+
+| Step | Was | Now |
+|---|---|---|
+| Step 5 — Organizations | 3a, 3b | 5a, 5b |
+| Step 6 — Products | 4a, 4b | 6a, 6b |
+| Step 7 — Analytics & Data Sources | 5a, 5a-Tableau, 5b, 5c | 7a, 7a-Tableau, 7b, 7c |
+| Step 8 — Key Metrics & OKRs | 6a, 6b, 6c | 8a, 8b, 8c |
+| Step 9 — Teams | 7a, 7b | 9a, 9b |
+| Step 11 — CJM Configuration | 9a–9f | 11a–11f |
+| Step 16 — Review & save | 13a–13g | 16a–16g |
+
+- Cross-reference "added Tableau in Step 5a" updated to "Step 7a".
+- Left unchanged on purpose: the RM-4 (Resume Mode) `4a–4e` block (correctly scoped to RM-4); the "Onboarding Step 3a" reference (Step 3 connector pre-check, still 3a); the "Step 13" mention inside 16g (refers to the Template Library step, still Step 13).
+- `plugin-configurator` `2.3.0 → 2.3.1` (PATCH).
+
+This eliminated the ambiguity that blocked an automated pass earlier (`3a` existed in both Step 3 and Step 5; `4a` in both RM-4 and Step 6) — resolved with section-scoped, full-line literal replacements.
+
+### Files
+
+| File | Type | Version |
+|---|---|---|
+| `skills/plugin-configurator/SKILL.md` | modified (substep prefixes + 1 cross-ref) | 2.3.0 → 2.3.1 |
+| `README.md` | version bump 1.25.1 | n/a |
+
+### Backwards compatibility
+Cosmetic relabeling only — no behavior change. Safe for Claude.
+
 ## v1.25.0 (2026-06-30)
 
 ### Changed — plugin-configurator refactor (pass 2)
