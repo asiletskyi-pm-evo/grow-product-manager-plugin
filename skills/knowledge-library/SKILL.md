@@ -1,6 +1,6 @@
 ---
 name: knowledge-library
-version: 0.4.0
+version: 0.5.0
 description: Manage a local library of curated knowledge sources (articles, benchmarks, research) with categorization, trust scoring, and multi-mode search. Use when the user asks to "manage sources", "add to library", "search knowledge", "import sources", "show library", or when another skill needs to search for enrichment data. Also triggers when user says "add this article", "save this source", "what sources do we have on [topic]". Українською: "керувати джерелами", "додати в бібліотеку", "пошук у знаннях", "імпортувати джерела", "показати бібліотеку", "додай цю статтю", "збережи це джерело", "які джерела маємо по темі".
 ---
 
@@ -188,6 +188,8 @@ Show the calculated score to the user:
 ---
 
 ## Workflow — Search Mode
+
+> **Subagent delegation (large fan-out).** For many sources or several independent search modes, delegate per `references/subagent-delegation.md`: split by source group / mode into batches, spawn subagents in parallel, each returns a compact structured result (per-source title, key insight, trust score, link), and the main agent aggregates (merge, dedupe, rank). Falls back to inline if subagents are unavailable.
 
 Search is the primary mode used by other skills. It can be invoked directly or via delegation.
 
