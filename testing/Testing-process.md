@@ -1,73 +1,73 @@
-# Процес тестування Grow PM Plugin
+# Grow PM Plugin Testing Process
 
-> Мета: вносити зміни поступово, **не ламаючи плагін** у Claude. Кожна версія проходить однакову петлю: backup → застосування → тести по стадіях → відладка → бамп версії. Скіли — це prompt-артефакти, тож «тест» = статична валідація + тригер-евал + сценарний прогін + інтеграція + регресія. Виконання — у режимі субагентів.
+> Goal: ship changes incrementally **without breaking the plugin** in Claude. Every version goes through the same loop: backup → apply → stage-by-stage tests → debug → version bump. Skills are prompt artifacts, so a "test" = static validation + trigger eval + scenario walk + integration + regression. Execution runs in subagent mode.
 
-## Стадії тестування
+## Testing stages
 
-| # | Стадія | Що перевіряє | Як | Блокер? |
+| # | Stage | What it checks | How | Blocker? |
 |---|--------|--------------|-----|---------|
-| 0 | **Backup** | знімок версії до змін | `git tag` + копія теки у `_backups/<version>/` | — |
-| 1 | **Static lint** | frontmatter, name==folder, semver, резолв `references/*`, крос-скіл посилання, skill_version ↔ frontmatter, CHANGELOG/README згадки | `testing/skill_lint.py` (автомат, у CI/локально) | так |
-| 2 | **Trigger eval** | description тригериться на цільових фразах і НЕ перехоплює чужі | набір positive/negative фраз на скіл; суддя-субагент | так |
-| 3 | **Scenario walk** | скіл дає правильну структуру: ключові кроки, gate-и, формат артефакту | 1-2 сценарії на скіл + mock local-context; субагент «сухо» проганяє і звіряє | так (для змінених) |
-| 4 | **Integration** | чейнинг між скілами, резолв спільних references, делегування (напр. planning→team-ops-reporter) | сценарій-ланцюг; субагент | так |
-| 5 | **Regression** | зміна не зламала наявні скіли (особливо після rename/dedup) | повторити 1-4 на сусідніх/залежних скілах | так |
-| 6 | **Sign-off** | усе зелено → бамп версії + CHANGELOG + README; інакше → debug-петля | головний агент зводить | — |
+| 0 | **Backup** | snapshot of the version before changes | `git tag` + copy of the folder into `_backups/<version>/` | — |
+| 1 | **Static lint** | frontmatter, name==folder, semver, resolution of `references/*`, cross-skill links, skill_version ↔ frontmatter, CHANGELOG/README mentions | `testing/skill_lint.py` (automated, in CI/locally) | yes |
+| 2 | **Trigger eval** | description triggers on target phrases and does NOT hijack others | a set of positive/negative phrases per skill; judge subagent | yes |
+| 3 | **Scenario walk** | skill produces the correct structure: key steps, gates, artifact format | 1-2 scenarios per skill + mock local-context; subagent does a "dry run" and verifies | yes (for changed skills) |
+| 4 | **Integration** | chaining between skills, resolution of shared references, delegation (e.g. planning→team-ops-reporter) | chain scenario; subagent | yes |
+| 5 | **Regression** | the change did not break existing skills (especially after rename/dedup) | re-run 1-4 on neighboring/dependent skills | yes |
+| 6 | **Sign-off** | all green → version bump + CHANGELOG + README; otherwise → debug loop | main agent consolidates | — |
 
-**Принцип gate:** жодна стадія-блокер не «жовта» → не йдемо далі. Помилка → стадія 6 debug → фікс → перепрогін зачеплених стадій.
+**Gate principle:** if any blocker stage is not "green" → do not proceed. On error → stage 6 debug → fix → re-run the affected stages.
 
-## Формат тест-кейсу
+## Test case format
 
 ```yaml
 - id: TC-<skill>-<stage>-<n>
   skill: <skill>
   stage: lint | trigger | scenario | integration | regression
-  input: <фраза / сценарій / mock-context>
-  expected: <очікувана поведінка/структура/резолв>
-  actual: <заповнюється при прогоні>
+  input: <phrase / scenario / mock-context>
+  expected: <expected behavior/structure/resolution>
+  actual: <filled in during the run>
   status: pass | fail | blocked | n/a
-  notes: <деталі, посилання на баг>
+  notes: <details, link to bug>
 ```
 
-Реєстр кейсів — `testing/test-cases.md`; оновлюється КОЖЕН реліз (нові кейси на нові скіли/фікси + регресійні на зачеплені).
+The case registry is `testing/test-cases.md`; updated EVERY release (new cases for new skills/fixes + regression cases for affected skills).
 
-## Backup-протокол
+## Backup protocol
 
-- Перед будь-якою зміною: `git tag pre-v<next>` + копія повної теки плагіна у `_backups/<current-version>-<timestamp>/` (поза git або у gitignored теку).
-- Бекап зберігати до підтвердження зеленого релізу; відкат = `git reset --hard pre-v<next>` або відновлення з `_backups/`.
-- Кожна версія має власний тег → завжди є точка відкату.
+- Before any change: `git tag pre-v<next>` + copy of the full plugin folder into `_backups/<current-version>-<timestamp>/` (outside git or into a gitignored folder).
+- Keep the backup until a green release is confirmed; rollback = `git reset --hard pre-v<next>` or restore from `_backups/`.
+- Every version has its own tag → there is always a rollback point.
 
-## Релізна петля (per version)
+## Release loop (per version)
 
 ```
-1. Backup (стадія 0): tag + копія.
-2. Apply: внести зміни цієї версії (нові/змінені файли).
-3. Test: стадії 1→5 (блокери). Кожна — субагент(и).
-4. Debug: фейли → root-cause → фікс → перепрогін зачеплених стадій (до зеленого).
-5. Sign-off (стадія 6): бамп версії у frontmatter + CHANGELOG-запис + README; оновити test-cases.md.
-6. Commit + tag v<version>. Перехід до наступної версії.
+1. Backup (stage 0): tag + copy.
+2. Apply: introduce this version's changes (new/modified files).
+3. Test: stages 1→5 (blockers). Each one — subagent(s).
+4. Debug: failures → root-cause → fix → re-run affected stages (until green).
+5. Sign-off (stage 6): version bump in frontmatter + CHANGELOG entry + README; update test-cases.md.
+6. Commit + tag v<version>. Move on to the next version.
 ```
 
-## Оркестрація субагентами
+## Subagent orchestration
 
-| Робота | Виконавець |
+| Work | Executor |
 |--------|-----------|
-| Static lint | скрипт (bash) — детермінований, без агента |
-| Trigger eval (по скілу) | субагент-суддя на скіл (паралельно батчами) |
-| Scenario walk (по скілу) | субагент «сухого прогону» на скіл |
-| Integration / Regression | субагент на ланцюг/групу залежних |
-| Зведення, debug-рішення, версія | головний агент |
+| Static lint | script (bash) — deterministic, no agent |
+| Trigger eval (per skill) | judge subagent per skill (in parallel batches) |
+| Scenario walk (per skill) | "dry run" subagent per skill |
+| Integration / Regression | subagent per chain/group of dependents |
+| Consolidation, debug decisions, version | main agent |
 
-Правило: важкі read/eval-проходи — субагентами (чистий головний контекст); рішення про фікс і бамп — головний агент із підтвердженням PM на ризикових.
+Rule: heavy read/eval passes — by subagents (keep the main context clean); fix and bump decisions — main agent, with PM confirmation on risky ones.
 
-## Критерії готовності версії (Definition of Done)
+## Version Definition of Done
 
 - Lint: 0 FAIL.
-- Trigger: усі цільові фрази тригерять цільовий скіл; 0 хибних перехоплень сусідів.
-- Scenario: для кожного змін"ого скіла ключові кроки/gate-и/формат присутні.
-- Integration: усі чейни й references резолвляться.
-- Regression: сусідні скіли поводяться як до зміни.
-- CHANGELOG + README + frontmatter-версії узгоджені; test-cases.md оновлено.
-- Бекап і тег на місці.
+- Trigger: all target phrases trigger the target skill; 0 false hijacks of neighbors.
+- Scenario: for every changed skill the key steps/gates/format are present.
+- Integration: all chains and references resolve.
+- Regression: neighboring skills behave as before the change.
+- CHANGELOG + README + frontmatter versions are consistent; test-cases.md updated.
+- Backup and tag in place.
 
-> Усі зміни лишаються **additive/безпечними для Claude**: тригер-фрази зберігати; нічого не видаляти без регресійної перевірки залежних.
+> All changes stay **additive/safe for Claude**: keep trigger phrases; remove nothing without a regression check of dependents.

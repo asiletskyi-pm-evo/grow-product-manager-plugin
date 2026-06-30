@@ -18,22 +18,45 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
 
+## v1.18.0 (2026-06-29)
+
+### Changed — i18n: planning suite + tooling translated to English
+
+The plugin is a public English-language repo. The planning-suite additions (v1.15.0–v1.17.0) and the testing tooling had shipped in Ukrainian. This release translates all of that content to English so the whole repo is consistent. Going forward, planning artifacts are drafted in the team's working language and the **English version is what lands in Git**.
+
+**Translated to English:**
+- `references/capacity-model.md`, `references/dependency-model.md`, `references/planning-core.md`, `references/roadmap-artifacts.md`
+- `skills/quarterly-planning/SKILL.md`, `skills/project-planning/SKILL.md`, `skills/sprint-planning/SKILL.md`, `skills/roadmap-architect/SKILL.md` — including frontmatter `description` (skill triggering is now English)
+- `testing/Testing-process.md`, `testing/test-cases.md`, `testing/skill_lint.py` (comments + output strings)
+- The Planning setup step in `skills/plugin-configurator/SKILL.md` and the Planning section in `local-context.example.md`
+- CHANGELOG entries v1.15.0 / v1.16.0 / v1.17.0 re-written in English
+
+**Skill version bumps (PATCH — English description):** quarterly-planning, project-planning, sprint-planning, roadmap-architect `0.1.0 → 0.1.1`.
+
+### Added — bilingual trigger phrases (all 18 skills)
+Every skill's frontmatter `description` now carries trigger phrases in **both English and Ukrainian** (`… Українською: "…", "…"`), so skills trigger regardless of the language the user types. Skill bodies stay English; only the trigger phrase list is bilingual. Additive — no behavior change, existing English triggers preserved (existing skills not version-bumped for this additive change).
+
+**Note:** in `planning-core.md` the status-normalization "Signals" column keeps literal Ukrainian tokens (e.g. `Готово`, `Закінчено`) — those are the actual values matched in the team's Confluence/Jira bodies; translating them would break status detection. They are data, not prose.
+
+### Backwards compatibility
+Translation only — no logic or behavior change. Trigger phrases preserved (now in English). Safe for Claude.
+
 ## v1.17.0 (2026-06-29)
 
 ### Fixed — audit quick-fixes (batch 2)
 
-- **`skills/team-ops-reporter/references/jira-data-protocol.md`** — прибрано захардкоджені sprint-id (`55=14979` тощо), що протухають щоспринта. Замінено на динамічне резолвлення в рантаймі (`openSprints()`/`closedSprints()` у JQL, або `customfield_10020`, або sprints дошки → map name→id). Числа лишено лише як позначений «приклад, не дефолт».
-- **`skills/template-library/SKILL.md`** — виправлено лічбу: «one of **11** actions» → «**12** actions» (у таблиці Actions фактично 12 рядків, включно з `backup` / `restore --from`).
+- **`skills/team-ops-reporter/references/jira-data-protocol.md`** — removed the hardcoded sprint-ids (`55=14979` etc.) that go stale every sprint. Replaced with dynamic resolution at runtime (`openSprints()`/`closedSprints()` in JQL, or `customfield_10020`, or the board's sprints → map name→id). Numbers kept only as a marked "example, not a default".
+- **`skills/template-library/SKILL.md`** — fixed the count: "one of **11** actions" → "**12** actions" (the Actions table actually has 12 rows, including `backup` / `restore --from`).
 
 ### Changed — lint denoise
 
-- **`testing/skill_lint.py`** — у перевірці dangling-refs у тілах reference-файлів тепер **ігноруються імена-приклади з датою** (`YYYY-MM-DD`, напр. артефакти волту у `vault-schema.md`/`vault-protocol.md`). Прибрало 18 хибних WARN, gate лишається високосигнальним.
+- **`testing/skill_lint.py`** — in the dangling-refs check on reference file bodies, **dated example names are now ignored** (`YYYY-MM-DD`, e.g. vault artifacts in `vault-schema.md`/`vault-protocol.md`). Removed 18 false WARNs; the gate stays high-signal.
 
 ### Verified — not a bug
-- `product-analysis` крос-реф «Step 0h» — **коректний** (Step 0h = vault detection реально існує в `references/local-context-protocol.md`, під-крок Step 0). Аудит-флаг знято.
+- `product-analysis` cross-ref "Step 0h" — **correct** (Step 0h = vault detection actually exists in `references/local-context-protocol.md`, a sub-step of Step 0). Audit flag cleared.
 
 ### Deferred → v1.18
-- `product-analysis` косметичний порядок Step 0.5/Step 1.5 (переміщення блоку) — разом із `plugin-configurator` рефактором (обережна інспекція великих файлів).
+- `product-analysis` cosmetic Step 0.5/Step 1.5 ordering (block move) — together with the `plugin-configurator` refactor (careful inspection of large files).
 
 ### Files
 
@@ -45,20 +68,20 @@ When a skill changes, its version is bumped independently. The plugin version is
 | `README.md` | version bump 1.17.0 |
 
 ### Backwards compatibility
-Additive + doc/tooling fixes. Безпечно для Claude; тригер-фрази й поведінка незмінні.
+Additive + doc/tooling fixes. Safe for Claude; trigger phrases and behavior unchanged.
 
 ## v1.16.0 (2026-06-29)
 
 ### Fixed — audit quick-fixes (batch 1)
 
-- **`skills/design-bridge/SKILL.md`** `0.2.0 → 0.2.1` (PATCH) — виправлено невідповідність subtype/template_id, що **ламала Step T** (резолв шаблону завжди промахувався → ad-hoc): `subtype=feature-concept` → `feature`; fallback id `presentation-builtin-feature-concept-v1` / `presentation-builtin-{subtype}-v1` → `presentation-builtin-feature` / `presentation-builtin-{subtype}` (узгоджено з реальним `template_id: presentation-builtin-feature`, `subtype: feature`).
-- **`references/capacity-model.md`** — виправлено висяче посилання `data-pipeline.md` → `jira-data-protocol.md` (data-pipeline свідомо не створювався; реюз протоколу team-ops-reporter).
+- **`skills/design-bridge/SKILL.md`** `0.2.0 → 0.2.1` (PATCH) — fixed the subtype/template_id mismatch that **broke Step T** (template resolution always missed → ad-hoc): `subtype=feature-concept` → `feature`; fallback id `presentation-builtin-feature-concept-v1` / `presentation-builtin-{subtype}-v1` → `presentation-builtin-feature` / `presentation-builtin-{subtype}` (aligned with the real `template_id: presentation-builtin-feature`, `subtype: feature`).
+- **`references/capacity-model.md`** — fixed the dangling reference `data-pipeline.md` → `jira-data-protocol.md` (data-pipeline was intentionally never created; the team-ops-reporter protocol is reused).
 
-### Added — testing infrastructure у репо
+### Added — testing infrastructure in the repo
 
-- **`testing/Testing-process.md`** — процес тестування плагіна: 6 стадій (backup → static lint → trigger eval → scenario walk → integration → regression → sign-off), формат тест-кейсів, backup-протокол, релізна петля, оркестрація субагентами, Definition of Done.
-- **`testing/skill_lint.py`** — автоматична Stage 1: frontmatter, `name`==тека, semver, резолв `references/*`, **skill_version у тілі == frontmatter**, і (v1.16) **dangling refs у тілах reference-файлів** (backticked `*.md`).
-- **`testing/test-cases.md`** — реєстр тест-кейсів по стадіях, оновлюється кожен реліз.
+- **`testing/Testing-process.md`** — the plugin testing process: 6 stages (backup → static lint → trigger eval → scenario walk → integration → regression → sign-off), test case format, backup protocol, release loop, subagent orchestration, Definition of Done.
+- **`testing/skill_lint.py`** — automated Stage 1: frontmatter, `name`==folder, semver, resolution of `references/*`, **skill_version in body == frontmatter**, and (v1.16) **dangling refs in the bodies of reference files** (backticked `*.md`).
+- **`testing/test-cases.md`** — the test case registry by stages, updated every release.
 
 ### Files
 
@@ -72,45 +95,45 @@ Additive + doc/tooling fixes. Безпечно для Claude; тригер-фр�
 | `README.md` | version bump 1.16.0 | n/a |
 
 ### Deferred
-- `product-analysis` фантомний Step 0h + порядок кроків → v1.17 (потребує обережної інспекції файла).
-- Решта аудит-фіксів (team-ops-reporter sprint-id, template-library лічба, plugin-configurator дублі/нумерація) → v1.17/v1.18.
+- `product-analysis` phantom Step 0h + step order → v1.17 (needs careful inspection of the file).
+- Remaining audit fixes (team-ops-reporter sprint-id, template-library count, plugin-configurator duplicates/numbering) → v1.17/v1.18.
 
 ### Backwards compatibility
-Additive + bugfix. Безпечно для Claude; тригер-фрази збережено.
+Additive + bugfix. Safe for Claude; trigger phrases preserved.
 
 ## v1.15.0 (2026-06-29)
 
 ### Added — Planning Suite (4 skills) + planning core references
 
-Новий планувальний/прогнозний шар поверх наявної звітності `team-ops-reporter`. Чотири скіли за рівнями абстракції roadmap + чотири спільні references. **Доповнює** team-ops-reporter (він — описовий «що є/було»; планування — «що має бути»), не дублює: спільний Jira-плумбінг реюзиться з `team-ops-reporter/references/jira-data-protocol.md`.
+A new planning/forecasting layer on top of the existing `team-ops-reporter` reporting. Four skills along the roadmap abstraction levels + four shared references. **Complements** team-ops-reporter (which is descriptive — "what is / was"; planning is "what should be"), does not duplicate it: shared Jira plumbing is reused from `team-ops-reporter/references/jira-data-protocol.md`.
 
-**Дві осі планування на спільному фундаменті:**
-- Фундамент — `roadmap-architect` (структура, поза часом).
-- Вертикаль — `project-planning` (один напрямок крізь час).
-- Горизонталь — `quarterly-planning` + `sprint-planning` (період через усі напрямки).
-Звʼязок ос — спільний `% зайнятості напрямком` і `capacity-model`.
+**Two planning axes on a shared foundation:**
+- Foundation — `roadmap-architect` (structure, outside of time).
+- Vertical — `project-planning` (a single direction across time).
+- Horizontal — `quarterly-planning` + `sprint-planning` (a period across all directions).
+- The axes link through a shared `% allocation to a direction` and `capacity-model`.
 
-**Нові скіли:**
-- **`quarterly-planning` (v0.1.0)** — квартальний roadmap: retro попереднього кварталу (делегує `team-ops-reporter` `quarter-review`) → capacity (4 входи з gate) → драфт + capacity-gate на платформних слайсах → корекція скоупу → артефакти (Confluence + живий дашборд + лейби q{N}). Режими: retro/plan/full/refresh.
-- **`project-planning` (v0.1.0)** — арка проєкту поза кварталами: обсяг + граф залежностей/критичний шлях + прогноз тривалості під % зайнятості + мульти-квартальний roadmap + **rolling-reforecast** (`replan`: факт+перенесене → перенос на майбутнє + дрейф vs baseline). Режими: forecast/sequence/roadmap/whatif/replan.
-- **`sprint-planning` (v0.1.0)** — передпланування спринта: фокуси з roadmap → per-member capacity → carryover-risk (делегує `sprint-review`+`member-review`) → сканування готовності (work-type DAG) → детекція порушень послідовності → наповнення + pull-forward → пропозиція виконавців. Режими: groom/plan/review/forecast.
-- **`roadmap-architect` (v0.1.0)** — структурна гігієна: мапінг Ціль→Initiative→Епік→Фіча, enforce розмітки, дерево, звіт розривів. Режими: audit/map/tree/onboard.
+**New skills:**
+- **`quarterly-planning` (v0.1.0)** — quarterly roadmap: retro of the previous quarter (delegates `team-ops-reporter` `quarter-review`) → capacity (4 inputs with a gate) → draft + capacity-gate on platform slices → scope correction → artifacts (Confluence + live dashboard + q{N} labels). Modes: retro/plan/full/refresh.
+- **`project-planning` (v0.1.0)** — project arc outside of quarters: scope + dependency graph/critical path + duration forecast under % allocation + multi-quarter roadmap + **rolling-reforecast** (`replan`: actuals+carryover → shift to the future + drift vs baseline). Modes: forecast/sequence/roadmap/whatif/replan.
+- **`sprint-planning` (v0.1.0)** — sprint pre-planning: focuses from the roadmap → per-member capacity → carryover-risk (delegates `sprint-review`+`member-review`) → readiness scan (work-type DAG) → sequence violation detection → fill + pull-forward → assignee proposals. Modes: groom/plan/review/forecast.
+- **`roadmap-architect` (v0.1.0)** — structural hygiene: mapping Goal→Initiative→Epic→Feature, enforcing layout, tree, gap report. Modes: audit/map/tree/onboard.
 
-**Нові references (спільне ядро):**
-- `references/capacity-model.md` — формула стелі, per-member, baseline+калібрування, доступність, техборг, **allocation %**, платформні слайси, авто-оцінка за аналогією, пороги gate (85/100%), quarter↔sprint масштабування, hook прогнозу тривалості.
-- `references/dependency-model.md` — DAG двох рівнів (епік/фіча + work-type), топосорт, критичний шлях, цикли, **правило готовності** (поріг on review/in test/done), джерела з Jira-лінків.
-- `references/planning-core.md` — канон-ієрархія, конвенція розмітки (назви/лейби), нормалізація статусів, мапа цілей, **Development Flow** (флоу розробки команди з онбордингу).
-- `references/roadmap-artifacts.md` — формати планувальних артефактів (quarterly roadmap, project arc, дерево структури, capacity-gate, живий дашборд) + демаркація з ops-report.
+**New references (shared core):**
+- `references/capacity-model.md` — ceiling formula, per-member, baseline+calibration, availability, tech debt, **allocation %**, platform slices, auto-estimate by analogy, gate thresholds (85/100%), quarter↔sprint scaling, duration forecast hook.
+- `references/dependency-model.md` — two-level DAG (epic/feature + work-type), topological sort, critical path, cycles, **readiness rule** (threshold on review/in test/done), sources from Jira links.
+- `references/planning-core.md` — canonical hierarchy, layout convention (names/labels), status normalization, goal map, **Development Flow** (the team's development flow from onboarding).
+- `references/roadmap-artifacts.md` — formats of planning artifacts (quarterly roadmap, project arc, structure tree, capacity-gate, live dashboard) + demarcation from the ops report.
 
-**Змінено:**
-- `skills/plugin-configurator/SKILL.md` `2.0.0 → 2.1.0` (MINOR) — нова **Planning setup** + опитування **Development Flow** (типова послідовність робіт, паралелізм, залежності, поріг готовності) у Extended-онбордингу; пише Planning-секцію в local-context.
-- `local-context.example.md` — нова **Planning** секція (склад команди+capacity-правила, спринти каденс+якір+board, baseline, мапа цілей, пороги gate, development_flow).
-- `README.md` — версія 1.15.0, скіли #14–17, нові references.
+**Changed:**
+- `skills/plugin-configurator/SKILL.md` `2.0.0 → 2.1.0` (MINOR) — new **Planning setup** + **Development Flow** survey (typical work sequence, parallelism, dependencies, readiness threshold) in Extended onboarding; writes the Planning section to local-context.
+- `local-context.example.md` — new **Planning** section (team composition+capacity rules, sprint cadence+anchor+board, baseline, goal map, gate thresholds, development_flow).
+- `README.md` — version 1.15.0, skills #14–17, new references.
 
 ### Changed — rename Feature Task Creator → Task Creator
-- `skills/feature-task-creator/` → `skills/task-creator/`; `name: feature-task-creator → task-creator`, title «Feature Task Creator» → «Task Creator», опис узагальнено (не лише «feature»). Усі внутрішні посилання у плагіні оновлено find/replace (CHANGELOG-історія збережена). **Тригер-фрази збережено** — інвокація за фразою у Claude не ламається.
+- `skills/feature-task-creator/` → `skills/task-creator/`; `name: feature-task-creator → task-creator`, title "Feature Task Creator" → "Task Creator", description generalized (not just "feature"). All internal references in the plugin updated via find/replace (CHANGELOG history preserved). **Trigger phrases preserved** — phrase-based invocation in Claude does not break.
 
-**Валідовано** наскрізним прогоном на живих даних PROJ/Prom (Q2-факт → capacity Q3 (Sprint 55–61) → драфт → 2 ітерації корекції + платформні слайси → опублікований roadmap стор. <confluence-page-id> + живий дашборд).
+**Validated** via an end-to-end run on live PROJ/Prom data (Q2 actuals → capacity Q3 (Sprint 55–61) → draft → 2 correction iterations + platform slices → published roadmap p. <confluence-page-id> + live dashboard).
 
 ### Files
 
@@ -129,10 +152,10 @@ Additive + bugfix. Безпечно для Claude; тригер-фрази зб�
 | `README.md` | version + 4 skills + references | n/a |
 
 ### Fixed — skill_version sync (audit quick-fix)
-Синхронізовано `skill_version` у тілі (vault_save) з frontmatter: cjm-research 0.2.0→0.4.0, product-analysis 0.6.0→0.9.0, write-concept 0.5.0→0.7.0. Виявлено lint-gate'ом під час релізу. Без зміни поведінки.
+Synced `skill_version` in the body (vault_save) with frontmatter: cjm-research 0.2.0→0.4.0, product-analysis 0.6.0→0.9.0, write-concept 0.5.0→0.7.0. Caught by the lint gate during the release. No behavior change.
 
 ### Backwards compatibility
-Additive only. Наявні скіли й `local-context.md` не зачеплені. Планувальні скіли потребують Jira MCP (вже prerequisite) і опційно Confluence/calendar; делегують факт у team-ops-reporter, не дублюючи fetch.
+Additive only. Existing skills and `local-context.md` are untouched. Planning skills require the Jira MCP (already a prerequisite) and optionally Confluence/calendar; they delegate facts to team-ops-reporter without duplicating the fetch.
 
 ## v1.14.0 (2026-06-29)
 

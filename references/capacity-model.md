@@ -1,162 +1,162 @@
 # capacity-model.md
 
-> Спільний reference planning-suite. Єдине джерело правди для розрахунку capacity, оцінки фіч і перевірки реалістичності. Споживають: `project-planning` (стеля напрямку + прогноз тривалості), `quarterly-planning` (стеля кварталу), `sprint-planning` (стеля спринта + per-member). `roadmap-architect` capacity не використовує.
+> Shared planning-suite reference. Single source of truth for capacity calculation, feature estimation, and realism checks. Consumers: `project-planning` (initiative ceiling + duration forecast), `quarterly-planning` (quarter ceiling), `sprint-planning` (sprint ceiling + per-member). `roadmap-architect` does not use capacity.
 
-Цей модуль описує **один рушій** із трьома множниками (квартал / спринт / напрямок). Усі скіли беруть формулу звідси — не дублюють.
+This module describes **one engine** with three multipliers (quarter / sprint / initiative). All skills take the formula from here — they do not duplicate it.
 
 ---
 
-## 1. Поняття
+## 1. Concepts
 
-| Термін | Що це |
+| Term | What it is |
 | --- | --- |
-| **baseline_SP** | орієнтовна продуктивність одного інженера за спринт (дефолт 10 SP; калібрується по факту) |
-| **доступність** | частка робочого часу спринта, доступна під командні задачі (1 − відпустки/лікарняні) |
-| **залученість** | частка часу людини на командні задачі цього напрямку (решта — інші напрямки, менторство, hiring) |
-| **резерв техборгу** | фіксований % capacity на TechDep/підтримку (не йде в нові фічі) |
-| **буфер ризиків** | запас на непередбачуване; реалізований як ціль завантаження ≤ 85% стелі (не множник) |
-| **allocation %** | максимальна частка стелі команди, віддана одному напрямку (для project/quarterly) |
-| **стеля** | скільки команда реально тягне за період (SP), після всіх відрахувань |
+| **baseline_SP** | rough productivity of one engineer per sprint (default 10 SP; calibrated against actuals) |
+| **availability** | share of sprint work time available for team tasks (1 − vacations/sick leave) |
+| **involvement** | share of a person's time on this initiative's team tasks (the rest — other initiatives, mentoring, hiring) |
+| **tech-debt reserve** | fixed % of capacity for TechDep/support (does not go into new features) |
+| **risk buffer** | reserve for the unexpected; implemented as a load target ≤ 85% of the ceiling (not a multiplier) |
+| **allocation %** | maximum share of the team's ceiling given to one initiative (for project/quarterly) |
+| **ceiling** | how much the team realistically handles per period (SP), after all deductions |
 
 ---
 
-## 2. Базова формула (стеля періоду по платформі/ролі)
+## 2. Base formula (period ceiling by platform/role)
 
 ```
-raw(платформа)     = Σ_люди[платформа]  baseline_SP(людина) × N_спринтів × доступність(людина) × залученість(людина)
-стеля(платформа)   = raw(платформа) × (1 − резерв_техборгу)
-ціль(платформа)    = стеля(платформа) × 0.85          # буфер ризиків (capacity-gate target)
+raw(platform)     = Σ_people[platform]  baseline_SP(person) × N_sprints × availability(person) × involvement(person)
+ceiling(platform) = raw(platform) × (1 − tech_debt_reserve)
+target(platform)  = ceiling(platform) × 0.85          # risk buffer (capacity-gate target)
 ```
 
-- `N_спринтів` = к-сть спринтів у періоді (квартал ≈ 6–7; спринт = 1).
-- Рахувати **по платформах окремо** (BE / FE / iOS / Android) і по ролях підтримки (Design / Analytics / QA) — бо боттлнек завжди на конкретній платформі, не «в середньому».
-- TL рахується як інженер лише якщо це підтверджено у складі (див. Development Team у local-context).
+- `N_sprints` = number of sprints in the period (quarter ≈ 6–7; sprint = 1).
+- Compute **per platform separately** (BE / FE / iOS / Android) and per support role (Design / Analytics / QA) — because the bottleneck is always on a specific platform, not "on average".
+- A TL counts as an engineer only if confirmed in the team composition (see Development Team in local-context).
 
-**Дефолти** (override у local-context): `baseline_SP = 10`, `доступність = 0.9` (10% резерв), `резерв_техборгу = 0.15`, `gate target = 0.85`.
+**Defaults** (override in local-context): `baseline_SP = 10`, `availability = 0.9` (10% reserve), `tech_debt_reserve = 0.15`, `gate target = 0.85`.
 
 ---
 
-## 3. Per-member capacity (для sprint-planning)
+## 3. Per-member capacity (for sprint-planning)
 
-Для спринта стеля деталізується **до людини** — бо план виконують конкретні люди, а не «платформа».
+For a sprint the ceiling is broken down **to the person** — because the plan is executed by specific people, not by "a platform".
 
 ```
-capacity(людина, спринт) = робочі_дні(людина, спринт) / днів_у_спринті × baseline_SP(людина) × залученість(людина)
+capacity(person, sprint) = work_days(person, sprint) / days_in_sprint × baseline_SP(person) × involvement(person)
 ```
 
-- `робочі_дні` збираються опитуванням PM на кожен спринт (відпустки, лікарняні, частковий день, паралельні напрямки) — це **gate**, не авто.
-- **Carryover-risk:** якщо у попередньому спринті `done / committed < поріг` АБО лишок_робіт / денний_throughput > днів_лишилось → людина в зоні ризику; знизити її пропоноване завантаження у наступному спринті й підсвітити PM хронічні перевантаження.
+- `work_days` are collected by a PM survey for each sprint (vacations, sick leave, partial days, parallel initiatives) — this is a **gate**, not auto.
+- **Carryover-risk:** if in the previous sprint `done / committed < threshold` OR remaining_work / daily_throughput > days_left → the person is in the risk zone; lower their proposed load in the next sprint and surface chronic overloads to the PM.
 
 ---
 
-## 4. Baseline velocity та калібрування
+## 4. Baseline velocity and calibration
 
-1. Старт — дефолт 10 SP/спринт/інженер.
-2. **Калібрування по факту** попереднього періоду: реальні закриті SP / (інженери × спринти) → фактична velocity по людях/ролях.
-3. Джерело факту — velocity-репорт Jira-дошки (через браузер, бо MCP-search падає; див. `jira-data-protocol.md`).
-4. **Фінальне число підтверджує PM** (він знає контекст: онбординг, аномалії, заміни).
-
----
-
-## 5. Allocation — вимір напрямку (для project / quarterly)
-
-Один напрямок не забирає всю команду. Кожному напрямку задається **максимальний % зайнятості**:
-
-```
-ефективна_capacity_напрямку(платформа) = стеля(платформа) × allocation%(напрямок)
-Σ allocation%(усі активні напрямки) ≤ 100%        # горизонтальний бюджет команди
-```
-
-- Для `project-planning`: allocation% задає **швидкість арки** напрямку → впливає на тривалість.
-- Для `quarterly-planning`: allocation% = частка стелі кварталу, що йде напрямку → скільки його скоупу влізе.
-- Це **спільне поняття**, що звʼязує дві осі (див. дизайн двох осей). Якщо сума > 100% — підсвітити конфлікт алокацій PM.
+1. Start — default 10 SP/sprint/engineer.
+2. **Calibrate against actuals** of the previous period: real closed SP / (engineers × sprints) → actual velocity per person/role.
+3. Source of actuals — the Jira board velocity report (via browser, because MCP-search fails; see `jira-data-protocol.md`).
+4. **The PM confirms the final number** (they know the context: onboarding, anomalies, substitutions).
 
 ---
 
-## 6. Платформна гранулярність (capacity-gate на рівні слайсів)
+## 5. Allocation — the initiative dimension (for project / quarterly)
 
-Більшість фіч котяться по готовності платформ і **не мусять виходити на всіх платформах в один період**. Тому gate працює на **платформних слайсах**, не цілих фічах:
+One initiative does not take the whole team. Each initiative is assigned a **maximum % of involvement**:
 
-- demand і стеля рахуються **по кожній платформі окремо**.
-- Розвантажити перевантажену платформу можна, **перенісши слайс саме цієї платформи** у наступний період, лишивши фічу живою на платформах зі слабиною.
-- Виняток — фічі з критичним крос-платформним запуском (синхронний A/B web+mobile): слайсити не можна, позначати окремо.
+```
+effective_initiative_capacity(platform) = ceiling(platform) × allocation%(initiative)
+Σ allocation%(all active initiatives) ≤ 100%        # horizontal team budget
+```
+
+- For `project-planning`: allocation% sets the **arc speed** of the initiative → affects duration.
+- For `quarterly-planning`: allocation% = share of the quarter ceiling that goes to the initiative → how much of its scope fits.
+- This is a **shared concept** linking the two axes (see the two-axis design). If the sum > 100% — surface the allocation conflict to the PM.
 
 ---
 
-## 7. Capacity-gate (пороги й подача)
+## 6. Platform granularity (capacity-gate at the slice level)
+
+Most features roll out by platform readiness and **need not ship on all platforms in one period**. So the gate works on **platform slices**, not whole features:
+
+- demand and ceiling are computed **per platform separately**.
+- An overloaded platform can be relieved by **carrying over the slice of exactly that platform** to the next period, leaving the feature alive on the platforms with slack.
+- Exception — features with a critical cross-platform launch (synchronous A/B web+mobile): cannot be sliced, mark separately.
+
+---
+
+## 7. Capacity-gate (thresholds and presentation)
 
 ```
-завантаження(платформа) = demand(платформа) / стеля(платформа)
+load(platform) = demand(platform) / ceiling(platform)
 ```
 
-| Зона | Завантаження vs ціль(85%) / стелі(100%) | Сигнал |
+| Zone | Load vs target(85%) / ceiling(100%) | Signal |
 | --- | --- | --- |
-| 🟢 OK | ≤ 85% стелі | реалістично, є буфер |
-| 🟡 Warning | 85–100% | щільно; ризик при будь-якому збої |
-| 🔴 Critical | > 100% | перевантажено — різати / переносити / слайсити |
+| 🟢 OK | ≤ 85% of ceiling | realistic, has buffer |
+| 🟡 Warning | 85–100% | tight; at risk on any disruption |
+| 🔴 Critical | > 100% | overloaded — cut / carry over / slice |
 
-**Правило подачі (обовʼязкове):** коли платформа над стелею — НЕ оперувати абстрактними SP. Показати **конкретний перелік напрямків → епіків → фіч (з оцінками), що не влазять**, і дати PM вибір (бажано інтерактивно: смуги завантаження + перемикачі фіч/слайсів). Рішення — за PM.
+**Presentation rule (mandatory):** when a platform is over the ceiling — do NOT operate with abstract SP. Show the **concrete list of initiatives → epics → features (with estimates) that do not fit**, and give the PM a choice (preferably interactively: load bars + feature/slice toggles). The decision is the PM's.
 
-Додаткові перевірки: концентрація на одній платформі (боттлнек), частка незавершеного з минулого періоду, к-сть «чекаємо деталей».
-
----
-
-## 8. Авто-оцінка фіч за аналогією (demand-side)
-
-Коли у фічі немає оцінки — не лишати пропуск, оцінити за аналогією:
-
-1. Знайти схожі **закриті** фічі (той самий тип: A/B на КТ / Q&A-фіча / каталог-лендінг / адмін-інструмент; схожі вимоги; ті самі платформи).
-2. Взяти їхній фактичний обсяг/торкнуті платформи → видати **діапазон** (t-shirt або SP-вилка), не псевдоточність.
-3. Рубрика t-shirt → SP (per платформа, дефолт; калібрується): `S=3 · M=5 · L=8 · XL=13`.
-4. Позначити `AI-оцінка (аналогія до {ключі}), на підтвердження TL` — фінал за TL/аналітиком (межа компетенції).
-5. Усі авто-оцінки звести окремим списком для швидкого перегляду PM/TL.
+Additional checks: concentration on one platform (bottleneck), share of unfinished work from the previous period, count of "waiting for details".
 
 ---
 
-## 9. Масштабування під період
+## 8. Auto-estimating features by analogy (demand-side)
 
-| Скіл | N_спринтів | Множник напрямку | Гранулярність demand |
+When a feature has no estimate — do not leave a gap, estimate by analogy:
+
+1. Find similar **closed** features (same type: A/B on the product card / Q&A feature / catalog landing / admin tool; similar requirements; same platforms).
+2. Take their actual volume/touched platforms → produce a **range** (t-shirt or SP spread), not pseudo-precision.
+3. T-shirt → SP rubric (per platform, default; calibrated): `S=3 · M=5 · L=8 · XL=13`.
+4. Mark `AI-estimate (analogy to {keys}), pending TL confirmation` — final by TL/analyst (competence boundary).
+5. Collect all auto-estimates into a separate list for quick PM/TL review.
+
+---
+
+## 9. Scaling to the period
+
+| Skill | N_sprints | Initiative multiplier | demand granularity |
 | --- | --- | --- | --- |
-| `project-planning` | усі спринти арки | allocation% напрямку | епік/фіча по платформах |
-| `quarterly-planning` | спринти кварталу (≈6–7) | allocation% по всіх напрямках | фіча по платформах (слайси) |
-| `sprint-planning` | 1 | — (весь спринт) | задача по людях, Ready-only |
+| `project-planning` | all sprints of the arc | initiative allocation% | epic/feature by platform |
+| `quarterly-planning` | sprints of the quarter (≈6–7) | allocation% across all initiatives | feature by platform (slices) |
+| `sprint-planning` | 1 | — (whole sprint) | task by person, Ready-only |
 
-Той самий рушій (розд. 2), різні `N_спринтів` і множник.
-
----
-
-## 10. Прогноз тривалості (hook для project-planning)
-
-Тривалість напрямку — не просто `обсяг / capacity`, а розклад з урахуванням залежностей:
-
-```
-тривалість ≈ critical_path_schedule(обсяг_по_платформах, залежності, ефективна_capacity_напрямку)
-```
-
-- `обсяг_по_платформах` — сума оцінок (вкл. авто-оцінки).
-- `залежності` та критичний шлях — з `dependency-model.md`.
-- `ефективна_capacity_напрямку` — розд. 5.
-- Вихід: дата завершення + розподіл по кварталах/спринтах; для `replan` — дельта vs baseline.
+Same engine (section 2), different `N_sprints` and multiplier.
 
 ---
 
-## 11. Еталонний приклад (FET Q3 2026, верифіковано прогоном)
+## 10. Duration forecast (hook for project-planning)
 
-Склад: BE 2 dev, FE 2 dev, iOS 3, Android 3. N_спринтів = 7. baseline 10, доступність 0.9, техборг 0.15.
+Initiative duration is not simply `volume / capacity`, but a schedule that accounts for dependencies:
 
 ```
-raw(BE)   = 2 × 10 × 7 × 0.9 = 126 ;  стеля = 126 × 0.85 ≈ 107
-raw(iOS)  = 3 × 10 × 7 × 0.9 = 189 ;  стеля = 189 × 0.85 ≈ 161
+duration ≈ critical_path_schedule(volume_by_platform, dependencies, effective_initiative_capacity)
 ```
 
-Стеля: BE/FE ≈ 107, iOS/Android ≈ 161, разом ≈ 536 SP. Ціль ≤85%: BE/FE ≈ 91. **Боттлнек: BE/FE по 2 dev** — через них іде майже кожна ініціатива. FE-перевантаження знято перенесенням FE-слайсів частини A/B-тестів КТ у наступний квартал (платформна гранулярність, розд. 6).
+- `volume_by_platform` — sum of estimates (incl. auto-estimates).
+- `dependencies` and the critical path — from `dependency-model.md`.
+- `effective_initiative_capacity` — section 5.
+- Output: completion date + distribution across quarters/sprints; for `replan` — delta vs baseline.
 
 ---
 
-## 12. Якість / застороги
+## 11. Reference example (FET Q3 2026, verified by a run)
 
-- Рахувати по платформах окремо — «середня по команді» приховує боттлнек.
-- Кожна оцінка/стеля з AI — маркер «на підтвердження TL/PM»; рішення за роллю.
-- Перевантаження = показати сутності + дати вибір, ніколи не голі SP.
-- Кожне число — з inline-періодом (який квартал/спринт, скільки спринтів, нормалізовано чи ні).
-- Дефолти (baseline/доступність/техборг/пороги/рубрика) override-яться у local-context → Planning; не хардкодити в скілах.
+Composition: BE 2 dev, FE 2 dev, iOS 3, Android 3. N_sprints = 7. baseline 10, availability 0.9, tech-debt 0.15.
+
+```
+raw(BE)   = 2 × 10 × 7 × 0.9 = 126 ;  ceiling = 126 × 0.85 ≈ 107
+raw(iOS)  = 3 × 10 × 7 × 0.9 = 189 ;  ceiling = 189 × 0.85 ≈ 161
+```
+
+Ceiling: BE/FE ≈ 107, iOS/Android ≈ 161, total ≈ 536 SP. Target ≤85%: BE/FE ≈ 91. **Bottleneck: BE/FE at 2 dev each** — almost every initiative goes through them. The FE overload was cleared by carrying over the FE slices of some product-card A/B tests to the next quarter (platform granularity, section 6).
+
+---
+
+## 12. Quality / caveats
+
+- Compute per platform separately — a "team average" hides the bottleneck.
+- Every AI estimate/ceiling carries a "pending TL/PM confirmation" marker; the decision is the role's.
+- Overload = show the entities + give a choice, never bare SP.
+- Every number — with an inline period (which quarter/sprint, how many sprints, normalized or not).
+- Defaults (baseline/availability/tech-debt/thresholds/rubric) are overridden in local-context → Planning; do not hardcode in skills.

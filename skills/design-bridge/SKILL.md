@@ -1,7 +1,7 @@
 ---
 name: design-bridge
 version: 0.2.1
-description: Orchestrate Claude's Design skills (user-research, research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline. Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact.
+description: Orchestrate Claude's Design skills (user-research, research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline. Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact. Українською: "створити презентацію", "зробити деку", "побудувати прототип", "згенерувати handoff", "дизайн-рев'ю", "передати дизайн у розробку".
 ---
 
 # Design Bridge

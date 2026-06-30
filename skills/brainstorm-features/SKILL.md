@@ -1,7 +1,7 @@
 ---
 name: brainstorm-features
 version: 0.7.0
-description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis.
+description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis. Українською: "брейншторм фіч", "згенерувати гіпотези", "знайти точки росту", "гіпотези для CJM-воронки", "ICE-оцінка гіпотез".
 ---
 
 # Brainstorm Features and Hypotheses
