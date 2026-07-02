@@ -1,6 +1,6 @@
 ---
 name: roadmap-architect
-version: 0.1.1
+version: 0.1.2
 description: Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree. Use when "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal", "direction structure". Українською: "навести лад у структурі", "розмітити епіки/фічі", "знайти розриви розмітки", "побудувати дерево roadmap", "звʼязати епік з ціллю", "структура напрямків".
 ---
 
@@ -15,7 +15,7 @@ Supplies clean structure to the rest of the planning-suite. Integrates with `tea
 - `references/planning-core.md` — canonical model, naming/labeling convention, normalization, goal map.
 - `references/dependency-model.md` — epic/feature links (for the tree and gaps).
 - `references/roadmap-artifacts.md` — structure-tree format + gap report.
-- `skills/team-ops-reporter/references/jira-data-protocol.md` — Jira plumbing (reuse).
+- `references/jira-data-protocol.md` — Jira plumbing (reuse).
 - `references/integration-strategy.md`, `references/persistent-storage.md`, `references/template-protocol.md`.
 
 ## Modes
@@ -57,4 +57,4 @@ Generate the Goal→Initiative→Epic→Feature tree (features as `code—name`)
 → `quarterly-planning` / `project-planning` (hands off clean structure) · ← `cjm-research` / `brainstorm-features` (new epics/features) · → `task-creator` (decomposition).
 
 ## Additional Resources
-`references/planning-core.md`, `dependency-model.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`; `skills/team-ops-reporter/references/jira-data-protocol.md`.
+`references/planning-core.md`, `dependency-model.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`, `jira-data-protocol.md`.
