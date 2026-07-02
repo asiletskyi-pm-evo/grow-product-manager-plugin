@@ -1,6 +1,6 @@
 {
   "name": "grow-product-manager",
-  "description": "AI assistant for Product Managers: research, concepts, requirements, brainstorming, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, knowledge library, multilingual artifact templates, and design-bridge (brand-themed decks, prototypes, handoffs, research enrichment, WCAG 2.1 AA a11y gates — bring your own Design System via local-context.md) — integrated with Jira, Confluence, Figma, and Tableau. Now includes Team Ops Reporter for Jira-based operational reports (sprint plan/review, quarter review, initiative status, member review). — v1.25.1 (released 2026-06-30)",
+  "description": "AI assistant for Product Managers: research, concepts, requirements, brainstorming, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, knowledge library, multilingual artifact templates, and design-bridge (brand-themed decks, prototypes, handoffs, research enrichment, WCAG 2.1 AA a11y gates — bring your own Design System via local-context.md) — integrated with Jira, Confluence, Figma, and Tableau. Now includes Team Ops Reporter for Jira-based operational reports (sprint plan/review, quarter review, initiative status, member review). — v1.26.0 (released 2026-07-01)",
   "author": {
     "name": "Andrii Siletskyi"
   }
