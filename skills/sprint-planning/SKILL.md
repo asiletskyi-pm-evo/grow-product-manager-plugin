@@ -1,6 +1,6 @@
 ---
 name: sprint-planning
-version: 0.1.1
+version: 0.1.2
 description: Helps the PM efficiently estimate and run sprint pre-planning — derives focuses from the quarterly roadmap/missions/projects, highlights what's READY to pull right now (dependencies cleared), catches work-sequence violations (e.g. client-side work planned ahead of analytics coverage), gathers per-member capacity, analyzes carryover risk from the last sprint, suggests assignees for unowned tasks, and fills the sprint to capacity. Use when "plan the sprint", "sprint pre-planning", "what can we pull into SEX N", "what's ready from the backlog", "check sprint dependencies", "build sprint focuses", "distribute the sprint", "who takes the tasks". Українською: "спланувати спринт", "передпланування спринта", "що можна взяти у SEX N", "що готове з беклогу", "перевір залежності спринта", "сформуй фокуси спринта", "розподілити спринт", "хто візьме задачі".
 ---
 
@@ -16,7 +16,7 @@ Part of the planning-suite: takes scope from `quarterly-planning` and direction 
 - `references/capacity-model.md` — per-member capacity (sec. 3), carryover-risk, auto-estimation, sprint ceiling (sec. 9).
 - `references/dependency-model.md` — **work-type DAG + readiness rule** (sec. 4), violations.
 - `references/roadmap-artifacts.md` — sprint-plan format (demarcation from ops-report).
-- `skills/team-ops-reporter/references/jira-data-protocol.md` — Jira plumbing (reuse).
+- `references/jira-data-protocol.md` — Jira plumbing (reuse).
 - `references/integration-strategy.md`, `references/persistent-storage.md`, `references/template-protocol.md`.
 
 ## Step T — Template Resolution
@@ -75,4 +75,4 @@ Sprint plan (Confluence / assignment into the Jira sprint) — **gate before wri
 - Write to Jira only after approval. Language — `user.language`.
 
 ## Additional Resources
-`references/capacity-model.md`, `dependency-model.md`, `planning-core.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`; `skills/team-ops-reporter/references/jira-data-protocol.md`.
+`references/capacity-model.md`, `dependency-model.md`, `planning-core.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`, `jira-data-protocol.md`.

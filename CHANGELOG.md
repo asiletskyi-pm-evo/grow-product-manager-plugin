@@ -12,11 +12,50 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
-<!-- Препенди цей блок у CHANGELOG.md одразу після хедера, перед "## v1.14.0". -->
+## v1.26.1 (2026-07-02)
 
-<!-- Препенди у CHANGELOG.md після хедера, перед "## v1.15.0". -->
+### Fixed — release hygiene: machine-readable version, README catch-up, shared jira-data-protocol
 
-<!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
+Documentation and manifest release; **no skill-logic change**.
+
+**Manifests — structured `version` field (root cause of the marketplace version-sync issue):**
+- `.claude-plugin/plugin.json`: added `"version": "1.26.1"` — previously the version existed only as free text inside `description`, so tooling (and the release process itself) could not read it mechanically. Description tail updated; planning suite mentioned.
+- `.claude-plugin/marketplace.json`: added `"version": "1.26.1"` to the plugin entry; descriptions updated.
+
+**README.md regenerated to match the actual plugin state:**
+- Version header/footer: 1.25.1 → 1.26.1 (footer previously drifted).
+- Added skill sections 15–18 for the Planning Suite (roadmap-architect, project-planning, quarterly-planning, sprint-planning) — previously a dangling Ukrainian block after the footer; removed that block.
+- Skills Summary table: now 18 rows with actual frontmatter versions (was 14 rows with stale versions, e.g. Plugin Configurator v1.0.0 → v2.3.1).
+- Section headers synced to frontmatter versions (CJM Research 0.5.0, Product Analysis 0.11.0, Product Research 0.9.0, Meeting Processor 0.11.0, Knowledge Library 0.5.0, Design Bridge 0.2.1, Team Ops Reporter 0.2.1).
+- Built-in templates: 12 → 17 (added the 5 `ops-report/` templates from v1.14.0).
+- Shared References: full actual list of 18 root reference files (was a partial mix of real and placeholder bullets).
+- Added "New in v1.26.0" and "New in v1.15.0" overview paragraphs.
+
+**CHANGELOG.md:** removed 3 leftover editorial prepend-instructions (`<!-- Препенди… -->`) that shipped by mistake.
+
+**Moved — `jira-data-protocol.md` to root `references/`:**
+- `skills/team-ops-reporter/references/jira-data-protocol.md` → `references/jira-data-protocol.md`. It is shared by 5 skills (team-ops-reporter + the 4 Planning Suite skills), so it belongs with the other cross-skill protocols. Title updated to "(shared)".
+- Path references updated in: `sprint-planning`, `quarterly-planning`, `project-planning`, `roadmap-architect` (each **0.1.1 → 0.1.2**). `team-ops-reporter` **0.2.0 → 0.2.1** (its `references/jira-data-protocol.md` mentions now resolve to the root file; no text change needed).
+
+### Files
+
+| File | Type | Version |
+|---|---|---|
+| `.claude-plugin/plugin.json` | modified (added `version` field) | 1.26.1 |
+| `.claude-plugin/marketplace.json` | modified (added `version` field) | 1.26.1 |
+| `README.md` | regenerated | n/a |
+| `CHANGELOG.md` | cleanup (3 leftover comments) | n/a |
+| `references/jira-data-protocol.md` | moved from `skills/team-ops-reporter/references/` | n/a |
+| `skills/sprint-planning/SKILL.md` | modified (paths) | 0.1.1 → 0.1.2 |
+| `skills/quarterly-planning/SKILL.md` | modified (paths) | 0.1.1 → 0.1.2 |
+| `skills/project-planning/SKILL.md` | modified (paths) | 0.1.1 → 0.1.2 |
+| `skills/roadmap-architect/SKILL.md` | modified (paths) | 0.1.1 → 0.1.2 |
+| `skills/team-ops-reporter/SKILL.md` | modified (version only) | 0.2.0 → 0.2.1 |
+
+### Backwards compatibility
+Docs + manifest metadata + file relocation with all in-repo paths updated. No workflow change. Safe for Claude.
+
+---
 
 ## v1.26.0 (2026-07-01)
 

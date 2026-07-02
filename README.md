@@ -1,12 +1,16 @@
 # Grow Product Manager
 
-**Version:** 1.25.1
+**Version:** 1.26.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.26.0** — **Subagent delegation** extended to all specialized modes of `product-analysis` (Post-Release, A/B Test, CJM Funnel): heavy data-acquisition fan-out runs off the main context, with data-policy guardrails and the Data Integrity Gate preserved. See CHANGELOG v1.24.0–v1.26.0 for the full subagent-delegation rollout.
+
+**New in v1.15.0** — **Planning Suite**: four skills on top of team-ops-reporter — `roadmap-architect` (structure: goal → initiative → epic → feature), `project-planning` (multi-quarter forecast, dependencies, critical path), `quarterly-planning` (quarter roadmap with capacity gate and retro), `sprint-planning` (sprint pre-planning: readiness, risks, assignees). Shared references: `planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`.
 
 **New in v1.14.0** — **Team Ops Reporter** skill (5 modes): sprint plan, sprint review, quarter review, initiative status, and team-member review — built directly on Jira (custom-field map, status-history throughput, per-Assignee/Developer breakdowns, charts). Output goes to Confluence and/or local md+xlsx (asked each run). Five built-in templates under `templates/built-in/ops-report/`. See `skills/team-ops-reporter/SKILL.md` and CHANGELOG v1.14.0.
 
@@ -20,7 +24,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.4.0)
+### 1. CJM Research (v0.5.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -39,7 +43,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 2. Product Analysis (v0.9.0)
+### 2. Product Analysis (v0.11.0)
 
 **Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
 
@@ -54,7 +58,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 3. Product Research (v0.8.0)
+### 3. Product Research (v0.9.0)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -151,7 +155,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 9. Meeting Processor (v0.10.0)
+### 9. Meeting Processor (v0.11.0)
 
 **Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
 
@@ -185,7 +189,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 10. Plugin Configurator (v2.0.0)
+### 10. Plugin Configurator (v2.3.1)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -203,7 +207,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 11. Knowledge Library (v0.4.0)
+### 11. Knowledge Library (v0.5.0)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
@@ -242,7 +246,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 13. Design Bridge (v0.2.0) — NEW in v1.10.0, brand-agnostic since v1.11.0
+### 13. Design Bridge (v0.2.1) — brand-agnostic since v1.11.0
 
 **Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into brand-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
 
@@ -267,7 +271,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 14. Team Ops Reporter (v0.1.0) — NEW in v1.14.0
+### 14. Team Ops Reporter (v0.2.1)
 
 **Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
 
@@ -284,24 +288,70 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
+### 15. Roadmap Architect (v0.1.2) — Planning Suite
+
+**Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree.
+
+**Modes:** audit / map / tree / onboard
+
+**Trigger phrases:** "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal"
+
+---
+
+### 16. Project Planning (v0.1.2) — Planning Suite
+
+**Description:** Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph with critical path, computes duration under a given team allocation %, and lays out a multi-quarter roadmap with rolling-reforecast.
+
+**Modes:** forecast / sequence / roadmap / whatif / replan
+
+**Trigger phrases:** "how long will the project take", "project roadmap", "epic sequence", "feature dependencies", "critical path", "replan the project"
+
+---
+
+### 17. Quarterly Planning (v0.1.2) — Planning Suite
+
+**Description:** Builds a quarterly roadmap, reviews the previous quarter's delivery (plan-vs-actual), and stress-tests the plan against team capacity.
+
+**Modes:** retro / plan / full / refresh
+
+**Trigger phrases:** "build a quarterly roadmap", "quarterly planning", "plan-vs-actual for the quarter", "quarter retro", "is the quarterly plan realistic"
+
+---
+
+### 18. Sprint Planning (v0.1.2) — Planning Suite
+
+**Description:** Sprint pre-planning: derives focuses from the quarterly roadmap, highlights what's READY to pull (dependencies cleared), catches work-sequence violations, gathers per-member capacity, analyzes carryover risk, suggests assignees, and fills the sprint to capacity.
+
+**Modes:** groom / plan / review / forecast
+
+**Trigger phrases:** "plan the sprint", "sprint pre-planning", "what can we pull into sprint N", "what's ready from the backlog", "who takes the tasks"
+
+**Planning Suite shared references:** `planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`, plus the shared Jira plumbing in `references/jira-data-protocol.md` (reused from team-ops-reporter — complements reporting, does not duplicate it).
+
+---
+
 ## Skills Summary
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.3.0 | Customer Journey Map analysis and hypothesis validation |
-| Product Analysis | v0.7.0 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.7.0 | Competitive analysis, user research, market trends, UX benchmarking |
+| CJM Research | v0.5.0 | Customer Journey Map analysis and hypothesis validation |
+| Product Analysis | v0.11.0 | Analyze metrics, dashboards, and A/B test results |
+| Product Research | v0.9.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.7.0 | Interactive feature ideation with ICE scoring |
 | Write Concept | v0.7.0 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.7.0 | Create and analyze feature requirements |
 | Task Creator | v0.8.0 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.8.0 | Visualize concepts with diagrams, prototypes, infographics |
-| Meeting Processor | v0.10.0 | Process meetings and extract action items |
-| Plugin Configurator | v1.0.0 | Configure plugin for your organization |
-| Knowledge Library | v0.4.0 | Manage curated knowledge sources |
+| Meeting Processor | v0.11.0 | Process meetings and extract action items |
+| Plugin Configurator | v2.3.1 | Configure plugin for your organization |
+| Knowledge Library | v0.5.0 | Manage curated knowledge sources |
 | Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
-| Design Bridge | v0.2.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
-| Team Ops Reporter | v0.1.0 | Operational team reports from Jira: sprint plan/review, quarter review, initiative status, member review |
+| Design Bridge | v0.2.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
+| Team Ops Reporter | v0.2.1 | Operational team reports from Jira: sprint plan/review, quarter review, initiative status, member review |
+| Roadmap Architect | v0.1.2 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
+| Project Planning | v0.1.2 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
+| Quarterly Planning | v0.1.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
+| Sprint Planning | v0.1.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 
 ---
 
@@ -418,9 +468,9 @@ variables: [feature_name, problem_statement, ...]
 <!-- Add additional languages as needed, e.g. <!-- lang:es --> ... <!-- /lang:es --> -->
 ```
 
-### Built-in templates (shipped in v1.9.0 + v1.10.0 + v1.11.0)
+### Built-in templates (shipped in v1.9.0–v1.14.0)
 
-12 seed templates, shipped in English; localize via additional `<!-- lang:xx -->` blocks:
+17 seed templates; localize via additional `<!-- lang:xx -->` blocks:
 
 - `concept/default-v1` — PRD skeleton
 - `requirements/default-v1` — general feature requirements
@@ -434,6 +484,11 @@ variables: [feature_name, problem_statement, ...]
 - `presentation/research-highlights-v1` — 10-slide research-highlights deck (**new in v1.10.0**)
 - `presentation/ab-test-readout-v1` — 6-slide A/B-test readout deck (**new in v1.10.0**)
 - `presentation/release-readout-v1` — 7-slide release / sprint readout deck (**new in v1.10.0**)
+- `ops-report/sprint-plan-v1` — sprint plan report (**new in v1.14.0**)
+- `ops-report/sprint-review-v1` — sprint review report (**new in v1.14.0**)
+- `ops-report/quarter-review-v1` — quarter plan-vs-actual report (**new in v1.14.0**)
+- `ops-report/initiative-status-v1` — mission/epic/feature status report (**new in v1.14.0**)
+- `ops-report/member-review-v1` — team-member review report (**new in v1.14.0**)
 
 ### Managing your library
 
@@ -491,20 +546,24 @@ All design deliverables pass WCAG 2.1 AA QA before publish (see `skills/design-b
 The plugin includes reference materials for product management best practices and frameworks:
 
 **Available reference files in `references/` directory:**
-- Product management frameworks and templates
-- PRD templates and examples
-- Requirement specification formats
-- User research methodologies
-- A/B testing frameworks
-- Competitive analysis templates
-- CJM mapping guides
-- Meeting templates and agendas
+- `local-context-protocol.md` — Step 0: how every skill finds and loads `local-context.md`
+- `integration-strategy.md` — MCP → Registry → Browser fallback chain for external tools
+- `data-policy.md` — data confidentiality rules (internal data never leaves the session)
+- `data-integrity-protocol.md` — verification gate against extrapolation and single-source claims
+- `subagent-delegation.md` — when and how skills delegate fan-out work to subagents
+- `self-improvement.md` — learning from user corrections (versioning, changelog)
+- `test-mode.md` — sandbox mode for dry-run onboarding and skill testing
 - `persistent-storage.md` — Pointer + User-Controlled Storage protocol
 - `vault-protocol.md` — Obsidian Vault integration protocol (detection, search, save, MOC updates)
 - `vault-schema.md` — Vault artifact schema (frontmatter, types, tags, folder structure, templates)
 - `cjm-protocol.md` — CJM shared standards (anomaly severity, funnel impact, health score)
 - `funnel-templates.md` — Standard funnel stage templates by product type
 - `template-protocol.md` — Multilingual template resolution protocol (Step T-0 → T-5, scoring, fallbacks, backup invariants)
+- `planning-core.md` — shared planning definitions for the Planning Suite
+- `capacity-model.md` — team capacity math (allocation %, velocity, focus factor)
+- `dependency-model.md` — dependency graph and critical-path rules
+- `roadmap-artifacts.md` — roadmap artifact formats (tree, timeline, forecast)
+- `jira-data-protocol.md` — Jira plumbing: custom-field map, JQL patterns, pagination, transitions parsing (shared by team-ops-reporter and the Planning Suite)
 
 **Design Bridge references:**
 - `skills/design-bridge/references/deck-subtypes.yaml` — slide-by-slide outlines for all 4 deck subtypes
@@ -553,17 +612,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.25.1  
-**Last Updated:** June 2026
-
-
-## Planning Suite (v1.15.0)
-
-Планувальний шар поверх звітності team-ops-reporter (доповнює, не дублює; спільний `jira-data-protocol.md`).
-
-- **Roadmap Architect (v0.1.0)** — структура roadmap: мапінг Ціль→Initiative→Епік→Фіча, розмітка, дерево, розриви (audit/map/tree/onboard).
-- **Project Planning (v0.1.0)** — арка проєкту: обсяг, залежності+критичний шлях, прогноз тривалості під % зайнятості, мульти-квартальний roadmap, rolling-reforecast (forecast/sequence/roadmap/whatif/replan).
-- **Quarterly Planning (v0.1.0)** — квартальний roadmap з capacity-gate і retro (retro/plan/full/refresh).
-- **Sprint Planning (v0.1.0)** — передпланування спринта: готовність, ризик, призначення (groom/plan/review/forecast).
-
-Нові references: `capacity-model.md`, `dependency-model.md`, `planning-core.md`, `roadmap-artifacts.md`.
+**Version:** 1.26.1  
+**Last Updated:** July 2026

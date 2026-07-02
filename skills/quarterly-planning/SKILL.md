@@ -1,6 +1,6 @@
 ---
 name: quarterly-planning
-version: 0.1.1
+version: 0.1.2
 description: Builds a quarterly roadmap, reviews the previous quarter's delivery, and stress-tests the plan against team capacity. Use when the user asks to "build a quarterly roadmap", "quarterly planning", "plan-vs-actual for the quarter", "quarter retro", "plan capacity", "what the team can deliver", "is the quarterly plan realistic". Українською: "зібрати roadmap на квартал", "quarterly planning", "plan-vs-actual кварталу", "retro кварталу", "capacity плану", "що команда встигне", "оцінити реалістичність плану на квартал".
 ---
 
@@ -18,7 +18,7 @@ Read and apply before starting:
 - `references/capacity-model.md` — ceiling formula, 4 inputs, allocation %, platform slices, auto-estimation, gate thresholds (85/100%).
 - `references/dependency-model.md` — dependencies/sequencing (for carrying over unfinished work).
 - `references/roadmap-artifacts.md` — roadmap page format, Gantt, live dashboard.
-- `skills/team-ops-reporter/references/jira-data-protocol.md` — Jira plumbing (field map, JQL, extraction). **Reuse, don't duplicate.**
+- `references/jira-data-protocol.md` — Jira plumbing (field map, JQL, extraction). **Reuse, don't duplicate.**
 - `references/integration-strategy.md`, `references/persistent-storage.md`, `references/template-protocol.md`.
 
 Planning section of local-context: team roster + capacity rules, sprints (cadence + anchor + board id), goal map, gate thresholds, Development Flow.
@@ -83,4 +83,4 @@ Per `roadmap-artifacts.md`: (1) **Confluence roadmap** (focuses + Gantt + tree, 
 - Every number with an inline period. Language — `user.language`.
 
 ## Additional Resources
-`references/planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`; `skills/team-ops-reporter/references/jira-data-protocol.md`.
+`references/planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`, `jira-data-protocol.md`.
