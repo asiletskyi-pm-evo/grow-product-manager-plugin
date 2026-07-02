@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.10.0
+version: 0.11.0
 description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", or "CJM funnel analysis". Українською: "проаналізувати метрики", "подивитись дашборд", "знайти аномалії", "пояснити ці дані", "аналіз після релізу", "аналіз результатів A/B-тесту", "аналіз CJM-воронки".
 ---
 
@@ -493,7 +493,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "product-analysis",
-     skill_version: "0.10.0",
+     skill_version: "0.11.0",
      tags: [metric names analyzed, platforms, analysis_mode],
      content: full_analysis_markdown,
      related: [source hypothesis, source requirements, previous analyses from Step 0.5],
@@ -604,6 +604,8 @@ Read shared standards from `references/cjm-protocol.md`:
   - Platforms? (all / specific)
 
 ### CJM-3. Load funnel data from dashboards
+
+> **Subagent delegation (large fan-out).** Loading data for many funnel stages is a natural fan-out — delegate per `references/subagent-delegation.md`: batch by stage (or stage × platform), spawn subagents in parallel, each returns a compact structured result (per stage: conversion rate, absolute users, drop-off rate, trend, segment data, source-type marker + link). The main agent aggregates and proceeds to CJM-4 anomaly calculation. `data-policy.md` applies to subagents. Falls back to inline if subagents are unavailable. When invoked by `cjm-research`, honor any batch/parallelism limits passed in context.
 
 For each funnel stage in scope:
 
@@ -738,6 +740,8 @@ Specialized mode for analyzing how a released feature affected product metrics. 
 
 ### PR-2. Gather metrics data
 
+> **Subagent delegation (large fan-out).** Gathering many metrics across multiple platforms and before/after periods is a natural fan-out — delegate per `references/subagent-delegation.md`: batch by metric group / platform, spawn subagents in parallel, each returns a compact structured result (per metric: before value, after value, period definition, platform, source-type marker + source link). The main agent aggregates and runs the Step 1.5 Data Integrity Gate before PR-3. `data-policy.md` applies to subagents. Falls back to inline if subagents are unavailable.
+
 **Identify affected metrics:**
 - From the requirements document: extract expected metric changes (from the "Metrics" section)
 - From the feature scope: identify product-level metrics and funnels that could be affected (even if not explicitly listed in requirements)
@@ -825,6 +829,8 @@ Specialized mode for comprehensive analysis of A/B test outcomes. Can work with 
 If requirements exist in Confluence — read them to extract all this context automatically.
 
 ### AB-2. Gather test results data
+
+> **Subagent delegation (large fan-out).** The dimension iteration (platform / country / user-type / new-vs-returning) is a natural fan-out — delegate per `references/subagent-delegation.md`: batch by segment / dimension, spawn subagents in parallel, each returns a compact structured result (per segment: primary + secondary metric values per group, sample size, significance if available, source-type marker + link). The main agent aggregates, cross-validates, and runs the Step 1.5 Data Integrity Gate before AB-3. `data-policy.md` applies to subagents. Falls back to inline if subagents are unavailable.
 
 **Data source — ask the user which source to use:**
 

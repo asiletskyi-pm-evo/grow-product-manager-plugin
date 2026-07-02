@@ -18,6 +18,28 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 <!-- Препенди у CHANGELOG.md після хедера, перед "## v1.16.0". -->
 
+## v1.26.0 (2026-07-01)
+
+### Added — product-analysis: subagent delegation in Post-Release, A/B, and CJM modes
+
+`product-analysis` already delegated the main data-acquisition fan-out (Step 1) to subagents per `references/subagent-delegation.md`. The three specialized modes did comparable fan-out work but had no explicit delegation callout. This release closes that gap.
+
+Added a subagent-delegation callout to:
+
+| Mode | Step | Batch by | Subagent returns |
+|---|---|---|---|
+| Post-Release Analysis | PR-2 (Gather metrics data) | metric group / platform | per metric: before value, after value, period, platform, source-type marker + link |
+| A/B Test Results | AB-2 (Gather test results data) | segment / dimension | per segment: primary + secondary metric values per group, sample size, significance, source-type marker + link |
+| CJM Funnel Analysis | CJM-3 (Load funnel data) | stage (or stage × platform) | per stage: conversion, absolute users, drop-off, trend, segment data, source-type marker + link |
+
+Guardrails preserved in every callout: `data-policy.md` applies to subagents (internal data stays internal), the main agent aggregates and still runs the **Step 1.5 Data Integrity Gate** before analysis, and each mode falls back to inline execution when subagents are unavailable. CJM-3 additionally honors any batch/parallelism limits passed by `cjm-research`.
+
+**No logic change** — the same data is gathered, just off the main context for efficiency. Output formats of all modes are unchanged.
+
+- `skills/product-analysis/SKILL.md`: **0.10.0 → 0.11.0** (frontmatter + Vault Save `skill_version`).
+
+---
+
 ## v1.25.1 (2026-06-30)
 
 ### Fixed — plugin-configurator refactor (pass 3): substep-numbering cleanup
