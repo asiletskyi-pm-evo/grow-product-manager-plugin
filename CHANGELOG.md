@@ -12,6 +12,42 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.30.0 (2026-07-03)
+
+### Changed — roadmap-trio disambiguation (audit 3.4, remaining group)
+
+Scope hints added to the last known trigger-collision group:
+
+| Skill | Hint | Version |
+|---|---|---|
+| roadmap-architect | structure/labeling only, no dates/capacity → quarterly-planning / project-planning | 0.2.0 → 0.2.1 |
+| project-planning | horizon beyond one quarter → quarterly-planning for a single quarter, roadmap-architect for structure | 0.2.0 → 0.2.1 |
+| quarterly-planning | scope = exactly one quarter → project-planning / roadmap-architect / sprint-planning | 0.2.0 → 0.2.1 |
+
+### Added — testing/trigger-evals.md
+
+36-phrase routing test set across 6 collision groups (CJM trio, prototype pair, roadmap trio + sprint, release semantics, research vs analysis vs knowledge, documents chain), with a manual run protocol, a skill-creator eval-harness option, ≥90 % per-group target, results log, and maintenance rules. Part of the definition-of-done for any description-touching release.
+
+### Fixed — release-manager 0.1.0 → 0.1.1 (self-improvement)
+
+Step 6 now carries an explicit "merging ≠ releasing" guard: a merged PR does not create the tag/Release — verify `releases/latest` after merge. Sourced from two live observations during v1.28.0–v1.29.0.
+
+### Files
+
+| File | Type | Version |
+|---|---|---|
+| `skills/roadmap-architect/SKILL.md` | description hint | 0.2.1 |
+| `skills/project-planning/SKILL.md` | description hint | 0.2.1 |
+| `skills/quarterly-planning/SKILL.md` | description hint | 0.2.1 |
+| `skills/release-manager/SKILL.md` | Step 6 guard | 0.1.1 |
+| `testing/trigger-evals.md` | new test set | n/a |
+| both manifests, `README.md` | version sync | 1.30.0 |
+
+### Backwards compatibility
+Description wording + new testing asset + one guard note. No workflow change. Safe for Claude.
+
+---
+
 ## v1.29.0 (2026-07-03)
 
 ### Added — Step V (Save to Vault) in the 11 skills that never wrote to the vault

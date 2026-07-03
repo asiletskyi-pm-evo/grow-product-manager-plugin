@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.29.0
+**Version:** 1.30.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.30.0** — **Roadmap-trio disambiguation + trigger evals**: the three planning skills now carry explicit scope hints in their descriptions (roadmap-architect = structure only, no dates; project-planning = beyond one quarter; quarterly-planning = exactly one quarter), and `testing/trigger-evals.md` ships a 36-phrase routing test set across 6 collision groups with a run protocol and results log. Release-manager 0.1.1: "merging ≠ releasing" guard in Step 6.
 
 **New in v1.29.0** — **Vault coverage complete**: a standard "Save to Vault" step added to the 11 skills that previously never wrote to the Obsidian knowledge graph (requirements-creator, meeting-processor, brainstorm-features, product-research, diagram-prototyper, task-creator, team-ops-reporter, and the 4 Planning Suite skills). Meeting MoMs, requirements, hypotheses, research, diagrams, task breakdowns, ops reports, and roadmaps now accumulate in the vault with wikilinks. Vault schema extended with 4 new artifact types: `diagram`, `task-breakdown`, `ops-report`, `roadmap` (20 types total). Vault stays optional — L0 setups are unaffected.
 
@@ -294,7 +296,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 15. Roadmap Architect (v0.2.0) — Planning Suite
+### 15. Roadmap Architect (v0.2.1) — Planning Suite
 
 **Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree.
 
@@ -304,7 +306,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 16. Project Planning (v0.2.0) — Planning Suite
+### 16. Project Planning (v0.2.1) — Planning Suite
 
 **Description:** Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph with critical path, computes duration under a given team allocation %, and lays out a multi-quarter roadmap with rolling-reforecast.
 
@@ -314,7 +316,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 17. Quarterly Planning (v0.2.0) — Planning Suite
+### 17. Quarterly Planning (v0.2.1) — Planning Suite
 
 **Description:** Builds a quarterly roadmap, reviews the previous quarter's delivery (plan-vs-actual), and stress-tests the plan against team capacity.
 
@@ -336,7 +338,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 19. Release Manager (v0.1.0) — NEW in v1.28.0
+### 19. Release Manager (v0.1.1) — NEW in v1.28.0
 
 **Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
 
@@ -368,11 +370,11 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.2.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Team Ops Reporter | v0.3.0 | Operational team reports from Jira: sprint plan/review, quarter review, initiative status, member review |
-| Roadmap Architect | v0.2.0 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
-| Project Planning | v0.2.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
-| Quarterly Planning | v0.2.0 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
+| Roadmap Architect | v0.2.1 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
+| Project Planning | v0.2.1 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
+| Quarterly Planning | v0.2.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.2.0 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
-| Release Manager | v0.1.0 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
+| Release Manager | v0.1.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 
 ---
 
@@ -633,5 +635,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.29.0  
+**Version:** 1.30.0  
 **Last Updated:** July 2026
