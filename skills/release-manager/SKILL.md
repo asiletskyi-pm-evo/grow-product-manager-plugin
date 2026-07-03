@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.1.0
+version: 0.1.1
 description: Release a Claude plugin end-to-end — version bump across all manifests, CHANGELOG entry, README sync, consistency validation, commit/PR/merge, GitHub Release with tag, mirror sync, and post-release verification. Use when the user asks to "release the plugin", "prepare a release", "bump plugin version", "ship vX.Y.Z", "cut a release", "publish plugin release", or after a batch of plugin changes is ready to ship. Українською: "зарелізити плагін", "підготуй реліз", "bump версії плагіна", "випусти vX.Y.Z", "опублікуй реліз плагіна". Do NOT use for releasing product features in Jira (use team-ops-reporter / sprint-planning) — this skill releases the plugin repository itself.
 ---
 
@@ -62,6 +62,8 @@ Via browser (user's session) or `gh` CLI if available:
 1. PR `release/vX.Y.Z` → main; wait for the CI check to pass.
 2. Merge (merge commit), delete branch. **Merge on the canonical remote only** — never merge the same branch on a mirror (pitfall P6).
 3. Release: tag `vX.Y.Z`, target `main`, title `vX.Y.Z — <headline>`, notes from the CHANGELOG entry. Publishing creates the tag — no local tagging needed.
+
+> **Merging ≠ releasing.** A merged PR does NOT create the tag or the Release — observed twice in live runs ("зарелізив" turned out to mean "merged"). After the merge, always verify `releases/latest` shows the new version; if not, the Release step still needs to happen.
 
 ### Step 7 — Sync local + mirrors (terminal block, gated)
 ```
