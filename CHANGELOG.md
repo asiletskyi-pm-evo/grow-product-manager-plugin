@@ -12,6 +12,45 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.28.0 (2026-07-03)
+
+### Added — release-manager skill (v0.1.0)
+
+New skill: releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated; Claude prepares, the user's terminal/browser session executes.
+
+**Pipeline (8 steps):** Step 0 local-context (`plugin_release` config: repo path, canonical + mirror remotes, VPN hosts, protected branches, optional Confluence changelog page) → pre-flight guards → scope & semver decision (gate) → bump in the 4 mandatory places → local `validate-consistency.sh` run → gated commit/push terminal block → PR → merge → GitHub Release with tag (canonical remote only) → mirror sync → post-release verification + optional Confluence update + vault release record (Step V).
+
+**`skills/release-manager/references/release-pitfalls.md`** — nine documented failure modes with guards and recovery recipes, all encountered for real during v1.26.1–v1.27.0:
+
+| # | Pitfall |
+|---|---|
+| P1 | iCloud-evicted files break git (EDEADLK, packfile timeout) → `brctl download` + materialization sweep |
+| P2 | Stale git lock files → delete only if >60 min old |
+| P3 | Editorial placeholders shipped in CHANGELOG → write final text; validator guards `^<!-- Препенди` |
+| P4 | GitHub token without `workflow` scope → fine-grained PAT with Contents + Workflows |
+| P5 | Mirror host requires VPN → `vpn_required_hosts` reminder; push retryable |
+| P6 | Mirror main diverged / protected → merge on canonical only; reconciliation-merge recipe, never force |
+| P7 | Stale raw.githubusercontent CDN → verify via releases/latest, not raw URLs |
+| P8 | GitHub editor auto-continues lists → set textarea value directly when automating |
+| P9 | Fresh terminal ≠ repo dir → every terminal block starts with `cd <repo>` |
+
+Design notes: generic for any Claude plugin repo (no hardcoded org specifics); version read/written only via structured `"version"` fields; explicit `git add` lists, never `-A`; trigger description carries a "Do NOT use" hint (Jira feature releases → team-ops-reporter / sprint-planning).
+
+### Files
+
+| File | Type | Version |
+|---|---|---|
+| `skills/release-manager/SKILL.md` | new skill | 0.1.0 |
+| `skills/release-manager/references/release-pitfalls.md` | new reference | n/a |
+| `.claude-plugin/plugin.json` | version + description | 1.28.0 |
+| `.claude-plugin/marketplace.json` | version + descriptions | 1.28.0 |
+| `README.md` | section 19, Skills Summary row, "New in v1.28.0" | n/a |
+
+### Backwards compatibility
+Additive only — new skill, no changes to existing skills. Safe for Claude.
+
+---
+
 ## v1.27.0 (2026-07-02)
 
 ### Added — CI validation (GitHub Actions)
