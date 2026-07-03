@@ -1,6 +1,6 @@
 ---
 name: brainstorm-features
-version: 0.7.1
+version: 0.8.0
 description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis. Українською: "брейншторм фіч", "згенерувати гіпотези", "знайти точки росту", "гіпотези для CJM-воронки", "ICE-оцінка гіпотез". This is the ideation engine — for the full CJM research pipeline (anomaly detection → enrichment → hypotheses) use cjm-research, which delegates here.
 ---
 
@@ -398,6 +398,16 @@ IF user selects 2 → invoke `design-bridge` with:
 - `length: 8`
 
 Fallback: if `design-bridge` is not installed — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Do not block the workflow.
+
+### Step 9 — Save to Vault (Optional)
+
+> Requires: `references/vault-protocol.md` → Vault Save
+
+IF vault_level > L0 AND vault sync_mode != "off":
+
+1. For **each finalized hypothesis** (Step 5), save a separate artifact:
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.8.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE score and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, status: "proposed" } })`
+2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
 
 ## Quality standards
 

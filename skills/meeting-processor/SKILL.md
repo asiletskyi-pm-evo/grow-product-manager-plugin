@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.11.0
+version: 0.12.0
 description: Process meeting recordings, transcripts, and notes to extract action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Chains to task-creator, requirements-creator, product-research, and brainstorm-features. Українською: "підсумувати зустріч", "нотатки зустрічі", "що обговорювали", "action items", "MoM", "опрацювати транскрипт зустрічі".
 ---
 
@@ -461,6 +461,16 @@ Every skill invocation from meeting-processor must include the **full participan
 | **diagram-prototyper** | Process descriptions, flow logic, architecture discussed, participants as actors in diagrams |
 
 If no chaining is relevant or the user declines — end the workflow gracefully.
+
+### M10 — Save to Vault (Optional)
+
+> Requires: `references/vault-protocol.md` → Vault Save
+
+IF vault_level > L0 AND vault sync_mode != "off":
+
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.12.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+2. Key decisions from the meeting may additionally be saved as separate `decision` artifacts (Decisions/) — offer, don't force.
+3. Display: "Saved to Vault: Meetings/{product}/…"
 
 ---
 

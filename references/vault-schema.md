@@ -234,7 +234,7 @@ target_date: date (project completion target, YYYY-MM-DD)
 
 ## Type Taxonomy
 
-The Grow Product Manager Plugin defines 16 artifact types, each with a specific purpose, source skill, and folder location.
+The Grow Product Manager Plugin defines 20 artifact types, each with a specific purpose, source skill, and folder location.
 
 | Type | Skill Source | Folder | Description |
 |------|--------------|--------|-------------|
@@ -254,6 +254,10 @@ The Grow Product Manager Plugin defines 16 artifact types, each with a specific 
 | decision | (any skill) | Decisions/ | Key decision with rationale |
 | knowledge-source | knowledge-library | Knowledge/sources/ | Curated external knowledge source |
 | project-overview | (manual/configurator) | Projects/ | Project description and status |
+| diagram | diagram-prototyper | Diagrams/ | Diagram, prototype, or infographic (source + export link) |
+| task-breakdown | task-creator | Projects/task-breakdowns/ | Feature → Jira tasks decomposition record with links |
+| ops-report | team-ops-reporter | Reports/ops/ | Sprint/quarter/initiative/member operational report |
+| roadmap | planning suite (sprint-/quarterly-/project-planning, roadmap-architect) | Roadmaps/ | Sprint plan, quarterly roadmap, project arc, or structure tree (subtype in frontmatter) |
 
 ### TYPE_FOLDER_MAP Reference
 

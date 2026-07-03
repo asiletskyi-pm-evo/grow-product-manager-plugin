@@ -1,6 +1,6 @@
 ---
 name: roadmap-architect
-version: 0.1.2
+version: 0.2.0
 description: Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree. Use when "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal", "direction structure". Українською: "навести лад у структурі", "розмітити епіки/фічі", "знайти розриви розмітки", "побудувати дерево roadmap", "звʼязати епік з ціллю", "структура напрямків".
 ---
 
@@ -46,6 +46,9 @@ Propose label/link fixes (epic→goal, feature→epic, q-labels). **Gate before 
 
 ### Step 5 — Tree (mode `tree`)
 Generate the Goal→Initiative→Epic→Feature tree (features as `code—name`) + gap report. Per `roadmap-artifacts.md` sec. 4. Workspace + library storage.
+
+### Step 6 — Save to Vault (Optional)
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.2.0", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Don't invent links — only Jira links / goal map / explicit PM input; the rest = "break, please formalize".

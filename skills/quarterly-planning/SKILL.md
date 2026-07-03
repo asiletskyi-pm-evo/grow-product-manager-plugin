@@ -1,6 +1,6 @@
 ---
 name: quarterly-planning
-version: 0.1.2
+version: 0.2.0
 description: Builds a quarterly roadmap, reviews the previous quarter's delivery, and stress-tests the plan against team capacity. Use when the user asks to "build a quarterly roadmap", "quarterly planning", "plan-vs-actual for the quarter", "quarter retro", "plan capacity", "what the team can deliver", "is the quarterly plan realistic". Українською: "зібрати roadmap на квартал", "quarterly planning", "plan-vs-actual кварталу", "retro кварталу", "capacity плану", "що команда встигне", "оцінити реалістичність плану на квартал".
 ---
 
@@ -64,6 +64,9 @@ If a platform is over the ceiling — **show the specific directions→epics→f
 
 ### Step 6 — Artifacts + storage
 Per `roadmap-artifacts.md`: (1) **Confluence roadmap** (focuses + Gantt + tree, features as `code—name`) — publish **after approval**; (2) **live dashboard**; (3) `q{N}` labels on epics (`editJiraIssue`, preserving existing); (4) workspace + library storage (draft/final kept separate).
+
+### Step 7 — Save to Vault (Optional)
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.2.0", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Integration with team-ops-reporter
 - Quarter actuals ← `quarter-review` (don't rewrite the fetch).
