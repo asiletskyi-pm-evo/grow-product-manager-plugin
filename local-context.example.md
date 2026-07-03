@@ -260,5 +260,6 @@ focus:
   cadence_overrides: []                # rows override/extend focus-cadence.md defaults
   scheduled:
     daily_brief: { enabled: false, cron: "0 8 * * 1-5", mode: now, headless: true }
+    tactical_brief: { enabled: false, cron: "0 9 * * 1", mode: tactics, headless: true }
     healthcheck: off                   # metrics health-check in headless runs
 ```

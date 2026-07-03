@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.4.0
+version: 2.4.1
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist. Українською: "налаштувати плагін", "сетап плагіна", "налаштувати контекст", "додати продукт", "оновити конфігурацію", "перевірити налаштування", "показати конфіг".
 ---
 
@@ -1340,6 +1340,6 @@ Collected via `AskUserQuestion`/dialog:
 2. **VIP senders** — prefill from existing stakeholders/team in local-context; if none — ask for names+emails. Explain: VIP raises mail-signal ranking, it does not filter others out.
 3. **PM goals** — prefill from local-context (OKRs, mission commitments); if none — ask for 1–3 goals with wording the PM uses. These act as permanent scoring weights (`focus-scoring.md`).
 4. **Cadence overrides** — show the default ritual table (`focus-cadence.md` §2), ask what differs for this PM/team.
-5. **Scheduled brief** — offer creating a daily headless brief task (via the platform's scheduled-tasks/`schedule` skill): time, working days only; `healthcheck: off` by default.
+5. **Scheduled briefs** — offer creating headless brief tasks (via the platform's scheduled-tasks/`schedule` skill): daily `now` brief (time, working days only) and weekly `tactics` brief (e.g. Monday morning); `healthcheck: off` by default.
 
 Existence check: if the `Focus` section already exists → do not re-ask, only offer review/update via `update config`.

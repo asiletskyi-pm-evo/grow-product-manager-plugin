@@ -249,6 +249,7 @@ Written by the Focus setup step; read by `focus-advisor`. Full field semantics: 
 
 #### Scheduled
 - Daily brief: [on/off], [cron], mode now, headless
+- Tactical brief: [on/off], [cron], mode tactics, headless
 ```
 
 ### Obsidian Vaults Configuration section format

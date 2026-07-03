@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.31.0
+**Version:** 1.32.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.32.0** — **Focus Advisor `tactics` mode**: focus-advisor 0.2.0 adds the sprint-to-quarter horizon — 3–5 tactical focus candidates from roadmap plan-vs-actual pace and drift, backlog staleness (ICE age), features missing prerequisites ahead of next sprints, A/B tests awaiting decisions, capacity/availability and team-event signals. Tactical scoring = ICE + capacity realism + goal alignment; new chains to project-planning `replan` and test readouts; weekly headless tactical brief supported (`mode=tactics headless=true`).
 
 **New in v1.31.0** — **Focus Advisor (20th skill)**: PM attention dispatcher above structure/quarter/sprint — collects context signals (sprint cycle position, calendar meetings needing prep, important unanswered "live" emails, open action items, Jira tails), ranks them, recommends 1–3 daily focuses, and chains execution to the right skill. Headless contract for scheduled morning briefs; mandatory persistence to `~/.grow-pm/focus/` + Vault (`focus-brief`, 21st artifact type). Plugin-configurator 2.4.0 ships a Focus setup onboarding step; trigger-evals gets Group G (attention vs execution).
 
@@ -354,11 +356,11 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 20. Focus Advisor (v0.1.0) — NEW in v1.31.0
+### 20. Focus Advisor (v0.2.0) — NEW in v1.31.0, tactics mode in v1.32.0
 
 **Description:** PM attention dispatcher — the 4th height of the suite, above structure/quarter/sprint. Scans the PM's context (sprint cycle position, calendar meetings needing preparation, important unanswered emails, open action items from recent meetings, Jira tails), ranks the signals, and recommends 1–3 focuses with reasons, cost of delay, and a chained next step. Recommends and chains — never executes another skill's work; the PM decides.
 
-**v0.1 scope:** mode `now` (daily/weekly focus) + `journal` + headless contract for scheduled morning briefs. Modes `tactics` (v1.32) and `strategy` (v1.33) respond with the closest chain until implemented.
+**Current scope (v0.2):** mode `now` (daily/weekly focus) + `tactics` (sprint-to-quarter: roadmap drift, stale backlog, A/B decisions, capacity and team events) + `journal` + headless contract for scheduled briefs (daily `now`, weekly `tactics`). Mode `strategy` (v1.33) responds with the closest chain until implemented.
 
 **Key mechanics:** deterministic ritual calendar (`focus-cadence.md`: "2nd Monday of the sprint → pre-planning"), signal registry with compact packets and TTL cache (`focus-signals.md`), two-stage "live letters" mail filter (automation never becomes a signal), meeting-prep detector with analytical-slice/deck chains, optional metrics health-check chain to product-analysis / cjm-research. All briefs persist to `~/.grow-pm/focus/` + Vault mirror (mandatory Step 7).
 
@@ -389,7 +391,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Quarterly Planning | v0.2.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.2.0 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.1.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
-| Focus Advisor | v0.1.0 | PM attention dispatcher: daily focus brief from calendar/mail/meetings/Jira signals, ritual cadence, chains to executing skills |
+| Focus Advisor | v0.2.0 | PM attention dispatcher: daily + tactical focus briefs from calendar/mail/meetings/Jira/roadmap signals, ritual cadence, chains to executing skills |
 
 ---
 
@@ -650,5 +652,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.31.0  
+**Version:** 1.32.0  
 **Last Updated:** July 2026
