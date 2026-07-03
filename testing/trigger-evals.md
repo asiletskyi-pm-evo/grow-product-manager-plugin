@@ -78,6 +78,21 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 | F3 | створи Jira-задачі з цих вимог у Confluence | task-creator |
 | F4 | перевір мою специфікацію на повноту | requirements-creator |
 
+### Group G — Attention vs execution (focus-advisor vs planning/analysis skills)
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| G1 | на чому мені сфокусуватись сьогодні | focus-advisor |
+| G2 | ранковий бриф: пошта, календар, задачі | focus-advisor |
+| G3 | розбери мою пошту — чи є важливі листи без відповіді | focus-advisor |
+| G4 | до яких зустрічей цього тижня треба готуватись | focus-advisor |
+| G5 | сформуй фокуси спринта з квартального roadmap | sprint-planning |
+| G6 | що можна взяти у Sprint 56 з беклогу | sprint-planning |
+| G7 | чи все ок з моїми метриками, глянь по-швидкому | focus-advisor (chains health-check) |
+| G8 | проаналізуй воронку за минулий тиждень проти baseline | cjm-research |
+| G9 | що робити з продуктом далі, де великі можливості | focus-advisor (strategy route) |
+| G10 | зроби health-check воронки з гіпотезами | cjm-research |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |

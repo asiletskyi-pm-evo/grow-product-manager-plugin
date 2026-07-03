@@ -144,6 +144,7 @@ Users can add any additional sections with free-form markdown content. The confi
 | **Write Concept** | product.name | confluence_space, key_metrics, OKRs |
 | **Brainstorm Features** | product.name | key_metrics, competitors, OKRs |
 | **Plugin Configurator** | — | reads/writes everything |
+| **Focus Advisor** | product.name, planning (sprint anchor/cadence) | focus section (sources, VIP senders, PM goals, cadence overrides, scheduled) |
 
 ## Validation Rules
 
@@ -220,6 +221,34 @@ The blocks below are the exact `local-context.md` output formats the Plugin Conf
 
 #### Configured Google Drive Folders (for CJM search)
 - [Folder ID]: [description]
+```
+
+### Focus Configuration section format
+
+Written by the Focus setup step; read by `focus-advisor`. Full field semantics: `references/focus-signals.md` §8.
+
+```markdown
+### Focus (focus-advisor)
+
+#### Sources
+- Mail: [on/off], window: [7] days, thresholds: [24]h VIP / [48]h others
+- Calendar: [on/off]; prep keywords: [demo, review, планування, ...]
+- Jira: [on/off]; Release flags: [off]
+- Metrics health-check in scheduled runs: [off]
+
+#### VIP senders
+- [Name <email>] — [role]
+
+#### PM goals (scoring weights)
+- [goal / mission commitment — permanent weight in focus scoring]
+
+#### Cadence Overrides
+| Cycle position | Ritual | Chain |
+|---|---|---|
+| [day/week] | [ritual or "off"] | [skill + mode] |
+
+#### Scheduled
+- Daily brief: [on/off], [cron], mode now, headless
 ```
 
 ### Obsidian Vaults Configuration section format

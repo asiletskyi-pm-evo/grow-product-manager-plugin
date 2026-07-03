@@ -241,3 +241,24 @@ planning:
     platform_notes: "iOS/Android client depend on BE"
     exceptions: ""
 ```
+
+## Focus (focus-advisor)
+
+Config for `focus-advisor`. Format details: `references/focus-signals.md` §8; markdown block format: `skills/plugin-configurator/references/context-schema.md` → Focus Configuration.
+
+```yaml
+focus:
+  sources:
+    mail: { enabled: true, window_days: 7, threshold_hours: { vip: 24, default: 48 } }
+    calendar: { enabled: true, prep_keywords: [demo, review, планування, презентація] }
+    jira: { enabled: true }
+    release_flags: { enabled: false }
+  vip_senders:
+    - { name: "Firstname Lastname", email: "vip.stakeholder@example.com", role: "Direction PM Lead" }
+  pm_goals:
+    - "Mission commit: +15% CR of listings and product page"   # permanent scoring weight
+  cadence_overrides: []                # rows override/extend focus-cadence.md defaults
+  scheduled:
+    daily_brief: { enabled: false, cron: "0 8 * * 1-5", mode: now, headless: true }
+    healthcheck: off                   # metrics health-check in headless runs
+```

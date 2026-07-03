@@ -219,6 +219,19 @@ deviation_percent: float (percentage deviation from baseline, e.g., -15.3)
 affected_platforms: string[] (platforms affected)
 ```
 
+#### focus-brief
+
+Artifact type for PM focus briefs produced by `focus-advisor`.
+
+```yaml
+subtype: string (daily-brief|tactical-brief|strategy-memo)
+mode: string (now|tactics|strategy)
+headless: boolean (true if produced by a scheduled run)
+focuses_proposed: int
+focuses_chosen: int (0 until the PM reacts; updated from journal)
+signals_sources: string[] (mail, calendar, meetings, jira, cadence, metrics)
+```
+
 #### project-overview
 
 Artifact type for project descriptions and tracking.
@@ -234,7 +247,7 @@ target_date: date (project completion target, YYYY-MM-DD)
 
 ## Type Taxonomy
 
-The Grow Product Manager Plugin defines 20 artifact types, each with a specific purpose, source skill, and folder location.
+The Grow Product Manager Plugin defines 21 artifact types, each with a specific purpose, source skill, and folder location.
 
 | Type | Skill Source | Folder | Description |
 |------|--------------|--------|-------------|
@@ -258,6 +271,7 @@ The Grow Product Manager Plugin defines 20 artifact types, each with a specific 
 | task-breakdown | task-creator | Projects/task-breakdowns/ | Feature → Jira tasks decomposition record with links |
 | ops-report | team-ops-reporter | Reports/ops/ | Sprint/quarter/initiative/member operational report |
 | roadmap | planning suite (sprint-/quarterly-/project-planning, roadmap-architect) | Roadmaps/ | Sprint plan, quarterly roadmap, project arc, or structure tree (subtype in frontmatter) |
+| focus-brief | focus-advisor | Focus/ | PM focus brief (daily/tactical/strategy — subtype in frontmatter) with chosen focuses and chains |
 
 ### TYPE_FOLDER_MAP Reference
 
@@ -278,7 +292,12 @@ The Grow Product Manager Plugin defines 20 artifact types, each with a specific 
   "meeting-notes": "Meetings/",
   "decision": "Decisions/",
   "knowledge-source": "Knowledge/sources/",
-  "project-overview": "Projects/"
+  "project-overview": "Projects/",
+  "diagram": "Diagrams/",
+  "task-breakdown": "Projects/task-breakdowns/",
+  "ops-report": "Reports/ops/",
+  "roadmap": "Roadmaps/",
+  "focus-brief": "Focus/"
 }
 ```
 
@@ -1562,7 +1581,7 @@ Planned work for {ProductName}:
 The Vault Schema defines a consistent, extensible structure for storing and organizing product artifacts in an Obsidian Vault. It includes:
 
 - **Frontmatter Standard** — Base and type-specific fields for classification, relations, and lifecycle management
-- **Type Taxonomy** — 16 artifact types mapped to skills, folders, and purposes
+- **Type Taxonomy** — 21 artifact types mapped to skills, folders, and purposes
 - **Tag Taxonomy** — Hierarchical tags for funnel, platform, metric, status, impact, research, and phase classification
 - **Folder Structure** — Complete directory organization for {Vault}/{PluginFolder}/
 - **Naming Convention** — Consistent {type}-{topic-slug}-{YYYY-MM-DD}.md pattern
