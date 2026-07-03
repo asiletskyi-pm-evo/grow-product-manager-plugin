@@ -89,7 +89,7 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 | G5 | сформуй фокуси спринта з квартального roadmap | sprint-planning |
 | G6 | що можна взяти у Sprint 56 з беклогу | sprint-planning |
 | G7 | чи все ок з моїми метриками, глянь по-швидкому | focus-advisor (chains health-check) |
-| G8 | проаналізуй воронку за минулий тиждень проти baseline | cjm-research |
+| G8 | проаналізуй воронку за минулий тиждень проти baseline | product-analysis (label fixed 2026-07-03: data-only comparison; cjm-research only if hypotheses/research requested) |
 | G9 | що робити з продуктом далі, де великі можливості | focus-advisor (strategy route) |
 | G10 | зроби health-check воронки з гіпотезами | cjm-research |
 
@@ -97,6 +97,7 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 
 | Date | Runner | Group accuracies | Failures → action |
 |------|--------|------------------|-------------------|
+| 2026-07-03 | 2 independent agent runs (descriptions-only simulation), plugin v1.33.0 | A 100 / B 100 / C 100 / D 100 / E 100 / F 100 / G 95→100 | G8: both runs picked product-analysis over cjm-research — eval label was wrong (data-only phrase), fixed the expected column, no description change. 46/46 primary agreement between runs. Baseline recorded before the monolith refactor (v1.34.x). |
 | (fill after each run) | | | |
 
 ## Maintenance

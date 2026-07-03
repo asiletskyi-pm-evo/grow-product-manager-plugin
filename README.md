@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.33.0
+**Version:** 1.34.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.34.0** — **Monolith refactor 1/4: plugin-configurator** slimmed from 1345 to ~180 lines following the planning-suite pattern: the core keeps the mode map, entry conditions, and cross-skill protocols; detailed workflows moved to skill-local references (`onboarding-steps.md` — Steps 1–17 + Planning/Focus setup; `maintenance-modes.md` — RM/Update/Validate/View + Versioning Protocol) loaded on demand. All content preserved verbatim; Planning/Focus setup steps integrated into the onboarding flow (previously dangled after the resources section); a leftover editorial artifact removed. Trigger-evals baseline recorded (A–F 100%, G 95→100 after one label fix).
 
 **New in v1.33.0** — **Focus Advisor complete: `strategy` mode + live "PM Focus Board"**: focus-advisor 0.3.0 ships the third horizon (quarter–year) — 2–4 strategic bets from product goals/missions (pinned source), NPS and funnel trends, research signals, leadership mandates and zone white-spaces, with a mandatory "what we deliberately do NOT do" section in the strategy memo. New `board` mode renders a persistent PM Focus Board (live artifact where supported, static HTML fallback). All three horizons of the original design are now live.
 
@@ -203,7 +205,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 10. Plugin Configurator (v2.3.1)
+### 10. Plugin Configurator (v2.5.0)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -383,7 +385,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Task Creator | v0.9.0 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.9.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Meeting Processor | v0.12.0 | Process meetings and extract action items |
-| Plugin Configurator | v2.3.1 | Configure plugin for your organization |
+| Plugin Configurator | v2.5.0 | Configure plugin for your organization |
 | Knowledge Library | v0.5.0 | Manage curated knowledge sources |
 | Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.2.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
@@ -654,5 +656,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.33.0  
+**Version:** 1.34.0  
 **Last Updated:** July 2026

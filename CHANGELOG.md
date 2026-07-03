@@ -12,6 +12,33 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.34.0 (2026-07-03)
+
+### Changed — plugin-configurator refactor (monolith 1/4): 1345 → ~180-line core
+
+First of four monolith refactors from the 2026-07-02 audit (section 3.1), following the planning-suite pattern: thin SKILL.md + on-demand skill-local references. **All content preserved verbatim** (extracted by line ranges, anchors verified); no logic change.
+
+| File | Contents | Lines |
+|---|---|---|
+| `skills/plugin-configurator/SKILL.md` | mode map, entry conditions, Auto-trigger / Changelog / Product-selection / Enrichment protocols (read by other skills — kept in core), quality standards | ~180 |
+| `skills/plugin-configurator/references/onboarding-steps.md` (new) | Onboarding Steps 1–17 in full + Planning setup + Focus setup (Extended add-ons) | ~740 |
+| `skills/plugin-configurator/references/maintenance-modes.md` (new) | Reinstall/Migration RM-0..RM-6, Update U-1..U-4, Validate V-1..V-6, View VW-1..VW-4, Versioning Protocol | ~455 |
+
+Also fixed en route: Planning/Focus setup steps were dangling after Additional Resources (outside the workflow) — now integrated into the onboarding reference; removed a leftover `<!-- Додай як новий крок… -->` editorial artifact (pitfall P3); README section 10 version was stale (v2.3.1 while frontmatter was 2.4.2) — synced.
+
+Context economy: entering any single mode now loads ~180 + one reference instead of 1345 lines (~-55% for the largest mode, ~-85% for View/Validate).
+
+- `skills/plugin-configurator/SKILL.md`: **2.4.2 → 2.5.0** (MINOR — structural reorganization, no behavior change).
+
+### Added — trigger-evals baseline (first run)
+
+Two independent description-only routing simulations on v1.33.0, 46 phrases: groups A–F **100%**, G 95% → one eval-label fix (G8 was mislabeled cjm-research for a data-only phrase; expected column corrected to product-analysis). 46/46 primary agreement between runs. Results log filled — baseline recorded before the remaining monolith refactors.
+
+### Backwards compatibility
+Content relocation + docs sync only. Every mode reads the same instructions from a new location. Safe for Claude.
+
+---
+
 ## v1.33.0 (2026-07-03)
 
 ### Added — focus-advisor 0.2.0 → 0.3.0: `strategy` mode + live "PM Focus Board"
