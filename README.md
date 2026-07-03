@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.26.1
+**Version:** 1.27.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.27.0** — **CI validation + trigger disambiguation**: every push/PR to main now runs `testing/validate-consistency.sh` via GitHub Actions (version consistency across manifests/README/CHANGELOG, SKILL.md frontmatter, broken reference paths). Skill descriptions of the CJM trio (cjm-research / product-analysis / brainstorm-features) and the prototype pair (diagram-prototyper / design-bridge) now carry explicit "Do NOT use" routing hints.
 
 **New in v1.26.0** — **Subagent delegation** extended to all specialized modes of `product-analysis` (Post-Release, A/B Test, CJM Funnel): heavy data-acquisition fan-out runs off the main context, with data-policy guardrails and the Data Integrity Gate preserved. See CHANGELOG v1.24.0–v1.26.0 for the full subagent-delegation rollout.
 
@@ -24,7 +26,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.5.0)
+### 1. CJM Research (v0.5.1)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -43,7 +45,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 2. Product Analysis (v0.11.0)
+### 2. Product Analysis (v0.11.1)
 
 **Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
 
@@ -72,7 +74,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 4. Brainstorm Features (v0.7.0)
+### 4. Brainstorm Features (v0.7.1)
 
 **Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation.
 
@@ -124,7 +126,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 8. Diagram & Prototype Creator (v0.8.0)
+### 8. Diagram & Prototype Creator (v0.8.1)
 
 **Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
 
@@ -246,7 +248,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 13. Design Bridge (v0.2.1) — brand-agnostic since v1.11.0
+### 13. Design Bridge (v0.2.2) — brand-agnostic since v1.11.0
 
 **Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into brand-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
 
@@ -334,19 +336,19 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.5.0 | Customer Journey Map analysis and hypothesis validation |
-| Product Analysis | v0.11.0 | Analyze metrics, dashboards, and A/B test results |
+| CJM Research | v0.5.1 | Customer Journey Map analysis and hypothesis validation |
+| Product Analysis | v0.11.1 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.9.0 | Competitive analysis, user research, market trends, UX benchmarking |
-| Brainstorm Features | v0.7.0 | Interactive feature ideation with ICE scoring |
+| Brainstorm Features | v0.7.1 | Interactive feature ideation with ICE scoring |
 | Write Concept | v0.7.0 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.7.0 | Create and analyze feature requirements |
 | Task Creator | v0.8.0 | Create Jira tasks from requirements |
-| Diagram & Prototype Creator | v0.8.0 | Visualize concepts with diagrams, prototypes, infographics |
+| Diagram & Prototype Creator | v0.8.1 | Visualize concepts with diagrams, prototypes, infographics |
 | Meeting Processor | v0.11.0 | Process meetings and extract action items |
 | Plugin Configurator | v2.3.1 | Configure plugin for your organization |
 | Knowledge Library | v0.5.0 | Manage curated knowledge sources |
 | Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
-| Design Bridge | v0.2.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
+| Design Bridge | v0.2.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Team Ops Reporter | v0.2.1 | Operational team reports from Jira: sprint plan/review, quarter review, initiative status, member review |
 | Roadmap Architect | v0.1.2 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
 | Project Planning | v0.1.2 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
@@ -612,5 +614,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.26.1  
+**Version:** 1.27.0  
 **Last Updated:** July 2026

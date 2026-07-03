@@ -12,6 +12,39 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.27.0 (2026-07-02)
+
+### Added — CI validation (GitHub Actions)
+
+- **`.github/workflows/validate.yml`** — runs on every push/PR to main.
+- **`testing/validate-consistency.sh`** (also runnable locally) checks:
+  1. plugin version identical in `plugin.json` = `marketplace.json` = README header/footer = top CHANGELOG entry, and mentioned in both manifest description tails;
+  2. every `skills/*/SKILL.md` has `name` / semver `version` / `description` frontmatter;
+  3. no leftover editorial artifacts in CHANGELOG;
+  4. every `references/*.md` path mentioned in skills exists;
+  5. the pre-v1.26.1 location of jira-data-protocol.md does not reappear.
+
+This makes the v1.26.1 hygiene guarantees permanent — the class of drift documented in the 2026-07-02 audit can no longer land on main unnoticed.
+
+### Changed — trigger disambiguation in skill descriptions
+
+Explicit "Do NOT use / use X instead" routing hints added to the descriptions of the two known trigger-collision groups (audit 2026-07-02, section 3.4):
+
+| Group | Skill | Routing hint added | Version |
+|---|---|---|---|
+| CJM trio | `cjm-research` | not for standalone dashboard analysis (→ product-analysis) or pure ideation (→ brainstorm-features) | 0.5.0 → 0.5.1 |
+| CJM trio | `product-analysis` | data analysis only; end-to-end CJM pipeline → cjm-research | 0.11.0 → 0.11.1 |
+| CJM trio | `brainstorm-features` | ideation engine; full CJM pipeline → cjm-research | 0.7.0 → 0.7.1 |
+| Prototype pair | `diagram-prototyper` | not for brand-themed DS deliverables → design-bridge | 0.8.0 → 0.8.1 |
+| Prototype pair | `design-bridge` | not for quick local diagrams/Mermaid → diagram-prototyper | 0.2.1 → 0.2.2 |
+
+README section headers and Skills Summary synced to the new versions; added "New in v1.27.0" overview paragraph.
+
+### Backwards compatibility
+Description wording + new CI infrastructure only; no workflow change inside any skill. Safe for Claude.
+
+---
+
 ## v1.26.1 (2026-07-02)
 
 ### Fixed — release hygiene: machine-readable version, README catch-up, shared jira-data-protocol
