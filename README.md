@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.27.0
+**Version:** 1.28.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.28.0** — **Release Manager** skill: one guided pipeline to release the plugin itself — version bump across all 4 mandatory places, CHANGELOG entry, README sync, local validation, gated commit/PR/merge, GitHub Release with tag, mirror sync, and post-release verification. Ships with `references/release-pitfalls.md` — nine real failure modes (iCloud-evicted git objects, stale locks, token scopes, VPN-only mirrors, protected-branch divergence, CDN cache…) with guards and recovery recipes.
 
 **New in v1.27.0** — **CI validation + trigger disambiguation**: every push/PR to main now runs `testing/validate-consistency.sh` via GitHub Actions (version consistency across manifests/README/CHANGELOG, SKILL.md frontmatter, broken reference paths). Skill descriptions of the CJM trio (cjm-research / product-analysis / brainstorm-features) and the prototype pair (diagram-prototyper / design-bridge) now carry explicit "Do NOT use" routing hints.
 
@@ -332,6 +334,20 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
+### 19. Release Manager (v0.1.0) — NEW in v1.28.0
+
+**Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
+
+**Pipeline:** pre-flight guards (iCloud materialization, stale locks, clean tree) → scope & semver decision → bump in the 4 mandatory places (plugin.json, marketplace.json, README, CHANGELOG) → local `validate-consistency.sh` run → gated commit/push → PR → merge → GitHub Release with tag → mirror sync → post-release verification, optional Confluence changelog update, and vault release record.
+
+**Built-in pitfall guide:** `skills/release-manager/references/release-pitfalls.md` — nine real failure modes with guards and recovery recipes (P1 iCloud-evicted git objects, P4 token without workflow scope, P6 diverged protected mirror, P7 stale raw CDN, and more).
+
+**Generic by design:** works for any Claude plugin repo; org specifics (mirrors, VPN hosts, Confluence page) come from `local-context.md` → `plugin_release`.
+
+**Trigger phrases:** "release the plugin", "prepare a release", "bump plugin version", "ship vX.Y.Z", "cut a release"
+
+---
+
 ## Skills Summary
 
 | Skill | Version | Description |
@@ -354,6 +370,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Project Planning | v0.1.2 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.1.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.1.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
+| Release Manager | v0.1.0 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 
 ---
 
@@ -614,5 +631,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.27.0  
+**Version:** 1.28.0  
 **Last Updated:** July 2026
