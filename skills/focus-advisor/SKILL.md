@@ -1,7 +1,7 @@
 ---
 name: focus-advisor
-version: 0.2.0
-description: PM attention dispatcher — scans the PM's full context (sprint cycle position, calendar, unanswered important emails, recent meetings and open action items, Jira tails, quarterly roadmap drift, stale backlog, A/B tests awaiting decisions, capacity signals) and recommends 1–3 focuses with reasons and next steps, chaining execution to the right skill. Use whenever the PM asks what to do or focus on — "на чому сфокусуватись", "що мені робити зараз/сьогодні", "фокус дня/тижня", "тактичний фокус", "куди фокусувати команду в цьому кварталі", "розбери мою пошту і календар", "до яких зустрічей готуватись", "чи все ок з метриками" (proposes a health-check chain), "what should I focus on", "daily focus", "tactical focus", "morning brief" — and for scheduled/headless focus briefs. "Стратегічний фокус" triggers here too (v0.2 responds with the closest chain + roadmap note). Do NOT use for planning the sprint itself (sprint-planning), building roadmaps (quarterly-/project-planning), or deep metric analysis (product-analysis / cjm-research) — this skill recommends and chains, it does not execute.
+version: 0.3.0
+description: PM attention dispatcher — scans the PM's full context (sprint cycle position, calendar, unanswered important emails, recent meetings and open action items, Jira tails, quarterly roadmap drift, stale backlog, A/B tests awaiting decisions, capacity signals, product goals/missions, NPS and funnel trends) and recommends focuses with reasons and next steps at three horizons — daily, tactical (sprint–quarter), strategic (quarter–year) — chaining execution to the right skill. Use whenever the PM asks what to do or focus on — "на чому сфокусуватись", "що мені робити зараз/сьогодні", "фокус дня/тижня", "тактичний фокус", "стратегічний фокус", "куди фокусувати команду", "де великі можливості для продукту", "розбери мою пошту і календар", "до яких зустрічей готуватись", "чи все ок з метриками" (proposes a health-check chain), "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "покажи focus board" — and for scheduled/headless focus briefs. Do NOT use for planning the sprint itself (sprint-planning), building roadmaps (quarterly-/project-planning), or deep metric analysis (product-analysis / cjm-research) — this skill recommends and chains, it does not execute.
 ---
 
 # Focus Advisor
@@ -17,7 +17,7 @@ The 4th height of the suite — **the PM's attention** above structure/quarter/s
 - `references/integration-strategy.md`, `references/data-policy.md`, `references/persistent-storage.md`, `references/vault-protocol.md`.
 
 ## Step T — Template Resolution
-`artifact_type: focus`, `subtype: daily-brief` (tactical-brief / strategy-memo arrive with their modes), `product_id`, `language`.
+`artifact_type: focus`, `subtype: daily-brief | tactical-brief | strategy-memo` (by mode), `product_id`, `language`.
 
 ## Modes
 
@@ -26,12 +26,13 @@ The 4th height of the suite — **the PM's attention** above structure/quarter/s
 | `now` | today – this sprint | **v0.1** |
 | `journal` | — | **v0.1** — review/close/snooze focuses, streaks |
 | `auto` | — | **v0.1** — detects horizon from phrasing/cycle |
-| `tactics` | sprint – quarter | **v0.2 (this release)** — 3–5 tactical candidates: roadmap drift, stale backlog, A/B decisions, capacity, team events |
-| `strategy` | quarter – year | planned v1.33 — until then: acknowledge + offer product-research / cjm-research / quarterly-planning |
+| `tactics` | sprint – quarter | **v0.2** — 3–5 tactical candidates: roadmap drift, stale backlog, A/B decisions, capacity, team events |
+| `strategy` | quarter – year | **v0.3 (this release)** — 2–4 strategic bets aligned to product goals/missions, with explicit "what we deliberately do NOT do" |
+| `board` | — | **v0.3** — create/refresh the live "PM Focus Board" artifact (on platforms with live-artifact support; otherwise a static HTML file) |
 
 ## Headless contract (scheduled runs)
 
-Invocation from a scheduled task prompt: `focus-advisor mode={now|tactics} headless=true` (e.g. daily morning `now`, Monday `tactics`). Rules: (1) skip all gates — **no side-effect actions at all** (no Jira/Gmail/Confluence writes, no auto-launching chained skills); (2) metrics health-check chain only if `Focus → Scheduled → healthcheck: on`; (3) output = brief in chat **and always as a file** (Step 7) with journal status `proposed`; chains render as "next steps" with ready-to-paste phrases; (4) collector cache is kept warm for the follow-up interactive session.
+Invocation from a scheduled task prompt: `focus-advisor mode={now|tactics|strategy} headless=true` (e.g. daily morning `now`, Monday `tactics`, first week of the quarter `strategy`). Rules: (1) skip all gates — **no side-effect actions at all** (no Jira/Gmail/Confluence writes, no auto-launching chained skills); (2) metrics health-check chain only if `Focus → Scheduled → healthcheck: on`; (3) output = brief in chat **and always as a file** (Step 7) with journal status `proposed`; chains render as "next steps" with ready-to-paste phrases; (4) collector cache is kept warm for the follow-up interactive session.
 
 ## Pipeline
 
@@ -39,19 +40,19 @@ Invocation from a scheduled task prompt: `focus-advisor mode={now|tactics} headl
 Per `local-context-protocol.md`: product, Planning (anchor/cadence), Focus section. Focus section missing → run once with safe defaults (mail/calendar on, 7-day window, default thresholds) and offer Focus setup via `plugin-configurator` at the end.
 
 ### Step 1 — Horizon + scope. Gate (skipped in headless)
-Confirm horizon (auto-detect from phrasing/cycle position) and period. Non-now horizons in v0.1 → route per Modes table.
+Confirm horizon (auto-detect from phrasing/cycle position: "сьогодні/зараз" → now, "квартал/команда/беклог" → tactics, "рік/можливості/напрямки" → strategy; quarter boundary nudges toward strategy) and period.
 
 ### Step 2 — Collect signals
-Per `focus-signals.md`, only the sources of the confirmed horizon. **now** (§3–4): cycle position, calendar (meetings needing prep), mail (live unanswered letters — two-stage filter), recent meetings' open action items, Jira tails. **tactics** (§6): quarterly roadmap plan-vs-actual and drift, backlog staleness (ICE age), features missing prerequisites ahead of next sprints, A/B tests awaiting decision, capacity and team-event signals. Honor cache TTL. Fan out collectors via `subagent-delegation.md` when available; inline otherwise. Each collector returns signal packets only.
+Per `focus-signals.md`, only the sources of the confirmed horizon. **now** (§3–4): cycle position, calendar (meetings needing prep), mail (live unanswered letters — two-stage filter), recent meetings' open action items, Jira tails. **tactics** (§6): quarterly roadmap plan-vs-actual and drift, backlog staleness (ICE age), features missing prerequisites ahead of next sprints, A/B tests awaiting decision, capacity and team-event signals. **strategy** (§7): product goals/missions (pinned source), NPS waves and love/hate themes, CJM/funnel trends (freshness-guarded), knowledge-library research signals, leadership-meeting mandates, white spaces in the PM's zones. Honor cache TTL. Fan out collectors via `subagent-delegation.md` when available; inline otherwise. Each collector returns signal packets only.
 
 ### Step 3 — Cadence check
 Per `focus-cadence.md`: due rituals (including recently missed ones) become high-priority candidates.
 
 ### Step 4 — Score and rank
-Per `focus-scoring.md`: journal dedup → **now**: urgency+impact+unblock → 1–3 focuses; **tactics**: ICE + capacity realism + goal alignment (§4) → 3–5 candidates. The rest goes to "також на радарі". Insufficient signals → say so honestly.
+Per `focus-scoring.md`: journal dedup → **now**: urgency+impact+unblock → 1–3 focuses; **tactics**: ICE + capacity realism + goal alignment (§4) → 3–5 candidates; **strategy**: goal/mission alignment × lever size × evidence strength (§5) → 2–4 bets. The rest goes to "також на радарі". Insufficient signals → say so honestly.
 
 ### Step 5 — Focus brief
-For each focus: what, why now (signals with links), cost of delay (one sentence), suggested next step. Subtype by mode: `daily-brief` / `tactical-brief`. Tactical brief adds: quarter position (sprints left, capacity used vs plan) and a "decisions waiting on you" section (A/B tests, approvals). Footer: degraded collectors, cache ages. Language — `user.language`.
+For each focus: what, why now (signals with links), cost of delay (one sentence), suggested next step. Subtype by mode: `daily-brief` / `tactical-brief` / `strategy-memo`. Tactical brief adds: quarter position (sprints left, capacity used vs plan) and a "decisions waiting on you" section (A/B tests, approvals). Strategy memo structure: current state (facts with sources) → 2–4 bets (each: what, why — data-backed, expected metric effect, first steps) → **"what we deliberately do NOT do"** → data-hygiene preconditions → next 2 weeks. A strategy memo without exclusions is a wish list. Footer: degraded collectors, cache ages. Language — `user.language`.
 
 ### Step 6 — PM chooses. Gate (skipped in headless)
 Per focus: **(a) chain** to the executing skill with prepared arguments; (b) create a task/reminder; (c) snooze with a date. Chain map:
@@ -68,6 +69,9 @@ Per focus: **(a) chain** to the executing skill with prepared arguments; (b) cre
 | Roadmap drift beyond threshold | project-planning `replan` |
 | A/B test waiting for a decision | product-analysis (test readout) |
 | Team event ahead (perf review, onboarding, booking deadline) | task/reminder + team-ops-reporter `member-review` where relevant |
+| Strategic bet needs deeper evidence | product-research (competitive/market) / cjm-research / knowledge-library |
+| Strategic bet accepted → needs a concept | write-concept, then quarterly-/project-planning to schedule |
+| Goals/missions source stale or missing | knowledge-library (refresh pinned source) + Focus config update |
 
 ### Step 7 — Save artifacts (mandatory, NOT optional)
 Every artifact this skill produces is persisted to the user's local repository:
@@ -76,6 +80,13 @@ Every artifact this skill produces is persisted to the user's local repository:
 - cache → `~/.grow-pm/focus/cache/` (packets only, no message bodies);
 - Vault mirror after every write per `vault-protocol.md` (`type: focus-brief`), recovery pattern as in knowledge-library (if `~/.grow-pm/focus/` is empty — restore from Vault);
 - artifacts produced by chained skills (slices, decks, plans) are saved by those skills' own Step V — focus-advisor links them in the brief and journal.
+
+### Step 7b — Live "PM Focus Board" (mode `board`, or offered after any brief)
+A persistent one-glance panel of the PM's attention. Contract:
+- **Content sections:** current focuses (from the latest brief, with status from journal), due cadence rituals, signal freshness per collector, "також на радарі" backlog, chain shortcuts (ready-to-paste phrases).
+- **Platforms with live artifacts** (e.g. Cowork `create_artifact`/`update_artifact`): dynamic parts re-query connector MCP tools on open (calendar events, Jira per-key statuses); local-only data (journal, briefs) is **baked in at render time** — artifacts cannot read local files, so focus-advisor refreshes the artifact on every run (update, not recreate; keep the artifact id in `~/.grow-pm/focus/board.yaml`).
+- **Fallback:** no artifact tools → render static `~/.grow-pm/focus/board.html` and link it in the brief.
+- Board is a **view**, not a store: journal stays the source of truth; no actions execute from the board beyond ready-to-paste phrases.
 
 ## Quality Standards
 - Recommend and chain — never execute another skill's work inline; never launch chained skills without an explicit PM "go" (and never in headless).

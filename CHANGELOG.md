@@ -12,6 +12,34 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.33.0 (2026-07-03)
+
+### Added — focus-advisor 0.2.0 → 0.3.0: `strategy` mode + live "PM Focus Board"
+
+Third and final horizon of the attention dispatcher (quarter – year) + a persistent attention panel; completes the focus-advisor design file (phase 3).
+
+- **Strategic collectors** (`references/focus-signals.md` §7, registry table): product goals/missions from a pinned source (`Focus → Goals source`), NPS waves + love/hate themes in the PM's zones, CJM/funnel trends (freshness-guarded), knowledge-library research signals (trust-weighted), leadership-meeting mandates (Fireflies scan), competitive moves (chained product-research), white spaces (zones without active investment).
+- **Strategic scoring** (`focus-scoring.md` §5) — goal/mission alignment × lever size × evidence strength → 2–4 bets.
+- **Strategy memo** — subtype `strategy-memo`: current state (facts with sources) → bets (what/why/expected effect/first steps) → mandatory **"what we deliberately do NOT do"** → data-hygiene preconditions → next 2 weeks.
+- **New chains:** bet needs evidence → product-research / cjm-research / knowledge-library; bet accepted → write-concept → quarterly-/project-planning; goals source stale → knowledge-library refresh + config update.
+- **Mode `board` — live "PM Focus Board"** (Step 7b): one-glance panel — current focuses with journal status, due rituals, signal freshness, radar backlog, chain shortcuts. On platforms with live artifacts: dynamic parts re-query connector MCPs on open, local data baked at render, artifact id kept in `~/.grow-pm/focus/board.yaml` (update, not recreate). Fallback: static `~/.grow-pm/focus/board.html`. Board is a view — journal remains the source of truth.
+- **Headless** extended to `mode=strategy` (quarterly memo); `auto` now routes all three horizons by phrasing + quarter-boundary nudge.
+
+### Changed
+
+| File | Change | Version |
+|---|---|---|
+| `skills/focus-advisor/SKILL.md` | strategy + board modes: description, Modes, Steps 1/2/4/5, Step 7b, chain map, headless | 0.2.0 → 0.3.0 |
+| `references/focus-signals.md` | §7 strategic collectors registry table; Focus config: Goals source + quarterly strategy memo | n/a |
+| `references/focus-scoring.md` | §4/§5 version markers dropped (both live) | n/a |
+| `skills/plugin-configurator/SKILL.md` | Focus setup: Goals source capture (Step 3), quarterly strategy memo (Step 5) | 2.4.1 → 2.4.2 |
+| `skills/plugin-configurator/references/context-schema.md`, `local-context.example.md` | Focus: goals_source + strategy_memo scheduled entry | n/a |
+| both manifests, `README.md` | version sync, New in v1.33.0 | 1.33.0 |
+
+Backwards compatible: `now`/`tactics`/`journal`/headless behavior unchanged. The focus-advisor concept (design file) is now fully shipped: all three horizons + board.
+
+---
+
 ## v1.32.0 (2026-07-03)
 
 ### Added — focus-advisor 0.1.0 → 0.2.0: `tactics` mode

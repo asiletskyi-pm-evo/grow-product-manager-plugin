@@ -33,10 +33,10 @@ Check `~/.grow-pm/focus/focus-log.md`:
 - Every focus carries: the signal links (the PM must be able to verify in one click), the cost of delay in one sentence, and the suggested next step (chain).
 - Degraded collectors (MCP down, stale cache) are reported in the brief footer — a recommendation built on partial context must look partial.
 
-## 4. Tactical scoring (mode: tactics — v1.32+)
+## 4. Tactical scoring (mode: tactics)
 
 Reuse ICE from `skills/brainstorm-features/references/ice-framework.md` for backlog-type candidates, plus two modifiers: **capacity realism** (does the team have a slot this quarter — from `capacity-model.md`) and **goal alignment** (weight from Focus → PM goals). Roadmap-drift and blocked-feature signals rank by how many sprints of delay they imply.
 
-## 5. Strategic scoring (mode: strategy — v1.33+)
+## 5. Strategic scoring (mode: strategy)
 
 Rank by: alignment with product goals/missions (pinned source) × size of the lever (order-of-magnitude, not precision) × evidence strength (data-backed > anecdotal; reuse trust scores from knowledge-library where applicable). Strategy briefs recommend 2–4 bets with explicit "what we deliberately do NOT do" — a strategy without exclusions is a wish list.
