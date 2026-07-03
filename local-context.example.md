@@ -257,9 +257,11 @@ focus:
     - { name: "Firstname Lastname", email: "vip.stakeholder@example.com", role: "Direction PM Lead" }
   pm_goals:
     - "Mission commit: +15% CR of listings and product page"   # permanent scoring weight
+  goals_source: "https://docs.google.com/spreadsheets/d/..."   # pinned product goals/missions (strategy collectors)
   cadence_overrides: []                # rows override/extend focus-cadence.md defaults
   scheduled:
     daily_brief: { enabled: false, cron: "0 8 * * 1-5", mode: now, headless: true }
     tactical_brief: { enabled: false, cron: "0 9 * * 1", mode: tactics, headless: true }
+    strategy_memo: { enabled: false, schedule: "first week of quarter", mode: strategy, headless: true }
     healthcheck: off                   # metrics health-check in headless runs
 ```

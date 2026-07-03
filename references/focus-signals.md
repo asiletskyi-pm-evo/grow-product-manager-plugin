@@ -58,9 +58,19 @@ When cadence says "metrics day" or the PM asks, focus-advisor **proposes** (gate
 
 Tactical signals feed `focus-scoring.md` §4 (ICE + capacity realism + goal alignment). Heavy analysis stays chained: drift → `project-planning replan`, test readout → `product-analysis`, re-scoring → `brainstorm-features`.
 
-## 7. Strategic collectors (mode: strategy — v1.33+)
+## 7. Strategic collectors (mode: strategy)
 
-Product goals & missions (pinned source from Focus config); NPS waves and love/hate themes; CJM/funnel trends; internal research signals (knowledge-library); competitive moves (product-research); leadership-meeting mandates (Fireflies keyword scan); white spaces in the PM's zones.
+| Source | Collector | Signal examples |
+|---|---|---|
+| Product goals & missions | pinned source from `Focus → Goals source` (URL; often a knowledge-library pinned entry); pull the current-quarter tab/section | "your mission commit: +15% CR — bets must map to it"; "new company mission touches your zone" |
+| NPS / satisfaction waves | NPS dashboard from local-context Metrics; love/hate themes in the PM's zones | "NPS −11 pp QoQ, top-hate theme in your zone: sellers not answering" |
+| CJM / funnel trends | Tableau/analytics via freshness guard (`data-integrity-protocol.md`); chained to cjm-research for depth | "funnel stage X degrades 3 quarters in a row" |
+| Research & knowledge signals | knowledge-library search on the PM's zones (trust-weighted); recent internal reports | "internal report: fast Q&A answers → +38% conversion — scalable lever" |
+| Leadership mandates | Fireflies keyword scan over leadership meetings (last quarter) | "leadership expects a concept for X by Q-end" |
+| Competitive moves | chained product-research (competitive mode) when a bet needs evidence | "competitor shipped Y in your zone" |
+| White spaces | PM zones (local-context) vs current epics: zones with no active investment | "zone Z has had no initiative for 2 quarters" |
+
+Strategic signals feed `focus-scoring.md` §5. The memo template and honesty rules apply — every bet carries data links; exclusions section is mandatory.
 
 ## 8. Config (local-context → Focus)
 
@@ -79,10 +89,14 @@ Product goals & missions (pinned source from Focus config); NPS waves and love/h
 #### PM goals (scoring weights)
 - [e.g. mission "+15% CR лістингів та КТ" — permanent high weight]
 
+#### Goals source
+- [URL of the pinned product goals/missions source (e.g. goals sheet); used by strategy collectors]
+
 #### Cadence Overrides
 (see focus-cadence.md §3)
 
 #### Scheduled
 - Daily brief: [cron + on/off], mode now, headless
 - Tactical brief: [cron + on/off], mode tactics, headless
+- Strategy memo: [quarterly + on/off], mode strategy, headless
 ```

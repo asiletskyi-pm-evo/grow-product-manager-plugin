@@ -247,9 +247,13 @@ Written by the Focus setup step; read by `focus-advisor`. Full field semantics: 
 |---|---|---|
 | [day/week] | [ritual or "off"] | [skill + mode] |
 
+#### Goals source
+- [URL — pinned product goals/missions source for strategy collectors]
+
 #### Scheduled
 - Daily brief: [on/off], [cron], mode now, headless
 - Tactical brief: [on/off], [cron], mode tactics, headless
+- Strategy memo: [on/off], quarterly, mode strategy, headless
 ```
 
 ### Obsidian Vaults Configuration section format
