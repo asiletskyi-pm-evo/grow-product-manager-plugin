@@ -44,9 +44,19 @@ Every collector returns compact packets, never raw data — this keeps token cos
 
 When cadence says "metrics day" or the PM asks, focus-advisor **proposes** (gate) delegating to: `product-analysis` (quick pass over dashboards from `local-context → Metrics`) and/or `cjm-research` health-check (funnel vs baseline, configured thresholds). Before chaining, verify source freshness (`data-integrity-protocol.md`) — a frozen extract must be reported, not silently analyzed. Results come back as signal packets ("all green" or "stage X deviates → separate focus"). focus-advisor never interprets metrics itself — that's the analysts' height.
 
-## 6. Tactical collectors (mode: tactics — v1.32+)
+## 6. Tactical collectors (mode: tactics)
 
-Quarterly roadmap plan-vs-actual (CQL by `qN-YYYY` label + per-key epic statuses); ICE backlog age (vault Hypotheses/); features missing requirements/design ahead of next sprints (work-type DAG, `dependency-model.md`); A/B tests awaiting decision; capacity signals (platform overload, vacations, booking deadlines); team events (perf reviews, vacancies, onboarding).
+| Source | Collector | Signal examples |
+|---|---|---|
+| Roadmap plan-vs-actual | features by CQL `space=X AND label=qN-YYYY` + epic statuses per-key (`jira-data-protocol.md`); compare feature statuses vs quarter position (sprints elapsed / remaining) | "5 of 27 features done, 3 of 7 sprints gone — behind pace"; "epic X has no movement for 2 sprints" |
+| Roadmap drift | committed scope vs current forecast (reuse `capacity-model.md` math where available) | "FE demand grew past ceiling after scope add → replan candidate" |
+| Backlog staleness | vault `Hypotheses/` + backlog pages: age since last ICE review | "ICE backlog untouched for 6 weeks — re-score before next quarter draft" |
+| Missing prerequisites | features planned for next 1–2 sprints lacking upstream work-types (work-type DAG, `dependency-model.md`) | "feature Y in SEX N+1 has no requirements page" |
+| A/B decisions | A/B tracker page (from `local-context → Product → ab_test_dashboards` / tracker URL): tests past their end date without a decision recorded | "test Z ended 12 days ago — decision pending" |
+| Capacity & availability | Planning config team + calendar vacations + booking/HR deadlines from Focus config | "2 of 3 Android devs on vacation in SEX N+1"; "bookings review due Sep 1" |
+| Team events | calendar + Focus config: perf reviews, onboarding milestones, vacancies | "perf review cycle opens next week — drafts needed" |
+
+Tactical signals feed `focus-scoring.md` §4 (ICE + capacity realism + goal alignment). Heavy analysis stays chained: drift → `project-planning replan`, test readout → `product-analysis`, re-scoring → `brainstorm-features`.
 
 ## 7. Strategic collectors (mode: strategy — v1.33+)
 
@@ -74,4 +84,5 @@ Product goals & missions (pinned source from Focus config); NPS waves and love/h
 
 #### Scheduled
 - Daily brief: [cron + on/off], mode now, headless
+- Tactical brief: [cron + on/off], mode tactics, headless
 ```

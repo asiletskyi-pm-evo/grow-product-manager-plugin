@@ -12,6 +12,32 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.32.0 (2026-07-03)
+
+### Added — focus-advisor 0.1.0 → 0.2.0: `tactics` mode
+
+Second horizon of the attention dispatcher (sprint – quarter), per the focus-advisor design file (phase 2):
+
+- **Tactical collectors** (`references/focus-signals.md` §6, now a full registry table): roadmap plan-vs-actual pace + per-epic stagnation (CQL by quarter label + per-key statuses), roadmap drift vs capacity ceiling, backlog staleness (ICE age from vault Hypotheses/), features missing prerequisites ahead of next 1–2 sprints (work-type DAG), A/B tests past end date without a recorded decision, capacity/availability (vacations, booking deadlines), team events (perf reviews, vacancies, onboarding).
+- **Tactical scoring** — ICE (reused from brainstorm-features) + capacity realism + goal alignment (`focus-scoring.md` §4); 3–5 candidates per brief.
+- **Tactical brief** — subtype `tactical-brief`: adds quarter position (sprints left, capacity vs plan) and a "decisions waiting on you" section.
+- **New chains:** roadmap drift → project-planning `replan`; A/B decision → product-analysis (test readout); team event → task/reminder + team-ops-reporter `member-review`.
+- **Headless** extended to `mode=tactics` (weekly tactical brief); `tactical_brief` added to the Focus scheduled config (example, schema, configurator Step 5).
+
+### Changed
+
+| File | Change | Version |
+|---|---|---|
+| `skills/focus-advisor/SKILL.md` | tactics mode: description, Modes, Steps 2/4/5, chain map, headless | 0.1.0 → 0.2.0 |
+| `references/focus-signals.md` | §6 tactical collectors registry table + scheduled config | n/a |
+| `skills/plugin-configurator/SKILL.md` | Focus setup Step 5: daily + weekly tactical scheduled briefs | 2.4.0 → 2.4.1 |
+| `skills/plugin-configurator/references/context-schema.md`, `local-context.example.md` | Focus → Scheduled: tactical brief entry | n/a |
+| both manifests, `README.md` | version sync, New in v1.32.0 | 1.32.0 |
+
+Backwards compatible: `now`/`journal`/headless behavior unchanged; `strategy` still routes to the closest chain (v1.33).
+
+---
+
 ## v1.31.0 (2026-07-03)
 
 ### Added — new skill: focus-advisor 0.1.0 (20th skill)
