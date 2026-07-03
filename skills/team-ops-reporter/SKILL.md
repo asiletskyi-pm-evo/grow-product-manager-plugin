@@ -1,6 +1,6 @@
 ---
 name: team-ops-reporter
-version: 0.2.1
+version: 0.3.0
 description: Create operational team reports from Jira — sprint plan, sprint review, quarter review, initiative status, and team-member review. Use when the user asks to "build a sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", or "report on releases / flags / story points". Українською: "зібрати звіт по спринту (план/рев'ю)", "результати кварталу", "статус епіка/фічі/місії", "скільки <людина> закрила за період", "операційний звіт команди", "звіт по релізах / флагах / стори-поінтах".
 ---
 
@@ -113,6 +113,15 @@ Ask via AskUserQuestion: **Confluence (PROM) / local files (md + xlsx) / both**.
 ### Step 7 — Feedback + self-improvement
 
 Present a short summary + links. Ask if changes are needed; iterate. If a correction reveals a pattern, follow `references/self-improvement.md` and propose a SKILL.md improvement.
+
+### Step 8 — Save to Vault (Optional)
+
+> Requires: `references/vault-protocol.md` → Vault Save
+
+IF vault_level > L0 AND vault sync_mode != "off":
+
+1. `vault_save({ type: "ops-report", product: active_product, skill: "team-ops-reporter", skill_version: "0.3.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+2. Display: "Saved to Vault: Reports/ops/{product}/…"
 
 ## Quality standards
 

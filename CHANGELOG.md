@@ -12,6 +12,39 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.29.0 (2026-07-03)
+
+### Added — Step V (Save to Vault) in the 11 skills that never wrote to the vault
+
+Closes the biggest gap from the 2026-07-02 audit (section 3.2): only 7 of 18 skills honored architecture principle #5 (vault mirror). Meeting MoMs, requirements, hypotheses, research, diagrams, task breakdowns, ops reports, and roadmaps now accumulate in the Obsidian knowledge graph with wikilinks. Vault remains optional — at L0 every new step skips silently (`IF vault_level > L0 AND sync_mode != "off"`), exactly per `references/vault-protocol.md` → Vault Save.
+
+| Skill | New step | Vault type → folder | Version |
+|---|---|---|---|
+| requirements-creator | Step 9 (+ A-mode note) | `requirements` → Requirements/ | 0.7.0 → 0.8.0 |
+| meeting-processor | M10 | `meeting-notes` → Meetings/ (+ optional `decision`) | 0.11.0 → 0.12.0 |
+| brainstorm-features | Step 9 | `hypothesis` → Hypotheses/ (one per finalized hypothesis) | 0.7.1 → 0.8.0 |
+| product-research | Step 7 | `competitive-analysis` / `market-research` / `ux-benchmark` → Research/ | 0.9.0 → 0.10.0 |
+| diagram-prototyper | Step 10 | `diagram` → Diagrams/ **(new type)** | 0.8.1 → 0.9.0 |
+| task-creator | Step 14 | `task-breakdown` → Projects/task-breakdowns/ **(new type)** | 0.8.0 → 0.9.0 |
+| team-ops-reporter | Step 8 | `ops-report` → Reports/ops/ **(new type)** | 0.2.1 → 0.3.0 |
+| sprint-planning | Step 9 | `roadmap` (subtype sprint-plan) → Roadmaps/ **(new type)** | 0.1.2 → 0.2.0 |
+| quarterly-planning | Step 7 | `roadmap` (subtype quarterly/retro) → Roadmaps/ | 0.1.2 → 0.2.0 |
+| project-planning | Step 7 | `roadmap` (subtype project-arc; baseline for `replan` drift) → Roadmaps/ | 0.1.2 → 0.2.0 |
+| roadmap-architect | Step 6 | `roadmap` (subtype structure-tree) → Roadmaps/ | 0.1.2 → 0.2.0 |
+
+### Changed — vault-schema.md: Type Taxonomy 16 → 20 types
+
+New rows: `diagram` (Diagrams/), `task-breakdown` (Projects/task-breakdowns/), `ops-report` (Reports/ops/), `roadmap` (Roadmaps/, subtype in frontmatter).
+
+### Files
+
+11 × `skills/*/SKILL.md` (versions above), `references/vault-schema.md`, both manifests → 1.29.0, `README.md` (headers, Skills Summary, "New in v1.29.0").
+
+### Backwards compatibility
+New optional steps only; every one is a no-op at vault L0. No workflow change for users without a vault. Safe for Claude.
+
+---
+
 ## v1.28.0 (2026-07-03)
 
 ### Added — release-manager skill (v0.1.0)

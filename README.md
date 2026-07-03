@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.28.0
+**Version:** 1.29.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.29.0** — **Vault coverage complete**: a standard "Save to Vault" step added to the 11 skills that previously never wrote to the Obsidian knowledge graph (requirements-creator, meeting-processor, brainstorm-features, product-research, diagram-prototyper, task-creator, team-ops-reporter, and the 4 Planning Suite skills). Meeting MoMs, requirements, hypotheses, research, diagrams, task breakdowns, ops reports, and roadmaps now accumulate in the vault with wikilinks. Vault schema extended with 4 new artifact types: `diagram`, `task-breakdown`, `ops-report`, `roadmap` (20 types total). Vault stays optional — L0 setups are unaffected.
 
 **New in v1.28.0** — **Release Manager** skill: one guided pipeline to release the plugin itself — version bump across all 4 mandatory places, CHANGELOG entry, README sync, local validation, gated commit/PR/merge, GitHub Release with tag, mirror sync, and post-release verification. Ships with `references/release-pitfalls.md` — nine real failure modes (iCloud-evicted git objects, stale locks, token scopes, VPN-only mirrors, protected-branch divergence, CDN cache…) with guards and recovery recipes.
 
@@ -62,7 +64,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 3. Product Research (v0.9.0)
+### 3. Product Research (v0.10.0)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -76,7 +78,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 4. Brainstorm Features (v0.7.1)
+### 4. Brainstorm Features (v0.8.0)
 
 **Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation.
 
@@ -100,7 +102,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 6. Requirements Creator (v0.7.0)
+### 6. Requirements Creator (v0.8.0)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -114,7 +116,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 7. Task Creator (v0.8.0)
+### 7. Task Creator (v0.9.0)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -128,7 +130,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 8. Diagram & Prototype Creator (v0.8.1)
+### 8. Diagram & Prototype Creator (v0.9.0)
 
 **Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
 
@@ -159,7 +161,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 9. Meeting Processor (v0.11.0)
+### 9. Meeting Processor (v0.12.0)
 
 **Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
 
@@ -275,7 +277,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 14. Team Ops Reporter (v0.2.1)
+### 14. Team Ops Reporter (v0.3.0)
 
 **Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
 
@@ -292,7 +294,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 15. Roadmap Architect (v0.1.2) — Planning Suite
+### 15. Roadmap Architect (v0.2.0) — Planning Suite
 
 **Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree.
 
@@ -302,7 +304,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 16. Project Planning (v0.1.2) — Planning Suite
+### 16. Project Planning (v0.2.0) — Planning Suite
 
 **Description:** Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph with critical path, computes duration under a given team allocation %, and lays out a multi-quarter roadmap with rolling-reforecast.
 
@@ -312,7 +314,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 17. Quarterly Planning (v0.1.2) — Planning Suite
+### 17. Quarterly Planning (v0.2.0) — Planning Suite
 
 **Description:** Builds a quarterly roadmap, reviews the previous quarter's delivery (plan-vs-actual), and stress-tests the plan against team capacity.
 
@@ -322,7 +324,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 18. Sprint Planning (v0.1.2) — Planning Suite
+### 18. Sprint Planning (v0.2.0) — Planning Suite
 
 **Description:** Sprint pre-planning: derives focuses from the quarterly roadmap, highlights what's READY to pull (dependencies cleared), catches work-sequence violations, gathers per-member capacity, analyzes carryover risk, suggests assignees, and fills the sprint to capacity.
 
@@ -354,22 +356,22 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 |-------|---------|-------------|
 | CJM Research | v0.5.1 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.11.1 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.9.0 | Competitive analysis, user research, market trends, UX benchmarking |
-| Brainstorm Features | v0.7.1 | Interactive feature ideation with ICE scoring |
+| Product Research | v0.10.0 | Competitive analysis, user research, market trends, UX benchmarking |
+| Brainstorm Features | v0.8.0 | Interactive feature ideation with ICE scoring |
 | Write Concept | v0.7.0 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.7.0 | Create and analyze feature requirements |
-| Task Creator | v0.8.0 | Create Jira tasks from requirements |
-| Diagram & Prototype Creator | v0.8.1 | Visualize concepts with diagrams, prototypes, infographics |
-| Meeting Processor | v0.11.0 | Process meetings and extract action items |
+| Requirements Creator | v0.8.0 | Create and analyze feature requirements |
+| Task Creator | v0.9.0 | Create Jira tasks from requirements |
+| Diagram & Prototype Creator | v0.9.0 | Visualize concepts with diagrams, prototypes, infographics |
+| Meeting Processor | v0.12.0 | Process meetings and extract action items |
 | Plugin Configurator | v2.3.1 | Configure plugin for your organization |
 | Knowledge Library | v0.5.0 | Manage curated knowledge sources |
 | Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.2.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
-| Team Ops Reporter | v0.2.1 | Operational team reports from Jira: sprint plan/review, quarter review, initiative status, member review |
-| Roadmap Architect | v0.1.2 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
-| Project Planning | v0.1.2 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
-| Quarterly Planning | v0.1.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
-| Sprint Planning | v0.1.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
+| Team Ops Reporter | v0.3.0 | Operational team reports from Jira: sprint plan/review, quarter review, initiative status, member review |
+| Roadmap Architect | v0.2.0 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
+| Project Planning | v0.2.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
+| Quarterly Planning | v0.2.0 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
+| Sprint Planning | v0.2.0 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.1.0 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 
 ---
@@ -631,5 +633,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.28.0  
+**Version:** 1.29.0  
 **Last Updated:** July 2026
