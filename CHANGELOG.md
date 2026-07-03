@@ -12,6 +12,36 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.31.0 (2026-07-03)
+
+### Added — new skill: focus-advisor 0.1.0 (20th skill)
+
+PM attention dispatcher — the 4th height of the suite, above structure/quarter/sprint. Collects context signals, ranks them, recommends 1–3 focuses, and chains execution to the right skill; the PM decides. Design file: workspace `skill-design — focus-advisor.md` (decisions fixed 2026-07-03).
+
+**v0.1 scope (MVP):** mode `now` (daily/weekly focus) + `journal` + `auto`, headless contract for scheduled morning briefs (no side-effect actions, mandatory file output). Modes `tactics`/`strategy` — declared, respond with the closest chain until v1.32/v1.33.
+
+**Mechanics:** deterministic ritual cadence ("2nd Monday of the sprint → pre-planning"), mail collector with two-stage "live letters" filter (7-day window, automation never becomes a signal, 24h/48h thresholds, VIP list), meeting-prep detector (analytical slice / deck / talking-points chains), optional metrics health-check chain to product-analysis / cjm-research with source-freshness guard, journal dedup with snooze, mandatory persistence to `~/.grow-pm/focus/` + Vault mirror.
+
+### Added — shared references (root)
+
+| File | Purpose |
+|---|---|
+| `references/focus-cadence.md` | Cycle position math + default ritual table + overrides + resolution |
+| `references/focus-signals.md` | Signal registry per horizon, packet format, cache TTL, mail/calendar detectors, Focus config format |
+| `references/focus-scoring.md` | Ranking (urgency+impact+unblock), journal dedup, honesty rules; tactics/strategy scoring stubs |
+
+### Changed — integrations
+
+| File | Change | Version |
+|---|---|---|
+| `references/vault-schema.md` | +`focus-brief` type (21st): taxonomy row, extended frontmatter, folder `Focus/`; TYPE_FOLDER_MAP backfilled with v1.29 types (diagram, task-breakdown, ops-report, roadmap); stale counts fixed (16/20 → 21) | n/a |
+| `skills/plugin-configurator/SKILL.md` | new Step — Focus setup (Extended): sources, VIP senders (prefill from stakeholders), PM goals (prefill from OKRs/missions), cadence overrides, scheduled brief | 2.3.1 → 2.4.0 |
+| `skills/plugin-configurator/references/context-schema.md` | Focus Configuration section format + Focus Advisor row in "Which Skills Read What" | n/a |
+| `testing/trigger-evals.md` | Group G — attention vs execution (10 phrases: focus-advisor vs sprint-planning vs cjm-research) | n/a |
+| both manifests, `README.md` | version sync, skill #20 section + summary row | 1.31.0 |
+
+---
+
 ## v1.30.0 (2026-07-03)
 
 ### Changed — roadmap-trio disambiguation (audit 3.4, remaining group)

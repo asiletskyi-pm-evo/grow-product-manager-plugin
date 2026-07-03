@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.3.1
+version: 2.4.0
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist. Українською: "налаштувати плагін", "сетап плагіна", "налаштувати контекст", "додати продукт", "оновити конфігурацію", "перевірити налаштування", "показати конфіг".
 ---
 
@@ -1329,3 +1329,17 @@ Collected via `AskUserQuestion`/dialog:
 Offer to save everything into local-context (`planning` section). All planning skills read this; `update config` updates it.
 
 Existence check: if `planning.development_flow` already exists → do not re-ask, only offer review/update.
+
+## Step — Focus setup (Extended)
+
+Configures `focus-advisor`. Writes the `Focus` section into local-context (format — `references/context-schema.md` → Focus Configuration; semantics — `references/focus-signals.md` §8). Mode-gate: Extended; in Basic — add the key to `onboarding.deferred_steps`. Requires the Planning section (sprint anchor/cadence) — if missing, run Planning setup first.
+
+Collected via `AskUserQuestion`/dialog:
+
+1. **Sources** — which collectors are on (mail / calendar / Jira; release flags off by default); mail window (default 7 days) and no-reply thresholds (default 24h VIP / 48h others).
+2. **VIP senders** — prefill from existing stakeholders/team in local-context; if none — ask for names+emails. Explain: VIP raises mail-signal ranking, it does not filter others out.
+3. **PM goals** — prefill from local-context (OKRs, mission commitments); if none — ask for 1–3 goals with wording the PM uses. These act as permanent scoring weights (`focus-scoring.md`).
+4. **Cadence overrides** — show the default ritual table (`focus-cadence.md` §2), ask what differs for this PM/team.
+5. **Scheduled brief** — offer creating a daily headless brief task (via the platform's scheduled-tasks/`schedule` skill): time, working days only; `healthcheck: off` by default.
+
+Existence check: if the `Focus` section already exists → do not re-ask, only offer review/update via `update config`.
