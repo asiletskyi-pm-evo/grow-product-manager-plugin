@@ -12,6 +12,31 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.35.0 (2026-07-03)
+
+### Changed — monolith refactor complete (2–4/4): product-analysis, cjm-research, knowledge-library
+
+Closes audit section 3.1. Same recipe as v1.34.0: full read → sed extraction by line ranges (zero loss) → anchor verification → thin core. **No logic change** — all content relocated verbatim; cross-mode guards (Data Integrity Gate, Vault Mirror Sync, service contracts) stay in the cores.
+
+| Skill | Core | New skill-local references | Version |
+|---|---|---|---|
+| product-analysis | 968 → 364 | `analysis-engine.md` (261: data acquisition 1e + Steps 2–6), `specialized-modes.md` (361: CJM / Post-Release / A/B modes) | 0.11.1 → 0.12.0 |
+| cjm-research | 788 → 393 | `cjm-pipeline.md` (234: Steps 4–11), `cjm-reports.md` (181: per-mode formats + publishing + automated health-check) | 0.5.1 → 0.6.0 |
+| knowledge-library | 751 → 252 | `library-workflows.md` (354: eight mode workflows), `trust-and-categories.md` (162: trust formula + taxonomy + KL onboarding) | 0.5.0 → 0.6.0 |
+
+Kept in cores by design: product-analysis Step 1.5 Data Integrity Gate + Vault Save + return-payload contract; cjm-research Steps 1–3.5 (init, scope, data load, gate) + Step 12 + chaining; knowledge-library storage model + mode map + cross-skill service contract + Vault Mirror Sync.
+
+Audit KPI closed: the top-4 monoliths were 3 838 lines (47 % of the plugin); cores now total ~1 188 — **-69 %** in always-loaded context, with per-mode references loaded on demand.
+
+### Files
+
+3 × SKILL.md (versions above), 6 new skill-local reference files, both manifests → 1.35.0, README (headers, Skills Summary, "New in v1.35.0").
+
+### Backwards compatibility
+Content relocation only; every mode reads the same instructions from a new location. Trigger descriptions untouched — the v1.34.0 evals baseline holds. Safe for Claude.
+
+---
+
 ## v1.34.0 (2026-07-03)
 
 ### Changed — plugin-configurator refactor (monolith 1/4): 1345 → ~180-line core
