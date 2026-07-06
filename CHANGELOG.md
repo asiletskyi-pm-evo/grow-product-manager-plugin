@@ -12,6 +12,29 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.36.0 (2026-07-04)
+
+### Added — wave 3 kickoff: three lifecycle skills (21 → 23 skills)
+
+All three ship thin-core from day one (planning-suite pattern, 110–170 lines each, no skill-local references needed yet).
+
+**`experiment-tracker` 0.1.0** — closes the audit's "pipeline drops after the A/B spec" gap. Persistent registry `~/.grow-pm/experiments/registry.yaml` (+ vault mirror `_System/experiments-registry.yaml`) with lifecycle `proposed → specced → running → awaiting-readout → decided`; 6 modes (status board / register / start / readout / decide / stale); stale detection (overdue runs, pending readouts > 3d, idle high-ICE hypotheses > 30d, unscheduled extensions); weekly headless stale-check via `schedule`. Guardrails: verdicts only via product-analysis A/B mode (Data Integrity Gate included); decisions recorded via decision-log; every transition dated and gated.
+
+**`decision-log` 0.1.0** — ADR-style records in vault `Decisions/` (existing `decision` type; L0 fallback `~/.grow-pm/decisions/`): context, ≥2 options considered, decision, rationale with evidence links, consequences. Modes: log (default, also chained from meeting-processor M10 / experiment-tracker decide / planning retro-replan), search ("чому ми вирішили X" — Rationale is the answer), revisit (supersede-flow: history marked, never rewritten).
+
+**`feedback-triage` 0.1.0** — feedback stream → ranked pain map: multi-source intake (files / GDrive / Confluence / pasted, subagent fan-out returning normalized rows), Python normalize with coverage gate (data-integrity applies to trend claims), semantic clustering (language-agnostic, `other` bucket < 15%), `pain_score = frequency × severity × trend`, new/growing/declining themes vs the previous run's vault baseline, hypothesis seeds → brainstorm-features. PII masked; feedback text never leaves the session.
+
+### Changed
+
+- `references/vault-schema.md`: Type Taxonomy 21 → 22 (`feedback-triage` → Research/feedback/) + extended frontmatter block.
+- `testing/trigger-evals.md`: Group H (14 phrases — lifecycle trio vs product-analysis / requirements-creator / meeting-processor / product-research / knowledge-library / brainstorm-features).
+- README: sections 21–23, Skills Summary 23 rows, "New in v1.36.0"; both manifests → 1.36.0.
+
+### Backwards compatibility
+Additive only — three new skills, no changes to existing skill logic. Safe for Claude.
+
+---
+
 ## v1.35.0 (2026-07-03)
 
 ### Changed — monolith refactor complete (2–4/4): product-analysis, cjm-research, knowledge-library

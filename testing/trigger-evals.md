@@ -93,11 +93,31 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 | G9 | що робити з продуктом далі, де великі можливості | focus-advisor (strategy route) |
 | G10 | зроби health-check воронки з гіпотезами | cjm-research |
 
+### Group H — Lifecycle trio (experiment-tracker / decision-log / feedback-triage vs neighbors)
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| H1 | які A/B-тести зараз біжать і що з ними | experiment-tracker |
+| H2 | зафіксуй запуск тесту бейджів: фліг BADGES_AB, 50/50 | experiment-tracker |
+| H3 | проаналізуй результати A/B-тесту бейджів | product-analysis |
+| H4 | нагадай, які тести завислі без рішення | experiment-tracker |
+| H5 | напиши вимоги до A/B-тесту нового фільтра | requirements-creator |
+| H6 | зафіксуй рішення: розкочуємо бейджі на 100% | decision-log |
+| H7 | чому ми відмовились від кастомних шаблонів торік | decision-log |
+| H8 | підсумуй зустріч і витягни action items | meeting-processor |
+| H9 | розбери скарги продавців за червень — що болить найбільше | feedback-triage |
+| H10 | кластеризуй ці support-тікети по темах | feedback-triage |
+| H11 | синтезуй ці 12 інтервʼю з користувачами | product-research |
+| H12 | збережи цю статтю про churn у бібліотеку | knowledge-library |
+| H13 | згенеруй гіпотези з топ-болей фідбеку | brainstorm-features |
+| H14 | тренд тем скарг цього кварталу проти минулого | feedback-triage |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
 |------|--------|------------------|-------------------|
 | 2026-07-03 | 2 independent agent runs (descriptions-only simulation), plugin v1.33.0 | A 100 / B 100 / C 100 / D 100 / E 100 / F 100 / G 95→100 | G8: both runs picked product-analysis over cjm-research — eval label was wrong (data-only phrase), fixed the expected column, no description change. 46/46 primary agreement between runs. Baseline recorded before the monolith refactor (v1.34.x). |
+| 2026-07-04 | 2 independent agent runs, pre-release v1.36.0 | H 100 (14/14 both runs) | New lifecycle trio routes cleanly vs neighbors (H3→product-analysis, H5→requirements-creator, H11→product-research as expected). No description changes needed. |
 | (fill after each run) | | | |
 
 ## Maintenance
