@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.34.0
+**Version:** 1.35.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.35.0** — **Monolith refactor complete (2–4/4)**: the three remaining oversized skills slimmed to on-demand cores — `product-analysis` 968 → ~365 lines (analysis engine and the three specialized modes moved to `analysis-engine.md` / `specialized-modes.md`; the Data Integrity Gate stays in the core), `cjm-research` 788 → ~395 (research pipeline Steps 4–11 → `cjm-pipeline.md`; per-mode report formats, publishing, and the automated health-check → `cjm-reports.md`), `knowledge-library` 751 → ~250 (eight mode workflows → `library-workflows.md`; trust scoring, categories, and KL onboarding → `trust-and-categories.md`). All content preserved verbatim; every skill now loads its core plus exactly one reference per mode.
 
 **New in v1.34.0** — **Monolith refactor 1/4: plugin-configurator** slimmed from 1345 to ~180 lines following the planning-suite pattern: the core keeps the mode map, entry conditions, and cross-skill protocols; detailed workflows moved to skill-local references (`onboarding-steps.md` — Steps 1–17 + Planning/Focus setup; `maintenance-modes.md` — RM/Update/Validate/View + Versioning Protocol) loaded on demand. All content preserved verbatim; Planning/Focus setup steps integrated into the onboarding flow (previously dangled after the resources section); a leftover editorial artifact removed. Trigger-evals baseline recorded (A–F 100%, G 95→100 after one label fix).
 
@@ -40,7 +42,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.5.1)
+### 1. CJM Research (v0.6.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -59,7 +61,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 2. Product Analysis (v0.11.1)
+### 2. Product Analysis (v0.12.0)
 
 **Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
 
@@ -223,7 +225,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 11. Knowledge Library (v0.5.0)
+### 11. Knowledge Library (v0.6.0)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
@@ -376,8 +378,8 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.5.1 | Customer Journey Map analysis and hypothesis validation |
-| Product Analysis | v0.11.1 | Analyze metrics, dashboards, and A/B test results |
+| CJM Research | v0.6.0 | Customer Journey Map analysis and hypothesis validation |
+| Product Analysis | v0.12.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.10.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.8.0 | Interactive feature ideation with ICE scoring |
 | Write Concept | v0.7.0 | Write product concept documents (PRDs) |
@@ -386,7 +388,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Diagram & Prototype Creator | v0.9.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Meeting Processor | v0.12.0 | Process meetings and extract action items |
 | Plugin Configurator | v2.5.0 | Configure plugin for your organization |
-| Knowledge Library | v0.5.0 | Manage curated knowledge sources |
+| Knowledge Library | v0.6.0 | Manage curated knowledge sources |
 | Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.2.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Team Ops Reporter | v0.3.0 | Operational team reports from Jira: sprint plan/review, quarter review, initiative status, member review |
@@ -656,5 +658,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.34.0  
+**Version:** 1.35.0  
 **Last Updated:** July 2026
