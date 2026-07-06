@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.35.0
+**Version:** 1.36.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.36.0** — **Wave 3 kickoff: three lifecycle skills (23 total)**. `experiment-tracker` closes the loop after the A/B spec — a persistent experiment registry with lifecycle states, stale-test reminders, readouts via product-analysis, and decisions recorded via the new `decision-log` (ADR-style records in vault Decisions/ that finally answer "чому ми вирішили X?"). `feedback-triage` turns raw support-ticket/review streams into a ranked pain map (semantic clustering, frequency × severity × trend vs the previous run's baseline) chaining straight into brainstorm-features. Vault taxonomy grows to 22 types (`feedback-triage`); trigger-evals gain Group H (14 phrases, lifecycle trio vs neighbors).
 
 **New in v1.35.0** — **Monolith refactor complete (2–4/4)**: the three remaining oversized skills slimmed to on-demand cores — `product-analysis` 968 → ~365 lines (analysis engine and the three specialized modes moved to `analysis-engine.md` / `specialized-modes.md`; the Data Integrity Gate stays in the core), `cjm-research` 788 → ~395 (research pipeline Steps 4–11 → `cjm-pipeline.md`; per-mode report formats, publishing, and the automated health-check → `cjm-reports.md`), `knowledge-library` 751 → ~250 (eight mode workflows → `library-workflows.md`; trust scoring, categories, and KL onboarding → `trust-and-categories.md`). All content preserved verbatim; every skill now loads its core plus exactly one reference per mode.
 
@@ -374,6 +376,36 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
+### 21. Experiment Tracker (v0.1.0) — NEW in v1.36.0
+
+**Description:** Owns the experiment lifecycle the pipeline used to drop after the A/B spec: `proposed → specced → running → awaiting-readout → decided`, with a persistent registry (`~/.grow-pm/experiments/registry.yaml` + vault mirror) and stale-test reminders (overdue runs, pending readouts, idle high-ICE hypotheses).
+
+**Modes:** status (board by lifecycle state) / register / start (flag, platforms, split, dates) / readout (chains product-analysis A/B mode — verdicts only come from there) / decide (chains decision-log) / stale (also the weekly headless payload).
+
+**Trigger phrases:** "які тести зараз біжать", "зафіксуй запуск тесту", "які тести чекають рішення", "нагадай про завислі тести", "experiment status"
+
+---
+
+### 22. Decision Log (v0.1.0) — NEW in v1.36.0
+
+**Description:** ADR-style records of key product decisions in the vault `Decisions/` area — context, options considered, decision, rationale, consequences, evidence links. Answers "чому ми вирішили X?" from the accumulated log; supersede-flow preserves history.
+
+**Modes:** log (default; also invoked by meeting-processor, experiment-tracker, planning skills) / search / revisit.
+
+**Trigger phrases:** "зафіксуй рішення", "чому ми вирішили…", "покажи рішення по…", "журнал рішень", "log this decision"
+
+---
+
+### 23. Feedback Triage (v0.1.0) — NEW in v1.36.0
+
+**Description:** Turns a raw feedback stream (support tickets, complaints, reviews, Q&A, NPS verbatims) into a ranked pain map: semantic theme clustering, `frequency × severity × trend` scoring, new/growing/declining theme detection against the previous run's baseline, and hypothesis seeds for brainstorm-features. Feedback text never leaves the session; PII is masked in verbatims.
+
+**Pipeline:** intake (files / GDrive / Confluence / pasted, subagent fan-out) → Python normalize + coverage gate → cluster → score → report (Step T template) → chains → vault save (`feedback-triage` type, 22nd — the baseline for next run's trends).
+
+**Trigger phrases:** "розбери відгуки/скарги", "тріаж фідбеку", "що болить покупцям/продавцям", "кластеризуй support-тікети", "топ проблем за місяць"
+
+---
+
 ## Skills Summary
 
 | Skill | Version | Description |
@@ -398,6 +430,9 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Sprint Planning | v0.2.0 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.1.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 | Focus Advisor | v0.3.0 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
+| Experiment Tracker | v0.1.0 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
+| Decision Log | v0.1.0 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
+| Feedback Triage | v0.1.0 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds |
 
 ---
 
@@ -658,5 +693,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.35.0  
+**Version:** 1.36.0  
 **Last Updated:** July 2026

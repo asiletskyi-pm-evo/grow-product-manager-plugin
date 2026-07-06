@@ -232,6 +232,21 @@ focuses_chosen: int (0 until the PM reacts; updated from journal)
 signals_sources: string[] (mail, calendar, meetings, jira, cadence, metrics)
 ```
 
+
+#### feedback-triage
+
+Artifact type for clustered feedback triage runs produced by `feedback-triage`.
+
+```yaml
+period: string (e.g., "2026-06" or "2026-06-01 to 2026-06-30")
+segment: string (buyers|sellers|both)
+sources_count: int (number of intake sources)
+items_total: int (feedback items received)
+items_usable: int (after dedupe/cleaning)
+top_pain_score: float (pain score of the #1 theme)
+baseline_ref: string (wikilink to the previous triage of the same segment, if any)
+```
+
 #### project-overview
 
 Artifact type for project descriptions and tracking.
@@ -247,7 +262,7 @@ target_date: date (project completion target, YYYY-MM-DD)
 
 ## Type Taxonomy
 
-The Grow Product Manager Plugin defines 21 artifact types, each with a specific purpose, source skill, and folder location.
+The Grow Product Manager Plugin defines 22 artifact types, each with a specific purpose, source skill, and folder location.
 
 | Type | Skill Source | Folder | Description |
 |------|--------------|--------|-------------|
@@ -272,6 +287,7 @@ The Grow Product Manager Plugin defines 21 artifact types, each with a specific 
 | ops-report | team-ops-reporter | Reports/ops/ | Sprint/quarter/initiative/member operational report |
 | roadmap | planning suite (sprint-/quarterly-/project-planning, roadmap-architect) | Roadmaps/ | Sprint plan, quarterly roadmap, project arc, or structure tree (subtype in frontmatter) |
 | focus-brief | focus-advisor | Focus/ | PM focus brief (daily/tactical/strategy — subtype in frontmatter) with chosen focuses and chains |
+| feedback-triage | feedback-triage | Research/feedback/ | Clustered feedback themes with pain scores and trends (baseline for next run) |
 
 ### TYPE_FOLDER_MAP Reference
 
