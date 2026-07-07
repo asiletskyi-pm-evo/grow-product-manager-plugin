@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.7.0
+version: 0.8.0
 description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document. Українською: "написати концепт", "створити PRD", "описати фічу", "написати специфікацію", "оформити ідею в документ".
 ---
 
@@ -190,6 +190,8 @@ If the context does not make it clear which users are affected — ask separatel
 
 Build the concept document following the confirmed structure from Step 1:
 
+> For a worked, high-quality reference of the target shape and depth, load `references/examples/prd-example-v1.md` on demand. It is a generic exemplar (few-shot), not a rigid template — match its rigor (measurable Success Metrics, a Verification/decision-rule block, explicit assumptions), not its exact wording.
+
 **Adaptive sections** — adjust depth based on feature type:
 - **Frontend/product feature** → expand Design & UX, minimize Technical Considerations
 - **Backend/infrastructure** → expand Technical Considerations, minimize or skip Design & UX
@@ -279,7 +281,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.7.0",
+     skill_version: "0.8.0",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],
@@ -331,6 +333,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 - **`references/vault-protocol.md`** — vault context search and save protocols
 - **`references/vault-schema.md`** — vault artifact schema and metadata structure
 - **`references/prd-structure.md`** — detailed templates for each PRD block
+- **`references/examples/prd-example-v1.md`** — worked golden PRD exemplar (few-shot; load on demand in Step 4)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
