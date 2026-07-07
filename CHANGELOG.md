@@ -12,6 +12,33 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.39.0 (2026-07-07)
+
+### Added — harness engineering, wave 3: output evals (point 1)
+
+The plugin could already verify *which* skill fires (`trigger-evals` = trajectory); it now verifies *how good the produced artifact is* (output eval). Following the whitepaper's split of output vs trajectory evaluation and "set the bar at the eval, not the demo."
+
+- **`testing/output-evals.md`** (new) — artifact-quality test set: the trajectory/output split, an LM-judge method (weighted 0/1/2 per criterion, pass ≥ threshold, scored against the skill's golden exemplar), how-to-run, and rubrics. Full rubrics for `write-concept`, `requirements-creator`, `cjm-research` (data-integrity bar 0.85); lighter rubrics for `product-analysis`, `brainstorm-features`, `meeting-processor`, `task-creator`.
+- **`testing/fixtures/`** (new) — runnable input briefs for the three exemplar skills (`write-concept`, `requirements-creator`, `cjm-research`), paired with the v1.37 golden exemplars as gold references. One shared "recently viewed / save-for-later" thread; the cjm-research fixture embeds an incomplete-period integrity trap.
+
+### Changed
+
+- **`testing/Testing-process.md`** — stage 3 split into **3a Trajectory / scenario walk** and **3b Output eval** (blocker for any changed artifact-producing skill); intro test definition updated. Output-eval ≥ threshold is now part of the DoD for releases touching artifact skills, the way trigger-evals gate description releases.
+
+### Files
+
+| File | Change |
+|------|--------|
+| testing/output-evals.md | new — rubrics + method + coverage map |
+| testing/fixtures/{write-concept,requirements-creator,cjm-research}/brief-v1.md | new — output-eval input briefs |
+| testing/Testing-process.md | stage 3a/3b split + DoD |
+
+### Backwards compatibility
+
+Fully backwards compatible. Testing infrastructure only — no runtime skill behaviour changes. No breaking changes.
+
+---
+
 ## v1.38.0 (2026-07-07)
 
 ### Added — harness engineering, wave 2: artifacts carry their verification (point 4)
