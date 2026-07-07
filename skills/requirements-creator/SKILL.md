@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.9.0
+version: 0.10.0
 description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one. Українською: "написати вимоги", "описати фічу", "створити специфікацію фічі", "вимоги до A/B-тесту", "переглянути вимоги", "проаналізувати вимоги", "покращити вимоги", "перевірити мою специфікацію".
 ---
 
@@ -207,6 +207,7 @@ Generate the full requirements document following the confirmed template structu
 | 5.3 | Technical requirements | Implementation approach, platforms, locales |
 | 5.4 | UI&UX requirements | **Empty section** — to be filled by Product Designer. If Figma links to current designs were found — include them as reference |
 | 5.5 | Analytics coverage requirements | **Empty section** — to be filled by Product Analyst |
+| Acceptance Criteria | Given/When/Then table (AC-N): testable, binary pass/fail conditions covering main flows + edge/error states. The contract QA and analytics verify against |
 | Tasks | Link to Epic in Jira + Jira work items macro with JQL filter (parent = EPIC-KEY AND labels = FEATURE-CODE) |
 
 > **Note:** Use the user's preferred language (`user.language`) for all section headings and content in the published document.
@@ -220,6 +221,7 @@ If A/B Test or A/B/C Test approach is selected — automatically add these secti
 | Test groups | Description of each group: control (current behavior), test A (new behavior), test B (alternative — for A/B/C) |
 | Traffic split | Percentage split between groups (e.g., 50/50, 33/33/34) |
 | Success criteria | What metrics and thresholds determine if the test is successful |
+| Decision rule | Explicit ship / iterate / kill table tied to the success thresholds, stated **before** launch so the readout is a lookup, not a debate |
 | Expected duration | Estimated test duration and minimum sample size considerations |
 
 **Formatting — mandatory for every document:**
@@ -364,7 +366,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.9.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.10.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 

@@ -12,6 +12,33 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.38.0 (2026-07-07)
+
+### Added — harness engineering, wave 2: artifacts carry their verification (point 4)
+
+Verification is now baked into the spec/PRD, not bolted on afterward — following the whitepaper's "verification moves to the middle of the lifecycle" and "write the tests and evals before generating the code."
+
+- **`requirements-creator` — Acceptance Criteria section** (`references/requirements-template.md`): a Given/When/Then table (AC-N) of testable, binary pass/fail conditions covering main flows + edge/error states — the contract QA and analytics verify against; also seeds Analytics Coverage and Test tasks.
+- **`requirements-creator` — Decision Rule** for A/B tests: explicit ship / iterate / kill table tied to the success thresholds, stated before launch so the readout is a lookup, not a debate.
+- **`write-concept` — Verification & decision rule** block added to Success Metrics (`references/prd-structure.md`): how each metric is verified (eval/dashboard/test), a Definition of Done checklist, and an experiment decision rule. Acceptance criteria in User Stories upgraded from a flat checklist to a Given/When/Then table.
+
+### Changed
+
+- `requirements-creator` SKILL.md — Step 4 section tables gain the Acceptance Criteria and Decision rule rows (kept in sync with the template).
+
+### Files
+
+| File | From | To | Change |
+|------|------|----|--------|
+| skills/requirements-creator/SKILL.md + requirements-template.md | 0.9.0 | 0.10.0 | minor — Acceptance Criteria section + A/B Decision Rule |
+| skills/write-concept/SKILL.md + prd-structure.md | 0.8.0 | 0.9.0 | minor — Verification & decision rule block + Given/When/Then acceptance |
+
+### Backwards compatibility
+
+Fully backwards compatible. New/enhanced template sections are additive; existing documents and workflows are unaffected. No breaking changes.
+
+---
+
 ## v1.37.0 (2026-07-07)
 
 ### Added — harness engineering, wave 1 (from Google/Kaggle "The New SDLC With Vibe Coding")

@@ -66,6 +66,16 @@ Describe hypotheses: preconditions/problem, what we want to change, what we want
 
 **Instructions:** Define primary metric (what determines success), guard rail metrics (what must not degrade), and minimum detectable effect size.
 
+#### Decision Rule
+
+| Outcome | Condition | Action |
+|---------|-----------|--------|
+| **Ship** | Primary metric hits threshold at significance AND no guardrail regression | Promote test group to 100% |
+| **Iterate** | Primary metric neutral / inconclusive, no guardrail harm | Refine and re-run, or extend for sample size |
+| **Kill** | Guardrail metric regresses beyond tolerance OR primary metric negative | Roll back, keep control |
+
+**Instructions:** State the ship / iterate / kill rule explicitly **before** launch, so the readout is a lookup, not a debate. Tie thresholds to the Success Criteria above and the significance level.
+
 #### Expected Duration
 
 - Estimated duration: X weeks
@@ -164,6 +174,21 @@ If Figma links to current (pre-change) designs were found during context gatheri
 Product Analysts add:
 - Analytics event requirements per platform
 - Tracking specifications
+
+---
+
+### Acceptance Criteria
+
+Testable conditions the implementation must satisfy for the feature to be considered done and correct — written so QA and analytics can verify them without guessing.
+
+**Format — Given / When / Then table:**
+
+| # | Given / When / Then |
+|---|---------------------|
+| AC-1 | GIVEN [context/state], WHEN [action], THEN [observable, checkable result] |
+| AC-2 | ... |
+
+**Instructions:** Cover the main flows AND the key edge cases and error states. Each criterion must be observable and binary (pass/fail) — avoid vague wording like "works well". These criteria are the contract with the developer/AI and the checklist QA verifies against; they also seed the Analytics Coverage and Test tasks. For A/B tests, acceptance criteria verify the mechanics work; the **Decision Rule** (above) decides whether the change ships.
 
 ---
 

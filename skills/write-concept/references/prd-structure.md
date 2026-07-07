@@ -65,8 +65,12 @@ Detailed templates for each standard block. Use these as the foundation for Conf
 - **Edge case 2**: [description] → expected behavior: [what should happen]
 
 ### Acceptance criteria
-- [ ] [Criterion 1]
-- [ ] [Criterion 2]
+Testable, binary (pass/fail) conditions — cover main flows and key edge cases.
+
+| # | Given / When / Then |
+|---|---------------------|
+| AC-1 | GIVEN [context/state], WHEN [action], THEN [observable, checkable result] |
+| AC-2 | ... |
 ```
 
 ---
@@ -251,6 +255,11 @@ Include only if confirmed by the user in Step 1.
 
 ### Guardrail metrics
 [Metrics that should NOT degrade — e.g., page load time, error rate]
+
+### Verification & decision rule
+- **How we'll verify**: [which eval / dashboard / test confirms each metric, and when it's read]
+- **Definition of Done**: [checklist — acceptance criteria met, analytics events instrumented, guardrails green]
+- **Decision rule** (for experiments): ship if [primary hits target at significance AND no guardrail regression]; iterate if [inconclusive]; kill if [guardrail regresses OR primary negative]. State this **before** launch.
 ```
 
 ---
