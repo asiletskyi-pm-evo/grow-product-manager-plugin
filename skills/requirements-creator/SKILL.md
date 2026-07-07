@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.8.0
+version: 0.9.0
 description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one. Українською: "написати вимоги", "описати фічу", "створити специфікацію фічі", "вимоги до A/B-тесту", "переглянути вимоги", "проаналізувати вимоги", "покращити вимоги", "перевірити мою специфікацію".
 ---
 
@@ -191,6 +191,8 @@ Ask the user via AskUserQuestion. Default options:
 
 Generate the full requirements document following the confirmed template structure.
 
+> For a worked, high-quality reference of the target shape and rigor, load `references/examples/feature-spec-example-v1.md` on demand. It is a generic exemplar (few-shot) with testable Acceptance Criteria and an explicit A/B decision rule — match its rigor, not its exact wording.
+
 **Standard template structure** (from `references/requirements-template.md`):
 
 | Section | Skill behavior |
@@ -362,7 +364,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.8.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.9.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 
@@ -566,6 +568,7 @@ If the user agrees — invoke Task Creator with full context.
 
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/requirements-template.md`** — detailed standard template with section descriptions and instructions
+- **`references/examples/feature-spec-example-v1.md`** — worked golden feature-spec exemplar with A/B + acceptance criteria (few-shot; load on demand in Step 4)
 - **`references/approach-recommendation.md`** — implementation approach recommendation logic (feature flag, A/B test, etc.)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)

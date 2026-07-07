@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.6.0
+version: 0.7.0
 description: Conduct CJM (Customer Journey Map) research — detect funnel anomalies, generate improvement hypotheses, and build prioritized backlogs. Use when the user asks to "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", or needs end-to-end funnel analysis with enrichment from knowledge sources. Українською: "проаналізувати CJM", "знайти аномалії у воронці", "CJM дослідження", "health-check воронки", "порівняти платформи", "CJM гіпотези". Do NOT use for standalone dashboard/metric analysis without the research pipeline (use product-analysis) or for pure idea generation without funnel research (use brainstorm-features).
 ---
 
@@ -289,6 +289,8 @@ Anomaly detection (Step 4), WORLD enrichment (5), INTERNAL enrichment (6), hypot
 
 Assemble the final report based on the selected mode. Use the user's preferred language (`user.language`).
 
+> For a worked, high-quality reference of the target shape and rigor, load `references/examples/funnel-anomaly-report-example-v1.md` on demand. It is a generic exemplar (few-shot) showing period annotation on every metric, Data Integrity caveats, and funnel-impact math — match its rigor, not its exact wording.
+
 ---
 
 
@@ -313,7 +315,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.6.0",
+     skill_version: "0.7.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
@@ -380,6 +382,7 @@ When chaining:
 
 - **`references/cjm-pipeline.md`** (skill-local) — Steps 4–11: anomalies, enrichment, hypotheses, impact, verification, risk
 - **`references/cjm-reports.md`** (skill-local) — per-mode report formats, publishing, automated health-check protocol
+- **`references/examples/funnel-anomaly-report-example-v1.md`** (skill-local) — worked golden anomaly-report exemplar with period annotation + impact math (few-shot; load on demand in Step 8)
 
 - **`references/data-integrity-protocol.md`** — **MANDATORY (v0.4.0+)** — 5 universal gate checks for any cited metric
 - **`references/cjm-protocol.md`** — anomaly severity, funnel impact formulas, health score, verification checklist, holiday windows, anomaly verification checklist, reference sources catalog

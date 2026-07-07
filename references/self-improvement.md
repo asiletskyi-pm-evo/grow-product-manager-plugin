@@ -42,6 +42,21 @@ After the corrections are applied and confirmed, internally analyze:
 - **Is this a pattern?** — Could this same issue occur in future runs of this skill, or was it a one-off situation unique to this task?
 - **Scope of improvement** — Would the fix improve only this skill, or should it apply to multiple skills?
 
+#### Harness-first diagnosis (run before proposing a fix)
+
+Most agent failures are **configuration failures**, not model failures — the fix usually lives in the harness around the skill, not in "smarter" prose. Before proposing an improvement, classify the failure by harness layer and route the fix to the right place. See `references/harness-map.md` for the plugin's full harness anatomy.
+
+| Harness layer | Diagnostic question | Where the fix goes |
+|---------------|---------------------|--------------------|
+| **Instructions** | Was the skill's core/description too loose or ambiguous? | SKILL.md description / core step wording |
+| **Tools** | Was an MCP/tool missing, or its "when to call" prose unclear? | `integration-strategy.md` / tool-usage prose in the skill |
+| **Context** | Wrong static/dynamic split — a needed field missing, or context overloaded with noise? | `local-context-protocol.md` / `context-budget.md` (static-dynamic boundary) |
+| **Guardrails** | Was a gate/check skipped (e.g. Data Integrity, data-policy)? | `data-integrity-protocol.md` / add a gate step |
+| **Orchestration** | Did the wrong skill fire, or did delegation misroute? | description "Do NOT use" hints / `subagent-delegation.md` |
+| **Observability** | Would we have caught this at all before the user did? | add/extend an output-eval rubric (`testing/output-evals.md`) |
+
+Pick the **single** layer that is the true root cause (not the symptom). If the honest answer is "we had no way to catch this," the fix is an observability fix (an eval), even when a prose tweak also helps.
+
 ### 3. Propose improvement (if applicable)
 
 If the analysis reveals a **pattern-level issue** (something that could recur), propose a specific improvement to the user:

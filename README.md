@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.36.0
+**Version:** 1.37.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.37.0** — **Harness engineering, wave 1** (from Google/Kaggle "The New SDLC With Vibe Coding"). Self-improvement now runs a **harness-first diagnosis** — before proposing a fix, the failure is classified by harness layer (instructions / tools / context / guardrails / orchestration / observability) and the fix is routed to the right place, because most agent failures are configuration failures, not model failures. A new `references/harness-map.md` documents the plugin's own harness anatomy and a six-context-type coverage map (thin spot identified: **Examples**). To fill that spot, the three heaviest artifact skills gain on-demand **golden exemplars** (few-shot): `write-concept` (worked PRD), `requirements-creator` (feature-spec with A/B + acceptance criteria), `cjm-research` (period-annotated anomaly report) — each doubling as a future output-eval fixture.
 
 **New in v1.36.0** — **Wave 3 kickoff: three lifecycle skills (23 total)**. `experiment-tracker` closes the loop after the A/B spec — a persistent experiment registry with lifecycle states, stale-test reminders, readouts via product-analysis, and decisions recorded via the new `decision-log` (ADR-style records in vault Decisions/ that finally answer "чому ми вирішили X?"). `feedback-triage` turns raw support-ticket/review streams into a ranked pain map (semantic clustering, frequency × severity × trend vs the previous run's baseline) chaining straight into brainstorm-features. Vault taxonomy grows to 22 types (`feedback-triage`); trigger-evals gain Group H (14 phrases, lifecycle trio vs neighbors).
 
@@ -693,5 +695,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.36.0  
+**Version:** 1.37.0  
 **Last Updated:** July 2026

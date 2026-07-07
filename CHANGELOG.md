@@ -12,6 +12,38 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.37.0 (2026-07-07)
+
+### Added — harness engineering, wave 1 (from Google/Kaggle "The New SDLC With Vibe Coding")
+
+- **`references/harness-map.md`** (new) — anatomy of the plugin's harness across the paper's six layers (instructions / tools / sandboxes / orchestration / guardrails / observability) plus a six-context-type coverage map (instructions / knowledge / memory / examples / tools / guardrails). Names the current thin spots: **Examples** and the output-eval half of Observability. Canonical answer to "what is our harness, and where is it thin."
+- **Golden exemplars (few-shot Examples context type)** for the three heaviest artifact skills, loaded on demand and doubling as fixtures for the planned `testing/output-evals.md`:
+  - `skills/write-concept/references/examples/prd-example-v1.md` — worked PRD with measurable Success Metrics + a Verification/decision-rule block.
+  - `skills/requirements-creator/references/examples/feature-spec-example-v1.md` — feature-spec with an A/B variant, testable Acceptance Criteria, and an explicit ship/kill decision rule.
+  - `skills/cjm-research/references/examples/funnel-anomaly-report-example-v1.md` — anomaly report demonstrating period annotation on every metric, Data Integrity caveats, and funnel-impact math.
+  - All exemplars are generic/anonymized (no org-specific data); a single "save-for-later" thread runs across them to show the concept → requirements → CJM pipeline.
+
+### Changed
+
+- **`references/self-improvement.md`** — Step 2 (root-cause analysis) gains a **harness-first diagnosis** sub-step: classify the failure by harness layer and route the fix (SKILL wording / integration-strategy / local-context / a gate / delegation / an output-eval) before proposing a change. Links to `harness-map.md`.
+- `write-concept`, `requirements-creator`, `cjm-research` SKILL.md — on-demand pointer to their golden exemplar in the drafting/report-assembly step + Additional Resources.
+
+### Files
+
+| File | From | To | Change |
+|------|------|----|--------|
+| references/harness-map.md | — | new | harness anatomy + 6-context-type coverage map |
+| references/self-improvement.md | — | — | harness-first diagnosis sub-step (reference, unversioned) |
+| skills/write-concept/SKILL.md | 0.7.0 | 0.8.0 | minor — on-demand golden PRD exemplar |
+| skills/requirements-creator/SKILL.md | 0.8.0 | 0.9.0 | minor — on-demand golden feature-spec exemplar |
+| skills/cjm-research/SKILL.md | 0.6.0 | 0.7.0 | minor — on-demand golden anomaly-report exemplar |
+
+### Backwards compatibility
+
+Fully backwards compatible. All additions are on-demand references (progressive disclosure) — no change to existing workflows, gates, or outputs. No breaking changes.
+
+---
+
 ## v1.36.0 (2026-07-04)
 
 ### Added — wave 3 kickoff: three lifecycle skills (21 → 23 skills)
