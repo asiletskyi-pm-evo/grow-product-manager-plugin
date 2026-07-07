@@ -1,6 +1,6 @@
 # Grow PM Plugin Testing Process
 
-> Goal: ship changes incrementally **without breaking the plugin** in Claude. Every version goes through the same loop: backup → apply → stage-by-stage tests → debug → version bump. Skills are prompt artifacts, so a "test" = static validation + trigger eval + scenario walk + integration + regression. Execution runs in subagent mode.
+> Goal: ship changes incrementally **without breaking the plugin** in Claude. Every version goes through the same loop: backup → apply → stage-by-stage tests → debug → version bump. Skills are prompt artifacts, so a "test" = static validation + trigger eval (trajectory) + scenario walk + **output eval (artifact quality)** + integration + regression. Execution runs in subagent mode.
 
 ## Testing stages
 
@@ -9,7 +9,8 @@
 | 0 | **Backup** | snapshot of the version before changes | `git tag` + copy of the folder into `_backups/<version>/` | — |
 | 1 | **Static lint** | frontmatter, name==folder, semver, resolution of `references/*`, cross-skill links, skill_version ↔ frontmatter, CHANGELOG/README mentions | `testing/skill_lint.py` (automated, in CI/locally) | yes |
 | 2 | **Trigger eval** | description triggers on target phrases and does NOT hijack others | a set of positive/negative phrases per skill; judge subagent | yes |
-| 3 | **Scenario walk** | skill produces the correct structure: key steps, gates, artifact format | 1-2 scenarios per skill + mock local-context; subagent does a "dry run" and verifies | yes (for changed skills) |
+| 3a | **Trajectory / scenario walk** | skill takes the right steps: key steps, gates, tool calls, artifact structure | 1-2 scenarios per skill + mock local-context; subagent "dry run" verifies | yes (for changed skills) |
+| 3b | **Output eval** | artifact **quality** against a rubric (weighted 0/1/2, pass ≥ threshold) | `testing/output-evals.md` rubric + fixture + gold exemplar; LM-judge subagent | yes (for changed artifact-producing skills) |
 | 4 | **Integration** | chaining between skills, resolution of shared references, delegation (e.g. planning→team-ops-reporter) | chain scenario; subagent | yes |
 | 5 | **Regression** | the change did not break existing skills (especially after rename/dedup) | re-run 1-4 on neighboring/dependent skills | yes |
 | 6 | **Sign-off** | all green → version bump + CHANGELOG + README; otherwise → debug loop | main agent consolidates | — |
