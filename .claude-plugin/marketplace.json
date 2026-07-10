@@ -1,20 +1,20 @@
 {
   "name": "grow-product-manager-plugins",
-  "description": "Personal marketplace with Grow Product Manager plugin — an AI assistant for Product Managers. — v1.39.0 (released 2026-07-07)",
+  "description": "Personal marketplace with Grow Product Manager plugin — an AI assistant for Product Managers. — v1.40.0 (released 2026-07-10)",
   "owner": {
     "name": "Andrii Siletskyi"
   },
   "plugins": [
     {
       "name": "grow-product-manager",
-      "version": "1.39.0",
+      "version": "1.40.0",
       "source": {
         "source": "git-subdir",
         "url": "https://github.com/asiletskyi-pm-evo/grow-product-manager-plugin.git",
         "path": ".",
         "ref": "main"
       },
-      "description": "AI assistant for Product Managers: research, concepts, brainstorming, requirements, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, knowledge library, multilingual artifact templates, planning suite (roadmap, project, quarterly, sprint), experiment lifecycle tracking (experiment-tracker), decision log, feedback triage, focus-advisor (daily/tactical/strategic PM focus briefs + live Focus Board from calendar/mail/meetings/Jira/roadmap/goals signals with ritual cadence and skill chaining), plugin release automation (release-manager), and design-bridge (brand-themed decks, prototypes, handoffs, research enrichment, WCAG 2.1 AA a11y gates — bring your own Design System via local-context.md) — integrated with Jira, Confluence, Figma, and Tableau. Includes Team Ops Reporter for Jira-based operational reports (sprint plan/review, quarter review, initiative status, member review). — v1.39.0 (released 2026-07-07)",
+      "description": "AI assistant for Product Managers: research, concepts, brainstorming, requirements, task creation, data analysis, CJM research with funnel anomaly detection, hypothesis generation, knowledge library, multilingual artifact templates, planning suite (roadmap, project, quarterly, sprint), experiment lifecycle tracking (experiment-tracker), decision log, feedback triage, focus-advisor (daily/tactical/strategic PM focus briefs + live Focus Board from calendar/mail/meetings/Jira/roadmap/goals signals with ritual cadence and skill chaining), plugin release automation (release-manager), and design-bridge (brand-themed decks, prototypes, handoffs, research enrichment, WCAG 2.1 AA a11y gates + routing host that delegates hi-fi screen generation to an external design toolkit declared in local-context.md — bring your own Design System and design toolkit) — integrated with Jira, Confluence, Figma, and Tableau. Includes Team Ops Reporter for Jira-based operational reports (sprint plan/review, quarter review, initiative status, member review). — v1.40.0 (released 2026-07-10)",
       "category": "productivity"
     }
   ]

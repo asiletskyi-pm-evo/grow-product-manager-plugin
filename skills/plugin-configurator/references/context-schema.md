@@ -47,7 +47,7 @@ local-context.md
 | onboarding.basic_completed_at | ✅ | Configurator | Timestamp when Basic onboarding finished |
 | onboarding.extended_completed_at | optional | Configurator | Timestamp when Extended onboarding finished |
 | onboarding.last_test_run_at | optional | Configurator | Timestamp of last Test (sandbox) run |
-| onboarding.deferred_steps | optional | All skills | List of step keys deferred during Basic (`cjm`, `knowledge-library`, `templates`, `obsidian-vault`, `teams`, `okrs`, `competitors`, `tableau-full`, `repos`, `custom-sections`) |
+| onboarding.deferred_steps | optional | All skills | List of step keys deferred during Basic (`cjm`, `knowledge-library`, `templates`, `obsidian-vault`, `teams`, `okrs`, `competitors`, `tableau-full`, `repos`, `custom-sections`, `design-toolkits`) |
 | onboarding.skip_nudges | optional | All skills | If `true`, suppress upgrade-to-Extended nudges from skills (default `false`) |
 
 Skills check `onboarding.mode` and `onboarding.deferred_steps` to decide whether to nudge the user toward Extended setup before running. The Configurator manages this section automatically — users do not edit it directly.
@@ -121,6 +121,24 @@ Skills check `onboarding.mode` and `onboarding.deferred_steps` to decide whether
 | ci_cd | optional | Future skills | CI/CD pipeline URLs |
 | environments | optional | Future skills | Staging/prod environment URLs |
 
+#### Design Toolkits (per product or user-global)
+
+External design solutions that `design-bridge` delegates hi-fi / screen-generation work to. Full semantics: `references/design-toolkit-protocol.md`. The plugin ships no concrete toolkit — every entry is user-declared.
+
+| Field | Required | Used by | Description |
+|-------|----------|---------|-------------|
+| design_toolkits[].id | ✅ | design-bridge | Stable slug (e.g., `my-design-toolkit`) |
+| design_toolkits[].label | optional | design-bridge | Human name shown in prompts |
+| design_toolkits[].entry.type | ✅ | design-bridge | `skill` / `mcp_tool` / `command` / `browser` |
+| design_toolkits[].entry.ref | ✅ | design-bridge | Invocation reference for the entry type |
+| design_toolkits[].capabilities | ✅ | design-bridge | Core-enum (`hi-fi-prototype`, `screen-generation`, `ds-tokens`, `figma-write`, `code-first-research`, `design-review`) + custom tags |
+| design_toolkits[].scope | optional | design-bridge | Free applicability tags (e.g., `[mobile, prom-b2c]`) |
+| design_toolkits[].input_contract | optional | design-bridge | `feature_name` / `platform` / `requirements_doc` / `jira_key` |
+| design_toolkits[].returns | optional | design-bridge | `figma_url` / `branch` / `files` |
+| design_toolkits[].setup_hint | optional | design-bridge | How to (re)configure the toolkit |
+| design_toolkits[].data_locality | optional | design-bridge | `local` / `external` (default `external`) — for data-policy |
+| design_toolkits[].contract_version | optional | design-bridge | Protocol semver the toolkit targets |
+
 ### Team (optional, per organization)
 
 | Field | Required | Used by | Description |
@@ -145,6 +163,7 @@ Users can add any additional sections with free-form markdown content. The confi
 | **Brainstorm Features** | product.name | key_metrics, competitors, OKRs |
 | **Plugin Configurator** | — | reads/writes everything |
 | **Focus Advisor** | product.name, planning (sprint anchor/cadence) | focus section (sources, VIP senders, PM goals, cadence overrides, scheduled) |
+| **Design Bridge** | product.name | design_system_spec, pptx_theme, brand.*, **design_toolkits[]** (external hi-fi delegation) |
 
 ## Validation Rules
 
@@ -277,4 +296,28 @@ Written by the Focus setup step; read by `focus-advisor`. Full field semantics: 
 - MOC created: [yes/no]
 - Knowledge library migrated: [yes/no]
 - Schema version: [X.Y.Z]
+```
+
+### Design Toolkits section format
+
+Read by `design-bridge` (Step 0.5). Generic — no concrete toolkit is shipped; the user declares their own. Full semantics: `references/design-toolkit-protocol.md`.
+
+```yaml
+design_toolkits:
+  - id: <slug>
+    label: <human name>
+    entry:
+      type: skill | mcp_tool | command | browser
+      ref: <invocation reference>
+    capabilities: [hi-fi-prototype, screen-generation, ds-tokens, figma-write, code-first-research, design-review]
+    scope: [<free tags>]
+    input_contract:
+      feature_name: required
+      platform: [<options>]
+      requirements_doc: optional
+      jira_key: optional
+    returns: [figma_url, branch, files]
+    setup_hint: <ref>
+    data_locality: local | external
+    contract_version: <semver>
 ```

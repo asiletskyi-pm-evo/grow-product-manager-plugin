@@ -167,6 +167,35 @@ contrast_pairs:
   - { fg: "#FFF", bg: "#3366FF", ratio: 4.5, usage: "CTA label on primary" }
 ```
 
+##### Design Toolkits
+<!--
+Optional. External design solutions that design-bridge delegates hi-fi / screen-generation work to.
+The plugin ships NO concrete toolkit — declare your own here. Full semantics: references/design-toolkit-protocol.md.
+entry.type is one of: skill | mcp_tool | command | browser.
+capabilities core enum: hi-fi-prototype, screen-generation, ds-tokens, figma-write, code-first-research, design-review (custom tags allowed).
+Leave this block out entirely if you have no external toolkit — design-bridge then uses its built-in Figma path.
+-->
+
+```yaml
+design_toolkits:
+  - id: my-design-toolkit                 # your slug
+    label: "My Design Toolkit"
+    entry:
+      type: skill                         # skill | mcp_tool | command | browser
+      ref: "some-design-plugin:entry-command"
+    capabilities: [hi-fi-prototype, screen-generation, ds-tokens, figma-write]
+    scope: [mobile]
+    input_contract:
+      feature_name: required
+      platform: [iOS, Android, both]
+      requirements_doc: optional
+      jira_key: optional
+    returns: [figma_url, branch, files]
+    setup_hint: "some-design-plugin:setup"
+    data_locality: local                  # local (co-installed) | external (third party)
+    contract_version: "1.0"
+```
+
 ---
 
 ### Product: Second Product Name

@@ -12,6 +12,40 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v1.40.0 (2026-07-10)
+
+### Added — external design toolkit provider (integration + reference)
+
+`design-bridge` becomes the single routing host for design/prototype work and can delegate hi-fi screen generation to an **external design toolkit** the user declares in `local-context.md` — keeping the plugin core universal for any company. Base logic stays the same when no toolkit is configured (zero regression); org-specifics live only in `local-context.md`.
+
+- **New `references/design-toolkit-protocol.md`** — the contract: `design_toolkits[]` config schema, capability-based routing (core enum `hi-fi-prototype` / `screen-generation` / `ds-tokens` / `figma-write` / `code-first-research` / `design-review` + custom tags), a tier-0 fallback (provider → Figma MCP → Registry → Browser), four entry types (`skill` / `mcp_tool` / `command` / `browser`), a bidirectional delegation contract (feature/platform/requirements/jira → figma_url/branch/files), QA-ownership rule (no double review), data-locality policy, and protocol semver.
+- **`design-bridge` → v0.3.0** — new **Step 0.5** (external toolkit routing): capability match → user-confirmed delegation → ingest returns → publish/link/vault. hi-fi prototype delegates to a covering toolkit, else falls back to the built-in Figma path. Added routing-host framing (other skills delegate design/prototype here), QA-ownership rule, vault `design_delivery` marker, description triggers (EN+UA), and new failure modes.
+- **`plugin-configurator` → v2.6.0** — new **Design Toolkit setup** step (Extended add-on; standalone "register design toolkit" / "зареєструвати дизайн-тулкіт"). `references/context-schema.md` gains the `design_toolkits` schema + section format and a `design-toolkits` deferred-step key.
+- **`references/integration-strategy.md`** — documents tier-0 (provider registry) ahead of the MCP→Registry→Browser chain, for design work only.
+- **`references/vault-schema.md`** — `design_delivery` / `toolkit_id` / `toolkit_returns` markers on existing `prototype` / `handoff` types (no new artifact type).
+- **`diagram-prototyper` → v0.9.1** — boundary note: hi-fi, design-system-native screen generation routes to `design-bridge`, not here.
+- **`local-context.example.md`** — generic `design_toolkits` example (no concrete toolkit shipped).
+- **Universality guard** — the plugin repository contains no reference to any concrete toolkit; every toolkit is user-declared in `local-context.md`.
+
+### Files
+
+| File | From | To | Change |
+|------|------|----|--------|
+| references/design-toolkit-protocol.md | — | new | provider contract: schema, capability routing, tier-0 fallback, entry types, delegation |
+| skills/design-bridge/SKILL.md | 0.2.2 | 0.3.0 | minor — Step 0.5 routing host, returns, QA-ownership, triggers, failure modes |
+| skills/plugin-configurator/SKILL.md + context-schema.md + onboarding-steps.md | 2.5.0 | 2.6.0 | minor — Design Toolkit registration step + schema + deferred-step key |
+| references/integration-strategy.md | — | — | tier-0 provider registry (design only) |
+| references/vault-schema.md | — | — | design_delivery / toolkit markers on prototype/handoff |
+| skills/diagram-prototyper/SKILL.md | 0.9.0 | 0.9.1 | patch — scope-boundary note (hi-fi routes to design-bridge) |
+| local-context.example.md | — | — | generic design_toolkits example |
+| testing/trigger-evals.md | — | — | +B7/B8/B9 (design routing) |
+
+### Backwards compatibility
+
+Fully backwards compatible. The provider abstraction is inert when no `design_toolkits[]` is declared in `local-context.md` — design-bridge's built-in Figma path is unchanged. No breaking changes.
+
+---
+
 ## v1.39.0 (2026-07-07)
 
 ### Added — harness engineering, wave 3: output evals (point 1)

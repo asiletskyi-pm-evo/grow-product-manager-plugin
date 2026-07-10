@@ -289,6 +289,14 @@ The Grow Product Manager Plugin defines 22 artifact types, each with a specific 
 | focus-brief | focus-advisor | Focus/ | PM focus brief (daily/tactical/strategy — subtype in frontmatter) with chosen focuses and chains |
 | feedback-triage | feedback-triage | Research/feedback/ | Clustered feedback themes with pain scores and trends (baseline for next run) |
 
+#### Design delivery marker (design-bridge)
+
+When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.5, per `design-toolkit-protocol.md`), the returned artifact is saved under the **existing** `prototype` / `handoff` types — no new artifact type. It carries these `extra_frontmatter` keys so delegated deliverables are distinguishable:
+
+- `design_delivery: true`
+- `toolkit_id: <id>` — which declared toolkit produced it
+- `toolkit_returns: [figma_url?, branch?, files?]` — what came back
+
 ### TYPE_FOLDER_MAP Reference
 
 ```json

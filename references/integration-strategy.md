@@ -8,6 +8,8 @@ This document defines how every skill in the Grow Product Manager plugin connect
 
 ## Fallback Chain
 
+> **Tier-0 (design work only):** for hi-fi design / screen-generation, `design-bridge` first checks the user's declared external design toolkits (`design_toolkits[]` in `local-context.md`) per `design-toolkit-protocol.md`. A matching toolkit is used before the MCP→Registry→Browser chain below. If none matches, continue with Step 1. This tier applies only to design delegation, not to general product integrations.
+
 ### Step 1: Use existing MCP connector
 
 Check if an MCP connector for the target product is already available in the current session.

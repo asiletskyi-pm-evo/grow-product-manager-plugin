@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.9.0
+version: 0.9.1
 description: Create diagrams, flowcharts, BPMN processes, UI prototypes, and infographics to visualize product concepts and hypotheses. Use when the user asks to "create a diagram", "draw a flowchart", "visualize this process", "make a prototype", "create an infographic", "BPMN diagram", "wireframe", "mockup", or when another skill suggests visualizing a concept. Supports generation via Gemini, ChatGPT, NotebookLM, Figma, Draw.io, and built-in Mermaid/HTML. Українською: "створити діаграму", "намалювати блок-схему", "візуалізувати цей процес", "зробити прототип", "створити інфографіку", "BPMN-діаграма", "вайрфрейм", "макет". Do NOT use for brand-themed decks, prototypes, or handoffs built on your Design System — use design-bridge for those.
 ---
 
@@ -155,6 +155,8 @@ If the user chose "Prototype" in Step 1, ask for the fidelity level via AskUserQ
 Provide a recommendation based on context:
 - Concept phase, brainstorming → recommend Lo-fi
 - Requirements phase, stakeholder review → recommend Mid-fi
+
+> **Boundary — hi-fi is out of scope here.** This skill covers lo-fi and mid-fi only. For hi-fi, design-system-native screen generation, route to `design-bridge`, which delegates to an external design toolkit when one is declared in `local-context.md` (`design_toolkits[]`, see `references/design-toolkit-protocol.md`) or falls back to the Figma path.
 
 ### Step 3b — Infographic style selection (for infographics only)
 
