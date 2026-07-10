@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.39.0
+**Version:** 1.40.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v1.40.0** — **External design toolkit provider**. `design-bridge` becomes the single **routing host** for design/prototype work and can delegate hi-fi screen generation to an **external design toolkit** the user declares in `local-context.md` — keeping the plugin core universal for any company (zero regression when none is configured). New `references/design-toolkit-protocol.md` defines the contract: a `design_toolkits[]` config schema, capability-based routing (core enum `hi-fi-prototype` / `screen-generation` / `ds-tokens` / `figma-write` / `code-first-research` / `design-review` + custom tags), a tier-0 fallback (provider → Figma MCP → Registry → Browser), four entry types (`skill` / `mcp_tool` / `command` / `browser`), a bidirectional delegation contract, and a QA-ownership rule (no double review). `design-bridge` → v0.3.0 adds **Step 0.5** (toolkit routing); `plugin-configurator` gains a **Design Toolkit** registration step; `diagram-prototyper` documents the scope boundary (hi-fi, DS-native generation routes to design-bridge). Every toolkit is user-declared — the repository ships no concrete toolkit.
 
 **New in v1.39.0** — **Harness engineering, wave 3: output evals** (point 1). The plugin could already check *which* skill fired (trigger-evals = trajectory); now it can check *how good the artifact is*. New `testing/output-evals.md` defines rubrics (weighted 0/1/2, pass ≥ threshold, LM-judge against the golden exemplar) for the artifact-producing skills, with runnable `testing/fixtures/` input briefs for `write-concept`, `requirements-creator`, and `cjm-research`. `Testing-process.md` splits stage 3 into **3a (trajectory)** and **3b (output eval)** — a blocker for any changed artifact skill — so quality is gated the way triggering already is. *"Set the bar at the eval, not the demo."*
 
@@ -699,5 +701,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.39.0  
+**Version:** 1.40.0  
 **Last Updated:** July 2026

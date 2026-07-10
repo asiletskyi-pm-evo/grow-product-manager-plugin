@@ -741,3 +741,20 @@ Collected via `AskUserQuestion`/dialog:
 5. **Scheduled briefs** — offer creating headless brief tasks (via the platform's scheduled-tasks/`schedule` skill): daily `now` brief (time, working days only), weekly `tactics` brief (e.g. Monday morning), and a quarterly `strategy` memo (first week of the quarter); `healthcheck: off` by default.
 
 Existence check: if the `Focus` section already exists → do not re-ask, only offer review/update via `update config`.
+
+## Step — Design Toolkit setup (Extended)
+
+Registers one or more **external design toolkits** that `design-bridge` delegates hi-fi / screen-generation work to. Writes the `design_toolkits` section into local-context (format — `references/context-schema.md` → Design Toolkits section format; semantics — root `references/design-toolkit-protocol.md`). Mode-gate: Extended; in Basic — add `design-toolkits` to `onboarding.deferred_steps`. Standalone triggers: "register design toolkit", "add design toolkit", "зареєструвати дизайн-тулкіт".
+
+> **Universality:** never hardcode a specific toolkit into the plugin. Everything collected here goes into the user's `local-context.md` only.
+
+Collected via `AskUserQuestion`/dialog, per toolkit:
+
+1. **Identity** — `id` (slug) and `label`.
+2. **Entry** — `type` (`skill` / `mcp_tool` / `command` / `browser`) and `ref` (the invocation reference: skill name, `mcp__…` tool, shell command, or URL).
+3. **Capabilities** — pick from the core enum (`hi-fi-prototype`, `screen-generation`, `ds-tokens`, `figma-write`, `code-first-research`, `design-review`); allow custom tags (opaque — won't auto-route).
+4. **Input contract & returns** — confirm what the toolkit consumes (`feature_name` / `platform` / `requirements_doc` / `jira_key`) and hands back (`figma_url` / `branch` / `files`).
+5. **Data locality** — `local` (co-installed skill, in-session) or `external` (third party; `data-policy.md` applies). Default `external`.
+6. **Setup hint & contract version** — optional: how to (re)configure it, and the protocol semver it targets.
+
+Pre-check the entry when cheap (skill installed? MCP tool present?) and note availability. Existence check: if a `design_toolkits` entry with the same `id` already exists → offer review/update, do not duplicate.

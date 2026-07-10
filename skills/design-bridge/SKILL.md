@@ -1,7 +1,7 @@
 ---
 name: design-bridge
-version: 0.2.2
-description: Orchestrate Claude's Design skills (user-research, research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline. Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact. Українською: "створити презентацію", "зробити деку", "побудувати прототип", "згенерувати handoff", "дизайн-рев'ю", "передати дизайн у розробку". Do NOT use for quick local diagrams, flowcharts, BPMN, Mermaid, or plain wireframes — use diagram-prototyper for those.
+version: 0.3.0
+description: Orchestrate Claude's Design skills (user-research, research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline, and route hi-fi screen generation to an external design toolkit declared in local-context (design_toolkits). Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact. Українською: "створити презентацію", "зробити деку", "побудувати прототип", "згенерувати hi-fi екран", "через мій дизайн-тулкіт", "згенерувати handoff", "дизайн-рев'ю", "передати дизайн у розробку". Do NOT use for quick local diagrams, flowcharts, BPMN, Mermaid, or plain wireframes — use diagram-prototyper for those.
 ---
 
 # Design Bridge
@@ -9,6 +9,8 @@ description: Orchestrate Claude's Design skills (user-research, research-synthes
 Orchestrator that connects the Grow PM pipeline with Claude Design skills, the Figma MCP, a brand Design System, and a pptx template. One skill handles four scenarios: **deck**, **prototype**, **handoff**, **research-enrichment**.
 
 All brand-specific values (Design System spec, pptx theme, base template, brand tokens, Figma `fileKey`) are read from `local-context.md` — the plugin ships **no** hardcoded brand assets. Users configure their own brand via the `plugin-configurator` skill or by editing `local-context.md` manually.
+
+**Routing host for external design toolkits.** This skill is also the single entry point for delegating hi-fi design / screen-generation work to an **external design toolkit** (a separate org-specific solution declared in `local-context.md` → `design_toolkits[]`). Other Grow PM skills never call a toolkit directly — they hand the design/prototype step here, and this skill applies `references/design-toolkit-protocol.md` (tier-0 provider check → delegate → ingest returns → publish/link/vault). The plugin ships **no** reference to any concrete toolkit; if `design_toolkits` is empty, behaviour is unchanged.
 
 ## When to invoke
 
@@ -56,6 +58,7 @@ Before gathering data, read `references/data-policy.md`. Figma embeds from compe
 - `product.tone_of_voice` — writing style guide
 - `product.design_targets` — WCAG level, touch targets, motion preferences
 - `user.language` — deliverable language (default `en`)
+- `design_toolkits[]` (product- or user-level) — declared external design toolkits for hi-fi delegation (see `references/design-toolkit-protocol.md`)
 
 If `local-context.md` is missing, or no Design System section is configured, redirect to `plugin-configurator`.
 
@@ -79,6 +82,21 @@ T-1..T-5 via `template-library`. If none found, fall back to `presentation-built
 2. Load the DS spec yaml at `product.design_system_spec` (path from local-context). If the path is unset or the file is missing → graceful fallback: use brand tokens from `product.brand.*`, or, as a last resort, a neutral default palette (dark text on white, 4.5:1 contrast).
 3. If `intent = deck` → load `product.pptx_theme` yaml.
 4. If the Figma MCP is available and `ds_file_key` is set → cache DS tokens via `get_variable_defs` (optional, for speed).
+5. Load `design_toolkits[]` (product- then user-level). If none → skip Step 0.5 entirely and behave exactly as before.
+
+### Step 0.5 — External toolkit routing (tier-0)
+
+Follow `references/design-toolkit-protocol.md`. Runs only when a toolkit is declared AND the request needs hi-fi generation (resolved in Step 1: `intent=prototype, fidelity=hi-fi`, or `intent=handoff` with screen generation).
+
+1. Map the request to required **core-enum** capabilities (protocol §6).
+2. Find `design_toolkits[]` entries whose `capabilities` cover them. None → continue to the normal built-in path (Step 5b Figma / Step 4f handoff). Two+ → `AskUserQuestion` which to use.
+3. **Confirm with the user** before delegating (mandatory — never silent).
+4. Build the input payload from `input_contract` (protocol §5) using upstream artifacts (concept / requirements / research / hypotheses). A conforming toolkit also works with an empty payload.
+5. Invoke via `entry` (protocol §4: skill / mcp_tool / command / browser). Entry unavailable → note it, offer `setup_hint`, fall back to the built-in path (do not hard-fail).
+6. Ingest `returns` (`figma_url` / `branch` / `files`) → carry into Step 7 (publish/link) and Step 8 (vault, with `design_delivery: true`).
+7. **QA ownership** (protocol §7): if the toolkit declares `design-review`, do NOT re-run Step 4d/4e on its output. If it does not, Step 6 QA still applies.
+
+Data policy (protocol §9): `data_locality: external` → `references/data-policy.md` constrains the payload; `local` → in-session, internal context allowed.
 
 ### Step 1 — Intent & subtype detection
 
@@ -99,7 +117,7 @@ Via `AskUserQuestion` if not passed from an upstream skill:
 **Q3 (prototype only). Fidelity level?**
 - lo-fi (Mermaid flow / ASCII wireframe)
 - mid-fi (HTML with inline brand tokens from local-context)
-- hi-fi (send to Figma via `use_figma` — requires Full seat)
+- hi-fi (delegate to an external toolkit if one covers it — Step 0.5; else send to Figma via `use_figma`, Full seat)
 
 **Q4 (handoff only). Delivery target?**
 - dedicated Confluence page (markdown + screenshots)
@@ -248,7 +266,7 @@ Fallback: if the pptx skill is unavailable → outline.md + outline.html (copy-p
 
 - lo-fi → `diagram-prototyper` (Mermaid + ASCII)
 - mid-fi → HTML with inline brand tokens (from `product.brand.*`) + Tailwind-compatible classes
-- hi-fi → `use_figma(…)` (Full seat only) → creates a Figma frame
+- hi-fi → **if Step 0.5 routed to an external toolkit** → use its `returns` (Figma URL / branch / files) as the deliverable; **else** → `use_figma(…)` (Full seat only) → creates a Figma frame
 
 Save to `{vault_root}/Prototypes/{product}/{date}-{slug}/`.
 
@@ -301,7 +319,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.2.1",
+  skill_version: "0.3.0",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],
@@ -310,7 +328,11 @@ vault_save({
     audience: <from Step 2>,
     slide_count: N,
     figma_embeds: [urls],
-    a11y_status: pass|warn|fail
+    a11y_status: pass|warn|fail,
+    // when the deliverable came from an external toolkit (Step 0.5):
+    design_delivery: true,
+    toolkit_id: <id>,
+    toolkit_returns: [figma_url?, branch?, files?]
   }
 })
 ```
@@ -318,6 +340,7 @@ vault_save({
 ## Additional Resources
 
 - **`references/local-context-protocol.md`** — Step 0 protocol
+- **`references/design-toolkit-protocol.md`** — Step 0.5 (external toolkit routing, delegation contract, capabilities)
 - **`references/template-protocol.md`** — Step T (resolve presentation template)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback
 - **`references/data-policy.md`** — Figma embed and publish restrictions
@@ -350,6 +373,10 @@ vault_save({
 | Source content < 100 words | ask user to fill manually; do not generate "lorem ipsum" |
 | A11y fail on handoff | release blocker; in deck mode — footer warning |
 | Language not in `available_languages` | pick the closest and note it in the outline |
+| `design_toolkits` empty / absent | skip Step 0.5; built-in hi-fi path (Figma) — unchanged behaviour |
+| Declared toolkit entry unavailable at runtime | note it, offer `setup_hint`, fall back to built-in path; never hard-fail |
+| Two+ toolkits match one request | `AskUserQuestion` which to use |
+| Toolkit `contract_version` mismatch | warn (don't block); verify payload/return shape |
 
 ## End-to-end example: concept → deck
 
@@ -387,5 +414,6 @@ design-bridge:
 
 ## Changelog
 
+- `0.3.0` (2026-07-10) — Became the routing host for external design toolkits. Added Step 0.5 (tier-0 provider check → delegate → ingest returns) per `references/design-toolkit-protocol.md`. hi-fi prototype now delegates to a declared toolkit when one covers the request, else falls back to the Figma path (unchanged when `design_toolkits` is empty). QA-ownership rule (no double review), vault `design_delivery` marker, new failure modes. No hardcoded toolkit reference — all org-specifics live in `local-context.md`.
 - `0.2.0` (2026-04-20) — Removed hardcoded brand assets and `design-integration/` coupling. All brand specifics (DS spec, pptx theme, base pptx, brand tokens, Figma fileKey) now read from `local-context.md`. English-only copy. Added graceful fallbacks when brand config is partial or missing.
 - `0.1.0` (2026-04-20) — Initial release. Supports 4 intents, 4 deck subtypes, 7 design-skill hooks, Figma MCP integration.

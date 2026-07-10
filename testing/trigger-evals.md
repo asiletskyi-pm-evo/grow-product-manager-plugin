@@ -35,6 +35,9 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 | B4 | побудуй hi-fi прототип на нашій дизайн-системі | design-bridge |
 | B5 | make a prototype (no DS/brand mentioned, quick visualization) | diagram-prototyper |
 | B6 | згенеруй design handoff з a11y-аудитом | design-bridge |
+| B7 | згенеруй hi-fi екран фічі через мій дизайн-тулкіт | design-bridge |
+| B8 | generate a hi-fi screen using my external design toolkit | design-bridge |
+| B9 | намалюй lo-fi блок-схему екрана швидко | diagram-prototyper |
 
 ### Group C — Roadmap trio + sprint (roadmap-architect / project-planning / quarterly-planning / sprint-planning)
 
