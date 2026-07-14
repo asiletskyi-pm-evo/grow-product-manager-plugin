@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.9.0
+version: 0.10.0
 description: Creates Jira tasks for feature implementation based on requirements from a Confluence page. Use when the user asks to create tasks for a feature, create Jira issues from Confluence requirements, break down a feature into development tasks (FE/BE/Android/iOS/Design/Analytics), set up feature tasks in an Epic, or says something like "create tasks from requirements". Also trigger when the user shares a Confluence link and asks to create Jira tasks from it. Українською: "створити задачі для фічі", "створити Jira-задачі з вимог у Confluence", "розбити фічу на задачі", "завести задачі в Epic", "створити задачі з вимог".
 ---
 
@@ -217,19 +217,38 @@ Examples:
 
 #### Description format (markdown):
 
-```markdown
-## Task
+Apply the **task-formulation quality gate** (`references/communication-frameworks.md` → task formulation). Every task body carries **why + what + how**, and — for critical tasks — a Definition of Done:
 
-{Short summary of what needs to be done for this specific work type}
+```markdown
+## Why
+
+{The meaning/motivation — why this task matters and how it ladders to the feature's goal. A missing "why" produces formal execution and demotivation.}
+
+## What
+
+{The result, as clear and short as possible — specific to this work type. If it's already in the title, don't duplicate.}
+
+## How
+
+{Depth adapts to the assignee's level — see the note below. For a senior (D4): only non-obvious points + audit checkpoints. For a junior (D1): a step-by-step checklist "how I'd do it".}
+
+## Definition of Done
+{Acceptance criteria — for critical / important tasks. Omit for routine ones.}
 
 ## Requirements
 
 [{Feature page title}]({Confluence page URL})
 ```
 
+> **"How"-depth by D-level (people-profile aware).** If the assignee has a person profile (`references/people-context-protocol.md`, `d_type`), tune the "How" depth to it: **D4 → minimal "how"** (or a goal instead of a task); **D1 → detailed checklist**. If no profile exists, default to a moderate checklist and note the assumption. This uses the profile **read-only** — task-creator never creates profiles.
+
+> **Title:** perfective, result-oriented verb, full essence in the title (`references/communication-frameworks.md`). "You don't pay per character."
+
+> **Deliberately NOT enforced: a single responsible per task.** The classic task-formulation rule of "one responsible" is intentionally **omitted** here — it conflicts with the team's process (a task may legitimately carry FE/BE/QA roles). Do not add or warn about multiple owners.
+
 > **Note:** Use the user's preferred language (`user.language`) for the task description content.
 
-The summary under "Task" should be specific to the work type:
+The summary under "What" should be specific to the work type:
 - **Design**: focus on UI&UX research, prototyping, Figma mockups
 - **BE**: focus on API, business logic, data models, feature flags
 - **Analytics**: focus on event tracking, metrics, data coverage (or A/B test analysis for the second analytics task)
@@ -384,7 +403,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.9.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.10.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode
@@ -411,4 +430,6 @@ This skill can work together with **Write Concept / PRD** — if a PRD was just 
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy
+- **`references/communication-frameworks.md`** — task-formulation quality gate (why/what/how + DoD + D-level depth)
+- **`references/people-context-protocol.md`** — read-only D-type of the assignee to tune "How"-depth
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms

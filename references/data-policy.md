@@ -14,6 +14,19 @@ The following data types are considered confidential and are subject to this pol
 - **Strategy documents**, roadmaps, OKRs, and business plans
 - Any data that constitutes a **trade secret** or is marked as confidential/secret within the organization
 - **User data** and personally identifiable information (PII)
+- **People data (highest-sensitivity tier)** — performance assessments, 1-1 notes, person profiles (situational-leadership type, GTD-index, career/motivation signals), offboarding cases, and any manager evaluation of a specific team member. See the dedicated tier rules below.
+
+---
+
+## People data — highest-sensitivity tier
+
+The People-contour skills (`goal-setter`, `one-on-one`, `performance-review`, `hiring-designer`, `offboarding-guide`, `delegation-coach`) and the person profiles they maintain (`references/people-context-protocol.md`) handle the **most sensitive** data in the plugin. Beyond the general restrictions below, these hard rules apply:
+
+1. **Local / vault only.** Person profiles, 1-1 notes, performance reviews, and offboarding materials are stored **only** in the vault (`People/…`) or `~/.grow-pm/people/…`. They are **never** published to Confluence, Jira, or any shared workspace.
+2. **Never to external LLMs / third parties.** Do not send a person's name-linked performance data, review, 1-1 content, or offboarding case to any external LLM (ChatGPT/Gemini/etc.) or third-party service — not for "deep research", not for phrasing help. Draft such text with the in-session model only.
+3. **Minimal in chat.** Surface only the minimum necessary in the chat transcript; prefer references to the stored artifact over pasting full evaluations.
+4. **Factual, not characterizing.** Record working performance in factual, NVC terms (`references/communication-frameworks.md`), not personal judgments — the record describes the work, not the person's worth.
+5. **Offboarding especially.** Termination/PIP materials are strictly local, gated before every write, and never leave the machine.
 
 ---
 

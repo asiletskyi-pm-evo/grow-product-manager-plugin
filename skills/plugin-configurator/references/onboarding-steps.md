@@ -758,3 +758,19 @@ Collected via `AskUserQuestion`/dialog, per toolkit:
 6. **Setup hint & contract version** — optional: how to (re)configure it, and the protocol semver it targets.
 
 Pre-check the entry when cheap (skill installed? MCP tool present?) and note availability. Existence check: if a `design_toolkits` entry with the same `id` already exists → offer review/update, do not duplicate.
+
+## Step — People setup (Extended)
+
+Configures the **People-contour** skills (`goal-setter`, `one-on-one`, `performance-review`, `hiring-designer`, `offboarding-guide`, `delegation-coach`). Writes the `people` section into local-context (format — `references/context-schema.md` → People Configuration) and seeds the person-profile roster (`references/people-context-protocol.md`). Mode-gate: Extended; in Basic — add `people` to `onboarding.deferred_steps`. Standalone triggers: "set up People", "add team roster", "People-сетап", "налаштувати команду".
+
+> **Data sensitivity:** person profiles are the highest-sensitivity tier (`references/data-policy.md`). They live in the vault `People/` area or `~/.grow-pm/people/` — **never** in Confluence/Jira. Collect only what the PM wants stored.
+
+Collected via `AskUserQuestion`/dialog:
+
+1. **Vault People area** — where profiles live: the `People/` area of a configured vault (preferred) or the `~/.grow-pm/people/` fallback if no vault. Store the resolved path.
+2. **Team roster** — for each direct report: name, role, join date; optionally their current situational-leadership type (D1–D4). For each, create a minimal profile file (`People/<slug>.md`) and a roster line in `People/_roster.md`. Only `name`/`role`/`updated` are required — the rest fills in over time.
+3. **Default cadences** — default 1-1 cadence (weekly / biweekly / monthly; default: monthly for newer people, quarterly for >1-year) and default goal-report cadence (weekly / monthly).
+4. **Performance-review template** — register the employer's review template as a `performance-review` scope template (via `template-library: add`/`import`), or use the built-in `performance-review` structure. Store the chosen `template_id`.
+5. **HR-form field map (hiring)** — the employer's vacancy-form fields and their controlled values (e.g. selects for Budget / Team / Position / Employment type / Probation length). Store under `people.hr_form` so `hiring-designer` can map the universal vacancy profile onto the employer's form field-by-field. Values are employer-specific — nothing is hardcoded in the plugin.
+
+Existence check: if a `people` section already exists → offer review/update, do not duplicate. Never fabricate profile fields (D-type, GTD, signals) — leave unknowns empty.

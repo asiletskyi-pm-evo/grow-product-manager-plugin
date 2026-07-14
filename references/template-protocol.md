@@ -25,7 +25,11 @@ schema_version: 1                        # format version
 name: "A/B Test Requirements"            # or map: {uk: "...", en: "..."}
 artifact_type: requirements              # concept | requirements | research
                                          # | cjm | epic | task | presentation
-                                         # | partial
+                                         # | ops-report | partial
+                                         # People-contour: goal-letter | report-3t5f
+                                         # | one-on-one-notes | followup-arcv
+                                         # | vacancy-profile | performance-review
+                                         # | offboarding-plan
 subtype: ab-test                         # optional specialization
 scope: user-global                       # built-in | user-global | product
 products: []                             # [] = all products; else list

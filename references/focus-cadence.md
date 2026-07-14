@@ -27,8 +27,8 @@ The table answers: *given today's cycle position, what does a disciplined PM do?
 | Mon, week 1 | Week kickoff: metrics glance + week goals | Start of sprint execution; catch weekend anomalies early | metrics health-check (see focus-signals §5) |
 | Fri, week 1 | Backlog grooming check | Mid-sprint: next-sprint candidates need estimates/requirements before pre-planning | sprint-planning `groom` |
 | **Mon, week 2** | **Sprint pre-planning** | Team needs the next sprint shaped before it starts | sprint-planning `plan` |
-| Thu, week 2 | Demo / review prep | Sprint results need packaging before the demo | team-ops-reporter `sprint-review` (draft) |
-| Fri, week 2 | Sprint close: review + retro notes | Close the loop; carryover feeds next sprint's risk model | team-ops-reporter `sprint-review` |
+| Thu, week 2 | Demo / review prep | Sprint results need packaging before the demo | product-reporter `sprint-review` (draft) |
+| Fri, week 2 | Sprint close: review + retro notes | Close the loop; carryover feeds next sprint's risk model | product-reporter `sprint-review` |
 | First week of quarter | Quarter retro + plan confirmation | Plan-vs-actual while memory is fresh | quarterly-planning `retro` |
 | Last month of quarter | Next-quarter roadmap draft | Capacity and scope need lead time | quarterly-planning `plan` |
 | Monthly (1st business day) | Backlog hygiene + decision log | Stale ideas and undocumented decisions accumulate silently | brainstorm-features / journal |

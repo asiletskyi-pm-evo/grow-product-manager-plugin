@@ -284,7 +284,7 @@ The Grow Product Manager Plugin defines 22 artifact types, each with a specific 
 | project-overview | (manual/configurator) | Projects/ | Project description and status |
 | diagram | diagram-prototyper | Diagrams/ | Diagram, prototype, or infographic (source + export link) |
 | task-breakdown | task-creator | Projects/task-breakdowns/ | Feature → Jira tasks decomposition record with links |
-| ops-report | team-ops-reporter | Reports/ops/ | Sprint/quarter/initiative/member operational report |
+| ops-report | product-reporter | Reports/ops/ | Sprint/quarter/initiative/member operational report |
 | roadmap | planning suite (sprint-/quarterly-/project-planning, roadmap-architect) | Roadmaps/ | Sprint plan, quarterly roadmap, project arc, or structure tree (subtype in frontmatter) |
 | focus-brief | focus-advisor | Focus/ | PM focus brief (daily/tactical/strategy — subtype in frontmatter) with chosen focuses and chains |
 | feedback-triage | feedback-triage | Research/feedback/ | Clustered feedback themes with pain scores and trends (baseline for next run) |

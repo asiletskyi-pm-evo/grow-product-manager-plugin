@@ -1,6 +1,6 @@
 # roadmap-artifacts.md
 
-> Shared planning-suite reference. Formats of **planning** artifacts (decision/forecast). These are NOT team-ops-reporter reports (ops-report templates) — those describe fact; these capture the plan. Consumers: `quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`.
+> Shared planning-suite reference. Formats of **planning** artifacts (decision/forecast). These are NOT product-reporter reports (ops-report templates) — those describe fact; these capture the plan. Consumers: `quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`.
 
 ---
 
@@ -42,11 +42,11 @@ A screen with per-platform load bars + feature/platform-slice toggles into the n
 - Storage: workspace + library (`persistent-storage.md`).
 - Language — `user.language`.
 
-## 7. Demarcation from team-ops-reporter
+## 7. Demarcation from product-reporter
 
 | Artifact | Whose |
 | --- | --- |
-| ops-report (sprint/quarter/initiative/member review) | team-ops-reporter (fact) |
+| ops-report (sprint/quarter/initiative/member review) | product-reporter (fact) |
 | quarterly roadmap, project arc, structure tree, capacity-gate, live dashboard | planning-suite (plan/forecast) |
 
-The shared Jira-data source — `jira-data-protocol.md`. A planning artifact may contain a "fact" block, rendered by delegating to team-ops-reporter.
+The shared Jira-data source — `jira-data-protocol.md`. A planning artifact may contain a "fact" block, rendered by delegating to product-reporter.

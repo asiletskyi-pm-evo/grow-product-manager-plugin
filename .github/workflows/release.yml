@@ -1,0 +1,76 @@
+name: release
+
+# Auto-release on merge to main.
+# When a merge lands on main and plugin.json's version has no matching git tag yet,
+# this workflow validates, then creates the tag + GitHub Release with notes pulled
+# from the matching CHANGELOG.md section. Idempotent: if the tag already exists it exits.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # create tags + releases
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags needed for the existence check
+
+      - name: Read plugin version
+        id: ver
+        run: |
+          VERSION=$(jq -r '.version' .claude-plugin/plugin.json)
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "::error::no structured \"version\" in .claude-plugin/plugin.json"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Plugin version: $VERSION"
+
+      - name: Skip if release already exists
+        id: check
+        run: |
+          if git rev-parse "v${{ steps.ver.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag v${{ steps.ver.outputs.version }} already exists — nothing to release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate (hard gate)
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          bash testing/validate-consistency.sh
+          python3 testing/skill_lint.py
+
+      - name: Extract CHANGELOG notes
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          awk -v ver="^## v${VERSION//./\\.} " '
+            $0 ~ ver { flag=1; next }
+            /^## v/ { if (flag) exit }
+            flag { print }
+          ' CHANGELOG.md > release-notes.md
+          # trim leading/trailing blank lines and a trailing "---" separator
+          sed -i -e '/^---[[:space:]]*$/d' release-notes.md
+          awk 'NF{p=1} p' release-notes.md > .rn && mv .rn release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::no CHANGELOG section found for v$VERSION"; exit 1
+          fi
+          echo "----- release notes preview -----"; head -20 release-notes.md
+
+      - name: Create tag and GitHub Release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          gh release create "v$VERSION" \
+            --target "${{ github.sha }}" \
+            --title "v$VERSION" \
+            --notes-file release-notes.md
+          echo "Published Release v$VERSION"

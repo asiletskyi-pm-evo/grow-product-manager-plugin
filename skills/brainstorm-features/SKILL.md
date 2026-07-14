@@ -1,6 +1,6 @@
 ---
 name: brainstorm-features
-version: 0.8.0
+version: 0.9.0
 description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis. Українською: "брейншторм фіч", "згенерувати гіпотези", "знайти точки росту", "гіпотези для CJM-воронки", "ICE-оцінка гіпотез". This is the ideation engine — for the full CJM research pipeline (anomaly detection → enrichment → hypotheses) use cjm-research, which delegates here.
 ---
 
@@ -149,10 +149,17 @@ If the user has ideas and wants evaluation:
 | **Risks** | What could go wrong, potential negative effects |
 | **Impact on metrics** | Which metrics will change and in which direction |
 | **ICE Score** | Impact (1-10) × Confidence (1-10) × Ease (1-10) = Score |
+| **PRO / ROI** | Money-based score (`references/roi-frameworks.md`): cost-in-hours × rate → effect → **% annual return** + the task-as-credit verdict (return vs cost of capital) + Confidence % |
 | **Validation method** | Recommended safest way to validate (see `references/validation-methods.md`) |
 | **Verdict** | Proceed / Postpone / Needs additional research |
 
-See `references/ice-framework.md` for detailed ICE scoring guidelines.
+> **Compute BOTH scores by default.** For every idea, produce **both** the **ICE** score and the **PRO/ROI** score (`references/roi-frameworks.md`). Report only one **only if the user explicitly asks** ("just ICE" / "only ROI"). ICE ranks by impact/confidence/ease; PRO ranks by money (annual % return, task-as-credit). Where a $ effect is unknowable, say so and fall back to ICE for that idea (see the overload methods below).
+
+See `references/ice-framework.md` for ICE scoring and `references/roi-frameworks.md` for PRO/ROAIP economics.
+
+**Overload / no-data prioritization methods** (offer when the backlog is large or data is missing):
+- **"Choose one"** — when the backlog is overloaded, force a single pick: which one idea, if you could only do one, moves the goal most? Cuts analysis paralysis.
+- **"Olympic system"** — when ideas have no comparable data, rank by pairwise elimination (bracket): compare two at a time, the winner advances, until an ordering emerges — a relative ranking without absolute scores.
 
 After presenting the evaluation — propose discussing specific ideas in more depth if the user wants to explore alternatives or refine the approach.
 
@@ -177,10 +184,13 @@ Target metric: [which metric is impacted and by how much]
 Validation method: [A/B test / user interviews / feature flag / fake door / etc.]
 
 ICE Score: Impact [X] × Confidence [X] × Ease [X] = [Score]
+PRO / ROI: cost [hours × rate] → effect [$/yr] → [% annual return], Confidence [%] — verdict vs cost of capital
 
 Benchmarks: [links to research, competitor cases, market data]
 Risks: [what could go wrong]
 ```
+
+> Both **ICE** and **PRO/ROI** are filled by default (see the scoring note in Step 3A); drop one only on explicit request.
 
 > **Note:** Use the user's preferred language (`user.language`) for all field labels and content in the output document.
 
@@ -406,7 +416,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 IF vault_level > L0 AND vault sync_mode != "off":
 
 1. For **each finalized hypothesis** (Step 5), save a separate artifact:
-   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.8.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE score and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, status: "proposed" } })`
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.9.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, status: "proposed" } })`
 2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
 
 ## Quality standards
@@ -422,6 +432,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
 
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/ice-framework.md`** — detailed ICE scoring guidelines and examples
+- **`references/roi-frameworks.md`** — PRO/ROAIP economics (money-based scoring computed alongside ICE)
 - **`references/validation-methods.md`** — validation methods ranked by cost and reliability
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain
 - **`references/data-policy.md`** — data confidentiality policy

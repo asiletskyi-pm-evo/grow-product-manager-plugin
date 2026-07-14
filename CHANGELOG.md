@@ -12,6 +12,85 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v2.0.0 (2026-07-14)
+
+**Wave 3 — the People-contour.** The plugin grows a second contour alongside product/data/delivery: **manager → people → goals → communication → development**. Six new skills, a new person-profile protocol (Step P), five methodology references, one **breaking rename**, and framework upgrades to nine existing skills. Person data is the highest-sensitivity tier — vault/local only, never Confluence/Jira/external LLMs.
+
+### Breaking
+
+- **`team-ops-reporter` renamed to `product-reporter`.** All live references updated across skills, references, manifests, README, and testing (historical CHANGELOG entries keep the old name as an accurate record). The skill gains a new **goal-report (3T5F)** mode (build/audit a person's or a direction's report against a goal). This rename is why the plugin goes to **v2.0.0**.
+
+### Added — foundation (references + protocol)
+
+- **`references/people-context-protocol.md`** — **Step P**: a persistent, vault-local profile per team member (D-type, delegation levels, active goals, reporting cadence, 1-1 history, GTD-index, signals). Storage in the vault `People/` area or `~/.grow-pm/people/`.
+- **`references/goal-frameworks.md`** — SMARTCBP (8 checks), MBO-vs-OKR selection, Tell-and-Sell commitment, goal letter, cascade.
+- **`references/people-frameworks.md`** — Hersey-Blanchard (D1–D4/S1–S4), 7 levels of Appelo, GTD-index, NVC feedback, "Did you tell them yourself?".
+- **`references/reporting-3t5f.md`** — the 8 elements, formatting rules, and manager audit (Forecast QA gate).
+- **`references/communication-frameworks.md`** — ARCV follow-ups, CBI, task formulation (why/what/how + DoD by D-level).
+- **`references/roi-frameworks.md`** — ROAIP / PRO economics (money-based scoring, task-as-credit, Confidence).
+- **`references/session-board.md`** — tactical-session structure + quarterly board-prep checklist.
+- **`references/data-policy.md`** — new highest-sensitivity **People-data** tier (strictly local).
+
+### Added — six People-contour skills
+
+- **`goal-setter` (0.1.0)** — SMARTCBP/OKR formulation, 8-check audit, cascade, Tell-and-Sell commitment; writes goals to the profile.
+- **`one-on-one` (0.1.0)** — prepare (agenda from profile + seven "how" questions + NVC drafts) / analyze (signals + ARCV follow-up + profile update) / coverage (headless). meeting-processor redirects 1-1s here.
+- **`performance-review` (0.1.0)** — goals + GTD-index + Hersey-Blanchard diagnosis into the employer's review template; recommendation (development / style change / yellow card / promotion).
+- **`hiring-designer` (0.1.0)** — role design (goal letter first) + universal vacancy profile mapped to the employer HR form + killer questions + goal×experience evaluation.
+- **`offboarding-guide` (0.1.0)** — evidence-gated four-meeting algorithm, dismissal script + team message, strictly local.
+- **`delegation-coach` (0.1.0)** — 7-levels-of-Appelo audit + S1→S4 hand-off plan + hiring/delegation ROI.
+
+### Added — built-in templates
+
+`goal-letter`, `report-3t5f`, `one-on-one-notes`, `followup-arcv`, `vacancy-profile`, `performance-review`, `offboarding-plan` under `templates/built-in/`.
+
+### Changed — existing skills learn the frameworks
+
+- **`meeting-processor` → 0.13.0** — ARCV follow-up standard (numbered actions, one responsible, verbs, separate Decisions block) + 1-1 detection → redirect to one-on-one.
+- **`task-creator` → 0.10.0** — task-formulation gate (why/what/how + DoD + "how"-depth by D-level from the profile). Single-responsible rule intentionally NOT added (team-process conflict).
+- **`brainstorm-features` → 0.9.0** — computes **ROI/PRO and ICE by default** (one only on explicit request) + "choose one" / "olympic" overload methods.
+- **`requirements-creator` → 0.11.0** — ROI/ICE prioritization gate (Create Step 3e + Analyze A5) → offers brainstorm-features before finalizing.
+- **`sprint-planning` → 0.3.0** — GTD-index (planned→done, written to the profile) + delegation-aware assignee fit.
+- **`focus-advisor` → 0.4.0** — manager-rhythms signal from person profiles + "choose one" final daily filter + People-contour chains.
+- **`quarterly-planning` → 0.3.0** — tactical-session structure + quarterly board-prep package (`references/session-board.md`).
+- **`feedback-triage` → 0.2.0** — SH step: each priority pain → a well-formulated task (task-creator standard).
+- **`experiment-tracker` → 0.2.0** and **`decision-log` → 0.2.0** — optional cost/ROI (ROAIP) + Tell-and-Sell commitment fields.
+- **`plugin-configurator` → 2.7.0** — People setup add-on (roster, cadences, review template, HR-form field map, vault People area) + `people` context-schema section.
+- **`template-library` → 0.2.0** — recognizes the seven People-contour artifact types.
+
+### Files
+
+| File | From | To | Change |
+|------|------|----|--------|
+| skills/team-ops-reporter/ → skills/product-reporter/ | 0.3.0 | 0.4.0 | **rename** + goal-report (3T5F) mode |
+| skills/goal-setter/SKILL.md | — | 0.1.0 | new |
+| skills/one-on-one/SKILL.md | — | 0.1.0 | new |
+| skills/performance-review/SKILL.md | — | 0.1.0 | new |
+| skills/hiring-designer/SKILL.md | — | 0.1.0 | new |
+| skills/offboarding-guide/SKILL.md | — | 0.1.0 | new |
+| skills/delegation-coach/SKILL.md | — | 0.1.0 | new |
+| references/{people-context-protocol,goal-frameworks,people-frameworks,reporting-3t5f,communication-frameworks,roi-frameworks,session-board}.md | — | new | People-contour methodology |
+| references/data-policy.md | — | — | People-data highest-sensitivity tier |
+| skills/meeting-processor/SKILL.md | 0.12.0 | 0.13.0 | ARCV + 1-1 detection |
+| skills/task-creator/SKILL.md | 0.9.0 | 0.10.0 | why/what/how + DoD + D-level depth |
+| skills/brainstorm-features/SKILL.md | 0.8.0 | 0.9.0 | ROI/PRO + ICE by default |
+| skills/requirements-creator/SKILL.md | 0.10.0 | 0.11.0 | ROI/ICE gate |
+| skills/sprint-planning/SKILL.md | 0.2.0 | 0.3.0 | GTD-index + delegation-aware assignee |
+| skills/focus-advisor/SKILL.md | 0.3.0 | 0.4.0 | manager-rhythms + choose-one |
+| skills/quarterly-planning/SKILL.md | 0.2.1 | 0.3.0 | session/board prep |
+| skills/feedback-triage/SKILL.md | 0.1.0 | 0.2.0 | SH step |
+| skills/experiment-tracker/SKILL.md | 0.1.0 | 0.2.0 | cost/ROI + commitment |
+| skills/decision-log/SKILL.md | 0.1.0 | 0.2.0 | cost/ROI + commitment |
+| skills/plugin-configurator/{SKILL,references/onboarding-steps,references/context-schema}.md | 2.6.0 | 2.7.0 | People setup + people schema |
+| skills/template-library/SKILL.md | 0.1.0 | 0.2.0 | People artifact types |
+| templates/built-in/{goal-letter,report-3t5f,one-on-one-notes,followup-arcv,vacancy-profile,performance-review,offboarding-plan}/default-v1.md | — | new | People-contour templates |
+
+### Backwards compatibility
+
+The **only** breaking change is the `team-ops-reporter` → `product-reporter` rename (skill name + directory); update any external references to the old name. The People-contour is fully additive and inert until a `people` section / roster is configured. All existing skills keep their prior behavior; the new framework logic is additive.
+
+---
+
 ## v1.40.0 (2026-07-10)
 
 ### Added — external design toolkit provider (integration + reference)

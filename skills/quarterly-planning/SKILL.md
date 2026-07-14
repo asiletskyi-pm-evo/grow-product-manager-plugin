@@ -1,6 +1,6 @@
 ---
 name: quarterly-planning
-version: 0.2.1
+version: 0.3.0
 description: Builds a quarterly roadmap, reviews the previous quarter's delivery, and stress-tests the plan against team capacity. Use when the user asks to "build a quarterly roadmap", "quarterly planning", "plan-vs-actual for the quarter", "quarter retro", "plan capacity", "what the team can deliver", "is the quarterly plan realistic". Українською: "зібрати roadmap на квартал", "quarterly planning", "plan-vs-actual кварталу", "retro кварталу", "capacity плану", "що команда встигне", "оцінити реалістичність плану на квартал". Scope = exactly one quarter: for multi-quarter project arcs use project-planning, for structure/labeling use roadmap-architect, for a single sprint use sprint-planning.
 ---
 
@@ -8,7 +8,7 @@ description: Builds a quarterly roadmap, reviews the previous quarter's delivery
 
 Quarterly-planning orchestrator (horizontal axis: one period across all directions). Pulls the previous quarter's actuals, computes capacity for the new quarter, drafts the plan with auto-estimates, runs it through the capacity-gate, walks the PM through scope correction, and generates artifacts. Does not analyze or compute metrics itself — it delegates. **AI is the PM's advisor:** it proposes and highlights; the user decides.
 
-Part of the planning-suite: `roadmap-architect` (structure) → **`quarterly-planning`** (quarter) → `sprint-planning` (sprint); `project-planning` supplies arcs / allocation %. Integrates with `team-ops-reporter` (reporting — source of actuals).
+Part of the planning-suite: `roadmap-architect` (structure) → **`quarterly-planning`** (quarter) → `sprint-planning` (sprint); `project-planning` supplies arcs / allocation %. Integrates with `product-reporter` (reporting — source of actuals).
 
 ## Prerequisites
 
@@ -18,6 +18,7 @@ Read and apply before starting:
 - `references/capacity-model.md` — ceiling formula, 4 inputs, allocation %, platform slices, auto-estimation, gate thresholds (85/100%).
 - `references/dependency-model.md` — dependencies/sequencing (for carrying over unfinished work).
 - `references/roadmap-artifacts.md` — roadmap page format, Gantt, live dashboard.
+- `references/session-board.md` — tactical-session structure + quarterly board-prep checklist (for the retro/readout framing).
 - `references/jira-data-protocol.md` — Jira plumbing (field map, JQL, extraction). **Reuse, don't duplicate.**
 - `references/integration-strategy.md`, `references/persistent-storage.md`, `references/template-protocol.md`.
 
@@ -44,7 +45,7 @@ Per `local-context-protocol.md`. If no Planning section → chain to `plugin-con
 `AskUserQuestion`: quarter; mode; format (Confluence + dashboard by default). Determine the previous quarter (retro) and the target quarter (plan).
 
 ### Step 2 — Actuals collection (retro)
-**Delegate `team-ops-reporter` `quarter-review`** for the previous quarter's plan-vs-actual (closed epics/features, releases, by direction). On top of that:
+**Delegate `product-reporter` `quarter-review`** for the previous quarter's plan-vs-actual (closed epics/features, releases, by direction). On top of that:
 - Feature inventory: CQL `space={space} AND label="q{N-1}-{year}" AND type=page` (name-parsing regex from `planning-core`).
 - Feature status normalization (`planning-core`) → done/in_progress/planned/blocked + miss reasons.
 - **Baseline calibration** of velocity against actuals (`capacity-model` sec. 4; velocity from the Jira board id).
@@ -65,12 +66,14 @@ If a platform is over the ceiling — **show the specific directions→epics→f
 ### Step 6 — Artifacts + storage
 Per `roadmap-artifacts.md`: (1) **Confluence roadmap** (focuses + Gantt + tree, features as `code—name`) — publish **after approval**; (2) **live dashboard**; (3) `q{N}` labels on epics (`editJiraIssue`, preserving existing); (4) workspace + library storage (draft/final kept separate).
 
-### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.2.0", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
+**Optional — quarterly board / stakeholder readout.** When the quarter is being reported up (not just planned), offer to frame the retro + plan as a **board-prep package** per `references/session-board.md`: previous-board follow-up statuses (GTD ≥ 80%), plan-vs-actual with causes, goal statuses & forecasts (SMARTCBP + 3T5F), AI/cost-savings table (ROAIP), the direction's health metrics/funnel, and worked-through questions for approval. This reuses the retro (Step 2) data — no new fetch.
 
-## Integration with team-ops-reporter
+### Step 7 — Save to Vault (Optional)
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.3.0", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
+
+## Integration with product-reporter
 - Quarter actuals ← `quarter-review` (don't rewrite the fetch).
-- Approved roadmap → can be rendered as a stakeholder report via team-ops-reporter.
+- Approved roadmap → can be rendered as a stakeholder report via product-reporter.
 - Shared Jira plumbing — `jira-data-protocol.md`.
 
 ## Skill Chaining

@@ -164,6 +164,14 @@ Users can add any additional sections with free-form markdown content. The confi
 | **Plugin Configurator** | — | reads/writes everything |
 | **Focus Advisor** | product.name, planning (sprint anchor/cadence) | focus section (sources, VIP senders, PM goals, cadence overrides, scheduled) |
 | **Design Bridge** | product.name | design_system_spec, pptx_theme, brand.*, **design_toolkits[]** (external hi-fi delegation) |
+| **Product Reporter** | product.name, jira_project_key | team, custom-field map; for goal-report: people.* (goal + cadence) |
+| **Goal Setter** | — | people.* (roster, cadences), product.current_okrs, planning goal map |
+| **One-on-One** | — | people.* (roster, 1-1 cadence), Fireflies/Calendar |
+| **Performance Review** | — | people.* (roster, review template), product-reporter data |
+| **Hiring Designer** | — | people.hr_form (employer vacancy-form fields), team |
+| **Offboarding Guide** | — | people.* (roster), goals/reports evidence |
+| **Delegation Coach** | — | people.* (roster, d_type, gtd, delegation), calendar/Jira |
+| **Sprint Planning** | product.name, planning | people.* (d_type/delegation for assignee fit; writes gtd_index) |
 
 ## Validation Rules
 
@@ -321,3 +329,28 @@ design_toolkits:
     data_locality: local | external
     contract_version: <semver>
 ```
+
+### People Configuration section format
+
+Read by the People-contour skills (`goal-setter`, `one-on-one`, `performance-review`, `hiring-designer`, `offboarding-guide`, `delegation-coach`) and, read-mostly, by `product-reporter` (goal-report), `sprint-planning`, and `focus-advisor`. Written by `plugin-configurator` → People setup. Full semantics: `references/people-context-protocol.md`.
+
+> **Highest-sensitivity data.** Person profiles live in the vault `People/` area or `~/.grow-pm/people/` — never Confluence/Jira/external LLMs (`references/data-policy.md`).
+
+```yaml
+people:
+  vault_area: "People"            # vault area for profiles; else ~/.grow-pm/people/
+  roster_index: "People/_roster.md"
+  cadence:
+    one_on_one: monthly           # weekly | biweekly | monthly | quarterly (default rule per person tenure)
+    goal_report: weekly           # weekly | monthly
+  review_template_id: performance-review-builtin-default   # or the employer's registered template_id
+  hr_form:                        # employer vacancy-form field map for hiring-designer (employer-specific)
+    budget: [<controlled values>]
+    team: [<controlled values>]
+    position: [<controlled values>]
+    employment_type: [<controlled values>]
+    probation_length: [<controlled values>]
+    # …any other employer form selects; hiring-designer maps the universal vacancy profile onto these
+```
+
+Person profiles themselves are **not** stored in `local-context.md` — only this pointer/config block is. Profiles are separate files per `people-context-protocol.md`.

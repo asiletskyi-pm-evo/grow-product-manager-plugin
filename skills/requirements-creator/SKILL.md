@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.10.0
+version: 0.11.0
 description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one. Українською: "написати вимоги", "описати фічу", "створити специфікацію фічі", "вимоги до A/B-тесту", "переглянути вимоги", "проаналізувати вимоги", "покращити вимоги", "перевірити мою специфікацію".
 ---
 
@@ -187,6 +187,16 @@ Ask the user via AskUserQuestion. Default options:
 - If Epic is unknown → ask the user for Epic key and feature number
 - Always show the proposed number to the user for confirmation before using it
 
+### Step 3e — Prioritization check (ROI & ICE)
+
+Before finalizing, check whether the feature has been **prioritized** — does it carry computed **ROI** (PRO/ROAIP — `references/roi-frameworks.md`) and **ICE** scores (computed by `brainstorm-features`)?
+
+- If **both are present** (e.g. passed from `brainstorm-features` or in the source concept) → carry them into the requirements' prioritization/metrics section.
+- If **missing** → offer to score before finalizing:
+  > "This feature doesn't have ROI (PRO/ROAIP) and ICE scores yet. Want me to run `/grow-product-manager:brainstorm-features` to evaluate it before we finalize the requirements? Writing requirements for an unprioritized feature risks speccing something that shouldn't be built yet."
+
+  If the user accepts → chain to `brainstorm-features` (scoring), then continue. If they decline → proceed and note "prioritization not computed" in the document.
+
 ### Step 4 — Draft the requirements document
 
 Generate the full requirements document following the confirmed template structure.
@@ -366,7 +376,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.10.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.11.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 
@@ -468,6 +478,8 @@ For each clarifying question, briefly explain why this information matters:
 Continue asking until all critical and important gaps are resolved, or the user explicitly says to proceed with what's available.
 
 ### A5 — Propose improvements
+
+**Prioritization check (ROI & ICE):** as part of the analysis, verify whether the existing requirements carry computed **ROI** (PRO/ROAIP — `references/roi-frameworks.md`) and **ICE** scores (computed by `brainstorm-features`). If missing, add a proposal: "The feature isn't prioritized (no ROI/ICE) — recommend running `/grow-product-manager:brainstorm-features` to score it before finalizing, to confirm it's worth implementing."
 
 Present a prioritized list of concrete improvement proposals:
 
@@ -572,6 +584,7 @@ If the user agrees — invoke Task Creator with full context.
 - **`references/requirements-template.md`** — detailed standard template with section descriptions and instructions
 - **`references/examples/feature-spec-example-v1.md`** — worked golden feature-spec exemplar with A/B + acceptance criteria (few-shot; load on demand in Step 4)
 - **`references/approach-recommendation.md`** — implementation approach recommendation logic (feature flag, A/B test, etc.)
+- **`references/roi-frameworks.md`** — the ROI (PRO/ROAIP) side of the prioritization gate (Step 3e / A5); ICE scoring is computed by `brainstorm-features`
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms

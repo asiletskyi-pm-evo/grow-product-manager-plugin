@@ -8,7 +8,7 @@ description: Plans and forecasts delivery of a project/mission/initiative beyond
 
 Project/mission planning orchestrator (vertical axis: one direction across time). Estimates volume, builds dependencies and the critical path, forecasts duration under a team allocation %, lays out the arc (multi-quarter roadmap), and **replans** it against actuals (rolling-reforecast). **AI is the PM's advisor.**
 
-Part of the planning-suite: supplies arcs and allocation % to `quarterly-planning`. Integrates with `team-ops-reporter` (current state / % done ← `initiative-status`).
+Part of the planning-suite: supplies arcs and allocation % to `quarterly-planning`. Integrates with `product-reporter` (current state / % done ← `initiative-status`).
 
 ## Prerequisites
 - `references/local-context-protocol.md` — Step 0 + Planning section.
@@ -41,7 +41,7 @@ Per `local-context-protocol.md` + Planning (capacity rules, sprints, goal map, D
 Pick the project/mission/initiative (goal PROJ-XX, epic, or a set of epics).
 
 ### Step 2 — Project content
-Epics + features (CQL by epic, `getJiraIssue` per-key); volume by platform; **auto-estimate missing ones** (`capacity-model` sec. 8). Current state / % done — **delegate `team-ops-reporter` `initiative-status`**.
+Epics + features (CQL by epic, `getJiraIssue` per-key); volume by platform; **auto-estimate missing ones** (`capacity-model` sec. 8). Current state / % done — **delegate `product-reporter` `initiative-status`**.
 
 ### Step 3 — Dependency graph
 Per `dependency-model.md`: derive from Jira links (Blocks/Relates) + PM input → DAG; topo-sort; **critical path**; flag cycles/breaks. **Gate** on manual dependencies.
@@ -57,7 +57,7 @@ Per `roadmap-artifacts.md` sec. 3: multi-quarter Gantt, critical path highlighte
 
 ### Replan — rolling-reforecast (mode `replan`)
 Trigger: quarter boundary / on-demand / scheduled.
-- R1. Current state ← `team-ops-reporter` (`initiative-status` + quarter actuals); committed and **carried over** ← `quarterly-planning`.
+- R1. Current state ← `product-reporter` (`initiative-status` + quarter actuals); committed and **carried over** ← `quarterly-planning`.
 - R2. Remainder = volume − done.
 - R3. Backlog = remainder − committed_this_quarter (incl. carried over).
 - R4. Re-sequence under dependencies + % for future periods.
@@ -65,10 +65,10 @@ Trigger: quarter boundary / on-demand / scheduled.
 - R6. Update roadmap + risks; save the new baseline.
 
 ### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "project-planning", skill_version: "0.2.0", tags: [project/mission key, directions], content: project arc + forecast (or replan drift report), related: [[goal artifact]], [[quarterly roadmaps]], extra_frontmatter: { subtype: "project-arc", baseline_date, forecast_date } })` → "Saved to Vault: Roadmaps/{product}/…". The saved baseline is what `replan` mode compares drift against.
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "project-planning", skill_version: "0.2.1", tags: [project/mission key, directions], content: project arc + forecast (or replan drift report), related: [[goal artifact]], [[quarterly roadmaps]], extra_frontmatter: { subtype: "project-arc", baseline_date, forecast_date } })` → "Saved to Vault: Roadmaps/{product}/…". The saved baseline is what `replan` mode compares drift against.
 
 ## Integration
-↔ `quarterly-planning` (down: arcs + allocation %; up: actuals + carryover → `replan`). ← `team-ops-reporter` `initiative-status` (state / % done). ← `roadmap-architect` (structure). → `diagram-prototyper` (arc presentation). ← `cjm-research`/`brainstorm-features` (new epics/features).
+↔ `quarterly-planning` (down: arcs + allocation %; up: actuals + carryover → `replan`). ← `product-reporter` `initiative-status` (state / % done). ← `roadmap-architect` (structure). → `diagram-prototyper` (arc presentation). ← `cjm-research`/`brainstorm-features` (new epics/features).
 
 ## Quality Standards
 - Don't invent dependencies — only Jira links / Development Flow / explicit PM input; the rest = "break, please formalize".

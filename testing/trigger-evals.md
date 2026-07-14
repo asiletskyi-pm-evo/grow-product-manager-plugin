@@ -59,8 +59,8 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 |---|--------|----------|
 | D1 | зарелізь плагін | release-manager |
 | D2 | підготуй реліз v1.31.0 | release-manager |
-| D3 | звіт по релізах команди за спринт | team-ops-reporter |
-| D4 | які фічі виїхали в реліз каталогу цього тижня | team-ops-reporter |
+| D3 | звіт по релізах команди за спринт | product-reporter |
+| D4 | які фічі виїхали в реліз каталогу цього тижня | product-reporter |
 
 ### Group E — Research vs analysis vs knowledge
 
