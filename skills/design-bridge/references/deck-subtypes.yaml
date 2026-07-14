@@ -12,9 +12,9 @@ meta:
 subtypes:
 
   # --------------------------------------------------------------------
-  # 1. FEATURE-CONCEPT — pitch a new feature for direction review
+  # 1. FEATURE — pitch a new feature for direction review
   # --------------------------------------------------------------------
-  feature-concept:
+  feature:
     name:
       en: "Feature Concept Pitch"
     target_length: 10

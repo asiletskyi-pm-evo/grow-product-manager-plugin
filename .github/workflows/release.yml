@@ -12,6 +12,12 @@ on:
 permissions:
   contents: write   # create tags + releases
 
+# Two rapid merges to main would both see "tag does not exist" and race
+# `gh release create`; the loser fails red instead of skipping.
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -50,9 +56,11 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
+          # Stop at the next entry in EITHER heading style: current "## vX.Y.Z (date)"
+          # or the legacy "## [X.Y.Z] — date" used up to v1.6.0.
           awk -v ver="^## v${VERSION//./\\.} " '
             $0 ~ ver { flag=1; next }
-            /^## v/ { if (flag) exit }
+            /^## v|^## \[/ { if (flag) exit }
             flag { print }
           ' CHANGELOG.md > release-notes.md
           # trim leading/trailing blank lines and a trailing "---" separator

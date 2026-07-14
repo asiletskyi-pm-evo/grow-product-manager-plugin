@@ -41,6 +41,13 @@ ok "SKILL.md frontmatter: $(ls -d skills/*/ | wc -l | tr -d ' ') skills checked"
 # --- 3. No leftover editorial artifacts ---------------------------------------
 # Match artifacts at line start only (historical CHANGELOG entries may mention the pattern in prose).
 if grep -qn '^<!-- Препенди' CHANGELOG.md; then err "CHANGELOG.md contains leftover editorial prepend-instructions"; fi
+# v2.0.1: the example file shipped an author-directed note ("Додай цю секцію у ...").
+# Editorial artifacts are a repo-wide class, not a CHANGELOG-only one.
+for f in local-context.example.md README.md; do
+  if grep -qnE '^<!--[[:space:]]*(Додай|Препенди|TODO|FIXME|Встав)' "$f"; then
+    err "$f contains a leftover editorial note addressed to the author"
+  fi
+done
 
 # --- 4. Reference paths mentioned in skills must exist ------------------------
 # Convention: in a SKILL.md, `references/X.md` may mean the root references/ dir

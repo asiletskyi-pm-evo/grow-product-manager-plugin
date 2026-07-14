@@ -9,7 +9,7 @@
 Every collector returns compact packets, never raw data — this keeps token cost flat regardless of how noisy the underlying source is:
 
 ```yaml
-- signal: "Лист від VIP stakeholder висить без відповіді 2 дні"   # one line, human-readable
+- signal: "Лист від VIP-стейкхолдера висить без відповіді 2 дні"   # one line, human-readable
   source: mail | calendar | meetings | jira | cadence | metrics | roadmap | goals
   severity: high | normal | low
   freshness: 2026-07-03T09:00                                   # when observed

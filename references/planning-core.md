@@ -20,7 +20,7 @@ Story/Task-level issues are **out of roadmap scope** (they are the sprint-planni
 ## 2. Marking convention (single source of truth for auto-assembly)
 
 **Feature (Confluence page):**
-- Name: `{PROJ}-{epic}.{feature}[.{sub}] - {human name}` (e.g. `PROJ-109.5 - Q&A - YouTube in threads`).
+- Name: `{PROJ}-{epic}.{feature}[.{sub}] - {human name}` (e.g. `PROJ-1234.5 - Q&A - answer threads`).
 - Labels: `feature`, `q{N}-{year}` (quarter where the work is run/planned; may be several), team label.
 - Status field in the body: line `Status: {value}` from a controlled vocabulary (section 3).
 
@@ -51,16 +51,16 @@ The epic's Jira status is taken from `statusCategory.key`: `done`→done, `indet
 
 ## 4. Goal map (epic → Goal)
 
-Atlas Goals are not queryable via MCP → keep the map in local-context (Planning → goal_map). Example (FET):
+Atlas Goals are not queryable via MCP → keep the map in local-context (Planning → goal_map). Example (illustrative — real values live only in local-context.md):
 
 | Goal | Epics |
 | --- | --- |
-| PROJ-25 (Conversion/catalog/brands) | 101, 102, 103, 104, 105, 106, 107 |
-| PROJ-3 (Product reviews) | 108, 106 |
-| PROJ-22 (Q&A) | 109 |
-| PROJ-23 (Product comparison) | (comparison epic) |
-| PROJ-24 (New segment) | 110 |
-| — Feedback Ecosystem | 111, 112, 113, 114 |
+| PROJ-10 (Conversion) | 101, 102, 103 |
+| PROJ-11 (Reviews) | 104, 105 |
+| PROJ-12 (Q&A) | 106 |
+| PROJ-13 (Comparison) | (comparison epic) |
+| PROJ-14 (New segment) | 107 |
+| — Some initiative | 108, 109 |
 
 ---
 

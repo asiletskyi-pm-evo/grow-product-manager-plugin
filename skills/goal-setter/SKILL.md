@@ -1,7 +1,7 @@
 ---
 name: goal-setter
-version: 0.1.0
-description: Set and audit goals for a person, team, product, direction, project, or a candidate offer — using SMARTCBP for personal goals and OKR for product/direction goals. Use when the user asks to "set a goal", "write goals for <person>", "audit this goal", "is this goal SMART", "goal letter", "cascade goals", "OKR for the quarter", "objectives and key results", "review goals for the period". Українською: "постав ціль", "сформулюй цілі для <людини>", "проведи аудит цілі", "ціль за SMARTCBP", "лист цілей", "каскад цілей", "OKR на квартал", "цілі напрямку", "переглянути цілі за період". Do NOT use to report progress against an existing goal (product-reporter goal-report / 3T5F), to review a person's overall performance (performance-review), or to build a delivery roadmap (quarterly-planning / project-planning). This skill formulates and commits goals; other skills track and report them.
+version: 0.1.1
+description: Set and audit goals for a person, team, product, direction, project, or a candidate offer — using SMARTCBP for personal goals and OKR for product/direction goals. Use when the user asks to "set a goal", "write goals for <person>", "audit this goal", "is this goal SMART", "goal letter", "cascade goals", "OKR for the quarter", "objectives and key results", "review goals for the period". Українською — "постав ціль", "сформулюй цілі для <людини>", "проведи аудит цілі", "ціль за SMARTCBP", "лист цілей", "каскад цілей", "OKR на квартал", "цілі напрямку", "переглянути цілі за період". Do NOT use to report progress against an existing goal (product-reporter goal-report / 3T5F), to review a person's overall performance (performance-review), or to build a delivery roadmap (quarterly-planning / project-planning). This skill formulates and commits goals; other skills track and report them.
 ---
 
 # Goal Setter

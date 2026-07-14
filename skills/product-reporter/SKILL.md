@@ -1,7 +1,7 @@
 ---
 name: product-reporter
-version: 0.4.0
-description: Create operational Jira reports AND goal reports for a team, person, or direction. Operational modes — sprint plan, sprint review, quarter review, initiative status, team-member review. Goal-report mode — build or audit a 3T5F report (Target, Top Record, Top-3 Highlights, Fact, Fact/Forecast Quota Attainment, Funnel) of a person's or a direction's progress against a goal. Use when the user asks to "build a sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points", "goal report", "3T5F report", "stakeholder report for the direction", or "audit this report against the goal". Українською: "зібрати звіт по спринту (план/рев'ю)", "результати кварталу", "статус епіка/фічі/місії", "скільки <людина> закрила за період", "операційний звіт команди", "звіт по релізах / флагах / стори-поінтах", "звіт по цілі", "звіт 3T5F", "звіт для стейкхолдерів по напрямку", "перевір звіт проти цілі". Do NOT use to SET a person's goal (that is goal-setter — this skill only reports/audits against an already-set goal), to analyze A/B or dashboard metrics (product-analysis), or to run a full performance review of a person (performance-review, which pulls goal data from here).
+version: 0.4.1
+description: Create operational Jira reports AND goal reports for a team, person, or direction. Six modes — sprint plan, sprint review, quarter review, initiative status, member review, goal-report (3T5F build/audit against a goal). Use when the user asks to "build a sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points", "goal report", "3T5F report", "stakeholder report for the direction", or "audit this report against the goal". Українською — "зібрати звіт по спринту (план/рев'ю)", "результати кварталу", "статус епіка/фічі/місії", "скільки <людина> закрила за період", "операційний звіт команди", "звіт по релізах / флагах / стори-поінтах", "звіт по цілі", "звіт 3T5F", "звіт для стейкхолдерів по напрямку", "перевір звіт проти цілі". Do NOT use to SET a person's goal (goal-setter), to analyze A/B or dashboard metrics (product-analysis), or to run a full performance review (performance-review).
 ---
 
 # Product Reporter
@@ -47,7 +47,7 @@ Runs before Step 1 (every mode produces an artifact). Follow `references/templat
 - `subtype`: `ops-sprint-plan` | `ops-sprint-review` | `ops-quarter-review` | `ops-initiative-status` | `ops-member-review` | `goal-3t5f`
 - `product_id`, `language` from local-context.
 - T-1 read `templates.preference` (`auto`/`always_ask`/`smart`); T-2 `resolve(...)` via template-library; T-3 decide; T-4 render with the template skeleton (collect required variables in Step 3); T-5 mark saved artifact with `<!-- template: {id}@{version} -->`.
-- **Fallback**: if no custom template, use `references/builtin-templates/<subtype>.md`.
+- **Fallback**: if no custom template, use the built-in skeletons `templates/built-in/ops-report/<mode>-v1.md` (e.g. `sprint-plan-v1.md`); for `goal-report` — `templates/built-in/report-3t5f/default-v1.md`.
 - **Escape hatch**: "no template" / "blank slate" → skip Step T, use built-in skeleton.
 
 ## Workflow
@@ -147,7 +147,7 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.4.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.4.1", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - For `goal-report` on a **person** — save to the People/Reports area **locally/vault only** (never Confluence), per data-policy.
 2. Display: "Saved to Vault: Reports/ops/{product}/…"
 
@@ -168,7 +168,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - `references/people-context-protocol.md` — Step P for person goal reports (goal + cadence + Forecast QA).
 - `references/roi-frameworks.md` — quantify Top-3 Highlights in $ / ROI.
 - `references/goal-frameworks.md` — SMARTCBP Target; boundary with `goal-setter`.
-- `references/builtin-templates/` — fallback skeletons for the ops subtypes.
+- `templates/built-in/ops-report/` + `templates/built-in/report-3t5f/` — built-in fallback skeletons for the report subtypes.
 - `references/template-protocol.md` — template-library resolution (shared).
 - `references/local-context-protocol.md` — Step 0 (shared).
 - `references/integration-strategy.md` — MCP → registry → browser (shared).

@@ -6,10 +6,18 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   consistency:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Must match release.yml's hard gate exactly — otherwise a PR goes green,
+      # merges, and then fails the auto-release on main with no earlier signal.
       - name: Run consistency checks
         run: bash testing/validate-consistency.sh
+      - name: Run static lint
+        run: python3 testing/skill_lint.py

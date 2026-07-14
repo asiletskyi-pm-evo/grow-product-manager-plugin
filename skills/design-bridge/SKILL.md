@@ -1,7 +1,7 @@
 ---
 name: design-bridge
-version: 0.3.0
-description: Orchestrate Claude's Design skills (user-research, research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline, and route hi-fi screen generation to an external design toolkit declared in local-context (design_toolkits). Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact. Українською: "створити презентацію", "зробити деку", "побудувати прототип", "згенерувати hi-fi екран", "через мій дизайн-тулкіт", "згенерувати handoff", "дизайн-рев'ю", "передати дизайн у розробку". Do NOT use for quick local diagrams, flowcharts, BPMN, Mermaid, or plain wireframes — use diagram-prototyper for those.
+version: 0.3.1
+description: Orchestrate Claude's Design skills (user-research, research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline, and route hi-fi screen generation to an external design toolkit declared in local-context (design_toolkits). Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact. Українською — "створити презентацію", "зробити деку", "побудувати прототип", "згенерувати hi-fi екран", "через мій дизайн-тулкіт", "згенерувати handoff", "дизайн-рев'ю", "передати дизайн у розробку". Do NOT use for quick local diagrams, flowcharts, BPMN, Mermaid, or plain wireframes — use diagram-prototyper for those.
 ---
 
 # Design Bridge
@@ -319,7 +319,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.3.0",
+  skill_version: "0.3.1",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],

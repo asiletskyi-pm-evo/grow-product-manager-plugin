@@ -1,7 +1,7 @@
 ---
 name: project-planning
-version: 0.2.1
-description: Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph and sequence, computes duration under a given team allocation % to the direction, and lays out a multi-quarter project roadmap with rolling-reforecast. Use when the user asks "how long will the project take", "project roadmap", "epic sequence", "feature dependencies", "when will we finish the initiative", "team % on a direction", "critical path", "replan the project". Українською: "скільки займе проєкт", "roadmap проєкту", "послідовність епіків", "залежності фіч", "коли завершимо ініціативу", "% команди на напрямок", "критичний шлях", "переплан проєкту". Horizon = beyond one quarter (mission/initiative arcs): for a single quarter's roadmap use quarterly-planning; for structure/labeling without dates use roadmap-architect.
+version: 0.2.2
+description: Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph and sequence, computes duration under a given team allocation % to the direction, and lays out a multi-quarter project roadmap with rolling-reforecast. Use when the user asks "how long will the project take", "project roadmap", "epic sequence", "feature dependencies", "when will we finish the initiative", "team % on a direction", "critical path", "replan the project". Українською — "скільки займе проєкт", "roadmap проєкту", "послідовність епіків", "залежності фіч", "коли завершимо ініціативу", "% команди на напрямок", "критичний шлях", "переплан проєкту". Horizon = beyond one quarter (mission/initiative arcs) — for a single quarter's roadmap use quarterly-planning; for structure/labeling without dates use roadmap-architect.
 ---
 
 # Project Planning
@@ -65,7 +65,7 @@ Trigger: quarter boundary / on-demand / scheduled.
 - R6. Update roadmap + risks; save the new baseline.
 
 ### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "project-planning", skill_version: "0.2.1", tags: [project/mission key, directions], content: project arc + forecast (or replan drift report), related: [[goal artifact]], [[quarterly roadmaps]], extra_frontmatter: { subtype: "project-arc", baseline_date, forecast_date } })` → "Saved to Vault: Roadmaps/{product}/…". The saved baseline is what `replan` mode compares drift against.
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "project-planning", skill_version: "0.2.2", tags: [project/mission key, directions], content: project arc + forecast (or replan drift report), related: [[goal artifact]], [[quarterly roadmaps]], extra_frontmatter: { subtype: "project-arc", baseline_date, forecast_date } })` → "Saved to Vault: Roadmaps/{product}/…". The saved baseline is what `replan` mode compares drift against.
 
 ## Integration
 ↔ `quarterly-planning` (down: arcs + allocation %; up: actuals + carryover → `replan`). ← `product-reporter` `initiative-status` (state / % done). ← `roadmap-architect` (structure). → `diagram-prototyper` (arc presentation). ← `cjm-research`/`brainstorm-features` (new epics/features).

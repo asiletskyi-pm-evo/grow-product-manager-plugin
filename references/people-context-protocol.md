@@ -17,7 +17,7 @@ Person profiles are stored as one Markdown file per person:
 
 `<slug>` is the kebab-cased name (`Olena Kovalenko` → `olena-kovalenko`). A team **roster index** lives at `People/_roster.md` (vault) or `~/.grow-pm/people/_roster.md` — one line per person: `- [[People/olena-kovalenko]] — Analyst, D3, reports weekly`.
 
-The `People` vault area and default cadences are configured by `plugin-configurator` → **People-setup** mode and stored in `local-context.md` → `people` section (see `references/context-schema.md`).
+The `People` vault area and default cadences are configured by `plugin-configurator` → **People-setup** mode and stored in `local-context.md` → `people` section (see `skills/plugin-configurator/references/context-schema.md`).
 
 ---
 
@@ -31,7 +31,7 @@ type: people
 name: "Olena Kovalenko"
 slug: olena-kovalenko
 role: "Product Analyst"
-team: "FET"
+team: "Core"
 manager: "Andrii"
 joined: 2025-03-01
 # Situational leadership (people-frameworks.md → Hersey-Blanchard)

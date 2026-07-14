@@ -50,7 +50,7 @@ Most agent failures are **configuration failures**, not model failures — the f
 |---------------|---------------------|--------------------|
 | **Instructions** | Was the skill's core/description too loose or ambiguous? | SKILL.md description / core step wording |
 | **Tools** | Was an MCP/tool missing, or its "when to call" prose unclear? | `integration-strategy.md` / tool-usage prose in the skill |
-| **Context** | Wrong static/dynamic split — a needed field missing, or context overloaded with noise? | `local-context-protocol.md` / `context-budget.md` (static-dynamic boundary) |
+| **Context** | Wrong static/dynamic split — a needed field missing, or context overloaded with noise? | `local-context-protocol.md` (static-dynamic boundary) |
 | **Guardrails** | Was a gate/check skipped (e.g. Data Integrity, data-policy)? | `data-integrity-protocol.md` / add a gate step |
 | **Orchestration** | Did the wrong skill fire, or did delegation misroute? | description "Do NOT use" hints / `subagent-delegation.md` |
 | **Observability** | Would we have caught this at all before the user did? | add/extend an output-eval rubric (`testing/output-evals.md`) |

@@ -1,7 +1,7 @@
 ---
 name: feedback-triage
-version: 0.2.0
-description: Triage a stream of user feedback — support tickets, complaints, reviews, Q&A, NPS verbatims — into clustered themes with frequency, severity, and trend scoring, producing a prioritized pain list and hypothesis candidates. Use when the user asks to "triage feedback", "cluster support tickets", "top user complaints for the period", "what hurts buyers/sellers", "feedback themes trend". Українською: "розбери відгуки/скарги", "тріаж фідбеку", "що болить покупцям/продавцям", "кластеризуй support-тікети", "топ проблем за місяць", "тренди тем фідбеку". Do NOT use for deep interview synthesis (product-research or design research-synthesis), saving individual sources (knowledge-library), or ideation (brainstorm-features — chain there after triage).
+version: 0.2.1
+description: Triage a stream of user feedback — support tickets, complaints, reviews, Q&A, NPS verbatims — into clustered themes with frequency, severity, and trend scoring, producing a prioritized pain list and hypothesis candidates. Use when the user asks to "triage feedback", "cluster support tickets", "top user complaints for the period", "what hurts buyers/sellers", "feedback themes trend". Українською — "розбери відгуки/скарги", "тріаж фідбеку", "що болить покупцям/продавцям", "кластеризуй support-тікети", "топ проблем за місяць", "тренди тем фідбеку". Do NOT use for deep interview synthesis (product-research or design research-synthesis), saving individual sources (knowledge-library), or ideation (brainstorm-features — chain there after triage).
 ---
 
 # Feedback Triage
@@ -57,7 +57,7 @@ Publishing: Confluence (default) / local — ask. Every number carries inline pe
 - → **`task-creator`**: quick-fix themes straight to Jira (the SH-step formulations feed directly in)
 
 ### Step V — Save to Vault
-`vault_save({type: "feedback-triage", product, skill: "feedback-triage", skill_version: "0.2.0", tags: [segment, period, top theme slugs], content: full report, related: [previous triage artifact, spawned hypotheses], extra_frontmatter: {period, segment, sources_count, items_total, items_usable, top_pain_score}})` → Research/feedback/. This artifact is the baseline for the next run's trends.
+`vault_save({type: "feedback-triage", product, skill: "feedback-triage", skill_version: "0.2.1", tags: [segment, period, top theme slugs], content: full report, related: [previous triage artifact, spawned hypotheses], extra_frontmatter: {period, segment, sources_count, items_total, items_usable, top_pain_score}})` → Research/feedback/. This artifact is the baseline for the next run's trends.
 
 ## Quality Standards
 - Theme names in the users' language of pain, verbatims verbatim (PII stripped: names, emails, order numbers masked).

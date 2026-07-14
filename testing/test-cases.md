@@ -2,6 +2,30 @@
 
 > Updated EVERY release: new cases for new/changed skills + regression for affected ones. Format — see `Testing-process.md`. Status is filled in when a stage runs.
 
+## Release v2.0.1 — audit remediation + validator hardening
+
+> **Run 2026-07-14 — verdict: GREEN.** Both validators pass; every case below is now automated in `skill_lint.py`, so it re-runs on every PR rather than being re-checked by hand.
+>
+> **Why this section exists.** The v2.0.0 audit found 5 critical + 14 major defects that both validators passed green. Worse, `TC-reg-rename-02` below was marked **pass** in v1.15.0 while `Feature-task-creator` was still live in `meeting-processor` — a hand-run check that reported the wrong answer. Every case here is therefore stated as a *linter check name*, not as a manual step.
+
+### Stage 1 — Static lint (each case = one `skill_lint.py` check)
+- **TC-lint-fm-yaml** | all 29 SKILL.md | frontmatter parses under a STRICT YAML parser, not just Claude Code's lenient one | check `frontmatter-yaml` | expected: 0 FAIL | **pass** (was 28/29 failing: unquoted `Українською: ` terminates a plain scalar)
+- **TC-lint-fm-desc** | all 29 SKILL.md | `description` ≤ 1024 chars (the field the model routes on) | check `frontmatter-fields` | expected: 0 FAIL | **pass** (was 4 over: product-reporter 1289, focus-advisor 1210, hiring-designer 1121, performance-review 1077)
+- **TC-lint-paths** | SKILL.md + all reference bodies | every cited path resolves, incl. multi-segment, `.yaml`, placeholders, skill-local, and `references/examples/**` | check `ref-paths` | expected: 0 FAIL | **pass** (was blind to `references/builtin-templates/<subtype>.md` — a dir that never existed)
+- **TC-lint-ghost** | SKILL.md + references | no chain target that is not a real skill | check `ghost-skill` | expected: 0 FAIL | **pass** (was: `people-context` in hiring-designer, `write-spec` ×2 in onboarding-steps)
+- **TC-lint-stale** | repo minus CHANGELOG history | renames are complete | check `stale-names` | expected: 0 FAIL | **pass** (was: `Feature-task-creator` in meeting-processor — the defect TC-reg-rename-02 missed)
+- **TC-lint-dup-h1** | all reference docs | no doc contains itself twice | check `duplicate-h1` | expected: 0 FAIL | **pass** (was: vault-protocol.md 1435→751, persistent-storage.md 699→426)
+- **TC-lint-readme** | README ↔ frontmatter | per-skill versions agree | check `readme-versions` | expected: 0 FAIL | **pass** (was 16 stale + a section contradicting the summary table in the same file)
+- **TC-lint-org** | example file, templates, references, skills | no real org identifiers, Atlassian hosts, or non-placeholder emails | check `org-data` | expected: 0 FAIL | **pass** (was: real roster, board id, epic keys, VIP name+email in `local-context.example.md`)
+- **TC-lint-deck** | deck-subtypes.yaml ↔ built-in templates | subtype keys agree | check `deck-subtypes` | expected: 0 FAIL | **pass** (was: yaml `feature-concept` vs template `feature`, callers passing the yaml's name)
+
+### Stage 5 — Regression
+- **TC-reg-201-fm** | all 29 skills | trigger phrases and "Do NOT use" boundaries preserved after the frontmatter rewrite | expected: no trigger lost | **pass** (rephrasing only — `Українською: ` → `Українською — `; the 4 trimmed descriptions kept every phrase)
+- **TC-reg-201-subtype** | write-concept, requirements-creator, design-bridge, deck-subtypes.yaml, presentation/feature-v1 | one canonical deck subtype end-to-end | expected: `feature` everywhere | **pass**
+- **TC-reg-201-ci** | validate.yml ↔ release.yml | the PR gate runs exactly what the release gate runs | expected: both run consistency + lint | **pass** (validate.yml previously omitted skill_lint.py — a PR could go green and fail the auto-release)
+
+---
+
 ## Release v1.15.0 — planning suite + Task Creator rename
 
 > **Run 2026-06-29 — verdict: GREEN** (condition: final lint TC-lint-002/003 on the full clone before push).

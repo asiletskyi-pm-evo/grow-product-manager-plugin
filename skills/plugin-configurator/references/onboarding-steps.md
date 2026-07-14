@@ -37,7 +37,7 @@
 - ⏭️ skip — not asked at all in Basic
 - — — no user input
 
-> "Basic mode takes ~3-5 minutes; the plugin is immediately usable for `write-concept`, `requirements-creator`, `write-spec`, `brainstorm-features`, and `product-research`.
+> "Basic mode takes ~3-5 minutes; the plugin is immediately usable for `write-concept`, `requirements-creator`, `brainstorm-features`, and `product-research`.
 > Extended mode takes ~15-25 minutes and configures every feature including CJM, Vault, and full Tableau analytics."
 
 **1c. Tip:**
@@ -82,7 +82,7 @@ Build the readiness table:
 
 | Connector | Status | Required for Basic | Required for Extended | Used by skills |
 |-----------|--------|--------------------|-----------------------|----------------|
-| Jira | ✅/❌ | ⭐ Strongly recommended | ✅ Mandatory | `task-creator`, `requirements-creator`, `write-spec` |
+| Jira | ✅/❌ | ⭐ Strongly recommended | ✅ Mandatory | `task-creator`, `requirements-creator` |
 | Confluence | ✅/❌ | ⭐ Strongly recommended | ✅ Mandatory | publishing skills |
 | Tableau | ✅/❌ | — | ⭐ Strongly recommended for CJM/AB | `product-analysis`, `cjm-research` |
 | Figma | ✅/❌ | — | optional | `product-research`, `design-bridge` |
@@ -714,7 +714,7 @@ Configures the planning suite (`quarterly-planning`, `project-planning`, `sprint
 Collected via `AskUserQuestion`/dialog:
 
 1. **Team and capacity** — composition by platforms/roles; **who counts** toward the ceiling (TL as a dev or not); baseline SP/sprint (default 10); tech-debt reserve (default 15%); load target (default 85%). Match members against Jira profiles.
-2. **Sprints** — cadence (default 2 weeks), anchor (name+date of the nearest one, e.g. `Sprint 55 = 2026-06-29`), Jira board id.
+2. **Sprints** — cadence (default 2 weeks), anchor (name+date of the nearest one, e.g. `Sprint 42 = 2026-01-05`), Jira board id.
 3. **Goal map** — epic → Goal (PROJ-XX), since Atlas Goals are not queryable via MCP.
 4. **Gate thresholds** — warning/critical (default 85/100%); t-shirt→SP rubric.
 5. **Development Flow (survey about the development flow)** — if the section does not yet exist:

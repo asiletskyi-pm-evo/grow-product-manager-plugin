@@ -29,7 +29,7 @@ Every entry below happened for real during the v1.26.1–v1.27.0 releases (2026-
 
 ## P5 — Mirror host requires VPN
 
-**Symptom:** `Could not resolve host: internal-gitlab-host`.
+**Symptom:** `Could not resolve host: <internal-gitlab-host>` (the mirror remote from `plugin_release`).
 **Cause:** internal GitLab is reachable only under VPN.
 **Guard:** list such hosts in `plugin_release.vpn_required_hosts`; remind before the mirror-push step; the push is retryable at any time — nothing is lost.
 

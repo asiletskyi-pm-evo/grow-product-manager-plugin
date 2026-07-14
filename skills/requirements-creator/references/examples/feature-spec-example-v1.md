@@ -2,7 +2,7 @@
      Purpose: a worked, high-quality feature-spec (with an A/B variant) the skill can pattern-match against (few-shot Examples context type).
      Generic/anonymized — NO org-specific data. Also used as a fixture for testing/output-evals.md (requirements-creator rubric).
      Illustrates rigor and shape, not a rigid template — real structure comes from requirements-template.md + the chosen template.
-     Continues the "Save for later" example from write-concept/references/examples/prd-example-v1.md to show concept → requirements flow. -->
+     Continues the "Save for later" example from skills/write-concept/references/examples/prd-example-v1.md to show concept → requirements flow. -->
 
 # Feature Requirements: Save-for-later (Phase 1 MVP) — A/B test
 

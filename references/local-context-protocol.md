@@ -49,7 +49,7 @@ The selected product becomes the **active product** for the current skill sessio
 
 ### 0e. Check for missing required fields
 
-Each skill has specific required fields (see `references/context-schema.md` → "Which Skills Read What"). If required fields are missing for the current skill:
+Each skill has specific required fields (see `skills/plugin-configurator/references/context-schema.md` → "Which Skills Read What"). If required fields are missing for the current skill:
 - Inform the user which fields are missing
 - Offer two options:
   1. Run **Plugin Configurator** in Update mode to add missing data

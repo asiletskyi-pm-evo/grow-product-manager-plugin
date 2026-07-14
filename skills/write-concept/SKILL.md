@@ -1,7 +1,7 @@
 ---
 name: write-concept
-version: 0.9.0
-description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document. Українською: "написати концепт", "створити PRD", "описати фічу", "написати специфікацію", "оформити ідею в документ".
+version: 0.9.1
+description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document. Українською — "написати концепт", "створити PRD", "описати фічу", "написати специфікацію", "оформити ідею в документ".
 ---
 
 # Write Concept (PRD)
@@ -281,7 +281,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.9.0",
+     skill_version: "0.9.1",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],
@@ -313,7 +313,7 @@ After successful publishing, automatically propose design-bridge for design-rela
 
 IF user selects 1 → invoke `design-bridge` with:
 - `intent: deck`
-- `subtype: feature-concept`
+- `subtype: feature`
 - `source: confluence_page_url` (published in Step 6)
 - `audience: inferred from user's next-step context` (default `direction_review`)
 - `language: active user.language`

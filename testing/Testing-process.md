@@ -7,7 +7,7 @@
 | # | Stage | What it checks | How | Blocker? |
 |---|--------|--------------|-----|---------|
 | 0 | **Backup** | snapshot of the version before changes | `git tag` + copy of the folder into `_backups/<version>/` | — |
-| 1 | **Static lint** | frontmatter, name==folder, semver, resolution of `references/*`, cross-skill links, skill_version ↔ frontmatter, CHANGELOG/README mentions | `testing/skill_lint.py` (automated, in CI/locally) | yes |
+| 1 | **Static lint** | 10 named checks — see the table below | `testing/skill_lint.py` (automated, in CI/locally) | yes |
 | 2 | **Trigger eval** | description triggers on target phrases and does NOT hijack others | a set of positive/negative phrases per skill; judge subagent | yes |
 | 3a | **Trajectory / scenario walk** | skill takes the right steps: key steps, gates, tool calls, artifact structure | 1-2 scenarios per skill + mock local-context; subagent "dry run" verifies | yes (for changed skills) |
 | 3b | **Output eval** | artifact **quality** against a rubric (weighted 0/1/2, pass ≥ threshold) | `testing/output-evals.md` rubric + fixture + gold exemplar; LM-judge subagent | yes (for changed artifact-producing skills) |
@@ -16,6 +16,25 @@
 | 6 | **Sign-off** | all green → version bump + CHANGELOG + README; otherwise → debug loop | main agent consolidates | — |
 
 **Gate principle:** if any blocker stage is not "green" → do not proceed. On error → stage 6 debug → fix → re-run the affected stages.
+
+## Stage 1 — what static lint actually checks
+
+Every check exists because the defect class it catches actually shipped. The v2.0.0 audit found 5 critical + 14 major defects while both validators reported green; each became a named check in v2.0.1. **When a new defect class is found, add a check here — do not rely on a manual step.** The rename regression `TC-reg-rename-02` was hand-run and reported *pass* while the stale name was still live; `stale-names` now answers that question mechanically.
+
+| Check | Catches | Shipped example it would have caught |
+|-------|---------|--------------------------------------|
+| `frontmatter-yaml` | frontmatter that only a lenient parser accepts | unquoted `Українською: ` broke strict YAML in 28/29 skills |
+| `frontmatter-fields` | name≠folder, bad semver, description missing or >1024 | 4 descriptions over the spec limit for the routing field |
+| `skill-version-sync` | body `skill_version` drifting from frontmatter | vault-save blocks citing an old version |
+| `ref-paths` | any cited path that does not resolve | `references/builtin-templates/<subtype>.md` — never existed |
+| `ghost-skill` | a chain target that is not a real skill | `people-context` (a protocol), `write-spec` (nothing) |
+| `stale-names` | an incomplete rename outside CHANGELOG history | `Feature-task-creator`, 8 months after the rename |
+| `duplicate-h1` | a doc containing itself twice | vault-protocol.md and persistent-storage.md |
+| `readme-versions` | README claims ≠ frontmatter | 16 stale skill versions |
+| `org-data` | real org identifiers in shipped files | real roster + board id + VIP email in the example file |
+| `deck-subtypes` | yaml keys ≠ template subtypes | `feature-concept` vs `feature` |
+
+Two design rules keep the linter honest: it is **stdlib-only** (PyYAML is an optional extra strict pass, never a hard dependency, so CI needs no install step), and the `ghost-skill` vocabulary is **auto-derived from `templates/built-in/`** rather than hand-listed, so new template types do not create false positives.
 
 ## Test case format
 

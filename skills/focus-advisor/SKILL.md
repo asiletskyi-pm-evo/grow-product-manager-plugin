@@ -1,7 +1,7 @@
 ---
 name: focus-advisor
-version: 0.4.0
-description: PM attention dispatcher — scans the PM's full context (sprint cycle position, calendar, unanswered important emails, recent meetings and open action items, Jira tails, quarterly roadmap drift, stale backlog, A/B tests awaiting decisions, capacity signals, product goals/missions, NPS and funnel trends) and recommends focuses with reasons and next steps at three horizons — daily, tactical (sprint–quarter), strategic (quarter–year) — chaining execution to the right skill. Use whenever the PM asks what to do or focus on — "на чому сфокусуватись", "що мені робити зараз/сьогодні", "фокус дня/тижня", "тактичний фокус", "стратегічний фокус", "куди фокусувати команду", "де великі можливості для продукту", "розбери мою пошту і календар", "до яких зустрічей готуватись", "чи все ок з метриками" (proposes a health-check chain), "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "покажи focus board" — and for scheduled/headless focus briefs. Do NOT use for planning the sprint itself (sprint-planning), building roadmaps (quarterly-/project-planning), or deep metric analysis (product-analysis / cjm-research) — this skill recommends and chains, it does not execute.
+version: 0.4.1
+description: PM attention dispatcher — scans the PM's context (sprint cycle, calendar, mail, meetings, Jira, roadmap drift, backlog, A/B tests awaiting decisions, capacity, goals, metrics) and recommends focuses with reasons and next steps at three horizons — daily, tactical (sprint–quarter), strategic (quarter–year) — chaining to the right skill. Use whenever the PM asks what to do or focus on — "на чому сфокусуватись", "що мені робити зараз/сьогодні", "фокус дня/тижня", "тактичний фокус", "стратегічний фокус", "куди фокусувати команду", "де великі можливості для продукту", "розбери мою пошту і календар", "до яких зустрічей готуватись", "чи все ок з метриками", "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "покажи focus board" — and for scheduled/headless briefs. Do NOT use for planning the sprint (sprint-planning), building roadmaps (quarterly-/project-planning), or deep metric analysis (product-analysis / cjm-research) — it recommends and chains, it does not execute.
 ---
 
 # Focus Advisor
@@ -102,7 +102,7 @@ A persistent one-glance panel of the PM's attention. Contract:
 - Board is a **view**, not a store: journal stays the source of truth; no actions execute from the board beyond ready-to-paste phrases.
 
 ## Quality Standards
-- Recommend and chain — never execute another skill's work inline; never launch chained skills without an explicit PM "go" (and never in headless).
+- Recommend and chain — never execute another skill's work inline; never launch chained skills without an explicit PM "go". In headless runs — no chained launches at all, with a single exception: the metrics health-check chain when `Focus → Scheduled → healthcheck: on` (see "Invocation from a scheduled task prompt" above).
 - Every focus is verifiable: signal links always present; no invented urgency; "insufficient signals" is a legitimate brief.
 - Mail: read-only screening; only live letters from humans become signals; bodies never leave the mailbox or enter the cache (`data-policy.md`); any write (reply draft) — gate.
 - Jira: per-key reads only (`jira-data-protocol.md`).

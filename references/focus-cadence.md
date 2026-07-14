@@ -6,7 +6,7 @@
 
 ## 1. Cycle position
 
-Compute from `local-context → Planning` (sprint cadence + anchor, e.g. `Sprint 55 = 2026-06-29`, 2 weeks):
+Compute from `local-context → Planning` (sprint cadence + anchor, e.g. `Sprint 42 = 2026-01-05`, 2 weeks):
 
 ```
 days_since_anchor = today - anchor_date

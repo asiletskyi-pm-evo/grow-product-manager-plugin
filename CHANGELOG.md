@@ -2,6 +2,37 @@
 
 All notable changes to this plugin are documented here.
 
+## v2.0.1 (2026-07-14)
+
+**Audit remediation (P0 + P1) + the validators that make these defect classes non-recurring.** A full audit of v2.0.0 (29 skills, 30 references, 24 templates, manifests, CI) found 5 critical and 14 major defects that both validators passed green. This release fixes the P0/P1 set and rebuilds `skill_lint.py` so each defect class is now a named, blocking check.
+
+### Security — P0
+
+- **Real organization data removed from shipped files.** `local-context.example.md` carried a genuine team roster (surnames per platform), Jira board id, epic keys with a goal map, sprint anchor, a named VIP stakeholder with email, and an internal mission commit — in a public repo, contradicting the file's own "should NOT be committed" warning. All replaced with placeholders. The same class of leak was cleaned from `planning-core.md` (goal map + feature-naming example), `focus-signals.md` (VIP name), `jira-data-protocol.md` (hardcoded space id), `people-context-protocol.md` (team name), `capacity-model.md`/`roadmap-artifacts.md`/`dependency-model.md` (org labels), `focus-cadence.md` + `trigger-evals.md` (sprint names), `project-planning`/`onboarding-steps` (goal keys), `release-pitfalls.md` (internal GitLab host), the `sprint-review` template (Atlassian host), and one CHANGELOG line with live page ids.
+  > Note: this data remains in git history. Remediating history is a separate, deliberate decision.
+
+### Fixed — P1
+
+- **Two protocol documents contained themselves twice.** `references/vault-protocol.md` (1435 → 751 lines) and `references/persistent-storage.md` (699 → 426) each had a stale copy appended below the current one — new versions had been *prepended* instead of replacing (commits `07d0936`, `c152ee0`). The stale halves carried conflicting footers (v1.0 vs v1.1) and lacked the Context Mirror / Pre-Update Backup / Vault Recovery sections, so a reader could land on contradicting guidance. Removed; every load of these protocols is now half the context.
+- **Phantom references and ghost skill names.** `product-reporter` pointed its template fallback at `references/builtin-templates/<subtype>.md` — a directory that never existed (real path: `templates/built-in/ops-report/`). `hiring-designer` chained to `people-context` and `onboarding-steps.md` twice cited `write-spec` — neither is a skill. `meeting-processor` still said `Feature-task-creator` (renamed to `task-creator` back in v1.24). `local-context-protocol.md` and `people-context-protocol.md` pointed at `references/context-schema.md`, which exists only skill-locally. `self-improvement.md` cited the unwritten `context-budget.md`.
+- **`feature` vs `feature-concept` deck-subtype mismatch.** `deck-subtypes.yaml` keyed the outline as `feature-concept` while design-bridge, the built-in template's frontmatter, and the fallback id all use `feature` — and both callers (`write-concept`, `requirements-creator`) passed `feature-concept`. Exact-key lookup missed in one direction or the other for the most common deck. Canonicalized to `feature`.
+- **focus-advisor headless contract contradicted itself** — the headless rules permit the metrics health-check chain when configured, while Quality Standards said "never in headless". The exception is now stated in both places.
+- **28 of 29 SKILL.md frontmatters were not valid YAML.** An unquoted `Українською: "…"` inside the plain-scalar `description` terminates the scalar: Claude Code's lenient parser accepted it, but PyYAML/js-yaml/gray-matter — i.e. any external tooling, CI step, or other agent — failed to parse. Rephrased to `Українською — …` (plus three skills with a second `: ` hazard). All 29 now parse strictly.
+- **Four descriptions exceeded the 1024-char spec limit** for the field the model routes on: `product-reporter` (1289), `focus-advisor` (1210), `hiring-designer` (1121), `performance-review` (1077). Trimmed with every trigger phrase and boundary preserved. product-reporter's parenthetical also listed 6 of the 8 3T5F elements — dropped rather than corrected, since `reporting-3t5f.md` is the source of truth.
+- **README resynced with reality** — 16 skills' versions were stale against their frontmatter (Plugin Configurator claimed v2.5.0 at actual v2.7.0), the Feedback Triage section contradicted the summary table in the same file, "17 built-in templates" understated the shipped 24 (the 7 People templates were undocumented), "Five methodology references" listed six, and `release-pitfalls.md` was cited at a non-existent root path.
+
+### Added — validators (so these classes cannot come back)
+
+- **`testing/skill_lint.py` rebuilt** — 10 named checks, one per defect class the audit found: `frontmatter-yaml` (strict parse + plain-scalar hazard scan, stdlib-only), `frontmatter-fields` (name==folder, semver, description ≤1024), `skill-version-sync`, `ref-paths` (multi-segment paths, `.yaml`, placeholder dirs, skill-local resolution, recursive — the old glob was one level deep and blind to `references/examples/**`), `ghost-skill` (a kebab token on a line citing a real skill, checked against the repo's own auto-derived template vocabulary), `stale-names` (renames incomplete outside CHANGELOG history), `duplicate-h1` (a doc containing itself), `readme-versions` (README ↔ frontmatter), `org-data` (internal identifiers, real Atlassian hosts, non-placeholder emails in shipped files), `deck-subtypes` (yaml keys ↔ template subtypes).
+- **`.github/workflows/validate.yml` now runs `skill_lint.py`** alongside the consistency script — previously only the release gate ran it, so a PR could pass CI, merge, and fail the auto-release on main with no earlier signal.
+- **`.github/workflows/release.yml`** gains a `concurrency` group (two rapid pushes to main raced the tag check, failing the loser red instead of skipping) and its CHANGELOG-extraction awk now also stops at legacy `## [x.y.z]` headings.
+
+### Files
+
+- Changed: all 29 `skills/*/SKILL.md` (patch bump), `references/` (12 files), `templates/built-in/ops-report/sprint-review-v1.md`, `local-context.example.md`, `README.md`, `CHANGELOG.md`, both manifests, `testing/skill_lint.py`, `testing/trigger-evals.md`, `testing/Testing-process.md`, `testing/test-cases.md`, both workflows.
+
+---
+
 Version format: `MAJOR.MINOR.PATCH`
 - **MAJOR** — breaking changes, full workflow restructure across multiple skills
 - **MINOR** — new skill added, new step/section in existing skill, significant workflow addition
@@ -897,7 +928,7 @@ A new planning/forecasting layer on top of the existing `team-ops-reporter` repo
 ### Changed — rename Feature Task Creator → Task Creator
 - `skills/feature-task-creator/` → `skills/task-creator/`; `name: feature-task-creator → task-creator`, title "Feature Task Creator" → "Task Creator", description generalized (not just "feature"). All internal references in the plugin updated via find/replace (CHANGELOG history preserved). **Trigger phrases preserved** — phrase-based invocation in Claude does not break.
 
-**Validated** via an end-to-end run on live PROJ/Prom data (Q2 actuals → capacity Q3 (Sprint 55–61) → draft → 2 correction iterations + platform slices → published roadmap p. <confluence-page-id> + live dashboard).
+**Validated** via an end-to-end run on live PROJ/Prom data (Q2 actuals → capacity Q3 → draft → 2 correction iterations + platform slices → published roadmap + live dashboard).
 
 ### Files
 

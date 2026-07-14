@@ -1,7 +1,7 @@
 ---
 name: hiring-designer
-version: 0.1.0
-description: Design a role and a vacancy profile the way strong hiring is done — the goal letter (SMARTCBP goals on a 3/6/12-month horizon) is written BEFORE the vacancy, and the offer = goals + conditions. Produces a universal vacancy profile (Request, Role goals, Vacancy description, Hiring conditions, Selection process), killer questions, screening criteria based strictly on past experience vs goals, interview questions from the role goals, a candidate-evaluation table (goal × experience), and an offer draft. Use when the user asks to "open a vacancy", "design a role", "write a job profile", "hiring", "killer questions", "screening criteria", "evaluate candidates", "draft an offer". Українською: "відкрити вакансію", "спроєктувати посаду", "профіль вакансії", "найм", "вітальні запитання", "критерії скринінгу", "оцінити кандидатів", "чернетка оферу". Do NOT use to write product/feature requirements (requirements-creator) or to set an existing employee's goals outside a hire (goal-setter — which this skill chains to for the role goals). Maps the universal profile onto the employer's HR-form fields from local-context.
+version: 0.1.1
+description: Design a role and a vacancy profile the way strong hiring is done — the goal letter (SMARTCBP goals on a 3/6/12-month horizon) is written BEFORE the vacancy, and the offer = goals + conditions. Produces a universal vacancy profile, killer questions, screening criteria based strictly on past experience vs goals, interview questions from the role goals, a candidate-evaluation table, and an offer draft. Use when the user asks to "open a vacancy", "design a role", "write a job profile", "hiring", "killer questions", "screening criteria", "evaluate candidates", "draft an offer". Українською — "відкрити вакансію", "спроєктувати посаду", "профіль вакансії", "найм", "вітальні запитання", "критерії скринінгу", "оцінити кандидатів", "чернетка оферу". Do NOT use to write product/feature requirements (requirements-creator) or to set an existing employee's goals outside a hire (goal-setter — which this skill chains to for the role goals).
 ---
 
 # Hiring Designer
@@ -77,7 +77,7 @@ Per `self-improvement.md`.
 - Language — `user.language`.
 
 ## Skill chaining
-→ `goal-setter` (role/probation goal letter — the heart of the process) · → `people-context` (create the new-hire profile) · → `one-on-one` (onboarding 1-1s) · ← `offboarding-guide` (re-design a role after parting ways). Boundary: not `requirements-creator` (that's product requirements, not job profiles).
+→ `goal-setter` (role/probation goal letter — the heart of the process) · Step P per `references/people-context-protocol.md` (create the new-hire profile) · → `one-on-one` (onboarding 1-1s) · ← `offboarding-guide` (re-design a role after parting ways). Boundary: not `requirements-creator` (that's product requirements, not job profiles).
 
 ## Example dialogues
 - *"Відкриваємо вакансію продуктового аналітика"* → Step 1 chains to goal-setter for the 3/6/12-month goal letter → builds the 5-section vacancy profile mapped to the employer HR-form → 3 killer questions with numeric thresholds + If/Then → candidate-documents checklist.

@@ -1,7 +1,7 @@
 ---
 name: meeting-processor
-version: 0.13.0
-description: Process meeting recordings, transcripts, and notes to extract ARCV-standard action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Detects 1-1 meetings and redirects to one-on-one. Chains to task-creator, requirements-creator, product-research, and brainstorm-features. Українською: "підсумувати зустріч", "нотатки зустрічі", "що обговорювали", "action items", "MoM", "опрацювати транскрипт зустрічі". Do NOT use for a 1-1 meeting (one-on-one handles those with signals + profile update).
+version: 0.13.1
+description: Process meeting recordings, transcripts, and notes to extract ARCV-standard action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Detects 1-1 meetings and redirects to one-on-one. Chains to task-creator, requirements-creator, product-research, and brainstorm-features. Українською — "підсумувати зустріч", "нотатки зустрічі", "що обговорювали", "action items", "MoM", "опрацювати транскрипт зустрічі". Do NOT use for a 1-1 meeting (one-on-one handles those with signals + profile update).
 ---
 
 # Meeting Processor
@@ -457,7 +457,7 @@ Every skill invocation from meeting-processor must include the **full participan
 
 | Context element | What to pass | Why |
 |----------------|-------------|-----|
-| **Participants** | Full list: name, email, role (from `team.members` match), attendance status (spoke / invited but silent / not invited but participated) | Feature-task-creator uses participants for task assignment; product-research uses for interview attribution; brainstorm-features uses for idea ownership |
+| **Participants** | Full list: name, email, role (from `team.members` match), attendance status (spoke / invited but silent / not invited but participated) | Task-creator uses participants for task assignment; product-research uses for interview attribution; brainstorm-features uses for idea ownership |
 | **Meeting metadata** | Title, date, duration, type(s), organizer, recurrence info | Context for all downstream skills |
 | **Meeting source link** | Fireflies link, calendar event link, or file reference | For traceability in created documents |
 | **Extracted content** | Depends on target skill (see table below) | Core input for the target skill |
@@ -481,7 +481,7 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.13.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.13.1", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
 2. Key decisions from the meeting may additionally be saved as separate `decision` artifacts (Decisions/) — offer, don't force.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 
