@@ -317,8 +317,26 @@ if os.path.isfile(README):
 # ------------------------------------------------------------- 9. org data
 # The example file shipped a real team roster, board id, epic keys and a named
 # VIP to a public repo. Shipped files must carry placeholders only.
-ORG_TOKENS = re.compile(r"\b(<org-token>|<org-token>|<org-token>)\b", re.I)
-PLACEHOLDER_HOSTS = ("your-org", "your-domain", "company", "example")
+#
+# The checks below are deliberately **generic** — they describe the *shape* of a
+# leak (a real host, a real email domain, a name that isn't a placeholder), not
+# one organization's vocabulary. An earlier version hardcoded this repo's own org
+# tokens into a denylist, which (a) contradicted the plugin's own rule that no
+# org-specific value ships in the repo, and (b) put the very strings it forbade
+# into the file forbidding them.
+#
+# To also catch your own org's identifiers, drop them one-per-line into
+# `testing/org-tokens.local` — gitignored, so the tokens never ship. Absent
+# (the CI case), the generic checks below still run.
+ORG_TOKENS = None
+_tokens_file = os.path.join(root, "testing", "org-tokens.local")
+if os.path.isfile(_tokens_file):
+    _toks = [l.strip() for l in open(_tokens_file, encoding="utf-8")
+             if l.strip() and not l.startswith("#")]
+    if _toks:
+        ORG_TOKENS = re.compile("|".join(re.escape(t) for t in _toks), re.I)
+
+PLACEHOLDER_HOSTS = ("your-org", "your-domain", "company", "example", "internal-gitlab-host")
 scan_targets = [os.path.join(root, "local-context.example.md")] + \
                glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True) + \
                [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files
@@ -326,8 +344,9 @@ for f in scan_targets:
     if not os.path.isfile(f): continue
     rel_name = os.path.relpath(f, root)
     for i, line in enumerate(open(f, encoding="utf-8").read().split("\n"), 1):
-        m = ORG_TOKENS.search(line)
-        if m: fail("org-data", f"{rel_name}:{i}: internal identifier '{m.group(1)}' — use a placeholder")
+        if ORG_TOKENS:
+            m = ORG_TOKENS.search(line)
+            if m: fail("org-data", f"{rel_name}:{i}: org identifier '{m.group(0)}' — use a placeholder")
         for host in re.findall(r"([\w-]+)\.atlassian\.net", line):
             if not any(p in host for p in PLACEHOLDER_HOSTS):
                 fail("org-data", f"{rel_name}:{i}: real Atlassian host '{host}.atlassian.net' — use your-org")
