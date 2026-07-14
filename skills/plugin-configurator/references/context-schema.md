@@ -47,10 +47,34 @@ local-context.md
 | onboarding.basic_completed_at | ✅ | Configurator | Timestamp when Basic onboarding finished |
 | onboarding.extended_completed_at | optional | Configurator | Timestamp when Extended onboarding finished |
 | onboarding.last_test_run_at | optional | Configurator | Timestamp of last Test (sandbox) run |
-| onboarding.deferred_steps | optional | All skills | List of step keys deferred during Basic (`cjm`, `knowledge-library`, `templates`, `obsidian-vault`, `teams`, `okrs`, `competitors`, `tableau-full`, `repos`, `custom-sections`, `design-toolkits`) |
+| onboarding.deferred_steps | optional | All skills | List of step keys deferred during Basic — the enum below |
 | onboarding.skip_nudges | optional | All skills | If `true`, suppress upgrade-to-Extended nudges from skills (default `false`) |
 
 Skills check `onboarding.mode` and `onboarding.deferred_steps` to decide whether to nudge the user toward Extended setup before running. The Configurator manages this section automatically — users do not edit it directly.
+
+#### `deferred_steps` enum
+
+Every key an onboarding step may append, and the step that writes it. A skill checking for a key that no step writes gets a silent false negative; a step writing a key not listed here makes the check undecidable. Keep this table and `references/onboarding-steps.md` in sync.
+
+| Key | Written by | Deferred section |
+|---|---|---|
+| `key-metrics` | Step 8 | Product key metrics |
+| `teams` | Step 9 | Teams |
+| `repos` | Step 10 | Repositories |
+| `cjm` | Step 11 | CJM configuration |
+| `knowledge-library` | Step 12 | Knowledge Library |
+| `templates` | Step 13 | Template Library |
+| `obsidian-vault` | Step 14 | Obsidian Vaults |
+| `custom-sections` | Step 15 | Custom sections |
+| `tableau-full` | Step 7b | Extended Tableau fields (datasources, Pulse IDs, A/B dashboards) |
+| `analytics-extended` | Step 7a | Non-Tableau analytics (Amplitude / Mixpanel / Sheets / custom BI) |
+| `tableau-mcp-required` | Step 7b | Fields that need Tableau MCP to be useful — recorded even in Extended |
+| `planning` | Planning setup | Planning suite (capacity, sprints, goal map, dev flow) |
+| `focus` | Focus setup | Focus (sources, zones, VIP, cadence, scheduled) |
+| `design-toolkits` | Design Toolkit setup | External design toolkits |
+| `people` | People setup | People-contour (roster, cadences, HR form) |
+
+> `okrs` and `competitors` were listed here until v2.1.0 but no step ever wrote them (both are collected inside Step 6, which has no defer path); `key-metrics`, `analytics-extended`, `tableau-mcp-required`, `planning`, `focus` and `people` were written but unlisted — for five sections the "is it deferred?" check could not be answered.
 
 ### Organization (required, 1+)
 
@@ -60,6 +84,7 @@ Skills check `onboarding.mode` and `onboarding.deferred_steps` to decide whether
 | domain | optional | Product Research | Company domain (e.g., company.com) |
 | jira_instance | optional | Task Creator, Requirements Creator | Jira cloud URL (e.g., company.atlassian.net) |
 | confluence_instance | optional | All publishing skills | Confluence cloud URL |
+| atlassian_cloud_id | optional | Product Reporter, Planning Suite | Atlassian cloud id — required by the Atlassian MCP's per-key calls. Auto-discoverable via `getAccessibleAtlassianResources`; collect at onboarding when Jira is connected. |
 
 ### Integrations & Data Sources (per organization)
 
@@ -250,6 +275,50 @@ The blocks below are the exact `local-context.md` output formats the Plugin Conf
 - [Folder ID]: [description]
 ```
 
+### Templates section format
+
+Written by Step 13 (O-T.7); read by `template-library` and by every skill's Step T. Full semantics: root `references/template-protocol.md`.
+
+```markdown
+### Templates
+
+- **Preference:** [auto | always_ask | smart]      <!-- T-3 decision mode; smart = default -->
+- **Storage root:** [{vault}/{plugin_folder} | ~/.grow-pm]   <!-- resolved per persistent-storage.md -->
+- **Registry:** [{storage_root}/Templates/_registry.json]
+- **Setup completed:** [true | false]              <!-- read by Step 16g's final invitation -->
+```
+
+### Planning section format
+
+Written by the Planning setup step; read by the planning suite (`quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`) and by `focus-advisor` (sprint anchor/cadence). Full field semantics: `references/capacity-model.md`, `references/planning-core.md`; a filled example: `local-context.example.md` → Planning.
+
+```yaml
+planning:
+  jira_board_id: [board id for sprints/velocity]
+  sprint:
+    cadence_weeks: [2]
+    anchor: { name: "[Sprint N]", start: "[YYYY-MM-DD]" }
+  capacity:
+    baseline_sp_per_sprint: [10]      # per engineer
+    availability_default: [0.9]
+    techdebt_reserve: [0.15]
+    gate_target: [0.85]
+    team:
+      [Platform]: { members: [...], note: "[who is not counted and why]" }
+  goal_map:                           # epic → Goal (Atlas Goals not queryable via MCP)
+    [GOAL-KEY]: [epic ids]
+  estimate_tshirt: { S: 3, M: 5, L: 8, XL: 13 }
+  development_flow:
+    work_types: [...]
+    sequence: { [type]: [prerequisites] }
+    parallel: [[...]]
+    ready_threshold: [...]
+    platform_notes: ""
+    exceptions: ""
+```
+
+> Both sections are written by onboarding and read by skills, but were defined in no schema until v2.1.0 — `context-schema.md` calls itself "the complete schema definition", and Planning's format was delegated to the example file, which is illustrative, not normative.
+
 ### Focus Configuration section format
 
 Written by the Focus setup step; read by `focus-advisor`. Full field semantics: `references/focus-signals.md` §8.
@@ -261,7 +330,9 @@ Written by the Focus setup step; read by `focus-advisor`. Full field semantics: 
 - Mail: [on/off], window: [7] days, thresholds: [24]h VIP / [48]h others
 - Calendar: [on/off]; prep keywords: [demo, review, планування, ...]
 - Jira: [on/off]; Release flags: [off]
-- Metrics health-check in scheduled runs: [off]
+
+#### Zones
+- [the PM's areas of responsibility — read by strategy collectors for white spaces, NPS themes, knowledge scoping]
 
 #### VIP senders
 - [Name <email>] — [role]
@@ -269,19 +340,22 @@ Written by the Focus setup step; read by `focus-advisor`. Full field semantics: 
 #### PM goals (scoring weights)
 - [goal / mission commitment — permanent weight in focus scoring]
 
+#### Goals source
+- [URL — pinned product goals/missions source for strategy collectors]
+
 #### Cadence Overrides
 | Cycle position | Ritual | Chain |
 |---|---|---|
 | [day/week] | [ritual or "off"] | [skill + mode] |
 
-#### Goals source
-- [URL — pinned product goals/missions source for strategy collectors]
-
 #### Scheduled
 - Daily brief: [on/off], [cron], mode now, headless
 - Tactical brief: [on/off], [cron], mode tactics, headless
 - Strategy memo: [on/off], quarterly, mode strategy, headless
+- Metrics health-check in scheduled runs: [off]
 ```
+
+> Subsection order and placement here must match `references/focus-signals.md` §8 — this is the write side of that contract, focus-advisor is the read side. `Metrics health-check` belongs under **Scheduled** (the skill reads `Focus → Scheduled → healthcheck`); it sat under Sources until v2.1.0, so the lookup found nothing in a schema-conformant file. `Goals source` precedes `Cadence Overrides` in both files.
 
 ### Obsidian Vaults Configuration section format
 
@@ -342,7 +416,7 @@ people:
   roster_index: "People/_roster.md"
   cadence:
     one_on_one: monthly           # weekly | biweekly | monthly | quarterly (default rule per person tenure)
-    goal_report: weekly           # weekly | monthly
+    goal_report: weekly           # weekly | biweekly | monthly — enum per people-context-protocol.md
   review_template_id: performance-review-builtin-default   # or the employer's registered template_id
   hr_form:                        # employer vacancy-form field map for hiring-designer (employer-specific)
     budget: [<controlled values>]

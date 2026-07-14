@@ -1,6 +1,6 @@
 # jira-data-protocol (shared)
 
-How to fetch and parse Jira data reliably for ops reports and planning. Shared by `product-reporter` and the Planning Suite (`sprint-planning`, `quarterly-planning`, `project-planning`, `roadmap-architect`). PROJ/Prom defaults shown; move org-specific ids into `local-context.md`.
+How to fetch and parse Jira data reliably for ops reports and planning. Shared by `product-reporter`, the Planning Suite (`sprint-planning`, `quarterly-planning`, `project-planning`, `roadmap-architect`), and `focus-advisor` (per-key reads only). All org-specific ids live in `local-context.md` — never hardcoded here.
 
 ## Custom-field map (PROJ)
 

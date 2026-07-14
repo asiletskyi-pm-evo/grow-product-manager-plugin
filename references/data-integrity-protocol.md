@@ -1,6 +1,6 @@
 # Data Integrity Protocol
 
-Universal gate for analytical skills in the Grow PM plugin. Referenced by `cjm-research` (Step 3.5), `product-analysis` (Step 1.5), and `product-research` (Step 1.5).
+Universal gate for analytical skills in the Grow PM plugin. Referenced by `cjm-research` (Step 3.5), `product-analysis` (Step 1.5), `product-research` (Step 1.5), and `feedback-triage`.
 
 > **Dependencies**: Also read `data-policy.md` (confidentiality), `integration-strategy.md` (MCP fallback chain), and skill-specific protocols before any data operation.
 

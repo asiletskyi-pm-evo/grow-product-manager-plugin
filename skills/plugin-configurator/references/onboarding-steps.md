@@ -50,7 +50,7 @@ Ask via AskUserQuestion:
 
 - **Basic (Recommended)** — required steps only. Everything else is deferred and can be added later.
 - **Extended** — full setup of every feature.
-- **Test mode (sandbox)** — walk through onboarding without touching real data. All writes are redirected to `~/.grow-pm-sandbox/`. See "Workflow — Test Mode" below.
+- **Test mode (sandbox)** — walk through onboarding without touching real data. All writes are redirected to `~/.grow-pm-sandbox/`. See root `references/test-mode.md`.
 - **Quit and read docs** — show README and exit.
 
 **Save the choice in session memory** as `selected_mode`. Each subsequent step reads this and decides whether to execute or defer.
@@ -136,7 +136,9 @@ If Jira MCP is available, use `lookupJiraAccountId` with the provided email to f
 
 ### Step 6 — Products (per organization)
 
-> **Mode gate:** **Basic** mode collects only core product fields (name, description, platforms, Jira project key, Confluence space). Extended fields (locales, OKRs, metric_targets, competitors, custom dashboards, A/B test dashboards) are deferred. **Extended** mode collects every field.
+> **Mode gate:** **Basic** mode collects only core product fields (name, description, platforms, Jira project key, Confluence space). Extended fields are deferred. **Extended** mode collects every field.
+>
+> Subsections below marked **(Extended)** are skipped entirely in Basic — do not ask them, regardless of what the body text lists. Applies to: Locales/countries, OKRs, metric_targets, Competitors, custom dashboards, A/B test dashboards.
 
 
 **6a. Product discovery — combine auto + manual:**
@@ -354,6 +356,15 @@ Collect dashboard URLs (Tableau, GA, or other). If the user already provided das
 | Default platforms | All configured | All / Specific |
 | Default search modes | Library + Internet | User selects from available modes |
 
+**11g. Health-check notifications:**
+
+| Setting | Default | Ask user |
+|---------|---------|---------|
+| Channels | local (in-session only) | local / slack / email / confluence |
+| Frequency | weekly | weekly / custom cron / off |
+
+Writes the `Health-Check Notifications` subsection defined in `references/context-schema.md` → CJM Configuration. Until v2.1.0 the schema defined this subsection and Update mode (U-3) offered to change it, but no onboarding step ever collected it — U-3 edited a subsection that never existed.
+
 ### Step 12 — Knowledge Library Setup (optional)
 
 > **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `knowledge-library` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
@@ -361,7 +372,7 @@ Collect dashboard URLs (Tableau, GA, or other). If the user already provided das
 
 > "Would you like to set up a Knowledge Library? It stores curated sources (articles, benchmarks, UX best practices) that enrich CJM analysis and research."
 
-If no → skip to Step 14.
+If no → continue to **Step 13** (Templates). Declining the Knowledge Library must not skip the Template Library: they are unrelated, and O-T.2's template preferences are "always asked, even when using built-in only". (This line said "skip to Step 14" until v2.1.0, so a user who declined KL never reached Step 13 — leaving `templates_setup_completed` unset and Step 16g's nudge firing at someone who was never asked.)
 
 If yes → delegate to `knowledge-library` skill onboarding workflow (KL-1 through KL-6). The Knowledge Library skill handles:
 1. Directory structure initialization
@@ -437,7 +448,7 @@ Create (if missing):
 
 **O-T.4. Run rebuild-registry:**
 
-Invoke `template-library: rebuild-registry` to walk `Templates/` (including the plugin's `templates/built-in/`) and generate `_registry.json`. This registers the 9 built-in templates that ship with the plugin v1.9.0.
+Invoke `template-library: rebuild-registry` to walk `Templates/` (including the plugin's `templates/built-in/`) and generate `_registry.json`. This registers every built-in template that ships with the plugin — count and types come from the walk, never from a number written here (it said "the 9 built-in templates … v1.9.0" until v2.1.0; 24 ship in v2.x).
 
 **O-T.5. Execute chosen action:**
 
@@ -622,13 +633,30 @@ Format:
 ### Obsidian Vaults (Optional)
 ...
 
+### Templates
+...
+
+## Planning (planning-suite)
+...
+
+### Focus (focus-advisor)
+...
+
+### Design Toolkits (Optional)
+...
+
+### People (Optional)
+...
+
 ## Custom Sections
 ...
 ```
 
-**CJM Configuration section format in local-context.md:** See `references/context-schema.md` → CJM Configuration section format.
+> The skeleton must contain a placeholder for **every** section any onboarding step writes — the later steps append into this file, and a section with no home here is a section written into an undefined place. Templates (O-T.7), Planning, Focus, Design Toolkits and People were all missing until v2.1.0.
+>
+> **Ordering note:** O-T.6/O-T.7 (Step 13) write the `Templates` section, but this skeleton is created here in Step 16c — later in the flow. Steps 13–15 therefore **buffer their sections in session memory** and Step 16c writes them into the skeleton in one pass. Nothing writes to `local-context.md` before it exists.
 
-**Knowledge Library Configuration section format:** See `references/context-schema.md` → Knowledge Library Configuration section format.
+**Section formats** — all defined in `references/context-schema.md`, never restated here: CJM Configuration · Knowledge Library Configuration · Obsidian Vaults · Templates · Planning · Focus · Design Toolkits · People.
 
 **Obsidian Vaults Configuration section format:** See `references/context-schema.md` → Obsidian Vaults Configuration section format.
 
@@ -709,7 +737,7 @@ Present each recommendation as an option in `AskUserQuestion` so the user can im
 
 ## Step — Planning setup (Extended)
 
-Configures the planning suite (`quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`). Writes the `planning` section into local-context (schema — `local-context.example.md` → Planning). Mode-gate: Extended; in Basic — add the key to `onboarding.deferred_steps`.
+Configures the planning suite (`quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`). Writes the `planning` section into local-context (schema — `references/context-schema.md` → Planning). Mode-gate: Extended; in Basic — append `planning` to `onboarding.deferred_steps`.
 
 Collected via `AskUserQuestion`/dialog:
 
@@ -730,7 +758,7 @@ Existence check: if `planning.development_flow` already exists → do not re-ask
 
 ## Step — Focus setup (Extended)
 
-Configures `focus-advisor`. Writes the `Focus` section into local-context (format — `references/context-schema.md` → Focus Configuration; semantics — `references/focus-signals.md` §8). Mode-gate: Extended; in Basic — add the key to `onboarding.deferred_steps`. Requires the Planning section (sprint anchor/cadence) — if missing, run Planning setup first.
+Configures `focus-advisor`. Writes the `Focus` section into local-context (format — `references/context-schema.md` → Focus; semantics — `references/focus-signals.md` §8). Mode-gate: Extended; in Basic — append `focus` to `onboarding.deferred_steps`. Requires the Planning section (sprint anchor/cadence) — if missing, run Planning setup first.
 
 Collected via `AskUserQuestion`/dialog:
 

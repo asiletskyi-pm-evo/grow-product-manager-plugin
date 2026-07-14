@@ -2,6 +2,54 @@
 
 All notable changes to this plugin are documented here.
 
+## v2.1.0 (2026-07-14)
+
+**Audit remediation, P3 + P4 — the last of the 2026-07-14 audit.** Closes the behavioural defects: a safety gate that could be skipped, a mode with no workflow, a config field nothing defined, and a health score that only summed correctly for one funnel shape. With this release every finding from the audit is either fixed or deliberately deferred with a reason.
+
+### Fixed — gates and safety
+
+- **`design-bridge` could ship a handoff with no accessibility audit.** Step 4e required `audience ∈ {c-level, dev_handoff}` on top of the intent, so a **handoff with `audience=team` skipped the audit entirely** — and Step 6's "A11y: if Step 4e ran" then never blocked it. This contradicted three other statements of the same rule in the same skill (the checklist's "handoff → full WCAG 2.1 AA, blocker", Quality Standards' "non-negotiable for handoff", and the failure-mode table). The audit now always runs for deck/prototype/handoff; scope and blocker-severity come from `a11y-checklist.md`, which is the one place that decides. The audience does not change whether a disabled user can use the thing.
+- **`plugin-configurator` could start a fresh onboarding over live data.** Two mode-selection rules both matched "`local-context.md` is gone but `~/.grow-pm/` or a vault mirror still has data", and textual order sent it to Onboarding — bypassing RM-0's backup and the RM-1 vault-recovery branch that exists for exactly that state. Rules are now ordered, data-presence first.
+- **Step P profile writes are uniformly gated.** The protocol gated 2 skills and made the rest "silent-with-notice", while 3 of those declared gated writes anyway. A profile records a judgement about a person; the manager owns it.
+
+### Fixed — dead ends and undecidable routes
+
+- **`focus-advisor`'s `journal` mode had no workflow, no output, and referenced "streaks"** — a word that appeared nowhere else in the plugin. It now has a defined flow: show non-terminal focuses, offer done/snooze/drop/keep per item, gate, write transitions, summarize. Nothing is auto-closed.
+- **The `chosen` journal status was unhandled by dedup.** `focus-scoring.md` handled `done`, `snoozed` and `proposed`, so a focus the PM had *already picked* fell through and got re-ranked against fresh signals every morning — the quiet way a chosen focus slips off the brief. It now pins to the top without re-scoring, with an honest nudge after 2 cycles.
+- **`design-bridge`'s "handoff with screen generation" route had no deciding input.** Step 0.5 and the toolkit protocol both branched on it; no question collected it. Added Q4a (document existing designs vs generate the screens).
+- **Two core-enum capabilities were unreachable:** `figma-write` and `code-first-research` were declared in the toolkit protocol §3 but absent from §6's request→capability mapping, and §3's "user may reference explicitly" escape covers only *custom* capabilities. Both now have routes; every core-enum member appears in the mapping.
+- **`deck-subtypes.yaml` was wired to a step that never cited it.** Its header says "Read by design-bridge Step 3"; Step 3 never mentioned it. Combined with the `feature`/`feature-concept` key split (v2.0.2), the slide outlines were unreachable by the documented lookup.
+
+### Fixed — config fields that nothing defined
+
+- **`Focus → Zones`** was read by three strategic collectors (white spaces, NPS themes, knowledge scoping) but defined in no schema — the collectors had nothing to read. Now in the schema, the example, and with a documented fallback.
+- **`healthcheck`** lived under `Sources` in both schema files while `focus-advisor` reads `Focus → Scheduled → healthcheck` and the example already had it under `scheduled:` — the lookup found nothing in a schema-conformant file. Moved to Scheduled; subsection order aligned between the write side (`context-schema.md`) and the read side (`focus-signals.md` §8).
+- **`Templates` and `Planning` sections** were written by onboarding and read by skills but defined in no schema — `context-schema.md` calls itself "the complete schema definition", and Planning's format was delegated to the example file, which is illustrative, not normative. Both now defined.
+- **`deferred_steps` keys**: onboarding wrote 6 keys the enum didn't list (`key-metrics`, `analytics-extended`, `tableau-mcp-required`, `planning`, `focus`, `people`) while the enum listed 2 nobody writes (`okrs`, `competitors`) — for five sections "is it deferred?" was unanswerable. Enum now maps key → writing step.
+- **`organization.atlassian_cloud_id`** was required by product-reporter and defined nowhere. Now schema'd, and documented as auto-discoverable.
+
+### Fixed — arithmetic and coverage
+
+- **CJM health-score weights only summed to 100% for a 4-stage funnel.** "First 15% / Middle 25% **each** / Last 35%" is correct for the E-commerce default, but the 5-stage Marketplace funnel scored out of 125 and the 6-stage SaaS funnel out of 150 — silently deflating every health score computed on them. Weights are now shares (first 15% · all middles 50% split evenly · last 35%), with worked examples per shipped template and a two-stage rule.
+- **Validate mode couldn't see half the config.** Planning, Focus and Templates were absent from V-4's scoring and from the Update menu the setup steps hand off to — a readiness report could read 100% while the planning suite had nothing to read. Deferred sections are now reported as deferred, not scored as gaps; People and Design Toolkits are presence-only, never scored.
+- **Declining the Knowledge Library skipped the Template Library** (Step 12 jumped to Step 14), leaving `templates_setup_completed` unset and Step 16g nudging someone who was never asked — against O-T.2's "always asked, even when using built-in only".
+- **CJM health-check notifications** were defined in the schema and editable via Update mode, but no onboarding step collected them. Added 11g.
+- The Step 16c skeleton lacked placeholders for the Templates/Planning/Focus/Design-Toolkits/People sections that later steps write into it; the write-ordering (steps 13–15 buffer, 16c writes once) is now explicit.
+
+### Changed
+
+- `local-context.example.md` gains the CJM, Knowledge Library, Templates, Obsidian Vaults and People sections (all schema-defined, none previously exemplified) plus `Focus → zones`.
+- README Getting Started now carries the actual install commands and the marketplace/repo names.
+- `design:user-research` removed from design-bridge's promises — no step ever called it; `product-research` owns primary research.
+- Slide-count guidance in design-bridge now cites `deck-subtypes.yaml` instead of restating different numbers (8–12 vs the yaml's 10/14; 6–8 vs 7/10).
+- The `wireframe` boundary is now symmetric and decidable: branded/DS → design-bridge, plain structure → diagram-prototyper, ask when the request doesn't say.
+
+### Files
+
+- Changed: 4 `skills/*/SKILL.md` (minor bump — behavioural), `skills/design-bridge/references/a11y-checklist.md`, `skills/plugin-configurator/references/` (context-schema, onboarding-steps, maintenance-modes), `references/` (cjm-protocol, focus-signals, focus-scoring, people-context-protocol, design-toolkit-protocol, data-integrity-protocol, jira-data-protocol), `local-context.example.md`, `README.md`, `CHANGELOG.md`, `testing/`, both manifests.
+
+---
+
 ## v2.0.2 (2026-07-14)
 
 **Audit remediation, P2 — structural drift.** v2.0.1 fixed the defects that were mechanically wrong (leaked data, duplicated docs, phantom paths). This release fixes the ones that were *architecturally* wrong: three documents each claiming to define the vault layout, chain edges that existed only on paper, and a template system whose fallback could not be satisfied. Three new linter checks make each class blocking.

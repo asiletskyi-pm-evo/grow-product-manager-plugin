@@ -114,7 +114,7 @@ a11y_audit:
   warnings: [...]
 ```
 
-If `blockers` is non-empty → Step 5 is blocked. Call it out conspicuously in the outline footer.
+If `blockers` is non-empty → the **Step 6 QA gate** blocks the deliverable (this doc's own title for the gate; it said "Step 5" until v2.1.0, which is the render step that must already have run for there to be anything to audit). Call it out conspicuously in the outline footer.
 
 If only `warnings` → deliverable ships, but with a visible block in the footer / handoff:
 > ⚠️ A11y audit warnings: <list>. Slide X / Component Y. Recommendation: <fix>.

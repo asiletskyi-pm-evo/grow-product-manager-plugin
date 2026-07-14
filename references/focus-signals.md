@@ -30,7 +30,7 @@ Every collector returns compact packets, never raw data — this keeps token cos
 | | fallback: browser calendar.google.com | per `integration-strategy.md` |
 | Meetings | Fireflies MCP (or vault Meetings/ if daily-import runs): last 3–7 days | extract PM's open action items |
 | Jira usual suspects | per-key `getJiraIssue` + board scrape — **never bulk JQL search** (`jira-data-protocol.md`) | in-sprint: stuck In review >2 days, unassigned, blocked chains; mentions/comments addressed to the PM |
-| | scope: current sprint + PM's epics from local-context | |
+| | scope: current sprint + the epics behind `planning.goal_map` (local-context) | |
 | Mail | Gmail MCP `search_threads`, read-only, window: **last 7 days** (default) | two-stage filter — §4 |
 | Release flags | only if configured in Focus config | flags awaiting rollout decision |
 
@@ -69,7 +69,7 @@ Tactical signals feed `focus-scoring.md` §4 (ICE + capacity realism + goal alig
 | Research & knowledge signals | knowledge-library search on the PM's zones (trust-weighted); recent internal reports | "internal report: fast Q&A answers → +38% conversion — scalable lever" |
 | Leadership mandates | Fireflies keyword scan over leadership meetings (last quarter) | "leadership expects a concept for X by Q-end" |
 | Competitive moves | chained product-research (competitive mode) when a bet needs evidence | "competitor shipped Y in your zone" |
-| White spaces | PM zones (local-context) vs current epics: zones with no active investment | "zone Z has had no initiative for 2 quarters" |
+| White spaces | `Focus → Zones` (local-context, §8) vs current epics: zones with no active investment | "zone Z has had no initiative for 2 quarters" |
 
 Strategic signals feed `focus-scoring.md` §5. The memo template and honesty rules apply — every bet carries data links; exclusions section is mandatory.
 
@@ -82,13 +82,16 @@ Strategic signals feed `focus-scoring.md` §5. The memo template and honesty rul
 - Mail: [on/off], window: [7] days, thresholds: [24]h VIP / [48]h others
 - Calendar: [on/off]; prep keywords: [demo, review, планування, ...]
 - Jira: [on/off]; Release flags: [off]
-- Metrics health-check in scheduled runs: [off]
+
+#### Zones
+- [the PM's areas of responsibility, e.g. listings, product card, reviews]
+- [used by strategy collectors §7: white-space detection, NPS theme filtering, knowledge search scoping]
 
 #### VIP senders
 - [name <email>] — [role]
 
 #### PM goals (scoring weights)
-- [e.g. mission "+15% CR лістингів та КТ" — permanent high weight]
+- [e.g. mission "+N% CR of the key funnel" — permanent high weight]
 
 #### Goals source
 - [URL of the pinned product goals/missions source (e.g. goals sheet); used by strategy collectors]
@@ -100,4 +103,9 @@ Strategic signals feed `focus-scoring.md` §5. The memo template and honesty rul
 - Daily brief: [cron + on/off], mode now, headless
 - Tactical brief: [cron + on/off], mode tactics, headless
 - Strategy memo: [quarterly + on/off], mode strategy, headless
+- Metrics health-check in scheduled runs: [off]
 ```
+
+> **`Zones`** was read by three strategic collectors (§7 white spaces, NPS themes, knowledge search) but defined in no schema — the collectors had nothing to read. When the section is absent, strategy mode falls back to the epics behind `planning.goal_map` and says so in the brief footer.
+>
+> **`Metrics health-check`** lives under **Scheduled**, not Sources: it is a property of headless runs, and `focus-advisor` reads it as `Focus → Scheduled → healthcheck`. It sat under Sources here and in `context-schema.md` while `local-context.example.md` already had it under `scheduled:` — the skill's lookup found nothing in a schema-conformant file.

@@ -91,15 +91,27 @@ If a stage has multiple anomalies, penalties are summed (minimum 0, maximum 100 
 overall_health = weighted_average(stage_health_1, stage_health_2, ..., stage_health_N)
 ```
 
-Stage weights (configurable, defaults):
+Stage weights (configurable). The defaults are defined as **shares of the funnel**, not fixed per-stage numbers, so they sum to 100% for a funnel of any length:
 
-| Stage position | Default weight |
+| Stage position | Share of total |
 |---------------|---------------|
 | First stage (entry) | 15% |
-| Middle stages | 25% each (split evenly) |
+| **All** middle stages together | 50% — split evenly among them |
 | Last stage (conversion) | 35% |
 
 Last stage weighs most because it directly reflects revenue/goal completion.
+
+Worked examples across the shipped templates (`funnel-templates.md`):
+
+| Template | Stages | Per-stage weights |
+|---|---|---|
+| E-commerce | 4 | 15 · **25 · 25** · 35 |
+| Marketplace | 5 | 15 · **16.7 · 16.7 · 16.7** · 35 |
+| SaaS | 6 | 15 · **12.5 · 12.5 · 12.5 · 12.5** · 35 |
+
+**Two-stage funnel** (no middle): 30% / 70% — the 50% middle share is redistributed proportionally.
+
+> Until v2.1.0 this table read "Middle stages | 25% **each**", which sums to 100% only for the 4-stage E-commerce default — the 5-stage Marketplace funnel scored out of 125 and the 6-stage SaaS funnel out of 150, silently deflating every health score computed on them.
 
 ### Health score interpretation
 

@@ -1,6 +1,6 @@
 ---
 name: focus-advisor
-version: 0.4.2
+version: 0.5.0
 description: PM attention dispatcher — scans the PM's context (sprint cycle, calendar, mail, meetings, Jira, roadmap drift, backlog, A/B tests awaiting decisions, capacity, goals, metrics) and recommends focuses with reasons and next steps at three horizons — daily, tactical (sprint–quarter), strategic (quarter–year) — chaining to the right skill. Use whenever the PM asks what to do or focus on — "на чому сфокусуватись", "що мені робити зараз/сьогодні", "фокус дня/тижня", "тактичний фокус", "стратегічний фокус", "куди фокусувати команду", "де великі можливості для продукту", "розбери мою пошту і календар", "до яких зустрічей готуватись", "чи все ок з метриками", "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "покажи focus board" — and for scheduled/headless briefs. Do NOT use for planning the sprint (sprint-planning), building roadmaps (quarterly-/project-planning), or deep metric analysis (product-analysis / cjm-research) — it recommends and chains, it does not execute.
 ---
 
@@ -25,7 +25,7 @@ The 4th height of the suite — **the PM's attention** above structure/quarter/s
 | Mode | Horizon | Status |
 |------|---------|--------|
 | `now` | today – this sprint | **v0.1** |
-| `journal` | — | **v0.1** — review/close/snooze focuses, streaks |
+| `journal` | — | **v0.1** — review/close/snooze open focuses (see "Mode: journal") |
 | `auto` | — | **v0.1** — detects horizon from phrasing/cycle |
 | `tactics` | sprint – quarter | **v0.2** — 3–5 tactical candidates: roadmap drift, stale backlog, A/B decisions, capacity, team events |
 | `strategy` | quarter – year | **v0.3 (this release)** — 2–4 strategic bets aligned to product goals/missions, with explicit "what we deliberately do NOT do" |
@@ -94,6 +94,18 @@ Every artifact this skill produces is persisted to the user's local repository:
 - cache → `~/.grow-pm/focus/cache/` (packets only, no message bodies);
 - Vault mirror after every write per `vault-protocol.md` (`type: focus-brief`), recovery pattern as in knowledge-library (if `~/.grow-pm/focus/` is empty — restore from Vault);
 - artifacts produced by chained skills (slices, decks, plans) are saved by those skills' own Step V — focus-advisor links them in the brief and journal.
+
+## Mode: journal — close the loop on what was already chosen
+
+The brief modes (`now`/`tactics`/`strategy`) run the Step 0–7 pipeline above. `journal` does **not**: it neither collects signals nor ranks anything — it settles the focuses already in the log. (Until v2.1.0 this mode was listed with no workflow and no output, and referenced "streaks", a word that appeared nowhere else in the plugin.)
+
+1. **Step 0** (local context), then read `~/.grow-pm/focus/focus-log.md`.
+2. Show every focus **not** in a terminal state, grouped: `chosen` (in progress, with days-since), then `proposed` carryovers, then `snoozed` whose date has passed. Terminal states (`done`, and `snoozed` still in the future) are not shown — this is a working list, not a report.
+3. Per focus, offer via `AskUserQuestion`: **done** (closed — optionally record the outcome in one line) · **snooze** (until a date — the 3+ snooze note from `focus-scoring.md` §2 applies) · **drop** (no longer relevant — recorded as `done` with reason "no longer relevant", not deleted) · **keep** (stays as-is).
+4. **Gate**, then write the transitions to the journal (append, never rewrite history). Refresh the board if one exists (Step 7b).
+5. Output: a one-line summary of what moved ("2 closed, 1 snoozed to Aug 4, 1 still open since Jul 6") plus, if a focus has been `chosen` for more than 2 cycles, the honest nudge — finish it, delegate it, or close it deliberately.
+
+Nothing is auto-closed. A focus the PM never revisits stays open and keeps appearing — that visibility is the point.
 
 ### Step 7b — Live "PM Focus Board" (mode `board`, or offered after any brief)
 A persistent one-glance panel of the PM's attention. Contract:

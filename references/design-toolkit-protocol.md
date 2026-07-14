@@ -124,8 +124,13 @@ These are exactly the artifacts Grow PM already produces (`requirements-creator`
 |---|---|---|
 | `intent=prototype, fidelity=hi-fi` | `hi-fi-prototype` (+ `ds-tokens` preferred) | tier-0 if covered, else Figma path |
 | `intent=prototype, fidelity=lo-fi/mid-fi` | — | built-in (diagram-prototyper / HTML) |
-| `intent=handoff` with screen generation | `screen-generation` | tier-0 if covered, else `design:design-handoff` |
+| `intent=handoff`, Q4a = "generate the screens" | `screen-generation` | tier-0 if covered, else `design:design-handoff` |
+| `intent=handoff`, Q4a = "document existing designs" | — | built-in (`design:design-handoff`) |
+| any of the above **and** the user wants the result landed in Figma | `+ figma-write` | tier-0 if covered, else Grow PM's own `use_figma` path (Full seat) |
+| `intent=research-enrichment` on an existing codebase | `code-first-research` | tier-0 if covered, else `design:research-synthesis` (docs/web only) |
 | `intent=deck` | — | built-in (no toolkit delegation) |
+
+> Every core-enum capability must appear in this table, or it is unreachable: a toolkit could declare it and nothing would ever ask for it. `figma-write` and `code-first-research` were declared in §3 but absent here until v2.1.0 — §3's "the user may reference them explicitly" escape covers only *custom* capabilities, so those two had no route at all.
 
 ---
 

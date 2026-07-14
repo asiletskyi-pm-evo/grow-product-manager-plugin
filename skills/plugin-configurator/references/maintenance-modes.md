@@ -185,8 +185,14 @@ Present current sections as options via AskUserQuestion:
 - Template Library Settings
 - Obsidian Vault Management
 - Repositories
+- Planning (capacity, sprints, goal map, development flow)
+- Focus (sources, zones, VIP senders, PM goals, cadence, scheduled briefs)
+- People (roster, cadences, HR-form field map)
+- Design Toolkits (external hi-fi/screen-generation providers)
 - Custom Sections
 - Add new custom section
+
+> The last four are the sections the Planning / Focus / People / Design Toolkit setup steps write and then hand off here ("offer review/update via `update config`"). They were missing from this menu until v2.1.0, so that handoff was a dead end.
 
 ### U-3. Update the selected section
 
@@ -291,19 +297,30 @@ For each product in the context:
 
 ### V-4. Check context completeness
 
-Score each product's context completeness:
+First check the file-level requirements from `references/context-schema.md` → Validation Rules: the **User Profile** block (name, role, email, language) and the **Onboarding Status** block (`mode`, `deferred_steps`) must be present and well-formed. A missing User Profile is a finding no per-product score would surface.
+
+Then score each product's context completeness:
 
 | Category | Fields | Weight |
 |----------|--------|--------|
-| **Core** (required) | product name, description, platforms, jira_project_key | 35% |
-| **Publishing** | confluence_space, confluence_template | 15% |
-| **Analytics** | key_metrics, dashboards, ab_test_dashboards | 15% |
-| **Team** | team name, members, jira_team_id | 15% |
+| **Core** (required) | product name, description, platforms, jira_project_key | 30% |
+| **Publishing** | confluence_space, confluence_template | 10% |
+| **Analytics** | key_metrics, dashboards, ab_test_dashboards | 10% |
+| **Team** | team name, members, jira_team_id | 10% |
 | **Strategy** | OKRs, competitors, metric_targets | 10% |
 | **CJM** | funnel template, stages, dashboards, thresholds | 5% |
 | **Knowledge Library** | initialized, sources count, search modes | 5% |
+| **Templates** | preference set, registry reachable at `storage_root` | 5% |
+| **Planning** | jira_board_id, sprint cadence+anchor, capacity team, goal_map, development_flow | 10% |
+| **Focus** | sources, zones, VIP senders, PM goals, cadence, scheduled | 5% |
 
 Calculate a completeness percentage per product and overall.
+
+**Sections deferred in Basic are not penalized** — report them as "deferred, add via `update config`" rather than as gaps; a Basic setup is a complete Basic setup, not a broken Extended one.
+
+**People and Design Toolkits are validated for presence only** (configured / not configured), never scored: People data is the PM's to keep as sparse as they like, and a toolkit is optional by design.
+
+> Planning, Focus and Templates were invisible to "validate setup" until v2.1.0 — a readiness report could read 100% while the planning suite had nothing to read.
 
 ### V-5. Validate Vault connectivity
 

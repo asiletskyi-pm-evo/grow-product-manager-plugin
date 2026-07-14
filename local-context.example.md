@@ -219,6 +219,98 @@ design_toolkits:
 
 ---
 
+## CJM Configuration
+
+Config for `cjm-research` and `product-analysis`. Format: `skills/plugin-configurator/references/context-schema.md` → CJM Configuration; stage templates: `references/funnel-templates.md`.
+
+```yaml
+cjm:
+  funnel_template: e-commerce        # e-commerce | saas | marketplace | custom
+  stages:                            # dashboards + baselines per stage
+    - { name: "Start / Listing",       dashboard: "https://...", baseline_cr: 0.42 }
+    - { name: "Product Page",          dashboard: "https://...", baseline_cr: 0.31 }
+    - { name: "Cart / Checkout",       dashboard: "https://...", baseline_cr: 0.18 }
+    - { name: "Payment / Post-Purchase", dashboard: "https://...", baseline_cr: 0.09 }
+  thresholds: { warning: 10, critical: 25 }   # % deviation from baseline
+  analysis_defaults:
+    comparison_baseline: previous-period      # previous-period | previous-year | target
+    platforms: all
+    search_modes: [library, internet]
+  health_check_notifications:
+    channels: [local]                # local | slack | email | confluence
+    frequency: weekly                # weekly | custom | off
+```
+
+---
+
+## Knowledge Library
+
+Config for `knowledge-library`. Format: `skills/plugin-configurator/references/context-schema.md` → Knowledge Library Configuration.
+
+```yaml
+knowledge_library:
+  path: "~/.grow-pm/knowledge-library/"
+  default_search_modes: [library, internet]
+  trust_reevaluation: monthly
+  min_trust_threshold: 0.5
+  confluence_spaces:                 # spaces searched for CJM/research enrichment
+    - { key: "SPACE", description: "Product docs" }
+  gdrive_folders: []
+```
+
+---
+
+## Templates
+
+Config for `template-library` and every skill's Step T. Semantics: `references/template-protocol.md`.
+
+```yaml
+templates:
+  preference: smart                  # auto | always_ask | smart
+  storage_root: "~/.grow-pm"         # or {vault}/{plugin_folder} when a vault is configured
+  setup_completed: true
+```
+
+---
+
+## Obsidian Vaults (Optional)
+
+Config for the vault layer. Format: `skills/plugin-configurator/references/context-schema.md` → Obsidian Vaults; layout: `references/vault-schema.md`.
+
+```yaml
+vaults:
+  - path: "/Users/you/Obsidian/YourVault"
+    plugin_folder: "Grow PM"
+    product_binding: all             # product key, or "all" for the default vault
+    sync_mode: auto                  # auto | manual | read-only | off
+```
+
+---
+
+## People (Optional)
+
+Config for the People-contour skills. Format: `skills/plugin-configurator/references/context-schema.md` → People Configuration; semantics: `references/people-context-protocol.md`.
+
+> **Highest-sensitivity tier.** Person profiles are separate files (vault `People/` or `~/.grow-pm/people/`) — never Confluence/Jira/external LLMs. Only this pointer block lives here.
+
+```yaml
+people:
+  vault_area: "People"
+  roster_index: "People/_roster.md"
+  cadence:
+    one_on_one: monthly              # weekly | biweekly | monthly | quarterly
+    goal_report: weekly              # weekly | biweekly | monthly
+  review_template_id: performance-review-builtin-default
+  hr_form:                           # employer vacancy-form field map (hiring-designer)
+    budget: ["<range A>", "<range B>"]
+    team: ["<team A>", "<team B>"]
+    position: ["<title A>", "<title B>"]
+    employment_type: ["full-time", "contract"]
+    probation_length: ["3 months", "6 months"]
+```
+
+---
+
 ## Custom Sections
 
 <!-- Add any additional context that your team needs -->
@@ -280,6 +372,10 @@ focus:
     calendar: { enabled: true, prep_keywords: [demo, review, планування, презентація] }
     jira: { enabled: true }
     release_flags: { enabled: false }
+  zones:                               # PM's areas of responsibility — read by strategy collectors
+    - listings
+    - product-card
+    - reviews
   vip_senders:
     - { name: "Firstname Lastname", email: "vip.stakeholder@example.com", role: "Direction PM Lead" }
   pm_goals:

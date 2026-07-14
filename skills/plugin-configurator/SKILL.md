@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.7.1
+version: 2.8.0
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist. Українською — "налаштувати плагін", "сетап плагіна", "налаштувати контекст", "додати продукт", "оновити конфігурацію", "перевірити налаштування", "показати конфіг".
 ---
 
@@ -20,7 +20,7 @@ Supports multiple organizations, products, and projects simultaneously.
 
 **Load only the reference for the mode you are entering** — never all at once.
 
-## Six Modes
+## Modes
 
 | Mode | When to use | What it does | Workflow |
 |------|------------|--------------|----------|
@@ -32,7 +32,13 @@ Supports multiple organizations, products, and projects simultaneously.
 | **Validate** | User wants to check everything works | Test all MCP connections, verify data access, check context completeness, validate Obsidian Vault connectivity, produce readiness report | `references/maintenance-modes.md` → V |
 | **View** | User asks to see current config | Display current `local-context.md` contents in a readable format, allow inline edits via dialogue | `references/maintenance-modes.md` → VW |
 
-**Mode selection on launch:** if `local-context.md` does not exist anywhere → Onboarding. If `~/.grow-pm/` has data but the launch looks like a fresh install → Reinstall/Migration (run RM-0 backup FIRST). Otherwise route by the user's request: change something → Update; check → Validate; show → View; "dry-run onboarding" → Test.
+**Mode selection on launch** — evaluate in this order, first match wins:
+
+1. **Any data exists under `~/.grow-pm/` or in a vault mirror** (even if `local-context.md` itself is gone) → **Reinstall/Migration**, RM-0 backup FIRST. RM-1 handles the "no local-context.md but a vault mirror exists" case by restoring it — which is precisely the state a naive "no context → Onboarding" rule would destroy by starting fresh over live data.
+2. **Nothing exists anywhere** → Onboarding.
+3. Otherwise route by the user's request: change something → Update; check → Validate; show → View; "dry-run onboarding" → Test.
+
+> Rules 1 and 2 both matched the data-recovery state until v2.1.0, and textual order sent it to Onboarding — bypassing the backup and the vault-recovery branch that exist for exactly that case.
 
 ## Persistent Storage
 
@@ -46,11 +52,17 @@ See **`references/persistent-storage.md`** for the complete protocol, directory 
 ~/.grow-pm/
 ├── local-context.md              # Main configuration
 ├── .schema-version               # Schema version marker
-├── template-library/             # User's templates
+├── Templates/                    # User's templates (layout per template-protocol.md)
 ├── knowledge-library/            # Curated sources
+├── people/                       # Person profiles (Step P) — highest-sensitivity
+├── experiments/                  # experiment-tracker registry
+├── decisions/                    # decision-log records (L0 fallback)
+├── focus/                        # focus-advisor journal, briefs, board
 ├── backups/                      # Auto-backups before migrations
 └── obsidian-vaults/              # Vault configuration cache (optional)
 ```
+
+> `references/persistent-storage.md` is the source of truth for this tree — RM-2's reinstall inventory walks it, so a directory missing here is a directory the user is never told they still have.
 
 ## Auto-trigger Protocol
 

@@ -1,7 +1,7 @@
 ---
 name: design-bridge
-version: 0.3.2
-description: Orchestrate Claude's Design skills (user-research, research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline, and route hi-fi screen generation to an external design toolkit declared in local-context (design_toolkits). Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact. Українською — "створити презентацію", "зробити деку", "побудувати прототип", "згенерувати hi-fi екран", "через мій дизайн-тулкіт", "згенерувати handoff", "дизайн-рев'ю", "передати дизайн у розробку". Do NOT use for quick local diagrams, flowcharts, BPMN, Mermaid, or plain wireframes — use diagram-prototyper for those.
+version: 0.4.0
+description: Orchestrate Claude's Design skills (research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline, and route hi-fi screen generation to an external design toolkit declared in local-context (design_toolkits). Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact. Українською — "створити презентацію", "зробити деку", "побудувати прототип", "згенерувати hi-fi екран", "через мій дизайн-тулкіт", "згенерувати handoff", "дизайн-рев'ю", "передати дизайн у розробку". Do NOT use for quick local diagrams, flowcharts, BPMN, Mermaid, or plain wireframes — use diagram-prototyper for those.
 ---
 
 # Design Bridge
@@ -27,7 +27,7 @@ All brand-specific values (Design System spec, pptx theme, base template, brand 
 
 **Manual** — when the user says:
 - "make a deck", "create a presentation", "prep for direction review"
-- "prototype", "mockup", "wireframe" (for a hypothesis / concept / requirements doc)
+- "prototype", "mockup" (for a hypothesis / concept / requirements doc) — **when it should carry your Design System / brand**; a plain structural wireframe is `diagram-prototyper`. If the request doesn't say, ask: "branded (your DS tokens, ready to show) or plain structure (fast, to think with)?"
 - "handoff to engineering", "ship the design to dev"
 - "design review", "contrast check", "a11y audit"
 - "pull context from Figma", "Figma screenshot"
@@ -36,7 +36,7 @@ All brand-specific values (Design System spec, pptx theme, base template, brand 
 
 Read and follow the fallback chain in `references/integration-strategy.md`. Key dependencies for this skill:
 
-- **Claude Design plugin** (`design:*` sub-skills) — `user-research`, `research-synthesis`, `ux-copy`, `design-critique`, `design-system`, `accessibility-review`, `design-handoff`
+- **Claude Design plugin** (`design:*` sub-skills) — `research-synthesis` (4a), `ux-copy` (4c), `design-system` (4d), `accessibility-review` (4e), `design-critique` (4f), `design-handoff` (handoff path). Each is called by the step named beside it; this skill does not orchestrate `design:user-research` — Grow PM's own `product-research` owns primary research.
 - **Figma MCP** — `whoami`, `get_libraries`, `search_design_system`, `get_variable_defs`, `get_design_context`, `get_screenshot`, `get_metadata`
 - **pptx skill** (Anthropic) — for .pptx rendering via python-pptx
 - **docx / pdf** — alternative deliverables
@@ -86,7 +86,9 @@ T-1..T-5 via `template-library`. If none found, fall back to `presentation-built
 
 ### Step 0.5 — External toolkit routing (tier-0)
 
-Follow `references/design-toolkit-protocol.md`. Runs only when a toolkit is declared AND the request needs hi-fi generation (resolved in Step 1: `intent=prototype, fidelity=hi-fi`, or `intent=handoff` with screen generation).
+Follow `references/design-toolkit-protocol.md`. Runs only when a toolkit is declared AND the request needs hi-fi generation — resolved in Step 1: `intent=prototype` with `fidelity=hi-fi` (Q3), or `intent=handoff` with Q4a = "generate the screens".
+
+> Ordering note: Steps 0.5 and T consume Step 1's answers, so despite their numbers they execute **after** Step 1 (as the end-to-end example shows). The numbering reflects the setup→routing→render grouping, not the call order.
 
 1. Map the request to required **core-enum** capabilities (protocol §6).
 2. Find `design_toolkits[]` entries whose `capabilities` cover them. None → continue to the normal built-in path (Step 5b Figma / Step 4f handoff). Two+ → `AskUserQuestion` which to use.
@@ -108,18 +110,22 @@ Via `AskUserQuestion` if not passed from an upstream skill:
 - handoff (developer spec for front-end)
 - research-enrichment (run sources through `design:research-synthesis` and append to the upstream artifact)
 
-**Q2 (deck only). Which deck subtype?**
-- feature (feature pitch — 10 slides, typical for direction review)
-- research-highlights (research dump — 8–12 slides)
-- ab-test-readout (A/B test results — 6 slides)
-- release-readout (release / sprint summary — 6–8 slides)
+**Q2 (deck only). Which deck subtype?** Lengths are `target (max)` from `references/deck-subtypes.yaml` — that file is the source of truth; do not restate different numbers here.
+- feature (feature pitch — 10 slides, max 15; typical for direction review)
+- research-highlights (research dump — 10 slides, max 14)
+- ab-test-readout (A/B test results — 6 slides, max 8)
+- release-readout (release / sprint summary — 7 slides, max 10)
 
 **Q3 (prototype only). Fidelity level?**
 - lo-fi (Mermaid flow / ASCII wireframe)
 - mid-fi (HTML with inline brand tokens from local-context)
 - hi-fi (delegate to an external toolkit if one covers it — Step 0.5; else send to Figma via `use_figma`, Full seat)
 
-**Q4 (handoff only). Delivery target?**
+**Q4a (handoff only). Does this handoff need screens generated?** This is the input Step 0.5 branches on — without it, "handoff with screen generation" is undecidable.
+- **document existing designs** (default) — the screens exist (Figma link / shipped UI); the handoff specs them. No toolkit delegation.
+- **generate the screens** — the handoff needs new hi-fi screens first → Step 0.5 routes to a declared toolkit (`screen-generation` capability); tier-0 fallback if none covers it.
+
+**Q4b (handoff only). Delivery target?**
 - dedicated Confluence page (markdown + screenshots)
 - inline in a Jira ticket as attachment
 - standalone .md in `deliverables/handoffs/`
@@ -127,7 +133,7 @@ Via `AskUserQuestion` if not passed from an upstream skill:
 ### Step 2 — Audience & constraints
 
 Via `AskUserQuestion`:
-- **Audience** (default from upstream): direction_review / team / c-level / customer / dev_handoff
+- **Audience** (default from upstream): direction_review / team / product_leads / stakeholders / c-level / customer / dev_handoff — the same set `deck-subtypes.yaml` uses in `typical_audience` (upstream skills pass values from it, e.g. brainstorm-features sends `product_leads`)
 - **Length** (for deck): recommended 10; cap 20
 - **Language**: from local-context `user.language`; user can override
 - **Brand mode**: `brand_default` (uses `product.brand.*`) | `custom` | `minimal`
@@ -155,11 +161,15 @@ Depending on **upstream**:
 
 **e. User-provided** — raw text / pasted context / uploaded files.
 
-Normalize into **Deck IR** (intermediate representation):
+Normalize into **Deck IR** (intermediate representation).
+
+**Read `references/deck-subtypes.yaml` first** and look the subtype up by its key — it gives the slide-by-slide outline (index, layout, role, required slots, media hint) for the chosen subtype, plus `target_length` / `max_length`. Build the IR's `slides` list from that outline and fill the slots from the sources extracted above; a slot with no source becomes an Open Question, not an invented fact. If the subtype has no entry, fall back to the generic structure below.
+
+> The yaml's header has always said "Read by design-bridge Step 3", but this step never cited it — combined with the `feature`/`feature-concept` key split (fixed in v2.0.2), the outlines were unreachable by the documented lookup.
 
 ```yaml
 deck:
-  subtype: <from Step 1>
+  subtype: <from Step 1 Q2 — must match a key in deck-subtypes.yaml>
   title: <string>
   subtitle: <string>
   presenter: <string>
@@ -211,14 +221,25 @@ Auto-fix what can be fixed (split, reorder, add section); for everything else, a
 
 #### 4e. Accessibility audit
 
-**Trigger**: `intent ∈ {prototype, handoff, deck}` AND (`audience=c-level` OR `dev_handoff` OR user explicitly asked).
+**Trigger**: `intent ∈ {deck, prototype, handoff}` — **always, regardless of audience**. Scope and blocker-severity come from `references/a11y-checklist.md` → "Pre-audit: what to run and when":
+
+| intent | WCAG scope | blocker? |
+|---|---|---|
+| deck | contrast (primary text, CTA) | blocker; everything else — warning |
+| prototype (lo-fi) | contrast, touch targets | warning only |
+| prototype (mid-fi, hi-fi) | full WCAG 2.1 AA | blocker |
+| handoff | full WCAG 2.1 AA + AAA stretches | blocker |
+| research-enrichment | not run | — |
+
+> Until v2.1.0 this step also required `audience=c-level OR dev_handoff OR user explicitly asked`, so a **handoff with `audience=team` skipped the audit entirely** — and Step 6's "A11y: if Step 4e ran" then never blocked it. That directly contradicted the checklist above, Quality Standards ("WCAG 2.1 AA — non-negotiable for handoff") and the failure-mode table ("A11y fail on handoff | release blocker"). The audience does not change whether a disabled user can use the thing.
+
 **Call**: `design:accessibility-review` (WCAG 2.1 AA):
 - contrast ratios
 - touch targets ≥ 44×44
 - keyboard nav
 - screen reader labels
 
-**Output**: pass/fail report. Critical findings block release (Step 6 QA gate).
+**Output**: pass/fail report. Blocker-severity findings block the Step 6 QA gate; warnings ship with a visible note in the footer/handoff.
 
 #### 4f. Developer handoff
 
@@ -289,7 +310,7 @@ Required for `intent ∈ {deck, prototype, handoff}`:
 - **Brand usage**: at least 2 slides using `product.brand.primary`
 - **Empty slots**: no `{{…}}`, `TODO`, placeholder titles, or "Lorem ipsum"
 - **Font check**: `product.brand.font_primary` + display font available (if not — warning in the outline footer)
-- **A11y**: if Step 4e ran — all fails are blockers; warnings go into the footer notice
+- **A11y**: Step 4e always ran for deck/prototype/handoff — blocker-severity findings (per the intent's row in `references/a11y-checklist.md`) block the deliverable; warnings go into the footer notice
 
 If any check fails → fix + rerun QA; escalate to the user if the blocker is not auto-fixable.
 
@@ -319,7 +340,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.3.2",
+  skill_version: "0.4.0",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],

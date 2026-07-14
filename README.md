@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 2.0.2
+**Version:** 2.1.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v2.1.0** — **Audit remediation (v2.0.1 → v2.1.0)**. A full audit of v2.0.0 found 5 critical + 14 major defects that both validators passed green. All are now fixed, and — more importantly — each defect *class* is a blocking linter check, verified by injecting the defect into a repo copy. Highlights: real organization data removed from the shipped example (and the whole repo); two protocol documents that contained themselves twice, halved; `vault-schema.md` declared the single source of truth for vault layout, with `vault-protocol.md` and the Obsidian setup guide conformed to it (they had described three incompatible layouts, and the setup smoke tests could not have passed); 28 of 29 skill frontmatters made valid YAML for external tooling; `experiment-tracker` made reachable by chaining at all; a `design-bridge` handoff can no longer skip its accessibility audit; and CJM health scores now sum to 100% for funnels of any length, not just the 4-stage default. `testing/skill_lint.py` grew from 4 checks to **13**. See the CHANGELOG for the full list.
 
 **New in v2.0.0** — **Wave 3: the People-contour (29 skills)**. The plugin grows a whole new contour — **manager → people → goals → communication → development** — alongside the existing product/data/delivery contour. Six new skills: **`goal-setter`** (SMARTCBP for people / OKR for product, audit + cascade + commitment), **`one-on-one`** (prepare from the profile + analyze into signals & an ARCV follow-up, 1-1 coverage headless), **`performance-review`** (goals + GTD-index + situational-leadership diagnosis into the employer's review template), **`hiring-designer`** (role design — goal letter before the vacancy — + a universal vacancy profile mapped to the employer's HR form), **`offboarding-guide`** (evidence-gated four-meeting algorithm, strictly local), and **`delegation-coach`** (7-levels-of-Appelo audit + S1→S4 hand-off plan). A new **People Context Protocol (Step P)** gives every person a persistent, vault-local profile (D-type, delegation levels, goals, reporting cadence, 1-1 history, GTD-index, signals). Six methodology references distil the frameworks (SMARTCBP, 3T5F, Hersey-Blanchard, 7-levels-of-Appelo, GTD-index, ARCV, CBI, NVC, ROAIP/PRO). **Breaking:** `team-ops-reporter` is **renamed to `product-reporter`** and gains a **goal-report (3T5F)** mode. Existing skills learn the frameworks too — meeting-processor (ARCV follow-ups + 1-1 detection), task-creator (why/what/how + DoD + D-level depth), brainstorm-features (ROI/PRO **and** ICE by default), requirements-creator (ROI/ICE gate), sprint-planning (GTD-index + delegation-aware assignees), focus-advisor (manager-rhythms + "choose one"), quarterly-planning (session/board prep), feedback-triage (SH step), experiment-tracker & decision-log (cost + commitment). People data is the **highest-sensitivity tier** — vault/local only, never Confluence/Jira/external LLMs.
 
@@ -219,7 +221,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 10. Plugin Configurator (v2.7.1)
+### 10. Plugin Configurator (v2.8.0)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -276,7 +278,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 13. Design Bridge (v0.3.2) — brand-agnostic since v1.11.0
+### 13. Design Bridge (v0.4.0) — brand-agnostic since v1.11.0
 
 **Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into brand-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
 
@@ -301,7 +303,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 14. Product Reporter (v0.4.2) — renamed from Team Ops Reporter in v2.0.0
+### 14. Product Reporter (v0.5.0) — renamed from Team Ops Reporter in v2.0.0
 
 **Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
 
@@ -374,7 +376,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 20. Focus Advisor (v0.4.2) — NEW in v1.31.0, complete in v1.33.0
+### 20. Focus Advisor (v0.5.0) — NEW in v1.31.0, complete in v1.33.0
 
 **Description:** PM attention dispatcher — the 4th height of the suite, above structure/quarter/sprint. Scans the PM's context (sprint cycle position, calendar meetings needing preparation, important unanswered emails, open action items from recent meetings, Jira tails), ranks the signals, and recommends 1–3 focuses with reasons, cost of delay, and a chained next step. Recommends and chains — never executes another skill's work; the PM decides.
 
@@ -475,17 +477,17 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Task Creator | v0.10.1 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.9.3 | Visualize concepts with diagrams, prototypes, infographics |
 | Meeting Processor | v0.13.2 | Process meetings and extract action items |
-| Plugin Configurator | v2.7.1 | Configure plugin for your organization |
+| Plugin Configurator | v2.8.0 | Configure plugin for your organization |
 | Knowledge Library | v0.6.1 | Manage curated knowledge sources |
 | Template Library | v0.2.2 | Manage multilingual artifact templates with per-product scope |
-| Design Bridge | v0.3.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
-| Product Reporter | v0.4.2 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
+| Design Bridge | v0.4.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
+| Product Reporter | v0.5.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
 | Roadmap Architect | v0.2.3 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
 | Project Planning | v0.2.3 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.3.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.3.1 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.1.2 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
-| Focus Advisor | v0.4.2 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
+| Focus Advisor | v0.5.0 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.2.2 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.2.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
 | Feedback Triage | v0.2.1 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
@@ -688,7 +690,7 @@ All design deliverables pass WCAG 2.1 AA QA before publish (see `skills/design-b
 
 The plugin includes reference materials for product management best practices and frameworks:
 
-**Available reference files in `references/` directory:**
+**Key reference files in `references/` (30 total — see the folder for the full list):**
 - `local-context-protocol.md` — Step 0: how every skill finds and loads `local-context.md`
 - `integration-strategy.md` — MCP → Registry → Browser fallback chain for external tools
 - `data-policy.md` — data confidentiality rules (internal data never leaves the session)
@@ -725,11 +727,19 @@ For detailed version history, release notes, and changelog information, see [CHA
 
 ## Getting Started
 
-1. **Install the plugin** from the Claude Code plugin marketplace
-2. **Configure the plugin** using the Plugin Configurator skill
-3. **Choose your storage location** — Obsidian Vault (recommended) or custom folder
-4. **Connect your data sources** (Jira, Confluence, Figma, etc.)
-5. **Start using skills** by typing trigger phrases in your Claude Code session
+1. **Add the marketplace and install the plugin** — in a Claude Code session:
+
+   ```
+   /plugin marketplace add asiletskyi-pm-evo/grow-product-manager-plugin
+   /plugin install grow-product-manager@grow-product-manager-plugins
+   ```
+
+2. **Configure the plugin** — say "налаштувати плагін" / "configure plugin" to run the Plugin Configurator. Basic setup takes ~3–5 minutes; Extended (~15–25 min) configures CJM, Vault, Templates, Planning, Focus and People. You can start Basic and add the rest later.
+3. **Choose your storage location** — Obsidian Vault (recommended: templates and artifacts live together) or `~/.grow-pm/` standalone.
+4. **Connect your data sources** (Jira, Confluence, Figma, Tableau, calendar, meeting tools) — the Configurator pre-checks what's available and works with whatever is connected.
+5. **Start using skills** by typing trigger phrases in your Claude Code session. Not sure where to start? Say "на чому сфокусуватись" — `focus-advisor` reads your context and recommends.
+
+> Your configuration lives in `local-context.md`, which is gitignored and never leaves your machine. Copy `local-context.example.md` if you prefer to fill it in by hand.
 
 ---
 
@@ -755,5 +765,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 2.0.2  
+**Version:** 2.1.0  
 **Last Updated:** July 2026

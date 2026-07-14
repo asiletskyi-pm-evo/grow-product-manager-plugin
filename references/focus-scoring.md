@@ -22,9 +22,10 @@ Each candidate (signal packet or due ritual) gets three 1–3 marks:
 
 ## 2. Journal dedup (before ranking)
 
-Check `~/.grow-pm/focus/focus-log.md`:
+Check `~/.grow-pm/focus/focus-log.md`. The journal's states are `proposed → chosen → done | snoozed`; every one of them needs a rule here, or the signal is re-ranked as if it were new:
 - status `done` → drop the signal;
 - status `snoozed` and snooze date not reached → drop, but count occurrences: a signal snoozed 3+ times gets a note in the brief ("це відкладається втретє — можливо, делегувати або закрити свідомо?");
+- status `chosen` (the PM picked it but it is not closed) → **keep and pin to the top**, marked "in progress since {date}", without re-scoring. It already won a ranking; re-competing it against fresh signals every morning is how a chosen focus quietly slips off the brief. If it has been `chosen` for more than 2 cycles → add "обрано N днів тому і досі відкрито — доробити, віддати або свідомо закрити?".
 - status `proposed` from a previous brief, still unresolved → keep and mark as carryover (carryover raises urgency by 1, once).
 
 ## 3. Honesty rules

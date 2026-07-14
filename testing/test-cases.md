@@ -2,6 +2,28 @@
 
 > Updated EVERY release: new cases for new/changed skills + regression for affected ones. Format — see `Testing-process.md`. Status is filled in when a stage runs.
 
+## Release v2.1.0 — audit remediation P3 + P4 (behavioural defects)
+
+> **Run 2026-07-14 — verdict: GREEN.** 13 checks, 0 FAIL. P3/P4 defects are mostly *semantic* (a gate that skips, a mode with no flow, weights that don't sum) — a linter cannot catch these, so they are covered by scenario cases below. This is the honest boundary of static lint.
+
+### Stage 3a — Trajectory / scenario walk
+- **TC-scn-210-a11y** | design-bridge | `intent=handoff`, `audience=team` | expected: a11y audit RUNS and blocker findings block Step 6 | **pass** (previously skipped: 4e required c-level/dev_handoff, so Step 6's "if Step 4e ran" never fired)
+- **TC-scn-210-handoff-route** | design-bridge | "make a handoff" with a declared toolkit | expected: Q4a decides document-vs-generate; Step 0.5 routes only on "generate" | **pass** (route was undecidable — no question collected the input)
+- **TC-scn-210-journal** | focus-advisor | `journal` mode with 2 chosen + 1 snoozed focus | expected: non-terminal focuses shown, per-item done/snooze/drop/keep, gated write, summary | **pass** (mode had no workflow at all)
+- **TC-scn-210-chosen** | focus-advisor | daily brief with a `chosen` focus in the log | expected: pinned to top, not re-scored, nudge after 2 cycles | **pass** (fell through dedup and was re-ranked as a fresh signal)
+- **TC-scn-210-recovery** | plugin-configurator | `local-context.md` deleted, `~/.grow-pm/` + vault mirror intact | expected: Reinstall/Migration with RM-0 backup, RM-1 restores from mirror | **pass** (both rules matched; textual order chose Onboarding and would have started fresh over live data)
+- **TC-scn-210-kl-skip** | plugin-configurator | decline the Knowledge Library at Step 12 | expected: continue to Step 13 (Templates), `templates_setup_completed` set | **pass** (jumped to Step 14; 16g then nudged a user who was never asked)
+
+### Stage 1 — Static lint (regression)
+- **TC-lint-210** | repo | all 13 checks after P3/P4 | expected: 0 FAIL | **pass**
+
+### Stage 4 — Integration
+- **TC-int-210-cjm-weights** | cjm-protocol × funnel-templates | health score sums to 100% for every shipped template | expected: 4-stage=100, 5-stage=100, 6-stage=100 | **pass** (was 100 / 125 / 150 — Marketplace and SaaS scores were silently deflated)
+- **TC-int-210-focus-config** | context-schema (write) ↔ focus-signals §8 (read) ↔ example | same subsections, same order, same placement | expected: `healthcheck` under Scheduled everywhere; `zones` defined | **pass**
+- **TC-int-210-deferred** | onboarding-steps ↔ context-schema | every written `deferred_steps` key is in the enum and vice versa | expected: exact match | **pass** (6 written-but-unlisted, 2 listed-but-never-written)
+
+---
+
 ## Release v2.0.2 — audit remediation P2 (structural drift)
 
 > **Run 2026-07-14 — verdict: GREEN.** 13 checks, 0 FAIL. The three new checks were verified by injection (one defect per class into a repo copy): all three caught, clean repo stays green.
