@@ -1,7 +1,7 @@
 ---
 name: meeting-processor
-version: 0.12.0
-description: Process meeting recordings, transcripts, and notes to extract action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Chains to task-creator, requirements-creator, product-research, and brainstorm-features. Українською: "підсумувати зустріч", "нотатки зустрічі", "що обговорювали", "action items", "MoM", "опрацювати транскрипт зустрічі".
+version: 0.13.0
+description: Process meeting recordings, transcripts, and notes to extract ARCV-standard action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Detects 1-1 meetings and redirects to one-on-one. Chains to task-creator, requirements-creator, product-research, and brainstorm-features. Українською: "підсумувати зустріч", "нотатки зустрічі", "що обговорювали", "action items", "MoM", "опрацювати транскрипт зустрічі". Do NOT use for a 1-1 meeting (one-on-one handles those with signals + profile update).
 ---
 
 # Meeting Processor
@@ -227,6 +227,13 @@ Analyze the meeting title, keywords, and content to determine the meeting type(s
 | **Demo / Retro** | "demo", "review", "retro", "retrospective", "showcase" | Feature demonstrations, feedback, what went well/badly, improvements |
 | **Status / Agreements** | "status", "sync", "standup", "weekly", "check-in", "alignment" | Progress updates, blockers, deadlines, agreements, commitments, responsibilities |
 | **Brainstorm** | "brainstorm", "ideation", "workshop", "design thinking" | Ideas, proposals, voting, pros/cons, concept exploration |
+| **1-1** | "1-1", "one-on-one", "ван-он-ван", two participants (manager + one report) | Personal feedback, growth, motivation, career, "how are you", not tasks/status |
+
+**1-1 detection → redirect.** If the meeting classifies as a **1-1** (two participants — a manager and a direct report — with feedback/growth/personal content rather than tasks/status), do **not** process it as a generic MoM. Offer to hand off to the dedicated skill:
+
+> "This looks like a 1-1 meeting. The **one-on-one** skill analyzes it properly — extracting signals (motivation, burnout, career), writing an ARCV follow-up, and updating the person's profile (kept strictly local). Continue there?"
+
+If the user accepts → invoke `one-on-one` (analyze mode), passing the transcript/notes. 1-1 content is People-data (`data-policy.md`) and must not be published to Confluence — one-on-one enforces this. If the user declines → proceed here but keep the output local.
 
 **After auto-classification, confirm with the user:**
 
@@ -272,11 +279,16 @@ Analyze the transcript (or summary + transcript) to extract structured informati
 - Look for language patterns: "we decided", "agreed to", "let's go with", "the decision is"
 - For each decision: what was decided, context/rationale, who was responsible (if mentioned)
 
-**Action items:**
+**Action items (ARCV standard):**
 - Extract tasks that someone committed to doing
 - Look for language patterns: "I'll do", "take this", "action item", "TODO"
-- For each action item: what needs to be done, who owns it, deadline (if mentioned)
+- Format every action item to the **ARCV** quality bar (`references/communication-frameworks.md`):
+  - **A — Actions:** only items that must be *done*; each **numbered**; one item = one number.
+  - **R — Responsible:** exactly **one** responsible person per action (two+ → the result may not happen).
+  - **C — Clearly:** each item unambiguous — someone who wasn't in the meeting could execute it.
+  - **V — Verbs:** start each with an **active perfective verb** + a deadline if relevant ("Olia will produce the doc by Apr 1", not "Doc — responsible: Olia").
 - Cross-reference with Fireflies action_items if available — merge, don't duplicate
+- Keep **Decisions separate from Actions** (see the Decisions block above): important agreements with no owner/action (e.g. "we stop the process if no 2 deals in 2 months") go under Decisions, not Action Items.
 
 **Open questions:**
 - Extract unresolved discussions, questions left without a clear answer
@@ -436,6 +448,7 @@ After publishing (or if the user decided not to save), offer the next step **bas
 | **Brainstorm** | Ideas and hypotheses extracted | "Would you like to score and prioritize these ideas? I'll pass the context to Brainstorm Features." → invoke `brainstorm-features` |
 | **Status / Agreements** | Agreements with deadlines | "Would you like to create Jira tasks for the agreed action items?" → invoke `task-creator` |
 | **Demo / Retro** | Improvement proposals extracted | "Would you like to brainstorm solutions for the identified improvements?" → invoke `brainstorm-features` |
+| **1-1** | Detected as a 1-1 (see M3) | "Analyze this as a 1-1 (signals + ARCV follow-up + profile update)?" → invoke `one-on-one` (analyze mode); keep output local |
 | **Any type** | Complex process discussed | "Would you like to visualize the discussed process as a diagram?" → invoke `diagram-prototyper` |
 
 **Context to pass when invoking another skill:**
@@ -468,7 +481,7 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.12.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.13.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
 2. Key decisions from the meeting may additionally be saved as separate `decision` artifacts (Decisions/) — offer, don't force.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 
@@ -591,5 +604,7 @@ If no meeting tool MCP is connected and the user expects one — offer to search
 
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
-- **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
+- **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering); People-data tier for 1-1s
+- **`references/communication-frameworks.md`** — ARCV follow-up standard (Actions/Responsible/Clearly/Verbs + Decisions block)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
+- **`skills/one-on-one/SKILL.md`** — dedicated handler for 1-1 meetings (redirect target)

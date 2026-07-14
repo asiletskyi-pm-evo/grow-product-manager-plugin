@@ -509,7 +509,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.9.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.9.1", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Skill Chaining — Inbound (for other skills)

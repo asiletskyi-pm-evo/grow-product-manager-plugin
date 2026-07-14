@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 1.40.0
+**Version:** 2.0.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v2.0.0** — **Wave 3: the People-contour (29 skills)**. The plugin grows a whole new contour — **manager → people → goals → communication → development** — alongside the existing product/data/delivery contour. Six new skills: **`goal-setter`** (SMARTCBP for people / OKR for product, audit + cascade + commitment), **`one-on-one`** (prepare from the profile + analyze into signals & an ARCV follow-up, 1-1 coverage headless), **`performance-review`** (goals + GTD-index + situational-leadership diagnosis into the employer's review template), **`hiring-designer`** (role design — goal letter before the vacancy — + a universal vacancy profile mapped to the employer's HR form), **`offboarding-guide`** (evidence-gated four-meeting algorithm, strictly local), and **`delegation-coach`** (7-levels-of-Appelo audit + S1→S4 hand-off plan). A new **People Context Protocol (Step P)** gives every person a persistent, vault-local profile (D-type, delegation levels, goals, reporting cadence, 1-1 history, GTD-index, signals). Five methodology references distil the frameworks (SMARTCBP, 3T5F, Hersey-Blanchard, 7-levels-of-Appelo, GTD-index, ARCV, CBI, NVC, ROAIP/PRO). **Breaking:** `team-ops-reporter` is **renamed to `product-reporter`** and gains a **goal-report (3T5F)** mode. Existing skills learn the frameworks too — meeting-processor (ARCV follow-ups + 1-1 detection), task-creator (why/what/how + DoD + D-level depth), brainstorm-features (ROI/PRO **and** ICE by default), requirements-creator (ROI/ICE gate), sprint-planning (GTD-index + delegation-aware assignees), focus-advisor (manager-rhythms + "choose one"), quarterly-planning (session/board prep), feedback-triage (SH step), experiment-tracker & decision-log (cost + commitment). People data is the **highest-sensitivity tier** — vault/local only, never Confluence/Jira/external LLMs.
 
 **New in v1.40.0** — **External design toolkit provider**. `design-bridge` becomes the single **routing host** for design/prototype work and can delegate hi-fi screen generation to an **external design toolkit** the user declares in `local-context.md` — keeping the plugin core universal for any company (zero regression when none is configured). New `references/design-toolkit-protocol.md` defines the contract: a `design_toolkits[]` config schema, capability-based routing (core enum `hi-fi-prototype` / `screen-generation` / `ds-tokens` / `figma-write` / `code-first-research` / `design-review` + custom tags), a tier-0 fallback (provider → Figma MCP → Registry → Browser), four entry types (`skill` / `mcp_tool` / `command` / `browser`), a bidirectional delegation contract, and a QA-ownership rule (no double review). `design-bridge` → v0.3.0 adds **Step 0.5** (toolkit routing); `plugin-configurator` gains a **Design Toolkit** registration step; `diagram-prototyper` documents the scope boundary (hi-fi, DS-native generation routes to design-bridge). Every toolkit is user-declared — the repository ships no concrete toolkit.
 
@@ -30,7 +32,7 @@ AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figm
 
 **New in v1.30.0** — **Roadmap-trio disambiguation + trigger evals**: the three planning skills now carry explicit scope hints in their descriptions (roadmap-architect = structure only, no dates; project-planning = beyond one quarter; quarterly-planning = exactly one quarter), and `testing/trigger-evals.md` ships a 36-phrase routing test set across 6 collision groups with a run protocol and results log. Release-manager 0.1.1: "merging ≠ releasing" guard in Step 6.
 
-**New in v1.29.0** — **Vault coverage complete**: a standard "Save to Vault" step added to the 11 skills that previously never wrote to the Obsidian knowledge graph (requirements-creator, meeting-processor, brainstorm-features, product-research, diagram-prototyper, task-creator, team-ops-reporter, and the 4 Planning Suite skills). Meeting MoMs, requirements, hypotheses, research, diagrams, task breakdowns, ops reports, and roadmaps now accumulate in the vault with wikilinks. Vault schema extended with 4 new artifact types: `diagram`, `task-breakdown`, `ops-report`, `roadmap` (20 types total). Vault stays optional — L0 setups are unaffected.
+**New in v1.29.0** — **Vault coverage complete**: a standard "Save to Vault" step added to the 11 skills that previously never wrote to the Obsidian knowledge graph (requirements-creator, meeting-processor, brainstorm-features, product-research, diagram-prototyper, task-creator, product-reporter, and the 4 Planning Suite skills). Meeting MoMs, requirements, hypotheses, research, diagrams, task breakdowns, ops reports, and roadmaps now accumulate in the vault with wikilinks. Vault schema extended with 4 new artifact types: `diagram`, `task-breakdown`, `ops-report`, `roadmap` (20 types total). Vault stays optional — L0 setups are unaffected.
 
 **New in v1.28.0** — **Release Manager** skill: one guided pipeline to release the plugin itself — version bump across all 4 mandatory places, CHANGELOG entry, README sync, local validation, gated commit/PR/merge, GitHub Release with tag, mirror sync, and post-release verification. Ships with `references/release-pitfalls.md` — nine real failure modes (iCloud-evicted git objects, stale locks, token scopes, VPN-only mirrors, protected-branch divergence, CDN cache…) with guards and recovery recipes.
 
@@ -38,9 +40,9 @@ AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figm
 
 **New in v1.26.0** — **Subagent delegation** extended to all specialized modes of `product-analysis` (Post-Release, A/B Test, CJM Funnel): heavy data-acquisition fan-out runs off the main context, with data-policy guardrails and the Data Integrity Gate preserved. See CHANGELOG v1.24.0–v1.26.0 for the full subagent-delegation rollout.
 
-**New in v1.15.0** — **Planning Suite**: four skills on top of team-ops-reporter — `roadmap-architect` (structure: goal → initiative → epic → feature), `project-planning` (multi-quarter forecast, dependencies, critical path), `quarterly-planning` (quarter roadmap with capacity gate and retro), `sprint-planning` (sprint pre-planning: readiness, risks, assignees). Shared references: `planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`.
+**New in v1.15.0** — **Planning Suite**: four skills on top of product-reporter — `roadmap-architect` (structure: goal → initiative → epic → feature), `project-planning` (multi-quarter forecast, dependencies, critical path), `quarterly-planning` (quarter roadmap with capacity gate and retro), `sprint-planning` (sprint pre-planning: readiness, risks, assignees). Shared references: `planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`.
 
-**New in v1.14.0** — **Team Ops Reporter** skill (5 modes): sprint plan, sprint review, quarter review, initiative status, and team-member review — built directly on Jira (custom-field map, status-history throughput, per-Assignee/Developer breakdowns, charts). Output goes to Confluence and/or local md+xlsx (asked each run). Five built-in templates under `templates/built-in/ops-report/`. See `skills/team-ops-reporter/SKILL.md` and CHANGELOG v1.14.0.
+**New in v1.14.0** — **Product Reporter** skill (5 modes): sprint plan, sprint review, quarter review, initiative status, and team-member review — built directly on Jira (custom-field map, status-history throughput, per-Assignee/Developer breakdowns, charts). Output goes to Confluence and/or local md+xlsx (asked each run). Five built-in templates under `templates/built-in/ops-report/`. See `skills/product-reporter/SKILL.md` and CHANGELOG v1.14.0.
 
 **New in v1.13.0** — **Data Integrity Gate** across `cjm-research`, `product-analysis`, and `product-research`. New universal verification gate that catches incomplete-period extrapolation, holiday windows cited as YoY trends, single-source cascading claims, and missing inline period annotation. See [`references/data-integrity-protocol.md`](references/data-integrity-protocol.md) and CHANGELOG v1.13.0.
 
@@ -299,7 +301,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 14. Team Ops Reporter (v0.3.0)
+### 14. Product Reporter (v0.4.0) — renamed from Team Ops Reporter in v2.0.0
 
 **Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
 
@@ -354,7 +356,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 **Trigger phrases:** "plan the sprint", "sprint pre-planning", "what can we pull into sprint N", "what's ready from the backlog", "who takes the tasks"
 
-**Planning Suite shared references:** `planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`, plus the shared Jira plumbing in `references/jira-data-protocol.md` (reused from team-ops-reporter — complements reporting, does not duplicate it).
+**Planning Suite shared references:** `planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`, plus the shared Jira plumbing in `references/jira-data-protocol.md` (reused from product-reporter — complements reporting, does not duplicate it).
 
 ---
 
@@ -414,6 +416,52 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
+## People-контур (People Contour) — NEW in v2.0.0
+
+The second contour of the plugin: **manager → people → goals → communication → development**. These six skills share the **People Context Protocol (Step P)** — a persistent, **vault-local** profile per team member (situational-leadership D-type, 7-levels delegation, active goals, reporting cadence, 1-1 history, GTD-index trend, motivation/career signals). Person data is the **highest-sensitivity tier**: it lives in the vault `People/` area (or `~/.grow-pm/people/`) and is **never** published to Confluence/Jira or sent to external LLMs. Methodology lives in `references/goal-frameworks.md`, `people-frameworks.md`, `reporting-3t5f.md`, `communication-frameworks.md`, `roi-frameworks.md`, and `people-context-protocol.md`.
+
+### 24. Goal Setter (v0.1.0) — NEW in v2.0.0
+
+**Description:** Formulates and audits goals — the foundation of the People-contour. Picks the methodology (**SMARTCBP** for personal goals, **OKR** for product/direction), drafts 2–3 variants or audits a draft against the 8 SMARTCBP checks, cascades Mission→direction→team→person, drives goals to **commitment** (Tell and Sell), and records them on the person's profile. Pulls the Comparable baseline via product-reporter/Tableau.
+
+**Modes:** formulate (default) / audit (8-check before→after table) / cascade / goal-letter.
+
+**Trigger phrases:** "постав ціль", "проведи аудит цілі", "лист цілей", "каскад цілей", "OKR на квартал", "set a goal", "audit this goal"
+
+### 25. One-on-One (v0.1.0) — NEW in v2.0.0
+
+**Description:** Prepares and analyzes 1-1 meetings — *for the person, about the person* (feedback/growth/trust), not tasks/status. Prepare builds the agenda from the profile (6 stages + seven "how" questions + NVC feedback drafts); Analyze turns a Fireflies transcript/notes into signals (motivation, burnout, career) + a manager-written **ARCV** follow-up + a profile update. Headless coverage: who hasn't been "touched" in > N weeks.
+
+**Modes:** prepare (default) / analyze / coverage (headless). meeting-processor detects a 1-1 and redirects here.
+
+**Trigger phrases:** "підготуватись до 1-1", "розбери 1-1", "з ким давно не було 1-1", "нотатки 1-1", "prepare for a 1-1"
+
+### 26. Performance Review (v0.1.0) — NEW in v2.0.0
+
+**Description:** Reviews a team member on the People-contour's coordinates — goal achievement (3T5F Forecast QA), GTD-index, Hersey-Blanchard diagnosis (D-type → style + delegation level), and 1-1 signals — rendered into the employer's standard review template (past-period feedback + a 6–12-month SMARTCBP plan). Ends with one recommendation: development / style change / yellow card / promotion. Strictly local.
+
+**Trigger phrases:** "провести перформанс-ревʼю", "оцінити співробітника", "піврічне ревʼю", "план розвитку для…", "is it time to promote"
+
+### 27. Hiring Designer (v0.1.0) — NEW in v2.0.0
+
+**Description:** Designs the role before the vacancy — the **goal letter** (SMARTCBP on 3/6/12 months) comes first, the offer = goals + conditions. Produces a **universal vacancy profile** (Request / Role goals / Description / Conditions / Selection process) mapped onto the employer's HR-form fields, plus killer questions (past-experience, numeric + If/Then), a candidate-documents checklist, and a **goal × experience** evaluation table. On hire, creates the new person's profile (curator, S1, probation = offer goals).
+
+**Trigger phrases:** "відкрити вакансію", "спроєктувати посаду", "профіль вакансії", "вітальні запитання", "оцінити кандидатів", "draft an offer"
+
+### 28. Offboarding Guide (v0.1.0) — NEW in v2.0.0
+
+**Description:** Guides parting ways with an underperformer — respectfully, on evidence. Gates on an **evidence base** (goals + reports; if absent → set them first), diagnoses "can't" vs "doesn't want", and runs the **four-meeting algorithm** (critical issues → measurable probation → results → sustainability), each with an ARCV follow-up, plus the dismissal script and a neutral team message. Strictly local; immediate dismissal only for theft/unlawful/ethics.
+
+**Trigger phrases:** "допоможи звільнити", "офбординг", "випробувальний термін через недосягнення", "розмова про звільнення", "PIP"
+
+### 29. Delegation Coach (v0.1.0) — NEW in v2.0.0
+
+**Description:** Audits the PM's operational load against the **7 levels of Appelo** (real delegation starts at level 5), builds the audit table (activity / current level / candidate / target / blocker), picks delegates from profiles (D-type, GTD-index — levels 5–7 only for consistently high GTD), and lays out the **S1→S4** transfer plan with dates. Computes hiring/delegation ROI when "no one to delegate to". Chains from focus-advisor when it sees PM overload.
+
+**Trigger phrases:** "аудит делегування", "що можна делегувати", "я перевантажений операційкою", "рівні делегування", "план передачі"
+
+---
+
 ## Skills Summary
 
 | Skill | Version | Description |
@@ -431,7 +479,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Knowledge Library | v0.6.0 | Manage curated knowledge sources |
 | Template Library | v0.1.0 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.2.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
-| Team Ops Reporter | v0.3.0 | Operational team reports from Jira: sprint plan/review, quarter review, initiative status, member review |
+| Product Reporter | v0.4.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
 | Roadmap Architect | v0.2.1 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
 | Project Planning | v0.2.1 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.2.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
@@ -440,7 +488,13 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 | Focus Advisor | v0.3.0 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.1.0 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.1.0 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
-| Feedback Triage | v0.1.0 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds |
+| Feedback Triage | v0.2.0 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
+| Goal Setter | v0.1.0 | Set/audit goals — SMARTCBP (people) / OKR (product), cascade, Tell-and-Sell commitment |
+| One-on-One | v0.1.0 | Prepare & analyze 1-1s — agenda from profile, signals + ARCV follow-up, coverage headless |
+| Performance Review | v0.1.0 | Review a person on goals + GTD-index + D-type, into the employer's review template |
+| Hiring Designer | v0.1.0 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
+| Offboarding Guide | v0.1.0 | Evidence-gated four-meeting offboarding, strictly local |
+| Delegation Coach | v0.1.0 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
 
 ---
 
@@ -515,7 +569,7 @@ The plugin ships with a built-in template library that every skill uses to produ
 
 ### How templates are used
 
-When you invoke a skill that produces a deliverable (e.g., `write-concept`, `requirements-creator`, `product-research`, `cjm-research`, `task-creator`, `product-analysis` in report mode, `diagram-prototyper` for decks, `meeting-processor` for MoMs, `brainstorm-features` when saving, `team-ops-reporter` for ops reports), the skill runs **Step T — Template Resolution** before starting the workflow. Step T:
+When you invoke a skill that produces a deliverable (e.g., `write-concept`, `requirements-creator`, `product-research`, `cjm-research`, `task-creator`, `product-analysis` in report mode, `diagram-prototyper` for decks, `meeting-processor` for MoMs, `brainstorm-features` when saving, `product-reporter` for ops reports), the skill runs **Step T — Template Resolution** before starting the workflow. Step T:
 
 1. Reads your `templates.preference` (`auto`, `always_ask`, or `smart` — default `smart`).
 2. Queries the template registry for candidates matching the artifact type, subtype, current product, and your language.
@@ -652,7 +706,7 @@ The plugin includes reference materials for product management best practices an
 - `capacity-model.md` — team capacity math (allocation %, velocity, focus factor)
 - `dependency-model.md` — dependency graph and critical-path rules
 - `roadmap-artifacts.md` — roadmap artifact formats (tree, timeline, forecast)
-- `jira-data-protocol.md` — Jira plumbing: custom-field map, JQL patterns, pagination, transitions parsing (shared by team-ops-reporter and the Planning Suite)
+- `jira-data-protocol.md` — Jira plumbing: custom-field map, JQL patterns, pagination, transitions parsing (shared by product-reporter and the Planning Suite)
 
 **Design Bridge references:**
 - `skills/design-bridge/references/deck-subtypes.yaml` — slide-by-slide outlines for all 4 deck subtypes
@@ -701,5 +755,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 1.40.0  
+**Version:** 2.0.0  
 **Last Updated:** July 2026

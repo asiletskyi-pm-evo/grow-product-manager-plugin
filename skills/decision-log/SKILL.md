@@ -1,6 +1,6 @@
 ---
 name: decision-log
-version: 0.1.0
+version: 0.2.0
 description: Log and retrieve key product decisions as ADR-style records in the vault Decisions/ area — context, options considered, decision, rationale, consequences, links. Use when the user says "log this decision", "why did we decide X", "show decisions about Y", "supersede that decision", "decision log". Українською: "зафіксуй рішення", "чому ми вирішили…", "покажи рішення по…", "перегляньмо це рішення", "журнал рішень". Also invoked by other skills (meeting-processor, experiment-tracker, planning skills) when their outcome contains a decision worth recording. Do NOT use for meeting notes as such (meeting-processor) or experiment state (experiment-tracker) — this skill records decisions and answers "why".
 ---
 
@@ -12,6 +12,8 @@ Product decisions evaporate from chats and meetings; three months later nobody r
 - `references/local-context-protocol.md` — Step 0.
 - `references/vault-protocol.md` + `references/vault-schema.md` — the `decision` artifact type (Decisions/) already exists in the taxonomy.
 - `references/persistent-storage.md` — fallback storage when no vault is configured.
+- `references/roi-frameworks.md` — optional cost-of-decision (ROAIP) field.
+- `references/goal-frameworks.md` — optional Tell-and-Sell commitment status.
 
 ## Storage
 - **Vault configured (L1/L2):** `Decisions/{product}/decision-{topic}-{date}.md` via `vault_save({type: "decision", …})`.
@@ -40,11 +42,15 @@ Why this one — evidence links (readout, research, metrics with inline periods)
 ## Consequences & risks
 What this commits us to; what we monitor; revisit-by date (optional).
 
+## Cost & commitment (optional)
+- **Cost of decision (ROAIP):** what this decision/investment costs and its expected ROI / annual return (`references/roi-frameworks.md`) — fill when the decision has a quantifiable economic weight.
+- **Commitment (Tell and Sell):** who committed to the decision and how (`references/goal-frameworks.md` → Tell and Sell) — "just told" vs "sold and committed", and by whom. Distinguishes a directive from a shared commitment.
+
 ## Links
 [[related artifacts]] — MoM, experiment, requirements, roadmap items, Jira epics.
 ```
 
-Frontmatter per `vault-schema.md`: `type: decision`, `product`, `tags` (topic, area), `related`, plus `supersedes` / `superseded_by` when applicable.
+Frontmatter per `vault-schema.md`: `type: decision`, `product`, `tags` (topic, area), `related`, plus `supersedes` / `superseded_by` when applicable, and optional `decision_cost` / `decision_roi` / `commitment` fields.
 
 ## Modes
 

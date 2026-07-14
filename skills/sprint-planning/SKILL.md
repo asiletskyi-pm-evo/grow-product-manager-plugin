@@ -1,6 +1,6 @@
 ---
 name: sprint-planning
-version: 0.2.0
+version: 0.3.0
 description: Helps the PM efficiently estimate and run sprint pre-planning — derives focuses from the quarterly roadmap/missions/projects, highlights what's READY to pull right now (dependencies cleared), catches work-sequence violations (e.g. client-side work planned ahead of analytics coverage), gathers per-member capacity, analyzes carryover risk from the last sprint, suggests assignees for unowned tasks, and fills the sprint to capacity. Use when "plan the sprint", "sprint pre-planning", "what can we pull into SEX N", "what's ready from the backlog", "check sprint dependencies", "build sprint focuses", "distribute the sprint", "who takes the tasks". Українською: "спланувати спринт", "передпланування спринта", "що можна взяти у SEX N", "що готове з беклогу", "перевір залежності спринта", "сформуй фокуси спринта", "розподілити спринт", "хто візьме задачі".
 ---
 
@@ -8,7 +8,7 @@ description: Helps the PM efficiently estimate and run sprint pre-planning — d
 
 PM advisor for sprint pre-planning (finest slice). It doesn't just fill the sprint — it **highlights readiness and work-order violations**, computes per-person capacity, accounts for carryover risk, and suggests assignees. **The PM decides.**
 
-Part of the planning-suite: takes scope from `quarterly-planning` and direction priority from `project-planning`; tasks → `task-creator`. Integrates with `team-ops-reporter` (last sprint ← `sprint-review`+`member-review`; approved plan → rendered as a `sprint-plan` report).
+Part of the planning-suite: takes scope from `quarterly-planning` and direction priority from `project-planning`; tasks → `task-creator`. Integrates with `product-reporter` (last sprint ← `sprint-review`+`member-review`; approved plan → rendered as a `sprint-plan` report).
 
 ## Prerequisites
 - `references/local-context-protocol.md` — Step 0 + Planning (capacity rules, sprint cadence + anchor, board, Development Flow).
@@ -17,10 +17,12 @@ Part of the planning-suite: takes scope from `quarterly-planning` and direction 
 - `references/dependency-model.md` — **work-type DAG + readiness rule** (sec. 4), violations.
 - `references/roadmap-artifacts.md` — sprint-plan format (demarcation from ops-report).
 - `references/jira-data-protocol.md` — Jira plumbing (reuse).
+- `references/people-frameworks.md` — GTD-index (planned→done conversion); D-type for assignee fit.
+- `references/people-context-protocol.md` — read `d_type`/`delegation`; write the `gtd_index` datapoint (read-mostly).
 - `references/integration-strategy.md`, `references/persistent-storage.md`, `references/template-protocol.md`.
 
 ## Step T — Template Resolution
-`artifact_type: roadmap`, `subtype: sprint-plan`, `product_id`, `language`. (The reporting sprint-plan lives in team-ops-reporter; this is the planning one.)
+`artifact_type: roadmap`, `subtype: sprint-plan`, `product_id`, `language`. (The reporting sprint-plan lives in product-reporter; this is the planning one.)
 
 ## Modes
 
@@ -45,8 +47,9 @@ Derive from the active quarterly roadmap + project arcs (`project-planning`): wh
 ### Step 3 — Per-sprint per-member capacity
 Gather from the PM a forecast of **working days / capacity for each person** (time off, partial days, parallel directions) — `capacity-model` sec. 3. **Gate.**
 
-### Step 3b — Carryover-risk (last sprint)
-**Delegate `team-ops-reporter` `sprint-review`+`member-review`** for committed vs done and per-person throughput. Compute carryover risk (`capacity-model` sec. 3: capacity ÷ remainder) → reduce load on at-risk members, flag chronic overload.
+### Step 3b — Carryover-risk + GTD-index (last sprint)
+**Delegate `product-reporter` `sprint-review`+`member-review`** for committed vs done and per-person throughput. Compute carryover risk (`capacity-model` sec. 3: capacity ÷ remainder) → reduce load on at-risk members, flag chronic overload.
+**GTD-index** (`references/people-frameworks.md`): from the same committed-vs-done data, compute the **planned→done conversion** per sprint and per person (the person's GTD-index for the period). If a person profile exists (`references/people-context-protocol.md`), **write the datapoint** to `gtd_index` (append, read-only elsewhere) — this feeds `performance-review`. No profile → report the number in the plan only.
 
 ### Step 4 — Readiness scan
 For each candidate check the status of prerequisites along the **work-type DAG** (`dependency-model` sec. 4) → **Ready** (prerequisites cleared) / **Blocked** (by what and up to which status). Example: BE+Design+Analytics in review/testing → client-side implementation = Ready.
@@ -58,16 +61,16 @@ If a downstream candidate is planned while upstream is below the readiness thres
 Auto-estimate missing ones (analogy); fill to the sprint ceiling by platform/person from **Ready** candidates only; **sprint-gate** (don't exceed the platform ceiling); sprint goal. Free capacity → **pull-forward** Ready tasks from future sprints (sync the shift with `project-planning` arcs).
 
 ### Step 6b — Assignee suggestion
-For unowned tasks — propose assignment, **prioritizing those with no tasks yet / free capacity**; role-platform matching; account for the per-member budget (Step 3) and risk (Step 3b). Writing assignee to Jira — **gate**; respect team convention (where assignee is left empty until work starts — the suggestion stays in the plan, not on the task).
+For unowned tasks — propose assignment, **prioritizing those with no tasks yet / free capacity**; role-platform matching; account for the per-member budget (Step 3) and risk (Step 3b). **Delegation-level fit** (`references/people-context-protocol.md` → `delegation`, `d_type`): where profiles exist, prefer routing work a person owns at a high delegation level (5–7) or that fits their D-type; a stretch assignment to a D1/D2 is flagged as needing closer support (chains to `delegation-coach` for a transfer plan). Writing assignee to Jira — **gate**; respect team convention (where assignee is left empty until work starts — the suggestion stays in the plan, not on the task).
 
 ### Step 7 — Correction loop with PM
 Show what doesn't fit / is blocked → choice. Live recompute.
 
 ### Step 8 — Artifacts
-Sprint plan (Confluence / assignment into the Jira sprint) — **gate before writing to Jira**. Approved plan → can be rendered as a `sprint-plan` report via team-ops-reporter.
+Sprint plan (Confluence / assignment into the Jira sprint) — **gate before writing to Jira**. Approved plan → can be rendered as a `sprint-plan` report via product-reporter.
 
 ### Step 9 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.2.0", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.3.0", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Only Ready candidates go into the fill; Blocked — with an explanation, not silently.

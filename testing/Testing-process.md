@@ -11,7 +11,7 @@
 | 2 | **Trigger eval** | description triggers on target phrases and does NOT hijack others | a set of positive/negative phrases per skill; judge subagent | yes |
 | 3a | **Trajectory / scenario walk** | skill takes the right steps: key steps, gates, tool calls, artifact structure | 1-2 scenarios per skill + mock local-context; subagent "dry run" verifies | yes (for changed skills) |
 | 3b | **Output eval** | artifact **quality** against a rubric (weighted 0/1/2, pass ≥ threshold) | `testing/output-evals.md` rubric + fixture + gold exemplar; LM-judge subagent | yes (for changed artifact-producing skills) |
-| 4 | **Integration** | chaining between skills, resolution of shared references, delegation (e.g. planning→team-ops-reporter) | chain scenario; subagent | yes |
+| 4 | **Integration** | chaining between skills, resolution of shared references, delegation (e.g. planning→product-reporter) | chain scenario; subagent | yes |
 | 5 | **Regression** | the change did not break existing skills (especially after rename/dedup) | re-run 1-4 on neighboring/dependent skills | yes |
 | 6 | **Sign-off** | all green → version bump + CHANGELOG + README; otherwise → debug loop | main agent consolidates | — |
 

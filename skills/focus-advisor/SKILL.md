@@ -1,6 +1,6 @@
 ---
 name: focus-advisor
-version: 0.3.0
+version: 0.4.0
 description: PM attention dispatcher — scans the PM's full context (sprint cycle position, calendar, unanswered important emails, recent meetings and open action items, Jira tails, quarterly roadmap drift, stale backlog, A/B tests awaiting decisions, capacity signals, product goals/missions, NPS and funnel trends) and recommends focuses with reasons and next steps at three horizons — daily, tactical (sprint–quarter), strategic (quarter–year) — chaining execution to the right skill. Use whenever the PM asks what to do or focus on — "на чому сфокусуватись", "що мені робити зараз/сьогодні", "фокус дня/тижня", "тактичний фокус", "стратегічний фокус", "куди фокусувати команду", "де великі можливості для продукту", "розбери мою пошту і календар", "до яких зустрічей готуватись", "чи все ок з метриками" (proposes a health-check chain), "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "покажи focus board" — and for scheduled/headless focus briefs. Do NOT use for planning the sprint itself (sprint-planning), building roadmaps (quarterly-/project-planning), or deep metric analysis (product-analysis / cjm-research) — this skill recommends and chains, it does not execute.
 ---
 
@@ -14,6 +14,7 @@ The 4th height of the suite — **the PM's attention** above structure/quarter/s
 - `references/focus-signals.md` — signal registry, collectors, packet format, cache, mail/calendar detectors.
 - `references/focus-scoring.md` — ranking, journal dedup, honesty rules.
 - `references/jira-data-protocol.md` — Jira plumbing (per-key, no bulk JQL).
+- `references/people-context-protocol.md` — manager-rhythms signal source (roster + cadences, read-only).
 - `references/integration-strategy.md`, `references/data-policy.md`, `references/persistent-storage.md`, `references/vault-protocol.md`.
 
 ## Step T — Template Resolution
@@ -45,11 +46,19 @@ Confirm horizon (auto-detect from phrasing/cycle position: "сьогодні/з�
 ### Step 2 — Collect signals
 Per `focus-signals.md`, only the sources of the confirmed horizon. **now** (§3–4): cycle position, calendar (meetings needing prep), mail (live unanswered letters — two-stage filter), recent meetings' open action items, Jira tails. **tactics** (§6): quarterly roadmap plan-vs-actual and drift, backlog staleness (ICE age), features missing prerequisites ahead of next sprints, A/B tests awaiting decision, capacity and team-event signals. **strategy** (§7): product goals/missions (pinned source), NPS waves and love/hate themes, CJM/funnel trends (freshness-guarded), knowledge-library research signals, leadership-meeting mandates, white spaces in the PM's zones. Honor cache TTL. Fan out collectors via `subagent-delegation.md` when available; inline otherwise. Each collector returns signal packets only.
 
+**Manager-rhythms signal (People-contour, read-only).** Derived from the team's person profiles (`references/people-context-protocol.md` roster) and their cadences — surfaces People-contour rituals that are due (energy/P&L-of-attention signals):
+- **weekly:** goal reports read? 1-1s held this week? meeting follow-ups sent?
+- **monthly:** every direct report "touched" with a 1-1 in the last month? (feeds `one-on-one` coverage)
+- **quarterly:** goals reviewed / performance reviews due?
+These become candidates just like cadence rituals; chains route to `one-on-one` (coverage), `product-reporter` (unread goal reports), `performance-review` (reviews due), `goal-setter` (goals stale). Read-only — focus-advisor never writes profiles.
+
 ### Step 3 — Cadence check
 Per `focus-cadence.md`: due rituals (including recently missed ones) become high-priority candidates.
 
 ### Step 4 — Score and rank
 Per `focus-scoring.md`: journal dedup → **now**: urgency+impact+unblock → 1–3 focuses; **tactics**: ICE + capacity realism + goal alignment (§4) → 3–5 candidates; **strategy**: goal/mission alignment × lever size × evidence strength (§5) → 2–4 bets. The rest goes to "також на радарі". Insufficient signals → say so honestly.
+
+**"Choose one" final filter (daily / `now`).** After ranking the daily focuses, apply a final single-pick filter: if you could do only **one** thing today, which moves the goal most? Lead the brief with that one focus (the rest stay as "також на радарі"). Cuts the overloaded-PM's analysis paralysis — the daily brief has a clear #1, not a tie.
 
 ### Step 5 — Focus brief
 For each focus: what, why now (signals with links), cost of delay (one sentence), suggested next step. Subtype by mode: `daily-brief` / `tactical-brief` / `strategy-memo`. Tactical brief adds: quarter position (sprints left, capacity used vs plan) and a "decisions waiting on you" section (A/B tests, approvals). Strategy memo structure: current state (facts with sources) → 2–4 bets (each: what, why — data-backed, expected metric effect, first steps) → **"what we deliberately do NOT do"** → data-hygiene preconditions → next 2 weeks. A strategy memo without exclusions is a wish list. Footer: degraded collectors, cache ages. Language — `user.language`.
@@ -59,7 +68,7 @@ Per focus: **(a) chain** to the executing skill with prepared arguments; (b) cre
 
 | Recommendation | Chain |
 |---|---|
-| Sprint-boundary ritual due | sprint-planning `groom`/`plan`, team-ops-reporter `sprint-review` |
+| Sprint-boundary ritual due | sprint-planning `groom`/`plan`, product-reporter `sprint-review` |
 | Important letter unanswered | reply draft (Gmail `create_draft` — gate) / task |
 | Meeting tomorrow needs prep | product-analysis (slice) / design-bridge (deck) / talking points from transcripts |
 | Metrics day / "чи все ок з метриками" | product-analysis + cjm-research health-check (verify source freshness first — `focus-signals.md` §5) |
@@ -68,10 +77,14 @@ Per focus: **(a) chain** to the executing skill with prepared arguments; (b) cre
 | Stale backlog / blurred focuses | brainstorm-features / quarterly-planning `refresh` |
 | Roadmap drift beyond threshold | project-planning `replan` |
 | A/B test waiting for a decision | product-analysis (test readout) |
-| Team event ahead (perf review, onboarding, booking deadline) | task/reminder + team-ops-reporter `member-review` where relevant |
+| Team event ahead (perf review, onboarding, booking deadline) | task/reminder + product-reporter `member-review` where relevant |
 | Strategic bet needs deeper evidence | product-research (competitive/market) / cjm-research / knowledge-library |
 | Strategic bet accepted → needs a concept | write-concept, then quarterly-/project-planning to schedule |
 | Goals/missions source stale or missing | knowledge-library (refresh pinned source) + Focus config update |
+| Direct report not "touched" in > a month | one-on-one `coverage` |
+| Goal reports unread / follow-ups unsent | product-reporter (goal-report) / meeting-processor |
+| Performance reviews due this quarter | performance-review |
+| PM overloaded with operations | delegation-coach |
 
 ### Step 7 — Save artifacts (mandatory, NOT optional)
 Every artifact this skill produces is persisted to the user's local repository:

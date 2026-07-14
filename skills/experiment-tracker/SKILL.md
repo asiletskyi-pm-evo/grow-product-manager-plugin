@@ -1,6 +1,6 @@
 ---
 name: experiment-tracker
-version: 0.1.0
+version: 0.2.0
 description: Track the full lifecycle of product experiments and hypotheses — a living registry of what is proposed, specced, running, awaiting readout, and decided, with stale-test reminders. Use when the user asks "what experiments are running", "experiment status", "register an experiment", "log the test launch", "which tests await a decision", "remind me about stale tests", "experiment tracker". Українською: "які тести зараз біжать", "статус експериментів", "заведи експеримент", "зафіксуй запуск тесту", "які тести чекають рішення", "нагадай про завислі тести", "трекер експериментів". Do NOT use for analyzing A/B results (product-analysis), writing an A/B spec (requirements-creator), or generating hypotheses (brainstorm-features) — this skill tracks state and chains to those skills.
 ---
 
@@ -13,6 +13,8 @@ Closes the loop the pipeline used to drop after the A/B spec was written: hypoth
 - `references/persistent-storage.md` — registry lives in `~/.grow-pm/experiments/`.
 - `references/vault-protocol.md` + `references/vault-schema.md` — hypothesis lifecycle updates and mirror sync.
 - `references/data-policy.md` — experiment metrics are internal data.
+- `references/roi-frameworks.md` — optional cost-of-test / decision ROI (ROAIP).
+- `references/goal-frameworks.md` — optional Tell-and-Sell commitment status.
 
 ## Experiment lifecycle
 
@@ -43,6 +45,10 @@ experiments:
     verdict: null             # winner | loser | inconclusive (from readout only)
     decision: null            # rollout | rollout-with-caveats | iterate | extend | rollback
     decision_ref: ""          # decision-log record link
+    # Economics & commitment (optional — references/roi-frameworks.md, references/goal-frameworks.md)
+    cost: null                # cost of running the test (hours × rate, or $)
+    roi: null                 # ROI / annual % return of the decision (ROAIP)
+    commitment: ""            # Tell and Sell: who committed to the decision, and how
     history: []               # {date, from, to, note}
 ```
 
@@ -94,7 +100,8 @@ Per `local-context-protocol.md`. Then **Step R** — load/create the registry.
 ### Mode: decide
 1. Pick an experiment with a recorded verdict.
 2. Ask the PM's decision: rollout / rollout-with-caveats (name the caveats) / iterate (what changes) / extend (new planned_end) / rollback (why).
-3. **Gate**, then write `decision`, `status: decided`, history.
+2b. **Economics & commitment (optional):** capture the test **cost** and the decision's **ROI / annual return** (`references/roi-frameworks.md`), and the **commitment** status (`references/goal-frameworks.md` → Tell and Sell: who committed and how). These flow into the decision-log record.
+3. **Gate**, then write `decision`, `status: decided`, `cost`/`roi`/`commitment` if provided, history.
 4. **Chain to `decision-log`** with full context (experiment, verdict, options considered, decision, rationale) — the ADR record link comes back into `decision_ref`.
 5. Follow-ups: rollout → offer `task-creator` (cleanup/rollout tasks, «Випилити прапор …» convention); iterate → offer `brainstorm-features`/`requirements-creator`; extend → update planned_end.
 
@@ -112,4 +119,4 @@ Contract for scheduled runs (analogous to focus-advisor): `mode=stale headless=t
 - Language — `user.language`.
 
 ## Skill Chaining
-← `brainstorm-features` (new hypotheses → register) · ← `requirements-creator` (A/B spec → specced) · → `product-analysis` A/B mode (readout) · → `decision-log` (decide) · → `task-creator` (rollout/cleanup tasks) · → `team-ops-reporter` (flags report cross-check) · → `schedule` (weekly stale-check).
+← `brainstorm-features` (new hypotheses → register) · ← `requirements-creator` (A/B spec → specced) · → `product-analysis` A/B mode (readout) · → `decision-log` (decide) · → `task-creator` (rollout/cleanup tasks) · → `product-reporter` (flags report cross-check) · → `schedule` (weekly stale-check).

@@ -8,7 +8,7 @@ description: Maintains the canonical structure of work — maps missions/goals �
 
 Keeper of the structure (foundation, outside time). Maps the Goal→Initiative→Epic→Feature hierarchy, **enforces labeling conventions**, finds gaps, and builds the structure tree. Doesn't plan the quarter/sprint and doesn't touch capacity — only structural integrity. **The PM decides.**
 
-Supplies clean structure to the rest of the planning-suite. Integrates with `team-ops-reporter` (Jira plumbing) and `cjm-research`/`brainstorm-features` (new candidates).
+Supplies clean structure to the rest of the planning-suite. Integrates with `product-reporter` (Jira plumbing) and `cjm-research`/`brainstorm-features` (new candidates).
 
 ## Prerequisites
 - `references/local-context-protocol.md` — Step 0 + Planning (goal map, labeling convention, Development Flow).
@@ -48,7 +48,7 @@ Propose label/link fixes (epic→goal, feature→epic, q-labels). **Gate before 
 Generate the Goal→Initiative→Epic→Feature tree (features as `code—name`) + gap report. Per `roadmap-artifacts.md` sec. 4. Workspace + library storage.
 
 ### Step 6 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.2.0", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.2.1", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Don't invent links — only Jira links / goal map / explicit PM input; the rest = "break, please formalize".

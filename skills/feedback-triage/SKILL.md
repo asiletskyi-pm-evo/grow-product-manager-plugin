@@ -1,6 +1,6 @@
 ---
 name: feedback-triage
-version: 0.1.0
+version: 0.2.0
 description: Triage a stream of user feedback — support tickets, complaints, reviews, Q&A, NPS verbatims — into clustered themes with frequency, severity, and trend scoring, producing a prioritized pain list and hypothesis candidates. Use when the user asks to "triage feedback", "cluster support tickets", "top user complaints for the period", "what hurts buyers/sellers", "feedback themes trend". Українською: "розбери відгуки/скарги", "тріаж фідбеку", "що болить покупцям/продавцям", "кластеризуй support-тікети", "топ проблем за місяць", "тренди тем фідбеку". Do NOT use for deep interview synthesis (product-research or design research-synthesis), saving individual sources (knowledge-library), or ideation (brainstorm-features — chain there after triage).
 ---
 
@@ -14,6 +14,7 @@ Turns a raw pile of feedback (hundreds of tickets, reviews, Q&A entries) into a 
 - `references/data-policy.md` — **feedback texts are internal data**; clustering and scoring run locally, nothing goes to external LLMs.
 - `references/data-integrity-protocol.md` — period completeness applies to trend claims.
 - `references/subagent-delegation.md` — large intakes fan out.
+- `references/communication-frameworks.md` — task-formulation standard for the SH step.
 - `references/vault-protocol.md` + `references/vault-schema.md` — artifact type `feedback-triage` (Research/feedback/).
 
 ## Pipeline
@@ -42,8 +43,9 @@ Template: `artifact_type: research`, `subtype: feedback-triage`. Structure (fall
 3. Theme map — ranked table: theme, count, share, severity, trend, pain score
 4. Top themes in detail — verbatims, segments, platforms, funnel stage
 5. Trends vs baseline — new / growing / declining themes
-6. Hypothesis candidates — 1-line seed per top theme (full ICE happens in brainstorm-features)
-7. Glossary + Sources (source-type markers per `data-integrity-protocol.md`)
+6. Hypothesis candidates — 1-line seed per top theme (full ICE + PRO happens in brainstorm-features)
+7. **SH step — pain → well-formulated task.** For each **priority** pain, reframe it as "an insufficiently well-formulated task" and produce a task formulation to the **task-creator standard** (`references/communication-frameworks.md` → task formulation: perfective-verb title + why/what/how, DoD for critical ones). Turns raw complaint into an actionable, verb-first statement ready for `task-creator`.
+8. Glossary + Sources (source-type markers per `data-integrity-protocol.md`)
 
 Publishing: Confluence (default) / local — ask. Every number carries inline period annotation.
 
@@ -52,10 +54,10 @@ Publishing: Confluence (default) / local — ask. Every number carries inline pe
 - → **design `research-synthesis`**: when themes need deep qualitative synthesis
 - → **`cjm-research`**: when pains map to funnel stages with metric impact
 - → **`decision-log`**: when triage triggers a priority decision
-- → **`task-creator`**: quick-fix themes straight to Jira
+- → **`task-creator`**: quick-fix themes straight to Jira (the SH-step formulations feed directly in)
 
 ### Step V — Save to Vault
-`vault_save({type: "feedback-triage", product, skill: "feedback-triage", skill_version: "0.1.0", tags: [segment, period, top theme slugs], content: full report, related: [previous triage artifact, spawned hypotheses], extra_frontmatter: {period, segment, sources_count, items_total, items_usable, top_pain_score}})` → Research/feedback/. This artifact is the baseline for the next run's trends.
+`vault_save({type: "feedback-triage", product, skill: "feedback-triage", skill_version: "0.2.0", tags: [segment, period, top theme slugs], content: full report, related: [previous triage artifact, spawned hypotheses], extra_frontmatter: {period, segment, sources_count, items_total, items_usable, top_pain_score}})` → Research/feedback/. This artifact is the baseline for the next run's trends.
 
 ## Quality Standards
 - Theme names in the users' language of pain, verbatims verbatim (PII stripped: names, emails, order numbers masked).
