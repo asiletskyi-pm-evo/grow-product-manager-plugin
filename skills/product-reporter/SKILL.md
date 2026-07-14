@@ -1,6 +1,6 @@
 ---
 name: product-reporter
-version: 0.4.1
+version: 0.4.2
 description: Create operational Jira reports AND goal reports for a team, person, or direction. Six modes — sprint plan, sprint review, quarter review, initiative status, member review, goal-report (3T5F build/audit against a goal). Use when the user asks to "build a sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points", "goal report", "3T5F report", "stakeholder report for the direction", or "audit this report against the goal". Українською — "зібрати звіт по спринту (план/рев'ю)", "результати кварталу", "статус епіка/фічі/місії", "скільки <людина> закрила за період", "операційний звіт команди", "звіт по релізах / флагах / стори-поінтах", "звіт по цілі", "звіт 3T5F", "звіт для стейкхолдерів по напрямку", "перевір звіт проти цілі". Do NOT use to SET a person's goal (goal-setter), to analyze A/B or dashboard metrics (product-analysis), or to run a full performance review (performance-review).
 ---
 
@@ -55,7 +55,7 @@ Runs before Step 1 (every mode produces an artifact). Follow `references/templat
 ### Step 1 — Scope
 
 Ask via AskUserQuestion (skip what is already unambiguous from the request):
-- **Mode** (which of the 5 reports).
+- **Mode** (which of the 6 reports — the five ops modes or `goal-report`).
 - **Team** (default: active team from local-context; allow override).
 - **Mode parameters**:
   - `sprint-plan` / `sprint-review`: which sprint (open / named `SEX <n>` / last closed). Review defaults to the **last closed** sprint.
@@ -94,7 +94,7 @@ Compute in Python (pandas) — never estimate what can be computed:
 
 ### Step 4 — Structure under template
 
-Map computed data into the resolved template's sections (or the built-in skeleton). Keep the FET conventions from this product: directions → features (Epic Link) → tasks; "feature" carries its Jira number; orphan tasks in a separate table.
+Map computed data into the resolved template's sections (or the built-in skeleton). Keep the reporting conventions from `planning-core.md`: directions → features (Epic Link) → tasks; "feature" carries its Jira number; orphan tasks in a separate table.
 
 ### Step 5 — Visualizations (offer, don't force)
 
@@ -108,7 +108,7 @@ Build charts into xlsx and/or as images embedded in Confluence.
 
 ### Step 6 — Output (ask each time)
 
-Ask via AskUserQuestion: **Confluence (PROM) / local files (md + xlsx) / both**.
+Ask via AskUserQuestion: **Confluence (the product's space from local-context) / local files (md + xlsx) / both**.
 - **Confluence**: `contentFormat: html`; ask space + parent (page **or folder** id both work). Tables use `<th>` headers, no "№" column, panel-info for the header block, epic/board links.
 - **Local**: build `<report>.md` (structured, nested tables) and `<report>.xlsx` (flat filterable sheet + "Огляд" summary sheet). Present files for the user.
 - **Both**: do local first, then publish, then link the page.
@@ -134,8 +134,14 @@ Render the 8 elements under the `report-3t5f` template with the formatting rules
 ### G-2 (audit) — Score an existing report
 Given a report + its goal, run the manager audit from `reporting-3t5f.md`: presence of all 8 elements, goal-linkage, **Forecast QA gate** (< 100% → generate corrective suggestions), ambiguity/brevity. Output a before→after and a reformatted model report.
 
-### G-3 — Persist
-Save to vault `Reports/…`; if the report is for a person, update their profile `reporting.last_report`, `last_report_ref`, `forecast_qa`. **People-data locality applies** (`data-policy.md`): goal reports for a person stay local/vault — do not auto-publish to Confluence.
+### G-3 — Update the person's profile
+If the report is for a **person**, run the Step P write (gated, per `references/people-context-protocol.md`): `reporting.last_report`, `last_report_ref`, `forecast_qa`. Persistence of the report artifact itself happens in Step 8 below — this step only writes the profile fields.
+
+---
+
+## Workflow — shared final steps (ALL six modes)
+
+> These run after the mode-specific pipeline above — the five ops modes (Steps 1–6) **and** `goal-report` (G-0–G-3) alike. They were nested under the goal-report heading until v2.0.2, which read as if the ops modes ended with no feedback loop and no persistence.
 
 ### Step 7 — Feedback + self-improvement
 
@@ -147,9 +153,9 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.4.1", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
-   - For `goal-report` on a **person** — save to the People/Reports area **locally/vault only** (never Confluence), per data-policy.
-2. Display: "Saved to Vault: Reports/ops/{product}/…"
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.4.2", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+   - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
+   - `goal-report` → `type: "report-3t5f"` → `People/reports/{product}/` → "Saved to Vault: People/reports/{product}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
 
 ## Quality standards
 

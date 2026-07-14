@@ -1,6 +1,6 @@
 ---
 name: brainstorm-features
-version: 0.9.1
+version: 0.9.2
 description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis. Українською — "брейншторм фіч", "згенерувати гіпотези", "знайти точки росту", "гіпотези для CJM-воронки", "ICE-оцінка гіпотез". This is the ideation engine — for the full CJM research pipeline (anomaly detection → enrichment → hypotheses) use cjm-research, which delegates here.
 ---
 
@@ -382,6 +382,7 @@ Always propose:
 - Recommend which specific ideas from the final list to take into work first — based on ICE score ranking
 - If no concept exists yet — suggest creating one via **Write Concept / PRD** before moving to requirements
 - If CJM Hypotheses mode was used → also offer: "Run full **CJM Research** to verify these hypotheses, assess risks, and build a prioritized backlog"
+- For the top-ranked hypotheses → offer: "Register these in the **experiment tracker** so they're tracked from proposed → running → decided?" → invoke `experiment-tracker` (register mode), passing per hypothesis: statement, ICE/ROI score, funnel stage, primary metric, and the validation method chosen in Step 6. The tracker takes them to state `proposed`.
 
 ### Step 8 — Design Bridge handoff (Optional)
 
@@ -416,7 +417,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 IF vault_level > L0 AND vault sync_mode != "off":
 
 1. For **each finalized hypothesis** (Step 5), save a separate artifact:
-   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.9.1", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, status: "proposed" } })`
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.9.2", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, status: "proposed" } })`
 2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
 
 ## Quality standards

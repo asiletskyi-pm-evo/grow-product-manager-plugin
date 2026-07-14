@@ -409,9 +409,9 @@ Explain `preference` briefly:
 
 **O-T.3. Storage initialization:**
 
-Follow `references/persistent-storage.md` to locate `storage_root`:
-- If Obsidian Vault is configured → `{vault}/{plugin_folder}/Templates/`
-- Otherwise → `~/.grow-pm/template-library/`
+Follow `references/persistent-storage.md` → "`storage_root` resolution" (the single definition — do not restate the rule here):
+- Vault configured → `{vault}/{plugin_folder}/Templates/`
+- Otherwise → `~/.grow-pm/Templates/`
 
 Create (if missing):
 

@@ -134,7 +134,7 @@ If `vault_level == L0` → **skip silently**, continue to Step 1 normally.
 
 ### SKILL_CONTEXT_MAP
 
-Defines which artifact types are relevant to each skill:
+Defines which artifact types are relevant to each skill. `local-context-protocol.md` sends **every** skill to Step 0.5, so every skill needs a row; a skill with no entry silently skips vault context.
 
 | Skill | Relevant Types |
 |-------|---|
@@ -146,6 +146,29 @@ Defines which artifact types are relevant to each skill:
 | meeting-processor | meeting-notes, decision, concept, requirements |
 | product-research | competitive-analysis, market-research, ux-benchmark, knowledge-source |
 | knowledge-library | knowledge-source |
+| task-creator | requirements, concept, task-breakdown |
+| diagram-prototyper | diagram, concept, requirements |
+| design-bridge | concept, requirements, competitive-analysis, presentation, prototype, handoff |
+| feedback-triage | feedback-triage, hypothesis, cjm-analysis |
+| experiment-tracker | hypothesis, ab-test-results, requirements, decision |
+| decision-log | decision, meeting-notes, hypothesis |
+| roadmap-architect | roadmap, project-overview |
+| project-planning | roadmap, project-overview, ops-report |
+| quarterly-planning | roadmap, ops-report, decision |
+| sprint-planning | roadmap, ops-report, task-breakdown |
+| product-reporter | ops-report, report-3t5f, roadmap, goal-letter |
+| focus-advisor | focus-brief, roadmap, ops-report, decision, hypothesis |
+| goal-setter | goal-letter, people, report-3t5f |
+| one-on-one | people, one-on-one-notes, goal-letter |
+| performance-review | people, report-3t5f, one-on-one-notes, goal-letter, performance-review |
+| hiring-designer | vacancy-profile, goal-letter, people |
+| offboarding-guide | people, performance-review, report-3t5f, offboarding-plan |
+| delegation-coach | people, delegation-audit, goal-letter |
+| template-library | (none — operates on Templates/, not artifacts) |
+| plugin-configurator | (none — configures, does not consume artifacts) |
+| release-manager | decision |
+
+> People types are only ever surfaced to People-contour skills. A product skill must not pull `people` / `one-on-one-notes` / `performance-review` into its context (`data-policy.md`).
 
 ---
 
@@ -161,15 +184,15 @@ file_search(criteria: SearchCriteria) → [ArtifactSummary]:
 
 2. Build glob patterns:
    FOR each type in criteria.artifact_types:
-     glob_pattern = "{vault_path}/artifacts/{type}/**/*.md"
+     glob_pattern = "{vault_path}/{TYPE_FOLDER_MAP[type]}/**/*.md"
      IF criteria.product specified:
-       glob_pattern += "{vault_path}/artifacts/{type}/{product_slug}/**/*.md"
+       glob_pattern += "{vault_path}/{TYPE_FOLDER_MAP[type]}/{product_slug}/**/*.md"
 
 3. Find files:
    files = glob(glob_pattern, recursive=true)
 
 4. Optimization - check MOC first:
-   IF file exists: {vault_path}/dashboard/MOC-Dashboard.md
+   IF file exists: {vault_path}/_MOC/Dashboard.md
      → parse Recent Activity table
      → collect artifact paths from recent items (if within date range)
      → prioritize these files in next step
@@ -282,7 +305,11 @@ vault_save(artifact, product, options):
        - cjm-health-check-2026-04-14.md
        - hypothesis-ai-personalization-2026-04-14.md
    
-   file_path = {target_vault.path}/artifacts/{type_folder}/{product_slug}/{filename}
+   file_path = {target_vault.path}/{type_folder}/{product_slug}/{filename}
+     (layout per vault-schema.md — the map gives the area path, product is the
+      last level. There is no `artifacts/` level.)
+     IF artifact.type == "people": file_path = {target_vault.path}/People/{slugify(name)}.md
+     (profiles are addressed by person, not by date — see people-context-protocol.md)
 
 4. Create directory structure:
    mkdir -p {file_path_parent_dir}
@@ -311,7 +338,9 @@ vault_save(artifact, product, options):
    content = "## Summary\n\n{summary_text}\n\n{full_artifact_content}"
 
 7. Find and link related artifacts (if auto-link enabled):
-   FOR each related_type in REVERSE_CONTEXT_MAP[artifact.type]:
+   Related types are the reverse of SKILL_CONTEXT_MAP: the types whose producing
+   skills consume this artifact's type. Derive it, do not hardcode a second map.
+   FOR each related_type in reverse_of(SKILL_CONTEXT_MAP)[artifact.type]:
      search_results = file_search({
        artifact_types: [related_type],
        product: product,
@@ -356,44 +385,31 @@ Called once by Plugin Configurator when Vault is first connected.
 ```
 vault_init(vault_path, plugin_folder_name):
 
-1. Create complete folder structure:
-   - artifacts/
-     - competitive-analysis/
-     - cjm-analysis/
-     - ab-test-results/
-     - decision/
-     - hypothesis/
-     - meeting-notes/
-     - knowledge-source/
-     - metrics-review/
-     - post-release/
-     - ux-benchmark/
-     - market-research/
-     - concept/
-     - requirements/
-     - cjm-health-check/
-     - funnel-anomaly/
-   
-   - dashboard/
-   - templates/
+1. Create the folder structure — derive it, do not restate it:
+   FOR each distinct folder in TYPE_FOLDER_MAP (vault-schema.md):
+     mkdir -p {vault_path}/{folder}
+   (Deriving from the map is what keeps init from drifting behind the taxonomy:
+    the previous hardcoded list had fallen 7 types behind.)
+
+   Plus the non-artifact areas from vault-schema.md → Folder Structure:
+   - _MOC/            (Dashboard, Products/, Timeline, Tags)
+   - _System/         (local-context mirror — see Context Mirror below)
+   - Templates/       (template-library storage — see template-protocol.md)
    - archive/
 
 2. Create product subfolders:
    FOR each product in local-context.products:
      product_slug = slugify(product)
-     FOR each artifact type:
-       mkdir -p {vault_path}/artifacts/{type}/{product_slug}/
+     FOR each distinct folder in TYPE_FOLDER_MAP:
+       mkdir -p {vault_path}/{folder}/{product_slug}/
+   (People/ profiles are per-person, not per-product — no product level there.)
 
-3. Write template files to templates/ folder:
-   - template-competitive-analysis.md
-   - template-cjm-analysis.md
-   - template-hypothesis.md
-   - template-decision.md
-   - template-meeting-notes.md
-   (Use templates from vault-schema.md)
+3. Initialize Templates/ per `template-protocol.md` → storage layout
+   (_registry.json + _partials/ + _System/ + _archive/ + user-global/).
+   Do NOT write the pre-v2.0 flat template files here — template-library owns them.
 
 4. Create initial Dashboard MOC:
-   Write: {vault_path}/dashboard/MOC-Dashboard.md
+   Write: {vault_path}/_MOC/Dashboard.md
      - Section: Recent Activity (empty table)
      - Section: Product Stats (table with product names)
      - Section: Quick Links (to Templates, Archive, Timeline)
@@ -405,7 +421,7 @@ vault_init(vault_path, plugin_folder_name):
 6. Migrate existing knowledge-library:
    IF knowledge-library/ folder exists in vault:
      FOR each .md file:
-       - Move to artifacts/knowledge-source/{product}/
+       - Move to Knowledge/sources/{product}/
        - Update frontmatter with type: knowledge-source
        - Add to MOC Dashboard
 
@@ -427,7 +443,7 @@ MOC (Map of Contents) files provide navigation and overview of vault artifacts. 
 ```
 update_dashboard_moc(artifact, vault):
 
-1. Open: {vault_path}/dashboard/MOC-Dashboard.md
+1. Open: {vault_path}/_MOC/Dashboard.md
 
 2. Update Recent Activity table:
    - Prepend new artifact entry to table (at top)
@@ -453,7 +469,7 @@ update_product_moc(artifact, vault):
 
 1. Determine MOC path:
    product_slug = slugify(product)
-   moc_path = {vault_path}/dashboard/MOC-{product_slug}.md
+   moc_path = {vault_path}/_MOC/Products/{product_slug}.md
 
 2. If MOC doesn't exist:
    → Create new MOC with standard sections (see below)
@@ -507,7 +523,7 @@ created: {today}
 [none]
 
 ### Related MOCs
-- [[MOC-Dashboard]]
+- [[_MOC/Dashboard]]
 ```
 
 ### Timeline.md Update
@@ -515,7 +531,7 @@ created: {today}
 ```
 update_timeline_moc(artifact, vault):
 
-1. Open or create: {vault_path}/dashboard/Timeline.md
+1. Open or create: {vault_path}/_MOC/Timeline.md
 
 2. Append chronological entry:
    Format: {YYYY-MM-DD} | {type} | {product} | {title_link}
@@ -555,7 +571,7 @@ FOR each target_path in target_artifact_paths:
 - **Example paths**:
   - `[[competitive-analysis/MyApp/competitive-checkout-flow-2026-04-14]]`
   - `[[hypothesis/MyApp/ai-personalization-2026-04-14]]`
-  - `[[dashboard/MOC-MyApp]]`
+  - `[[_MOC/Products/MyApp]]`
 
 ---
 
@@ -651,12 +667,12 @@ vault_structure_check(vault_path, plugin_folder):
      → create directory
 
 3. For each expected artifact type folder:
-   IF NOT exists({vault_path}/artifacts/{type}):
+   IF NOT exists({vault_path}/{TYPE_FOLDER_MAP[type]}):
      → create directory silently
 
 4. For each product in local-context:
    FOR each artifact type:
-     IF NOT exists({vault_path}/artifacts/{type}/{product_slug}):
+     IF NOT exists({vault_path}/{TYPE_FOLDER_MAP[type]}/{product_slug}):
        → create directory silently
 
 5. Check dashboard folder:

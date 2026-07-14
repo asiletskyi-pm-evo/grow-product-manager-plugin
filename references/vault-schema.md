@@ -262,7 +262,11 @@ target_date: date (project completion target, YYYY-MM-DD)
 
 ## Type Taxonomy
 
-The Grow Product Manager Plugin defines 22 artifact types, each with a specific purpose, source skill, and folder location.
+The Grow Product Manager Plugin defines 32 artifact types, each with a specific purpose, source skill, and folder location.
+
+> **This table is the single source of truth for vault layout.** `vault-protocol.md` (save/init) and `obsidian-setup-guide.md` (setup smoke tests) conform to it, not the other way round. A type that is not listed here cannot be saved — `vault_save` resolves its folder from TYPE_FOLDER_MAP below, so an unlisted type has no destination. When a skill starts producing a new artifact type, add the row **and** the map entry in the same change; `testing/skill_lint.py` → `vault-types` enforces this.
+
+**Path composition (one rule, no exceptions):** `{vault}/{TYPE_FOLDER_MAP[type]}/{product_slug}/{filename}` — the map gives the area path, the product is always the last folder level.
 
 | Type | Skill Source | Folder | Description |
 |------|--------------|--------|-------------|
@@ -288,10 +292,28 @@ The Grow Product Manager Plugin defines 22 artifact types, each with a specific 
 | roadmap | planning suite (sprint-/quarterly-/project-planning, roadmap-architect) | Roadmaps/ | Sprint plan, quarterly roadmap, project arc, or structure tree (subtype in frontmatter) |
 | focus-brief | focus-advisor | Focus/ | PM focus brief (daily/tactical/strategy — subtype in frontmatter) with chosen focuses and chains |
 | feedback-triage | feedback-triage | Research/feedback/ | Clustered feedback themes with pain scores and trends (baseline for next run) |
+| presentation | design-bridge | Presentations/ | Rendered deck (.pptx) — subtype in frontmatter |
+| prototype | design-bridge | Prototypes/ | Lo-fi/mid-fi/hi-fi prototype (own or toolkit-delegated) |
+| handoff | design-bridge | Handoffs/ | Design → dev handoff package |
+| vacancy-profile | hiring-designer | Hiring/ | Role design + vacancy profile + offer draft |
+
+#### People-contour types (highest-sensitivity tier)
+
+Everything about a person lives under `People/` — one folder, one sensitivity boundary. These artifacts are **vault/local only**: never Confluence, never Jira, never external LLMs (`data-policy.md` → People data). `vacancy-profile` sits outside `People/` on purpose — a vacancy is a role, not yet a person.
+
+| Type | Skill Source | Folder | Description |
+|------|--------------|--------|-------------|
+| people | People contour (Step P) | People/ | Person profile — D-type, delegation levels, goals, cadence, GTD-index, signals (`people-context-protocol.md`) |
+| goal-letter | goal-setter | People/goals/ | SMARTCBP goal letter for a person |
+| report-3t5f | product-reporter | People/reports/ | 3T5F goal report for a person or direction |
+| one-on-one-notes | one-on-one | People/1-1/ | 1-1 notes, signals, ARCV follow-up |
+| performance-review | performance-review | People/reviews/ | Structured review against goals + GTD + D-type |
+| offboarding-plan | offboarding-guide | People/offboarding/ | Four-meeting offboarding plan and follow-ups |
+| delegation-audit | delegation-coach | People/delegation/ | 7-levels audit + S1→S4 hand-off plan |
 
 #### Design delivery marker (design-bridge)
 
-When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.5, per `design-toolkit-protocol.md`), the returned artifact is saved under the **existing** `prototype` / `handoff` types — no new artifact type. It carries these `extra_frontmatter` keys so delegated deliverables are distinguishable:
+When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.5, per `design-toolkit-protocol.md`), the returned artifact is saved under the `prototype` / `handoff` types above. It carries these `extra_frontmatter` keys so delegated deliverables are distinguishable:
 
 - `design_delivery: true`
 - `toolkit_id: <id>` — which declared toolkit produced it
@@ -321,9 +343,24 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
   "task-breakdown": "Projects/task-breakdowns/",
   "ops-report": "Reports/ops/",
   "roadmap": "Roadmaps/",
-  "focus-brief": "Focus/"
+  "focus-brief": "Focus/",
+  "feedback-triage": "Research/feedback/",
+  "presentation": "Presentations/",
+  "prototype": "Prototypes/",
+  "handoff": "Handoffs/",
+  "vacancy-profile": "Hiring/",
+
+  "people": "People/",
+  "goal-letter": "People/goals/",
+  "report-3t5f": "People/reports/",
+  "one-on-one-notes": "People/1-1/",
+  "performance-review": "People/reviews/",
+  "offboarding-plan": "People/offboarding/",
+  "delegation-audit": "People/delegation/"
 }
 ```
+
+> The `people` profile itself is the one artifact addressed by name rather than by date: `People/<slug>.md` (plus the roster index `People/_roster.md`), because Step P looks it up per person. Every other People type follows the standard `{folder}/{product_slug}/{filename}` composition.
 
 ---
 
@@ -417,47 +454,44 @@ Complete folder structure for `{Vault}/{PluginFolder}/`:
 │       └── ux-benchmark-*.md
 │
 ├── CJM/                               # Customer Journey Map research
-│   ├── {product}/
-│   │   ├── health-checks/
-│   │   │   └── cjm-health-check-*.md
-│   │   ├── anomalies/
-│   │   │   └── funnel-anomaly-*.md
-│   │   └── full-reports/
-│   │       └── cjm-analysis-*.md
-│   └── cross-platform/
-│       └── [shared CJM reports]
+│   ├── health-checks/
+│   │   └── {product}/
+│   │       └── cjm-health-check-*.md
+│   ├── anomalies/
+│   │   └── {product}/
+│   │       └── funnel-anomaly-*.md
+│   └── full-reports/
+│       └── {product}/
+│           └── cjm-analysis-*.md
 │
 ├── Concepts/                          # Product concepts and PRDs
-│   ├── {product}/
-│   │   └── concept-*.md
-│   └── drafts/
-│       └── concept-*.md (draft status)
+│   └── {product}/
+│       └── concept-*.md              (draft status stays in frontmatter, not a folder)
 │
 ├── Requirements/                      # Feature requirements
-│   ├── {product}/
-│   │   └── requirements-*.md
+│   └── {product}/
+│       └── requirements-*.md
 │
 ├── Analysis/                          # Product analysis and metrics
-│   ├── {product}/
-│   │   ├── metrics/
-│   │   │   └── metrics-review-*.md
-│   │   ├── ab-tests/
-│   │   │   └── ab-test-results-*.md
-│   │   └── post-release/
-│   │       └── post-release-*.md
-│   └── dashboards/
-│       └── [analysis summary dashboards]
+│   ├── metrics/
+│   │   └── {product}/
+│   │       └── metrics-review-*.md
+│   ├── ab-tests/
+│   │   └── {product}/
+│   │       └── ab-test-results-*.md
+│   └── post-release/
+│       └── {product}/
+│           └── post-release-*.md
 │
 ├── Hypotheses/                        # Feature hypotheses and ideas
 │   ├── {product}/
-│   │   └── hypothesis-*.md
-│   ├── archive/
-│   │   └── hypothesis-*.md (archived status)
+│   │   └── hypothesis-*.md           (archived status stays in frontmatter)
 │   └── backlog.md
 │       (Prioritized hypothesis backlog with links to hypothesis artifacts)
 │
 ├── Meetings/                          # Meeting notes and summaries
-│   └── meeting-notes-*.md
+│   └── {product}/
+│       └── meeting-notes-*.md
 │
 ├── Decisions/                         # Product and technical decisions
 │   ├── {product}/
@@ -468,27 +502,85 @@ Complete folder structure for `{Vault}/{PluginFolder}/`:
 ├── Knowledge/                         # Knowledge library and sources
 │   ├── sources/
 │   │   └── knowledge-source-*.md
-│   ├── library-index.md
-│   │   (Index of all knowledge sources)
-│   ├── categories.md
-│   │   (Knowledge source categories and trust scores)
+│   ├── library.md
+│   │   (Index of all knowledge sources — created by knowledge-library)
+│   └── categories.md
+│       (Knowledge source categories and trust scores)
 │
 ├── Projects/                          # Project overviews and tracking
-│   ├── {project-name}/
-│   │   ├── project-overview.md
-│   │   └── [project-specific files]
-│   └── {project-name}/
-│       └── project-overview.md
+│   ├── {product}/
+│   │   └── project-overview-*.md
+│   └── task-breakdowns/
+│       └── {product}/
+│           └── task-breakdown-*.md
 │
-└── Templates/                         # Template files (7 templates)
-    ├── research.md
-    ├── concept.md
-    ├── requirements.md
-    ├── decision.md
-    ├── meeting.md
-    ├── hypothesis.md
-    └── knowledge-source.md
+├── Reports/                           # Operational reports
+│   └── ops/
+│       └── {product}/
+│           └── ops-report-*.md
+│
+├── Roadmaps/                          # Planning suite output (subtype in frontmatter)
+│   └── {product}/
+│       └── roadmap-*.md
+│
+├── Focus/                             # focus-advisor briefs
+│   └── {product}/
+│       └── focus-brief-*.md
+│
+├── Diagrams/                          # diagram-prototyper output
+│   └── {product}/
+│       └── diagram-*.md
+│
+├── Presentations/                     # design-bridge decks
+│   └── {product}/
+│       └── presentation-*.md
+│
+├── Prototypes/                        # design-bridge prototypes
+│   └── {product}/
+│       └── prototype-*.md
+│
+├── Handoffs/                          # design-bridge dev handoffs
+│   └── {product}/
+│       └── handoff-*.md
+│
+├── Hiring/                            # hiring-designer vacancy profiles
+│   └── {product}/
+│       └── vacancy-profile-*.md
+│
+├── People/                            # HIGHEST-SENSITIVITY — local/vault only, never published
+│   ├── _roster.md                     (one line per person → [[People/<slug>]])
+│   ├── <slug>.md                      (person profile — type: people, Step P)
+│   ├── goals/
+│   │   └── {product}/
+│   │       └── goal-letter-*.md
+│   ├── reports/
+│   │   └── {product}/
+│   │       └── report-3t5f-*.md
+│   ├── 1-1/
+│   │   └── {product}/
+│   │       └── one-on-one-notes-*.md
+│   ├── reviews/
+│   │   └── {product}/
+│   │       └── performance-review-*.md
+│   ├── offboarding/
+│   │   └── {product}/
+│   │       └── offboarding-plan-*.md
+│   └── delegation/
+│       └── {product}/
+│           └── delegation-audit-*.md
+│
+└── Templates/                         # template-library storage (see template-protocol.md)
+    ├── _registry.json                 (template registry — the resolution index)
+    ├── _partials/
+    ├── _System/
+    ├── _archive/
+    ├── user-global/
+    │   └── {artifact_type}/
+    └── {product}/
+        └── {artifact_type}/
 ```
+
+> **Folder order mirrors TYPE_FOLDER_MAP.** Where the map carries a subfolder (`CJM/full-reports/`, `Analysis/ab-tests/`, `Reports/ops/`), the product is the level **below** it — never above. Lifecycle status (`draft`, `archived`, `superseded`) lives in frontmatter and is filtered by search; it is not a folder.
 
 ---
 
@@ -1400,7 +1492,7 @@ Curated external knowledge sources organized by category.
 - **[Analytics & Metrics](Knowledge/categories#analytics--metrics)**
 - **[Payment Systems](Knowledge/categories#payment-systems)**
 
-**[View All Sources →](Knowledge/library-index.md)**
+**[View All Sources →](Knowledge/library.md)**
 
 ---
 
@@ -1605,7 +1697,7 @@ Planned work for {ProductName}:
 The Vault Schema defines a consistent, extensible structure for storing and organizing product artifacts in an Obsidian Vault. It includes:
 
 - **Frontmatter Standard** — Base and type-specific fields for classification, relations, and lifecycle management
-- **Type Taxonomy** — 21 artifact types mapped to skills, folders, and purposes
+- **Type Taxonomy** — 32 artifact types mapped to skills, folders, and purposes
 - **Tag Taxonomy** — Hierarchical tags for funnel, platform, metric, status, impact, research, and phase classification
 - **Folder Structure** — Complete directory organization for {Vault}/{PluginFolder}/
 - **Naming Convention** — Consistent {type}-{topic-slug}-{YYYY-MM-DD}.md pattern

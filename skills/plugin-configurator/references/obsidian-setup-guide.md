@@ -1,7 +1,7 @@
 # Obsidian Vault Setup — Step-by-Step Guide
 
 > Used by:
-> - **Plugin Configurator → Onboarding Mode → Step 7** (Obsidian Vault)
+> - **Plugin Configurator → Onboarding Mode → Step 14** (Obsidian Vault)
 > - **Plugin Configurator → Update Mode → Obsidian Vault Management → Connect Vault**
 >
 > This guide is the canonical procedure for connecting an Obsidian Vault. Both onboarding and update flows are thin wrappers over this guide so the experience stays consistent.
@@ -135,9 +135,9 @@ Wait for the user to confirm "done" via AskUserQuestion:
 
 **Show progress with ✅/❌ per substep:**
 
-- ✅ Created folder structure (`{plugin_folder}/_System/`, `{plugin_folder}/Templates/`, etc.)
-- ✅ Created N templates (count from vault-protocol)
-- ✅ Created Dashboard MOC at `{plugin_folder}/Dashboard.md`
+- ✅ Created folder structure (one folder per TYPE_FOLDER_MAP entry + `_MOC/`, `_System/`, `Templates/`, `archive/`)
+- ✅ Initialized `Templates/` (registry + partials — per `template-protocol.md`)
+- ✅ Created Dashboard MOC at `{plugin_folder}/_MOC/Dashboard.md`
 - ✅ Copied `local-context.md` to `{plugin_folder}/_System/local-context.md`
 - ✅ Migrated knowledge-library files (X files moved) — only if `~/.grow-pm/knowledge-library/` exists
 - ✅ Created `.vault-schema-version` file
@@ -149,13 +149,13 @@ Wait for the user to confirm "done" via AskUserQuestion:
 
 ### S-8. Smoke test (read-back validation)
 
-**Verify what was just created:**
+**Verify what was just created.** These paths must match what `vault-protocol.md` → Vault Initialization actually creates, which in turn follows `vault-schema.md` → Folder Structure. (Before v2.0.2 all four checks tested a layout the init algorithm never produced — the smoke test could not have passed.)
 
-1. `test -f "{vault_path}/{folder_name}/Dashboard.md"` → ✅ MOC present
+1. `test -f "{vault_path}/{folder_name}/_MOC/Dashboard.md"` → ✅ MOC present
 2. `test -f "{vault_path}/{folder_name}/_System/local-context.md"` → ✅ Context mirrored
 3. `test -f "{vault_path}/{folder_name}/.vault-schema-version"` → ✅ Schema version stamped
 4. `test -d "{vault_path}/{folder_name}/Templates"` → ✅ Templates folder exists
-5. If Templates were initialized in this onboarding (Step 8 ran) → `test -f "{vault_path}/{folder_name}/Templates/_registry.json"` → ✅ Registry present
+5. If Templates were initialized in this onboarding (Step 13 ran) → `test -f "{vault_path}/{folder_name}/Templates/_registry.json"` → ✅ Registry present
 
 **On all ✅:** "Vault is ready."
 
@@ -163,7 +163,7 @@ Wait for the user to confirm "done" via AskUserQuestion:
 
 ### S-9. Save to local-context.md
 
-1. Add or update the `## Obsidian Vaults` section in `~/.grow-pm/local-context.md` per the schema in `references/context-schema.md` and the format in `Onboarding Step 13` of `SKILL.md`.
+1. Add or update the `## Obsidian Vaults` section in `~/.grow-pm/local-context.md` per the schema and section format in `skills/plugin-configurator/references/context-schema.md` → "Obsidian Vaults".
 2. If `vault.sync_mode` is `auto` or `manual` — execute the Vault Mirror Protocol (VM-1..VM-3 from `references/persistent-storage.md`) to copy `local-context.md` and `.schema-version` into `{vault_path}/{folder_name}/_System/`.
 3. Update the `Updated:` timestamp at the top of `local-context.md`.
 4. Show the user a summary card:

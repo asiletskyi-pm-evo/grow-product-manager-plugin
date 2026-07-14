@@ -24,6 +24,9 @@ CHECKS = """
  8. readme-versions      README skill versions == SKILL.md frontmatter
  9. org-data             real org identifiers in shipped example/templates/refs
 10. deck-subtypes        deck-subtypes.yaml keys == built-in template subtypes
+11. vault-types          every vault_save type is in the taxonomy AND TYPE_FOLDER_MAP
+12. artifact-types       every Step T artifact_type is in the template-protocol enum
+13. chain-contracts      a claimed inbound edge (<- X) exists on X's side too
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -52,6 +55,8 @@ KNOWN_NON_SKILL_TOKENS = {
     "ab-test-results", "competitive-analysis", "market-research", "ux-benchmark",
     "cjm-analysis", "task-breakdown", "project-overview", "focus-brief",
     "feedback-triage-report", "meeting-notes", "hypothesis-list",
+    # experiment-tracker lifecycle states
+    "awaiting-readout", "hypothesis-backlog",
 }
 
 # ---------------------------------------------------------------- inventories
@@ -103,6 +108,19 @@ for tp in glob.glob(os.path.join(root, "templates", "built-in", "*", "*.md")):
     # skills also address templates as "{artifact_type}-{subtype}" (e.g. cjm-funnel)
     if "artifact_type" in vals and "subtype" in vals:
         VOCAB.add(f"{vals['artifact_type']}-{vals['subtype']}")
+
+# The artifact_type enum is vocabulary too — including members that ship no
+# built-in template yet (e.g. delegation-audit), and members that share a name
+# with a skill (performance-review). Parsed here so both ghost-skill and
+# artifact-types read the same single source.
+ARTIFACT_ENUM = set()
+_proto = os.path.join(root, "references", "template-protocol.md")
+if os.path.isfile(_proto):
+    _pt = open(_proto, encoding="utf-8").read()
+    _em = re.search(r"### artifact_type enum.*?\n(.*?)(?=\n### )", _pt, re.S)
+    if _em:
+        ARTIFACT_ENUM = set(re.findall(r"`([a-z0-9-]+)`", _em.group(1)))
+        VOCAB |= ARTIFACT_ENUM
 
 # ------------------------------------------- 1+2. frontmatter validity/fields
 def scan_plain_scalar_hazards(block):
@@ -348,6 +366,84 @@ if os.path.isfile(deck_yaml):
         fail("deck-subtypes", f"deck-subtypes.yaml key '{k}' has no built-in template with that subtype")
     for s in sorted(tpl_subtypes - yaml_keys):
         warn("deck-subtypes", f"built-in presentation subtype '{s}' has no deck-subtypes.yaml outline")
+
+# --------------------------------------------------------- 11. vault types
+# A type absent from TYPE_FOLDER_MAP has no destination — vault_save cannot
+# resolve a folder for it. feedback-triage, report-3t5f, presentation, prototype,
+# handoff and the whole People contour were all being saved to undefined types.
+schema_p = os.path.join(root, "references", "vault-schema.md")
+if os.path.isfile(schema_p):
+    st = open(schema_p, encoding="utf-8").read()
+    m = re.search(r"TYPE_FOLDER_MAP Reference\s*```json\s*(\{.*?\})\s*```", st, re.S)
+    folder_map = {}
+    if m:
+        try:
+            folder_map = json.loads(m.group(1))
+        except Exception as e:
+            fail("vault-types", f"vault-schema.md: TYPE_FOLDER_MAP is not valid JSON — {e}")
+    else:
+        fail("vault-types", "vault-schema.md: TYPE_FOLDER_MAP Reference block not found")
+
+    # taxonomy rows: | type | skill | folder | description |
+    taxonomy = set(re.findall(r"^\|\s*([a-z][a-z0-9-]+)\s*\|[^|]*\|\s*[A-Z][\w/{}-]*\s*\|", st, re.M))
+    for t in sorted(taxonomy - set(folder_map)):
+        fail("vault-types", f"vault-schema.md: type '{t}' is in the taxonomy but missing from TYPE_FOLDER_MAP")
+    for t in sorted(set(folder_map) - taxonomy):
+        warn("vault-types", f"vault-schema.md: TYPE_FOLDER_MAP has '{t}' with no taxonomy row")
+
+    # what the skills actually save
+    SAVE_RE = re.compile(r'vault_save\(\{\s*type:\s*((?:"[a-z0-9-]+"\s*\|?\s*)+)')
+    for sf in skill_files:
+        folder = os.path.basename(os.path.dirname(sf))
+        text = open(sf, encoding="utf-8").read()
+        for m2 in SAVE_RE.finditer(text):
+            for t in re.findall(r'"([a-z0-9-]+)"', m2.group(1)):
+                if t not in folder_map:
+                    line = text[:m2.start()].count("\n") + 1
+                    fail("vault-types", f"{folder}:{line}: saves type '{t}', which is not in TYPE_FOLDER_MAP")
+
+# ------------------------------------------------------- 12. artifact types
+# Step T declares an artifact_type; template-protocol.md enumerates the legal set.
+# roadmap / meeting-notes / focus / delegation-audit were declared by skills but
+# absent from the enum, so template-library's wizard could not create them.
+if not ARTIFACT_ENUM:
+    warn("artifact-types", "template-protocol.md: could not locate the artifact_type enum block")
+else:
+    for sf in skill_files:
+        folder = os.path.basename(os.path.dirname(sf))
+        text = open(sf, encoding="utf-8").read()
+        for m3 in re.finditer(r"`?artifact_type`?:\s*`?([a-z0-9-]+)`?", text):
+            t = m3.group(1)
+            if t in ("from", "the", "inferred"): continue
+            if t not in ARTIFACT_ENUM:
+                line = text[:m3.start()].count("\n") + 1
+                fail("artifact-types", f"{folder}:{line}: artifact_type '{t}' is not in the template-protocol enum")
+
+# ---------------------------------------------------- 13. chain contracts
+# "← `X` (reason)" in A's chaining line asserts that X chains to A. If X never
+# mentions A, the edge exists only on paper: experiment-tracker claimed inbounds
+# from brainstorm-features and requirements-creator and was, in fact, unreachable.
+# `←` carries two meanings: "X invokes me" (X must know about me) and "I pull
+# from X by delegating to it" (X needn't know). The claim is satisfied by either.
+INBOUND = re.compile(r"←\s*`([a-z][a-z0-9-]+)`")
+skill_text = {os.path.basename(os.path.dirname(p)): open(p, encoding="utf-8").read()
+              for p in skill_files}
+reported = set()
+for target, text in skill_text.items():
+    lines = text.split("\n")
+    body_without_chain_lines = "\n".join(l for l in lines if "←" not in l and "→" not in l)
+    for line in lines:
+        if "←" not in line: continue
+        for source in set(INBOUND.findall(line)):
+            if source not in SKILLS or source == target: continue
+            if (target, source) in reported: continue
+            x_knows_me = re.search(rf"\b{re.escape(target)}\b", skill_text[source])
+            i_call_x = re.search(rf"\b{re.escape(source)}\b", body_without_chain_lines)
+            if not x_knows_me and not i_call_x:
+                reported.add((target, source))
+                fail("chain-contracts",
+                     f"{target}: claims '← {source}', but {source} never mentions {target} and "
+                     f"{target} never calls {source} — wire the edge or drop the claim")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

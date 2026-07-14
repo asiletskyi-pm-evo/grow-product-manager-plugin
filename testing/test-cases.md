@@ -2,6 +2,25 @@
 
 > Updated EVERY release: new cases for new/changed skills + regression for affected ones. Format — see `Testing-process.md`. Status is filled in when a stage runs.
 
+## Release v2.0.2 — audit remediation P2 (structural drift)
+
+> **Run 2026-07-14 — verdict: GREEN.** 13 checks, 0 FAIL. The three new checks were verified by injection (one defect per class into a repo copy): all three caught, clean repo stays green.
+
+### Stage 1 — Static lint (new checks)
+- **TC-lint-vault-types** | all skills + vault-schema | every `vault_save` type exists in the taxonomy AND TYPE_FOLDER_MAP | check `vault-types` | expected: 0 FAIL | **pass** (was: `feedback-triage` in the taxonomy but unmapped — no resolvable folder; `report-3t5f`, `presentation`, `prototype`, `handoff`, `vacancy-profile` and all 7 People types undefined)
+- **TC-lint-artifact-types** | all skills + template-protocol | every Step T `artifact_type` is in the enum | check `artifact-types` | expected: 0 FAIL | **pass** (was: `roadmap`, `meeting-notes`, `focus`, `delegation-audit` declared but absent — no wizard path to a custom template)
+- **TC-lint-chain-contracts** | all skills | a claimed `← X` edge exists on X's side, or X is one this skill calls | check `chain-contracts` | expected: 0 FAIL | **pass** (was: experiment-tracker unreachable; found 3 further one-sided claims on first run)
+
+### Stage 4 — Integration (the contracts the new checks now guard)
+- **TC-int-202-tracker** | brainstorm-features / requirements-creator / focus-advisor → experiment-tracker | the tracker is reachable from the pipeline | expected: all three chain in | **pass** (register after ICE ranking; A/B spec → `specced` with its Decision Rule; focus-advisor routes readout through the state owner instead of past it)
+- **TC-int-202-decisions** | meeting-processor / quarterly-planning / project-planning → decision-log | decisions reach the log | expected: all three chain in | **pass** (meeting-processor no longer hand-writes `Decisions/`)
+- **TC-int-202-vault** | vault-protocol ↔ vault-schema ↔ obsidian-setup-guide | one layout, one path rule | expected: init, save, search and the smoke tests all agree | **pass** (setup guide's four smoke tests previously tested a layout the init algorithm never produced)
+
+### Stage 5 — Regression
+- **TC-reg-202-paths** | 13 changed skills | every save target resolves under the new layout | expected: no orphaned path | **pass** (People skills already wrote `People/…`; the protocol's wikilinks were the outlier and now match)
+
+---
+
 ## Release v2.0.1 — audit remediation + validator hardening
 
 > **Run 2026-07-14 — verdict: GREEN.** Both validators pass; every case below is now automated in `skill_lint.py`, so it re-runs on every PR rather than being re-checked by hand.

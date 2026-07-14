@@ -1,6 +1,6 @@
 ---
 name: roadmap-architect
-version: 0.2.2
+version: 0.2.3
 description: Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree. Use when "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal", "direction structure". Українською — "навести лад у структурі", "розмітити епіки/фічі", "знайти розриви розмітки", "побудувати дерево roadmap", "звʼязати епік з ціллю", "структура напрямків". This skill owns structure and labeling only — no dates, no capacity. For a quarter plan use quarterly-planning, for multi-quarter forecasts use project-planning.
 ---
 
@@ -17,6 +17,12 @@ Supplies clean structure to the rest of the planning-suite. Integrates with `pro
 - `references/roadmap-artifacts.md` — structure-tree format + gap report.
 - `references/jira-data-protocol.md` — Jira plumbing (reuse).
 - `references/integration-strategy.md`, `references/persistent-storage.md`, `references/template-protocol.md`.
+
+## Step T — Template Resolution
+
+`artifact_type: roadmap`, `subtype: structure-tree` (`tree` mode) or `gap-report` (`audit` mode), `product_id`, `language`. Resolve per `references/template-protocol.md` (T-1 → T-5); the resolved template shapes the Step 5 output. `map` and `onboard` mutate Jira/Confluence rather than producing a document — they skip Step T.
+
+**Fallback:** no template → use the structure-tree / gap-report formats in `references/roadmap-artifacts.md`.
 
 ## Modes
 
@@ -48,7 +54,7 @@ Propose label/link fixes (epic→goal, feature→epic, q-labels). **Gate before 
 Generate the Goal→Initiative→Epic→Feature tree (features as `code—name`) + gap report. Per `roadmap-artifacts.md` sec. 4. Workspace + library storage.
 
 ### Step 6 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.2.2", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.2.3", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Don't invent links — only Jira links / goal map / explicit PM input; the rest = "break, please formalize".
@@ -57,7 +63,7 @@ Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_
 - Write to Jira/Confluence only after PM approval. Language — `user.language`.
 
 ## Skill Chaining
-→ `quarterly-planning` / `project-planning` (hands off clean structure) · ← `cjm-research` / `brainstorm-features` (new epics/features) · → `task-creator` (decomposition).
+→ `quarterly-planning` / `project-planning` (hands off clean structure) · → `task-creator` (decomposition).
 
 ## Additional Resources
 `references/planning-core.md`, `dependency-model.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`, `jira-data-protocol.md`.

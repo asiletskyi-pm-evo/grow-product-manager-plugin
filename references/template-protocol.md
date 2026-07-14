@@ -16,6 +16,18 @@ The registry at `{storage_root}/Templates/_registry.json` is the single source o
 
 A template is a Markdown file with YAML frontmatter and a body that may include variable substitution, conditional blocks, loops, and language-tagged sections.
 
+### artifact_type enum (canonical list)
+
+Every `artifact_type` a skill may declare in Step T. A type absent from this list cannot be created through the `template-library` wizard, so a skill declaring one has no path to a custom template.
+
+**Product contour:** `concept` · `requirements` · `research` · `cjm` · `epic` · `task` · `presentation` · `ops-report` · `roadmap` · `meeting-notes` · `focus` · `partial`
+
+**People contour:** `goal-letter` · `report-3t5f` · `one-on-one-notes` · `followup-arcv` · `vacancy-profile` · `performance-review` · `offboarding-plan` · `delegation-audit`
+
+> `roadmap` (planning suite), `meeting-notes` (meeting-processor), `focus` (focus-advisor) and `delegation-audit` (delegation-coach) were declared by their skills but missing from this enum until v2.0.2 — the wizard's type list and this enum must both be updated when a skill starts producing a new artifact. `testing/skill_lint.py` → `artifact-types` enforces it.
+>
+> Not every enum member ships a built-in template — see "Zero-candidate fallback" below for what happens then.
+
 ### Frontmatter schema
 
 ```yaml
@@ -23,13 +35,7 @@ A template is a Markdown file with YAML frontmatter and a body that may include 
 template_id: requirements-ab-test-v1     # unique across the registry
 schema_version: 1                        # format version
 name: "A/B Test Requirements"            # or map: {uk: "...", en: "..."}
-artifact_type: requirements              # concept | requirements | research
-                                         # | cjm | epic | task | presentation
-                                         # | ops-report | partial
-                                         # People-contour: goal-letter | report-3t5f
-                                         # | one-on-one-notes | followup-arcv
-                                         # | vacancy-profile | performance-review
-                                         # | offboarding-plan
+artifact_type: requirements              # one of the artifact_type enum above
 subtype: ab-test                         # optional specialization
 scope: user-global                       # built-in | user-global | product
 products: []                             # [] = all products; else list
@@ -121,7 +127,13 @@ Sort descending: first by scope (product > user-global > built-in), then by tota
 
 ### Step T-3. Decide
 
-- **Zero candidates** → fall back to `builtin://{artifact_type}/default-v1.md`. If the built-in default is also missing, warn the user and proceed without a template (skill renders its own structure).
+- **Zero candidates** → walk the built-in ladder for `artifact_type`, first hit wins:
+  1. `builtin://{artifact_type}/{subtype}-v1.md` — the requested subtype, when one was declared.
+  2. `builtin://{artifact_type}/default-v1.md` — the type's generic default.
+  3. The type's **only** built-in, if it ships exactly one (e.g. `cjm/funnel-v1.md`).
+  4. Nothing matched → warn the user and proceed template-free (the skill renders its own structure). This is a normal outcome, not an error.
+
+  > Rungs 1 and 3 exist because several types deliberately ship **no** `default-v1`: `ops-report`, `presentation`, `research` and `cjm` are meaningful only per subtype — a generic "default ops report" is not a document anyone wants. Until v2.0.2 the rule named only `default-v1`, so those four types always fell through to the warning even though a perfectly good built-in existed.
 - **Exactly one candidate** → use it silently. Append `<!-- template: {template_id} -->` at the end of the rendered artifact.
 - **Multiple candidates** → ask the user via `AskUserQuestion`:
   > "I found {N} templates for {artifact_type}. Which one should I use?"
@@ -194,7 +206,7 @@ Skills MUST NOT reimplement template search logic. All ranking / ask / render lo
 - **`min_plugin_version` > current.** Hidden from resolution. `template-library: list` marks it with a warning.
 - **Language missing in selected template.** Fall back to `default_language`, warn the user.
 - **Registry schema version older than current plugin.** `template-library: rebuild-registry` is invoked; migration adds new fields with defaults.
-- **`storage_root` unreachable.** Fall back to `builtin://` via the registry's seed file embedded in the plugin.
+- **`storage_root` unreachable.** Resolve `builtin://` URIs directly against `{plugin-root}/templates/built-in/` — the built-ins ship with the plugin and need no registry. Custom templates are simply unavailable until storage is reachable; say so rather than failing the skill. (Until v2.0.2 this rule pointed at "the registry's seed file embedded in the plugin", which does not exist.)
 - **User edits built-in path directly.** Prevented by readonly flag; if detected, show a clone flow ("Copy to user-global and edit?").
 
 ---

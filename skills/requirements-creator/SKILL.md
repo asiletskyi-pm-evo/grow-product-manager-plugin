@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.11.1
+version: 0.11.2
 description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one. Українською — "написати вимоги", "описати фічу", "створити специфікацію фічі", "вимоги до A/B-тесту", "переглянути вимоги", "проаналізувати вимоги", "покращити вимоги", "перевірити мою специфікацію".
 ---
 
@@ -339,6 +339,12 @@ If the user agrees:
 
 If the user declines — end the workflow gracefully.
 
+**If the approach is `ab-test` — also register the experiment.** An A/B spec that nobody tracks is how a test ends up running for six weeks with no readout. Offer:
+
+> "This is an A/B spec. Register it in the experiment tracker so it doesn't get lost between launch and readout?"
+
+If the user agrees → invoke `experiment-tracker` (register mode) with: hypothesis statement, the Decision Rule (ship/iterate/kill, from the spec), primary metric, requirements-document link, planned start and expected readout date. The tracker takes it to state `specced`.
+
 ### Step 8 — Design Bridge handoff (Optional)
 
 > Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
@@ -376,7 +382,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.11.1", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.11.2", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 

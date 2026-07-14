@@ -1,6 +1,6 @@
 ---
 name: focus-advisor
-version: 0.4.1
+version: 0.4.2
 description: PM attention dispatcher — scans the PM's context (sprint cycle, calendar, mail, meetings, Jira, roadmap drift, backlog, A/B tests awaiting decisions, capacity, goals, metrics) and recommends focuses with reasons and next steps at three horizons — daily, tactical (sprint–quarter), strategic (quarter–year) — chaining to the right skill. Use whenever the PM asks what to do or focus on — "на чому сфокусуватись", "що мені робити зараз/сьогодні", "фокус дня/тижня", "тактичний фокус", "стратегічний фокус", "куди фокусувати команду", "де великі можливості для продукту", "розбери мою пошту і календар", "до яких зустрічей готуватись", "чи все ок з метриками", "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "покажи focus board" — and for scheduled/headless briefs. Do NOT use for planning the sprint (sprint-planning), building roadmaps (quarterly-/project-planning), or deep metric analysis (product-analysis / cjm-research) — it recommends and chains, it does not execute.
 ---
 
@@ -76,7 +76,8 @@ Per focus: **(a) chain** to the executing skill with prepared arguments; (b) cre
 | Feature blocking next sprint lacks requirements | requirements-creator |
 | Stale backlog / blurred focuses | brainstorm-features / quarterly-planning `refresh` |
 | Roadmap drift beyond threshold | project-planning `replan` |
-| A/B test waiting for a decision | product-analysis (test readout) |
+| A/B test waiting for a decision | experiment-tracker `readout` (it owns test state and chains onward to product-analysis for the readout, then decision-log) |
+| Decision revisit-by date reached | decision-log (`revisit` — the decision said "re-examine by this date") |
 | Team event ahead (perf review, onboarding, booking deadline) | task/reminder + product-reporter `member-review` where relevant |
 | Strategic bet needs deeper evidence | product-research (competitive/market) / cjm-research / knowledge-library |
 | Strategic bet accepted → needs a concept | write-concept, then quarterly-/project-planning to schedule |

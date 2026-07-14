@@ -1,6 +1,6 @@
 ---
 name: design-bridge
-version: 0.3.1
+version: 0.3.2
 description: Orchestrate Claude's Design skills (user-research, research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline, and route hi-fi screen generation to an external design toolkit declared in local-context (design_toolkits). Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact. Українською — "створити презентацію", "зробити деку", "побудувати прототип", "згенерувати hi-fi екран", "через мій дизайн-тулкіт", "згенерувати handoff", "дизайн-рев'ю", "передати дизайн у розробку". Do NOT use for quick local diagrams, flowcharts, BPMN, Mermaid, or plain wireframes — use diagram-prototyper for those.
 ---
 
@@ -18,12 +18,12 @@ All brand-specific values (Design System spec, pptx theme, base template, brand 
 
 | Upstream skill | Trigger | Default intent |
 |---|---|---|
-| `write-concept` | after Step 7 (publish) | `deck: subtype=feature` |
-| `requirements-creator` | after Step 5 (publish) | `handoff: components + copy + a11y` |
-| `brainstorm-features` | after ICE ranking top-3 | `prototype: lo-fi per top hypothesis` |
-| `product-research` | after Step 6 (synthesis) | `deck: subtype=research-highlights` |
-| `cjm-research` | after hypothesis-backlog | `deck: subtype=research-highlights` + `prototype` for quick wins |
-| `meeting-processor` | meeting → decisions → deck | propose deck or handoff based on context |
+| `write-concept` | after Step 8 (Design Bridge handoff) | `deck: subtype=feature` |
+| `requirements-creator` | after Step 8 (Design Bridge handoff) | `handoff: components + copy + a11y` |
+| `brainstorm-features` | after Step 8, ICE ranking top-3 | `prototype: lo-fi per top hypothesis` |
+| `product-research` | after Step 8 (synthesis published) | `deck: subtype=research-highlights` |
+
+> Only rows with a real hook in the upstream skill belong here. `cjm-research` and `meeting-processor` were listed until v2.0.2 but have no design-bridge hook — both route visualization to `diagram-prototyper` instead, which is the correct boundary (their outputs are process/funnel diagrams, not DS-themed decks).
 
 **Manual** — when the user says:
 - "make a deck", "create a presentation", "prep for direction review"
@@ -319,7 +319,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.3.1",
+  skill_version: "0.3.2",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],

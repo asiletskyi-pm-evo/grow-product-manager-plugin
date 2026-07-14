@@ -45,20 +45,20 @@ delegation:
   - { zone: "A/B readouts",      level: 6, target: 7 }
   - { zone: "funnel dashboards", level: 4, target: 6 }
 # Goals
-active_goal_letter: "[[Goals/olena-2026H1]]"   # link to SMARTCBP goal letter
+active_goal_letter: "[[People/goals/olena-2026H1]]"   # link to SMARTCBP goal letter
 goal_methodology: SMARTCBP      # SMARTCBP | OKR
 # Reporting (reporting-3t5f.md)
 reporting:
   cadence: weekly               # weekly | biweekly | monthly
   last_report: 2026-07-11
-  last_report_ref: "[[Reports/olena-2026-07-11]]"
+  last_report_ref: "[[People/reports/olena-2026-07-11]]"
   forecast_qa: 92               # last Forecast Quota Attainment, %
 # 1-1 cadence and history
 one_on_one:
   cadence: biweekly
   last: 2026-07-07
   history:
-    - { date: 2026-07-07, followup_ref: "[[1-1/olena-2026-07-07]]" }
+    - { date: 2026-07-07, followup_ref: "[[People/1-1/olena-2026-07-07]]" }
 # GTD-index trend (people-frameworks.md → GTD-index)
 gtd_index:
   - { period: "SEX-41", value: 0.72 }
@@ -113,7 +113,11 @@ Do not hard-stop. Offer:
 
 ### P-d. Update at the end (MANDATORY when the profile exists)
 
-After the skill delivers its output, write back whatever it learned — new `d_type` transition, delegation-level change, a 1-1 log entry + follow-up link, a new `gtd_index` datapoint, updated `signals`, a new `active_goal_letter`. Always bump `updated`. Append, don't overwrite history arrays. This write is **gated** (show the diff before saving) for `performance-review` and `offboarding-guide`; silent-with-notice for the others.
+After the skill delivers its output, write back whatever it learned — new `d_type` transition, delegation-level change, a 1-1 log entry + follow-up link, a new `gtd_index` datapoint, updated `signals`, a new `active_goal_letter`. Always bump `updated`. Append, don't overwrite history arrays.
+
+**Every profile write is gated — show the diff, save on confirmation.** No exceptions: a profile records a judgement about a person (their D-type, their trend, their signals), and the manager owns that judgement. The one-line diff costs a second; a silently-persisted wrong `d_type` quietly steers every later 1-1, review, and delegation decision.
+
+> Until v2.0.2 this rule read "gated for `performance-review` and `offboarding-guide`; silent-with-notice for the others", while `goal-setter`, `one-on-one` and `delegation-coach` each declared a gated write in their own SKILL.md. The skills were right; the protocol is now aligned to them.
 
 ---
 
@@ -127,6 +131,9 @@ After the skill delivers its output, write back whatever it learned — new `d_t
 | `hiring-designer` | — (creates a new profile on hire) | new profile: curator, S1 style, probation = offer goals |
 | `offboarding-guide` | goals + reports (evidence gate), d_type, 1-1 history | offboarding state (local only), d_type → "leaving" |
 | `delegation-coach` | d_type, gtd_index, delegation zones | delegation levels + transfer plan |
+| `product-reporter` (goal-report) | `active_goal_letter`, reporting cadence, forecast_qa history | `reporting.last_report`, `last_report_ref`, `forecast_qa` |
+
+`product-reporter` is not a People-contour skill, but its `goal-report` mode reports **on a person against their goal**, so it runs Step P and writes the reporting fields back. Its goal-report output is People-data: `People/reports/`, vault/local only, never Confluence.
 
 Cross-contour readers: `task-creator` reads `d_type` (how-depth); `sprint-planning` reads `d_type`/`delegation` (assignee fit) and writes a `gtd_index` datapoint from carryover; `focus-advisor` reads roster + `one_on_one`/`reporting` cadence for manager-rhythm signals. These are **read-mostly** — they never create profiles, they use them if present.
 

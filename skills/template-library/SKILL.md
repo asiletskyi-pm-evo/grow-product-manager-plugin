@@ -1,6 +1,6 @@
 ---
 name: template-library
-version: 0.2.1
+version: 0.2.2
 description: Manage artifact templates (concepts, requirements, research, CJM, epics, tasks, presentations) — create, clone, update, delete, import, export, validate. Use when the user asks to "manage templates", "add a template", "create a template", "edit a template", "import templates from a folder", "show templates", "backup templates", or when another skill needs to render an artifact with Step T of `references/template-protocol.md`. Also triggers on template-related requests. Українською — "керувати шаблонами", "додати шаблон", "створити шаблон", "редагувати шаблон", "імпортувати шаблони з папки", "показати шаблони", "зробити бекап шаблонів".
 ---
 
@@ -47,9 +47,9 @@ The skill dispatches on the user's request into one of 12 actions. If ambiguous,
 
 ## Wizard: `add`
 
-1. **Artifact type** — via `AskUserQuestion`:
-   - `concept`, `requirements`, `research`, `cjm`, `epic`, `task`, `presentation`, `ops-report`, `partial`
-   - People-contour: `goal-letter`, `report-3t5f`, `one-on-one-notes`, `followup-arcv`, `vacancy-profile`, `performance-review`, `offboarding-plan`
+1. **Artifact type** — via `AskUserQuestion`. The list is the `artifact_type` enum in `references/template-protocol.md` — keep the two in sync (`skill_lint.py` → `artifact-types`):
+   - `concept`, `requirements`, `research`, `cjm`, `epic`, `task`, `presentation`, `ops-report`, `roadmap`, `meeting-notes`, `focus`, `partial`
+   - People-contour: `goal-letter`, `report-3t5f`, `one-on-one-notes`, `followup-arcv`, `vacancy-profile`, `performance-review`, `offboarding-plan`, `delegation-audit`
 2. **Scope** — via `AskUserQuestion`:
    - `user-global` (all products)
    - `product` (pick one from `local-context.md` products list)

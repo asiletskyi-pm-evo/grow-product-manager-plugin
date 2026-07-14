@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.13.1
+version: 0.13.2
 description: Process meeting recordings, transcripts, and notes to extract ARCV-standard action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Detects 1-1 meetings and redirects to one-on-one. Chains to task-creator, requirements-creator, product-research, and brainstorm-features. Українською — "підсумувати зустріч", "нотатки зустрічі", "що обговорювали", "action items", "MoM", "опрацювати транскрипт зустрічі". Do NOT use for a 1-1 meeting (one-on-one handles those with signals + profile update).
 ---
 
@@ -450,6 +450,8 @@ After publishing (or if the user decided not to save), offer the next step **bas
 | **Demo / Retro** | Improvement proposals extracted | "Would you like to brainstorm solutions for the identified improvements?" → invoke `brainstorm-features` |
 | **1-1** | Detected as a 1-1 (see M3) | "Analyze this as a 1-1 (signals + ARCV follow-up + profile update)?" → invoke `one-on-one` (analyze mode); keep output local |
 | **Any type** | Complex process discussed | "Would you like to visualize the discussed process as a diagram?" → invoke `diagram-prototyper` |
+| **Any type** | Decisions extracted (see M5a) | "Log these decisions so the 'why' survives?" → invoke `decision-log` (log mode) — see M10 |
+| **Status / Decision** | Decisions that change quarterly scope or direction focuses | "These decisions change the quarter's focuses. Fold them into the quarterly plan?" → invoke `quarterly-planning` |
 
 **Context to pass when invoking another skill:**
 
@@ -472,6 +474,8 @@ Every skill invocation from meeting-processor must include the **full participan
 | **product-research** | User insights, quotes with speaker attribution, pain points, needs, participants as interview subjects |
 | **brainstorm-features** | Ideas, hypotheses, evaluation criteria, voting results, participants as idea owners |
 | **diagram-prototyper** | Process descriptions, flow logic, architecture discussed, participants as actors in diagrams |
+| **decision-log** | Per decision: what was decided, context/rationale, options discussed, who decided, link back to these notes |
+| **quarterly-planning** | Decisions that shift scope or focuses, with the meeting as the source link |
 
 If no chaining is relevant or the user declines — end the workflow gracefully.
 
@@ -481,8 +485,8 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.13.1", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
-2. Key decisions from the meeting may additionally be saved as separate `decision` artifacts (Decisions/) — offer, don't force.
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.13.2", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+2. Key decisions from the meeting may additionally be recorded as ADR-style records — offer, don't force: "The meeting produced N decisions. Log them in the decision log so the 'why' survives?" → invoke `decision-log` (log mode) per decision, passing: what was decided, the context and options discussed, who decided, and a link back to these notes. decision-log owns the `decision` artifact; do not hand-write `Decisions/` files here.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 
 ---

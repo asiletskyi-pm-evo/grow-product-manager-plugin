@@ -16,25 +16,44 @@ All persistent user data is stored under:
 
 Resolved as `$HOME/.grow-pm/` on the user's machine. In Cowork sessions, this translates to the user's home directory (e.g., `/Users/username/.grow-pm/`).
 
+### `storage_root` resolution
+
+`storage_root` is the base that `template-protocol.md` (Step T-1, registry lookup) and `template-library` resolve `Templates/` against. Resolve it in this order:
+
+1. **Obsidian Vault configured** (`vault_level ≥ L1`, `sync_mode != "off"`) → `storage_root = {vault_path}/{plugin_folder}` — templates live beside the artifacts they render, so the whole knowledge base moves as one unit.
+2. **Otherwise** → `storage_root = ~/.grow-pm` — the standalone home. `Templates/` sits directly under it.
+
+Both modes use the **same** `Templates/` layout (registry + partials + scopes), defined once in `template-protocol.md` → storage layout. The mode only changes where that folder lives.
+
+> Until v2.0.2 this rule existed nowhere: `template-protocol.md` deferred the resolution to this document, which never defined `storage_root`, while the only concrete statement lived in the configurator's onboarding step — and it named `~/.grow-pm/template-library/`, a path `template-protocol.md` simultaneously called *legacy*. If you find that folder, it is pre-v2.0 data: migrate it per "Legacy Data Discovery" below.
+
 ### Directory Structure
 
 ```
 ~/.grow-pm/
 ├── local-context.md              # Main plugin configuration (user profile, orgs, products, teams)
 ├── .schema-version               # Schema version marker (for migration compatibility)
-├── template-library/
-│   ├── _registry.json            # Template registry
-│   └── templates/                # Template files organized by type
-│       ├── requirements/
-│       ├── concepts/
-│       ├── presentations/
-│       └── ...
+├── Templates/                    # storage_root/Templates — layout per template-protocol.md
+│   ├── _registry.json            # Template registry (the resolution index)
+│   ├── _partials/
+│   ├── _System/
+│   ├── _archive/
+│   ├── user-global/
+│   │   └── {artifact_type}/
+│   └── {product}/
+│       └── {artifact_type}/
 ├── knowledge-library/
 │   ├── library.md                # Master index
 │   ├── categories.md             # Category definitions
 │   ├── trust-scores.yaml         # Trust scores metadata
 │   ├── sources/                  # Individual source detail files
 │   └── health-checks/            # CJM health-check snapshots
+├── people/                       # Person profiles (Step P) — highest-sensitivity, L0 fallback
+│   ├── _roster.md
+│   └── <slug>.md
+├── experiments/                  # experiment-tracker registry
+├── decisions/                    # decision-log records (L0 fallback)
+├── focus/                        # focus-advisor journal + board.html
 └── backups/                      # Auto-backups before migrations
     ├── pre-migration-1.4.0/      # Backup taken before migrating to v1.4.0
     │   ├── local-context.md
@@ -42,6 +61,8 @@ Resolved as `$HOME/.grow-pm/` on the user's machine. In Cowork sessions, this tr
     │   └── ...
     └── ...
 ```
+
+> When a vault is configured, the `people/`, `experiments/`, `decisions/` and `focus/` trees have vault counterparts (`People/`, `Hypotheses/`, `Decisions/`, `Focus/` — see `vault-schema.md`); `~/.grow-pm/` remains the L0 fallback so every contour works standalone.
 
 ### .schema-version File
 

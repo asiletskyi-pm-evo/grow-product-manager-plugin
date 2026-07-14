@@ -33,6 +33,9 @@ Every check exists because the defect class it catches actually shipped. The v2.
 | `readme-versions` | README claims ≠ frontmatter | 16 stale skill versions |
 | `org-data` | real org identifiers in shipped files | real roster + board id + VIP email in the example file |
 | `deck-subtypes` | yaml keys ≠ template subtypes | `feature-concept` vs `feature` |
+| `vault-types` | a saved type with no folder in TYPE_FOLDER_MAP | feedback-triage, report-3t5f, presentation/prototype/handoff, all People types |
+| `artifact-types` | a Step T type outside the protocol enum | roadmap, meeting-notes, focus, delegation-audit |
+| `chain-contracts` | a claimed `← X` edge that X knows nothing about | experiment-tracker was unreachable by chaining |
 
 Two design rules keep the linter honest: it is **stdlib-only** (PyYAML is an optional extra strict pass, never a hard dependency, so CI needs no install step), and the `ghost-skill` vocabulary is **auto-derived from `templates/built-in/`** rather than hand-listed, so new template types do not create false positives.
 

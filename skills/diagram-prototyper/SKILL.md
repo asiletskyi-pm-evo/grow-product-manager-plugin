@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.9.2
+version: 0.9.3
 description: Create diagrams, flowcharts, BPMN processes, UI prototypes, and infographics to visualize product concepts and hypotheses. Use when the user asks to "create a diagram", "draw a flowchart", "visualize this process", "make a prototype", "create an infographic", "BPMN diagram", "wireframe", "mockup", or when another skill suggests visualizing a concept. Supports generation via Gemini, ChatGPT, NotebookLM, Figma, Draw.io, and built-in Mermaid/HTML. Українською — "створити діаграму", "намалювати блок-схему", "візуалізувати цей процес", "зробити прототип", "створити інфографіку", "BPMN-діаграма", "вайрфрейм", "макет". Do NOT use for brand-themed decks, prototypes, or handoffs built on your Design System — use design-bridge for those.
 ---
 
@@ -509,22 +509,22 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.9.2", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.9.3", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Skill Chaining — Inbound (for other skills)
 
-**This section defines how other skills should invoke this skill.**
+**This section defines how other skills should invoke this skill.** It lists the skills that actually chain here today — if you add a caller, add its row.
 
-After completing their main workflow, the following skills should offer visualization:
+Since `design-bridge` (v1.10.0) became the routing host for brand-themed decks, prototypes and handoffs, the artifact skills (`write-concept`, `requirements-creator`, `brainstorm-features`, `product-research`, `product-analysis`) hand **design** work to design-bridge instead. This skill keeps the lo-fi, DS-free visualization work: process diagrams, flowcharts, BPMN, mind maps, infographics.
 
 | Source skill | When to offer | Suggested visualization |
 |-------------|--------------|----------------------|
-| **write-concept** | After concept is published | Flowchart of the main user flow, prototype of key screens |
-| **brainstorm-features** | After hypotheses are scored | Mind map of feature ideas, diagrams of top hypotheses |
-| **requirements-creator** | After requirements are published | BPMN of the process, prototype of UI changes |
-| **product-research** | After research is published | Mind map of competitive landscape, diagram of market positioning, **infographic of key research findings** |
-| **product-analysis** | After analysis is complete | Flowchart of user funnel, diagram of metric relationships, **infographic of key metrics and trends** |
+| **meeting-processor** | Complex process discussed (M9) | Flowchart/BPMN of the discussed process |
+| **cjm-research** | After the report is ready | Funnel diagram, journey map, deck of the findings |
+| **quarterly-planning** | After the roadmap is approved | Roadmap/timeline visualization |
+| **project-planning** | After the arc is built | Dependency graph, critical-path diagram |
+| **design-bridge** | Lo-fi/DS-free visual needed inside a design flow | Mermaid flow, plain wireframe |
 
 **Transition prompt template:**
 > "Would you like to create a visual diagram, prototype, or infographic for [brief description]? This can help communicate the concept more effectively."

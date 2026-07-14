@@ -152,7 +152,7 @@ If data was found in a legacy location (not `~/.grow-pm/`):
 ### RM-6. Post-migration validation
 
 After migration completes:
-1. Run Validate mode (V-1 through V-5)
+1. Run Validate mode (V-1 through V-6)
 2. Report results
 3. If user chose "Use existing + reconfigure" → continue to Update mode
 4. If user chose "Use existing data" → complete, show summary

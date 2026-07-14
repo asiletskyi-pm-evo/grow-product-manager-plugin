@@ -1,6 +1,6 @@
 ---
 name: decision-log
-version: 0.2.1
+version: 0.2.2
 description: Log and retrieve key product decisions as ADR-style records in the vault Decisions/ area — context, options considered, decision, rationale, consequences, links. Use when the user says "log this decision", "why did we decide X", "show decisions about Y", "supersede that decision", "decision log". Українською — "зафіксуй рішення", "чому ми вирішили…", "покажи рішення по…", "перегляньмо це рішення", "журнал рішень". Also invoked by other skills (meeting-processor, experiment-tracker, planning skills) when their outcome contains a decision worth recording. Do NOT use for meeting notes as such (meeting-processor) or experiment state (experiment-tracker) — this skill records decisions and answers "why".
 ---
 
@@ -77,4 +77,4 @@ Frontmatter per `vault-schema.md`: `type: decision`, `product`, `tags` (topic, a
 - Language — `user.language`.
 
 ## Skill Chaining
-← `meeting-processor` (M10: key decisions from MoM) · ← `experiment-tracker` (decide mode) · ← `quarterly-planning` retro / `project-planning` replan (scope decisions) · ← any skill with a decision outcome · → `task-creator` (when the decision spawns work) · → `focus-advisor` (revisit-by dates feed tactical signals).
+← `meeting-processor` (M10: key decisions from MoM) · ← `experiment-tracker` (decide mode) · ← `quarterly-planning` retro / `project-planning` replan (scope decisions) · ← `feedback-triage`, `goal-setter`, `one-on-one` (decision outcomes) · ← any skill with a decision outcome · → `task-creator` (when the decision spawns work) · → `focus-advisor` (overdue `revisit_by` dates surface as tactical signals — `focus-signals.md` §6).

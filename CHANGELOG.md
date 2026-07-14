@@ -2,6 +2,46 @@
 
 All notable changes to this plugin are documented here.
 
+## v2.0.2 (2026-07-14)
+
+**Audit remediation, P2 — structural drift.** v2.0.1 fixed the defects that were mechanically wrong (leaked data, duplicated docs, phantom paths). This release fixes the ones that were *architecturally* wrong: three documents each claiming to define the vault layout, chain edges that existed only on paper, and a template system whose fallback could not be satisfied. Three new linter checks make each class blocking.
+
+### Fixed — vault layer: one source of truth
+
+- **`vault-schema.md` is now declared the single source of truth for vault layout**, and `vault-protocol.md` (save/init/search) and `obsidian-setup-guide.md` (setup smoke tests) conform to it. Previously all three described *different* layouts: the protocol saved to `{vault}/artifacts/{type}/{product}/` with the MOC at `dashboard/MOC-Dashboard.md`, the schema documented an area-first tree with `_MOC/Dashboard.md`, and the setup guide's four smoke tests checked a third layout — against the very algorithm it delegates to, so they could not have passed.
+- **One path rule, no exceptions:** `{vault}/{TYPE_FOLDER_MAP[type]}/{product_slug}/{filename}`. The schema's own tree contradicted its map on nesting order (`CJM/{product}/full-reports/` vs `CJM/full-reports/`); the tree now follows the map. Lifecycle status lives in frontmatter, not in folders.
+- **10 artifact types that skills were already saving had no home in the schema** — `feedback-triage` (in the taxonomy but absent from TYPE_FOLDER_MAP, so it had no resolvable folder at all), `report-3t5f`, `presentation`, `prototype`, `handoff` (the schema even called the latter two "existing" while defining neither), `vacancy-profile`, and the People contour. Taxonomy grows 22 → 32 types, all mapped.
+- **The People contour gets a defined home:** everything about a person under `People/` — one folder, one sensitivity boundary (`People/goals/`, `/reports/`, `/1-1/`, `/reviews/`, `/offboarding/`, `/delegation/`). The protocol's own wikilink examples pointed at top-level `Goals/`, `Reports/`, `1-1/` while the skills wrote to `People/…` — three homes for the same artifact. `vacancy-profile` sits outside `People/` deliberately: a vacancy is a role, not yet a person.
+- **`vault_init` now derives its folders from TYPE_FOLDER_MAP** instead of restating them — the hardcoded list had fallen 7 types behind. Same for the search glob and the MOC paths.
+- **`REVERSE_CONTEXT_MAP`** — used by `vault_save` step 7, defined nowhere — is now derived from SKILL_CONTEXT_MAP rather than being a second map to keep in sync. **SKILL_CONTEXT_MAP** grew from 8 to all 29 skills (`local-context-protocol.md` sends every skill to Step 0.5, so the 21 missing rows meant silent skips), with People types restricted to People-contour readers.
+
+### Fixed — chain contracts that existed only on paper
+
+- **`experiment-tracker` was unreachable by chaining.** It claimed inbound edges from `brainstorm-features` and `requirements-creator` — neither mentioned it — while `focus-advisor` routed "A/B test waiting for a decision" straight past it to `product-analysis`. All three edges are now real: brainstorm-features offers registration after ICE ranking, requirements-creator registers A/B specs with their Decision Rule, and focus-advisor routes test-readout and decision-revisit signals through the skills that own that state.
+- **`decision-log` named three callers that never called it** (meeting-processor, quarterly-planning, project-planning) plus a focus-advisor signal feed that did not exist. meeting-processor now chains decisions to it (instead of hand-writing `Decisions/` files); the planning skills offer to log scope cuts and replan calls; `revisit_by` dates are a real tactical signal in `focus-signals.md`.
+- **`diagram-prototyper`'s inbound table listed 5 callers, none of which still call it** — all moved to design-bridge when it arrived in v1.10.0. Table now lists the actual callers and states the boundary (lo-fi/DS-free visuals here, brand-themed decks there).
+- **`design-bridge` claimed auto-triggers from `cjm-research` and `meeting-processor`** that have no hook on the upstream side; both correctly route to diagram-prototyper instead. Rows removed, stale step numbers on the remaining four corrected (Step 7/5 → Step 8).
+- Unsubstantiated inbound claims dropped from `roadmap-architect` and `project-planning`. The chain graph describes what exists.
+
+### Fixed — templates and Step P
+
+- **The zero-candidate fallback was unsatisfiable for 4 of 9 types.** `builtin://{artifact_type}/default-v1.md` does not exist for `cjm`, `research`, `presentation` or `ops-report` — those ship only subtype files, deliberately (a generic "default ops report" is not a document anyone wants). The rule is now a ladder: requested subtype → `default-v1` → the type's only built-in → warn.
+- **`storage_root` was defined nowhere.** `template-protocol.md` deferred to `persistent-storage.md`, which never mentioned the term; the only concrete rule lived in an onboarding step and named a path the protocol simultaneously called *legacy*. `persistent-storage.md` now defines the resolution (vault → `{vault}/{plugin_folder}`, else `~/.grow-pm`), and its directory tree matches what skills actually create (`Templates/` per the protocol, plus `people/`, `experiments/`, `decisions/`, `focus/`).
+- **4 artifact types were declared by skills but absent from the enum** (`roadmap`, `meeting-notes`, `focus`, `delegation-audit`) — users could not create templates for them. The enum is now an explicit, machine-checkable block; template-library's wizard list matches it.
+- **`roadmap-architect` had no Step T** — the only artifact-producing planning skill without one, against the protocol's own "MUST".
+- **Step P write-gating contradicted itself**: the protocol gated writes for 2 skills and made the rest silent, while 3 of those "rest" declared gated writes anyway. Now uniformly gated — a profile records a judgement about a person, and the manager owns it. `product-reporter` (which writes profile fields from `goal-report`) is documented in the reads/writes table it was missing from.
+- **product-reporter's Steps 7–8 were nested inside the `goal-report` section** though their content covers all six modes — read structurally, the five ops modes ended with no feedback loop and no vault save. Promoted to shared final steps; the duplicate goal-report persistence (two destinations, two optionality rules) is resolved.
+
+### Added — validators
+
+Three new checks (13 total): **`vault-types`** (every `vault_save` type is in the taxonomy *and* TYPE_FOLDER_MAP — an unmapped type has no destination), **`artifact-types`** (every Step T `artifact_type` is in the protocol enum), **`chain-contracts`** (a claimed `← X` edge exists on X's side, or X is one this skill calls — the notation carries both meanings). `chain-contracts` found 3 further one-sided claims beyond the audit's list on its first run.
+
+### Files
+
+- Changed: 13 `skills/*/SKILL.md` (patch bump), `references/` (vault-schema, vault-protocol, people-context-protocol, persistent-storage, template-protocol, focus-signals), `skills/plugin-configurator/references/` (obsidian-setup-guide, onboarding-steps, maintenance-modes), `testing/skill_lint.py`, `README.md`, `CHANGELOG.md`, both manifests.
+
+---
+
 ## v2.0.1 (2026-07-14)
 
 **Audit remediation (P0 + P1) + the validators that make these defect classes non-recurring.** A full audit of v2.0.0 (29 skills, 30 references, 24 templates, manifests, CI) found 5 critical and 14 major defects that both validators passed green. This release fixes the P0/P1 set and rebuilds `skill_lint.py` so each defect class is now a named, blocking check.
