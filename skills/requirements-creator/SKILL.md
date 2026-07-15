@@ -1,7 +1,7 @@
 ---
 name: requirements-creator
 version: 0.11.2
-description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one. Українською — "написати вимоги", "описати фічу", "створити специфікацію фічі", "вимоги до A/B-тесту", "переглянути вимоги", "проаналізувати вимоги", "покращити вимоги", "перевірити мою специфікацію".
+description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one. Do NOT use for a high-level product concept or PRD — use write-concept (its output is this skill's input). Українською — "написати вимоги", "створити специфікацію фічі", "вимоги до A/B-тесту", "переглянути вимоги", "проаналізувати вимоги", "покращити вимоги", "перевірити мою специфікацію".
 ---
 
 # Feature and Hypothesis Requirements Creator
@@ -111,13 +111,13 @@ If the requirements involve changing UI/UX for any user type, ask via AskUserQue
 - **If no designs exist** — note this and proceed without design context
 - **If relevant designs are confirmed** — use throughout the requirements: reference current state in functional requirements, describe what changes in the UI, include Figma links in the UI&UX section
 
-**1d. Requirements template — ask via AskUserQuestion:**
+**1d. Template — already resolved in Step T; do not ask again.**
 
-> "Which template should we use for the requirements?"
+Step T resolved the template through the registry (`references/template-protocol.md`). Do **not** re-ask "which template?" here: the protocol is explicit that *skills must not reimplement template search logic*, and a second question can contradict T-3's answer with nothing defining which wins.
 
-- **Standard template** (default) — use the template defined in `references/requirements-template.md`. If a custom Confluence template URL is configured in `local-context.md` — reference it as the base
-- **Standard with modifications** — ask the user what exactly needs to change (add/remove/modify sections)
-- **Custom template** — ask the user to provide their template (as text, file, or link)
+- **Step T selected a template** → use it. If the user wants structural changes, ask what to add/remove/modify and apply them to that skeleton for this run only.
+- **Step T selected nothing** (registry empty / user said "no template") → confirm the built-in structure from `references/requirements-template.md`.
+- **A custom Confluence template URL is configured** (`product.confluence_template_url`) → that is a `product`-scope template: offer to register it via `template-library` (`add-template`) so Step T can rank it from now on, and use it as the base for this run.
 
 ### Step 2 — Deep requirements gathering (BA mode)
 

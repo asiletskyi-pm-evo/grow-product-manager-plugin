@@ -32,7 +32,7 @@ Per `references/template-protocol.md`: `artifact_type: roadmap`, `subtype: quart
 | Mode | Steps | Output |
 |------|-------|--------|
 | `retro` | 1–2 | Plan-vs-actual for the previous quarter + lessons + calibrated baseline |
-| `plan` | 1, 3–5 | Draft roadmap with a capacity traffic light |
+| `plan` | 1, 2-lite, 3–5 | Draft roadmap with a capacity traffic light |
 | `full` (default) | 1–6 | Published roadmap + live dashboard |
 | `refresh` | 2 + 6 | Updated statuses in existing artifacts |
 
@@ -49,6 +49,8 @@ Per `local-context-protocol.md`. If no Planning section → chain to `plugin-con
 - Feature inventory: CQL `space={space} AND label="q{N-1}-{year}" AND type=page` (name-parsing regex from `planning-core`).
 - Feature status normalization (`planning-core`) → done/in_progress/planned/blocked + miss reasons.
 - **Baseline calibration** of velocity against actuals (`capacity-model` sec. 4; velocity from the Jira board id).
+
+> **Step 2-lite (`plan` mode).** Steps 3c and 4.1 consume this step's outputs — calibrated velocity and carried-over work — so `plan` cannot skip it entirely; it used to, leaving both undefined. In `plan` mode run only the two data pulls, with no retro narrative: (a) unfinished features from the previous quarter's label → the carryover list; (b) velocity from the board's last 3–5 sprints → the baseline. If the board is unreachable, fall back to `planning.capacity.baseline_sp_per_sprint` from local-context and say which source was used. Skip miss-reason analysis and lessons — those belong to `retro`.
 **Gate:** show the retro, confirm/correct.
 
 ### Step 3 — Capacity (4 inputs, each gated)

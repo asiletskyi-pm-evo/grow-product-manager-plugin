@@ -126,6 +126,7 @@ IF vault_level > L0 (detected during Step 1e):
    - Display: "Found {N} related CJM artifacts in your knowledge base:"
    - Show: title, type, date, health_score (if health-check), key tags
    - Ask: "Use as context for this analysis? [Yes / Select specific / Skip]"
+   - **`health-check` mode (automated): do not ask** — silently use the top results as baseline context and note it in the report header, exactly as Step T and Step 2 already do for background runs. This was the last interactive point left in the scheduled path, so a weekly health-check would block on a question with nobody there to answer it.
 
 3. IF user accepts:
    - Read full content of selected artifacts

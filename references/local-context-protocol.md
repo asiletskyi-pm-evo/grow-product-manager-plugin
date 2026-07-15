@@ -28,7 +28,9 @@ Stop the current skill workflow and inform the user:
 
 > "To work effectively, the plugin needs to be configured with your organization, products, and tools context. Let's run a quick setup (~5-10 min)."
 
-Launch the **Plugin Configurator** skill in **Onboarding** mode. The Configurator will create `~/.grow-pm/` and save all data there. After Onboarding completes — return to the original skill and continue its workflow with the newly created context.
+Launch the **Plugin Configurator** and let **its own mode selection on launch** decide what to do — do **not** name a mode from here. A missing `local-context.md` does not mean "nothing is configured": the knowledge library, person profiles, experiment registry or a vault mirror may all still be there, and the Configurator's rule 1 restores from them after taking an RM-0 backup. Forcing Onboarding from the caller starts fresh over live data — the exact destruction its rule ordering exists to prevent.
+
+After the Configurator finishes — return to the original skill and continue its workflow with the resulting context.
 
 ### 0c. If found → read and parse
 

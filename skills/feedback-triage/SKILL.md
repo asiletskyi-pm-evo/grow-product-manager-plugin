@@ -1,7 +1,7 @@
 ---
 name: feedback-triage
 version: 0.2.1
-description: Triage a stream of user feedback — support tickets, complaints, reviews, Q&A, NPS verbatims — into clustered themes with frequency, severity, and trend scoring, producing a prioritized pain list and hypothesis candidates. Use when the user asks to "triage feedback", "cluster support tickets", "top user complaints for the period", "what hurts buyers/sellers", "feedback themes trend". Українською — "розбери відгуки/скарги", "тріаж фідбеку", "що болить покупцям/продавцям", "кластеризуй support-тікети", "топ проблем за місяць", "тренди тем фідбеку". Do NOT use for deep interview synthesis (product-research or design research-synthesis), saving individual sources (knowledge-library), or ideation (brainstorm-features — chain there after triage).
+description: Triage a stream of user feedback — support tickets, complaints, reviews, Q&A, NPS verbatims — into clustered themes with frequency, severity, and trend scoring, producing a prioritized pain list and hypothesis candidates. Use when the user asks to "triage feedback", "cluster support tickets", "top user complaints for the period", "what hurts a given user segment", "feedback themes trend". Українською — "розбери відгуки/скарги", "тріаж фідбеку", "що болить сегменту користувачів", "кластеризуй support-тікети", "топ проблем за місяць", "тренди тем фідбеку". Do NOT use for deep interview synthesis (product-research or design research-synthesis), saving individual sources (knowledge-library), or ideation (brainstorm-features — chain there after triage).
 ---
 
 # Feedback Triage
@@ -21,7 +21,7 @@ Turns a raw pile of feedback (hundreds of tickets, reviews, Q&A entries) into a 
 
 ### Step 1 — Intake
 1. **Sources** (any mix): uploaded CSV/XLSX exports, Google Drive folders (support tickets), Confluence pages, pasted text, Jira issues (complaint labels). Prefill from the `Feedback` section when configured.
-2. **Scope:** period (default: last full month), segment (buyers / sellers / both), product area filter (optional).
+2. **Scope:** period (default: `feedback.default_period`, else last full month), segment (from `feedback.segments`; ask when unset — a two-sided marketplace splits buyers/sellers, SaaS splits by plan or role, so there is no universal default), product area filter (optional).
 3. **Baseline for trends:** search vault for the previous `feedback-triage` artifact of the same segment — if found, this run computes trends against it; if not, this run becomes the baseline (say so).
 
 > **Subagent delegation (large fan-out).** For many files/sources, delegate per `subagent-delegation.md`: batch by source/file, each subagent returns normalized rows (date, channel, segment, text, severity-if-present) — never raw dumps. `data-policy.md` applies to subagents. Inline fallback if unavailable.

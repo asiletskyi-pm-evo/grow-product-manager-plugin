@@ -78,8 +78,8 @@ At the start of execution, every skill MUST follow `references/local-context-pro
 **If `local-context.md` is NOT found anywhere:**
 - Stop the current skill workflow
 - Inform the user: "To work effectively, the plugin needs to be configured with your organization, products, and tools context. Let's run a quick setup."
-- Launch the Plugin Configurator in **Onboarding** mode
-- After Onboarding completes — return to the original skill and continue its workflow with the newly created context
+- Launch the Plugin Configurator and let **Mode selection on launch** (above) pick the mode — never force **Onboarding** from the caller: leftover data under `~/.grow-pm/` or a vault mirror routes to Reinstall/Migration with a backup first, and Onboarding would overwrite it
+- After the Configurator finishes — return to the original skill and continue its workflow with the resulting context
 
 **If found in `~/.grow-pm/`:**
 - Read it at the start of every skill execution

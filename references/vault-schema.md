@@ -100,7 +100,10 @@ decided_by: string[] (email addresses or names of decision makers)
 alternatives_considered: int (number of alternatives evaluated)
 reversibility: string (easy|medium|hard - how easy to reverse)
 deadline: date (decision deadline, YYYY-MM-DD)
+revisit_by: date (when this decision should be re-examined, YYYY-MM-DD; optional)
 ```
+
+> `revisit_by` is a frontmatter field, not prose: `focus-advisor` surfaces overdue revisits as a tactical signal (`focus-signals.md`), and it can only do that by filtering the field. It lived only in the decision body's "Consequences" section until v2.1.1, so that signal was a permanent false negative. `deadline` is when the decision had to be *made*; `revisit_by` is when it should be *re-examined*.
 
 #### cjm-health-check
 

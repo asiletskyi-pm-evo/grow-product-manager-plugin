@@ -496,7 +496,7 @@ After publishing (or if the user decided not to save), offer the next step based
 > "Would you like to create Jira tasks for this feature? I'll pass the context to the Task Creator skill."
 
 **If the infographic was for product analysis or research:**
-> "Would you like to create a presentation that includes this infographic? I'll pass the context to the Presentation Creator skill."
+> "Would you like a deck that includes this infographic? I'll pass the context to **design-bridge**, which builds brand-themed decks."
 
 **If standalone:**
 > "Would you like to create another diagram, prototype, or infographic? Or continue with a different task?"

@@ -73,11 +73,14 @@ Per `local-context-protocol.md`. Then **Step R** — load/create the registry.
 ### Mode: status
 1. Read registry; if vault_level > L0 — cross-check `Hypotheses/` artifacts with `status: proposed|testing` that are missing from the registry → offer to import.
 2. Render the board: one table per lifecycle state (id, title, flag, platforms, key dates, days in state).
-3. **Stale detection** (always appended):
+3. **Stale detection** (always appended; thresholds overridable via `experiments.stale.*`):
    - `running` past `planned_end` → "⏰ overdue by N days — extend or readout?"
-   - `awaiting-readout` > 3 days → "📊 readout pending N days"
-   - `proposed` with ICE ≥ 8 older than 30 days → "💤 high-ICE hypothesis idle"
+   - `awaiting-readout` **and `verdict == null`** > `readout_pending_days` (default 3) → "📊 readout pending N days"
+   - `awaiting-readout` **and `verdict != null`** > `readout_pending_days` → "🧑‍⚖️ verdict recorded, awaiting your decision for N days"
+   - `proposed` with ICE ≥ `idle_high_ice_min` (default 8) older than `idle_high_ice_days` (default 30) → "💤 high-ICE hypothesis idle"
    - `decided: extend` without a new `planned_end` → "❓ extension not scheduled"
+
+> `awaiting-readout` spans two situations — the readout has not been produced, and the readout exists but the PM has not decided (Mode: decide). The `verdict` field is what separates them; without that qualifier the detector nagged "readout pending" at experiments whose readout was already recorded.
 4. Offer per-item actions (start / readout / decide / archive).
 
 ### Mode: register
@@ -94,7 +97,7 @@ Per `local-context-protocol.md`. Then **Step R** — load/create the registry.
 ### Mode: readout
 1. Pick the running/overdue experiment.
 2. **Chain to `product-analysis` → A/B Test Results mode**, passing: flag/test name, dashboards, start/end dates, platforms, traffic split, spec link. product-analysis runs its own Data Integrity Gate and returns the verdict.
-3. Record `verdict` + `readout_ref`; the experiment stays in `awaiting-readout` until the PM decides (Mode: decide). The linked hypothesis artifact's status is updated by product-analysis' own Vault Save (winner → validated, loser → rejected, inconclusive → inconclusive).
+3. Record `verdict` + `readout_ref`; the experiment stays in `awaiting-readout` until the PM decides (Mode: decide) — with `verdict` now set, stale detection reports it as "awaiting your decision", not "readout pending". The linked hypothesis artifact's status is updated by product-analysis' own Vault Save (winner → validated, loser → rejected, inconclusive → stays `testing`, per `vault-protocol.md` → Hypothesis Lifecycle).
 4. Never compute or adjust the verdict here — the tracker records what product-analysis concluded, including "inconclusive".
 
 ### Mode: decide

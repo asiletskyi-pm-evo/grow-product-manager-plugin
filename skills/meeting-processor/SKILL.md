@@ -134,7 +134,7 @@ If the user agrees — proceed with calendar lookup. If the user declines — sk
 
 | Calendar | How to detect | MCP tools |
 |----------|--------------|-----------|
-| **Google Calendar** | Google Calendar MCP is connected (`gcal_list_events`, `gcal_get_event`) | Use `gcal_list_events` to search by date/title → `gcal_get_event` to read details |
+| **Google Calendar** | A Google Calendar connector is present (its list/get event tools, e.g. `list_events` / `get_event`) | List events by date/title → read the matching event's details |
 | **Microsoft Calendar** | Microsoft Calendar / Outlook MCP is connected | Use the available MCP tools to search and fetch events |
 | **No calendar** | No calendar MCP detected | Offer to search the MCP registry: "No calendar tool is connected. Would you like me to search for available calendar connectors?" |
 

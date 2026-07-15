@@ -237,6 +237,7 @@ Target Metric: [stage conversion rate, expected change direction and magnitude]
 Validation Method: [A/B test / feature flag / user interviews / analytics deep-dive]
 
 ICE Score: Impact [X] × Confidence [X] × Ease [X] = [Score]
+PRO/ROI: [annual % return per `references/roi-frameworks.md` — or "n/a: <why the $ effect is unknowable>"]
 
 Funnel Stage Impact: current [X]% → projected [Y]% (+Z%)
 
@@ -382,7 +383,7 @@ Always propose:
 - Recommend which specific ideas from the final list to take into work first — based on ICE score ranking
 - If no concept exists yet — suggest creating one via **Write Concept / PRD** before moving to requirements
 - If CJM Hypotheses mode was used → also offer: "Run full **CJM Research** to verify these hypotheses, assess risks, and build a prioritized backlog"
-- For the top-ranked hypotheses → offer: "Register these in the **experiment tracker** so they're tracked from proposed → running → decided?" → invoke `experiment-tracker` (register mode), passing per hypothesis: statement, ICE/ROI score, funnel stage, primary metric, and the validation method chosen in Step 6. The tracker takes them to state `proposed`.
+- For the top-ranked hypotheses → offer: "Register these in the **experiment tracker** so they're tracked from proposed → running → decided?" → invoke `experiment-tracker` (register mode), passing per hypothesis: statement, ICE/ROI score, funnel stage, primary metric, and the validation method chosen in Step 3A/3B. The tracker takes them to state `proposed`.
 
 ### Step 8 — Design Bridge handoff (Optional)
 

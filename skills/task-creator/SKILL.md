@@ -63,7 +63,7 @@ If the user says "do not use a template" → skip Step T and use the skill's int
 
 When the user provides a Confluence link:
 
-1. Resolve the page — try `getConfluencePage` or `searchAtlassian` / `searchConfluenceUsingCql` to find it
+1. Resolve the page — try `getConfluencePage`, or `search` / `searchConfluenceUsingCql` to find it
 2. Extract from the page:
    - **Feature name** — from the page title (after the code prefix, e.g. "Feature Name Description" from "PROJ-1234.5 - Feature Name Description")
    - **Feature code** — the code in the page title (e.g. `PROJ-1234.5`). Pattern: `EPICKEY-NUMBER.NUMBER`
@@ -345,7 +345,7 @@ Use `getJiraIssue` to fetch the created task with all fields. This ensures we ve
 | **Team** | Set to the correct team | Compare with the confirmed team value from Step 6b |
 | **Labels** | Contains all required labels: feature code, work type label, `a/b_test` if applicable, `grooming` if applicable | Check labels array against expected values |
 | **Components** | Matches the confirmed components | Compare with the confirmed values from Step 6b |
-| **Description** | Contains "Task" section and "Requirements" section with Confluence link | Parse description content |
+| **Description** | Contains "Why", "What", "How", "Definition of Done" and "Requirements" (with Confluence link) sections — the Step 7 format | Parse description content |
 | **Issue Type** | Correct type (Task/Design/Analytics) | Check issue type field |
 | **Links** | Correct dependency links created (if linking was confirmed) | Check issue links via `getJiraIssue` |
 

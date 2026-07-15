@@ -1,7 +1,7 @@
 ---
 name: design-bridge
 version: 0.4.0
-description: Orchestrate Claude's Design skills (research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline, and route hi-fi screen generation to an external design toolkit declared in local-context (design_toolkits). Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research, cjm-research, meeting-processor) finishes and the next step involves a deck, prototype, or design artifact. Українською — "створити презентацію", "зробити деку", "побудувати прототип", "згенерувати hi-fi екран", "через мій дизайн-тулкіт", "згенерувати handoff", "дизайн-рев'ю", "передати дизайн у розробку". Do NOT use for quick local diagrams, flowcharts, BPMN, Mermaid, or plain wireframes — use diagram-prototyper for those.
+description: Orchestrate Claude's Design skills (research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) and Figma MCP into the Grow PM pipeline, and route hi-fi screen generation to an external design toolkit declared in local-context (design_toolkits). Use when the user asks to "create a deck", "make a presentation", "build a prototype", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review", or when another Grow PM skill (write-concept, requirements-creator, brainstorm-features, product-research) finishes and the next step involves a deck, prototype, or design artifact. Українською — "створити презентацію", "зробити деку", "побудувати прототип", "згенерувати hi-fi екран", "через мій дизайн-тулкіт", "згенерувати handoff", "дизайн-рев'ю", "передати дизайн у розробку". Do NOT use for quick local diagrams, flowcharts, BPMN, Mermaid, or plain wireframes — use diagram-prototyper for those.
 ---
 
 # Design Bridge
@@ -55,12 +55,13 @@ Before gathering data, read `references/data-policy.md`. Figma embeds from compe
 - `product.pptx_theme` — path to your pptx theme yaml
 - `product.base_pptx` — path to your base pptx template
 - `product.brand.primary`, `product.brand.dark`, `product.brand.font_primary`, `product.brand.font_display` — brand token overrides
-- `product.tone_of_voice` — writing style guide
-- `product.design_targets` — WCAG level, touch targets, motion preferences
+- `product.tone_of_voice` — writing style guide (optional; used for slide titles and copy). Absent → neutral, plain product English/Ukrainian per `user.language`.
 - `user.language` — deliverable language (default `en`)
 - `design_toolkits[]` (product- or user-level) — declared external design toolkits for hi-fi delegation (see `references/design-toolkit-protocol.md`)
 
-If `local-context.md` is missing, or no Design System section is configured, redirect to `plugin-configurator`.
+If `local-context.md` is missing → follow `local-context-protocol.md` Step 0b (launch `plugin-configurator`, let its mode selection decide).
+
+If the **Design System** keys are absent, do **not** hard-redirect: there is no configurator step that writes them, so the redirect used to be a dead end. Instead say what is missing, point at the block in `local-context.example.md` → Design System for the user to fill, and continue on the fallbacks in "Failure modes" below — every Design System key is optional by design, and the deliverable degrades rather than blocks.
 
 ## Step T — Template Resolution
 
@@ -303,8 +304,8 @@ Does not create a separate file — returns structured themes to the upstream sk
 
 Required for `intent ∈ {deck, prototype, handoff}`:
 
-- **Contrast** (WCAG AA): all key pairs from `qa_rules.contrast.pairs_to_check` in your theme yaml
-- **Slide count** (deck): within `max_over_preference_ratio`
+- **Contrast** (WCAG AA): all key pairs from `qa_rules.contrast.pairs_to_check` in your theme yaml — **if no theme yaml or no `qa_rules`, check the default pairs**: title/background, body/background, CTA text/CTA fill
+- **Slide count** (deck): within the subtype's `max_length` from `references/deck-subtypes.yaml` — the one length rule. (`qa_rules.max_over_preference_ratio` overrides it when the theme yaml defines it.)
 - **Bullets per slide** (deck): ≤ 5
 - **Title length**: ≤ 72 chars
 - **Brand usage**: at least 2 slides using `product.brand.primary`
@@ -388,6 +389,8 @@ vault_save({
 | `product.base_pptx` unset or missing | blank `Presentation()` + explicit shape positioning from theme yaml rect coords |
 | Template not found | fall back to `presentation-builtin-{subtype}`; if that's missing too — ad-hoc outline |
 | DS yaml won't parse | fall back to brand tokens in `product.brand.*`; if those are missing — neutral defaults (dark text on white) |
+| `product.pptx_theme` unset / theme yaml missing / no `qa_rules` | Step 6 QA still runs on defaults: WCAG AA on title/body/CTA pairs, slide max = the subtype's `max_length` from `deck-subtypes.yaml`. The gate never silently no-ops for want of config — it is the only blocking gate on the deck path |
+| No Design System keys at all (fresh install) | proceed on neutral defaults; name the missing keys once in the outline footer, do not block or redirect |
 | Figma MCP 403 / seat=View | skip hi-fi; embed only screenshots (if `get_screenshot` works); on fail — placeholder |
 | `design:*` plugin missing | propose install; fall back to native rewrite (ux-copy), manual critique outline |
 | pptx skill unavailable | fall back to outline.md + outline.html |

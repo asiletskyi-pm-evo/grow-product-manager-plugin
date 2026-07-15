@@ -1,7 +1,7 @@
 ---
 name: product-research
 version: 0.10.1
-description: Conduct comprehensive product research — competitive analysis, user research, market research, or UX benchmark research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks", "search knowledge library", or needs SWOT, TAM SAM SOM, or PESTEL analysis. Українською — "дослідити конкурентів", "проаналізувати ринок", "конкурентний аналіз", "синтез інтервʼю з користувачами", "знайти ринкові тренди", "порівняти з галузевими бенчмарками", "пошук у бібліотеці знань".
+description: Conduct comprehensive product research — competitive analysis, user research, market research, or UX benchmark research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks", or needs SWOT, TAM SAM SOM, or PESTEL analysis. Do NOT use for a plain lookup in the knowledge library — use knowledge-library (this skill calls it for enrichment during research). Українською — "дослідити конкурентів", "проаналізувати ринок", "конкурентний аналіз", "синтез інтервʼю з користувачами", "знайти ринкові тренди", "порівняти з галузевими бенчмарками".
 ---
 
 # Product Research
@@ -267,7 +267,8 @@ This delegation ensures accurate computation (via pandas/numpy) and consistent a
 1. Open ChatGPT via browser (`navigate` to `https://chatgpt.com`)
 2. Select the strongest model available in the user's interface (e.g., GPT-4o, o3)
 3. Activate **Deep Research** mode if available in the interface
-4. Compose a detailed research prompt based on the agreed scope from Step 1 — include specific questions, competitors, market segments, and what data points are needed
+4. Compose a detailed research prompt based on the agreed scope from Step 1 — include specific questions, competitors, market segments, and what data points are needed.
+   **`data-policy.md` applies here:** the prompt goes to a third-party LLM, so it carries **public information only**. Step 1's scope may include internal documents, metrics and hypotheses — generalize them ("a marketplace of our size" rather than the figure) or leave them out. Never paste Tableau numbers, internal URLs, or unreleased plans.
 5. Submit the prompt and wait for the full response
 6. Read and extract the findings using `read_page` / `get_page_text`
 7. Use the extracted data as additional context — cross-reference with other sources, note any contradictions or unique insights
@@ -277,7 +278,7 @@ This delegation ensures accurate computation (via pandas/numpy) and consistent a
 1. Open Gemini via browser (`navigate` to `https://gemini.google.com`)
 2. Select the strongest model available in the user's interface (e.g., Gemini 2.5 Pro)
 3. Activate **Deep Research** mode if available in the interface
-4. Compose a detailed research prompt — can be the same as for ChatGPT, or adjusted based on ChatGPT's results if it was run first (to fill gaps or verify claims)
+4. Compose a detailed research prompt — can be the same as for ChatGPT, or adjusted based on ChatGPT's results if it was run first (to fill gaps or verify claims). **Same `data-policy.md` rule: public information only** — generalize anything internal from Step 1.
 5. Submit the prompt and wait for the full response
 6. Read and extract the findings using `read_page` / `get_page_text`
 7. Use the extracted data as additional context — cross-reference with ChatGPT results (if both are used) and other sources

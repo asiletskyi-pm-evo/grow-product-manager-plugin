@@ -1,7 +1,7 @@
 ---
 name: write-concept
 version: 0.9.1
-description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document. Українською — "написати концепт", "створити PRD", "описати фічу", "написати специфікацію", "оформити ідею в документ".
+description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document. Do NOT use for a full requirements/spec document with numbered functional requirements — use requirements-creator (a concept is the input to it). Українською — "написати концепт", "створити PRD", "описати фічу", "написати специфікацію", "оформити ідею в документ".
 ---
 
 # Write Concept (PRD)
@@ -257,15 +257,22 @@ After sharing the concept summary, **always** propose transitioning to the next 
 
 > "Concept is ready. What's next? I can pass the context and transition to one of the following steps:
 > 1. **Brainstorm Features and Hypotheses** — generate hypotheses and feature ideas based on this concept, evaluate them with ICE scoring and suggest validation methods
-> 2. **Feature and Hypothesis Requirements Creator** — immediately create Jira tasks for feature implementation based on this concept"
+> 2. **Requirements Creator** — turn the concept into a numbered requirements document (the normal next step before development)
+> 3. **Task Creator** — go straight to Jira tasks, skipping the requirements document"
 
 If the user chooses **Brainstorm Features and Hypotheses**:
 - Pass the full concept context: Confluence page link, problem statement, goals, proposed solution, user stories, success metrics
-- The Brainstorm skill will use this concept as the starting point (Situation 1 of its workflow — concept/PRD exists)
+- The Brainstorm skill will use this concept as the starting point (Situation B of its workflow — concept/PRD exists)
 
-If the user chooses **Feature and Hypothesis Requirements Creator**:
+If the user chooses **Requirements Creator**:
 - Pass the full concept context: Confluence page link, scope, phasing, technical considerations
-- The Task Creator skill will use this concept as the requirements source
+- `requirements-creator` uses the concept as its source and produces the numbered feature spec (its Step 3d), which `task-creator` then consumes
+
+If the user chooses **Task Creator**:
+- Pass the same context, and say plainly what is being skipped: a PRD carries no feature numbering (that is created in `requirements-creator` Step 3d), so tasks will be derived directly from the concept's scope and phasing
+- Prefer option 2 when the work will be estimated or split across platforms
+
+> Option 2 used to be labelled "Requirements Creator", described as "immediately create Jira tasks", and executed as `task-creator` — three different promises in one option, which quietly skipped the documented concept → requirements → tasks chain.
 
 If the user declines — end the workflow gracefully.
 
