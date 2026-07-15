@@ -77,7 +77,7 @@ Mirror push rejected non-fast-forward → mirror diverged: never force into a pr
 ### Step 8 — Post-release
 1. **Verify:** fetch `releases/latest` on the canonical host → must show `vX.Y.Z`. Raw-file CDN may lag a few minutes — don't panic on stale `raw.githubusercontent.com` (pitfall P7).
 2. Confluence: if `confluence_changelog_page_id` is set — append the release entry via Atlassian MCP (gate before writing).
-3. **Step V — Vault Save:** per `vault-protocol.md`, save a release record (version, date, scope, links to Release and CHANGELOG) to the vault `Decisions/Releases` area with `skill_version` frontmatter.
+3. **Step V — Vault Save:** per `vault-protocol.md`, `vault_save({ type: "decision", product: "general", skill: "release-manager", tags: ["release"], … })` → `Decisions/general/decision-release-vX-Y-Z-<date>.md` (version, date, scope, links to Release and CHANGELOG). There is no `Decisions/Releases/` area — the release record IS a decision, tagged `release`.
 4. Remind the user to update their installed plugin from the marketplace.
 
 ## Quality Standards

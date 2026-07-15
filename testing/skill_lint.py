@@ -27,6 +27,8 @@ CHECKS = """
 11. vault-types          every vault_save type is in the taxonomy AND TYPE_FOLDER_MAP
 12. artifact-types       every Step T artifact_type is in the template-protocol enum
 13. chain-contracts      a claimed inbound edge (<- X) exists on X's side too
+14. vault-paths          every example vault path matches TYPE_FOLDER_MAP's layout
+15. builtin-subtypes     a declared subtype resolves to a built-in filename
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -527,6 +529,39 @@ if os.path.isfile(schema_p):
             if t not in folder_map:
                 line = text[:pos].count("\n") + 1
                 fail("vault-types", f"{folder}:{line}: saves type '{t}', which is not in TYPE_FOLDER_MAP")
+
+    # -------------------------------------------------------- 14. vault paths
+    # The schema states one path rule, then its own MOC templates and the
+    # protocol's examples contradicted it: product ABOVE the area subfolder
+    # ([[CJM/mobile-app/health-checks/…]] when the map says CJM/health-checks/),
+    # links with no key level at all, and an [[Hypotheses/archive/…]] folder the
+    # schema forbids. Those examples are what the model imitates at save time, so
+    # a wrong example writes wrong artifacts. Check them against the map.
+    AREAS = sorted({v.strip("/") for v in folder_map.values()}, key=len, reverse=True)
+    MULTI = [a for a in AREAS if "/" in a]          # e.g. CJM/health-checks
+    TOP_OF_MULTI = {a.split("/")[0] for a in MULTI} # e.g. CJM
+    SUBS_OF = {}
+    for a in MULTI:
+        SUBS_OF.setdefault(a.split("/")[0], set()).add(a.split("/", 1)[1])
+    WIKILINK_RE = re.compile(r"\[\[([A-Z][\w-]*(?:/[^\]\|]+)+?)(?:\|[^\]]*)?\]\]")
+    for vf in (schema_p, os.path.join(root, "references", "vault-protocol.md"),
+               os.path.join(root, "references", "people-context-protocol.md")):
+        if not os.path.isfile(vf): continue
+        rel_name = os.path.relpath(vf, root)
+        for i, line in enumerate(open(vf, encoding="utf-8").read().split("\n"), 1):
+            for link in WIKILINK_RE.findall(line):
+                parts = link.split("/")
+                top = parts[0]
+                if top not in {a.split("/")[0] for a in AREAS}: continue
+                if top in TOP_OF_MULTI and len(parts) >= 3:
+                    # legal: {top}/{sub}/{key}/{file}; illegal: {top}/{key}/{sub}/{file}
+                    if parts[1] not in SUBS_OF[top] and parts[2] in SUBS_OF[top]:
+                        fail("vault-paths", f"{rel_name}:{i}: '[[{link}]]' puts the key above "
+                                            f"'{parts[2]}' — the map says {top}/{parts[2]}/<key>/<file>")
+                        continue
+                if "archive" in parts[1:2]:
+                    fail("vault-paths", f"{rel_name}:{i}: '[[{link}]]' uses an archive/ folder — "
+                                        f"lifecycle status lives in frontmatter, not in a folder")
 
 # ------------------------------------------------------- 12. artifact types
 # Step T declares an artifact_type; template-protocol.md enumerates the legal set.

@@ -283,13 +283,13 @@ IF vault_level > L0 AND vault sync_mode != "off":
    
    Follow `references/vault-protocol.md` → "Hypothesis Lifecycle Updates":
    - Read the linked hypothesis from Vault
-   - Update `hypothesis_status`: winner → `validated`, loser → `rejected`, inconclusive → `inconclusive`
+   - Update `hypothesis_status`: winner → `validated`, loser → `rejected`, inconclusive → stays `testing` (not a status value — the test did not decide the hypothesis)
    - Set `test_result` and `validated_by` fields
    - If rejected: set `confidence` to 0.2
    - Update `last_reviewed` to today
    - Log: "Updated hypothesis status to {status} based on A/B test results"
 
-4. Display: "Saved to Vault: Analysis/{product}/..."
+4. Display: "Saved to Vault: {TYPE_FOLDER_MAP[type]}/{product}/…" (e.g. Analysis/metrics/{product}/…)
 
 ### Step 7 — Skill chaining
 

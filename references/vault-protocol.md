@@ -300,13 +300,17 @@ vault_save(artifact, product, options):
    type_folder = TYPE_FOLDER_MAP[artifact.type]
    product_slug = slugify(product)
    filename = "{artifact_type}-{topic_slug}-{YYYY-MM-DD}.md"
-     Examples:
-       - competitive-checkout-flow-2026-04-14.md
+     Examples (the type prefix is the artifact_type verbatim — not an abbreviation):
+       - competitive-analysis-checkout-flow-2026-04-14.md
        - cjm-health-check-2026-04-14.md
        - hypothesis-ai-personalization-2026-04-14.md
-   
-   file_path = {target_vault.path}/{type_folder}/{product_slug}/{filename}
-     (layout per vault-schema.md — the map gives the area path, product is the
+
+   key_slug = slugify(product)                    # product artifacts
+     IF type_folder.startswith("People/"): key_slug = slugify(person_name)
+     (People areas key by person — vault-schema.md → Path composition)
+
+   file_path = {target_vault.path}/{type_folder}/{key_slug}/{filename}
+     (layout per vault-schema.md — the map gives the area path, the key is the
       last level. There is no `artifacts/` level.)
      IF artifact.type == "people": file_path = {target_vault.path}/People/{slugify(name)}.md
      (profiles are addressed by person, not by date — see people-context-protocol.md)
@@ -314,19 +318,22 @@ vault_save(artifact, product, options):
 4. Create directory structure:
    mkdir -p {file_path_parent_dir}
 
-5. Build frontmatter (see vault-schema.md for schema):
+5. Build frontmatter — field names come from vault-schema.md, which is the schema
+   this function serves; do not invent near-synonyms here:
    frontmatter = {
      type: artifact.type,
      product: product,
+     created: today ISO8601,
+     skill: calling_skill_name,          # REQUIRED — omitted until v2.1.1
+     skill_version: calling_skill_version,# REQUIRED — omitted until v2.1.1
      title: artifact.title,
      tags: artifact.tags,
-     status: "active",
-     created: today ISO8601,
-     last_updated: today ISO8601,
+     status: "active",                   # lifecycle only: active|archived|superseded|draft
+     last_reviewed: today ISO8601,       # NOT `last_updated` — no such field exists
      related: [],
-     linked_hypothesis: null (if applicable),
-     test_result: null (if applicable),
-     ...
+     ...type-specific fields per vault-schema.md → Type-specific frontmatter
+        (e.g. hypothesis: hypothesis_status, ice_*; ab-test-results:
+         tested_hypothesis, result — NOT `linked_hypothesis`/`winner_id`)
    }
 
 6. Build content:
@@ -385,9 +392,14 @@ Called once by Plugin Configurator when Vault is first connected.
 ```
 vault_init(vault_path, plugin_folder_name):
 
+   ROOT = {vault_path}/{plugin_folder_name}     # every path below is relative to ROOT
+   (The plugin never writes to the vault root itself — the user's vault is theirs.
+    `vault_structure_check` and the Context Mirror resolve the same ROOT; until
+    v2.1.1 this function ignored plugin_folder_name and wrote one level too high.)
+
 1. Create the folder structure — derive it, do not restate it:
    FOR each distinct folder in TYPE_FOLDER_MAP (vault-schema.md):
-     mkdir -p {vault_path}/{folder}
+     mkdir -p {ROOT}/{folder}
    (Deriving from the map is what keeps init from drifting behind the taxonomy:
     the previous hardcoded list had fallen 7 types behind.)
 
@@ -395,38 +407,43 @@ vault_init(vault_path, plugin_folder_name):
    - _MOC/            (Dashboard, Products/, Timeline, Tags)
    - _System/         (local-context mirror — see Context Mirror below)
    - Templates/       (template-library storage — see template-protocol.md)
-   - archive/
+   (No top-level archive/: lifecycle status lives in frontmatter and is filtered
+    by search, never by folder — vault-schema.md → Folder Structure. The only
+    archive folder in the vault is Templates/_archive/, created in step 3.)
 
-2. Create product subfolders:
-   FOR each product in local-context.products:
-     product_slug = slugify(product)
-     FOR each distinct folder in TYPE_FOLDER_MAP:
-       mkdir -p {vault_path}/{folder}/{product_slug}/
-   (People/ profiles are per-person, not per-product — no product level there.)
+2. Create the key subfolder per area — the key is the product, except in People/:
+   FOR each distinct folder in TYPE_FOLDER_MAP where NOT folder.startswith("People/"):
+     FOR each product in local-context.products:
+       mkdir -p {ROOT}/{folder}/{slugify(product)}/
+   (People/ areas key by person, not product — vault-schema.md → Path composition.
+    Person subfolders are created on first write by vault_save, not at init: the
+    roster is not known here, and an empty folder per person is noise in Obsidian.)
 
 3. Initialize Templates/ per `template-protocol.md` → storage layout
    (_registry.json + _partials/ + _System/ + _archive/ + user-global/).
    Do NOT write the pre-v2.0 flat template files here — template-library owns them.
 
 4. Create initial Dashboard MOC:
-   Write: {vault_path}/_MOC/Dashboard.md
+   Write: {ROOT}/_MOC/Dashboard.md
      - Section: Recent Activity (empty table)
      - Section: Product Stats (table with product names)
-     - Section: Quick Links (to Templates, Archive, Timeline)
+     - Section: Quick Links (to Templates, Timeline, Tags)
 
-5. Copy local-context as reference:
-   Copy local-context.md → {vault_path}/REFERENCE-local-context.md
+5. Mirror local-context into the vault:
+   Copy local-context.md → {ROOT}/_System/local-context.md
    Mark as read-only
+   (One mirror location, shared with "Context Mirror to Vault" below and asserted
+    by the setup guide's smoke test S-8.2. It must not be written anywhere else.)
 
 6. Migrate existing knowledge-library:
    IF knowledge-library/ folder exists in vault:
      FOR each .md file:
-       - Move to Knowledge/sources/{product}/
+       - Move to {ROOT}/Knowledge/sources/{product_slug}/
        - Update frontmatter with type: knowledge-source
        - Add to MOC Dashboard
 
 7. Create schema version file:
-   Write: {vault_path}/.vault-schema-version
+   Write: {ROOT}/.vault-schema-version
    Content: {current_version} (e.g., "1.0")
 
 8. Return success
@@ -560,7 +577,7 @@ FOR each target_path in target_artifact_paths:
   4. Add source_path to related[] in frontmatter
   5. Rewrite target file with updated frontmatter
   6. Store relative wikilink path (from plugin folder)
-     Format: [[CJM/MyApp/health-checks/2026-04-14]]
+     Format: [[CJM/health-checks/my-app/cjm-health-check-2026-04-14]]
      (no .md extension, relative from vault plugin folder root)
 ```
 
@@ -569,8 +586,8 @@ FOR each target_path in target_artifact_paths:
 - **Format**: `[[relative_path_from_plugin_root]]`
 - **No file extension**: `.md` is omitted
 - **Example paths**:
-  - `[[competitive-analysis/MyApp/competitive-checkout-flow-2026-04-14]]`
-  - `[[hypothesis/MyApp/ai-personalization-2026-04-14]]`
+  - `[[Research/my-app/competitive-analysis-checkout-flow-2026-04-14]]`
+  - `[[Hypotheses/my-app/hypothesis-ai-personalization-2026-04-14]]`
   - `[[_MOC/Products/MyApp]]`
 
 ---
@@ -582,25 +599,38 @@ Special handling for hypothesis artifacts when linked test results are saved.
 ### Algorithm
 
 ```
-update_hypothesis_lifecycle(hypothesis_artifact_path, test_result_artifact):
+update_hypothesis_lifecycle(hypothesis_artifact_path, ab_test_artifact):
+
+   Field names are the ab-test-results and hypothesis schemas in vault-schema.md.
+   (Until v2.1.1 this algorithm read `winner_id`/`loser_id`/`hypothesis.id` — none
+    of which exist in any schema — and wrote a status outside the enum, so it
+    could not have run as written.)
 
 1. Read hypothesis file
 2. Parse frontmatter
-3. Read test_result frontmatter:
-   - Get test_result.winner_id or test_result.loser_id
-   - If test_result.winner_id == hypothesis.id:
-       hypothesis.hypothesis_status = "validated"
-       hypothesis.confidence = 0.95
-   - Else if test_result.loser_id == hypothesis.id:
-       hypothesis.hypothesis_status = "rejected"
-       hypothesis.confidence = 0.2
-   - Else:
-       hypothesis.hypothesis_status = "inconclusive"
+3. Read the A/B test's frontmatter:
+   - The link is `ab_test.tested_hypothesis` — a wikilink to the hypothesis file.
+     Confirm it resolves to hypothesis_artifact_path; if not, abort (wrong pair).
+   - Branch on `ab_test.result` (enum: winner | loser | inconclusive):
+       "winner"       → hypothesis.hypothesis_status = "validated"
+                        hypothesis.confidence = 0.95
+       "loser"        → hypothesis.hypothesis_status = "rejected"
+                        hypothesis.confidence = 0.2
+       "inconclusive" → hypothesis.hypothesis_status stays "testing"
+                        hypothesis.confidence = 0.5
+                        (there is no "inconclusive" hypothesis_status: the enum is
+                         proposed|testing|validated|rejected. An inconclusive test
+                         did not decide the hypothesis — it leaves it under test,
+                         which is also what keeps it visible to experiment-tracker.)
 
 4. Update hypothesis frontmatter:
-   - hypothesis_status: updated (see above)
-   - test_result: {test_result_artifact_path}
-   - validated_by: {test_result artifact}
+   - hypothesis_status: per the branch above
+   - test_result: "{one-line outcome} — see [[{ab_test_artifact_path}]]"
+                  (schema: a description of the outcome, not a path)
+   - validated_by: {person who ran/approved the readout}
+                  (schema: email or name of a person — the artifact link belongs
+                   in test_result / related, not here)
+   - related: += "[[{ab_test_artifact_path}]]"
    - last_reviewed: {today ISO8601}
 
 5. Write hypothesis file back
@@ -662,22 +692,26 @@ vault_structure_check(vault_path, plugin_folder):
      → fallback to L0
      → return
 
-2. Check plugin folder:
-   IF NOT exists({vault_path}/{plugin_folder}):
+2. Check plugin folder — this is ROOT for every path below (same as vault_init):
+   ROOT = {vault_path}/{plugin_folder}
+   IF NOT exists(ROOT):
      → create directory
 
 3. For each expected artifact type folder:
-   IF NOT exists({vault_path}/{TYPE_FOLDER_MAP[type]}):
+   IF NOT exists({ROOT}/{TYPE_FOLDER_MAP[type]}):
      → create directory silently
 
 4. For each product in local-context:
-   FOR each artifact type:
-     IF NOT exists({vault_path}/{TYPE_FOLDER_MAP[type]}/{product_slug}):
+   FOR each artifact type folder NOT under People/:
+     IF NOT exists({ROOT}/{TYPE_FOLDER_MAP[type]}/{product_slug}):
        → create directory silently
+   (People/ keys by person and its subfolders appear on first write — vault_init step 2)
 
-5. Check dashboard folder:
-   IF NOT exists({vault_path}/dashboard):
+5. Check the MOC folder:
+   IF NOT exists({ROOT}/_MOC):
      → create directory
+   (The Dashboard is the file {ROOT}/_MOC/Dashboard.md — there is no `dashboard/`
+    folder in the schema; this check used to create one.)
 
 6. Do NOT delete unexpected files/folders:
    → User may have created custom structure

@@ -105,7 +105,7 @@ If mode is `health-check` or `full`:
 **1e. Detect vault level (for all modes):**
 
 Follow `references/vault-protocol.md` — Step 0.5:
-- Detect vault_level from `local-context.md` (L0, L1, L2, L3)
+- Detect vault_level per `vault-protocol.md` → "Vault Level Detection" (L0, L1, L2)
 - If vault_level > L0 → note that vault context search will be available in Step 1.5
 - If vault_level = L0 or vault sync_mode = "off" → vault steps will be skipped
 
@@ -333,7 +333,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
    - Update previous health check's `status` to `superseded`
    - Set `superseded_by` to link to new health check
 
-4. Display: "Saved to Vault: CJM/{product}/..."
+4. Display: "Saved to Vault: {TYPE_FOLDER_MAP[type]}/{product}/…" (e.g. CJM/health-checks/{product}/…)
 
 ---
 

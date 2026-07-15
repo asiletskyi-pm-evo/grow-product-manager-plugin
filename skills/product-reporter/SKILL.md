@@ -155,7 +155,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
 
 1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.5.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
-   - `goal-report` → `type: "report-3t5f"` → `People/reports/{product}/` → "Saved to Vault: People/reports/{product}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
+   - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
 
 ## Quality standards
 

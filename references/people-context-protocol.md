@@ -45,20 +45,20 @@ delegation:
   - { zone: "A/B readouts",      level: 6, target: 7 }
   - { zone: "funnel dashboards", level: 4, target: 6 }
 # Goals
-active_goal_letter: "[[People/goals/firstname-lastname-2026H1]]"   # link to SMARTCBP goal letter
+active_goal_letter: "[[People/goals/firstname-lastname/goal-letter-2026H1]]"   # link to SMARTCBP goal letter
 goal_methodology: SMARTCBP      # SMARTCBP | OKR
 # Reporting (reporting-3t5f.md)
 reporting:
   cadence: weekly               # weekly | biweekly | monthly
   last_report: 2026-07-11
-  last_report_ref: "[[People/reports/firstname-lastname-2026-07-11]]"
+  last_report_ref: "[[People/reports/firstname-lastname/report-3t5f-2026-07-11]]"
   forecast_qa: 92               # last Forecast Quota Attainment, %
 # 1-1 cadence and history
 one_on_one:
   cadence: biweekly
   last: 2026-07-07
   history:
-    - { date: 2026-07-07, followup_ref: "[[People/1-1/firstname-lastname-2026-07-07]]" }
+    - { date: 2026-07-07, followup_ref: "[[People/1-1/firstname-lastname/one-on-one-notes-2026-07-07]]" }
 # GTD-index trend (people-frameworks.md → GTD-index)
 gtd_index:
   - { period: "Sprint 41", value: 0.72 }

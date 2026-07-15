@@ -417,7 +417,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 IF vault_level > L0 AND vault sync_mode != "off":
 
 1. For **each finalized hypothesis** (Step 5), save a separate artifact:
-   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.9.2", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, status: "proposed" } })`
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.9.2", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
 2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
 
 ## Quality standards

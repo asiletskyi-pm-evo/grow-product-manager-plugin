@@ -262,11 +262,20 @@ target_date: date (project completion target, YYYY-MM-DD)
 
 ## Type Taxonomy
 
-The Grow Product Manager Plugin defines 32 artifact types, each with a specific purpose, source skill, and folder location.
+The Grow Product Manager Plugin defines 33 artifact types, each with a specific purpose, source skill, and folder location.
 
 > **This table is the single source of truth for vault layout.** `vault-protocol.md` (save/init) and `obsidian-setup-guide.md` (setup smoke tests) conform to it, not the other way round. A type that is not listed here cannot be saved — `vault_save` resolves its folder from TYPE_FOLDER_MAP below, so an unlisted type has no destination. When a skill starts producing a new artifact type, add the row **and** the map entry in the same change; `testing/skill_lint.py` → `vault-types` enforces this.
 
-**Path composition (one rule, no exceptions):** `{vault}/{TYPE_FOLDER_MAP[type]}/{product_slug}/{filename}` — the map gives the area path, the product is always the last folder level.
+**Path composition (one rule):** `{vault}/{TYPE_FOLDER_MAP[type]}/{key_slug}/{filename}` — the map gives the area path, and the **key** is always the last folder level.
+
+The key is whichever entity you retrieve the artifact *by*:
+
+| Contour | Key | Example |
+|---------|-----|---------|
+| Product artifacts (Research, CJM, Concepts, Requirements, …) | `{product_slug}` | `Research/mobile-app/competitive-analysis-checkout-2026-04-14.md` |
+| **People artifacts** (goals, reports, 1-1, reviews, …) | `{person_slug}` | `People/goals/firstname-lastname/goal-letter-2026H1.md` |
+
+People artifacts key by person because that is the access pattern the contour is built on: Step P loads everything known about **a person**, and a person is not scoped to a product — one analyst has one goal letter per period, not one per product. Product-keying them would scatter a single person's history across every product folder and make Step P a cross-folder search. The person profile itself stays `People/<slug>.md` (addressed by name, not by date), with the roster index at `People/_roster.md`.
 
 | Type | Skill Source | Folder | Description |
 |------|--------------|--------|-------------|
@@ -360,7 +369,7 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
 }
 ```
 
-> The `people` profile itself is the one artifact addressed by name rather than by date: `People/<slug>.md` (plus the roster index `People/_roster.md`), because Step P looks it up per person. Every other People type follows the standard `{folder}/{product_slug}/{filename}` composition.
+> The `people` profile itself is the one artifact addressed by name rather than by date: `People/<slug>.md` (plus the roster index `People/_roster.md`), because Step P looks it up per person. Every other People type follows `{folder}/{person_slug}/{filename}` — see "Path composition" above for why the People key is the person, not the product.
 
 ---
 
@@ -501,7 +510,8 @@ Complete folder structure for `{Vault}/{PluginFolder}/`:
 │
 ├── Knowledge/                         # Knowledge library and sources
 │   ├── sources/
-│   │   └── knowledge-source-*.md
+│   │   └── {product}/
+│   │       └── knowledge-source-*.md
 │   ├── library.md
 │   │   (Index of all knowledge sources — created by knowledge-library)
 │   └── categories.md
@@ -550,23 +560,23 @@ Complete folder structure for `{Vault}/{PluginFolder}/`:
 ├── People/                            # HIGHEST-SENSITIVITY — local/vault only, never published
 │   ├── _roster.md                     (one line per person → [[People/<slug>]])
 │   ├── <slug>.md                      (person profile — type: people, Step P)
-│   ├── goals/
-│   │   └── {product}/
+│   ├── goals/                         # keyed by PERSON, not product — see Path composition
+│   │   └── {person}/
 │   │       └── goal-letter-*.md
 │   ├── reports/
-│   │   └── {product}/
+│   │   └── {person}/
 │   │       └── report-3t5f-*.md
 │   ├── 1-1/
-│   │   └── {product}/
+│   │   └── {person}/
 │   │       └── one-on-one-notes-*.md
 │   ├── reviews/
-│   │   └── {product}/
+│   │   └── {person}/
 │   │       └── performance-review-*.md
 │   ├── offboarding/
-│   │   └── {product}/
+│   │   └── {person}/
 │   │       └── offboarding-plan-*.md
 │   └── delegation/
-│       └── {product}/
+│       └── {person}/
 │           └── delegation-audit-*.md
 │
 └── Templates/                         # template-library storage (see template-protocol.md)
@@ -674,7 +684,7 @@ skill_version: 1.2.3
 tags: [funnel/checkout, platform/mobile, impact/high]
 category: conversion-optimization
 platform: [ios, android]
-related: ["[[Analysis/metrics/metrics-review-q1-2026-2026-04-14.md]]"]
+related: ["[[Analysis/metrics/mobile-app/metrics-review-q1-2026-2026-04-14.md]]"]
 parent: "[[Projects/mobile-checkout-modernization/project-overview.md]]"
 children: []
 status: active
@@ -1403,14 +1413,14 @@ Cross-product research and strategy
 Latest research across competitive, market, and UX dimensions.
 
 ### Competitive Analysis
-- [[Research/competitive-analysis-stripe-checkout-2026-04-14]]
-- [[Research/competitive-analysis-square-checkout-2026-04-10]]
+- [[Research/mobile-app/competitive-analysis-stripe-checkout-2026-04-14]]
+- [[Research/mobile-app/competitive-analysis-square-checkout-2026-04-10]]
 
 ### Market Research
-- [[Research/market-research-bnpl-market-2026-04-12]]
+- [[Research/mobile-app/market-research-bnpl-market-2026-04-12]]
 
 ### UX Benchmarks
-- [[Research/ux-benchmark-mobile-checkout-2026-04-08]]
+- [[Research/mobile-app/ux-benchmark-mobile-checkout-2026-04-08]]
 
 ---
 
@@ -1429,13 +1439,13 @@ Product concepts and strategic initiatives.
 Metrics, tests, and post-release analysis.
 
 ### Recent Metrics Reviews
-- [[Analysis/mobile-app/metrics/metrics-review-march-2026-2026-04-14]]
+- [[Analysis/metrics/mobile-app/metrics-review-march-2026-2026-04-14]]
 
 ### A/B Test Results
-- [[Analysis/web/ab-tests/ab-test-results-checkout-mobile-2026-04-08]]
+- [[Analysis/ab-tests/web/ab-test-results-checkout-mobile-2026-04-08]]
 
 ### Post-Release Analysis
-- [[Analysis/web/post-release/post-release-guest-checkout-2026-04-10]]
+- [[Analysis/post-release/web/post-release-guest-checkout-2026-04-10]]
 
 ---
 
@@ -1444,11 +1454,11 @@ Metrics, tests, and post-release analysis.
 Customer Journey Map health and anomaly tracking.
 
 ### Latest Health Checks
-- [[CJM/mobile-app/health-checks/cjm-health-check-q1-2026-summary-2026-04-14]]
-- [[CJM/web/health-checks/cjm-health-check-q1-2026-summary-2026-04-12]]
+- [[CJM/health-checks/mobile-app/cjm-health-check-q1-2026-summary-2026-04-14]]
+- [[CJM/health-checks/web/cjm-health-check-q1-2026-summary-2026-04-12]]
 
 ### Critical Anomalies
-- [[CJM/mobile-app/anomalies/funnel-anomaly-checkout-mobile-drop-2026-04-14]]
+- [[CJM/anomalies/mobile-app/funnel-anomaly-checkout-mobile-drop-2026-04-14]]
 
 ---
 
@@ -1457,8 +1467,8 @@ Customer Journey Map health and anomaly tracking.
 Key product and technical decisions.
 
 ### Recent Decisions
-- [[Decisions/decision-postgres-vs-mongodb-2026-04-10]]
-- [[Decisions/decision-feature-flag-strategy-2026-04-08]]
+- [[Decisions/mobile-app/decision-postgres-vs-mongodb-2026-04-10]]
+- [[Decisions/mobile-app/decision-feature-flag-strategy-2026-04-08]]
 
 ---
 
@@ -1467,8 +1477,8 @@ Key product and technical decisions.
 Recent meeting notes and summaries.
 
 ### Latest Meetings
-- [[Meetings/meeting-notes-sprint-planning-2026-04-14]]
-- [[Meetings/meeting-notes-stakeholder-update-2026-04-12]]
+- [[Meetings/mobile-app/meeting-notes-sprint-planning-2026-04-14]]
+- [[Meetings/mobile-app/meeting-notes-stakeholder-update-2026-04-12]]
 
 ---
 
@@ -1508,7 +1518,7 @@ Feature ideas and hypotheses organized by funnel stage. See full prioritized bac
 - [[Hypotheses/mobile-app/hypothesis-one-click-checkout-2026-04-10]] (ICE: 65)
 
 ### Archive
-- [[Hypotheses/archive/hypothesis-saved-payment-methods-2026-03-15]]
+- [[Hypotheses/mobile-app/hypothesis-saved-payment-methods-2026-03-15]] (status: archived)
 
 ---
 
@@ -1533,8 +1543,8 @@ Browse all artifacts by tag.
 
 Latest artifacts created or modified:
 - 2026-04-14 — [[Hypotheses/mobile-app/hypothesis-guest-checkout-2026-04-14]]
-- 2026-04-14 — [[Analysis/mobile-app/metrics/metrics-review-march-2026-2026-04-14]]
-- 2026-04-12 — [[CJM/web/health-checks/cjm-health-check-q1-2026-summary-2026-04-12]]
+- 2026-04-14 — [[Analysis/metrics/mobile-app/metrics-review-march-2026-2026-04-14]]
+- 2026-04-12 — [[CJM/health-checks/web/cjm-health-check-q1-2026-summary-2026-04-12]]
 
 ```
 
@@ -1595,13 +1605,13 @@ Product concepts and PRDs:
 CJM analysis and health:
 
 ### Full CJM Analysis
-- [[CJM/{ProductName}/full-reports/cjm-analysis-...]]
+- [[CJM/full-reports/{ProductName}/cjm-analysis-...]]
 
 ### Funnel Health Checks
-- [[CJM/{ProductName}/health-checks/cjm-health-check-...]]
+- [[CJM/health-checks/{ProductName}/cjm-health-check-...]]
 
 ### Detected Anomalies
-- [[CJM/{ProductName}/anomalies/funnel-anomaly-...]]
+- [[CJM/anomalies/{ProductName}/funnel-anomaly-...]]
 
 ---
 
@@ -1618,13 +1628,13 @@ Feature specifications ready for development:
 Metrics, tests, and post-launch analysis:
 
 ### Metrics Reviews
-- [[Analysis/{ProductName}/metrics/metrics-review-...]]
+- [[Analysis/metrics/{ProductName}/metrics-review-...]]
 
 ### A/B Test Results
-- [[Analysis/{ProductName}/ab-tests/ab-test-results-...]]
+- [[Analysis/ab-tests/{ProductName}/ab-test-results-...]]
 
 ### Post-Release Analysis
-- [[Analysis/{ProductName}/post-release/post-release-...]]
+- [[Analysis/post-release/{ProductName}/post-release-...]]
 
 ---
 
@@ -1640,7 +1650,7 @@ Feature hypotheses organized by priority:
 
 ### Backlog & Archive
 - [[Hypotheses/{ProductName}/hypothesis-... (draft status)]]
-- [[Hypotheses/archive/hypothesis-...]]
+- [[Hypotheses/{ProductName}/hypothesis-...]] (status: archived)
 
 ---
 
