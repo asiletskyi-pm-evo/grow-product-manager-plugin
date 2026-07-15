@@ -46,13 +46,13 @@ However, when the visualization type (resolved in Step 1b) is **Presentation**, 
 - `product_id`: from local-context.md active product
 - `language`: from `user.language` in local-context.md
 
-Run Steps T-1 → T-5 from `references/template-protocol.md`:
+Run **Steps T-0 → T-5 exactly as `references/template-protocol.md` names them** (do not renumber locally — "Step T-4" must mean the same thing in every skill):
 
-1. **T-1:** read `templates.preference`.
-2. **T-2:** call template-library helper `resolve({artifact_type, subtype, product_id, language})`.
-3. **T-3:** auto / ask / smart per preference.
-4. **T-4:** if a template was selected, use its slide outline as the structure for Step 3 (generation); collect variables from passed context; fall back to `presentation-builtin-feature` if no match.
-5. **T-5:** when publishing the deck/outline, append `<!-- template: {template_id}@{version} -->` to the outline markdown (not to the rendered .pptx).
+- **T-0 (Declare context):** the fields above.
+- **T-1 (Load registry) + T-2 (Score and rank):** via the template-library helper `resolve({artifact_type, subtype, product_id, language})`.
+- **T-3 (Decide):** auto / ask / smart per `templates.preference`.
+- **T-4 (Collect variables):** from the passed context; ask only for required variables still missing.
+- **T-5 (Render and record):** use the selected template's slide outline as the structure for Step 3 (generation); if the ladder finds nothing, fall back to `presentation-builtin-feature`. When publishing the deck/outline, append the protocol's marker `<!-- template: {template_id} version: {version} -->` to the outline markdown (not to the rendered .pptx).
 
 **Escape hatch:** if the user says "don't use a template" or "free-form deck", skip Step T and use a blank outline.
 

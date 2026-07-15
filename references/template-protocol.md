@@ -134,7 +134,7 @@ Sort descending: first by scope (product > user-global > built-in), then by tota
   4. Nothing matched → warn the user and proceed template-free (the skill renders its own structure). This is a normal outcome, not an error.
 
   > Rungs 1 and 3 exist because several types deliberately ship **no** `default-v1`: `ops-report`, `presentation`, `research` and `cjm` are meaningful only per subtype — a generic "default ops report" is not a document anyone wants. Until v2.0.2 the rule named only `default-v1`, so those four types always fell through to the warning even though a perfectly good built-in existed.
-- **Exactly one candidate** → use it silently. Append `<!-- template: {template_id} -->` at the end of the rendered artifact.
+- **Exactly one candidate** → use it silently. (The artifact is marked in T-5, which defines the one marker format — do not restate it here.)
 - **Multiple candidates** → ask the user via `AskUserQuestion`:
   > "I found {N} templates for {artifact_type}. Which one should I use?"
   >  1. {top.name} — {scope}, updated {date}

@@ -3,7 +3,7 @@ template_id: ops-report-builtin-sprint-review
 schema_version: 1
 name: "Sprint Review"
 artifact_type: ops-report
-subtype: ops-sprint-review
+subtype: sprint-review
 scope: built-in
 products: []
 default_language: uk
@@ -16,6 +16,11 @@ tags: [ops, sprint, review, releases, flags]
 description: "Результати спринту: закриті задачі, релізи, прапори ON/OFF, закрито по членах, перелік задач"
 status: active
 min_plugin_version: "1.14.0"
+variables:
+  - { name: team_name, type: string, required: true, label: "Команда" }
+  - { name: sprint_name, type: string, required: true, label: "Спринт" }
+  - { name: sprint_dates, type: string, required: true, label: "Період" }
+  - { name: board_url, type: string, required: false, label: "Дошка" }
 ---
 
 
@@ -77,4 +82,4 @@ min_plugin_version: "1.14.0"
 - Незавершене, що перейшло далі (carry-over у наступний спринт): {{carry_over_note}}
 - Спостереження / ризики: {{notes}}
 
-<!-- template: ops-sprint-review-builtin@0.1 -->
+<!-- template: ops-report-builtin-sprint-review version: 1.0.0 -->

@@ -3,7 +3,7 @@ template_id: ops-report-builtin-sprint-plan
 schema_version: 1
 name: "Sprint Plan"
 artifact_type: ops-report
-subtype: ops-sprint-plan
+subtype: sprint-plan
 scope: built-in
 products: []
 default_language: uk
@@ -57,4 +57,4 @@ variables:
 ### ⬚ Задачі без фічі
 Окрема таблиця того ж формату.
 
-<!-- template: ops-report-builtin-sprint-plan@1.0.0 -->
+<!-- template: ops-report-builtin-sprint-plan version: 1.0.0 -->

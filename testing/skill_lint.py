@@ -563,6 +563,45 @@ if os.path.isfile(schema_p):
                     fail("vault-paths", f"{rel_name}:{i}: '[[{link}]]' uses an archive/ folder — "
                                         f"lifecycle status lives in frontmatter, not in a folder")
 
+# -------------------------------------------------- 15. built-in subtypes
+# The protocol's degraded path (registry unreachable) resolves a built-in by
+# FILENAME: builtin://{artifact_type}/{subtype}-v1.md. All five ops-report
+# built-ins declared subtype `ops-sprint-plan…` while the files were named
+# `sprint-plan-v1.md`, so every one of them was unreachable in exactly the
+# scenario the ladder exists for. The same files also carried literal markers
+# citing template ids that were not their own.
+MARKER_RE = re.compile(r"<!--\s*template:\s*([^\s>]+)(?:\s+version:\s*([^\s>]+))?\s*(@[^\s>]+)?\s*-->")
+for tp in sorted(glob.glob(os.path.join(root, "templates", "built-in", "**", "*.md"), recursive=True)):
+    rel_name = os.path.relpath(tp, root)
+    txt = open(tp, encoding="utf-8").read()
+    fm = fm_block(txt)
+    def g(k):
+        m0 = re.search(rf'^{k}:\s*"?([^"\n]+?)"?\s*$', fm, re.M)
+        v = m0.group(1).strip() if m0 else None
+        return None if v in (None, "", "null", "~") else v   # YAML null → absent
+    tid, sub, ver = g("template_id"), g("subtype"), g("version")
+    area = os.path.basename(os.path.dirname(tp))
+    fname = os.path.basename(tp)
+    if sub:
+        expected = f"{sub}-v{(ver or '1').split('.')[0]}.md"
+        if fname != expected:
+            fail("builtin-subtypes", f"{rel_name}: subtype '{sub}' resolves to "
+                                     f"builtin://{area}/{expected}, which is not this file — "
+                                     f"the built-in ladder cannot reach it")
+    if tid:
+        expected_id = f"{area}-builtin-{sub or 'default'}"
+        if tid != expected_id:
+            warn("builtin-subtypes", f"{rel_name}: template_id '{tid}' breaks the "
+                                     f"{{type}}-builtin-{{subtype}} convention (expected '{expected_id}')")
+    m = MARKER_RE.search(txt)
+    if m:
+        if m.group(3) or not m.group(2):
+            fail("builtin-subtypes", f"{rel_name}: marker '{m.group(0)}' — the one format is "
+                                     f"`<!-- template: {{id}} version: {{ver}} -->` (template-protocol T-5)")
+        elif tid and m.group(1) != tid:
+            fail("builtin-subtypes", f"{rel_name}: marker cites '{m.group(1)}' but the file's "
+                                     f"template_id is '{tid}'")
+
 # ------------------------------------------------------- 12. artifact types
 # Step T declares an artifact_type; template-protocol.md enumerates the legal set.
 # roadmap / meeting-notes / focus / delegation-audit were declared by skills but

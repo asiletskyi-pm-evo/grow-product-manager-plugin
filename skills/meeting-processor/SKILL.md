@@ -41,25 +41,25 @@ Key context used by this skill:
 Follow `references/template-protocol.md`, but with meeting-specific semantics:
 
 - `artifact_type: meeting-notes`
-- `subtype`: inferred from meeting classification in Step M3
-  - Grooming / backlog refinement → `grooming`
-  - Planning / sprint planning → `planning`
-  - Retrospective → `retro`
-  - Discovery / user interview → `discovery`
-  - Status / sync → `status`
-  - Decision meeting → `decision`
+- `subtype`: **exactly the class Step M3 assigns** — one subtype per classifier row, no more:
+  - Grooming / Planning → `grooming-planning`
+  - Discovery / Interview → `discovery`
+  - Demo / Retro → `demo-retro`
+  - Status / Agreements → `status`
   - Brainstorm → `brainstorm`
-  - Stakeholder review → `review`
+  - (1-1 never reaches Step T — M3 redirects it to `one-on-one`, which owns its own artifact)
 - `product_id`: from local-context.md active product
 - `language`: from `user.language` in local-context.md
 
-Run Steps T-1 → T-5 from `references/template-protocol.md`:
+> This map must stay row-for-row with M3's classification table. Until v2.1.1 it offered `decision` and `review` subtypes and split grooming from planning — classes M3 cannot emit — so a user who registered a `meeting-notes/decision` template could never have it selected. If you want a new subtype here, add the classifier row in M3 first.
 
-1. **T-1 (Preference):** read `templates.preference` from local-context.md.
-2. **T-2 (Query registry):** call template-library helper `resolve({artifact_type: "meeting-notes", subtype, product_id, language})`.
-3. **T-3 (Decide):** per preference mode.
-4. **T-4 (Render):** if a template was selected, use it as the MoM structure for Step M6 (Generate output); collect variables from Step M5 extraction; if no match, use the built-in structure described in Step M4 per meeting type.
-5. **T-5 (Mark):** when publishing to Confluence / Notion, append `<!-- template: {template_id}@{version} -->` to the body.
+Run **Steps T-0 → T-5 exactly as `references/template-protocol.md` names them** (do not renumber locally):
+
+- **T-0 (Declare context):** the fields above — so Step T runs after M3, whose classification produces `subtype`, and before M6.
+- **T-1 (Load registry) + T-2 (Score and rank):** via `resolve({artifact_type: "meeting-notes", subtype, product_id, language})`.
+- **T-3 (Decide):** per `templates.preference`.
+- **T-4 (Collect variables):** from the Step M5 extraction.
+- **T-5 (Render and record):** use the selected template as the MoM structure for Step M6 (Generate output); if nothing matched, use the built-in structure described in Step M4 per meeting type. When publishing to Confluence / Notion, append `<!-- template: {template_id} version: {version} -->` to the body.
 
 **When to run Step T:** between Step M4 (Choose output format) and Step M5 (Extract content) — once meeting type is known, resolve the template so that Step M5 can collect variables that the template expects.
 

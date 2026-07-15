@@ -42,35 +42,37 @@ Key context used by this skill:
 
 ## Step T — Template Resolution (when producing a structured report)
 
-Runs before Step 1 of the workflow, but only when the user requests a deliverable artifact (Full structured report, Post-Release Analysis report, A/B Test Results report, or CJM Funnel Analysis report). **Skip Step T for Interactive Q&A mode** — no artifact is being produced, so no template is needed.
+Runs **after Step 1b (mode selection) and before data acquisition**, and only when the user requests a deliverable artifact (Full structured report, Post-Release Analysis report, A/B Test Results report, or CJM Funnel Analysis report). **Skip Step T for Interactive Q&A mode** — no artifact is being produced, so no template is needed.
+
+> The ordering matters and used to be wrong ("runs before Step 1"): `subtype` is inferred from the selected mode, and the mode is chosen in Step 1b — so unless the user named the mode outright, Step T had no input to run on. Resolving the template before the data is gathered is still the point: T-4 tells Step 1 which variables to collect.
 
 Follow `references/template-protocol.md`:
 
-- `artifact_type: research`
+- `artifact_type`: `research` for the three analysis reports; **`cjm` for CJM Funnel Analysis** — that report is the same artifact `cjm-research` produces, and a `research`-typed request can never match the `cjm`-typed built-in (or any custom CJM template the user registered), which is why the declared `cjm-funnel` fallback below was unreachable until v2.1.1.
 - `subtype`: inferred from selected mode
   - Full structured report → `metrics-analysis`
   - Post-Release Analysis → `post-release`
   - A/B Test Results → `ab-test-results`
-  - CJM Funnel Analysis → `cjm-funnel`
+  - CJM Funnel Analysis → `funnel` (with `artifact_type: cjm` — matching `cjm-research`)
 - `product_id`: from local-context.md active product
 - `language`: from `user.language` in local-context.md
 
-Run Steps T-1 → T-5 from `references/template-protocol.md`:
+Run **Steps T-0 → T-5 exactly as `references/template-protocol.md` names them** — do not renumber them here (this skill used to call the preference check "T-1" and rendering "T-4", so a cross-skill reference to "Step T-4" meant two different things):
 
-1. **T-1 (Check preference):** read `templates.preference` from local-context.md (`auto` | `always_ask` | `smart`, default `smart`).
-2. **T-2 (Query registry):** call template-library helper `resolve({artifact_type, subtype, product_id, language})`; get ranked candidates.
-3. **T-3 (Decide):** per preference mode, either auto-select top candidate, always ask, or ask only when multiple strong candidates exist.
-4. **T-4 (Render):** if a template was selected, use it as the report skeleton; collect required variables during Step 1 data gathering; if no suitable template exists, fall back to the skill's built-in structure (see mode-specific sections below).
-5. **T-5 (Mark):** when saving the final report (Confluence / Notion / vault), append:
+- **T-0 (Declare context):** the `artifact_type` / `subtype` / `product_id` / `language` above.
+- **T-1 (Load registry) + T-2 (Score and rank):** via the template-library helper `resolve({artifact_type, subtype, product_id, language})`.
+- **T-3 (Decide):** per `templates.preference` from local-context.md (`auto` | `always_ask` | `smart`, default `smart`) — auto-select the top candidate, always ask, or ask only when several strong candidates exist.
+- **T-4 (Collect variables):** gather the template's required variables during Step 1 data gathering.
+- **T-5 (Render and record):** if no suitable template exists, fall back to the skill's built-in structure (see mode-specific sections below). When saving the final report (Confluence / Notion / vault), append the marker the protocol defines:
    ```
-   <!-- template: {template_id}@{version} -->
+   <!-- template: {template_id} version: {version} -->
    ```
 
-**Fallbacks** (when registry returns no match):
+**Fallbacks** (when registry returns no match — the protocol's built-in ladder runs first):
 - `metrics-analysis` → built-in structure defined in Step 7
 - `post-release` → built-in structure in Post-Release Analysis Mode section
 - `ab-test-results` → built-in structure in A/B Test Results Analysis Mode section
-- `cjm-funnel` → `cjm-builtin-funnel` (shared with `cjm-research`)
+- `cjm` / `funnel` → `builtin://cjm/funnel-v1.md`, the same built-in `cjm-research` uses
 
 **Escape hatch:** if the user says "don't use a template" or "blank slate", skip Step T entirely and use the built-in skeleton.
 

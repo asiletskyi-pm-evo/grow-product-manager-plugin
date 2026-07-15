@@ -44,10 +44,10 @@ If `local-context.md` is missing → redirect to Plugin Configurator.
 
 Runs before Step 1 (every mode produces an artifact). Follow `references/template-protocol.md`:
 - `artifact_type: ops-report` for operational modes; `artifact_type: report-3t5f` for `goal-report`.
-- `subtype`: `ops-sprint-plan` | `ops-sprint-review` | `ops-quarter-review` | `ops-initiative-status` | `ops-member-review` | `goal-3t5f`
+- `subtype`: `sprint-plan` | `sprint-review` | `quarter-review` | `initiative-status` | `member-review` | `goal-3t5f` (the subtype is already scoped by `artifact_type: ops-report` — it carries no `ops-` prefix, which is also why the built-in filenames resolve)
 - `product_id`, `language` from local-context.
-- T-1 read `templates.preference` (`auto`/`always_ask`/`smart`); T-2 `resolve(...)` via template-library; T-3 decide; T-4 render with the template skeleton (collect required variables in Step 3); T-5 mark saved artifact with `<!-- template: {id}@{version} -->`.
-- **Fallback**: if no custom template, use the built-in skeletons `templates/built-in/ops-report/<mode>-v1.md` (e.g. `sprint-plan-v1.md`); for `goal-report` — `templates/built-in/report-3t5f/default-v1.md`.
+- Run **T-0 → T-5 exactly as `references/template-protocol.md` names them** — T-0 declare context, T-1 load registry, T-2 score/rank, T-3 decide (per `templates.preference`: `auto`/`always_ask`/`smart`), T-4 collect variables (during Step 3), T-5 render + record. Do not renumber the steps locally: other skills cite "Step T-4" meaning the protocol's T-4.
+- **Fallback**: if no custom template, the protocol's built-in ladder resolves `builtin://ops-report/{subtype}-v1.md` (e.g. `sprint-plan-v1.md`); for `goal-report` — `templates/built-in/report-3t5f/default-v1.md`.
 - **Escape hatch**: "no template" / "blank slate" → skip Step T, use built-in skeleton.
 
 ## Workflow

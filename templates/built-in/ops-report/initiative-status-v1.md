@@ -3,7 +3,7 @@ template_id: ops-report-builtin-initiative-status
 schema_version: 1
 name: "Initiative Status"
 artifact_type: ops-report
-subtype: ops-initiative-status
+subtype: initiative-status
 scope: built-in
 products: []
 default_language: uk
@@ -16,6 +16,11 @@ tags: [ops, epic, feature, status, progress]
 description: "Статус реалізації місії/проєкту/епіка/фічі: % готовності, статуси, під-фічі, блокери"
 status: active
 min_plugin_version: "1.14.0"
+variables:
+  - { name: initiative_title, type: string, required: true, label: "Ініціатива" }
+  - { name: key, type: string, required: true, label: "Ключ epic/ініціативи" }
+  - { name: owner, type: string, required: false, label: "Власник" }
+  - { name: start_date, type: date, required: false, label: "Старт" }
 ---
 
 
@@ -57,4 +62,4 @@ min_plugin_version: "1.14.0"
 ## Наступні кроки
 {{next_steps}}
 
-<!-- template: ops-initiative-status-builtin@0.1 -->
+<!-- template: ops-report-builtin-initiative-status version: 1.0.0 -->

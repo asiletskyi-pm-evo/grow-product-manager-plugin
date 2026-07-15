@@ -3,7 +3,7 @@ template_id: ops-report-builtin-quarter-review
 schema_version: 1
 name: "Quarter Review"
 artifact_type: ops-report
-subtype: ops-quarter-review
+subtype: quarter-review
 scope: built-in
 products: []
 default_language: uk
@@ -16,6 +16,11 @@ tags: [ops, quarter, plan-vs-actual, epics, releases]
 description: "Результати кварталу: план vs факт, релізи, повністю закриті епіки/фічі, внесок по напрямках"
 status: active
 min_plugin_version: "1.14.0"
+variables:
+  - { name: team_name, type: string, required: true, label: "Команда" }
+  - { name: quarter, type: string, required: true, label: "Квартал" }
+  - { name: quarter_dates, type: string, required: true, label: "Період кварталу" }
+  - { name: direction, type: string, required: false, label: "Напрямок" }
 ---
 
 
@@ -61,7 +66,7 @@ min_plugin_version: "1.14.0"
 - Що просунулось найбільше: {{highlights}}
 - Що відстає / перенесено на наступний квартал: {{slips}}
 
-<!-- template: ops-quarter-review-builtin@0.1 -->
+<!-- template: ops-report-builtin-quarter-review version: 1.0.0 -->
 
 ---
 ### Технічна нотатка pipeline (підтверджено тестом)

@@ -3,7 +3,7 @@ template_id: ops-report-builtin-member-review
 schema_version: 1
 name: "Team Member Review"
 artifact_type: ops-report
-subtype: ops-member-review
+subtype: member-review
 scope: built-in
 products: []
 default_language: uk
@@ -16,6 +16,12 @@ tags: [ops, member, throughput, changelog, dynamics]
 description: "Результати члена команди за період: закрито/SP/передано на тест(ревʼю)/протестовано + динаміка (role-aware)"
 status: active
 min_plugin_version: "1.14.0"
+variables:
+  - { name: member_name, type: string, required: true, label: "Член команди" }
+  - { name: role, type: enum, required: false, label: "Роль", options: [assignee, developer, qa, analyst] }
+  - { name: period, type: string, required: true, label: "Період" }
+  - { name: team_name, type: string, required: false, label: "Команда" }
+  - { name: granularity, type: enum, required: false, label: "Гранулярність", options: [day, week, sprint, month, quarter, year] }
 ---
 
 
@@ -59,4 +65,4 @@ Delivery-метрики беруться з `resolutiondate` + SP (без важ
 - Сезонність (відпустки, провали): {{notes}}
 - Цикл «розробив → на тест → закрито» (cycle time) — опц., з changelog timestamps.
 
-<!-- template: ops-member-review-builtin@0.1 -->
+<!-- template: ops-report-builtin-member-review version: 1.0.0 -->
