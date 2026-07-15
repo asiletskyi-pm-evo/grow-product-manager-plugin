@@ -39,7 +39,7 @@ Declare:
 - `artifact_type: cjm`
 - `subtype: {inferred from mode — "funnel" | "comparison" | "health-check" | null}`
 - `product_id: {from local-context.md active product}`
-- `language: {from local-context.md → user.language or product.default_language}`
+- `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
 
 Run Steps T-1 → T-5 via the `template-library` helper routines. Render and append `<!-- template: {template_id} version: {version} -->` at the end of the report.
 

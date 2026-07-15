@@ -37,7 +37,7 @@ Key context used by this skill:
 **Knowledge Library context** (if initialized):
 - `knowledge_library.status` — whether Knowledge Library is initialized (`~/.grow-pm/knowledge-library/`)
 - `knowledge_library.sources_count` — number of curated sources available
-- `knowledge_library.search_modes` — available search modes (semantic, keyword, hybrid)
+- `knowledge_library.default_search_modes` — which search modes to use (`library` / `confluence` / `gdrive` / `baymard` / `internet` — the set `knowledge-library` implements)
 - `knowledge_library.baymard_access` — access to Baymard UX benchmarks (if configured)
 - `knowledge_library.confluence_spaces` — integrated Confluence spaces for knowledge enrichment
 
@@ -51,7 +51,7 @@ Declare:
 - `artifact_type: research`
 - `subtype: {inferred from research type — "competitive" | "user-research" | "market" | "ux-benchmark" | null}`
 - `product_id: {from local-context.md active product}`
-- `language: {from local-context.md → user.language or product.default_language}`
+- `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
 
 Run Steps T-1 → T-5 via the `template-library` helper routines. Render the result and append `<!-- template: {template_id} version: {version} -->` at the end.
 

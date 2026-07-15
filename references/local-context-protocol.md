@@ -190,9 +190,11 @@ Once the context is loaded and active product selected, skills should:
 - Use `user.language` for output language preference
 - Use `user.jira_account_id` for setting Reporter on Jira tasks
 - Use `team.jira_team_id` for setting Team field on Jira tasks
-- Use `product.cjm_configuration.funnel_stages` for CJM funnel analysis
-- Use `product.cjm_configuration.anomaly_thresholds` for anomaly detection
-- Use `product.cjm_configuration.default_search_modes` for Knowledge Library search
-- Use `knowledge_library.configured_confluence_spaces` for Confluence CJM search
-- Use `knowledge_library.configured_gdrive_folders` for Google Drive CJM search
+- Use `cjm.stages` for CJM funnel analysis (name + dashboard + `baseline_cr` per stage)
+- Use `cjm.thresholds` for anomaly detection (`warning` / `critical`, % deviation from baseline)
+- Use `cjm.analysis_defaults.search_modes` for Knowledge Library search during CJM enrichment
+- Use `knowledge_library.confluence_spaces` for Confluence CJM search
+- Use `knowledge_library.gdrive_folders` for Google Drive CJM search
+
+> Key names are the ones in `local-context.example.md` (the canonical spelling). Until v2.1.1 this list read `product.cjm_configuration.funnel_stages`, `.anomaly_thresholds`, `configured_confluence_spaces` and `configured_gdrive_folders` — a per-product path and four key names that exist in no example and no schema, so every skill following this list read nothing.
 - Use vault context (from Step 0.5) to enrich analysis with historical data and prior decisions

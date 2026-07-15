@@ -267,6 +267,8 @@ Config for `template-library` and every skill's Step T. Semantics: `references/t
 ```yaml
 templates:
   preference: smart                  # auto | always_ask | smart
+  default_language: uk               # default render language when the request names none
+  favorite_templates: []             # template_id values that rise to the top of T-2 ranking
   storage_root: "~/.grow-pm"         # or {vault}/{plugin_folder} when a vault is configured
   setup_completed: true
 ```

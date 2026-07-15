@@ -213,7 +213,6 @@ Follow the same collection flow as Onboarding for the selected section. Pre-fill
 **For Template Library Settings updates:**
 - Allow changing `templates.preference` (auto / always_ask / smart)
 - Allow changing `templates.default_language`
-- Allow changing `templates.auto_save_to_vault`
 - Allow editing `templates.favorite_templates` (reorder / add / remove)
 - For template CRUD (add / edit / delete / import / rebuild-registry) → redirect to `template-library` skill with the requested action
 

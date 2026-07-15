@@ -410,8 +410,7 @@ Via `AskUserQuestion`, collect:
 | Setting | Options | Default |
 |---------|---------|---------|
 | `templates.preference` | `auto`, `always_ask`, `smart` | `smart` |
-| `templates.default_language` | from `local-context.locales` | first locale |
-| `templates.auto_save_to_vault` | `true`, `false` | `true` if Vault configured |
+| `templates.default_language` | `user.language`, else a `product.locales` entry | `user.language` |
 
 Explain `preference` briefly:
 - **auto** — always use the top-ranked template silently
@@ -470,8 +469,11 @@ templates:
   preference: smart            # auto | always_ask | smart
   default_language: uk
   favorite_templates: []       # template_id values that rise to the top
-  auto_save_to_vault: true
+  storage_root: "~/.grow-pm"   # or {vault}/{plugin_folder} — resolved per persistent-storage.md
+  setup_completed: true
 ```
+
+> Key set per `references/context-schema.md` → "Templates section format" (the canonical definition). `auto_save_to_vault` was written here until v2.1.1 and read by nothing — vault saving follows `vault.sync_mode`.
 
 **O-T.8. Confirm and continue:**
 

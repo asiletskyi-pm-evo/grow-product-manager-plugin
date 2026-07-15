@@ -230,7 +230,8 @@ templates:
   preference: smart            # auto | always_ask | smart
   default_language: uk
   favorite_templates: []
-  auto_save_to_vault: true
+  storage_root: "~/.grow-pm"
+  setup_completed: true
 ```
 
 Write operations update `onboarding.templates_setup_completed` when `add` first runs via `plugin-configurator` Step O-T.

@@ -272,10 +272,11 @@ templates:
   preference: smart            # auto | always_ask | smart
   default_language: uk
   favorite_templates: []       # list of template_id that rise to the top
-  auto_save_to_vault: true
+  storage_root: "~/.grow-pm"   # or {vault}/{plugin_folder}
+  setup_completed: true
 ```
 
-`plugin-configurator` writes this section during Step O-T of onboarding; users can change it via Update mode.
+`plugin-configurator` writes this section during Step O-T of onboarding; users can change it via Update mode. **The canonical key set lives in `skills/plugin-configurator/references/context-schema.md` → "Templates section format"** — this block mirrors it for convenience; if they ever disagree, the schema wins.
 
 ---
 

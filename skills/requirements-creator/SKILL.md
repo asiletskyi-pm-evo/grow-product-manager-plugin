@@ -62,7 +62,7 @@ Declare:
 - `artifact_type: requirements`
 - `subtype: {inferred — "ab-test" when user mentions A/B test / experiment, "bugfix" when describing a bugfix spec, null otherwise}`
 - `product_id: {from local-context.md active product}`
-- `language: {from local-context.md → user.language or product.default_language}`
+- `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
 
 Run Steps T-1 → T-5 via the `template-library` helper routines. Render the result and append `<!-- template: {template_id} version: {version} -->` at the end.
 

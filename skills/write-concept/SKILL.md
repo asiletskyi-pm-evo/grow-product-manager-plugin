@@ -72,7 +72,7 @@ Declare:
 - `artifact_type: concept`
 - `subtype: {null | inferred from user input, e.g. "lightweight", "technical-spec"}`
 - `product_id: {from local-context.md active product}`
-- `language: {from local-context.md → user.language or product.default_language}`
+- `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
 
 Run Steps T-1 → T-5 via the `template-library` helper routines:
 - T-1 Load registry from `{storage_root}/Templates/_registry.json`

@@ -197,6 +197,20 @@ Users can add any additional sections with free-form markdown content. The confi
 | **Offboarding Guide** | — | people.* (roster), goals/reports evidence |
 | **Delegation Coach** | — | people.* (roster, d_type, gtd, delegation), calendar/Jira |
 | **Sprint Planning** | product.name, planning | people.* (d_type/delegation for assignee fit; writes gtd_index) |
+| **CJM Research** | product.name, cjm (stages + thresholds) | data_sources_catalog, knowledge_library.*, ab_test_dashboards |
+| **Meeting Processor** | — | product.name, confluence_space, Fireflies/Calendar connectors |
+| **Knowledge Library** | — | knowledge_library.* (path, default_search_modes, confluence_spaces, gdrive_folders) |
+| **Diagram Prototyper** | — | product.name, figma_workspace |
+| **Experiment Tracker** | — | experiments.stale.* (threshold overrides), product.name |
+| **Decision Log** | — | product.name |
+| **Feedback Triage** | — | feedback.* (sources, segments, default_period) |
+| **Roadmap Architect** | product.name | planning (goal map), product.current_okrs |
+| **Project Planning** | product.name, planning | jira_project_key, team |
+| **Quarterly Planning** | product.name, planning | product.current_okrs, team |
+| **Template Library** | — | templates.* (preference, default_language, favorite_templates, storage_root) |
+| **Release Manager** | — | plugin_release.* (repo path, remotes, protected branches) |
+
+> Every skill sent to Step 0e must have a row here — the step tells a skill to check "its required fields" against this table, so a missing row silently means "nothing required". 12 skills had no row until v2.1.1.
 
 ## Validation Rules
 
@@ -279,14 +293,20 @@ The blocks below are the exact `local-context.md` output formats the Plugin Conf
 
 Written by Step 13 (O-T.7); read by `template-library` and by every skill's Step T. Full semantics: root `references/template-protocol.md`.
 
-```markdown
-### Templates
+**This block is the canonical key set.** `template-protocol.md`, `onboarding-steps.md` and `local-context.example.md` cite it; they must not define a competing one. (Until v2.1.1 there were two: the write side used `default_language`/`favorite_templates`/`auto_save_to_vault`, this schema used `storage_root`/`setup_completed`, and each side was missing the other's keys — so half the config was read but undefined and the other half defined but unwritten.)
 
-- **Preference:** [auto | always_ask | smart]      <!-- T-3 decision mode; smart = default -->
-- **Storage root:** [{vault}/{plugin_folder} | ~/.grow-pm]   <!-- resolved per persistent-storage.md -->
-- **Registry:** [{storage_root}/Templates/_registry.json]
-- **Setup completed:** [true | false]              <!-- read by Step 16g's final invitation -->
+```yaml
+templates:
+  preference: smart                  # auto | always_ask | smart — T-3 decision mode (default: smart)
+  default_language: uk               # default render language when the request names none
+  favorite_templates: []             # template_id values that rise to the top of T-2 ranking
+  storage_root: "~/.grow-pm"         # or {vault}/{plugin_folder} — resolved per persistent-storage.md
+  setup_completed: true              # read by Step 16g's final invitation
 ```
+
+Derived, not configured: the registry always lives at `{storage_root}/Templates/_registry.json` — do not store the path.
+
+> Removed in v2.1.1: `auto_save_to_vault`. It was written by onboarding and read by nothing — vault saving is governed by `vault.sync_mode`, and a second switch that silently did not work is worse than no switch.
 
 ### Planning section format
 
@@ -369,8 +389,8 @@ Written by the Focus setup step; read by `focus-advisor`. Full field semantics: 
 #### Vaults
 | # | Vault Path | Folder Name | Products | Sync Mode | Last Artifact |
 |---|------------|------------|----------|-----------|--------------|
-| 1 | [path] | [folder] | [all/specific] | [auto/manual/read-only] | [date or never] |
-| 2 | [path] | [folder] | [all/specific] | [auto/manual/read-only] | [date or never] |
+| 1 | [path] | [folder] | [all/specific] | [auto/manual/read-only/off] | [date or never] |
+| 2 | [path] | [folder] | [all/specific] | [auto/manual/read-only/off] | [date or never] |
 
 #### Vault Initialization
 - Status: [initialized / pending / error]
@@ -428,3 +448,73 @@ people:
 ```
 
 Person profiles themselves are **not** stored in `local-context.md` — only this pointer/config block is. Profiles are separate files per `people-context-protocol.md`.
+
+---
+
+## Sections added in v2.1.1
+
+Each of these was **read by a skill but defined in no schema and no example** — the
+same defect class v2.1.0 closed for Planning and Focus. A skill that reads an
+undefined key has no way for the user to set it: the feature is dead on arrival
+and the "override" it advertises never happens.
+
+### Experiments section format
+
+Optional. Written by the user (or `plugin-configurator` → Update); read by `experiment-tracker` to override its built-in stale thresholds. Absent → the defaults below apply silently.
+
+```yaml
+experiments:
+  stale:
+    readout_pending_days: 3        # awaiting-readout older than this → "📊 readout pending"
+    idle_high_ice_days: 30         # proposed with ICE >= idle_high_ice_min, older than this → "💤 idle"
+    idle_high_ice_min: 8           # the ICE score that makes an idle hypothesis worth surfacing
+  registry_path: "{storage_root}/experiments/registry.yaml"   # derived; override only for a custom layout
+```
+
+### Feedback section format
+
+Optional. Read by `feedback-triage` (Step 1 Intake) to prefill sources and scope. Absent → the skill collects ad-hoc and offers to save the answers via Enrichment.
+
+```yaml
+feedback:
+  sources:                          # where the raw feedback normally comes from
+    - { type: gdrive, ref: "[folder id or URL]", label: "support exports" }
+    - { type: confluence, ref: "[space or page id]", label: "NPS verbatims" }
+    - { type: jira, ref: "[JQL for complaint-labelled issues]", label: "complaints" }
+  segments: [<segment>, <segment>]  # your product's user segments — e.g. [buyers, sellers], [free, paid]
+  default_period: last_full_month   # last_full_month | last_30d | last_quarter
+```
+
+> `segments` has no universal default: two-sided marketplaces split buyers/sellers, SaaS splits by plan or role. `feedback-triage` asks when this key is absent rather than assuming.
+
+### plugin_release section format
+
+Optional; all keys optional. Read by `release-manager` (Step 0); collected interactively and offered for saving on first run. Relevant only if you are releasing **this plugin's repository**, not your product.
+
+```yaml
+plugin_release:
+  repo_path: "[absolute path to the plugin repo]"
+  canonical_remote: origin          # default: origin
+  mirror_remotes: [<remote>, ...]   # additional remotes to sync tags/branches to
+  vpn_required_hosts: [<host>, ...] # hosts reachable only on VPN — pre-flight warns
+  protected_branches: [main]        # default: [main]
+  confluence_changelog_page_id: "[page id]"
+  versioning_table: null            # null → PATCH/MINOR/MAJOR rules from the CHANGELOG header
+```
+
+### data_sources_catalog section format
+
+Optional but strongly recommended for products with dashboards. Read by `cjm-research` and `product-analysis` via `data-integrity-protocol.md` → Gate Check 3 (Multi-Source Cross-Validation): it is how the skill knows which **second, independently-built** source validates a given metric. Absent → every metric that needs cross-validation is ⚠️ Caveat rather than ✅ Verified.
+
+```yaml
+data_sources_catalog:
+  - metric: "[GMV YoY]"
+    primary: "[workbook + view]"
+    cross_validation: "[a second, independently-built source]"
+    methodology_doc: "[attribution/metric-definition page]"   # optional
+  - metric: "[Checkout CR]"
+    primary: "[funnel workbook + view]"
+    cross_validation: "[CJM master dashboard]"
+```
+
+> Name the **view**, not just the workbook: two views of one workbook can disagree, and Gate Check 3 needs to know which produced the number. The same workbook under a different filter is **not** a second source — it inherits the same methodology error.
