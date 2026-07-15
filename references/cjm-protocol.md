@@ -223,7 +223,7 @@ All CJM-related skills MUST execute the Data Integrity Gate before reporting any
 2. **Seasonal/Cultural Screening** — flag anomaly windows that overlap with holiday periods (Ukraine: Week 1 Jan, Mar 7-8, Easter, May 1-3, BF, Dec 22-31); verify geographic relevance of external benchmarks
 3. **Multi-Source Cross-Validation** — ≥ 2 independent sources for critical metrics; ≥ 3 sources for extreme values (drop > 25% / lift > 50% / sensational claims)
 4. **Period Definition Lock + Inline Annotation** — every cited metric carries inline period annotation (12mo rolling, YoY, snapshot, normalized, etc.)
-5. **Source Type Marker** — mark every source with type (`tableau-mcp`, `tableau-web`, `glint-live`, `ga-snapshot`, `baymard-premium`, `web-search`, `kb-source`, `competitor-website`, `user-research`)
+5. **Source Type Marker** — mark every source with type (`tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `baymard-premium`, `web-search`, `kb-source`, `competitor-website`, `user-research`)
 
 **Output statuses:** ✅ Verified / ⚠️ Caveat / ❌ Blocked.
 
@@ -233,7 +233,7 @@ All CJM-related skills MUST execute the Data Integrity Gate before reporting any
 
 ## Holiday Screening Windows
 
-For Ukraine-default products (Prom-context):
+For products whose primary market is Ukraine (local-context → `product.primary_market` = UA):
 
 | Window | Effect | Action |
 |--------|--------|--------|
@@ -255,7 +255,7 @@ For global products, also screen: Chinese New Year, Diwali, Ramadan, US Thanksgi
 - [ ] Period completeness checked (Gate Check 1)
 - [ ] Holiday window screening (Gate Check 2)
 - [ ] ≥ 3 independent sources (Gate Check 3 — extreme-value rule)
-- [ ] Methodology change check (DT-* / DATA-* tickets in the period)
+- [ ] Methodology change check (data-platform / attribution-change tickets in the period — the tracker project your org uses for them)
 - [ ] Reference period analysis (full YoY table, not single cell)
 - [ ] Inline-period annotation (Gate Check 4)
 
@@ -269,8 +269,8 @@ Each product/organization should build a metric → sources mapping in `local-co
 
 | Metric | Primary source | Cross-validation source | Methodology doc |
 |--------|----------------|------------------------|-----------------|
-| (e.g.) Listing GMV YoY | Tableau workbook X (YtoY view) | Tableau workbook Y / GA / Glint | Attribution change ticket |
-| (e.g.) Catalog CR | Listing metrics workbook | Master CJM workbook | — |
-| (e.g.) Funnel stages | Master CJM workbook | Per-stage workbooks | — |
+| (e.g.) `<GMV YoY>` | Tableau workbook X (YtoY view) | Tableau workbook Y / GA / internal live-metrics tool | Attribution-change ticket |
+| (e.g.) `<Conversion rate>` | `<funnel workbook>` | `<CJM master workbook>` | — |
+| (e.g.) `<Funnel stages>` | `<CJM master workbook>` | `<per-stage workbooks>` | — |
 
 This catalog enables Gate Check 3 (Multi-Source Cross-Validation) to operate automatically — the skill knows which secondary source to query for each metric.

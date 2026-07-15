@@ -149,12 +149,14 @@ For each external source, determine publication / data collection date. Apply re
 
 For each external source — determine geography and cultural relevance to the active product's market.
 
-For Ukraine-default products (Prom-context):
-- ✅ Direct fit (UA-specific): Rozetka, OLX, Allo, Epicentrk, Kasta, Makeup.com.ua
-- ✅ CIS/EE comparable: Allegro (PL), eMag (RO), Wildberries/Ozon (RU — political caveat)
-- ⚠️ Global with adaptation: Amazon, eBay, AliExpress (cite with adaptation note)
-- ⚠️ Western mature markets: ASOS, Sephora, IKEA (good for UX patterns, caveat CR/AOV)
-- ❌ Heavily local (do not use as-is): US-only retailers without adaptation
+Rank each source against the product's own market (local-context → `product.primary_market`), not against a fixed list:
+- ✅ **Direct fit** — players in the same market and category as the product
+- ✅ **Regional comparable** — neighbouring markets with similar buying behaviour and payment/delivery norms
+- ⚠️ **Global with adaptation** — global giants; cite with an adaptation note (their scale distorts CR/AOV benchmarks)
+- ⚠️ **Mature-market reference** — good for **UX patterns**, caveat every CR/AOV number
+- ❌ **Heavily local elsewhere** — a market whose norms don't transfer; do not use as-is
+
+*Worked example, `primary_market: UA` e-commerce:* direct fit = the local marketplaces and category leaders; regional comparable = Allegro (PL), eMag (RO); global with adaptation = Amazon, eBay, AliExpress; mature-market reference = ASOS, IKEA; heavily local = US-only retailers. Keep your own per-market list in local-context (`product.competitors`) rather than re-deriving it each run.
 
 **Action when citing non-target geography:** explicit caveat about cultural fit + propose A/B-validation for the target market.
 

@@ -50,7 +50,7 @@ For external data (web research, market reports, competitor data, Baymard guidel
 
 For internal data — detect anomaly weeks/months that overlap with holiday windows:
 
-**Ukraine (default for Prom-context products):**
+**Ukraine** (apply when local-context → `product.primary_market` is UA):
 | Window | Effect |
 |--------|--------|
 | Week 1 (Jan 1-7) | Heavy holiday effect, low purchase activity |
@@ -93,7 +93,7 @@ For external data — verify geographic/cultural relevance:
 
 For product-analysis / cjm-research:
 - 2 different Tableau workbooks
-- Tableau + Glint live query
+- Tableau + an internal live-metrics query
 - Tableau + GA Acquisition
 - Tableau + A/B test dashboard
 - CSV/uploaded report + Tableau dashboard cross-check
@@ -151,7 +151,7 @@ Every cited number / claim in the Sources section is marked with type:
 **Internal sources:**
 - `tableau-mcp` — Tableau retrieved via MCP connector
 - `tableau-web` — Tableau retrieved via browser fallback
-- `glint-live` — Glint live query
+- `internal-live` — internal live-metrics tool query
 - `ga-snapshot` — Google Analytics snapshot
 - `csv-upload` — User-uploaded CSV file
 - `screenshot-user` — User-provided screenshot
@@ -197,52 +197,49 @@ For any metric / claim cited in the final report:
 
 ---
 
-## Anti-patterns (from real incidents)
+## Anti-patterns
+
+Each is a real failure shape, illustrated on a **fictional** product with two revenue streams (Marketplace and Storefront). Substitute your own metrics — the arithmetic is the lesson, the numbers are not data.
 
 ### Anti-pattern 1: Incomplete-period extrapolation
 
-> "Sessions 01.05.2026 = 1.28M vs квітень 5.69M = -77% PoP organic catastrophe"
+> "Sessions 01.06.2026 = 1.10M vs May 4.60M = -76% PoP — organic catastrophe"
 
-**Reality:** 01.05.2026 = 7 days of data (extract was 8.05.2026). Normalized: 1.28M × 30/7 = 5.49M ≈ April 5.69M. No catastrophe.
+**Reality:** 01.06.2026 held 7 days of data (the extract ran on 8.06.2026). Normalized: 1.10M × 30/7 = 4.71M ≈ May's 4.60M. No catastrophe — the period was incomplete, not the traffic.
 
 ### Anti-pattern 2: Week-1 YoY trap
 
-> "Listing GMV -29% YoY proти Portal GMV -8.6% YoY. Каталог деградує 3.4× швидше за маркетплейс."
+> "Marketplace GMV -29% YoY vs Storefront GMV -8.6% YoY. Marketplace is degrading 3.4× faster."
 
-**Reality:** This is Week 1 (Jan 1-7) holiday zriz from Listing metrics workbook 285 YtoY view. Across 18 of 19 weeks in 2026, both Listing and Portal GMV are **growing** YoY (+20% / +42% in May). Listings lose share (19.6% → 16.4%), not absolute volume.
+**Reality:** that window is Week 1 (Jan 1-7) — a holiday cut. Across 18 of the year's other 19 weeks, **both** streams grow YoY. The real story is a share shift (Marketplace 19.6% → 16.4% of the mix), not an absolute decline — and a ratio of two holiday artifacts ("3.4× faster") is an artifact squared.
 
 ### Anti-pattern 3: Cascading derived claim
 
-A single uncritical "-29%/-8.6%/3.4×" propagated into 5+ artifacts:
-- CJM diagnostics v.1-v.3
-- Project Mission v.3-v.5
-- Triangulation v.1-v.3
-- Phase 3 v.1-v.3
-- Various Obsidian local copies
-
-Re-verification at each propagation step would have caught this earlier.
+A single unverified "-29% / -8.6% / 3.4×" propagated into 5+ artifacts: CJM diagnostics v.1-v.3, the project mission deck v.3-v.5, the triangulation doc v.1-v.3, the phase plan v.1-v.3, plus local vault copies. Re-verification at each propagation step would have caught it at step 1 instead of step 5.
 
 ### Anti-pattern 4: Missing inline-period annotation
 
-> "Catalog CR 0.99%" — without period, source, methodology
+> "Checkout CR 0.99%" — no period, no source, no methodology
 
-**Reality:** Reader cannot tell if this is 12mo rolling, Q1 2026, snapshot, or all-time average. Number loses meaning the moment it is copied out of the original document.
+**Reality:** the reader cannot tell whether this is 12-month rolling, one quarter, a snapshot, or an all-time average. The number loses its meaning the moment it is copied out of the document it was born in.
 
 ---
 
 ## Correct patterns
 
+The same four claims, written so they survive being copied out of context (same fictional product).
+
 ### Pattern 1: Verified period
-> "Sessions May 2026 normalized: 1.28M × 30/7 = 5.49M (full-month equivalent from 7-day extract on 8.05.2026, Tableau workbook 397)"
+> "Sessions June 2026 normalized: 1.10M × 30/7 = 4.71M (full-month equivalent from a 7-day extract on 8.06.2026, `<sessions workbook>`)"
 
 ### Pattern 2: Holiday-aware YoY
-> "Listing GMV +20% YoY (May 2025 → May 2026, weeks 18-19 of both years, non-holiday window). Cross-validated: workbook 285 YtoY view + Orders Dashboard v2 Portal vs Sites (order count +51% YoY in same week)."
+> "Marketplace GMV +20% YoY (June 2025 → June 2026, weeks 22-23 of both years, non-holiday window). Cross-validated: `<GMV workbook>` YtoY view + `<orders dashboard>` (order count +51% YoY in the same week)."
 
 ### Pattern 3: Re-verified derived claim
-> "Catalog grows +20% YoY but slower than Portal (+42% YoY) — share decline 19.6% → 16.4% (workbook 285 YtoY, cross-validated). NOT '3.4× faster degradation' (that was Week 1 holiday-zriz, not a trend)."
+> "Marketplace grows +20% YoY but slower than Storefront (+42% YoY) — mix share 19.6% → 16.4% (`<GMV workbook>` YtoY, cross-validated). NOT '3.4× faster degradation' — that was a Week-1 holiday cut, not a trend."
 
 ### Pattern 4: Inline-period annotation
-> "Catalog CR 0.99% (12mo rolling, 1.05.2025 → 7.05.2026, Listing metrics workbook 285 Overview view, cross-validation pending on Master CJM 125)"
+> "Checkout CR 0.99% (12mo rolling, 1.06.2025 → 7.06.2026, `<funnel workbook>` Overview view, cross-validation pending on `<CJM master dashboard>`)"
 
 ---
 
@@ -274,19 +271,21 @@ When a skill invokes this protocol:
 
 ---
 
-## Recommended Prom.ua reference sources catalog
+## Reference sources catalog
 
-For Prom.ua-specific cross-validation (extend in `cjm-protocol.md`):
+Gate Check 3 (Multi-Source Cross-Validation) needs to know **which second source** validates a given metric. That mapping is product-specific and lives in `local-context.md` under `data_sources_catalog` — never in this file. Build it once per product; the skills read it.
 
-| Метрика | Primary source | Cross-validation | Methodology doc |
-|---------|----------------|------------------|-----------------|
-| Listing GMV YoY | Listing metrics workbook 285 YtoY view | Orders Dashboard v2 Portal vs Sites | DT-1773 attribution |
-| Portal GMV YoY | Listing metrics workbook 285 YtoY view | Orders Dashboard v2 | — |
-| Catalog CR | Listing metrics workbook 285 Overview | Master CJM 125 funnel + Glint live | — |
-| Search CR | Listing metrics workbook 285 Overview | Master CJM 125 funnel | — |
-| Direct/Paid/Organic mix | Workbook 533 (First Page) | Master CJM 125 + GA Acquisition | — |
-| Stage drop-off | Master CJM 125 funnel | CJM listing workbook 285 sub-segments | — |
-| App vs Web CR | Master CJM 125 by platform | Listing metrics_app workbook | — |
-| Auto Exit Rate | AutoMoto Metrics workbook | Master CJM 125 Auto segment | — |
+Shape (one row per metric that matters, filled with your own sources):
 
-This catalog is product-specific; other organizations should build their own in `local-context.md` under a `data_sources_catalog` section.
+| Metric | Primary source | Cross-validation | Methodology doc |
+|--------|----------------|------------------|-----------------|
+| `<GMV YoY>` | `<workbook + view>` | `<a second, independently-built source>` | `<attribution/methodology page>` |
+| `<Conversion rate>` | `<workbook + view>` | `<funnel dashboard>` | — |
+| `<Traffic mix>` | `<acquisition workbook>` | `<web analytics>` | — |
+| `<Stage drop-off>` | `<CJM funnel>` | `<same funnel, sub-segments>` | — |
+
+Rules for a usable catalog:
+- The cross-validation source must be **independently built** — the same workbook under a different filter is not a second source (it inherits the same methodology error).
+- Name the **view**, not just the workbook: "workbook X, YtoY view" and "workbook X, Overview view" can disagree, and Gate Check 3 needs to know which one the number came from.
+- A metric with no second source is not blocked — it is ⚠️ Caveat, and the caveat travels with it into the report (Gate Check 3).
+- Where a methodology doc exists (attribution rules, metric definitions), link it: it is what resolves a cross-validation disagreement.

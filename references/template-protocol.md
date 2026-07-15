@@ -42,7 +42,7 @@ products: []                             # [] = all products; else list
 default_language: uk
 available_languages: [uk, en]
 version: "1.0.0"
-author: "Andrii"
+author: "<author>"
 created: 2026-04-17
 updated: 2026-04-17
 tags: [ab-test, growth]

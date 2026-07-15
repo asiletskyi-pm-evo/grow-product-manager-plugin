@@ -58,7 +58,7 @@ Ask via AskUserQuestion (skip what is already unambiguous from the request):
 - **Mode** (which of the 6 reports — the five ops modes or `goal-report`).
 - **Team** (default: active team from local-context; allow override).
 - **Mode parameters**:
-  - `sprint-plan` / `sprint-review`: which sprint (open / named `SEX <n>` / last closed). Review defaults to the **last closed** sprint.
+  - `sprint-plan` / `sprint-review`: which sprint (open / named, e.g. `Sprint 41` / last closed). Review defaults to the **last closed** sprint.
   - `quarter-review`: quarter (e.g. Q2 2026) → resolve to sprint set or date range.
   - `initiative-status`: the key (mission/epic/feature) and depth.
   - `member-review`: which member (Assignee and/or Developer/QA role), period, and **granularity** for dynamics (day/week/sprint/month/quarter/year).

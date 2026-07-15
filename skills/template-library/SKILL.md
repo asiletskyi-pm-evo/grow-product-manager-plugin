@@ -192,7 +192,7 @@ Templates (12 total — 4 built-in, 6 user-global, 2 product-specific)
 | concept-builtin-default       | concept      | built-in      | uk, en | 2026-04-17 |
 | requirements-builtin-default  | requirements | built-in      | uk, en | 2026-04-17 |
 | requirements-ab-test-v1       | requirements | user-global   | uk, en | 2026-04-17 |
-| requirements-prom-marketplace | requirements | product:prom  | uk     | 2026-04-17 |
+| requirements-acme-marketplace  | requirements | product:acme  | uk     | 2026-04-17 |
 | …                             | …            | …             | …      | …          |
 
 Registry: {storage_root}/Templates/_registry.json (last rebuilt 2026-04-17)

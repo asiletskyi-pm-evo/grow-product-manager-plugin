@@ -23,7 +23,7 @@ A 1-1 is a regular manager↔person meeting for **feedback, the person's problem
 
 | Mode | Trigger | What it does |
 |------|---------|--------------|
-| `prepare` (default) | "підготуватись до 1-1", "1-1 with Olena" | Build the agenda from the profile + the 6-stage structure + tailored questions + NVC feedback drafts. |
+| `prepare` (default) | "підготуватись до 1-1", "1-1 with <person>" | Build the agenda from the profile + the 6-stage structure + tailored questions + NVC feedback drafts. |
 | `analyze` | "розбери 1-1", transcript/notes provided | Extract signals, write the ARCV follow-up, update the profile, chain if needed. |
 | `coverage` | "з ким давно не було 1-1" | Who among direct reports is overdue (also the headless payload). |
 

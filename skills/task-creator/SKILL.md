@@ -135,7 +135,7 @@ Before creating tasks, fetch project metadata to ensure correct field values:
 2. **Team field** — find the custom field ID for Team (usually `customfield_10001`):
    - Use `getJiraIssueTypeMetaWithFields` to find the field
    - Look at an existing task in the Epic to find the Team value/ID format
-   - The Team field often requires a string ID (not an object), e.g. `"3eb29614-f447-45a5-8963-016f46f7dded-31"`
+   - The Team field often requires a string ID (not an object) — a UUID with a numeric suffix, e.g. `"<team-uuid>-NN"`; take the value from local-context (`product.jira_team_id`) or from an existing task in the Epic
 
 ### Step 6b: Validate field values before creation
 

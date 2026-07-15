@@ -39,7 +39,7 @@ One row per activity:
 
 | Activity | Current level (1–7) | Candidate | Target level | Blocker |
 |----------|--------------------|-----------|--------------|---------|
-| A/B readout prep | 3 Consult | Olena (D3, GTD 0.81) | 6 Inquire | "still training" |
+| A/B readout prep | 3 Consult | Firstname (D3, GTD 0.81) | 6 Inquire | "still training" |
 
 - **Blocker** is a controlled value: *"Impossible to transfer" / "Already training someone" / "Still looking for someone"*.
 - Show the **level distribution** (% of activities at each level) — a low average = the skill has room to grow. Flag every level 1–4 routine item as a push-down candidate.
@@ -74,5 +74,5 @@ Per `self-improvement.md`.
 ← `focus-advisor` (PM overload) · → `goal-setter` (delegate's goals) · → `task-creator` (hand-off tasks) · → `product-reporter` (the 3T5F reporting the delegate takes over) · → `one-on-one` (mentor the delegate through S1→S2).
 
 ## Example dialogues
-- *"Я потонув в операційці, що делегувати?"* → mines calendar+Jira → audit table of 14 activities, 9 at levels 1–4 → flags "A/B readout prep" and "stakeholder status prep" as top push-downs → proposes Olena (D3, GTD 0.81) at target level 6 with an S1→S4 plan.
+- *"Я потонув в операційці, що делегувати?"* → mines calendar+Jira → audit table of 14 activities, 9 at levels 1–4 → flags "A/B readout prep" and "stakeholder status prep" as top push-downs → proposes Firstname (D3, GTD 0.81) at target level 6 with an S1→S4 plan.
 - *"Немає кому делегувати розбір багрепортів"* → computes ROI of a junior analyst hire vs the PM's hours → positive payback → drafts the argument for the manager + a role hand-off plan (chains to hiring-designer).

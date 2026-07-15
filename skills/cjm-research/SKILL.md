@@ -239,7 +239,7 @@ If an anomaly week aligns with a holiday window:
 **3.5.c — Multi-Source Cross-Validation:**
 
 For every critical CR / GMV / Order / Revenue / Retention metric:
-- Require ≥ 2 independent sources (two different Tableau workbooks, or Tableau + Glint, or Tableau + GA, etc.)
+- Require ≥ 2 independent sources (two different Tableau workbooks, or Tableau + an internal live-metrics tool, or Tableau + GA, etc.)
 - Variance tolerance ≤ 15% between sources
 - Variance > 15% → ⚠️ FLAG, resolve before reporting
 
@@ -262,7 +262,7 @@ Methodology section at the top of the report is **not sufficient** — readers c
 
 Tag every source with type per Gate Check 5 of `data-integrity-protocol.md`:
 
-- Internal: `tableau-mcp`, `tableau-web`, `glint-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `confluence-internal`, `jira-internal`
+- Internal: `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `confluence-internal`, `jira-internal`
 - This enables audit trail in the final Sources section
 
 **Output of Step 3.5:**
@@ -376,7 +376,7 @@ When chaining:
 - **(v0.4.0+) Inline period annotation MANDATORY** — every cited metric in TL;DR, Executive Summary, tables, bullets carries inline annotation per Gate Check 4 of `data-integrity-protocol.md` (`12mo rolling`, `YoY`, `snapshot`, `normalized`, etc.). Methodology section at the top is not sufficient — readers copy individual numbers into Slack and slides.
 - **(v0.4.0+) Caveat propagation** — Step 3.5 ⚠️ Caveat metrics surface their qualifier in the final report (e.g., "single-source pending cross-validation", "normalized from N-day extract", "holiday-affected period")
 - **(v0.4.0+) Anomaly disclosure** — for any reported anomaly: source count (≥ 2; ≥ 3 for extreme), period definition, holiday-screening status, methodology change check status
-- **(v0.4.0+) Source type markers** — every cited number in Sources section tagged (`tableau-mcp` / `tableau-web` / `glint-live` / `ga-snapshot` / `confluence-internal`)
+- **(v0.4.0+) Source type markers** — every cited number in Sources section tagged (`tableau-mcp` / `tableau-web` / `internal-live` / `ga-snapshot` / `confluence-internal`)
 
 ## Additional Resources
 

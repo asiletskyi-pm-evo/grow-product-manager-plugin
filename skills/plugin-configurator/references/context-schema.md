@@ -157,7 +157,7 @@ External design solutions that `design-bridge` delegates hi-fi / screen-generati
 | design_toolkits[].entry.type | ✅ | design-bridge | `skill` / `mcp_tool` / `command` / `browser` |
 | design_toolkits[].entry.ref | ✅ | design-bridge | Invocation reference for the entry type |
 | design_toolkits[].capabilities | ✅ | design-bridge | Core-enum (`hi-fi-prototype`, `screen-generation`, `ds-tokens`, `figma-write`, `code-first-research`, `design-review`) + custom tags |
-| design_toolkits[].scope | optional | design-bridge | Free applicability tags (e.g., `[mobile, prom-b2c]`) |
+| design_toolkits[].scope | optional | design-bridge | Free applicability tags (e.g., `[mobile, b2c]`) |
 | design_toolkits[].input_contract | optional | design-bridge | `feature_name` / `platform` / `requirements_doc` / `jira_key` |
 | design_toolkits[].returns | optional | design-bridge | `figma_url` / `branch` / `files` |
 | design_toolkits[].setup_hint | optional | design-bridge | How to (re)configure the toolkit |

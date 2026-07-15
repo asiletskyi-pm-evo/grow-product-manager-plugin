@@ -93,6 +93,6 @@ Per `self-improvement.md`.
 → `product-reporter` (3T5F reporting) · → `one-on-one` (commit/review) · → `hiring-designer` (offer goal letter) · → `performance-review` (goals become review inputs) · → `decision-log` (strategic goal decisions) · ← `focus-advisor`, `performance-review`, `offboarding-guide` (request goals be set/revised).
 
 ## Example dialogues
-- *"Постав ціль аналітику Олені на друге півріччя"* → Step P loads Olena (D3, weekly reporting) → SMARTCBP → pulls her H1 fact via product-reporter for Comparable → 2–3 variants → Tell-and-Sell → writes `active_goal_letter`, offers to set up her 3T5F cadence.
+- *"Постав ціль аналітику <ім’я> на друге півріччя"* → Step P loads the person (D3, weekly reporting) → SMARTCBP → pulls their H1 fact via product-reporter for Comparable → 2–3 variants → Tell-and-Sell → writes `active_goal_letter`, offers to set up their 3T5F cadence.
 - *"Це нормальна ціль: 'покращити конверсію'?"* → `audit` mode → 8-check table shows S/M/C/T failures → returns "increase checkout conversion from 2.1% to 3.0% (+0.9 p.p. vs H1) by 2026-12-31".
 - *"Зроби OKR для напрямку Q&A на квартал"* → OKR path: 1 Objective + 3 Key Results, public, stretch → offers to cascade personal SMARTCBP goals for the owners underneath.

@@ -51,10 +51,10 @@ When cadence says "metrics day" or the PM asks, focus-advisor **proposes** (gate
 | Roadmap plan-vs-actual | features by CQL `space=X AND label=qN-YYYY` + epic statuses per-key (`jira-data-protocol.md`); compare feature statuses vs quarter position (sprints elapsed / remaining) | "5 of 27 features done, 3 of 7 sprints gone — behind pace"; "epic X has no movement for 2 sprints" |
 | Roadmap drift | committed scope vs current forecast (reuse `capacity-model.md` math where available) | "FE demand grew past ceiling after scope add → replan candidate" |
 | Backlog staleness | vault `Hypotheses/` + backlog pages: age since last ICE review | "ICE backlog untouched for 6 weeks — re-score before next quarter draft" |
-| Missing prerequisites | features planned for next 1–2 sprints lacking upstream work-types (work-type DAG, `dependency-model.md`) | "feature Y in SEX N+1 has no requirements page" |
+| Missing prerequisites | features planned for next 1–2 sprints lacking upstream work-types (work-type DAG, `dependency-model.md`) | "feature Y in sprint N+1 has no requirements page" |
 | A/B decisions | `experiment-tracker` registry — tests in state `awaiting-readout` past their expected date (fall back to the A/B tracker page from `local-context → Product → ab_test_dashboards` when the registry is empty) | "test Z ended 12 days ago — decision pending" |
 | Decision revisit dates | `decision-log` records whose `revisit_by` date has passed | "the 'build vs buy' decision said re-examine by Jul 1 — it's overdue" |
-| Capacity & availability | Planning config team + calendar vacations + booking/HR deadlines from Focus config | "2 of 3 Android devs on vacation in SEX N+1"; "bookings review due Sep 1" |
+| Capacity & availability | Planning config team + calendar vacations + booking/HR deadlines from Focus config | "2 of 3 Android devs on vacation in sprint N+1"; "bookings review due Sep 1" |
 | Team events | calendar + Focus config: perf reviews, onboarding milestones, vacancies | "perf review cycle opens next week — drafts needed" |
 
 Tactical signals feed `focus-scoring.md` §4 (ICE + capacity realism + goal alignment). Heavy analysis stays chained: drift → `project-planning replan`, test readout → `experiment-tracker readout` (which owns test state and chains onward to `product-analysis`), overdue revisits → `decision-log`, re-scoring → `brainstorm-features`.

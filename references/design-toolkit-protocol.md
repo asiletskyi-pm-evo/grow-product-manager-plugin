@@ -20,7 +20,7 @@ design_toolkits:
       type: skill | mcp_tool | command | browser
       ref: <invocation reference>  # see §4 per type
     capabilities: [<capability>, ...]   # see §3
-    scope: [<free tags>]           # org-specific applicability, e.g. [mobile, prom-b2c]
+    scope: [<free tags>]           # org-specific applicability, e.g. [mobile, b2c]
     input_contract:                # what Grow PM passes in — see §5
       feature_name: required
       platform: [<options>]

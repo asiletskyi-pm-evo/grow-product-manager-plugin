@@ -175,7 +175,7 @@ If anomaly aligns with holiday window:
 **1.5.c — Multi-Source Cross-Validation:**
 
 For critical CR / GMV / Order / Revenue / Retention metrics:
-- ≥ 2 independent sources (two Tableau workbooks, or Tableau + Glint, or Tableau + GA, or CSV + Tableau)
+- ≥ 2 independent sources (two Tableau workbooks, or Tableau + an internal live-metrics tool, or Tableau + GA, or CSV + Tableau)
 - Variance ≤ 15% tolerated; > 15% → flag, resolve
 
 **Special case — extreme values:**
@@ -211,7 +211,7 @@ Methodology section at the top is **not sufficient** — readers copy individual
 
 **1.5.e — Source Type Marker:**
 
-Tag every source: `tableau-mcp`, `tableau-web`, `glint-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `pdf-upload`, `confluence-internal`, `jira-internal`, `user-text`.
+Tag every source: `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `pdf-upload`, `confluence-internal`, `jira-internal`, `user-text`.
 
 ### Output of Step 1.5
 
@@ -346,7 +346,7 @@ The calling skill should incorporate these results into its workflow without re-
 - **(v0.9.0+) Inline period annotation MANDATORY** — every cited metric in TL;DR, Executive Summary, A/B verdict, post-release classification, tables, bullets carries inline annotation per Gate Check 4 of `data-integrity-protocol.md`. Methodology section at the top is not sufficient — readers copy individual numbers into Slack and slides.
 - **(v0.9.0+) Caveat propagation** — Step 1.5 ⚠️ Caveat metrics surface their qualifier in the final report
 - **(v0.9.0+) Anomaly/A-B disclosure** — for any reported anomaly or A/B verdict: source count (≥ 2; ≥ 3 for extreme), period definition, holiday-screening status, methodology change check status, sample-size and power adequacy
-- **(v0.9.0+) Source type markers** — every cited number in Sources section tagged (`tableau-mcp` / `tableau-web` / `glint-live` / `ga-snapshot` / `csv-upload` / `screenshot-user` / `pdf-upload` / `confluence-internal` / `jira-internal`)
+- **(v0.9.0+) Source type markers** — every cited number in Sources section tagged (`tableau-mcp` / `tableau-web` / `internal-live` / `ga-snapshot` / `csv-upload` / `screenshot-user` / `pdf-upload` / `confluence-internal` / `jira-internal`)
 - **(v0.9.0+) Never declare A/B winner/loser without:** sample-size power check, p-value or confidence interval, holiday-screening pass, segment-level review (Mobile vs Web, country, user-type)
 
 ## Additional Resources

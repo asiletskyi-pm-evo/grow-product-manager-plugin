@@ -15,7 +15,7 @@ Person profiles are stored as one Markdown file per person:
 1. **Vault area `People/<name>.md`** — primary, when a vault is configured (`vault_level ≥ L1`). Levels L0/L1/L2 behave exactly as in `references/vault-protocol.md`.
 2. **`~/.grow-pm/people/<slug>.md`** — fallback when no vault is configured (`vault_level == L0`), so the People-contour works standalone.
 
-`<slug>` is the kebab-cased name (`Olena Kovalenko` → `olena-kovalenko`). A team **roster index** lives at `People/_roster.md` (vault) or `~/.grow-pm/people/_roster.md` — one line per person: `- [[People/olena-kovalenko]] — Analyst, D3, reports weekly`.
+`<slug>` is the kebab-cased name (`Firstname Lastname` → `firstname-lastname`). A team **roster index** lives at `People/_roster.md` (vault) or `~/.grow-pm/people/_roster.md` — one line per person: `- [[People/firstname-lastname]] — Analyst, D3, reports weekly`.
 
 The `People` vault area and default cadences are configured by `plugin-configurator` → **People-setup** mode and stored in `local-context.md` → `people` section (see `skills/plugin-configurator/references/context-schema.md`).
 
@@ -28,11 +28,11 @@ YAML frontmatter + free-form sections:
 ```yaml
 ---
 type: people
-name: "Olena Kovalenko"
-slug: olena-kovalenko
+name: "Firstname Lastname"
+slug: firstname-lastname
 role: "Product Analyst"
 team: "Core"
-manager: "Andrii"
+manager: "<manager-name>"
 joined: 2025-03-01
 # Situational leadership (people-frameworks.md → Hersey-Blanchard)
 d_type: D3                      # D1 | D2 | D2.1 | D3 | D3.1 | D4
@@ -45,24 +45,24 @@ delegation:
   - { zone: "A/B readouts",      level: 6, target: 7 }
   - { zone: "funnel dashboards", level: 4, target: 6 }
 # Goals
-active_goal_letter: "[[People/goals/olena-2026H1]]"   # link to SMARTCBP goal letter
+active_goal_letter: "[[People/goals/firstname-lastname-2026H1]]"   # link to SMARTCBP goal letter
 goal_methodology: SMARTCBP      # SMARTCBP | OKR
 # Reporting (reporting-3t5f.md)
 reporting:
   cadence: weekly               # weekly | biweekly | monthly
   last_report: 2026-07-11
-  last_report_ref: "[[People/reports/olena-2026-07-11]]"
+  last_report_ref: "[[People/reports/firstname-lastname-2026-07-11]]"
   forecast_qa: 92               # last Forecast Quota Attainment, %
 # 1-1 cadence and history
 one_on_one:
   cadence: biweekly
   last: 2026-07-07
   history:
-    - { date: 2026-07-07, followup_ref: "[[People/1-1/olena-2026-07-07]]" }
+    - { date: 2026-07-07, followup_ref: "[[People/1-1/firstname-lastname-2026-07-07]]" }
 # GTD-index trend (people-frameworks.md → GTD-index)
 gtd_index:
-  - { period: "SEX-41", value: 0.72 }
-  - { period: "SEX-42", value: 0.81 }
+  - { period: "Sprint 41", value: 0.72 }
+  - { period: "Sprint 42", value: 0.81 }
 # Signals — free text, updated by one-on-one / performance-review
 signals:
   motivation: "high; wants to move toward analytics lead"

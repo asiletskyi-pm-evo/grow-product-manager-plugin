@@ -16,7 +16,7 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 
 | # | Phrase | Expected |
 |---|--------|----------|
-| A1 | проаналізуй CJM-воронку Prom і знайди аномалії | cjm-research |
+| A1 | проаналізуй CJM-воронку продукту і знайди аномалії | cjm-research |
 | A2 | зроби повне CJM-дослідження з гіпотезами | cjm-research |
 | A3 | подивись дашборд конверсії за червень і поясни тренд | product-analysis |
 | A4 | проаналізуй результати A/B-тесту нового чекаута | product-analysis |

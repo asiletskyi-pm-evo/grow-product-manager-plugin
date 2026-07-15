@@ -6,18 +6,18 @@ How to fetch and parse Jira data reliably for ops reports and planning. Shared b
 
 | Field | ID | Notes |
 |---|---|---|
-| Team | `customfield_10001` | Atlassian Team object. JQL by **id**: `cf[10001] = "3eb29614-f447-45a5-8963-016f46f7dded-31"` (Feedback Ecosystem). Filtering by name does not work. |
+| Team | `customfield_10001` | Atlassian Team object. JQL by **id**: `cf[10001] = "<team-uuid>"` (local-context → `product.jira_team_id`). Filtering by name does not work. |
 | Story Points | `customfield_10036` | number; null → treat as 0 |
 | Story point estimate | `customfield_10016` | team-managed alt; PROJ uses 10036 |
 | Developer | `customfield_10041` | user object |
 | QA | `customfield_10037` | user object |
-| Epic Link | `customfield_10014` | string key (`PROJ-…` or cross-project `DT-…`) = the "feature" level |
+| Epic Link | `customfield_10014` | string key (`PROJ-…`, or a cross-project key `<OTHER>-…`) = the "feature" level |
 | Sprint | `customfield_10020` | array of `{id,name,state,startDate,endDate,completeDate}` — full history |
 | FLAG | `customfield_10043` | feature flag |
 | fixVersions | `fixVersions` | releases (`name`, `releaseDate`, `released`) |
 | resolutiondate | `resolutiondate` | use for "closed in period" |
 
-Cloud ID: `4a0df834-655a-4a18-8b2a-5ec2c9dec994`. **Sprint ids are NOT hardcoded** — resolve them at runtime: use `openSprints()` / `closedSprints()` in JQL, or read `customfield_10020` (`{id,name,state,…}`) from issues, or query the board's sprints, then map name → id. (Example only, do NOT use as defaults: at one point sprint 55 ≈ `14979` active, 54 ≈ `14978`, 53 ≈ `14977` closed — these go stale every sprint.)
+**Cloud ID and sprint ids are NOT hardcoded.** Cloud ID: local-context → `product.atlassian_cloud_id` (resolve once via `getAccessibleAtlassianResources`). Sprint ids: resolve at runtime — use `openSprints()` / `closedSprints()` in JQL, or read `customfield_10020` (`{id,name,state,…}`) from issues, or query the board's sprints, then map name → id. Never store a sprint id as a default: they go stale every sprint.
 
 ## Per-mode JQL
 
@@ -103,11 +103,11 @@ Aggregate counts and SP by the chosen granularity (day/week/sprint/month/quarter
 These were confirmed against real PROJ data during skill bring-up:
 
 - **"Closed" = statusCategory `Done`** — and this category **includes the `Ready` status** (A/B-rolled-out tasks often sit in `Ready`, not `Closed`). Count both. Use `statusCategory = Done` in JQL, not `status = Closed`.
-- **Releases** — issues carry their **entire** fixVersions history (back years). For "releases in period", filter `fixVersions.releaseDate` to the period window and group by **stream**: app (`[B2C][Android] …`, `[B2C][iOS] …`), `catalog-ui: vYYYY…`, backend (`26.NN.N`), `company-stats: …`. Show all streams.
-- **Feature flags** — `customfield_10043` (FLAG) holds flag name(s), sometimes comma-separated, suffixes `_AB` / `_ENABLED`. **Enabled / A-B launched** = FLAG present on the task. **Disabled / removed** = tasks whose summary matches `Випилити прапор …` (flag cleanup after full rollout).
+- **Releases** — issues carry their **entire** fixVersions history (back years). For "releases in period", filter `fixVersions.releaseDate` to the period window and group by **stream**. The stream set is product-specific (local-context → `product.release_streams`); a typical shape is one stream per platform plus per-service streams, each with its own version format — e.g. `[B2C][Android] …` / `[B2C][iOS] …` for apps, `<web-ui-stream>: vYYYY…`, backend `YY.NN.N`, `<service>: …`. Show all configured streams.
+- **Feature flags** — `customfield_10043` (FLAG) holds flag name(s), sometimes comma-separated, suffixes `_AB` / `_ENABLED`. **Enabled / A-B launched** = FLAG present on the task. **Disabled / removed** = tasks whose summary matches the team's flag-cleanup wording (product-specific, in the team's working language — e.g. "Remove flag …"; keep the pattern in local-context → `product.flag_cleanup_pattern`).
 - **member-review transitions (changelog-backed, efficient)** — do NOT bulk-fetch raw `changelog`. Use status-history JQL:
   - passed to test (dev): `status CHANGED TO "Ready for test" BY "<accountId>" DURING ("<from>","<to>")`
   - passed to review (analyst/designer): `status CHANGED TO "On review" BY "<accountId>" DURING (...)`
   - bucket dynamics by running the `DURING` clause per period (month/sprint/quarter). Delivery metrics (closed count + SP) come from `resolutiondate` + SP without any changelog.
-- **quarter-review pagination** — a full-quarter `resolved >= … AND resolved <= …` (3 months) JQL **times out (>180 s)** on this Jira. Fetch **per month** (Apr / May / Jun) and sum. "Epics fully closed in quarter": `issuetype = Epic AND status CHANGED TO Done DURING (<quarter>)`.
+- **quarter-review pagination** — a full-quarter `resolved >= … AND resolved <= …` (3 months) JQL **times out (>180 s)** on a large Jira instance. Fetch **per month** and sum. "Epics fully closed in quarter": `issuetype = Epic AND status CHANGED TO Done DURING (<quarter>)`.
 - **initiative-status** — `cf[10014] = "<epic>"` returns the whole child tree; `statusCategory` → % done; group by the `X.Y` sub-feature code in the summary; blockers = `customfield_10021` (Flagged) non-null + status `On hold` + `is blocked by` links.
