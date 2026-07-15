@@ -46,9 +46,45 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Validate (hard gate)
+      # A push can carry several version bumps (v2.0.1 + v2.0.2 + v2.1.0 all landed
+      # in one push once). This job only ever reads plugin.json at HEAD, so the
+      # intermediate versions were documented in the CHANGELOG but never tagged or
+      # released — unpinnable and undiffable. Catch the skip instead of repeating it.
+      - name: Guard — no CHANGELOG version skipped
         if: steps.check.outputs.exists == 'false'
         run: |
+          CURRENT="${{ steps.ver.outputs.version }}"
+          HIGHEST_TAG=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -1)
+          [ -n "$HIGHEST_TAG" ] || HIGHEST_TAG="0.0.0"
+          SKIPPED=""
+          for v in $(sed -n 's/^## v\([0-9][0-9.]*\) .*/\1/p' CHANGELOG.md); do
+            [ "$v" = "$CURRENT" ] && continue
+            git rev-parse "v$v" >/dev/null 2>&1 && continue
+            # only versions this push jumps over: newer than every tag, older than HEAD's
+            newer_than_tag=$(printf '%s\n%s\n' "$HIGHEST_TAG" "$v" | sort -V | tail -1)
+            older_than_cur=$(printf '%s\n%s\n' "$CURRENT" "$v" | sort -V | head -1)
+            if [ "$newer_than_tag" = "$v" ] && [ "$older_than_cur" = "$v" ]; then
+              SKIPPED="$SKIPPED $v"
+            fi
+          done
+          if [ -n "$SKIPPED" ]; then
+            echo "::error::CHANGELOG documents version(s)$SKIPPED between the newest tag" \
+                 "(v$HIGHEST_TAG) and this release (v$CURRENT), but they have no tag." \
+                 "Releasing v$CURRENT now would bury them. Tag them at their bump commits" \
+                 "(git tag vX.Y.Z <sha> && git push origin vX.Y.Z), then re-run — or fold" \
+                 "their notes into the v$CURRENT entry if they were never meant to ship."
+            exit 1
+          fi
+          echo "No skipped versions between v$HIGHEST_TAG and v$CURRENT."
+
+      - name: Validate (hard gate)
+        if: steps.check.outputs.exists == 'false'
+        # Kept byte-for-byte in step with validate.yml — a PR must fail for the same
+        # reasons the release does, or the signal arrives after the merge.
+        env:
+          GROW_LINT_REQUIRE_YAML: "1"
+        run: |
+          python3 -m pip install --quiet pyyaml
           bash testing/validate-consistency.sh
           python3 testing/skill_lint.py
 

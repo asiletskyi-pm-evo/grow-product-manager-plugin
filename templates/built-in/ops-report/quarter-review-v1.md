@@ -44,7 +44,7 @@ min_plugin_version: "1.14.0"
 | {{epic_link}} | {{name}} | {{sp}} | {{resolved}} |
 
 ## 🚀 Релізи кварталу
-Згруповано по потоках (app / catalog-ui / backend / company-stats), `releaseDate` у вікні кварталу.
+Згруповано по потоках із `product.release_streams` (типово: app / web UI / backend / сервіси), `releaseDate` у вікні кварталу.
 | Потік | К-сть | Ключові версії |
 |---|--:|---|
 

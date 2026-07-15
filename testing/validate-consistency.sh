@@ -23,12 +23,14 @@ if [ -n "$PLUGIN_VER" ]; then
 fi
 
 # README footer must match header
-FOOTER_COUNT=$(grep -c "^\*\*Version:\*\* $README_VER" README.md || true)
+FOOTER_COUNT=$(grep -cF "**Version:** $README_VER" README.md || true)
 [ "$FOOTER_COUNT" -ge 2 ] || err "README footer version differs from header ($README_VER found $FOOTER_COUNT time(s), expected 2)"
 
-# Version must be mentioned in manifest descriptions too (human-readable tail)
-grep -q "v$PLUGIN_VER" .claude-plugin/plugin.json      || err "plugin.json description tail does not mention v$PLUGIN_VER"
-grep -q "v$PLUGIN_VER" .claude-plugin/marketplace.json || err "marketplace.json description tail does not mention v$PLUGIN_VER"
+# Version must be mentioned in manifest descriptions too (human-readable tail).
+# -F matters: without it the dots are regex wildcards, so "v2x1x0" (or v2.10.0)
+# satisfies a "v2.1.0" check and a desynced tail passes green.
+grep -qF "v$PLUGIN_VER" .claude-plugin/plugin.json      || err "plugin.json description tail does not mention v$PLUGIN_VER"
+grep -qF "v$PLUGIN_VER" .claude-plugin/marketplace.json || err "marketplace.json description tail does not mention v$PLUGIN_VER"
 
 # --- 2. SKILL.md frontmatter --------------------------------------------------
 for f in skills/*/SKILL.md; do

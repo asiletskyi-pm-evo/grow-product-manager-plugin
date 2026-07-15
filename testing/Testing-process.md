@@ -7,7 +7,7 @@
 | # | Stage | What it checks | How | Blocker? |
 |---|--------|--------------|-----|---------|
 | 0 | **Backup** | snapshot of the version before changes | `git tag` + copy of the folder into `_backups/<version>/` | — |
-| 1 | **Static lint** | 10 named checks — see the table below | `testing/skill_lint.py` (automated, in CI/locally) | yes |
+| 1 | **Static lint** | 13 named checks — see the table below | `testing/skill_lint.py` (automated, in CI/locally) | yes |
 | 2 | **Trigger eval** | description triggers on target phrases and does NOT hijack others | a set of positive/negative phrases per skill; judge subagent | yes |
 | 3a | **Trajectory / scenario walk** | skill takes the right steps: key steps, gates, tool calls, artifact structure | 1-2 scenarios per skill + mock local-context; subagent "dry run" verifies | yes (for changed skills) |
 | 3b | **Output eval** | artifact **quality** against a rubric (weighted 0/1/2, pass ≥ threshold) | `testing/output-evals.md` rubric + fixture + gold exemplar; LM-judge subagent | yes (for changed artifact-producing skills) |
@@ -31,13 +31,35 @@ Every check exists because the defect class it catches actually shipped. The v2.
 | `stale-names` | an incomplete rename outside CHANGELOG history | `Feature-task-creator`, 8 months after the rename |
 | `duplicate-h1` | a doc containing itself twice | vault-protocol.md and persistent-storage.md |
 | `readme-versions` | README claims ≠ frontmatter | 16 stale skill versions |
-| `org-data` | real org identifiers in shipped files | real roster + board id + VIP email in the example file |
+| `org-data` | real org identifiers in shipped files | real roster + board id + VIP email in the example file; team UUID + cloud id + internal KPI data (audit #2) |
 | `deck-subtypes` | yaml keys ≠ template subtypes | `feature-concept` vs `feature` |
 | `vault-types` | a saved type with no folder in TYPE_FOLDER_MAP | feedback-triage, report-3t5f, presentation/prototype/handoff, all People types |
 | `artifact-types` | a Step T type outside the protocol enum | roadmap, meeting-notes, focus, delegation-audit |
 | `chain-contracts` | a claimed `← X` edge that X knows nothing about | experiment-tracker was unreachable by chaining |
 
-Two design rules keep the linter honest: it is **stdlib-only** (PyYAML is an optional extra strict pass, never a hard dependency, so CI needs no install step), and the `ghost-skill` vocabulary is **auto-derived from `templates/built-in/`** rather than hand-listed, so new template types do not create false positives.
+Two design rules keep the linter honest: it is **stdlib-only** (PyYAML only adds an extra strict parse — CI installs it and sets `GROW_LINT_REQUIRE_YAML=1` so its absence is a blocker there, while a local run without it degrades to a warning), and the `ghost-skill` vocabulary is **auto-derived from `templates/built-in/`** rather than hand-listed, so new template types do not create false positives.
+
+### `org-data`: set up your local denylist (do this once per machine)
+
+The `org-data` check has two layers:
+
+1. **Generic shapes — always on, including CI.** Real Atlassian hosts, real-looking email domains, literal UUIDs (cloud/team ids), company registry ids (ЄДРПОУ/EDRPOU), internal hostnames (`*.corp`, `*.internal`, `gitlab.<domain>`), and non-placeholder names in the example roster.
+2. **Your organization's own tokens — only if you create the file.** `testing/org-tokens.local`, one token per line, case-insensitive substring match.
+
+That second layer is **gitignored on purpose**: a denylist that ships would put the very strings it forbids into the repo (the pre-v2.1.0 linter did exactly that). The cost is that it protects nothing until you create it — CI never has it, and audit #2 found the file did not exist on the author's machine either, so re-injecting the original v2.0.0 leak passed green for a full release cycle.
+
+```bash
+cat > testing/org-tokens.local <<'EOF'
+# one token per line; '#' comments ignored
+acme-internal.example            # your hosts
+4a0df834-655a-4a18-8b2a-...      # your Atlassian cloud id
+PROJKEY                          # your Jira project/board keys
+Surname                          # real colleagues' names
+EOF
+python3 testing/skill_lint.py    # now RED on anything that leaks them
+```
+
+**Rule:** whenever you purge an identifier from the tree, add it to `org-tokens.local` **in the same commit** — that is what stops it from coming back. Everything the generic layer cannot recognize (a surname, a product codename, an internal tool) exists only in this file.
 
 ## Test case format
 

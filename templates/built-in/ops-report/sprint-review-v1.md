@@ -37,7 +37,7 @@ min_plugin_version: "1.14.0"
 | Потік | Версії |
 |---|---|
 | App (Android/iOS) | {{releases_app}} |
-| catalog-ui | {{releases_catalog}} |
+| Web UI | {{releases_web_ui}} |
 | Backend / сервіси | {{releases_backend}} |
 
 ## 🚩 Прапори

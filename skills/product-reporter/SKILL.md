@@ -184,7 +184,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
 ## Locked conventions (validated v1.14.0)
 
 - **"Closed"** for review/quarter = `statusCategory = Done` (includes the `Ready` status).
-- **Releases** — show **all** fixVersions streams (app + catalog-ui + backend + company-stats), windowed by `releaseDate`.
+- **Releases** — show **all** fixVersions streams configured in local-context (`product.release_streams`; typically app + web UI + backend + per-service), windowed by `releaseDate`.
 - **Per-member** distribution — always produce **both** Assignee and Developer breakdowns (QA when relevant); never double-count totals.
 - **Transitions** (member-review) — changelog-backed via `status CHANGED TO "<s>" BY "<accountId>" DURING (...)`, not raw changelog dumps.
 - **Quarter-review** — fetch **per month** and sum (full-quarter JQL times out).

@@ -309,7 +309,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 **Modes:**
 - **sprint-plan** — directions → features → tasks, summary (total / carried / new / SP), per-Assignee and per-Developer distribution, key-focus table
-- **sprint-review** — closed tasks (Done incl. `Ready`), releases by stream (app / catalog-ui / backend / company-stats), flags ON/OFF, task list, closed-per-member
+- **sprint-review** — closed tasks (Done incl. `Ready`), releases by stream (your `product.release_streams` — typically app / web UI / backend / services), flags ON/OFF, task list, closed-per-member
 - **quarter-review** — plan vs actual by direction, epics/features fully closed, releases (fetched per month — full-quarter JQL times out)
 - **initiative-status** — mission/epic/feature % done, status breakdown, per sub-feature, blockers (Flagged / On hold / blocked-by)
 - **member-review** — role-aware: closed / SP / passed-to-test (`status CHANGED TO "Ready for test" BY <member>`) / passed-to-review / tested, plus dynamics across days/weeks/sprints/months/quarters/years
@@ -716,6 +716,30 @@ The plugin includes reference materials for product management best practices an
 - `skills/design-bridge/references/a11y-checklist.md` — WCAG 2.1 AA checklist + contrast pair schema
 
 See the plugin's `references/` folder for the complete list of available materials.
+
+---
+
+## Testing & Contributing
+
+Two validators gate every push and PR (`.github/workflows/validate.yml`), and they are the same hard gate the release runs:
+
+```bash
+bash testing/validate-consistency.sh   # versions, frontmatter, reference paths
+python3 testing/skill_lint.py          # 13 named checks
+```
+
+Every check exists because the defect class it catches actually shipped, and each is verified by injecting that defect into a repo copy. When you find a new defect class, **add a check — never a manual step** (see `testing/Testing-process.md`).
+
+### One-time local setup: `testing/org-tokens.local`
+
+The `org-data` check keeps your organization's identifiers out of a public repo. Its generic layer (real Atlassian hosts, real-looking email domains, literal UUIDs, registry ids, internal hostnames) always runs. But a linter cannot know that a surname, a project key, or an internal tool name is yours — those go in a local denylist:
+
+```bash
+printf 'yourcorp.example\nPROJKEY\nSurname\n' > testing/org-tokens.local
+python3 testing/skill_lint.py
+```
+
+The file is **gitignored on purpose** — a denylist that ships would carry the very strings it forbids. The trade-off is that it protects nothing until you create it, so create it before your first contribution, and add any identifier you purge from the tree to it in the same commit.
 
 ---
 

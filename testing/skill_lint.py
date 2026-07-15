@@ -57,6 +57,11 @@ KNOWN_NON_SKILL_TOKENS = {
     "feedback-triage-report", "meeting-notes", "hypothesis-list",
     # experiment-tracker lifecycle states
     "awaiting-readout", "hypothesis-backlog",
+    # design-toolkit capability core-enum (design-toolkit-protocol.md §3)
+    "hi-fi-prototype", "screen-generation", "ds-tokens", "figma-write",
+    "code-first-research",
+    # template-library modes
+    "add-language", "add-template", "list-templates", "edit-template",
 }
 
 # ---------------------------------------------------------------- inventories
@@ -119,7 +124,15 @@ if os.path.isfile(_proto):
     _pt = open(_proto, encoding="utf-8").read()
     _em = re.search(r"### artifact_type enum.*?\n(.*?)(?=\n### )", _pt, re.S)
     if _em:
-        ARTIFACT_ENUM = set(re.findall(r"`([a-z0-9-]+)`", _em.group(1)))
+        # Only the "**<name> contour:**" lines carry enum members. Slurping every
+        # backticked token in the section also swallowed the explanatory note, so
+        # `template-library`, `focus-advisor` etc. became legal artifact types and
+        # the check could not reject them.
+        _rows = re.findall(r"^\*\*[^*]*contour:\*\*(.*)$", _em.group(1), re.M)
+        if not _rows:
+            warn("artifact-types", "template-protocol.md: artifact_type enum has no '**… contour:**' rows")
+        for _row in _rows:
+            ARTIFACT_ENUM |= set(re.findall(r"`([a-z0-9-]+)`", _row))
         VOCAB |= ARTIFACT_ENUM
 
 # ------------------------------------------- 1+2. frontmatter validity/fields
@@ -148,12 +161,19 @@ def scan_plain_scalar_hazards(block):
             hazards.append((key, "' #' in unquoted value"))
     return hazards
 
+# The strict parse catches frontmatter the hazard scan cannot (e.g. an unbalanced
+# quote), so on the runner its absence must be a blocker, not a note that nothing
+# gates on. CI sets GROW_LINT_REQUIRE_YAML=1; locally a missing PyYAML stays a warn.
 try:
     import yaml
     HAVE_YAML = True
 except ImportError:
     HAVE_YAML = False
-    warn("frontmatter-yaml", "PyYAML absent — strict parse skipped, hazard scan still ran")
+    if os.environ.get("GROW_LINT_REQUIRE_YAML") == "1":
+        fail("frontmatter-yaml", "PyYAML absent but GROW_LINT_REQUIRE_YAML=1 — "
+                                 "the strict parse must run in CI (pip install pyyaml)")
+    else:
+        warn("frontmatter-yaml", "PyYAML absent — strict parse skipped, hazard scan still ran")
 
 semver = re.compile(r"^\d+\.\d+\.\d+$")
 for sf in skill_files:
@@ -189,7 +209,9 @@ for sf in skill_files:
     elif len(desc) < 40: warn("frontmatter-fields", f"{folder}: description is short (<40 chars)")
 
     # 3. inline skill_version must track the frontmatter
-    for m in re.finditer(r'skill_version:\s*["\']?([\d.]+)', text):
+    # Optional `v` prefix: `skill_version: v0.9.0` used to slip past the regex
+    # entirely, so a desync in that form was invisible rather than reported.
+    for m in re.finditer(r'skill_version:\s*["\']?v?([\d.]+)', text):
         if ver and m.group(1) != ver:
             fail("skill-version-sync", f"{folder}: body skill_version '{m.group(1)}' != frontmatter '{ver}'")
 
@@ -240,13 +262,21 @@ for rp in ref_files:
 # names a real skill in backticks, is almost certainly a ghost chain target.
 # Caught in the audit: `people-context` (a protocol, not a skill), `write-spec`.
 KEBAB = re.compile(r"`([a-z][a-z0-9]*(?:-[a-z0-9]+)+)`")
+# A chain line names its target and often nothing else, so requiring a real skill
+# on the same line blinds this check to the ghosts it exists to catch. On lines
+# that explicitly hand work to a skill, a lone unknown token is enough to fail.
+# Bare arrows are deliberately NOT markers: in these docs "→" overwhelmingly means
+# "maps to" (keyword → category, config → MCP tool), not "chains to".
+CHAIN_MARKER = re.compile(r"(\bchain(s|ed)?\s+(to|into)\b|\binvoke(s|d)?\b|\bdelegat\w*\s+to\b|"
+                          r"\bhand(s)?[ -]off\s+to\b|\broute(s|d)?\s+to\b|"
+                          r"виклич|делегу)", re.I)
 for f in skill_files + [p for p in ref_files if p.endswith(".md")]:
     rel_name = os.path.relpath(f, root)
     for i, line in enumerate(strip_code_fences(open(f, encoding="utf-8").read()).split("\n"), 1):
         toks = set(KEBAB.findall(line))
         if not toks: continue
         real = toks & SKILLS
-        if not real: continue
+        if not real and not CHAIN_MARKER.search(line): continue
         for t in sorted(toks - SKILLS):
             if t in KNOWN_NON_SKILL_TOKENS or t in VOCAB: continue
             if f"{t}.md" in REF_BASENAMES or f"{t}.yaml" in REF_BASENAMES: continue
@@ -254,35 +284,47 @@ for f in skill_files + [p for p in ref_files if p.endswith(".md")]:
                            "-v1", "-setup", "-notes", "-arcv", "-letter", "-plan",
                            "-profile", "-index", "-3t5f")): continue
             if t.startswith(("builtin-", "cjm-builtin", "templates-")): continue
-            fail("ghost-skill", f"{rel_name}:{i}: '{t}' is not a skill (line also cites {sorted(real)[0]})")
+            ctx = f"line also cites {sorted(real)[0]}" if real else "on a chain line"
+            fail("ghost-skill", f"{rel_name}:{i}: '{t}' is not a skill ({ctx})")
 
 # ------------------------------------------------------------- 6. stale names
 # Renames are only complete when the old identifier is gone from live docs.
-# CHANGELOG is history and README/validators may cite a rename deliberately.
+# CHANGELOG is history; a deliberate citation ("renamed from X", "formerly X")
+# is exempted per-line below, which is what lets README be scanned too — it is
+# the most public file a stale name can survive in.
 STALE = {
     "team-ops-reporter": "product-reporter",
     "feature-task-creator": "task-creator",
     "Feature-task-creator": "Task-creator",
 }
 for f in skill_files + [p for p in ref_files if p.endswith(".md")] + \
-         glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True):
+         glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True) + \
+         [os.path.join(root, "README.md")]:
+    if not os.path.isfile(f): continue
     rel_name = os.path.relpath(f, root)
     t = open(f, encoding="utf-8").read()
     for old, new in STALE.items():
         for i, line in enumerate(t.split("\n"), 1):
-            if old in line and "renamed" not in line.lower() and "formerly" not in line.lower():
+            low = line.lower()
+            # case-insensitive: "Team-Ops-Reporter" in a heading is just as stale
+            if old.lower() in low and "renamed" not in low and "formerly" not in low:
                 fail("stale-names", f"{rel_name}:{i}: stale '{old}' (renamed to '{new}')")
 
 # ----------------------------------------------------------- 7. duplicate H1
 # vault-protocol.md and persistent-storage.md each contained their whole content
 # twice: a new version was prepended instead of replacing the old one.
-for rp in ref_files:
-    if not rp.endswith(".md"): continue
+# SKILL.md files are included too: they are the highest-value docs in the repo,
+# and a doubled SKILL.md was invisible here while a doubled reference was not.
+for rp in [p for p in ref_files if p.endswith(".md")] + skill_files:
     # '#' inside a fenced block is a code comment, not a heading
-    lines = strip_code_fences(open(rp, encoding="utf-8").read()).split("\n")
+    body = open(rp, encoding="utf-8").read()
+    if rp in skill_files:
+        body = body[len(fm_block(body)):] if fm_block(body) else body
+    lines = strip_code_fences(body).split("\n")
     h1s = [i for i, l in enumerate(lines, 1) if l.startswith("# ")]
     if len(h1s) > 1:
-        fail("duplicate-h1", f"{os.path.basename(rp)}: {len(h1s)} H1 headings (lines {h1s}) — doc likely contains itself twice")
+        label = os.path.relpath(rp, root)
+        fail("duplicate-h1", f"{label}: {len(h1s)} H1 headings (lines {h1s}) — doc likely contains itself twice")
 
 # -------------------------------------------------------- 8. README versions
 README = os.path.join(root, "README.md")
@@ -336,9 +378,36 @@ if os.path.isfile(_tokens_file):
     if _toks:
         ORG_TOKENS = re.compile("|".join(re.escape(t) for t in _toks), re.I)
 
-PLACEHOLDER_HOSTS = ("your-org", "your-domain", "company", "example", "internal-gitlab-host")
-scan_targets = [os.path.join(root, "local-context.example.md")] + \
+# Whole-label match: "mycompany.io" must NOT pass because "company" is a substring
+# of "mycompany" (that bug shipped a real domain past this check).
+PLACEHOLDER_HOSTS = ("your-org", "your-domain", "company", "example", "internal-gitlab-host",
+                     "acme", "localhost")
+def is_placeholder_host(host):
+    # A label matches whole ("company.com") or as a hyphen-part ("example-corp.com").
+    # "mycompany.io" must not match "company" — that is the bug this replaces.
+    for label in host.lower().split("."):
+        if label in PLACEHOLDER_HOSTS: return True
+        if any(part in PLACEHOLDER_HOSTS for part in label.split("-")): return True
+    return False
+
+# An instance UUID (Atlassian cloud id, Jira Team object id) is org data in the
+# same way a hostname is, and no generic "is it real" test exists — so any
+# literal UUID in a shipped file is a leak by shape. Placeholders use <angle>.
+UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+# National company registry ids (UA legal entity), 8 digits after the label.
+REGISTRY_RE = re.compile(r"(ЄДРПОУ|EDRPOU|ІПН|VAT\s*ID)\D{0,5}\d{8}", re.I)
+# Internal hosts that are not Atlassian: foo.corp, jira.internal, host.intra …
+# `.local` is deliberately NOT a suffix here: it is the repo's own convention for
+# gitignored config (testing/org-tokens.local), so it collides with filenames.
+INTERNAL_HOST_RE = re.compile(r"\b(?:[\w-]+\.)+(?:corp|internal|lan|intra)\b", re.I)
+VCS_HOST_RE = re.compile(r"\b(?:gitlab|jira|confluence|jenkins|grafana|tableau)\.(?:[\w-]+\.)+[a-z]{2,}\b", re.I)
+
+# README and the test fixtures ship too: README is the most public file in the
+# repo, and fixtures are realistic briefs where org context creeps in naturally.
+scan_targets = [os.path.join(root, "local-context.example.md"),
+                os.path.join(root, "README.md")] + \
                glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True) + \
+               glob.glob(os.path.join(root, "testing", "**", "*.md"), recursive=True) + \
                [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files
 for f in scan_targets:
     if not os.path.isfile(f): continue
@@ -348,12 +417,21 @@ for f in scan_targets:
             m = ORG_TOKENS.search(line)
             if m: fail("org-data", f"{rel_name}:{i}: org identifier '{m.group(0)}' — use a placeholder")
         for host in re.findall(r"([\w-]+)\.atlassian\.net", line):
-            if not any(p in host for p in PLACEHOLDER_HOSTS):
+            if not is_placeholder_host(host):
                 fail("org-data", f"{rel_name}:{i}: real Atlassian host '{host}.atlassian.net' — use your-org")
         # letter-only TLD so version markers like `template-id@0.1` don't match
         for email in re.findall(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,})", line):
-            if not any(p in email for p in PLACEHOLDER_HOSTS):
+            if not is_placeholder_host(email):
                 fail("org-data", f"{rel_name}:{i}: real-looking email domain '{email}' — use example.com")
+        m = UUID_RE.search(line)
+        if m: fail("org-data", f"{rel_name}:{i}: literal UUID '{m.group(0)}' — instance/team ids "
+                               f"live in local-context; ship <team-uuid>/<cloud-id>")
+        m = REGISTRY_RE.search(line)
+        if m: fail("org-data", f"{rel_name}:{i}: company registry id '{m.group(0)}' — never ship a legal entity id")
+        for rx, what in ((INTERNAL_HOST_RE, "internal hostname"), (VCS_HOST_RE, "internal service host")):
+            m = rx.search(line)
+            if m and not is_placeholder_host(m.group(0)):
+                fail("org-data", f"{rel_name}:{i}: {what} '{m.group(0)}' — use a placeholder host")
 
 # A linter cannot know that "Surname1" is a real person, so the roster leak needs
 # a positive rule instead of a denylist: the example file carries placeholders only.
@@ -396,8 +474,18 @@ if os.path.isfile(schema_p):
     m = re.search(r"TYPE_FOLDER_MAP Reference\s*```json\s*(\{.*?\})\s*```", st, re.S)
     folder_map = {}
     if m:
+        # A duplicated key is last-wins in json.loads, so one type quietly losing
+        # its folder would parse clean. Reject dupes explicitly.
+        def _no_dupes(pairs):
+            seen = {}
+            for k, v in pairs:
+                if k in seen:
+                    fail("vault-types", f"vault-schema.md: TYPE_FOLDER_MAP has duplicate key "
+                                        f"'{k}' ('{seen[k]}' vs '{v}') — last-wins would hide one")
+                seen[k] = v
+            return seen
         try:
-            folder_map = json.loads(m.group(1))
+            folder_map = json.loads(m.group(1), object_pairs_hook=_no_dupes)
         except Exception as e:
             fail("vault-types", f"vault-schema.md: TYPE_FOLDER_MAP is not valid JSON — {e}")
     else:
@@ -410,16 +498,35 @@ if os.path.isfile(schema_p):
     for t in sorted(set(folder_map) - taxonomy):
         warn("vault-types", f"vault-schema.md: TYPE_FOLDER_MAP has '{t}' with no taxonomy row")
 
-    # what the skills actually save
+    # What the skills actually save.
+    # Two passes, because a strict `vault_save({ type: "literal"` regex silently
+    # skipped every call that wraps the value in prose — e.g.
+    #   type: <per research type: "competitive-analysis" | "market-research">
+    # which left three real types unvalidated. Pass 2 takes any vault_save line
+    # and checks every quoted token between `type:` and the next key.
     SAVE_RE = re.compile(r'vault_save\(\{\s*type:\s*((?:"[a-z0-9-]+"\s*\|?\s*)+)')
+    SAVE_LINE_RE = re.compile(r'vault_save\(.*?\btype:\s*([^,}\n]*)')
+    # A variable stands in for a runtime-computed type — uncheckable by design.
+    VAR_TYPE_RE = re.compile(r'^[a-z_][a-z0-9_]*$')
     for sf in skill_files:
         folder = os.path.basename(os.path.dirname(sf))
         text = open(sf, encoding="utf-8").read()
+        seen = set()
         for m2 in SAVE_RE.finditer(text):
             for t in re.findall(r'"([a-z0-9-]+)"', m2.group(1)):
-                if t not in folder_map:
-                    line = text[:m2.start()].count("\n") + 1
-                    fail("vault-types", f"{folder}:{line}: saves type '{t}', which is not in TYPE_FOLDER_MAP")
+                seen.add((t, m2.start()))
+        for m2 in SAVE_LINE_RE.finditer(text):
+            frag = m2.group(1)
+            for t in re.findall(r'["\']([a-z0-9-]+)["\']', frag):
+                seen.add((t, m2.start()))
+            bare = frag.strip().strip("`")
+            if bare and not VAR_TYPE_RE.match(bare) and not re.search(r'["\'<]', bare):
+                warn("vault-types", f"{folder}: vault_save type '{bare}' is neither a quoted "
+                                    f"literal nor a variable — cannot be validated")
+        for t, pos in sorted(seen, key=lambda x: x[1]):
+            if t not in folder_map:
+                line = text[:pos].count("\n") + 1
+                fail("vault-types", f"{folder}:{line}: saves type '{t}', which is not in TYPE_FOLDER_MAP")
 
 # ------------------------------------------------------- 12. artifact types
 # Step T declares an artifact_type; template-protocol.md enumerates the legal set.

@@ -10,14 +10,24 @@ concurrency:
   group: validate-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   consistency:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The runner image ships PyYAML today, but nothing pinned it — so if it ever
+      # disappears the strict frontmatter parse silently downgrades to a warning
+      # that gates nothing. Install it, and make its absence fatal below.
+      - name: Install lint deps
+        run: python3 -m pip install --quiet pyyaml
       # Must match release.yml's hard gate exactly — otherwise a PR goes green,
       # merges, and then fails the auto-release on main with no earlier signal.
       - name: Run consistency checks
         run: bash testing/validate-consistency.sh
       - name: Run static lint
+        env:
+          GROW_LINT_REQUIRE_YAML: "1"
         run: python3 testing/skill_lint.py
