@@ -1,6 +1,8 @@
 # Test Case Registry — Grow PM Plugin
 
-> Updated EVERY release: new cases for new/changed skills + regression for affected ones. Format — see `Testing-process.md`. Status is filled in when a stage runs.
+> Cases for new/changed skills + regression for affected ones; format — see `Testing-process.md`. Status is filled in when a stage runs.
+>
+> **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
 ## Release v2.1.0 — audit remediation P3 + P4 (behavioural defects)
 
@@ -112,7 +114,15 @@
 
 ---
 
-## Future releases (placeholders)
-- **v1.16.0 quick fixes** — cases for the 8 bugfixes from the audit (design-bridge subtype, product-analysis Step 0h, skill_version ×3, product-reporter sprint-id, configurator duplicates, template-library count).
-- **v1.17.0 dedup** — regression on the skills whose canon was extracted into references.
-- **v1.18.0 configurator refactor** — full plugin-configurator regression + subagent processes.
+## Coverage gaps (known, deliberate)
+
+This registry holds cases for **v1.15.0 and v2.0.1+**. v1.16.0–v1.40.0 and v2.0.0 shipped
+without entries — including v2.0.0, the largest release (6 new skills + the
+`team-ops-reporter` → `product-reporter` rename). Do not read an absent case as a passing
+one.
+
+Rather than backfill 25 releases of prose, the defect classes those cases would have
+covered are now **automated** in `skill_lint.py` (15 checks) — the rename regression that
+`TC-reg-rename-02` reported as "pass" while a stale name was live is exactly what
+`stale-names` answers mechanically. What remains genuinely manual (trajectory walks,
+output evals) belongs in `trigger-evals.md` / `output-evals.md`, not here.

@@ -358,6 +358,21 @@ if os.path.isfile(README):
         if folder not in {README_ALIASES.get(slugify(d), slugify(d)) for d, _, _ in claims}:
             warn("readme-versions", f"skill '{folder}' has no versioned README entry")
 
+    # README counts vs reality. v2.0.1 corrected "24 seed templates" but not the
+    # list under it, which stayed at 17 — so the count and its own enumeration
+    # disagreed for a whole release. Check the claim, the list, and the disk.
+    builtins = glob.glob(os.path.join(root, "templates", "built-in", "*", "*.md"))
+    m = re.search(r"^(\d+)\s+seed templates", rt, re.M)
+    if m:
+        claimed_n, actual_n = int(m.group(1)), len(builtins)
+        if claimed_n != actual_n:
+            fail("readme-versions", f"README claims {claimed_n} seed templates; "
+                                    f"templates/built-in/ has {actual_n}")
+        listed = len(re.findall(r"^- `[a-z0-9-]+/[a-z0-9-]+-v\d+`", rt[m.start():], re.M))
+        if listed != actual_n:
+            fail("readme-versions", f"README enumerates {listed} seed templates but claims "
+                                    f"{claimed_n} and ships {actual_n} — list and count must agree")
+
 # ------------------------------------------------------------- 9. org data
 # The example file shipped a real team roster, board id, epic keys and a named
 # VIP to a public repo. Shipped files must carry placeholders only.

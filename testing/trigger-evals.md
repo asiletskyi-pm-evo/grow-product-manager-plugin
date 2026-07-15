@@ -128,3 +128,11 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 - New collision discovered in real use → add 2–3 rows to the relevant group (or a new group), then fix descriptions.
 - Keep phrases realistic (copy from actual user requests where possible), mixed UA/EN like real usage.
 - This file is part of the release definition-of-done for any description-touching release.
+
+> **Log status (2026-07-15).** The last recorded run is 2026-07-04 (pre-v1.36.0). v2.0.0 added
+> 6 skills, v2.0.1 rewrote all 29 descriptions, and v2.1.1 changed the routing-relevant guards
+> below — none of it is logged here, so the DoD above has been asserted rather than met. The
+> next description-touching release must run the groups and add a row, and the run needs a new
+> group for the People contour (one-on-one vs meeting-processor, performance-review vs
+> product-reporter member-review) plus the v2.1.1 guards: write-concept vs requirements-creator
+> ("describe a feature" / "описати фічу"), product-research vs knowledge-library (library lookup).

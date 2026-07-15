@@ -2,6 +2,16 @@
 
 All notable changes to this plugin are documented here.
 
+Version format: `MAJOR.MINOR.PATCH`
+- **MAJOR** — breaking changes, full workflow restructure across multiple skills
+- **MINOR** — new skill added, new step/section in existing skill, significant workflow addition
+- **PATCH** — wording fix, small content addition, formatting change, bug fix in skill logic
+
+Each skill also carries its own version in the frontmatter (`version:` field in SKILL.md).
+When a skill changes, its version is bumped independently. The plugin version is bumped to reflect the highest-impact change among all updated skills.
+
+---
+
 ## v2.1.0 (2026-07-14)
 
 **Audit remediation, P3 + P4 — the last of the 2026-07-14 audit.** Closes the behavioural defects: a safety gate that could be skipped, a mode with no workflow, a config field nothing defined, and a health score that only summed correctly for one funnel shape. With this release every finding from the audit is either fixed or deliberately deferred with a reason.
@@ -58,7 +68,7 @@ All notable changes to this plugin are documented here.
 
 - **`vault-schema.md` is now declared the single source of truth for vault layout**, and `vault-protocol.md` (save/init/search) and `obsidian-setup-guide.md` (setup smoke tests) conform to it. Previously all three described *different* layouts: the protocol saved to `{vault}/artifacts/{type}/{product}/` with the MOC at `dashboard/MOC-Dashboard.md`, the schema documented an area-first tree with `_MOC/Dashboard.md`, and the setup guide's four smoke tests checked a third layout — against the very algorithm it delegates to, so they could not have passed.
 - **One path rule, no exceptions:** `{vault}/{TYPE_FOLDER_MAP[type]}/{product_slug}/{filename}`. The schema's own tree contradicted its map on nesting order (`CJM/{product}/full-reports/` vs `CJM/full-reports/`); the tree now follows the map. Lifecycle status lives in frontmatter, not in folders.
-- **10 artifact types that skills were already saving had no home in the schema** — `feedback-triage` (in the taxonomy but absent from TYPE_FOLDER_MAP, so it had no resolvable folder at all), `report-3t5f`, `presentation`, `prototype`, `handoff` (the schema even called the latter two "existing" while defining neither), `vacancy-profile`, and the People contour. Taxonomy grows 22 → 32 types, all mapped.
+- **10 artifact types that skills were already saving had no home in the schema** — `feedback-triage` (in the taxonomy but absent from TYPE_FOLDER_MAP, so it had no resolvable folder at all), `report-3t5f`, `presentation`, `prototype`, `handoff` (the schema even called the latter two "existing" while defining neither), `vacancy-profile`, and the People contour. Taxonomy grows 22 → 33 types, all mapped.
 - **The People contour gets a defined home:** everything about a person under `People/` — one folder, one sensitivity boundary (`People/goals/`, `/reports/`, `/1-1/`, `/reviews/`, `/offboarding/`, `/delegation/`). The protocol's own wikilink examples pointed at top-level `Goals/`, `Reports/`, `1-1/` while the skills wrote to `People/…` — three homes for the same artifact. `vacancy-profile` sits outside `People/` deliberately: a vacancy is a role, not yet a person.
 - **`vault_init` now derives its folders from TYPE_FOLDER_MAP** instead of restating them — the hardcoded list had fallen 7 types behind. Same for the search glob and the MOC paths.
 - **`REVERSE_CONTEXT_MAP`** — used by `vault_save` step 7, defined nowhere — is now derived from SKILL_CONTEXT_MAP rather than being a second map to keep in sync. **SKILL_CONTEXT_MAP** grew from 8 to all 29 skills (`local-context-protocol.md` sends every skill to Step 0.5, so the 21 missing rows meant silent skips), with People types restricted to People-contour readers.
@@ -119,17 +129,6 @@ Three new checks (13 total): **`vault-types`** (every `vault_save` type is in th
 
 - Changed: all 29 `skills/*/SKILL.md` (patch bump), `references/` (12 files), `templates/built-in/ops-report/sprint-review-v1.md`, `local-context.example.md`, `README.md`, `CHANGELOG.md`, both manifests, `testing/skill_lint.py`, `testing/trigger-evals.md`, `testing/Testing-process.md`, `testing/test-cases.md`, both workflows.
 
----
-
-Version format: `MAJOR.MINOR.PATCH`
-- **MAJOR** — breaking changes, full workflow restructure across multiple skills
-- **MINOR** — new skill added, new step/section in existing skill, significant workflow addition
-- **PATCH** — wording fix, small content addition, formatting change, bug fix in skill logic
-
-Each skill also carries its own version in the frontmatter (`version:` field in SKILL.md).
-When a skill changes, its version is bumped independently. The plugin version is bumped to reflect the highest-impact change among all updated skills.
-
----
 
 ## v2.0.0 (2026-07-14)
 

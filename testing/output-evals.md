@@ -83,7 +83,13 @@ Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input br
 - **Definition of Done** — for a release touching an artifact skill, its output-eval must be ≥ pass_threshold (the same way trigger-evals gate description releases).
 - **On regression** — a dropped criterion score points at the harness layer to fix (usually Instructions or Examples); see `references/self-improvement.md`.
 
-## Coverage status (v1.39.0)
+## Coverage status (rubrics/fixtures as of v1.39.0 — no run logged since)
+
+> **Stage 3b is a blocker** (`Testing-process.md`), yet no 3b run is recorded anywhere for
+> v2.0.x or v2.1.x — and those releases changed `requirements-creator`, `meeting-processor`,
+> `product-analysis` and `cjm-research`, all artifact-producing. As with `trigger-evals.md`,
+> the gate has been asserted rather than met. Run 3b for every changed artifact skill before
+> the next release and record the result here; an unlogged pass is not a pass.
 
 | Skill | Rubric | Fixture | Gold exemplar |
 |-------|--------|---------|---------------|

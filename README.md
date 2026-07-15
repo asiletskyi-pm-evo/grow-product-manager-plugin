@@ -288,7 +288,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 - **handoff** — developer-ready handoff spec (tokens, components, states, responsive breakpoints) with WCAG 2.1 AA a11y audit as blocker
 - **research-enrichment** — pull UI screenshots, competitor visuals, or DS references to augment research
 
-**Design plugin integration:** hooks 7 design skills (research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) via optional delegation, plus Figma MCP for DS sync. Your Figma DS `fileKey` lives in `local-context.md` → `product.figma.ds_file_key`.
+**Design plugin integration:** hooks 6 design skills (research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) via optional delegation, plus Figma MCP for DS sync. Your Figma DS `fileKey` lives in `local-context.md` → `product.figma.ds_file_key`.
 
 **Brand configuration (from `local-context.md`):**
 - `product.brand.primary`, `product.brand.dark`, `product.brand.font_primary`, `product.brand.font_display`
@@ -313,6 +313,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 - **quarter-review** — plan vs actual by direction, epics/features fully closed, releases (fetched per month — full-quarter JQL times out)
 - **initiative-status** — mission/epic/feature % done, status breakdown, per sub-feature, blockers (Flagged / On hold / blocked-by)
 - **member-review** — role-aware: closed / SP / passed-to-test (`status CHANGED TO "Ready for test" BY <member>`) / passed-to-review / tested, plus dynamics across days/weeks/sprints/months/quarters/years
+- **goal-report** — 3T5F goal report for a person or direction (build or audit); People-data — vault/local only, never auto-published
 
 **Output:** asked each run — Confluence (your space) and/or local `md` + `xlsx`. Visualizations are proposed (burndown, SP dynamics, status donut, load distribution) and built on accept. Built-in templates live in `templates/built-in/ops-report/`; custom ones via Template Library (`artifact_type: ops-report`).
 
@@ -634,6 +635,13 @@ variables: [feature_name, problem_statement, ...]
 - `ops-report/quarter-review-v1` — quarter plan-vs-actual report (**new in v1.14.0**)
 - `ops-report/initiative-status-v1` — mission/epic/feature status report (**new in v1.14.0**)
 - `ops-report/member-review-v1` — team-member review report (**new in v1.14.0**)
+- `goal-letter/default-v1` — SMARTCBP goal letter for a person (**new in v2.0.0**)
+- `report-3t5f/default-v1` — 3T5F goal report (**new in v2.0.0**)
+- `one-on-one-notes/default-v1` — 1-1 notes with signals (**new in v2.0.0**)
+- `followup-arcv/default-v1` — ARCV follow-up after a meeting or 1-1 (**new in v2.0.0**)
+- `vacancy-profile/default-v1` — universal vacancy profile (**new in v2.0.0**)
+- `performance-review/default-v1` — structured performance review (**new in v2.0.0**)
+- `offboarding-plan/default-v1` — four-meeting offboarding plan (**new in v2.0.0**)
 
 ### Managing your library
 
@@ -779,7 +787,7 @@ The Grow Product Manager plugin integrates with:
 - **Fireflies.ai** — Meeting recording and transcription
 - **Google Drive** — Document storage and collaboration
 - **Obsidian** — Persistent knowledge graph (optional)
-- **Claude Design plugin** — 7 design skills (user-research, research-synthesis, ux-copy, accessibility-review, design-system, design-critique, design-handoff) hooked via `design-bridge` (new in v1.10.0)
+- **Claude Design plugin** — 6 design skills (research-synthesis, ux-copy, accessibility-review, design-system, design-critique, design-handoff) hooked via `design-bridge` (new in v1.10.0; `design:user-research` was dropped in v2.1.0 — Grow PM's own `product-research` owns primary research)
 - **ChatGPT / Google Gemini** — Image and content generation (optional)
 
 ---

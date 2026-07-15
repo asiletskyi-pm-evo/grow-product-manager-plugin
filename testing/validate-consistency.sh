@@ -68,5 +68,28 @@ if grep -rqn 'skills/team-ops-reporter/references/jira-data-protocol' skills/ re
   err "stale path to skills/team-ops-reporter/references/jira-data-protocol.md found (moved to references/ in v1.26.1)"
 fi
 
+# --- 6. CI gate parity --------------------------------------------------------
+# validate.yml promises in a comment that its gate matches release.yml's "exactly".
+# A comment cannot enforce that: if they drift, a PR goes green, merges, and the
+# auto-release fails on main with no earlier signal. Check it instead of promising it.
+gate_of() {  # extract the validator commands each workflow actually runs
+  grep -hoE '(bash testing/validate-consistency\.sh|python3 testing/skill_lint\.py)' "$1" | sort -u
+}
+V_GATE=$(gate_of .github/workflows/validate.yml)
+R_GATE=$(gate_of .github/workflows/release.yml)
+if [ "$V_GATE" != "$R_GATE" ]; then
+  err "CI gate drift: validate.yml and release.yml do not run the same validators
+  validate.yml: $(echo "$V_GATE" | tr '\n' ' ')
+  release.yml:  $(echo "$R_GATE" | tr '\n' ' ')"
+else
+  ok "CI gate parity: validate.yml == release.yml ($(echo "$V_GATE" | wc -l | tr -d ' ') validators)"
+fi
+# The strict-YAML env flag must be set in both, or one of them silently degrades.
+V_YAML=$(grep -c 'GROW_LINT_REQUIRE_YAML' .github/workflows/validate.yml || true)
+R_YAML=$(grep -c 'GROW_LINT_REQUIRE_YAML' .github/workflows/release.yml || true)
+if [ "$V_YAML" -eq 0 ] || [ "$R_YAML" -eq 0 ]; then
+  err "GROW_LINT_REQUIRE_YAML must be set in BOTH workflows (validate=$V_YAML, release=$R_YAML) — otherwise the strict frontmatter parse degrades to a warning that gates nothing"
+fi
+
 echo
 if [ $FAIL -eq 0 ]; then echo "✅ All consistency checks passed (v$PLUGIN_VER)"; else echo "❌ Consistency checks failed"; exit 1; fi
