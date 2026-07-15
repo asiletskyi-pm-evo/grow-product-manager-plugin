@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.9.3
+version: 0.9.4
 description: Create diagrams, flowcharts, BPMN processes, UI prototypes, and infographics to visualize product concepts and hypotheses. Use when the user asks to "create a diagram", "draw a flowchart", "visualize this process", "make a prototype", "create an infographic", "BPMN diagram", "wireframe", "mockup", or when another skill suggests visualizing a concept. Supports generation via Gemini, ChatGPT, NotebookLM, Figma, Draw.io, and built-in Mermaid/HTML. Українською — "створити діаграму", "намалювати блок-схему", "візуалізувати цей процес", "зробити прототип", "створити інфографіку", "BPMN-діаграма", "вайрфрейм", "макет". Do NOT use for brand-themed decks, prototypes, or handoffs built on your Design System — use design-bridge for those.
 ---
 
@@ -509,7 +509,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.9.3", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.9.4", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Skill Chaining — Inbound (for other skills)

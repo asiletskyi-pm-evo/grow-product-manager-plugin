@@ -1,6 +1,6 @@
 ---
 name: decision-log
-version: 0.2.2
+version: 0.2.3
 description: Log and retrieve key product decisions as ADR-style records in the vault Decisions/ area — context, options considered, decision, rationale, consequences, links. Use when the user says "log this decision", "why did we decide X", "show decisions about Y", "supersede that decision", "decision log". Українською — "зафіксуй рішення", "чому ми вирішили…", "покажи рішення по…", "перегляньмо це рішення", "журнал рішень". Also invoked by other skills (meeting-processor, experiment-tracker, planning skills) when their outcome contains a decision worth recording. Do NOT use for meeting notes as such (meeting-processor) or experiment state (experiment-tracker) — this skill records decisions and answers "why".
 ---
 

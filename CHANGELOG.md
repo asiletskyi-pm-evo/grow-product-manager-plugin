@@ -12,6 +12,73 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v2.1.1 (2026-07-15)
+
+**Re-audit remediation — audit #2 of v2.1.0.** The v2.0.0 audit's fixes verifiably held where they were aimed; a second, independent audit of the result found what they did not reach. Two themes: **live organization data the genericized lint check cannot see**, and **a rule fixed in one place while its copies drifted on** — 7 of the findings are "two sources of one truth" failures. Both validators were green throughout, which is the point: three new checks now cover the classes they missed.
+
+### Fixed — P0, organization data in shipped files
+
+- **`jira-data-protocol.md` contradicted its own first line** ("All org-specific ids live in local-context.md — never hardcoded here"): a real Jira Team UUID **with the team's name**, the org's real Atlassian Cloud ID, and live sprint ids labelled "example only". The team UUID was duplicated in `task-creator`. All now placeholders resolved from `local-context`.
+- **`data-integrity-protocol.md` shipped what `data-policy.md` itself classifies as confidential** — real GMV/CR figures and a source catalog naming internal workbooks, an internal live-metrics tool and a tracker key. The anti-patterns and correct-patterns are rewritten on a fictional two-stream product; **the arithmetic, which is the actual lesson, is preserved verbatim**. The catalog moves to `local-context` → `data_sources_catalog`.
+- **The `SEX` sprint prefix survived both the v2.0.1 fix and the history purge** — 8 occurrences across 4 files, including a routing trigger shipped to every install. It was the only token from the purge list still present.
+- Org vocabulary made universal: the internal live-metrics tool (now the `internal-live` source marker), "Prom-context" geo defaults (now keyed on `product.primary_market`, with the UA ladder as a worked example), release-stream names, feedback segments, and the worked-example persona across 5 files.
+
+### Fixed — P1, validators that passed the leak
+
+Re-injecting the **original v2.0.0 leak** (board id + epic keys + VIP name) into the example file **passed GREEN**. Root cause: after v2.1.0 made the denylist user-supplied, `testing/org-tokens.local` existed in **no environment** — not in CI (gitignored by design) and not on the author's machine — and the mechanism was documented nowhere. A check nobody knows to enable is not a check.
+
+- **Documented** in README (Testing & Contributing) and `Testing-process.md`, with the standing rule: purge an identifier → add it to the denylist **in the same commit**.
+- **The layer that must work without it** now fails by shape on literal UUIDs, registry ids (ЄДРПОУ/EDRPOU), internal hostnames (`*.corp`/`internal`/`lan`/`intra`) and service hosts (`gitlab.`/`jira.`/…), and scans **README and `testing/**`** — both previously unscanned, and a real `catalog-ui` stream name in README was found by exactly this change. Placeholder hosts now match whole labels: `mycompany.io` no longer passes because "company" is a substring of it.
+- `ghost-skill` fired only when a real skill shared the line, so a chain line naming just its ghost was invisible. `vault-types` missed prose-wrapped and single-quoted `vault_save` types — three real types in `product-research` were unvalidated. `artifact_type`'s enum slurped its section's prose, making `template-library` and `focus-advisor` legal artifact types. `skill_version: v0.9.0` made the sync check invisible rather than failing. `stale-names` was case-blind and skipped README. `duplicate-h1` skipped SKILL.md. TYPE_FOLDER_MAP duplicate keys were last-wins.
+- **CI**: `permissions: contents: read`; PyYAML installed with `GROW_LINT_REQUIRE_YAML=1` so the strict frontmatter parse can no longer degrade to a warning that gates nothing; `grep -F` in the shell script (dots in a version were regex wildcards, so `v2x1x0` satisfied a `v2.1.0` check).
+
+### Fixed — P2, the release that skipped two releases
+
+`release.yml` only ever read `plugin.json` at push HEAD, so when v2.0.1, v2.0.2 and v2.1.0 landed in one push, **only v2.1.0 was tagged** — and on the wrong commit (`ea64e32`, a change described in no CHANGELOG entry). v2.0.1 and v2.0.2 are documented releases that cannot be pinned or diffed. A guard now fails the release when the CHANGELOG documents versions between the newest tag and the one being cut (verified against the historical scenario).
+
+### Fixed — P2, vault: schema vs the algorithms that serve it
+
+- **People artifacts key by person, not product** — the schema mandated `{folder}/{product}/` for every People type, scattering one person's goal letters across every product folder while Step P's whole job is "load everything known about a person". The schema was wrong; the protocol and skills were right.
+- `vault_init` and `vault_structure_check` **took `plugin_folder_name` and then wrote to the vault root** — one level above the plugin's own folder, into the user's vault. `vault_init` also copied local-context to `REFERENCE-local-context.md`, a filename the Context Mirror, the setup guide and its own smoke test (S-8.2) do not expect — that test could not have passed. Plus a top-level `archive/` and a `dashboard/` folder that exist in no schema.
+- `vault_save` built `last_updated`/`linked_hypothesis` (schema: `last_reviewed`/`tested_hypothesis`) and **omitted the required `skill`/`skill_version`**. The Hypothesis Lifecycle branched on `winner_id`/`loser_id`/`hypothesis.id` — fields that exist nowhere — and wrote a status outside the enum; it now branches on `ab-test-results.result`, and an inconclusive test leaves the hypothesis in `testing` (it did not decide it).
+- **New check `vault-paths`**: the schema's own MOC templates put the product above the area subfolder and linked an `archive/` folder the same file forbids. Those examples are what the model imitates at save time. 23 example paths corrected; every wikilink in the three vault docs is now checked against TYPE_FOLDER_MAP.
+- The 650-line "Template Files" section — the pre-v2.0 flat template system that `template-protocol.md` replaced and `vault_init` forbids writing — is cut to a pointer.
+
+### Fixed — P2, templates: a ladder that reached nothing
+
+- **All five `ops-report` built-ins were unreachable** through the protocol's built-in ladder: it resolves by filename (`builtin://{type}/{subtype}-v1.md`) while they declared `subtype: ops-sprint-plan…` against files named `sprint-plan-v1.md`. Their own `template_id` already implied the unprefixed form. Fixed, and **new check `builtin-subtypes`** enforces it.
+- **One CJM report under two `artifact_type`s**: `product-analysis` declared `research`/`cjm-funnel` for the report `cjm-research` saves as `cjm`, then declared a fallback to the shared built-in that a `research`-typed request can never match.
+- **Step T meant different things in different files** — four skills had renumbered the shared protocol locally, so "Step T-4" was ambiguous; and **four marker formats** were in use, with 4 of 5 built-ins citing template ids that were not their own.
+- `meeting-processor`'s Step T offered `decision` and `review` subtypes its M3 classifier cannot emit.
+
+### Fixed — P2/P3, config, gates and chains
+
+- **One canonical Templates key set** (context-schema): the write side and the schema side had disagreed, so half the config was read-but-undefined and half defined-but-unwritten. Dead key `auto_save_to_vault` removed — written, offered in Update mode, read by nothing.
+- **Four sections added that skills already read**: `experiments.stale.*`, `feedback.*`, `plugin_release.*`, `data_sources_catalog`. Key names that pointed at nothing fixed (`product.cjm_configuration.*`, `configured_confluence_spaces`, `knowledge_library.search_modes` with an enum that exists nowhere, `product.default_language`).
+- **Callers still forced the mode v2.1.0 removed** — Step 0b and the auto-trigger sent every skill to Onboarding unconditionally, bypassing the backup and vault-recovery branch that exist for a partial wipe.
+- **Gates that could not do their job**: `task-creator`'s mandatory check required a description section its own format never writes (every correct task failed it); `cjm-research`'s scheduled health-check still hit an interactive question; `design-bridge`'s only blocking gate read `qa_rules` with no missing-file branch, and its Design System redirect pointed at a configurator step that does not exist.
+- **Chains and triggers**: `diagram-prototyper` chained to a skill that does not exist; `design-bridge`'s description advertised two hooks its body removed in v2.0.2; `write-concept`'s next step was labelled, described and executed as three different things; `write-concept`/`requirements-creator` both claimed "describe a feature" with no guard; `focus-advisor` filtered a `revisit_by` field `decision-log` never wrote (a permanent false negative); two connector tool names did not exist.
+- `quarterly-planning`'s `plan` mode consumed a step it skipped; `experiment-tracker`'s `awaiting-readout` meant two things, so the stale detector nagged about readouts that existed.
+
+### Fixed — P4, docs that contradict the code
+
+README claimed 7 design skills over a list of 6 (and still named the one v2.1.0 dropped), listed 5 of product-reporter's 6 modes, and enumerated 17 of "24 seed templates" — v2.0.1 fixed the count and not the list. The manifest description was 1259 chars in one sentence, omitted three skills, and had drifted between its two copies (now one canonical 844-char text). `vault-schema` claimed 32 types (33). The CHANGELOG's version-format block sat between two entries, so the release workflow would have appended it to v2.0.1's notes.
+
+**Testing docs stop asserting gates that did not run**: `test-cases.md` promised "Updated EVERY release" over a registry that skips v1.16.0–v1.40.0 and v2.0.0; `trigger-evals.md` calls itself part of the DoD but its last logged run predates the releases that rewrote all 29 descriptions; `output-evals.md` is a blocker with no 3b run recorded for v2.0.x/v2.1.x. Each now states the gap and what the next run must cover. **New check — CI gate parity**: `validate.yml`'s comment promised its gate matches `release.yml`'s "exactly"; a comment cannot enforce that, and drift means a PR goes green, merges, then fails the release with no earlier signal.
+
+### Enforcement
+
+`testing/skill_lint.py`: **13 → 15 checks** (`vault-paths`, `builtin-subtypes`), plus hardened `org-data`, `ghost-skill`, `vault-types`, `artifact-types`, `stale-names`, `duplicate-h1`, `readme-versions`, `skill-version-sync`. `validate-consistency.sh` gains CI gate parity and `grep -F`. Every check verified by injecting its defect into a repo copy — including re-injecting the exact v2.0.0 leak and the exact `ops-` prefix bug.
+
+### Known — still open (needs the repository owner)
+
+- **GitHub still serves the full pre-purge history** via `refs/pull/1..35` — all 35 head SHAs are pre-purge commits. Force-push cannot fix this; it needs a GitHub Support request ("purge unreachable objects / stale PR refs after history rewrite") or repo delete/recreate.
+- **The GitLab mirror's `main` is still pre-purge history** and its tags stop at v2.0.0 (branch protection rejected the force-push). Needs unprotect → `git push --force mirror main` → `git push mirror --tags`.
+- **The `SEX` prefix remains in git history** (from commit `7fe89fb`); the tree is clean. Worth purging together with whatever resolves the PR-refs question, since a second rewrite would hit the same wall.
+- `~/grow-pm-backup-20260714-223144.bundle` (17 MB) still holds the original history — delete once the above is settled.
+
+---
+
 ## v2.1.0 (2026-07-14)
 
 **Audit remediation, P3 + P4 — the last of the 2026-07-14 audit.** Closes the behavioural defects: a safety gate that could be skipped, a mode with no workflow, a config field nothing defined, and a health score that only summed correctly for one funnel shape. With this release every finding from the audit is either fixed or deliberately deferred with a reason.

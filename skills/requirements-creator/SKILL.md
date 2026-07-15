@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.11.2
+version: 0.11.3
 description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one. Do NOT use for a high-level product concept or PRD — use write-concept (its output is this skill's input). Українською — "написати вимоги", "створити специфікацію фічі", "вимоги до A/B-тесту", "переглянути вимоги", "проаналізувати вимоги", "покращити вимоги", "перевірити мою специфікацію".
 ---
 
@@ -382,7 +382,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.11.2", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.11.3", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 

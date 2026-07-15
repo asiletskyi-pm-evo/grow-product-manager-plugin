@@ -1,6 +1,6 @@
 ---
 name: sprint-planning
-version: 0.3.1
+version: 0.3.2
 description: Helps the PM efficiently estimate and run sprint pre-planning — derives focuses from the quarterly roadmap/missions/projects, highlights what's READY to pull right now (dependencies cleared), catches work-sequence violations (e.g. client-side work planned ahead of analytics coverage), gathers per-member capacity, analyzes carryover risk from the last sprint, suggests assignees for unowned tasks, and fills the sprint to capacity. Use when "plan the sprint", "sprint pre-planning", "what can we pull into the next sprint", "what's ready from the backlog", "check sprint dependencies", "build sprint focuses", "distribute the sprint", "who takes the tasks". Українською — "спланувати спринт", "передпланування спринта", "що можна взяти у наступний спринт", "що готове з беклогу", "перевір залежності спринта", "сформуй фокуси спринта", "розподілити спринт", "хто візьме задачі".
 ---
 
@@ -70,7 +70,7 @@ Show what doesn't fit / is blocked → choice. Live recompute.
 Sprint plan (Confluence / assignment into the Jira sprint) — **gate before writing to Jira**. Approved plan → can be rendered as a `sprint-plan` report via product-reporter.
 
 ### Step 9 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.3.1", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.3.2", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Only Ready candidates go into the fill; Blocked — with an explanation, not silently.

@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.12.1
+version: 0.12.2
 description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", or "CJM funnel analysis". Українською — "проаналізувати метрики", "подивитись дашборд", "знайти аномалії", "пояснити ці дані", "аналіз після релізу", "аналіз результатів A/B-тесту", "аналіз CJM-воронки". This skill analyzes data only — for the end-to-end CJM research pipeline (anomalies → enrichment → hypothesis backlog) use cjm-research instead.
 ---
 
@@ -245,7 +245,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "product-analysis",
-     skill_version: "0.12.1",
+     skill_version: "0.12.2",
      tags: [metric names analyzed, platforms, analysis_mode],
      content: full_analysis_markdown,
      related: [source hypothesis, source requirements, previous analyses from Step 0.5],

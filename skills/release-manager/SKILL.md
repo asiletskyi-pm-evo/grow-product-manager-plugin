@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.1.2
+version: 0.1.3
 description: Release a Claude plugin end-to-end — version bump across all manifests, CHANGELOG entry, README sync, consistency validation, commit/PR/merge, GitHub Release with tag, mirror sync, and post-release verification. Use when the user asks to "release the plugin", "prepare a release", "bump plugin version", "ship vX.Y.Z", "cut a release", "publish plugin release", or after a batch of plugin changes is ready to ship. Українською — "зарелізити плагін", "підготуй реліз", "bump версії плагіна", "випусти vX.Y.Z", "опублікуй реліз плагіна". Do NOT use for releasing product features in Jira (use product-reporter / sprint-planning) — this skill releases the plugin repository itself.
 ---
 

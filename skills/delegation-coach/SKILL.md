@@ -1,6 +1,6 @@
 ---
 name: delegation-coach
-version: 0.1.1
+version: 0.1.2
 description: Audit a manager's operational load against the 7 levels of delegation and build a hand-off plan. Lists the PM's recurring activities, marks each on the 1-7 Appelo scale (current → target), picks delegation candidates from team profiles (D-type, GTD-index), and lays out the S1→S4 transfer of a direction. Use when the user asks to "audit my delegation", "what can I delegate", "I'm overloaded with ops", "delegation levels", "hand-off plan", "who can I give this to", "stop doing operations myself". Українською — "аудит делегування", "що можна делегувати", "я перевантажений операційкою", "рівні делегування", "план передачі", "кому це віддати", "вийти з операційки". Do NOT use to create the resulting tasks (task-creator), to set the delegate's goals (goal-setter), or to decide daily focus (focus-advisor — which chains here when it sees PM overload). This skill diagnoses delegation and plans the transfer; other skills execute it.
 ---
 

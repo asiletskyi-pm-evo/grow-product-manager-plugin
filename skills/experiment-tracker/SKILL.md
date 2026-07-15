@@ -1,6 +1,6 @@
 ---
 name: experiment-tracker
-version: 0.2.2
+version: 0.2.3
 description: Track the full lifecycle of product experiments and hypotheses — a living registry of what is proposed, specced, running, awaiting readout, and decided, with stale-test reminders. Use when the user asks "what experiments are running", "experiment status", "register an experiment", "log the test launch", "which tests await a decision", "remind me about stale tests", "experiment tracker". Українською — "які тести зараз біжать", "статус експериментів", "заведи експеримент", "зафіксуй запуск тесту", "які тести чекають рішення", "нагадай про завислі тести", "трекер експериментів". Do NOT use for analyzing A/B results (product-analysis), writing an A/B spec (requirements-creator), or generating hypotheses (brainstorm-features) — this skill tracks state and chains to those skills.
 ---
 

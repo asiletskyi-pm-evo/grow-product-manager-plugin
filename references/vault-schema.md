@@ -710,7 +710,7 @@ custom_field: any-value
 ## Template Files
 
 > **Removed in v2.1.1.** This section documented seven flat master template files
-> (`research.md`, `concept.md`, …) with a `[placeholder]` + HTML-comment convention —
+> (research.md, concept.md, …) with a `[placeholder]` + HTML-comment convention —
 > the pre-v2.0 template system that `references/template-protocol.md` replaced with the
 > `templates/built-in/` tree, `builtin://` resolution and Handlebars variables.
 > `vault-protocol.md` → `vault_init` already forbids writing those files, so this

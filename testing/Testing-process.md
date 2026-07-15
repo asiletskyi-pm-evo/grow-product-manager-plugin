@@ -7,7 +7,7 @@
 | # | Stage | What it checks | How | Blocker? |
 |---|--------|--------------|-----|---------|
 | 0 | **Backup** | snapshot of the version before changes | `git tag` + copy of the folder into `_backups/<version>/` | — |
-| 1 | **Static lint** | 13 named checks — see the table below | `testing/skill_lint.py` (automated, in CI/locally) | yes |
+| 1 | **Static lint** | 15 named checks — see the table below | `testing/skill_lint.py` (automated, in CI/locally) | yes |
 | 2 | **Trigger eval** | description triggers on target phrases and does NOT hijack others | a set of positive/negative phrases per skill; judge subagent | yes |
 | 3a | **Trajectory / scenario walk** | skill takes the right steps: key steps, gates, tool calls, artifact structure | 1-2 scenarios per skill + mock local-context; subagent "dry run" verifies | yes (for changed skills) |
 | 3b | **Output eval** | artifact **quality** against a rubric (weighted 0/1/2, pass ≥ threshold) | `testing/output-evals.md` rubric + fixture + gold exemplar; LM-judge subagent | yes (for changed artifact-producing skills) |
@@ -36,6 +36,8 @@ Every check exists because the defect class it catches actually shipped. The v2.
 | `vault-types` | a saved type with no folder in TYPE_FOLDER_MAP | feedback-triage, report-3t5f, presentation/prototype/handoff, all People types |
 | `artifact-types` | a Step T type outside the protocol enum | roadmap, meeting-notes, focus, delegation-audit |
 | `chain-contracts` | a claimed `← X` edge that X knows nothing about | experiment-tracker was unreachable by chaining |
+| `vault-paths` | an example vault path that contradicts TYPE_FOLDER_MAP | the schema's own MOC templates put the product above the area subfolder, and linked an `archive/` folder the same file forbids |
+| `builtin-subtypes` | a subtype that does not resolve to its own filename; a marker citing someone else's id | all five ops-report built-ins were unreachable through the ladder; 4 of 5 carried the wrong template id |
 
 Two design rules keep the linter honest: it is **stdlib-only** (PyYAML only adds an extra strict parse — CI installs it and sets `GROW_LINT_REQUIRE_YAML=1` so its absence is a blocker there, while a local run without it degrades to a warning), and the `ghost-skill` vocabulary is **auto-derived from `templates/built-in/`** rather than hand-listed, so new template types do not create false positives.
 

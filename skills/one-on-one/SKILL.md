@@ -1,6 +1,6 @@
 ---
 name: one-on-one
-version: 0.1.1
+version: 0.1.2
 description: Prepare for and analyze 1-1 meetings with a team member — a meeting FOR the person and ABOUT the person (feedback, growth, trust), not a status/task sync. Prepare mode builds an agenda from the person's profile (D-type, goals, past follow-ups, GTD trend) with the seven "how" questions and NVC-framed feedback drafts. Analyze mode turns a transcript or notes into signals (motivation, burnout, conflict, career) plus an ARCV follow-up and a profile update. Use when the user asks to "prepare for a 1-1", "1-1 with <person>", "analyze this 1-1", "who haven't I had a 1-1 with", "one-on-one prep/notes", "questions for a 1-1". Українською — "підготуватись до 1-1", "1-1 з <людиною>", "розбери 1-1", "з ким давно не було 1-1", "нотатки 1-1", "питання для 1-1". Do NOT use for status/task meetings or general meeting notes (meeting-processor), for setting goals (goal-setter), or for a formal performance review (performance-review). meeting-processor detects a 1-1 and redirects here.
 ---
 

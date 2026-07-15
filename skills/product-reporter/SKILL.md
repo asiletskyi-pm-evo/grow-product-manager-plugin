@@ -1,6 +1,6 @@
 ---
 name: product-reporter
-version: 0.5.0
+version: 0.5.1
 description: Create operational Jira reports AND goal reports for a team, person, or direction. Six modes — sprint plan, sprint review, quarter review, initiative status, member review, goal-report (3T5F build/audit against a goal). Use when the user asks to "build a sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points", "goal report", "3T5F report", "stakeholder report for the direction", or "audit this report against the goal". Українською — "зібрати звіт по спринту (план/рев'ю)", "результати кварталу", "статус епіка/фічі/місії", "скільки <людина> закрила за період", "операційний звіт команди", "звіт по релізах / флагах / стори-поінтах", "звіт по цілі", "звіт 3T5F", "звіт для стейкхолдерів по напрямку", "перевір звіт проти цілі". Do NOT use to SET a person's goal (goal-setter), to analyze A/B or dashboard metrics (product-analysis), or to run a full performance review (performance-review).
 ---
 
@@ -153,7 +153,7 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.5.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.5.1", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
    - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
 
