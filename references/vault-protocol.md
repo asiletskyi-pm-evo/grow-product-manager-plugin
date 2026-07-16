@@ -141,7 +141,7 @@ Defines which artifact types are relevant to each skill. `local-context-protocol
 | cjm-research | cjm-analysis, cjm-health-check, funnel-anomaly, ab-test-results, hypothesis |
 | write-concept | competitive-analysis, market-research, ux-benchmark, hypothesis, decision, requirements |
 | product-analysis | cjm-analysis, ab-test-results, metrics-review, post-release, hypothesis |
-| brainstorm-features | cjm-analysis, competitive-analysis, ab-test-results, ux-benchmark, decision |
+| brainstorm-features | cjm-analysis, competitive-analysis, ab-test-results, ux-benchmark, decision, debate |
 | requirements-creator | concept, hypothesis, competitive-analysis, decision, ab-test-results |
 | meeting-processor | meeting-notes, decision, concept, requirements |
 | product-research | competitive-analysis, market-research, ux-benchmark, knowledge-source |
@@ -151,7 +151,7 @@ Defines which artifact types are relevant to each skill. `local-context-protocol
 | design-bridge | concept, requirements, competitive-analysis, presentation, prototype, handoff |
 | feedback-triage | feedback-triage, hypothesis, cjm-analysis |
 | experiment-tracker | hypothesis, ab-test-results, requirements, decision |
-| decision-log | decision, meeting-notes, hypothesis |
+| decision-log | decision, meeting-notes, hypothesis, debate |
 | roadmap-architect | roadmap, project-overview |
 | project-planning | roadmap, project-overview, ops-report |
 | quarterly-planning | roadmap, ops-report, decision |

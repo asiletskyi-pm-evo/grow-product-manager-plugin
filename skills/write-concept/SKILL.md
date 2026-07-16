@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.9.2
+version: 0.9.3
 description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document. Do NOT use for a full requirements/spec document with numbered functional requirements — use requirements-creator (a concept is the input to it). Українською — "написати концепт", "створити PRD", "описати фічу", "написати специфікацію", "оформити ідею в документ".
 ---
 
@@ -212,6 +212,8 @@ Present the full draft to the user before publishing. Iterate until confirmed:
 - Collect feedback and make edits
 - May require multiple iterations
 
+> **Debate hook (red-team).** Before publishing a contested concept (real trade-offs, ≥ 2 affected interest groups) — offer a red-team debate per `references/debate-protocol.md`: evidence pack from the concept's own research base and analysis, roles chosen with the user (Skeptic mandatory), rounds → facilitator synthesis. Unresolved objections land in Risks / Open Questions, and the verdict + minority report embed as a «Debates» section in the PRD before it ships.
+
 ### 6. Confirm Confluence location and publish
 
 If the user has not already specified where to publish — use AskUserQuestion:
@@ -288,7 +290,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.9.2",
+     skill_version: "0.9.3",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],

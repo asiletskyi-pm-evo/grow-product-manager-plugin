@@ -1,6 +1,6 @@
 ---
 name: decision-log
-version: 0.2.3
+version: 0.2.4
 description: Log and retrieve key product decisions as ADR-style records in the vault Decisions/ area — context, options considered, decision, rationale, consequences, links. Use when the user says "log this decision", "why did we decide X", "show decisions about Y", "supersede that decision", "decision log". Українською — "зафіксуй рішення", "чому ми вирішили…", "покажи рішення по…", "перегляньмо це рішення", "журнал рішень". Also invoked by other skills (meeting-processor, experiment-tracker, planning skills) when their outcome contains a decision worth recording. Do NOT use for meeting notes as such (meeting-processor) or experiment state (experiment-tracker) — this skill records decisions and answers "why".
 ---
 
@@ -58,6 +58,8 @@ Frontmatter per `vault-schema.md`: `type: decision`, `product`, `tags` (topic, a
 1. Collect the record fields — from the invoking skill's context when chained (meeting decision block, experiment decide payload, planning outcome), or via short dialogue when standalone. Do not interrogate: infer what's already in context, ask only for gaps (especially **options considered** — the field people skip and later regret).
 2. Show the draft record. **Gate: confirm/correct before saving.**
 3. Save (vault or fallback), display the link. If the decision implies work → offer `task-creator`.
+
+> **Debate hook.** For a contested decision (real trade-offs, ≥ 2 interest groups) — before the gate in step 2, offer a debate per `references/debate-protocol.md`, using the evidence already linked to the record as the pack. The verdict feeds the Decision and Rationale sections, the minority report is preserved in Consequences & risks, and the debate artifact links via `related`.
 
 ### Mode: search ("чому ми вирішили X")
 1. Search Decisions/ by topic/tags/product (vault search per `vault-protocol.md`; L0 → grep the fallback folder).
