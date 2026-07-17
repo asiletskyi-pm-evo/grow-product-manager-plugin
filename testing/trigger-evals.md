@@ -115,12 +115,40 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 | H13 | згенеруй гіпотези з топ-болей фідбеку | brainstorm-features |
 | H14 | тренд тем скарг цього кварталу проти минулого | feedback-triage |
 
+### Group I — Debate mode (brainstorm-features Debate mode vs neighbors)
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| I1 | проведи дебати про сортування за кредитною ціною | brainstorm-features (Debate mode) |
+| I2 | розбери транскрипт дискусії з команди | meeting-processor (NOT debate) |
+| I3 | брейншторм фіч для сторінки Q&A | brainstorm-features (standard mode, NOT debate) |
+| I4 | зафіксуй рішення після наших дебатів | decision-log |
+| I5 | red team цю ідею перед стартом розробки | brainstorm-features (Debate mode) |
+| I6 | stress-test our top-3 hypotheses via a role debate | brainstorm-features (Debate mode) |
+| I7 | нехай агенти подискутують: чи варто ховати телефони продавців зі сторінки товару | brainstorm-features (Debate mode) |
+| I8 | круглий стіл ролей щодо переходу на нову модель тарифів | brainstorm-features (Debate mode) |
+
+### Group J — People contour + v2.1.1 guards (added 2026-07-16 per the log-status note below)
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| J1 | підготуй мене до 1-1 з аналітиком | one-on-one |
+| J2 | розбери транскрипт 1-1 — які сигнали по вигоранню | one-on-one |
+| J3 | розбери транскрипт статус-зустрічі команди | meeting-processor |
+| J4 | проведи піврічне ревʼю розробника з планом розвитку | performance-review |
+| J5 | скільки задач закрив розробник за квартал по Jira | product-reporter (member review) |
+| J6 | опиши фічу | write-concept; borderline pass = clarifying question naming write-concept vs requirements-creator |
+| J7 | опиши фічу як нумеровані вимоги для розробки | requirements-creator |
+| J8 | що каже наша бібліотека джерел про guest checkout | knowledge-library |
+| J9 | дослідi, як конкуренти зробили guest checkout | product-research |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
 |------|--------|------------------|-------------------|
 | 2026-07-03 | 2 independent agent runs (descriptions-only simulation), plugin v1.33.0 | A 100 / B 100 / C 100 / D 100 / E 100 / F 100 / G 95→100 | G8: both runs picked product-analysis over cjm-research — eval label was wrong (data-only phrase), fixed the expected column, no description change. 46/46 primary agreement between runs. Baseline recorded before the monolith refactor (v1.34.x). |
 | 2026-07-04 | 2 independent agent runs, pre-release v1.36.0 | H 100 (14/14 both runs) | New lifecycle trio routes cleanly vs neighbors (H3→product-analysis, H5→requirements-creator, H11→product-research as expected). No description changes needed. |
+| 2026-07-16 | 2 independent agent runs (descriptions-only simulation), pre-release v2.2.0 | A 100 / B 100 / C 100 / D 100 / E 100 / F 100 / G 100 / H 100 / I 100 / J 100 | None. 80/80 primary agreement between runs; J6 → clarifying question naming write-concept vs requirements-creator in both runs (borderline pass by the group's own definition). New Group I (Debate mode) and Group J (People contour + v2.1.1 guards) route cleanly on first run; the brainstorm-features description change (debate triggers + Do NOT use guard) did not regress Groups A/H. |
 | (fill after each run) | | | |
 
 ## Maintenance
@@ -136,3 +164,5 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 > group for the People contour (one-on-one vs meeting-processor, performance-review vs
 > product-reporter member-review) plus the v2.1.1 guards: write-concept vs requirements-creator
 > ("describe a feature" / "описати фічу"), product-research vs knowledge-library (library lookup).
+
+> **Update (2026-07-16, v2.2.0).** Addressed: Group I (Debate mode vs meeting-processor / decision-log / standard brainstorm) and Group J (People contour + the v2.1.1 guards) added; the descriptions-only simulation run over all groups is recorded in the Results log.

@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 2.1.1
+**Version:** 2.2.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v2.2.0** — **Debate Mode: a role-based adversarial discussion engine**. One agent brainstorming alone approves its own ideas — trade-offs between interest groups go unnoticed and ICE Confidence inflates. Now any evidence-holding skill can convene 3–5 conflicting roles (10-preset card library + custom; the **Skeptic / Risk-officer is always in**) over a numbered evidence pack and debate one contested question in parallel subagent rounds: opening positions → cross-examination → facilitator synthesis (consensus points, live disagreements, position shifts, verdict + confidence, **mandatory minority report**) with ICE Confidence corrections (consensus +1…+2, unresolved skeptic objection −1…−2). New shared `references/debate-protocol.md` carries the engine and guardrails (no facts beyond the pack, no web for debaters, cost cap 4×2 = 8 / hard 12 calls, inline-simulation fallback with an explicit marker); `brainstorm-features` Step 3D is the primary entry; thin Debate hooks land in `product-research`, `cjm-research`, `write-concept`, `decision-log`; the vault gains artifact type #34 `debate` (`Debates/{product}/`); trigger-evals gain Groups I and J. The `brainstorm-features` core stays ≤ 400 lines — Step 3C's CJM workflow moved verbatim to skill-local `cjm-hypotheses-mode.md`.
 
 **New in v2.1.0** — **Audit remediation (v2.0.1 → v2.1.0)**. A full audit of v2.0.0 found 5 critical + 14 major defects that both validators passed green. All are now fixed, and — more importantly — each defect *class* is a blocking linter check, verified by injecting the defect into a repo copy. Highlights: real organization data removed from the shipped example (and the whole repo); two protocol documents that contained themselves twice, halved; `vault-schema.md` declared the single source of truth for vault layout, with `vault-protocol.md` and the Obsidian setup guide conformed to it (they had described three incompatible layouts, and the setup smoke tests could not have passed); 28 of 29 skill frontmatters made valid YAML for external tooling; `experiment-tracker` made reachable by chaining at all; a `design-bridge` handoff can no longer skip its accessibility audit; and CJM health scores now sum to 100% for funnels of any length, not just the 4-stage default. `testing/skill_lint.py` grew from 4 checks to **13**. See the CHANGELOG for the full list.
 
@@ -56,7 +58,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.7.2)
+### 1. CJM Research (v0.7.3)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -90,7 +92,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 3. Product Research (v0.10.2)
+### 3. Product Research (v0.10.3)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -104,21 +106,22 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 4. Brainstorm Features (v0.9.3)
+### 4. Brainstorm Features (v0.10.0)
 
-**Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation.
+**Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation. Hosts Debate mode — a role-based adversarial discussion over an evidence pack (`references/debate-protocol.md`).
 
 **Features:**
 - Feature ideation and scoring (Impact, Confidence, Ease)
 - CJM Hypotheses mode with funnel impact calculation
 - Growth opportunity identification
 - Prioritization framework
+- Debate mode (Step 3D): 3–5 conflicting roles, parallel rounds, verdict with a mandatory minority report, ICE Confidence correction
 
-**Trigger phrases:** "brainstorm features", "generate hypotheses", "find growth opportunities", "CJM hypotheses"
+**Trigger phrases:** "brainstorm features", "generate hypotheses", "find growth opportunities", "CJM hypotheses", "run a debate", "red team this idea", "проведи дебати"
 
 ---
 
-### 5. Write Concept (v0.9.2)
+### 5. Write Concept (v0.9.3)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -399,7 +402,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 22. Decision Log (v0.2.3) — NEW in v1.36.0
+### 22. Decision Log (v0.2.4) — NEW in v1.36.0
 
 **Description:** ADR-style records of key product decisions in the vault `Decisions/` area — context, options considered, decision, rationale, consequences, evidence links. Answers "чому ми вирішили X?" from the accumulated log; supersede-flow preserves history.
 
@@ -469,11 +472,11 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.7.2 | Customer Journey Map analysis and hypothesis validation |
+| CJM Research | v0.7.3 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.12.2 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.10.2 | Competitive analysis, user research, market trends, UX benchmarking |
-| Brainstorm Features | v0.9.3 | Interactive feature ideation with ICE scoring |
-| Write Concept | v0.9.2 | Write product concept documents (PRDs) |
+| Product Research | v0.10.3 | Competitive analysis, user research, market trends, UX benchmarking |
+| Brainstorm Features | v0.10.0 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
+| Write Concept | v0.9.3 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.11.3 | Create and analyze feature requirements |
 | Task Creator | v0.10.2 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.9.4 | Visualize concepts with diagrams, prototypes, infographics |
@@ -490,7 +493,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Release Manager | v0.1.3 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 | Focus Advisor | v0.5.0 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.2.3 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
-| Decision Log | v0.2.3 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
+| Decision Log | v0.2.4 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
 | Feedback Triage | v0.2.2 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
 | Goal Setter | v0.1.2 | Set/audit goals — SMARTCBP (people) / OKR (product), cascade, Tell-and-Sell commitment |
 | One-on-One | v0.1.2 | Prepare & analyze 1-1s — agenda from profile, signals + ARCV follow-up, coverage headless |
@@ -698,12 +701,13 @@ All design deliverables pass WCAG 2.1 AA QA before publish (see `skills/design-b
 
 The plugin includes reference materials for product management best practices and frameworks:
 
-**Key reference files in `references/` (30 total — see the folder for the full list):**
+**Key reference files in `references/` (31 total — see the folder for the full list):**
 - `local-context-protocol.md` — Step 0: how every skill finds and loads `local-context.md`
 - `integration-strategy.md` — MCP → Registry → Browser fallback chain for external tools
 - `data-policy.md` — data confidentiality rules (internal data never leaves the session)
 - `data-integrity-protocol.md` — verification gate against extrapolation and single-source claims
 - `subagent-delegation.md` — when and how skills delegate fan-out work to subagents
+- `debate-protocol.md` — role-based adversarial debate engine (roles, rounds, synthesis, ICE correction, guardrails)
 - `self-improvement.md` — learning from user corrections (versioning, changelog)
 - `test-mode.md` — sandbox mode for dry-run onboarding and skill testing
 - `persistent-storage.md` — Pointer + User-Controlled Storage protocol
@@ -797,5 +801,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 2.1.1  
+**Version:** 2.2.0  
 **Last Updated:** July 2026

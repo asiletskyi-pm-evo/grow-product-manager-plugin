@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.7.2
+version: 0.7.3
 description: Conduct CJM (Customer Journey Map) research — detect funnel anomalies, generate improvement hypotheses, and build prioritized backlogs. Use when the user asks to "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", or needs end-to-end funnel analysis with enrichment from knowledge sources. Українською — "проаналізувати CJM", "знайти аномалії у воронці", "CJM дослідження", "health-check воронки", "порівняти платформи", "CJM гіпотези". Do NOT use for standalone dashboard/metric analysis without the research pipeline (use product-analysis) or for pure idea generation without funnel research (use brainstorm-features).
 ---
 
@@ -284,6 +284,8 @@ Every metric receives a status:
 
 Anomaly detection (Step 4), WORLD enrichment (5), INTERNAL enrichment (6), hypothesis building (7), per-hypothesis impact (8), overall-conversion impact (9), independent verification (10), and risk assessment (11) live in `references/cjm-pipeline.md` (skill-local). Read it after the Step 3.5 gate passes. Mode map (which steps run per mode) — see Modes of Operation above.
 
+> **Debate hook.** If the user asks for a debate / role discussion / red-team, or top hypotheses are contested and touch ≥ 2 interest groups — after hypothesis building (Step 7) run `references/debate-protocol.md` for the top-3 hypotheses: evidence pack = anomalies + enrichment already gathered (post-Step 3.5 gate), roles chosen with the user (Skeptic mandatory), rounds → facilitator synthesis. The verdict corrects ICE Confidence (consensus +1…+2, unresolved skeptic objection −1…−2), new risks feed the Step 11 risk assessment, and the «Debates» section embeds in the Step 12 report.
+
 ### Step 12 — Report assembly and publishing
 
 **Internal logic (cjm-research).**
@@ -316,7 +318,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.7.2",
+     skill_version: "0.7.3",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],

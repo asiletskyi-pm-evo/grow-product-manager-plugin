@@ -105,6 +105,20 @@ revisit_by: date (when this decision should be re-examined, YYYY-MM-DD; optional
 
 > `revisit_by` is a frontmatter field, not prose: `focus-advisor` surfaces overdue revisits as a tactical signal (`focus-signals.md`), and it can only do that by filtering the field. It lived only in the decision body's "Consequences" section until v2.1.1, so that signal was a permanent false negative. `deadline` is when the decision had to be *made*; `revisit_by` is when it should be *re-examined*.
 
+#### debate
+
+Artifact type for role-based adversarial debate sessions (`references/debate-protocol.md`).
+
+```yaml
+debate_question: string (the single binary or limited-choice question debated)
+roles: string[] (participating role names, incl. the mandatory Skeptic / Risk-officer)
+verdict: string (facilitator's recommendation)
+confidence: string (high|medium|low - facilitator's confidence in the verdict)
+minority_report: string (2-3 sentence dissent of the disagreeing role)
+rounds: int (debate rounds run, 2-3)
+inline_simulation: bool (true when run without the Agent tool - role independence reduced)
+```
+
 #### cjm-health-check
 
 Artifact type for regular Customer Journey Map health assessments.
@@ -265,7 +279,7 @@ target_date: date (project completion target, YYYY-MM-DD)
 
 ## Type Taxonomy
 
-The Grow Product Manager Plugin defines 33 artifact types, each with a specific purpose, source skill, and folder location.
+The Grow Product Manager Plugin defines 34 artifact types, each with a specific purpose, source skill, and folder location.
 
 > **This table is the single source of truth for vault layout.** `vault-protocol.md` (save/init) and `obsidian-setup-guide.md` (setup smoke tests) conform to it, not the other way round. A type that is not listed here cannot be saved — `vault_save` resolves its folder from TYPE_FOLDER_MAP below, so an unlisted type has no destination. When a skill starts producing a new artifact type, add the row **and** the map entry in the same change; `testing/skill_lint.py` → `vault-types` enforces this.
 
@@ -308,6 +322,7 @@ People artifacts key by person because that is the access pattern the contour is
 | prototype | design-bridge | Prototypes/ | Lo-fi/mid-fi/hi-fi prototype (own or toolkit-delegated) |
 | handoff | design-bridge | Handoffs/ | Design → dev handoff package |
 | vacancy-profile | hiring-designer | Hiring/ | Role design + vacancy profile + offer draft |
+| debate | brainstorm-features Step 3D + Debate hooks (product-research, cjm-research, write-concept, decision-log) | Debates/ | Role-based adversarial debate: question, evidence pack, verdict, minority report |
 
 #### People-contour types (highest-sensitivity tier)
 
@@ -361,6 +376,7 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
   "prototype": "Prototypes/",
   "handoff": "Handoffs/",
   "vacancy-profile": "Hiring/",
+  "debate": "Debates/",
 
   "people": "People/",
   "goal-letter": "People/goals/",
@@ -511,6 +527,10 @@ Complete folder structure for `{Vault}/{PluginFolder}/`:
 │   └── ADR/
 │       └── decision-*.md (Architecture Decision Records)
 │
+├── Debates/                           # Role-based debate sessions
+│   └── {product}/
+│       └── debate-*.md
+│
 ├── Knowledge/                         # Knowledge library and sources
 │   ├── sources/
 │   │   └── {product}/
@@ -619,6 +639,7 @@ All artifact files follow a consistent naming pattern to support automated organ
 | hypothesis | `hypothesis-guest-checkout-flow-2026-04-14.md` | Feature hypothesis with descriptive topic |
 | ab-test-results | `ab-test-results-checkout-mobile-upsell-2026-04-14.md` | Test results with variant names |
 | decision | `decision-postgres-vs-mongodb-2026-04-14.md` | Decision with clear topic/choice |
+| debate | `debate-express-delivery-badge-2026-07-16.md` | Debate question topic |
 | cjm-health-check | `cjm-health-check-q1-2026-summary-2026-04-14.md` | Health check with period |
 | meeting-notes | `meeting-notes-sprint-planning-2026-04-14.md` | Meeting type and date |
 | metrics-review | `metrics-review-march-2026-mobile-app-2026-04-14.md` | Period and platform/product |
@@ -1066,7 +1087,7 @@ Planned work for {ProductName}:
 The Vault Schema defines a consistent, extensible structure for storing and organizing product artifacts in an Obsidian Vault. It includes:
 
 - **Frontmatter Standard** — Base and type-specific fields for classification, relations, and lifecycle management
-- **Type Taxonomy** — 33 artifact types mapped to skills, folders, and purposes
+- **Type Taxonomy** — 34 artifact types mapped to skills, folders, and purposes
 - **Tag Taxonomy** — Hierarchical tags for funnel, platform, metric, status, impact, research, and phase classification
 - **Folder Structure** — Complete directory organization for {Vault}/{PluginFolder}/
 - **Naming Convention** — Consistent {type}-{topic-slug}-{YYYY-MM-DD}.md pattern

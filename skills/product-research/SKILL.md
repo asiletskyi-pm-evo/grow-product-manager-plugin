@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.10.2
+version: 0.10.3
 description: Conduct comprehensive product research — competitive analysis, user research, market research, or UX benchmark research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks", or needs SWOT, TAM SAM SOM, or PESTEL analysis. Do NOT use for a plain lookup in the knowledge library — use knowledge-library (this skill calls it for enrichment during research). Українською — "дослідити конкурентів", "проаналізувати ринок", "конкурентний аналіз", "синтез інтервʼю з користувачами", "знайти ринкові тренди", "порівняти з галузевими бенчмарками".
 ---
 
@@ -314,6 +314,8 @@ Apply the appropriate framework(s) based on research type. See `references/frame
 - Output format: benchmark matrix (practice, industry standard, our current state, gap, priority)
 - This type is commonly used by `cjm-research` during enrichment steps
 
+> **Debate hook.** If the user asks for a debate / role discussion / red-team («проведи дебати», "have agents argue from different roles"), or a researched decision is contested and touches ≥ 2 interest groups — run `references/debate-protocol.md` on the structured findings: evidence pack E1…En = findings that passed the Source Validation Gate (Step 1.5), roles chosen with the user (Skeptic mandatory), parallel rounds → facilitator synthesis. The «Debates» section embeds in the published report (Step 4), and the verdict corrects ICE Confidence of any hypotheses derived from this research.
+
 ### 4. Confirm Confluence location and publish
 
 **Before creating the page**, if the user has not already specified where to publish, use AskUserQuestion to clarify:
@@ -422,7 +424,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.10.2", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.10.3", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
    (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added.)
 2. Display: "Saved to Vault: Research/{product}/…"
 

@@ -1,7 +1,7 @@
 ---
 name: brainstorm-features
-version: 0.9.3
-description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis. Українською — "брейншторм фіч", "згенерувати гіпотези", "знайти точки росту", "гіпотези для CJM-воронки", "ICE-оцінка гіпотез". This is the ideation engine — for the full CJM research pipeline (anomaly detection → enrichment → hypotheses) use cjm-research, which delegates here.
+version: 0.10.0
+description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis. Also hosts Debate mode — "run a debate", "role debate", "red team this idea", "have agents argue / discuss from different roles", "stress-test via debate". Українською — "брейншторм фіч", "згенерувати гіпотези", "знайти точки росту", "гіпотези для CJM-воронки", "ICE-оцінка гіпотез", "проведи дебати", "нехай агенти подискутують", "розглянь з різних ролей", "red team цю ідею", "круглий стіл ролей". This is the ideation engine — for the full CJM research pipeline (anomaly detection → enrichment → hypotheses) use cjm-research, which delegates here. Do NOT use for meeting transcript discussions (meeting-processor) or for recording an already made decision (decision-log).
 ---
 
 # Brainstorm Features and Hypotheses
@@ -213,97 +213,31 @@ Present the **ICE summary table** sorted by score descending — giving the user
 
 ### Step 3C — CJM Hypothesis Generation (CJM mode)
 
-This step runs when invoked by `cjm-research` or when the user explicitly requests CJM-based brainstorming.
+This step runs when invoked by `cjm-research` (Situation D) or when the user explicitly requests CJM-based brainstorming.
 
 **Input required:**
 - Anomaly list from `product-analysis` (CJM mode): stage, metric, baseline, actual, deviation, severity
 - World enrichment from `knowledge-library` / `product-research`: benchmarks, best practices, competitor approaches
 - Internal enrichment: Confluence experiment results, user feedback, previous research
 
-**3C-1. Generate hypotheses from anomalies:**
+The full mode workflow lives in `references/cjm-hypotheses-mode.md` (skill-local) — read it when this step activates. It covers: **3C-1** the hypothesis format generated from anomalies (Data Trigger / Feedback Match / Heuristic Match), **3C-2** ICE scoring with CJM stage-position multipliers and evidence-quality Confidence boosts, **3C-3** per-stage and combined funnel-impact formulas, **3C-4** categorization (low-hanging fruit / structural / business-logic), **3C-5** result presentation, and **3C-6** the return contract to `cjm-research` (full hypothesis list, weighted ICE, per-stage impact, categories, evidence references).
 
-For each anomaly (prioritize by severity: Critical first, then Warning):
+### Step 3D — Debate mode (role-based adversarial discussion)
 
-```
-Name: [short descriptive name]
+Executes `references/debate-protocol.md` — the shared engine: D0 applicability check → D1 setup (question, roles, evidence pack) → parallel debate rounds → facilitator synthesis → output & save. Activates in three ways:
 
-Data Trigger: [anomaly details — stage, metric, deviation from baseline]
-Feedback Match: [correlated user feedback, support tickets, NPS verbatims — from internal enrichment]
-Heuristic Match: [matching UX best practice or benchmark — from Knowledge Library with trust score]
+1. **Explicit request** — the user asks for a debate / role discussion / red-team («проведи дебати», "red team this idea", «круглий стіл ролей», "stress-test via debate").
+2. **Offered after 3A–3C** — when top hypotheses are contested, touch ≥ 2 interest groups, and an evidence base exists (Step 4 proposes the stress-test).
+3. **Called from another skill's Debate hook** (`product-research`, `cjm-research`, `write-concept`, `decision-log`) — arrives with a ready evidence pack: skip gathering, go straight to D1 role selection.
 
-Solution: [proposed change to address the anomaly]
-Expected Impact: [estimated conversion lift % for the affected stage]
-Target Metric: [stage conversion rate, expected change direction and magnitude]
-Validation Method: [A/B test / feature flag / user interviews / analytics deep-dive]
+Execution in this skill's terms:
 
-ICE Score: Impact [X] × Confidence [X] × Ease [X] = [Score]
-PRO/ROI: [annual % return per `references/roi-frameworks.md` — or "n/a: <why the $ effect is unknowable>"]
+- **Evidence pack** = what is already on the table: Step 2 analysis, `product-analysis` results, Knowledge Library sources, CJM anomalies (Situation D). Facts E1…En only from material that passed integrity checks; everything else enters as a marked assumption A1…An.
+- **Debate question** = one contested hypothesis or an X-vs-Y choice between two hypotheses — never the whole backlog at once.
+- **Roles** via AskUserQuestion from the protocol's presets; the Skeptic / Risk-officer is always in.
+- **Results return to the standard flow:** the verdict's ICE Confidence corrections (consensus +1…+2, unresolved skeptic objection −1…−2) update the scores in the Step 3A/3B/3C tables; new risks append to the hypotheses' Risks fields; the «Debates» section embeds in the saved artifact (Step 5) and the debate is saved to the vault (Step 9).
 
-Funnel Stage Impact: current [X]% → projected [Y]% (+Z%)
-
-Benchmarks: [supporting evidence with trust scores — from Knowledge Library and web]
-Risks: [what could go wrong, negative side effects]
-```
-
-> Use the user's preferred language (`user.language`) for all field labels and content.
-
-**3C-2. ICE scoring with CJM-specific weighting:**
-
-Enhanced ICE scoring for CJM hypotheses:
-
-**Impact** — weighted by funnel stage position (per `references/cjm-protocol.md`):
-| Stage position | Multiplier | Rationale |
-|---------------|-----------|-----------|
-| Stage 1 (entry) | ×1.5 | Improvements at entry affect all downstream stages |
-| Stage 2 | ×1.3 | High leverage — feeds middle funnel |
-| Stage 3 | ×1.1 | Important but narrower audience |
-| Stage 4+ | ×1.0 | Baseline — affects only late-stage users |
-
-**Confidence** — boosted by evidence quality:
-- Baymard/academic evidence supports hypothesis → +1–2 points
-- Internal A/B test confirmed similar approach → +2–3 points
-- Only blog/article evidence → +0 (no boost)
-- Contradicting internal evidence → -2–3 points
-
-**Ease** — based on technical complexity, team capacity, dependencies
-
-**3C-3. Funnel impact calculation:**
-
-For each hypothesis, calculate the per-stage conversion impact:
-```
-new_stage_conversion = current_stage_conversion × (1 + expected_lift_percent / 100)
-```
-
-Calculate end-to-end funnel impact if all hypotheses in a stage are implemented:
-```
-stage_combined_lift = 1 - product(1 - lift_i for each hypothesis_i in stage)
-new_stage_conversion = current × (1 + stage_combined_lift)
-```
-
-**3C-4. Categorize hypotheses:**
-
-| Category | Criteria | Typical timeline |
-|----------|----------|-----------------|
-| **Low-hanging fruit** | Ease ≥ 7, moderate Impact, can be A/B tested quickly | 1–2 sprints |
-| **Structural changes** | High Impact, Ease < 5, requires significant development | 1–2 quarters |
-| **Business logic changes** | Requires stakeholder alignment, pricing/policy changes | Cross-functional initiative |
-
-**3C-5. Present results:**
-
-Show hypotheses grouped by category, sorted by ICE score within each group.
-
-Present ICE summary table:
-| # | Name | Stage | Trigger | ICE | Stage Impact | Category |
-|---|------|-------|---------|-----|-------------|----------|
-
-**3C-6. Return results to cjm-research:**
-
-When returning to `cjm-research`, include:
-- Full hypothesis list with all fields
-- ICE scores with stage multipliers applied
-- Per-hypothesis funnel stage impact
-- Category assignments
-- Evidence references (Knowledge Library sources, web sources)
+Cost: default 4 roles × 2 rounds = 8 subagent calls, hard cap 12. Without the Agent tool — inline simulation with the mandatory "inline simulation: role independence reduced" marker (protocol → Guardrails).
 
 ### Step 4 — Interactive discussion
 
@@ -314,6 +248,7 @@ This skill is a live dialogue, not a one-shot generation. Actively engage the us
 - Iterate: add new ideas, remove weak ones, regroup, re-score
 - Can return to Step 3B or 3C to generate more ideas if needed
 - Help the user make trade-off decisions between competing ideas
+- For contested top hypotheses — propose: "Stress-test the top-3 hypotheses via a role debate (Step 3D)?" — the debate runs on the already-gathered evidence, and the corrected Confidence re-sorts the ICE table
 
 ### Step 5 — Finalize and optionally save results
 
@@ -337,6 +272,7 @@ When the user confirms the final list of ideas/hypotheses, ask via AskUserQuesti
   - **Generated ideas/hypotheses** (full description, ICE, benchmarks, risks)
   - **ICE Summary Table** — sorted by score, with validation methods
   - **Phase Roadmap** (if MVP approach) — which ideas go into which phase
+  - **Debates** (if Step 3D ran) — verdict table open, round transcripts in collapsed expand-blocks
   - **Recommended next steps**
   - **Sources** section with links, marking each source type (Confluence, Google Drive, Web, ChatGPT Deep Research, Gemini Deep Research)
 - Formatting: headings H1/H2/H3, bold key theses, tables for structured data
@@ -418,8 +354,11 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 IF vault_level > L0 AND vault sync_mode != "off":
 
 1. For **each finalized hypothesis** (Step 5), save a separate artifact:
-   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.9.3", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.10.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
 2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
+3. For **debate sessions** (Step 3D), additionally save the debate itself:
+   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.10.0", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
+   Display: "Saved to Vault: Debates/{product}/…"
 
 ## Quality standards
 
@@ -440,4 +379,6 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - **`references/data-policy.md`** — data confidentiality policy
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
 - **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, stage position multipliers
+- **`references/debate-protocol.md`** — Debate mode engine (Step 3D): applicability check, role presets, rounds, facilitator synthesis, ICE Confidence correction, guardrails
+- **`references/cjm-hypotheses-mode.md`** — skill-local: full Step 3C workflow (hypothesis format, CJM-weighted ICE, funnel impact, categorization, return contract)
 - **`references/funnel-templates.md`** — standard funnel stage templates by product type
