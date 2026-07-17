@@ -12,7 +12,7 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
-## v2.2.0 (2026-07-16)
+## v2.2.0 (2026-07-17)
 
 **Debate Mode — role-based adversarial discussion engine.** A single brainstorming agent both generates ideas and approves them: trade-offs between interest groups (buyer / seller / business / risk) go unnoticed and ICE Confidence inflates. The mechanic proved itself ad-hoc in a live research session — four conflicting roles argued a prioritization decision and flipped it — and this release turns it into a reproducible, guarded protocol instead of a lucky prompt.
 
