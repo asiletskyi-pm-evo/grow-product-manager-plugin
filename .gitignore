@@ -3,3 +3,6 @@ local-context.md
 # Optional: your org's identifiers, one per line — the linter fails if any
 # appears in a shipped file. Gitignored: the tokens themselves never ship.
 testing/org-tokens.local
+
+# Local Claude Code settings (personal permission rules) — never ship in the plugin.
+.claude/settings.local.json
