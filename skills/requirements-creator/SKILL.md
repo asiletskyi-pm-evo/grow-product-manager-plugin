@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.11.3
+version: 0.12.0
 description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one. Do NOT use for a high-level product concept or PRD — use write-concept (its output is this skill's input). Українською — "написати вимоги", "створити специфікацію фічі", "вимоги до A/B-тесту", "переглянути вимоги", "проаналізувати вимоги", "покращити вимоги", "перевірити мою специфікацію".
 ---
 
@@ -155,6 +155,8 @@ Proactively gather detailed information from the user, asking clarifying questio
 
 Throughout this step: analyze provided information, identify gaps, propose alternatives, challenge assumptions, suggest improvements.
 
+**Source test (Gate 1):** every technical statement recorded here must pass *"Can I point to where this came from — the user, a document, a ticket?"* AI technical assumptions (technology choices, API/schema design, architecture, effort estimates) do NOT go into business or functional requirements — see `references/artifact-style-gate.md`. If the user explicitly asks for technical recommendations, collect them for the separate "Технічні рекомендації (AI)" block (Step 4).
+
 ### Step 3 — Technical parameters
 
 **3a. Implementation approach — provide a recommendation based on context analysis:**
@@ -212,7 +214,7 @@ Generate the full requirements document following the confirmed template structu
 | Hypotheses | Numbered table: №, Hypothesis |
 | Goals | Numbered table: №, Goal (can be removed if goal = metrics) |
 | Metrics | Numbered table: №, Metric, Expected change |
-| 5.1 | Business requirements | Text with bold highlights for key theses |
+| 5.1 | Business requirements | Bulleted list of theses — 1–2 sentences each, key points in bold; no paragraph prose |
 | 5.2 | Functional requirements | Numbered table: №, Block/Module/Theme, Requirements |
 | 5.3 | Technical requirements | Implementation approach, platforms, locales |
 | 5.4 | UI&UX requirements | **Empty section** — to be filled by Product Designer. If Figma links to current designs were found — include them as reference |
@@ -234,6 +236,10 @@ If A/B Test or A/B/C Test approach is selected — automatically add these secti
 | Decision rule | Explicit ship / iterate / kill table tied to the success thresholds, stated **before** launch so the readout is a lookup, not a debate |
 | Expected duration | Estimated test duration and minimum sample size considerations |
 
+**Optional block — "Технічні рекомендації (AI)" (only on explicit user request):**
+
+If the user asked for technical recommendations, add them as a separate block at the very end of the document — never inside the functional requirements table — opened with the mandatory AI callout and per-item confidence markers. Format per `references/artifact-style-gate.md` (Gate 1).
+
 **Formatting — mandatory for every document:**
 
 1. **Headings** — H1/H2/H3 hierarchy for all sections and subsections. Headings must NOT be numbered (no "1. Epic", "2. Hypotheses" etc — just "Epic", "Hypotheses").
@@ -242,6 +248,11 @@ If A/B Test or A/B/C Test approach is selected — automatically add these secti
 4. **Tables** — use for all structured data: hypotheses, goals, metrics, functional requirements, risk/mitigation pairs
 5. **Clarity** — every requirement must be specific, unambiguous, and actionable
 6. **Adaptivity** — requirements must contain all necessary information for BE, FE, Android, iOS, and Design teams
+7. **Lists over prose** — any sequence (steps, stages, requirements, criteria, changes, risks) is a numbered/bulleted list or a table, never a paragraph; paragraphs only for context and motivation, ≤ 3–4 sentences (`references/artifact-style-gate.md`, Gate 2)
+
+### Step 4.5 — Artifact quality gate
+
+Run `references/artifact-style-gate.md` on the draft. Maker–checker: an independent checker subagent receives the draft + the source list + the gate checklists — never this conversation's reasoning. A requirements document is a critical artifact (published and then materialized in Jira) → use two checker lenses (form / groundedness). Apply fixes, keep disputed findings visible, and include the one-line gate report when presenting the draft in Step 5.
 
 ### Step 5 — Review with the user
 
@@ -382,7 +393,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.11.3", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.12.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 
@@ -392,184 +403,9 @@ IF vault_level > L0 AND vault sync_mode != "off":
 
 ## Mode: Analyze & Improve — Workflow
 
-This mode is for reviewing and improving **already written requirements**. The goal is to act as an experienced Business Analyst: assess the quality, completeness, and coherence of the document, ask clarifying questions where needed, propose concrete improvements, and optionally initiate additional research to validate whether the requirement is worth implementing.
+Review and improve **already written requirements** as an experienced BA: read the document and its context (A1), run structural + content analysis against the template and gate checklists (A2–A3), ask prioritized clarifying questions (A4), propose and apply improvements (A5–A6, gate-checked), optionally validate feasibility via Product Research (A7), publish and chain to Task Creator (A8–A9).
 
-### A1 — Read existing requirements
-
-**A1a. Determine the source of requirements:**
-
-- **Confluence link provided** → read page via Confluence MCP (`getConfluencePage`) or browser fallback. Extract full text, tables, and structure
-- **File provided** → read from uploaded file
-- **Text pasted into dialogue** → use as-is
-- **No source provided** → ask via AskUserQuestion:
-  > "Please provide the existing requirements — paste the text, share a Confluence/Notion link, or upload a file."
-
-**A1b. Read supporting context:**
-
-After reading the requirements, check if additional context is available:
-- If a Jira Epic is referenced — read it via Jira MCP to understand the broader goal
-- If a Confluence concept/PRD is referenced — read it for background
-- If Figma designs are linked — read via Figma MCP for design context
-
-### A2 — Structural analysis
-
-Evaluate the document against the standard requirements template (`references/requirements-template.md`) and the standard quality criteria:
-
-**Structure completeness check — assess each section:**
-
-| Section | Present? | Quality assessment |
-|---------|----------|-------------------|
-| Hypotheses | ✅ / ⚠️ Missing | Clear, measurable, falsifiable? |
-| Goals | ✅ / ⚠️ Missing | Tied to a measurable outcome? Or redundant with metrics? |
-| Metrics | ✅ / ⚠️ Missing | Specific metrics named? Expected changes quantified? |
-| Business requirements | ✅ / ⚠️ Missing | Covers all user types? Rules clearly stated? |
-| Functional requirements | ✅ / ⚠️ Missing | Decomposed by block/screen/stage? Numbered? Unambiguous? |
-| Technical requirements | ✅ / ⚠️ Missing | Approach selected (flag/A/B)? Platforms? Locales? |
-| UI&UX requirements | ✅ / ⚠️ Missing | Design placeholder present? Figma links included if available? |
-| Analytics coverage | ✅ / ⚠️ Missing | Placeholder present? Any analytics events specified? |
-| Tasks section | ✅ / ⚠️ Missing | Epic link? Jira macro or task list? |
-
-**Content quality check:**
-
-- Are hypotheses falsifiable and tied to a measurable outcome?
-- Are functional requirements specific enough for a developer to implement without asking follow-up questions?
-- Are edge cases and error states described?
-- Are all user types (buyer, seller, admin, etc.) covered where relevant?
-- Are there internal contradictions or ambiguities?
-- Is the scope clear — what IS in scope and what is NOT?
-- Are acceptance criteria or success thresholds defined?
-
-### A3 — Present analysis results
-
-Present findings to the user in a structured format:
-
-```
-## Requirements Analysis — [Document title]
-
-### Overall assessment
-[Brief summary: strong points and main gaps. 2-4 sentences.]
-
-### Completeness
-| Section | Status | Issue |
-|---------|--------|-------|
-| Hypotheses | ✅ Present | — |
-| Metrics | ⚠️ Incomplete | Expected % change not specified |
-| Functional requirements | ❌ Missing | No breakdown by screen/block |
-| ... | ... | ... |
-
-**Completeness score: X/9 sections fully covered**
-
-### Content issues
-1. **[Issue title]** — [description of the problem and why it matters]
-2. ...
-
-### Strong points
-- [What is well written and should be preserved]
-- ...
-```
-
-### A4 — Clarifying questions
-
-Based on gaps identified in A2 and A3, ask the user targeted clarifying questions to fill in the missing context. Ask in batches — group related questions together to avoid overwhelming the user.
-
-Prioritize questions by impact:
-1. **Critical** — missing information that blocks implementation (e.g., no functional requirements for a key scenario)
-2. **Important** — missing information that reduces quality (e.g., no metrics, no edge cases)
-3. **Recommended** — additions that strengthen the document (e.g., competitor precedents, rollback plan)
-
-For each clarifying question, briefly explain why this information matters:
-
-> "The functional requirements don't cover what happens when a user has no purchase history. This is needed so the BE team knows what to return in that case. Could you describe the expected behavior?"
-
-Continue asking until all critical and important gaps are resolved, or the user explicitly says to proceed with what's available.
-
-### A5 — Propose improvements
-
-**Prioritization check (ROI & ICE):** as part of the analysis, verify whether the existing requirements carry computed **ROI** (PRO/ROAIP — `references/roi-frameworks.md`) and **ICE** scores (computed by `brainstorm-features`). If missing, add a proposal: "The feature isn't prioritized (no ROI/ICE) — recommend running `/grow-product-manager:brainstorm-features` to score it before finalizing, to confirm it's worth implementing."
-
-Present a prioritized list of concrete improvement proposals:
-
-```
-## Proposed improvements
-
-### Critical (required for implementation)
-1. **Add functional requirements for [scenario]** — currently missing. Here is a draft based on the context provided:
-   [draft requirement text]
-
-2. **Clarify [section]** — the current wording "[quote]" is ambiguous. Proposed revision:
-   [revised text]
-
-### Important (quality improvements)
-3. **Add expected metric changes** — currently the Metrics section lists metrics without target values. Based on the product context, suggest:
-   [suggested values or "please provide"]
-
-4. **Add edge cases to functional requirements** — [list of missing scenarios]
-
-### Recommended (optional enhancements)
-5. **Add a rollback plan** — for a feature of this scale, it's good practice to define rollback conditions
-6. **Restructure [section]** — current structure makes it hard to read; proposed restructuring: [description]
-```
-
-Ask the user via AskUserQuestion:
-
-> "Which of these improvements would you like to apply? You can select all, some, or none."
-
-- **All** → apply all improvements in priority order
-- **Selected** → apply only the chosen ones
-- **None** → skip to next step
-- **Discuss first** → explain any specific improvement in more detail before deciding
-
-### A6 — Apply improvements
-
-For each approved improvement:
-1. Edit the relevant section of the requirements
-2. Show the before/after diff for the changed section
-3. Ask for confirmation before moving to the next change (or apply all at once if the user prefers)
-
-After all improvements are applied — present the full updated document for final review.
-
-### A7 — Feasibility research (optional)
-
-After analysis and improvements, offer to validate the requirement from a strategic and product perspective:
-
-> "Would you like me to assess the feasibility and advisability of implementing this requirement? I can research: competitor implementations, user behavior data, technical risk, and alignment with product goals."
-
-If the user agrees — **invoke the Product Research skill** with the following context:
-- Feature description and hypotheses from the requirements
-- Product name and key metrics from `local-context.md`
-- Research goal: assess whether this feature is worth building, what analogues exist in the market, what risks exist
-
-The Product Research skill will return: competitive analysis, market evidence, risk assessment, and a recommendation. Use these results to:
-- Add a "Research summary" section to the requirements (or as a linked document)
-- Highlight if the research reveals reasons to reconsider the approach, pivot the hypothesis, or de-prioritize the feature
-- If research is discouraging — explicitly flag this to the user and ask how they want to proceed
-
-If the user declines the research offer — proceed to publishing.
-
-### A8 — Publishing updated requirements
-
-After the user confirms the improved document:
-
-**A8a. Ask if the user wants to save:**
-
-> "Would you like to save the updated requirements? I can update the original document or save a new version."
-
-Options:
-- **Update original** — overwrite the existing Confluence/Notion page with the improved version
-- **Save as new version** — create a new page (e.g., with "[Updated]" or a version suffix in the title)
-- **No** — end the skill, results stay in the dialogue
-
-**A8b. Publishing flow:**
-
-Follow the same publishing flow as **Create Mode — Step 6** (Confluence, Notion, Google Docs, other).
-
-### A9 — Skill chaining
-
-After publishing, always offer the next step:
-
-> "Requirements are improved and saved. Would you like to create Jira tasks for implementing this feature?"
-
-If the user agrees — invoke Task Creator with full context.
+The full A1–A9 workflow lives in the skill-local `references/analyze-improve-mode.md` — read it ONLY when this mode is active.
 
 ---
 
@@ -588,6 +424,8 @@ If the user agrees — invoke Task Creator with full context.
 
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/requirements-template.md`** — detailed standard template with section descriptions and instructions
+- **`references/analyze-improve-mode.md`** — skill-local: the full Analyze & Improve workflow (A1–A9); load only in that mode
+- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), maker–checker execution model (Step 4.5 / A6)
 - **`references/examples/feature-spec-example-v1.md`** — worked golden feature-spec exemplar with A/B + acceptance criteria (few-shot; load on demand in Step 4)
 - **`references/approach-recommendation.md`** — implementation approach recommendation logic (feature flag, A/B test, etc.)
 - **`references/roi-frameworks.md`** — the ROI (PRO/ROAIP) side of the prioritization gate (Step 3e / A5); ICE scoring is computed by `brainstorm-features`

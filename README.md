@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 2.2.0
+**Version:** 2.3.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v2.3.0** — **Clean artifacts: a quality gate with maker–checker verification**. Stakeholder feedback surfaced two recurring defects in generated artifacts: AI-invented technical content inside business/functional requirements and tasks, and requirements written as paragraph prose instead of lists. New shared `references/artifact-style-gate.md` blocks both: **Gate 1** applies a source test to every technical statement (process parameters stay; AI technical assumptions are prohibited by default and, on explicit request, go into a separate callout-guarded "Технічні рекомендації (AI)" block), **Gate 2** enforces lists-over-prose. The gate is executed by an **independent checker subagent** — the agent that produced the artifact never checks its own work; the checker sees only the draft + sources + checklists, reports findings without rewriting, and critical artifacts (Confluence publish / Jira creation) get two checkers with distinct lenses (form / groundedness). Consumers: `requirements-creator` v0.12.0 (+ thin-core refactor: Analyze & Improve moved to skill-local `analyze-improve-mode.md`), `task-creator` v0.11.0 (batch gate before creation; Step 12 verification switches to maker–checker), `write-concept` v0.10.0, `meeting-processor` v0.13.4 (opt-in). Skill triggers unchanged.
 
 **New in v2.2.0** — **Debate Mode: a role-based adversarial discussion engine**. One agent brainstorming alone approves its own ideas — trade-offs between interest groups go unnoticed and ICE Confidence inflates. Now any evidence-holding skill can convene 3–5 conflicting roles (10-preset card library + custom; the **Skeptic / Risk-officer is always in**) over a numbered evidence pack and debate one contested question in parallel subagent rounds: opening positions → cross-examination → facilitator synthesis (consensus points, live disagreements, position shifts, verdict + confidence, **mandatory minority report**) with ICE Confidence corrections (consensus +1…+2, unresolved skeptic objection −1…−2). New shared `references/debate-protocol.md` carries the engine and guardrails (no facts beyond the pack, no web for debaters, cost cap 4×2 = 8 / hard 12 calls, inline-simulation fallback with an explicit marker); `brainstorm-features` Step 3D is the primary entry; thin Debate hooks land in `product-research`, `cjm-research`, `write-concept`, `decision-log`; the vault gains artifact type #34 `debate` (`Debates/{product}/`); trigger-evals gain Groups I and J. The `brainstorm-features` core stays ≤ 400 lines — Step 3C's CJM workflow moved verbatim to skill-local `cjm-hypotheses-mode.md`.
 
@@ -121,7 +123,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 5. Write Concept (v0.9.3)
+### 5. Write Concept (v0.10.0)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -131,7 +133,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 6. Requirements Creator (v0.11.3)
+### 6. Requirements Creator (v0.12.0)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -145,7 +147,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 7. Task Creator (v0.10.2)
+### 7. Task Creator (v0.11.0)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -190,7 +192,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 9. Meeting Processor (v0.13.3)
+### 9. Meeting Processor (v0.13.4)
 
 **Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
 
@@ -476,11 +478,11 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Product Analysis | v0.12.2 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.10.3 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.10.0 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
-| Write Concept | v0.9.3 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.11.3 | Create and analyze feature requirements |
-| Task Creator | v0.10.2 | Create Jira tasks from requirements |
+| Write Concept | v0.10.0 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.12.0 | Create and analyze feature requirements |
+| Task Creator | v0.11.0 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.9.4 | Visualize concepts with diagrams, prototypes, infographics |
-| Meeting Processor | v0.13.3 | Process meetings and extract action items |
+| Meeting Processor | v0.13.4 | Process meetings and extract action items |
 | Plugin Configurator | v2.8.1 | Configure plugin for your organization |
 | Knowledge Library | v0.6.1 | Manage curated knowledge sources |
 | Template Library | v0.2.3 | Manage multilingual artifact templates with per-product scope |
@@ -701,13 +703,14 @@ All design deliverables pass WCAG 2.1 AA QA before publish (see `skills/design-b
 
 The plugin includes reference materials for product management best practices and frameworks:
 
-**Key reference files in `references/` (31 total — see the folder for the full list):**
+**Key reference files in `references/` (32 total — see the folder for the full list):**
 - `local-context-protocol.md` — Step 0: how every skill finds and loads `local-context.md`
 - `integration-strategy.md` — MCP → Registry → Browser fallback chain for external tools
 - `data-policy.md` — data confidentiality rules (internal data never leaves the session)
 - `data-integrity-protocol.md` — verification gate against extrapolation and single-source claims
 - `subagent-delegation.md` — when and how skills delegate fan-out work to subagents
 - `debate-protocol.md` — role-based adversarial debate engine (roles, rounds, synthesis, ICE correction, guardrails)
+- `artifact-style-gate.md` — artifact quality gate: source test for technical content, lists-over-prose, maker–checker execution (an independent checker subagent verifies every artifact)
 - `self-improvement.md` — learning from user corrections (versioning, changelog)
 - `test-mode.md` — sandbox mode for dry-run onboarding and skill testing
 - `persistent-storage.md` — Pointer + User-Controlled Storage protocol
@@ -801,5 +804,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 2.2.0  
+**Version:** 2.3.0  
 **Last Updated:** July 2026

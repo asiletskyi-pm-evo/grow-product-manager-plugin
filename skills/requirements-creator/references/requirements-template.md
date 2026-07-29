@@ -120,7 +120,13 @@ Describe metrics and forecasts of their changes, usually in %.
 
 Describe general business requirements: what should change for different user types and in the product overall.
 
-**Instructions:** Focus on WHAT should change from a business perspective, not HOW it should be implemented. Describe the expected behavior for each affected user type. Use bold text to highlight key business rules and constraints.
+**Format — bulleted list of theses:**
+
+- Each thesis is 1–2 sentences, key business rules and constraints in **bold**
+- Group theses by affected user type when more than one is affected
+- No paragraph prose — a paragraph hides individual requirements (`references/artifact-style-gate.md`, Gate 2)
+
+**Instructions:** Focus on WHAT should change from a business perspective, not HOW it should be implemented. Describe the expected behavior for each affected user type. Only include technical facts that pass the source test (Gate 1) — no AI technical assumptions here.
 
 #### Functional Requirements
 
@@ -156,6 +162,10 @@ Describe what we want to implement/change in the product, how it should work, wh
   - On all locales
   - Only on specific locales (list them)
   - On several (specify which)
+
+#### Технічні рекомендації (AI) — optional
+
+Included ONLY when the user explicitly requested technical recommendations. Placed at the end of the document. Opens with the mandatory AI callout (warning panel in Confluence) and marks each item's confidence (`general practice` / `assumption from context`). See `references/artifact-style-gate.md` (Gate 1). Never merge these items into functional or business requirements.
 
 #### UI&UX Requirements
 

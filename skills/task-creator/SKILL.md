@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.10.2
+version: 0.11.0
 description: Creates Jira tasks for feature implementation based on requirements from a Confluence page. Use when the user asks to create tasks for a feature, create Jira issues from Confluence requirements, break down a feature into development tasks (FE/BE/Android/iOS/Design/Analytics), set up feature tasks in an Epic, or says something like "create tasks from requirements". Also trigger when the user shares a Confluence link and asks to create Jira tasks from it. Українською — "створити задачі для фічі", "створити Jira-задачі з вимог у Confluence", "розбити фічу на задачі", "завести задачі в Epic", "створити задачі з вимог".
 ---
 
@@ -240,6 +240,8 @@ Apply the **task-formulation quality gate** (`references/communication-framework
 [{Feature page title}]({Confluence page URL})
 ```
 
+> **"How" is built ONLY from the requirements and confirmed context** (`references/artifact-style-gate.md`, Gate 1). Do not invent engineering steps that are not in the requirements: no technology choices, no API/schema design, no architecture decisions. For a D1 checklist, keep the steps process-level ("read the spec section X", "sync the contract with BE", "cover states A/B/C"), not invented implementation detail. If the user explicitly asked for technical recommendations — put them in a separate "Технічні рекомендації (AI)" section at the end of the description, opened with the mandatory AI callout (never inside "How").
+
 > **"How"-depth by D-level (people-profile aware).** If the assignee has a person profile (`references/people-context-protocol.md`, `d_type`), tune the "How" depth to it: **D4 → minimal "how"** (or a goal instead of a task); **D1 → detailed checklist**. If no profile exists, default to a moderate checklist and note the assumption. This uses the profile **read-only** — task-creator never creates profiles.
 
 > **Title:** perfective, result-oriented verb, full essence in the title (`references/communication-frameworks.md`). "You don't pay per character."
@@ -254,6 +256,10 @@ The summary under "What" should be specific to the work type:
 - **Analytics**: focus on event tracking, metrics, data coverage (or A/B test analysis for the second analytics task)
 - **FE**: focus on frontend implementation, UI components, interactions
 - **Android/iOS**: focus on mobile implementation, deeplinks, native UI
+
+#### Batch quality gate before creation
+
+After drafting all task descriptions and BEFORE creating issues in Jira, run `references/artifact-style-gate.md` over the batch (maker–checker; tasks are a critical artifact → two lenses: form / groundedness). The checker receives the drafted descriptions + the requirements page content + the checklists. Typical catches: engineering steps in "How" that are absent from the requirements (Gate 1), "What"/"How" written as paragraph prose instead of lists (Gate 2). Apply fixes, surface disputed findings, include the one-line gate report in the pre-creation summary.
 
 #### Work-type specific fields:
 
@@ -335,6 +341,8 @@ Pick one of the created tasks (preferably a development task — FE or BE — as
 
 Use `getJiraIssue` to fetch the created task with all fields. This ensures we verify what was actually saved, not what we intended to send.
 
+**Maker–checker separation (v0.11.0):** the agent that created the tasks does not evaluate them. The maker fetches the raw task data (this step), then passes it — together with the requirements content and the check table below — to an independent **checker subagent** (`references/artifact-style-gate.md` → Execution model) that has no access to this conversation's reasoning. The checker returns findings; the maker applies fixes (12d). If subagents are unavailable — run inline and mark the report "незалежність перевірки знижена (inline)".
+
 **12c. Run verification checks:**
 
 | Check | What to verify | How to verify |
@@ -348,6 +356,8 @@ Use `getJiraIssue` to fetch the created task with all fields. This ensures we ve
 | **Description** | Contains "Why", "What", "How", "Definition of Done" and "Requirements" (with Confluence link) sections — the Step 7 format | Parse description content |
 | **Issue Type** | Correct type (Task/Design/Analytics) | Check issue type field |
 | **Links** | Correct dependency links created (if linking was confirmed) | Check issue links via `getJiraIssue` |
+| **List formatting** | "What"/"How"/DoD are lists or short structured blocks, not paragraph prose | Gate 2 checklist (`references/artifact-style-gate.md`) |
+| **No ungrounded tech content** | No technical assumptions outside the "Технічні рекомендації (AI)" section; that section (if present) opens with the AI callout | Gate 1 source test against the requirements page |
 
 **12d. Report verification results:**
 
@@ -403,7 +413,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.10.2", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.11.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode
@@ -431,5 +441,6 @@ This skill can work together with **Write Concept / PRD** — if a PRD was just 
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy
 - **`references/communication-frameworks.md`** — task-formulation quality gate (why/what/how + DoD + D-level depth)
+- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), maker–checker execution (batch gate before creation + Step 12)
 - **`references/people-context-protocol.md`** — read-only D-type of the assignee to tune "How"-depth
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
