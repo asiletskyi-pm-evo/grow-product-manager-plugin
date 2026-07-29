@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.9.3
+version: 0.10.0
 description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document. Do NOT use for a full requirements/spec document with numbered functional requirements — use requirements-creator (a concept is the input to it). Українською — "написати концепт", "створити PRD", "описати фічу", "написати специфікацію", "оформити ідею в документ".
 ---
 
@@ -199,11 +199,17 @@ Build the concept document following the confirmed structure from Step 1:
 - **Autonomous small feature** → minimize Timeline & Milestones
 
 **Content guidelines:**
+- **Technical Considerations carries only confirmed constraints and dependencies** — statements that pass the source test ("can I point to where this came from — the user, a document, a ticket?"). AI technical assumptions (technology choices, API/schema design, architecture, effort estimates) are prohibited by default; on explicit user request they go into a separate "Технічні рекомендації (AI)" block at the end with the mandatory AI callout (`references/artifact-style-gate.md`, Gate 1)
+- Any sequence — phases, changes, risks, criteria — is a list or a table, never paragraph prose (Gate 2)
 - Include only the blocks confirmed in Step 1
 - Add Alternative Solutions block if confirmed
 - Include any custom blocks the user requested
 - Cross-reference data from multiple sources
 - Mark data sources throughout the document
+
+### 4.5. Artifact quality gate
+
+Run `references/artifact-style-gate.md` on the draft PRD. Maker–checker: an independent checker subagent gets the draft + the source list + the checklists — never this conversation's reasoning. A PRD headed for Confluence is a critical artifact → two checker lenses (form / groundedness). Apply fixes, keep disputed findings visible, include the one-line gate report when presenting the draft in Step 5.
 
 ### 5. Review with the user
 
@@ -290,7 +296,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.9.3",
+     skill_version: "0.10.0",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],
@@ -342,6 +348,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 - **`references/vault-protocol.md`** — vault context search and save protocols
 - **`references/vault-schema.md`** — vault artifact schema and metadata structure
 - **`references/prd-structure.md`** — detailed templates for each PRD block
+- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), maker–checker execution (Step 4.5)
 - **`references/examples/prd-example-v1.md`** — worked golden PRD exemplar (few-shot; load on demand in Step 4)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)

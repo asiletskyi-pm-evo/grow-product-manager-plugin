@@ -12,6 +12,29 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v2.3.0 (2026-07-29)
+
+**Clean artifacts — quality gate with maker–checker verification.** Stakeholder and team feedback on generated artifacts surfaced two recurring defects: AI-invented technical content sneaks into business/functional requirements and task bodies (the team burns time analyzing recommendations nobody asked for), and requirements/stages drift into paragraph prose instead of scannable lists. Both are now blocked by a shared quality gate — and, critically, the gate is executed by an **independent checker subagent, not by the agent that produced the artifact** ("the maker does not check its own work").
+
+### Added — artifact quality gate
+
+- **New shared `references/artifact-style-gate.md`** — two checklists plus an execution model:
+  - **Gate 1 — Ungrounded technical content:** a source test for every technical statement ("can I point to where this came from — the user, a document, a ticket?"). Process parameters (feature flag / A/B, platforms, locales) stay; sourced technical facts stay with their source; AI technical assumptions (technology choices, API/schema design, architecture, effort estimates) are prohibited by default. On explicit user request they land in a separate **"Технічні рекомендації (AI)"** block at the end of the document, opened with a mandatory AI-generated warning callout and per-item confidence markers — never inside functional requirements or a task's "How".
+  - **Gate 2 — Lists over prose:** any sequence (steps, stages, requirements, criteria, changes, risks) is a list or a table, never a paragraph; paragraphs only for context/motivation (≤ 3–4 sentences); named prose-enumeration markers for the self-check.
+  - **Maker–checker execution model:** the checker is a fresh-context subagent that receives ONLY the draft + sources + checklists (never the maker's reasoning), reports structured findings without rewriting, and must walk every section explicitly (anti-rubber-stamping — an empty no-comment report is invalid). One fix cycle + one re-check of fixed locations; disputed findings are surfaced to the user, never silently dropped. Critical artifacts (Confluence publish, Jira creation) get **two checkers with distinct lenses** (form / groundedness). Limits: ≤ 2 checkers, sequential when reading Atlassian MCP; inline fallback carries the explicit marker "незалежність перевірки знижена (inline)". Optional config: `Artifact Quality Gate → review_mode: subagent | inline | off`. Gate 3 (Team language) is reserved for v2.4.0.
+
+### Changed — consuming skills
+
+- **`requirements-creator` → v0.12.0** — Step 2 applies the Gate 1 source test while gathering requirements; Step 4's Business requirements section becomes a **bulleted list of theses** (1–2 sentences each) instead of prose with bold; an optional "Технічні рекомендації (AI)" block (request-only, callout-guarded); new **Step 4.5 — Artifact quality gate** (two lenses) before user review; formatting rule 7 "lists over prose". **Thin-core refactor:** the entire Analyze & Improve mode (A1–A9) moved verbatim to skill-local `references/analyze-improve-mode.md` (core 597 → ~435 lines); inside the mode, A2 gains two content checks (ungrounded technical claims, prose-formatted requirements) and A6 gate-checks the improved document. `references/requirements-template.md` updated to match (theses format + optional AI block).
+- **`task-creator` → v0.11.0** — "How" is built ONLY from the requirements and confirmed context (no invented engineering steps; D1 checklists stay process-level); optional "Технічні рекомендації (AI)" section at the end of a description; **batch quality gate** over all drafted descriptions before any Jira issue is created; **Step 12 post-creation verification switches to maker–checker** — the maker fetches the created task, an independent checker evaluates it (previously the same agent that created the tasks verified them); Step 12c adds two checks (list formatting, no ungrounded tech content outside the AI section).
+- **`write-concept` → v0.10.0** — Technical Considerations carries only confirmed constraints and dependencies (source test); AI assumptions request-only in the callout-guarded block; new **Step 4.5 — Artifact quality gate** before user review.
+- **`meeting-processor` → v0.13.4** (patch) — quality standard pinned: topics / decisions / action items / next steps are always lists or tables; optional full gate run for Confluence-bound MoMs.
+
+### Notes
+
+- Skill descriptions (triggers) are unchanged — no trigger-evals impact.
+- Design doc: `Release-Design-v2.3.0-v2.4.0-Artifact-Quality.md` (workspace). v2.4.0 will add annotated screenshots (visual-annotation protocol + REST attachments), the team glossary + style profile in `knowledge-library`, and Gate 3 "Team language".
+
 ## v2.2.0 (2026-07-17)
 
 **Debate Mode — role-based adversarial discussion engine.** A single brainstorming agent both generates ideas and approves them: trade-offs between interest groups (buyer / seller / business / risk) go unnoticed and ICE Confidence inflates. The mechanic proved itself ad-hoc in a live research session — four conflicting roles argued a prioritization decision and flipped it — and this release turns it into a reproducible, guarded protocol instead of a lucky prompt.
