@@ -12,6 +12,33 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v2.4.0 (2026-07-29)
+
+**Visual requirements and team language — stage 2 of the stakeholder-feedback release.** v2.3.0 cleaned artifacts of ungrounded technical content and prose; v2.4.0 closes the remaining two feedback items: requirements lacked "a screenshot with an arrow" showing where changes land, and AI text used terms and tone foreign to the team.
+
+### Added — annotated screenshots (visual index of requirements)
+
+- **New shared `references/visual-annotation-protocol.md`** — the core idea: marker № on the screenshot = requirement № in the table; the screenshot is a visual index, not an illustration, and always ships with a legend table. Source priority: user upload → Figma `get_screenshot` → live product via browser. Rendering: Python + Pillow, fully local (product screenshots never leave the session): numbered marker circles, arrows, no-fill boxes, defined style spec. Mandatory user preview cycle before attaching. Local storage in the **project repository** (`{feature-code}-screen-{N}.png`). Attachment chain — verified 2026-07-29 that the Atlassian (Rovo) MCP has NO attachment-upload tools — so: **Atlassian REST API via curl** (Confluence `child/attachment`, Jira `attachments`; token via env variable whose NAME lives in local-context — the value never does) → browser upload → manual placeholder.
+- **`diagram-prototyper` → v0.10.0** — standalone **Annotate mode** ("анотуй скріншот", "додай стрілки на скрін", "annotate this screenshot") + description triggers.
+
+### Added — team glossary + style profile (knowledge-library)
+
+- **`knowledge-library` → v0.7.0** — the team-language contour, in the existing service-skill pattern: **Glossary Build** (mine term candidates from Confluence / Jira / Fireflies / documents — Atlassian read strictly sequential — rank, batch-confirm 10–15 at a time), **Style Build** (profile from 3–10 human-written reference texts: tone, syntax, do/don't, few-shot fragments, AI anti-patterns), **Glossary Manage** (CRUD, "how do we call X"), **Glossary Lint** (service: draft in → replacements / style findings / candidates out). Two-level glossary schema: `terms` (canonical + variants + avoid + en) and `phrases` (officialese → living replacements). Storage `~/.grow-pm/knowledge-library/glossary/ + style/` with vault mirror; routing becomes the triple sources / templates / **terms**; one-time sync of phrases + style with the user's project-instruction style guide. Full workflows in skill-local `references/glossary-workflows.md`.
+- **`references/artifact-style-gate.md` v2 — Gate 3 "Team language"**, two touches: **3a style preamble BEFORE generation** (lively text must be born lively) and **3b terminology + style lint AFTER** (merged into the groundedness/language checker lens; `lint_mode: suggest | auto | off`). No glossary configured → Gate 3 silently skips.
+
+### Changed — consuming skills and configuration
+
+- **`requirements-creator` → v0.13.0** — new **Step 4.2 Requirements visualization** (annotated screenshot for existing-UI changes, marker = FR row) + style preamble in Step 4.
+- **`task-creator` → v0.12.0** — style preamble before drafting descriptions; new **Step 8.5** attaches annotated screenshots to Design/FE tasks with the legend in the description.
+- **`write-concept` → v0.11.0** — annotated current-state screenshot in "What Changes for Users" + style preamble.
+- **`plugin-configurator` → v2.9.0** — **Terminology & Style setup** and **Attachments (REST) setup** (site + email + token env NAME, never the value; verified by a live GET) as standalone entry points; `references/context-schema.md` gains both section formats + two `deferred_steps` keys; `local-context.example.md` updated.
+
+### Verification
+
+- **Trigger-evals:** new **Group K** (team language + annotation, 13 phrases) — 100% in 2 independent description-only simulation runs; regression re-run of the groups whose members' descriptions changed (B, E, J) — 100%, 36/36 with full agreement between runs. Logged in `testing/trigger-evals.md`.
+- **Smoke tests:** end-to-end Pillow annotation per the protocol (marker + arrow + box on a synthetic product-card screenshot) rendered and visually verified; Glossary Lint on a seeded draft caught **5/5** planted violations including inflected forms ("на продуктовій картці" → "на картці товару").
+- Remaining live checks for the first real run: REST attachment against the live Confluence/Jira (needs the user's token env), Glossary Build on a real space, Style Build on real reference texts.
+
 ## v2.3.0 (2026-07-29)
 
 **Clean artifacts — quality gate with maker–checker verification.** Stakeholder and team feedback on generated artifacts surfaced two recurring defects: AI-invented technical content sneaks into business/functional requirements and task bodies (the team burns time analyzing recommendations nobody asked for), and requirements/stages drift into paragraph prose instead of scannable lists. Both are now blocked by a shared quality gate — and, critically, the gate is executed by an **independent checker subagent, not by the agent that produced the artifact** ("the maker does not check its own work").

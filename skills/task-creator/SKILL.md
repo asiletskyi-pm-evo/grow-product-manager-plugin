@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.11.0
+version: 0.12.0
 description: Creates Jira tasks for feature implementation based on requirements from a Confluence page. Use when the user asks to create tasks for a feature, create Jira issues from Confluence requirements, break down a feature into development tasks (FE/BE/Android/iOS/Design/Analytics), set up feature tasks in an Epic, or says something like "create tasks from requirements". Also trigger when the user shares a Confluence link and asks to create Jira tasks from it. Українською — "створити задачі для фічі", "створити Jira-задачі з вимог у Confluence", "розбити фічу на задачі", "завести задачі в Epic", "створити задачі з вимог".
 ---
 
@@ -257,6 +257,10 @@ The summary under "What" should be specific to the work type:
 - **FE**: focus on frontend implementation, UI components, interactions
 - **Android/iOS**: focus on mobile implementation, deeplinks, native UI
 
+#### Style preamble
+
+Before drafting descriptions, load the team style preamble (`references/artifact-style-gate.md` Gate 3a) — task text follows the team's language; skip silently if no profile is configured.
+
 #### Batch quality gate before creation
 
 After drafting all task descriptions and BEFORE creating issues in Jira, run `references/artifact-style-gate.md` over the batch (maker–checker; tasks are a critical artifact → two lenses: form / groundedness). The checker receives the drafted descriptions + the requirements page content + the checklists. Typical catches: engineering steps in "How" that are absent from the requirements (Gate 1), "What"/"How" written as paragraph prose instead of lists (Gate 2). Apply fixes, surface disputed findings, include the one-line gate report in the pre-creation summary.
@@ -285,6 +289,10 @@ If the feature is an A/B test, create **2** Analytics tasks:
 Some fields may not be settable during creation. After creating each task, use `editJiraIssue` to set:
 - **Team** (custom field) — if it didn't work during creation
 - **Issue Type** change — if Design/Analytics types need to be changed from Task
+
+### Step 8.5: Attach Annotated Screenshots
+
+If the source requirements carry annotated screenshots (created by `requirements-creator` Step 4.2), or the user asks to visualize the tasks: attach the relevant `{feature-code}-screen-{N}.png` to the **Design and FE tasks** (the ones with UI changes) via `references/visual-annotation-protocol.md` Step V-6 (REST chain → browser → manual placeholder), and put the legend table into the task description. Markers on the image = functional requirement numbers the task implements. Skip silently when there are none.
 
 ### Step 9: Ask About Linking
 
@@ -413,7 +421,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.11.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.12.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode

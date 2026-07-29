@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.8.1
+version: 2.9.0
 description: Configure the Grow Product Manager plugin for your organization, products, teams, and data sources. Use when the user asks to "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", or when any other skill detects that local-context.md does not exist. Українською — "налаштувати плагін", "сетап плагіна", "налаштувати контекст", "додати продукт", "оновити конфігурацію", "перевірити налаштування", "показати конфіг".
 ---
 
@@ -94,7 +94,7 @@ At the start of execution, every skill MUST follow `references/local-context-pro
 ## Workflow entry points
 
 - **Test Mode (sandbox):** follow root `references/test-mode.md` — full sandbox procedure (TM-0..TM-5, isolation, finale diff, Discard/Promote/Keep, verification matrix). Triggers: "dry-run onboarding", "test mode", "тестовий режим".
-- **Onboarding:** read `references/onboarding-steps.md` (skill-local) and execute Steps 1–17 in order, respecting the Basic/Extended mode gates on every step. Extended add-ons: Planning setup, Focus setup, Design Toolkit setup, and **People setup** (same file, after Step 14). Single sections can be run standalone: `add CJM` → Step 11, `connect Obsidian` → Step 14, `set up templates` → Step 13, `add Planning` / `add Focus` → the corresponding add-on step, `register design toolkit` / `add design toolkit` / `зареєструвати дизайн-тулкіт` → Design Toolkit setup, `set up People` / `add team roster` / `People-сетап` / `налаштувати команду` → People setup.
+- **Onboarding:** read `references/onboarding-steps.md` (skill-local) and execute Steps 1–17 in order, respecting the Basic/Extended mode gates on every step. Extended add-ons: Planning setup, Focus setup, Design Toolkit setup, and **People setup** (same file, after Step 14). Single sections can be run standalone: `add CJM` → Step 11, `connect Obsidian` → Step 14, `set up templates` → Step 13, `add Planning` / `add Focus` → the corresponding add-on step, `register design toolkit` / `add design toolkit` / `зареєструвати дизайн-тулкіт` → Design Toolkit setup, `set up People` / `add team roster` / `People-сетап` / `налаштувати команду` → People setup. New in v2.9.0: `set up terminology` / `налаштувати глосарій і стиль` → **Terminology & Style setup** (writes the config section per `references/context-schema.md`, then routes to `knowledge-library` Glossary/Style Build), and `set up attachments` / `налаштувати вкладення` → **Attachments (REST) setup**: collect site URL + account email + the NAME of the token env variable (never the token value — the user creates it at id.atlassian.com and exports it in their shell), write the section, verify with a GET `/wiki/rest/api/space?limit=1` → 200.
 - **Reinstall / Migration:** read `references/maintenance-modes.md` → RM-0..RM-6. **RM-0 (pre-update backup) runs before ANY other operation.**
 - **Update:** read `references/maintenance-modes.md` → U-1..U-4. Mandatory changelog after every save.
 - **Validate:** read `references/maintenance-modes.md` → V-1..V-6. Produces the readiness report.

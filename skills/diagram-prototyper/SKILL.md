@@ -1,7 +1,7 @@
 ---
 name: diagram-prototyper
-version: 0.9.4
-description: Create diagrams, flowcharts, BPMN processes, UI prototypes, and infographics to visualize product concepts and hypotheses. Use when the user asks to "create a diagram", "draw a flowchart", "visualize this process", "make a prototype", "create an infographic", "BPMN diagram", "wireframe", "mockup", or when another skill suggests visualizing a concept. Supports generation via Gemini, ChatGPT, NotebookLM, Figma, Draw.io, and built-in Mermaid/HTML. Українською — "створити діаграму", "намалювати блок-схему", "візуалізувати цей процес", "зробити прототип", "створити інфографіку", "BPMN-діаграма", "вайрфрейм", "макет". Do NOT use for brand-themed decks, prototypes, or handoffs built on your Design System — use design-bridge for those.
+version: 0.10.0
+description: Create diagrams, flowcharts, BPMN processes, UI prototypes, infographics — and annotate screenshots with numbered markers and arrows. Use when the user asks to "create a diagram", "draw a flowchart", "visualize this process", "make a prototype", "create an infographic", "BPMN diagram", "wireframe", "mockup", "annotate this screenshot", "add arrows to this screen", or when another skill suggests visualizing a concept. Supports generation via Gemini, ChatGPT, NotebookLM, Figma, Draw.io, and built-in Mermaid/HTML; annotation runs locally (Pillow). Українською — "створити діаграму", "намалювати блок-схему", "візуалізувати цей процес", "зробити прототип", "створити інфографіку", "BPMN-діаграма", "вайрфрейм", "макет", "анотуй скріншот", "додай стрілки на скрін", "познач на скріншоті". Do NOT use for brand-themed decks, prototypes, or handoffs built on your Design System — use design-bridge for those.
 ---
 
 # Diagram & Prototype Creator
@@ -509,8 +509,14 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.9.4", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.10.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
+
+## Mode: Annotate (standalone screenshot annotation)
+
+Triggers: "анотуй скріншот", "додай стрілки на скрін", "познач на скріншоті", "annotate this screenshot" — WITHOUT a full requirements/concept cycle.
+
+Follow `references/visual-annotation-protocol.md`: obtain the image (V-1: user upload → Figma → browser), agree the marker list with the user (V-2 — here markers number the user's points, not requirement rows, unless they say otherwise), render locally with Pillow (V-3), run the mandatory preview cycle (V-4), store per V-5 and deliver the PNG + legend table. Offer the REST/browser attachment chain (V-6) only if the user names a Confluence page or Jira issue. This mode never invokes templates (Step T does not apply).
 
 ## Skill Chaining — Inbound (for other skills)
 
@@ -551,6 +557,8 @@ When invoking this skill from another skill, pass:
 - Always present the result to the user before publishing
 
 ## Additional Resources
+
+- **`references/visual-annotation-protocol.md`** — screenshot annotation: sources, Pillow rendering, marker=requirement binding, preview cycle, attachment chain
 
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)

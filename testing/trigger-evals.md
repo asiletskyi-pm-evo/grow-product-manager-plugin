@@ -142,6 +142,26 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 | J8 | що каже наша бібліотека джерел про guest checkout | knowledge-library |
 | J9 | дослідi, як конкуренти зробили guest checkout | product-research |
 
+### Group K — Team language + annotation (added 2026-07-29, v2.4.0)
+
+Collisions: knowledge-library (glossary/style) vs template-library vs plugin-configurator (setup vs build) vs feedback-triage; diagram-prototyper (annotate) vs design-bridge.
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| K1 | збери глосарій наших термінів з Confluence і зустрічей | knowledge-library |
+| K2 | додай термін «картка товару» в глосарій | knowledge-library |
+| K3 | як ми називаємо блок з питаннями на картці товару? | knowledge-library |
+| K4 | перевір термінологію в цьому тексті | knowledge-library |
+| K5 | навчись нашого стилю письма | knowledge-library |
+| K6 | build a glossary of team terms with synonyms | knowledge-library |
+| K7 | додай шаблон для вимог | template-library |
+| K8 | налаштуй секцію глосарія і стилю в конфігурації плагіна | plugin-configurator |
+| K9 | анотуй цей скріншот стрілками | diagram-prototyper |
+| K10 | додай стрілки й нумеровані маркери на скрін головної | diagram-prototyper |
+| K11 | annotate this screenshot with numbered markers | diagram-prototyper |
+| K12 | згенеруй hi-fi екран фічі на нашій дизайн-системі | design-bridge |
+| K13 | розбери скарги покупців за липень на теми | feedback-triage |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -149,6 +169,7 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 | 2026-07-03 | 2 independent agent runs (descriptions-only simulation), plugin v1.33.0 | A 100 / B 100 / C 100 / D 100 / E 100 / F 100 / G 95→100 | G8: both runs picked product-analysis over cjm-research — eval label was wrong (data-only phrase), fixed the expected column, no description change. 46/46 primary agreement between runs. Baseline recorded before the monolith refactor (v1.34.x). |
 | 2026-07-04 | 2 independent agent runs, pre-release v1.36.0 | H 100 (14/14 both runs) | New lifecycle trio routes cleanly vs neighbors (H3→product-analysis, H5→requirements-creator, H11→product-research as expected). No description changes needed. |
 | 2026-07-16 | 2 independent agent runs (descriptions-only simulation), pre-release v2.2.0 | A 100 / B 100 / C 100 / D 100 / E 100 / F 100 / G 100 / H 100 / I 100 / J 100 | None. 80/80 primary agreement between runs; J6 → clarifying question naming write-concept vs requirements-creator in both runs (borderline pass by the group's own definition). New Group I (Debate mode) and Group J (People contour + v2.1.1 guards) route cleanly on first run; the brainstorm-features description change (debate triggers + Do NOT use guard) did not regress Groups A/H. |
+| 2026-07-29 | 2 independent agent runs (descriptions-only simulation), pre-release v2.4.0 | B 100 / E 100 / J 100 / K 100 | None. New Group K (team language + annotation) routes cleanly on first run: glossary/style → knowledge-library, setup phrasing → plugin-configurator, annotate → diagram-prototyper without stealing design-bridge hi-fi. Regression re-run limited to groups whose members' descriptions changed (B, E, J — knowledge-library + diagram-prototyper): no regressions. 36/36 phrases, full agreement between runs. |
 | (fill after each run) | | | |
 
 ## Maintenance

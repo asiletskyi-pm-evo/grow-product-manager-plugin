@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.12.0
+version: 0.13.0
 description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one. Do NOT use for a high-level product concept or PRD — use write-concept (its output is this skill's input). Українською — "написати вимоги", "створити специфікацію фічі", "вимоги до A/B-тесту", "переглянути вимоги", "проаналізувати вимоги", "покращити вимоги", "перевірити мою специфікацію".
 ---
 
@@ -201,7 +201,7 @@ Before finalizing, check whether the feature has been **prioritized** — does i
 
 ### Step 4 — Draft the requirements document
 
-Generate the full requirements document following the confirmed template structure.
+Before writing, load the team style preamble — `references/artifact-style-gate.md` Gate 3a (style profile + reference fragments from `knowledge-library`); skip silently if no profile is configured. Then generate the full requirements document following the confirmed template structure.
 
 > For a worked, high-quality reference of the target shape and rigor, load `references/examples/feature-spec-example-v1.md` on demand. It is a generic exemplar (few-shot) with testable Acceptance Criteria and an explicit A/B decision rule — match its rigor, not its exact wording.
 
@@ -249,6 +249,10 @@ If the user asked for technical recommendations, add them as a separate block at
 5. **Clarity** — every requirement must be specific, unambiguous, and actionable
 6. **Adaptivity** — requirements must contain all necessary information for BE, FE, Android, iOS, and Design teams
 7. **Lists over prose** — any sequence (steps, stages, requirements, criteria, changes, risks) is a numbered/bulleted list or a table, never a paragraph; paragraphs only for context and motivation, ≤ 3–4 sentences (`references/artifact-style-gate.md`, Gate 2)
+
+### Step 4.2 — Requirements visualization (annotated screenshot)
+
+If the requirements change **existing UI**, offer an annotated screenshot per `references/visual-annotation-protocol.md`: obtain the current screen (user upload → Figma frame from Step 1c → live product via browser), place numbered markers where **marker № = functional requirement №**, preview with the user, store in the project repo (`{feature-code}-screen-{N}.png`), and put the image + legend table into the Functional requirements / UI&UX sections. Attach to the published page via the protocol's REST chain in Step 6. Never block on this — skip gracefully if declined or no source exists.
 
 ### Step 4.5 — Artifact quality gate
 
@@ -393,7 +397,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.12.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.13.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 
