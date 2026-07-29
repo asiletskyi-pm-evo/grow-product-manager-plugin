@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.10.0
+version: 0.11.0
 description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document. Do NOT use for a full requirements/spec document with numbered functional requirements — use requirements-creator (a concept is the input to it). Українською — "написати концепт", "створити PRD", "описати фічу", "написати специфікацію", "оформити ідею в документ".
 ---
 
@@ -186,9 +186,11 @@ If the context does not make it clear which users are affected — ask separatel
   - What they gain from this feature
   - What they lose or what changes in their existing flow
 
+If the concept changes **existing UI**, offer an annotated screenshot of the current state per `references/visual-annotation-protocol.md` (numbered markers = numbered changes, legend table under the image, preview cycle with the user). It lands in the "What Changes for Users" block and later feeds requirements-creator Step 4.2. Skip gracefully if declined.
+
 ### 4. Draft the PRD
 
-Build the concept document following the confirmed structure from Step 1:
+Before writing, load the team style preamble — `references/artifact-style-gate.md` Gate 3a; skip silently if no profile is configured. Build the concept document following the confirmed structure from Step 1:
 
 > For a worked, high-quality reference of the target shape and depth, load `references/examples/prd-example-v1.md` on demand. It is a generic exemplar (few-shot), not a rigid template — match its rigor (measurable Success Metrics, a Verification/decision-rule block, explicit assumptions), not its exact wording.
 
@@ -296,7 +298,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.10.0",
+     skill_version: "0.11.0",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],

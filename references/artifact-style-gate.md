@@ -6,7 +6,7 @@
 
 - After the draft is fully generated and **before** the "Review with the user" step (or, for `task-creator`, before the pre-creation summary and after task creation as the Step 12 verification).
 - Only on the final draft of an artifact — never on intermediate brainstorm text, clarifying questions, or conversational replies.
-- Gates 1–2 are self-contained checklists. Gate 3 (Team language: terminology + style) is **reserved for v2.4.0** — keep the numbering.
+- Gates 1–2 are self-contained checklists. Gate 3 (Team language) additionally has a **pre-generation touch** — the style preamble — because lively text must be born lively; fixing stilted prose post-hoc makes it worse.
 
 ---
 
@@ -59,6 +59,30 @@ Paragraphs are allowed only for context, motivation, and conclusions — at most
 
 ---
 
+## Gate 3 — Team language (terminology + style) — since v2.4.0
+
+The defect: AI-generated text reads stilted and uses terms the team does not use, causing misunderstandings in decks, concepts, requirements, and tasks. The cure lives in `knowledge-library` (glossary + style profile); this gate wires it into every artifact. Both parts degrade gracefully: no glossary and no style profile configured → Gate 3 silently skips.
+
+### 3a. Style preamble — BEFORE generation (maker side)
+
+Before the maker starts writing the artifact, load the product's style profile (`~/.grow-pm/knowledge-library/style/{product_id}.md`, falling back to `style/_org.md`) and follow it while writing: tone and register, syntax rules, do/don't list, and — most powerful — imitate the reference fragments (few-shot). Controlled by `style_preamble: on|off` in the Terminology & Style config (default `on` when a profile exists).
+
+### 3b. Terminology + style lint — AFTER generation (checker side)
+
+After Gates 1–2, if the product glossary exists and is non-empty, call `knowledge-library` **Glossary Lint** (service mode) with the draft text. The lint returns: replacements (`avoid` → canonical term; dead-phrase → living phrase), style-profile deviations, and candidate terms (frequent terms in the draft that are absent from the glossary). These findings merge into the **groundedness/language checker lens** report — no separate agent.
+
+Apply replacements per `lint_mode` from the Terminology & Style config:
+
+- `suggest` (default) — show the replacement list to the user, apply the confirmed ones;
+- `auto` — apply silently, report the count in the gate report line;
+- `off` — skip the lint.
+
+Candidate terms: offer in one line to add as `status: candidate` to the glossary — never block the flow on it.
+
+### Gate report extension
+
+> "Гейт якості (checker): N виправлень (техвставки: X, формат: Y, термінологія: Z), спірних: W."
+
 ## Execution model: maker–checker
 
 **The agent that produced the artifact does not check its own work.** The same context that generated the text is biased toward justifying its own decisions, so the gate is executed by a separate subagent.
@@ -98,7 +122,7 @@ maker → checker → maker applies fixes → **one** re-check pass by the check
 For artifacts about to be **published** (Confluence page) or **materialized** (Jira issues), use **two checkers with distinct lenses** instead of one:
 
 - **(a) Form lens** — Gate 2 + template-structure conformance;
-- **(b) Groundedness lens** — Gate 1 + spot-checking claims against the sources. (Gate 3 joins this lens in v2.4.0.)
+- **(b) Groundedness/language lens** — Gate 1 + spot-checking claims against the sources + Gate 3 lint findings (terminology and style).
 
 Two identical checkers add almost nothing over one; distinct perspectives catch distinct failure classes.
 
@@ -116,6 +140,8 @@ Optional `local-context.md` section (defaults apply when absent):
 ### Artifact Quality Gate
 - review_mode: subagent   # subagent (default) | inline | off
 ```
+
+Gate 3 reads its own keys (`lint_mode`, `style_preamble`) from the **Terminology & Style** section — schema in `skills/plugin-configurator/references/context-schema.md`.
 
 `off` skips the gate entirely (the user opts out); `inline` forces the fallback mode without the subagent cost.
 

@@ -396,3 +396,19 @@ focus:
     strategy_memo: { enabled: false, schedule: "first week of quarter", mode: strategy, headless: true }
     healthcheck: off                   # metrics health-check in headless runs
 ```
+
+### Terminology & Style
+
+#### Settings
+- lint_mode: suggest
+- style_preamble: on
+
+#### Extraction Sources (per product)
+- confluence_space: DOCS
+- jira_project: PROJ
+- fireflies: last_20_meetings
+
+#### Attachments (REST API)
+- atlassian_site: https://example.atlassian.net
+- atlassian_email: pm@example.com
+- api_token_env: ATLASSIAN_API_TOKEN

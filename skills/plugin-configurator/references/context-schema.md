@@ -73,6 +73,8 @@ Every key an onboarding step may append, and the step that writes it. A skill ch
 | `focus` | Focus setup | Focus (sources, zones, VIP, cadence, scheduled) |
 | `design-toolkits` | Design Toolkit setup | External design toolkits |
 | `people` | People setup | People-contour (roster, cadences, HR form) |
+| `terminology` | Terminology & Style setup | Team glossary + style profile (lint_mode, style_preamble, extraction sources) |
+| `attachments-rest` | Attachments setup | Atlassian REST attachments (site, email, token env NAME) |
 
 > `okrs` and `competitors` were listed here until v2.1.0 but no step ever wrote them (both are collected inside Step 6, which has no defer path); `key-metrics`, `analytics-extended`, `tableau-mcp-required`, `planning`, `focus` and `people` were written but unlisted — for five sections the "is it deferred?" check could not be answered.
 
@@ -288,6 +290,32 @@ The blocks below are the exact `local-context.md` output formats the Plugin Conf
 #### Configured Google Drive Folders (for CJM search)
 - [Folder ID]: [description]
 ```
+
+### Terminology & Style section format
+
+```markdown
+### Terminology & Style
+#### Settings
+- lint_mode: suggest        # suggest | auto | off — how Gate 3 applies glossary replacements
+- style_preamble: on        # on | off — load the style profile before generating artifacts
+#### Extraction Sources (per product)
+- confluence_space: SPACE
+- jira_project: PROJ
+- fireflies: last_20_meetings
+```
+
+Read by `references/artifact-style-gate.md` (Gate 3) and `knowledge-library` (glossary/style modes — schemas and workflows in `skills/knowledge-library/references/glossary-workflows.md`). Glossary and style data itself lives in `~/.grow-pm/knowledge-library/glossary|style/`, NOT in local-context.
+
+### Attachments (REST API) section format
+
+```markdown
+#### Attachments (REST API)
+- atlassian_site: https://example.atlassian.net
+- atlassian_email: user@example.com
+- api_token_env: ATLASSIAN_API_TOKEN
+```
+
+Used by `references/visual-annotation-protocol.md` Step V-6. **`api_token_env` stores the NAME of the environment variable — the token value itself must never appear in local-context.md or in chat.** Verify on setup with GET `/wiki/rest/api/space?limit=1` → 200.
 
 ### Templates section format
 
