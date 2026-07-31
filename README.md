@@ -1,12 +1,14 @@
 # Grow Product Manager
 
-**Version:** 2.4.0
+**Version:** 2.4.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v2.4.1** — **The "no org data" promise, enforced.** An audit found nine shipped lines that named the maintainer's own team as the authority behind a rule (`per <Team> convention`), signed reference examples with a team and a quarter, wrote a schema example in one team's language, or hardcoded an output language where `user.language` exists — all green under every existing check, because a leak that is an ordinary word has no lexical signature, only a position. Those lines are fixed, and three positional checks now catch the class: **`org-signature`**, **`example-locale`** (fenced blocks only — bilingual triggers in prose are the routing surface by design), **`example-keys`**. New **`testing/seeded_leak_test.py`**: ten known-bad lines injected one at a time, the linter must go RED on each — **10/10**, wired into both CI workflows. `testing/Testing-process.md` gains the written rule ("Every example in the plugin is universal") and two DoD items. Touched: `product-reporter` v0.5.2, `knowledge-library` v0.7.1, `plugin-configurator` v2.9.1.
 
 **New in v2.4.0** — **Visual requirements and team language** (stage 2 of the stakeholder-feedback release). New shared `references/visual-annotation-protocol.md`: annotated screenshots where **marker № = requirement №** (a visual index with a legend table, not an illustration) — sourced from user upload / Figma / live browser, rendered locally with Pillow, user-previewed, stored in the project repo, and attached via **Atlassian REST API** (the Rovo MCP ships no attachment tools; token env NAME in config, value never) with browser/manual fallbacks; `diagram-prototyper` v0.10.0 gains a standalone Annotate mode. `knowledge-library` v0.7.0 grows the **team-language contour**: Glossary Build/Manage/Lint + Style Build (terms with variants/avoid + officialese→living `phrases` + a style profile with few-shot fragments), wired into every artifact by **Gate 3 "Team language"** in the artifact quality gate — style preamble before generation, terminology lint after. Consumers: `requirements-creator` v0.13.0 (Step 4.2 visualization), `task-creator` v0.12.0 (Step 8.5 attachments), `write-concept` v0.11.0, `plugin-configurator` v2.9.0 (Terminology & Style + Attachments setup). Trigger-evals: new Group K 100%, B/E/J regression 100%.
 
@@ -228,7 +230,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 10. Plugin Configurator (v2.9.0)
+### 10. Plugin Configurator (v2.9.1)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -246,7 +248,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 11. Knowledge Library (v0.7.0)
+### 11. Knowledge Library (v0.7.1)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
@@ -310,7 +312,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 14. Product Reporter (v0.5.1) — renamed from Team Ops Reporter in v2.0.0
+### 14. Product Reporter (v0.5.2) — renamed from Team Ops Reporter in v2.0.0
 
 **Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
 
@@ -485,11 +487,11 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Task Creator | v0.12.0 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.10.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Meeting Processor | v0.13.4 | Process meetings and extract action items |
-| Plugin Configurator | v2.9.0 | Configure plugin for your organization |
-| Knowledge Library | v0.7.0 | Manage curated knowledge sources |
+| Plugin Configurator | v2.9.1 | Configure plugin for your organization |
+| Knowledge Library | v0.7.1 | Manage curated knowledge sources |
 | Template Library | v0.2.3 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.4.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
-| Product Reporter | v0.5.1 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
+| Product Reporter | v0.5.2 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
 | Roadmap Architect | v0.2.3 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
 | Project Planning | v0.2.3 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.3.3 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
@@ -807,5 +809,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 2.4.0  
+**Version:** 2.4.1  
 **Last Updated:** July 2026

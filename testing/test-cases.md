@@ -4,6 +4,30 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v2.4.1 — org-leak audit (examples that were not universal)
+
+> **Run 2026-07-31 — verdict: GREEN.** 18 checks, 0 FAIL; seeded-leak test 10/10. The nine defects here were all green under the previous 15 checks: none of them is a host, an id or an email, so no shape-based rule saw them, and the one layer that would have — the gitignored `org-tokens.local` denylist — did not exist on any machine. The lesson is written into the linter's own comments: an optional layer that nobody notices is absent is a layer that does not run.
+
+### Stage 1 — Static lint (new checks)
+- **TC-lint-241-signature** | references + skills | no rule cites a team as its authority; no example is signed with a team + quarter | check `org-signature` | expected: 0 FAIL | **pass** (was 4: a link convention, report formatting rules, and two reference examples carrying a team name and a quarter)
+- **TC-lint-241-locale** | references + skills, fenced blocks | sample values inside code blocks are language-neutral | check `example-locale` | expected: 0 FAIL | **pass** (was 5: the glossary schema example in one team's language, two config blocks with a localized keyword, a signal example, a style-profile note assuming a specific language's address forms)
+- **TC-lint-241-lang** | references + skills | no output language hardcoded where `user.language` exists | check `example-locale` | expected: 0 FAIL | **pass** (was 1: `Language: <Lang> by default` in product-reporter)
+- **TC-lint-241-keys** | references + skills + templates | example issue/space keys come from the placeholder vocabulary | check `example-keys` | expected: 0 FAIL | **pass** (0 in the tree; the check caught its own documentation row in `Testing-process.md`, which was rewritten)
+- **TC-lint-241-denylist** | repo | absence of `testing/org-tokens.local` is reported | expected: WARN, not silence | **pass**
+
+### Stage 1b — Seeded-leak test (new stage)
+- **TC-seed-241** | temp copy of the tree | each of 10 known-bad lines makes the linter RED with the expected tag; the clean copy is GREEN | `testing/seeded_leak_test.py` | expected: 10/10 | **pass** (5 signature shapes, 2 locale, 2 keys, 1 denylist)
+- **TC-seed-241-ci** | validate.yml ↔ release.yml | the seeded test runs in both, and gate parity covers it | expected: 3 validators, identical | **pass**
+
+### Stage 5 — Regression
+- **TC-reg-241-triggers** | 3 touched skills | no description changed, so routing is untouched | expected: no trigger-eval re-run needed | **pass** (all three edits are in bodies and skill-local references; frontmatter `description` byte-identical)
+- **TC-reg-241-bilingual** | references + skills | the bilingual trigger surface in prose survives the locale check | expected: 0 FAIL on ~30 lines of intentional non-Latin trigger phrases and status synonyms | **pass** (that is why the check is scoped to fenced blocks)
+
+### Coverage gap this release leaves open
+- A plausible-sounding but domain-specific example ("the Buy button moves above the specs block") is invisible to a regex. It is caught by review only — the rule is stated in `Testing-process.md` and belongs in the checker's brief for any doc change.
+
+---
+
 ## Release v2.1.0 — audit remediation P3 + P4 (behavioural defects)
 
 > **Run 2026-07-14 — verdict: GREEN.** 13 checks, 0 FAIL. P3/P4 defects are mostly *semantic* (a gate that skips, a mode with no flow, weights that don't sum) — a linter cannot catch these, so they are covered by scenario cases below. This is the honest boundary of static lint.

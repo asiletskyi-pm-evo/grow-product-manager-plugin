@@ -66,10 +66,12 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 
 | # | Phrase | Expected |
 |---|--------|----------|
-| E1 | дослідi як Rozetka зробила Q&A на картці товару | product-research |
+| E1 | дослідi як головний конкурент зробив Q&A на картці товару | product-research |
 | E2 | порівняй наш фільтр з галузевими UX-бенчмарками | product-research |
 | E3 | збережи цю статтю Baymard у бібліотеку | knowledge-library |
 | E4 | які джерела маємо по темі відгуків | knowledge-library |
+
+> E1 named a specific local competitor until v2.4.1; it now says "головний конкурент". The routing signal is unchanged (research verb + a competitor + a product surface), and the phrase no longer ties the fixture to one market.
 | E5 | поясни чому впала конверсія КТ минулого тижня | product-analysis |
 
 ### Group F — Documents chain (write-concept / requirements-creator / task-creator)

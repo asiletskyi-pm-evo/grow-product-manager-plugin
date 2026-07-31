@@ -1,0 +1,45 @@
+# testing/org-tokens.local — YOUR organization's identifiers, one per line.
+#
+# Copy this file to `testing/org-tokens.local` (which is gitignored, so the
+# tokens never ship) and fill it in. `skill_lint.py` then fails on any shipped
+# file that contains one of them, case-insensitively, as a substring.
+#
+#     cp testing/org-tokens.local.example testing/org-tokens.local
+#     $EDITOR testing/org-tokens.local
+#     python3 testing/skill_lint.py
+#
+# Why the file is not committed: a denylist that ships would put the very strings
+# it forbids into a public repo. The cost is that it protects nothing until you
+# create it — CI never has it, and for one full release cycle it existed on no
+# machine at all, which is how "per <Team> convention" reached main. The
+# shape-based checks (`org-signature`, `example-locale`, `example-keys`, and the
+# generic half of `org-data`) cover that class without this file; the tokens here
+# are for everything a shape cannot describe.
+#
+# Rule: whenever you purge an identifier from the tree, add it here in the SAME
+# commit. That is what stops it from coming back.
+#
+# Below are the categories worth listing, with fictional values — replace them.
+
+# --- team, squad, department, and product code names ---------------------------
+Zorg
+Zorgtech
+Zorg Platform Squad
+
+# --- Jira project / board keys, Confluence space keys --------------------------
+ZORG
+ZORGX
+
+# --- hosts and domains that are yours ------------------------------------------
+zorgtech.example
+wiki.zorgtech.example
+
+# --- instance identifiers (Atlassian cloud id, Jira team id, workspace id) -----
+00000000-0000-0000-0000-000000000000
+
+# --- real people: surnames of colleagues who appear in your local context ------
+Surname
+Anothername
+
+# --- internal tools and services nobody outside your org would recognize -------
+Zorgboard

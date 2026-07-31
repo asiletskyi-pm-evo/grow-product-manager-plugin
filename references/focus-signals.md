@@ -9,7 +9,7 @@
 Every collector returns compact packets, never raw data — this keeps token cost flat regardless of how noisy the underlying source is:
 
 ```yaml
-- signal: "Лист від VIP-стейкхолдера висить без відповіді 2 дні"   # one line, human-readable
+- signal: "Email from a VIP stakeholder unanswered for 2 days"     # one line, human-readable
   source: mail | calendar | meetings | jira | cadence | metrics | roadmap | goals
   severity: high | normal | low
   freshness: 2026-07-03T09:00                                   # when observed
@@ -80,7 +80,7 @@ Strategic signals feed `focus-scoring.md` §5. The memo template and honesty rul
 
 #### Sources
 - Mail: [on/off], window: [7] days, thresholds: [24]h VIP / [48]h others
-- Calendar: [on/off]; prep keywords: [demo, review, планування, ...]
+- Calendar: [on/off]; prep keywords: [demo, review, planning, ...]
 - Jira: [on/off]; Release flags: [off]
 
 #### Zones

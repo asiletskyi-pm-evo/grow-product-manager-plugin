@@ -1,6 +1,6 @@
 ---
 name: knowledge-library
-version: 0.7.0
+version: 0.7.1
 description: Manage a local library of curated knowledge sources (articles, benchmarks, research) with trust scoring and multi-mode search, AND the team-language contour — glossary of team terms with synonyms and a writing style profile. Use for "manage sources", "add to library", "search knowledge", "import sources", "show library", "add this article", "what sources do we have on [topic]" — and for "build a glossary", "add a term", "how do we call X", "check terminology", "learn our writing style", or when another skill needs enrichment search or a terminology lint. Українською — "керувати джерелами", "додати в бібліотеку", "пошук у знаннях", "показати бібліотеку", "додай цю статтю", "які джерела маємо по темі", "збери глосарій", "додай термін", "як ми називаємо…", "перевір термінологію", "навчись нашого стилю". Do NOT use for artifact templates — use template-library.
 ---
 

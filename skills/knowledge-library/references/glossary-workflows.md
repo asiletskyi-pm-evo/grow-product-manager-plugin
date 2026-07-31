@@ -20,23 +20,23 @@ Vault mirror (when configured): `Knowledge/glossary/` and `Knowledge/style/` —
 
 ```yaml
 terms:
-  - term: "картка товару"          # canonical name the team uses
+  - term: "product card"           # canonical name the team uses
     en: "product card"             # English equivalent (market-standard)
-    variants: ["КТ"]               # accepted synonyms/abbreviations
-    avoid:                         # foreign phrasings AI tends to use
-      - "продуктова картка"
-      - "картка продукту"
+    variants: ["PC"]               # accepted synonyms/abbreviations
+    avoid:                         # phrasings the team does not use
       - "product page"
-    definition: "Сторінка товару на маркетплейсі"   # one sentence
+      - "item card"
+      - "listing entry"
+    definition: "The page of a single product"      # one sentence
     source: "confluence:SPACE/Page"                 # where it was mined from
     status: approved               # candidate | approved | deprecated
-    added: 2026-08-01
+    added: 2026-01-15
 
 phrases:                           # dead officialese → living replacements
-  - avoid: "здійснити імплементацію"
-    use: "впровадити"
-  - avoid: "в рамках даного функціоналу"
-    use: "у цій функції"
+  - avoid: "perform an implementation of"
+    use: "implement"
+  - avoid: "in the scope of the given functionality"
+    use: "in this feature"
 ```
 
 `terms` fixes WHAT things are called; `phrases` fixes HOW sentences sound. Both feed Glossary Lint. Only `approved` entries drive replacements; `candidate` entries are shown as suggestions only.
@@ -45,9 +45,9 @@ phrases:                           # dead officialese → living replacements
 
 ```markdown
 # Style profile — {product|org}
-## Tone & register        ← address form (ти/ви), formality, person
+## Tone & register        ← address form (formal/informal), formality, person
 ## Syntax                 ← sentence length, active voice, clause density
-## Do / Don't             ← team-specific rules ("висновок першим", "не нумерувати заголовки")
+## Do / Don't             ← team-specific rules ("conclusion first", "no numbered headings")
 ## Reference fragments    ← 3–5 verbatim excerpts of human-written team text (few-shot; the strongest mechanism)
 ## AI anti-patterns       ← accumulated from feedback and lint findings
 ```

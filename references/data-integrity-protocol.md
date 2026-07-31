@@ -50,7 +50,9 @@ For external data (web research, market reports, competitor data, Baymard guidel
 
 For internal data — detect anomaly weeks/months that overlap with holiday windows:
 
-**Ukraine** (apply when local-context → `product.primary_market` is UA):
+Build the window list for the market in `local-context.md` → `product.primary_market` (unset → ask the user once, and offer to record it via `plugin-configurator`), and treat the table below as the worked example of what one market's list looks like — the plugin ships no calendar for any other market, so for a different market assemble the equivalent windows (national holidays, gifting peaks, local promo weeks) before screening.
+
+**Worked example — UA market** (apply only when `product.primary_market` is UA):
 | Window | Effect |
 |--------|--------|
 | Week 1 (Jan 1-7) | Heavy holiday effect, low purchase activity |
@@ -74,13 +76,17 @@ For internal data — detect anomaly weeks/months that overlap with holiday wind
 
 For external data — verify geographic/cultural relevance:
 
-| Geography fit for Ukraine market | Examples |
-|----------------------------------|----------|
-| ✅ Direct fit (UA-specific) | Rozetka, OLX, Allo, Epicentrk, Kasta, Makeup.com.ua |
-| ✅ CIS/EE comparable | Allegro (PL), eMag (RO), Wildberries/Ozon (RU — political caveat) |
-| ⚠️ Global with adaptation | Amazon, eBay, AliExpress |
-| ⚠️ Western mature markets | ASOS, Sephora, IKEA (good for UX patterns, but caveat CR/AOV) |
-| ❌ Heavily local (do not use as-is) | US-only retailers (Wayfair, Etsy without adaptation) |
+Relevance is judged against **your** market (`local-context.md` → `product.primary_market`) and **your** competitor list — the plugin ships neither, so resolve the tiers below from the config before using a benchmark:
+
+| Tier | What belongs here | How to use the number |
+|------|-------------------|------------------------|
+| ✅ Domestic | players in your primary market (`product.competitors`) | direct fit — usable as-is |
+| ✅ Regional comparable | neighbouring markets of similar maturity and purchasing power | usable with a stated caveat |
+| ⚠️ Global platform | worldwide marketplaces present in many markets | adapt: traffic mix and assortment differ |
+| ⚠️ Mature Western market | leaders in high-maturity markets | UX patterns transfer; CR/AOV/retention do not |
+| ❌ Heavily local elsewhere | a leader in one foreign market with no presence in yours | do not use as-is |
+
+When a source falls outside the domestic tier, the caveat travels with the number into the artifact (Gate Check 4), e.g. `(global platform benchmark, adapted)`.
 
 ### Gate Check 3: Multi-Source Cross-Validation
 
