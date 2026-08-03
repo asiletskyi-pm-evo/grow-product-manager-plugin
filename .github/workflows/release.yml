@@ -87,6 +87,7 @@ jobs:
           python3 -m pip install --quiet pyyaml
           bash testing/validate-consistency.sh
           python3 testing/skill_lint.py
+          python3 testing/seeded_leak_test.py
 
       - name: Extract CHANGELOG notes
         if: steps.check.outputs.exists == 'false'

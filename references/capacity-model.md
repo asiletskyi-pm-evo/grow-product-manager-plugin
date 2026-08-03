@@ -140,7 +140,7 @@ duration ≈ critical_path_schedule(volume_by_platform, dependencies, effective_
 
 ---
 
-## 11. Reference example (FET Q3 2026, verified by a run)
+## 11. Reference example (anonymized from a real quarterly run)
 
 Composition: BE 2 dev, FE 2 dev, iOS 3, Android 3. N_sprints = 7. baseline 10, availability 0.9, tech-debt 0.15.
 

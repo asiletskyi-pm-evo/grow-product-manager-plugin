@@ -6,7 +6,7 @@
 
 ## 1. Quarterly roadmap (Confluence page)
 
-Sections (validated by a run of Q3 FET):
+Sections (validated by a real quarterly run):
 1. **Header panel** — artifact/team/period/author + method (CQL by label + Jira statuses + capacity).
 2. **Quarter capacity** — table by platform: demand / ceiling / state (status-lozenges green/yellow/red); panel on platform granularity (FE slices → next quarter).
 3. **Main focuses** — focus / why table.

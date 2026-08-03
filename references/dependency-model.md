@@ -17,7 +17,7 @@ Same machinery (DAG, topo-sort), different granularity.
 
 ## 2. Dependency sources
 
-1. **Jira issue-links** (primary): per FET convention — a `Blocks` chain (sequence) + `Relates` pairs (between entities of one feature). Pull via `getJiraIssue` (field `issuelinks`) per-key.
+1. **Jira issue-links** (primary): follow the team's link convention from `local-context.md` (`planning.link_convention`). Default when unset — a `Blocks` chain (sequence) + `Relates` pairs (between entities of one feature). Pull via `getJiraIssue` (field `issuelinks`) per-key.
 2. **Feature names/numbering** (`PROJ-{epic}.{feature}`) — grouping under an epic.
 3. **Development Flow** from local-context — the team's typical work-type sequence (micro level).
 4. **PM input** — manual dependencies not present in Jira (gate clarification).

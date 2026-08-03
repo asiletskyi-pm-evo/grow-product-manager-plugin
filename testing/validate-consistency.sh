@@ -73,7 +73,7 @@ fi
 # A comment cannot enforce that: if they drift, a PR goes green, merges, and the
 # auto-release fails on main with no earlier signal. Check it instead of promising it.
 gate_of() {  # extract the validator commands each workflow actually runs
-  grep -hoE '(bash testing/validate-consistency\.sh|python3 testing/skill_lint\.py)' "$1" | sort -u
+  grep -hoE '(bash testing/validate-consistency\.sh|python3 testing/skill_lint\.py|python3 testing/seeded_leak_test\.py)' "$1" | sort -u
 }
 V_GATE=$(gate_of .github/workflows/validate.yml)
 R_GATE=$(gate_of .github/workflows/release.yml)

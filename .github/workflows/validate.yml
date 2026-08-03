@@ -31,3 +31,8 @@ jobs:
         env:
           GROW_LINT_REQUIRE_YAML: "1"
         run: python3 testing/skill_lint.py
+      # The org-leak checks are the only ones whose failure mode is silence, so
+      # they get a test of their own: seed a known-bad line, assert the linter
+      # goes RED. Without this, a broken regex reads exactly like a clean repo.
+      - name: Run seeded-leak test
+        run: python3 testing/seeded_leak_test.py

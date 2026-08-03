@@ -12,6 +12,38 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v2.4.1 (2026-07-31)
+
+**The plugin's own promise, enforced.** Both manifests state that the plugin "ships no hardcoded brand or organization data". An audit of the tree found nine lines where that was not true — not hosts or ids (those were already checked) but ordinary words: the maintainer's team cited as the authority behind a rule, examples signed with a team and a quarter, a schema example written in one team's language, and an output language hardcoded where `user.language` exists. Every check in the linter passed green over them, because a leak that is an ordinary word has no lexical signature — only a position. This release fixes the lines and adds the checks that make the class visible.
+
+### Fixed — examples and rules are now universal
+
+- **`references/dependency-model.md`** — the Jira link convention was attributed to one team. It now reads from `local-context.md` (`planning.link_convention`), with the previous behavior as the documented default when unset.
+- **`skills/product-reporter` → v0.5.2** — report formatting was attributed to one team (now: the team's report conventions from `local-context.md`), and the output language was hardcoded (now: `user.language`).
+- **`references/capacity-model.md`, `references/roadmap-artifacts.md`** — two reference examples were signed with a team and a quarter; now anonymized. A signed example reads as the plugin's rule inside that team and as an unverifiable claim outside it.
+- **`skills/knowledge-library` → v0.7.1** — the glossary schema example shipped its sample terms, synonyms, `avoid` list and definitions in one team's language, so every other user read a format spec they could not use as a model. Now English throughout, with the style-profile schema's language-specific notes generalized.
+- **`skills/plugin-configurator` → v2.9.1**, **`references/focus-signals.md`** — localized sample values inside config code blocks.
+- **`references/visual-annotation-protocol.md`** — the legend example described one marketplace's product page; now generic UI.
+- **`references/data-integrity-protocol.md`** — Gate Check 2 shipped one country's benchmark roster under the heading "Geography fit for <Country> market", so every user of the plugin screened external data against one market's competitors. It is now a **tier table** (domestic / regional comparable / global platform / mature Western / heavily local elsewhere) resolved from `product.primary_market` and `product.competitors`, with the out-of-tier caveat travelling into the artifact. The seasonal-window table is relabelled as the worked example it is, with the generic instruction above it.
+- **`skills/plugin-configurator/references/context-schema.md`, `local-context.example.md`** — both geography gates referenced `product.primary_market`, a key that existed in no schema. It is now a documented optional field; unset, the gates ask once instead of assuming.
+- **`testing/trigger-evals.md`** — fixture phrase E1 named a specific local competitor; now "головний конкурент". Same routing signal, no tie to one market.
+
+### Fixed — the denylist layer is usable
+
+- **Word-boundary matching in `org-tokens.local`.** Tokens were matched as bare substrings, so a three-letter team acronym fired on "offset", "fetch" and "feature": a first run against a real token list produced 46 hits, 42 of them noise. Boundaries are now added where the token's own edge is a word character, which leaves host-style tokens (`example.com`) matching mid-string. The same run after the fix: 4 hits, 2 of them real (both fixed above) and 2 correct-by-design (the author line and the marketplace install path name the repository owner).
+
+### Added — three checks that catch the class, and a test that proves they do
+
+- **`org-signature`** — a team/org name cited as the authority behind a rule (`per <Team> convention`, `(<Team> formatting rules)`), or an example signed with a team and a quarter. Positional, not lexical: in a shipped file the authority behind a convention is the plugin, a config key, or a named vendor — never a proper noun the reader cannot look up.
+- **`example-locale`** — a localized sample value inside a fenced block (scope is deliberately code blocks only: bilingual trigger phrases in prose are the plugin's routing surface by design), and any output language hardcoded where `user.language` exists.
+- **`example-keys`** — an example issue or Confluence space key outside the placeholder vocabulary (`PROJ-1234`, `SPACE`). A real key is both an org leak and an example the reader cannot run.
+- **`testing/seeded_leak_test.py` (stage 1b)** — the checks above are the only ones whose failure mode is silence, so they get a test of their own: the tree is copied, one known-bad line is injected at a time, and the linter must go RED with the expected tag. Ten seeds, one per shipped defect class, written with a fictional org so no real identifier enters the repo. **10/10 caught.** Wired into both CI workflows; the gate-parity check now covers it too.
+- **`testing/org-tokens.local.example`** — the optional denylist layer never protected anything because nobody noticed the file was absent (two release cycles, two audits). Its absence is now a WARN on every run, and the example file makes creating it a copy.
+
+### Changed — the rule is written down
+
+- **`testing/Testing-process.md`** — a new section, "Every example in the plugin is universal": placeholders instead of real values, a nameable authority behind every rule, no team signature on examples, language-neutral code blocks, no hardcoded output language, generic domain detail. Two rules added to the Definition of Done, and one honest limit stated: the checks catch shapes, not judgment — whether a plausible-sounding example is domain-specific stays a review question and belongs in the checker's brief.
+
 ## v2.4.0 (2026-07-29)
 
 **Visual requirements and team language — stage 2 of the stakeholder-feedback release.** v2.3.0 cleaned artifacts of ungrounded technical content and prose; v2.4.0 closes the remaining two feedback items: requirements lacked "a screenshot with an arrow" showing where changes land, and AI text used terms and tone foreign to the team.

@@ -10,8 +10,8 @@ Every annotated screenshot ships with a **legend table** directly below it:
 
 | Marker | Requirement | What changes |
 |--------|-------------|--------------|
-| 1 | FR-3 | "Buy" button moves above the specs block |
-| 2 | FR-5 | Q&A badge added next to the rating |
+| 1 | FR-3 | Primary action button moves above the details block |
+| 2 | FR-5 | Counter badge added next to the title |
 
 ## When to offer annotation
 

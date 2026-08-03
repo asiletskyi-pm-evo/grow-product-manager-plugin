@@ -29,6 +29,9 @@ CHECKS = """
 13. chain-contracts      a claimed inbound edge (<- X) exists on X's side too
 14. vault-paths          every example vault path matches TYPE_FOLDER_MAP's layout
 15. builtin-subtypes     a declared subtype resolves to a built-in filename
+16. org-signature        a team/org name cited as the authority behind a rule or example
+17. example-locale       non-Latin examples, or an output language hardcoded in a doc
+18. example-keys         example issue/space keys outside the placeholder vocabulary
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -387,13 +390,31 @@ if os.path.isfile(README):
 # To also catch your own org's identifiers, drop them one-per-line into
 # `testing/org-tokens.local` — gitignored, so the tokens never ship. Absent
 # (the CI case), the generic checks below still run.
+#
+# The denylist is OPTIONAL, and an optional layer that nobody notices is absent
+# is a layer that does not run: the four leaks of 2026-07-30 shipped while this
+# file did not exist on any machine. Its absence is now reported, and the
+# shape-based checks 16-18 below cover the same defect class without it.
 ORG_TOKENS = None
 _tokens_file = os.path.join(root, "testing", "org-tokens.local")
 if os.path.isfile(_tokens_file):
     _toks = [l.strip() for l in open(_tokens_file, encoding="utf-8")
              if l.strip() and not l.startswith("#")]
     if _toks:
-        ORG_TOKENS = re.compile("|".join(re.escape(t) for t in _toks), re.I)
+        # Word-boundaried, not bare substring: a short team acronym is a substring
+        # of ordinary English (a 3-letter token inside "offset", "settings"), and a
+        # denylist that fires 40 times on the first run is a denylist the
+        # maintainer deletes. Boundaries are added only where the token's own edge
+        # is a word character, so "example.com" or ".corp" still match mid-token.
+        def _bounded(t):
+            e = re.escape(t)
+            return (r"\b" if t[:1].isalnum() else "") + e + (r"\b" if t[-1:].isalnum() else "")
+        ORG_TOKENS = re.compile("|".join(_bounded(t) for t in _toks), re.I)
+    else:
+        warn("org-data", "testing/org-tokens.local exists but is empty — the org denylist is not running")
+else:
+    warn("org-data", "testing/org-tokens.local absent — the org denylist is not running "
+                     "(copy org-tokens.local.example and list your team/org names; it is gitignored)")
 
 # Whole-label match: "mycompany.io" must NOT pass because "company" is a substring
 # of "mycompany" (that bug shipped a real domain past this check).
@@ -463,6 +484,145 @@ if os.path.isfile(example):
             if not PLACEHOLDER_NAME.match(nm):
                 fail("org-data", f"local-context.example.md:{i}: '{nm}' is not a placeholder "
                                  f"(use Surname1/Name1/<role>) — the example must never carry a real roster")
+
+# ---------------------------------------------------- 16. org signature
+# A leak does not have to look like a hostname. The 2026-07-30 audit found four
+# lines that named the maintainer's own team as the authority behind a rule or an
+# example: "per <Team> convention", "(<Team> formatting rules)", a section titled
+# "Reference example (<Team> Q3 2026…)", and "validated by a run of Q3 <Team>".
+# Every check above was blind to them — the token is an ordinary word, and the
+# denylist layer that would have named it is optional and was absent everywhere.
+#
+# The rule that catches them is positional, not lexical. In a shipped file the
+# authority behind a convention is the plugin itself, the user's own
+# `local-context.md`, or a named vendor — never a proper noun the reader has no
+# way to look up. And an example is never signed with a team and a quarter: a
+# reader outside that team cannot verify it, and a reader inside it will copy the
+# team's habits as if they were the plugin's rules.
+KNOWN_PROPER = {
+    # vendors / tools / formats that legitimately own a convention
+    "jira", "confluence", "atlassian", "github", "gitlab", "git", "figma", "miro",
+    "slack", "google", "claude", "anthropic", "tableau", "fireflies", "obsidian",
+    "notion", "linear", "mermaid", "markdown", "commonmark", "python", "pillow",
+    "semver", "iso", "json", "yaml", "html", "css", "chatgpt", "gemini",
+    "notebooklm", "draw", "keep", "conventional", "unicode", "rfc",
+    # ordinary words that can sit in front of a convention noun
+    "the", "this", "that", "these", "those", "our", "your", "their", "its", "a",
+    "an", "one", "same", "each", "every", "no", "any", "all", "both", "other",
+    "team", "company", "org", "project", "product", "plugin", "skill", "template",
+    "vault", "repo", "repository", "release", "commit", "branch", "file", "folder",
+    "quality", "marking", "naming", "style", "data", "best", "industry", "local",
+    "default", "standard", "house", "output", "input", "source", "target",
+    # the repo's own method acronyms
+    "arcv", "cjm", "gtd", "ice", "rice", "smart", "smartcbp", "okr", "nvc",
+    "roaip", "pm", "ux", "ui", "prd", "adr", "moc", "wcag", "bpmn",
+    # date placeholders
+    "yyyy", "yy", "mm", "dd", "hh", "q1", "q2", "q3", "q4",
+}
+PN = r"([A-Z][A-Za-z0-9.&-]{1,15})"
+AUTH_NOUN = (r"(?:conventions?|rules?|standards?|formats?|formatting|process(?:es)?|"
+             r"polic(?:y|ies)|guidelines?|practices?|naming|style)")
+SIGNATURE_RULES = [
+    (re.compile(rf"\b(?:per|as per|following|according to)\s+(?:the\s+)?{PN}\s+{AUTH_NOUN}\b"),
+     "cites '{t}' as the authority behind a rule — name the config key "
+     "(`local-context.md`) or the vendor instead"),
+    (re.compile(rf"\(\s*{PN}\s+{AUTH_NOUN}\s*\)"),
+     "qualifies a rule with '{t}' — a reader outside that org cannot look it up"),
+    (re.compile(rf"\b{PN}\s+(?:formatting|naming|style|report)\s+rules?\b"),
+     "attributes rules to '{t}' — read them from `local-context.md` instead"),
+    (re.compile(rf"\b{PN}\s+Q[1-4]\b"),
+     "signs an example with '{t}' + a quarter — anonymize it "
+     "('anonymized from a real quarterly run')"),
+    (re.compile(rf"\bQ[1-4]\s+{PN}\b"),
+     "signs an example with a quarter + '{t}' — anonymize it"),
+    (re.compile(rf"\b(?:verified|validated|measured|confirmed|observed|piloted|adopted)\s+"
+                rf"(?:by|at|in|for|with)\s+(?:the\s+)?{PN}\s+"
+                rf"(?:team|squad|tribe|department|unit|org|crew)\b"),
+     "attributes an example to the '{t}' team — anonymize it"),
+]
+for f in scan_targets:
+    if not os.path.isfile(f): continue
+    rel_name = os.path.relpath(f, root)
+    for i, line in enumerate(open(f, encoding="utf-8").read().split("\n"), 1):
+        for rx, msg in SIGNATURE_RULES:
+            for m in rx.finditer(line):
+                t = m.group(1)
+                if t.lower() in KNOWN_PROPER: continue
+                if t in SKILLS or t in VOCAB: continue
+                fail("org-signature", f"{rel_name}:{i}: " + msg.format(t=t))
+
+# ---------------------------------------------------- 17. example locale
+# Two ways a shipped doc stops being universal. First: a schema example written
+# in the maintainer's own language — the glossary schema shipped sample terms,
+# synonyms and definitions in one team's language, so every other user read a
+# format spec they could not use as a model.
+#
+# Scope is deliberately **fenced blocks only**. Trigger phrases in prose
+# («проведи дебати»), Jira status synonyms and quoted output lines are the
+# plugin's bilingual surface by design; a fenced block is a machine-readable
+# example that the model copies literally, so its values must be neutral.
+# Localized wording belongs in `templates/` (deliberately bilingual) and in the
+# user's own `~/.grow-pm/` files.
+#
+# Second: a hardcoded output language. "Language: <Lang> by default" pinned one
+# team's language into a skill that has `user.language` for exactly this.
+NON_LATIN = re.compile(r"[Ѐ-ӿ֐-׿؀-ۿ一-鿿぀-ヿ]")
+locale_targets = [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files
+for f in locale_targets:
+    rel_name = os.path.relpath(f, root)
+    in_fence = False
+    for i, line in enumerate(open(f, encoding="utf-8").read().split("\n"), 1):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence; continue
+        if not in_fence: continue
+        m = NON_LATIN.search(line)
+        if m:
+            fail("example-locale", f"{rel_name}:{i}: non-Latin sample value ('{m.group(0)}…') inside a "
+                                   f"code block — a format example must be language-neutral English; "
+                                   f"localized wording belongs in templates/ or the user's own files")
+
+LANGS = ("Ukrainian|Russian|Polish|German|French|Spanish|Italian|Portuguese|Turkish|"
+         "Chinese|Japanese|Korean|Arabic|Hebrew|Dutch|Czech|Slovak|Hungarian|Romanian|"
+         "Bulgarian|Serbian|Croatian|Greek|Swedish|Norwegian|Danish|Finnish|Kazakh|"
+         "Georgian|Armenian|Hindi|Vietnamese|Thai|Indonesian")
+LANG_DEFAULT_RE = re.compile(
+    rf"\b(?:{LANGS})\b[^.\n]{{0,30}}\bby default\b|"
+    rf"\bdefaults?\s*(?:to|=|:)\s*(?:{LANGS})\b|"
+    rf"\b(?:always|only)\s+(?:write|answer|respond|output|render)\w*\s+(?:in\s+)?(?:{LANGS})\b", re.I)
+for f in scan_targets:
+    if not os.path.isfile(f): continue
+    rel_name = os.path.relpath(f, root)
+    for i, line in enumerate(open(f, encoding="utf-8").read().split("\n"), 1):
+        m = LANG_DEFAULT_RE.search(line)
+        if m:
+            fail("example-locale", f"{rel_name}:{i}: '{m.group(0).strip()}' hardcodes an output "
+                                   f"language — read it from `user.language` in local-context")
+
+# ------------------------------------------------------ 18. example keys
+# The repo has one placeholder vocabulary — PROJ-1234 for issues, SPACE for a
+# Confluence space, example.com for hosts, "Product 1" for a product. A real key
+# in an example is both an org leak and a broken example: the reader cannot run
+# it, and the model imitating the doc will address a project that is not theirs.
+PLACEHOLDER_ISSUE_KEYS = {"PROJ", "PROJKEY", "EPICKEY", "ISSUEKEY", "KEY"}
+PLACEHOLDER_SPACE_KEYS = {"SPACE", "SPACEKEY"}
+# 4+ letters: real project keys are rarely shorter, and 2-3 letter prefixes are
+# this repo's step ids (GB-1, RM-2, FR-3) — matching those would drown the check.
+ISSUE_KEY_RE = re.compile(r"\b([A-Z][A-Z0-9]{3,9})-\d+\b")
+SPACE_KEY_RE = re.compile(r"(?:confluence:|/wiki/spaces/|spaces/|space[ _-]?key[\"']?\s*[:=]\s*[\"']?)([A-Z][A-Z0-9]{1,9})\b")
+for f in scan_targets:
+    if not os.path.isfile(f): continue
+    rel_name = os.path.relpath(f, root)
+    for i, line in enumerate(open(f, encoding="utf-8").read().split("\n"), 1):
+        for m in ISSUE_KEY_RE.finditer(line):
+            k = m.group(1)
+            if k in PLACEHOLDER_ISSUE_KEYS or k in VOCAB: continue
+            fail("example-keys", f"{rel_name}:{i}: example issue key '{m.group(0)}' — "
+                                 f"use the placeholder project (PROJ-1234)")
+        for m in SPACE_KEY_RE.finditer(line):
+            k = m.group(1)
+            if k in PLACEHOLDER_SPACE_KEYS: continue
+            fail("example-keys", f"{rel_name}:{i}: example Confluence space '{k}' — "
+                                 f"use the placeholder space (SPACE)")
 
 # --------------------------------------------------------- 10. deck subtypes
 # `feature` vs `feature-concept`: the yaml key, the built-in template subtype,

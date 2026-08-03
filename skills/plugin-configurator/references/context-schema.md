@@ -112,6 +112,7 @@ Every key an onboarding step may append, and the step that writes it. A skill ch
 | url | optional | Product Research | Product URL |
 | platforms | ✅ | Requirements Creator, Task Creator | List: Android, iOS, Web Portal, Web CMS, Admin, etc. |
 | locales | optional | Requirements Creator | Countries/locales where product operates |
+| primary_market | optional | Product Analysis, CJM Research, Product Research | The single market whose holiday calendar and benchmark relevance apply (ISO country code). Unset → the seasonal and geography gates of `references/data-integrity-protocol.md` ask once instead of assuming |
 | jira_project_key | ✅ | Task Creator, Requirements Creator | Jira project key (e.g., PROJ) |
 | confluence_space | optional | All publishing skills | Default Confluence space for this product |
 | confluence_template_url | optional | Requirements Creator | URL to requirements template in Confluence |
@@ -376,7 +377,7 @@ Written by the Focus setup step; read by `focus-advisor`. Full field semantics: 
 
 #### Sources
 - Mail: [on/off], window: [7] days, thresholds: [24]h VIP / [48]h others
-- Calendar: [on/off]; prep keywords: [demo, review, планування, ...]
+- Calendar: [on/off]; prep keywords: [demo, review, planning, ...]
 - Jira: [on/off]; Release flags: [off]
 
 #### Zones
