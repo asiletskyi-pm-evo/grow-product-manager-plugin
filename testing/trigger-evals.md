@@ -178,6 +178,7 @@ Commands in `commands/` carry `disable-model-invocation: true`; the model must n
 | L6 | перевір термінологію в цьому тексті | knowledge-library — NOT `glossary-lint` command |
 | L7 | what is the plugin status | plugin-configurator (Validate) — NOT `status` command |
 | L8 | /grow-product-manager:status | `status` command (explicit invocation — the only way in) |
+| L9 | вимкни підтвердження перед записом у Confluence | conversation → point to `/grow-product-manager:setup --write-gate off` — NOT the `setup` command itself (added v2.6.0) |
 
 ## Results log
 

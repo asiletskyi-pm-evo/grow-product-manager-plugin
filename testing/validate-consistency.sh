@@ -136,6 +136,39 @@ if [ -f .mcp.json ]; then
   fi
 fi
 
+# --- 11. Host hooks (hooks/hooks.json + scripts/) -----------------------------
+# A hook that points at a missing or non-executable script fails silently at the
+# host — the session simply never gets its digest. Check the wiring, not the prose.
+N_HOOKS=0
+if [ -f hooks/hooks.json ]; then
+  HOOK_EVENTS=$(python3 -c '
+import json,sys
+d=json.load(open("hooks/hooks.json"))
+ok={"SessionStart","SessionEnd","Stop","StopFailure","UserPromptSubmit","PreToolUse","PostToolUse","PostToolUseFailure","PermissionRequest","Notification","SubagentStart","SubagentStop","PreCompact","Setup"}
+bad=[e for e in d.get("hooks",{}) if e not in ok]
+if bad: print("BAD:"+",".join(bad)); sys.exit(0)
+n=0
+for e,groups in d["hooks"].items():
+    for g in groups:
+        for h in g.get("hooks",[]):
+            n+=1
+            if "timeout" not in h: print("NOTIMEOUT:"+e); sys.exit(0)
+            if h.get("type")=="command":
+                cmd=h["command"].replace("${CLAUDE_PLUGIN_ROOT}/","").strip("\"")
+                import os
+                if not os.path.isfile(cmd): print("MISSING:"+cmd); sys.exit(0)
+                if not os.access(cmd, os.X_OK): print("NOEXEC:"+cmd); sys.exit(0)
+print(n)') || err "hooks/hooks.json is not valid JSON"
+  case "$HOOK_EVENTS" in
+    BAD:*)       err "hooks/hooks.json: unknown event(s) ${HOOK_EVENTS#BAD:}" ;;
+    NOTIMEOUT:*) err "hooks/hooks.json: hook without 'timeout' under ${HOOK_EVENTS#NOTIMEOUT:} — a hung hook blocks the session" ;;
+    MISSING:*)   err "hooks/hooks.json: command script not found: ${HOOK_EVENTS#MISSING:}" ;;
+    NOEXEC:*)    err "hooks/hooks.json: command script not executable (chmod +x): ${HOOK_EVENTS#NOEXEC:}" ;;
+    *)           N_HOOKS=$HOOK_EVENTS; ok "hooks: $N_HOOKS hook(s) wired to existing executable scripts" ;;
+  esac
+  for f in scripts/*.py; do python3 -m py_compile "$f" 2>/dev/null || err "$f does not compile"; done
+fi
+
 # --- 10. Component counts in the three public descriptions -------------------
 # "29 skills across five contours" lives in plugin.json, marketplace.json and
 # README. With agents/commands/connectors the counts multiply; grep them all.
@@ -148,8 +181,9 @@ for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json README.md; d
   grep -qF "$N_AGENTS agents"        "$f" || err "$f: does not state '$N_AGENTS agents' (actual count)"
   grep -qF "$N_COMMANDS commands"    "$f" || err "$f: does not state '$N_COMMANDS commands' (actual count)"
   grep -qF "$N_CONNECTORS connectors" "$f" || err "$f: does not state '$N_CONNECTORS connectors' (actual count)"
+  grep -qF "$N_HOOKS hooks"          "$f" || err "$f: does not state '$N_HOOKS hooks' (actual count)"
 done
-ok "component counts: $N_SKILLS skills, $N_AGENTS agents, $N_COMMANDS commands, $N_CONNECTORS connectors"
+ok "component counts: $N_SKILLS skills, $N_AGENTS agents, $N_COMMANDS commands, $N_CONNECTORS connectors, $N_HOOKS hooks"
 
 echo
 if [ $FAIL -eq 0 ]; then echo "✅ All consistency checks passed (v$PLUGIN_VER)"; else echo "❌ Consistency checks failed"; exit 1; fi

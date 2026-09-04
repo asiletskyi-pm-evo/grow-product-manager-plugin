@@ -12,6 +12,39 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v2.6.0 (2026-09-04)
+
+**Host hooks: the session knows where its context is, and a human confirms before a write.** v2.5.0 moved connectors, agents and commands into the manifest. This release adds the fourth component, hooks — two of them, chosen by a rule: a hook must be *deterministic*, *fail-open*, and do something a skill cannot do reliably from prose. A hook runs in the session's own environment (a local VM or a hosted container) and sees only its event's JSON, never the conversation — both hooks are designed around that.
+
+### Added — `hooks/hooks.json` (2) + `scripts/`
+
+- **SessionStart → context digest** (`scripts/session-start.sh` → `session_start.py`; matcher `startup|resume|clear|compact`, timeout 10 s). Searches for `local-context.md` in the order a session can actually see it: `~/.grow-pm/` → connected folders `$HOME/mnt/*/`, `$HOME/mnt/*/.grow-pm/`, `$HOME/mnt/*/grow-pm/` → staged uploads → the working directory. Found → injects a `GROW_PM_SESSION` digest (path, configurator version, onboarding mode, `user.language`, product and team names, vault / CJM / team-language flags, deferred onboarding steps; header facts only — never URLs, ids or emails) and appends `export GROW_PM_CONTEXT_PATH=…` to `$CLAUDE_ENV_FILE` for later Bash calls. Not found → a three-line `NOT VISIBLE` note that tells skills to run Step 0 unchanged and **not** to start onboarding on that signal. Re-runs after `/clear` and after compaction, so the location survives long sessions. Without python3 the wrapper emits a static note; any error → exit 0, no output.
+- **PreToolUse → write gate** (`scripts/write-gate.sh` → `write_gate.py`; matcher `mcp__.*__(createJiraIssue|editJiraIssue|createConfluencePage|updateConfluencePage)$`, timeout 10 s). Returns `permissionDecision: "ask"` for every create and for content-bearing updates (a description/body ≥ 200 chars); the reason the host shows is the checklist the artifact quality gate expects to be done by then — gate report in chat, the user's explicit go-ahead, not a sandbox. Metadata-only edits (status, labels, title) pass silently. Opt-out via `{"write_gate": "off"}` in the plugin data dir. Any error → allow.
+- **`/grow-product-manager:setup [--show | --write-gate on|off]`** (`commands/setup.md` → `scripts/setup.py`) — the toggle above, plus a report of the hooks environment (`CLAUDE_PLUGIN_DATA`, `CLAUDE_ENV_FILE`, `GROW_PM_CONTEXT_PATH`). Never touches `local-context.md`.
+
+### Changed — protocols and validation
+
+- **`references/local-context-protocol.md`** Step 0a — the digest is a shortcut: take the path from `GROW_PM_SESSION` / `GROW_PM_CONTEXT_PATH` and skip the location search; still parse the file for 0c–0h. `NOT VISIBLE` means "the hook could not see it", not "not configured". No skill file changed.
+- **`references/artifact-style-gate.md`** — new section *Host write gate*: skills must present the gate report and get the go-ahead **before** the write step, because the host prompt will ask for exactly that.
+- **`references/harness-map.md`** — hooks and agents named in the Guardrails layer.
+- **`testing/validate-consistency.sh`** — check 11: `hooks.json` valid, events from the official list, every hook has a `timeout`, every command points at an existing **executable** script, `scripts/*.py` compile; check 10 counts hooks. **`testing/skill_lint.py`** scans `scripts/`. Trigger-evals L9; `testing/test-cases.md` v2.6.0 block with fixture results (8/8 pass) and the host stage split by environment (local / hosted / CLI / after compaction).
+
+| File | From | To | Change |
+|------|------|----|--------|
+| `hooks/hooks.json` | — | new | SessionStart + PreToolUse |
+| `scripts/session-start.sh`, `session_start.py` | — | new | context digest |
+| `scripts/write-gate.sh`, `write_gate.py` | — | new | write gate (`ask`) |
+| `scripts/setup.py`, `commands/setup.md` | — | new | toggles + env report |
+| `references/local-context-protocol.md`, `artifact-style-gate.md`, `harness-map.md` | — | — | digest shortcut, host write gate, harness layer |
+| `testing/validate-consistency.sh`, `skill_lint.py`, `trigger-evals.md`, `test-cases.md` | — | — | check 11, scope, L9, v2.6.0 cases |
+| `.claude-plugin/plugin.json`, `marketplace.json`, `README.md` | 2.5.0 | 2.6.0 | version, counts, hooks section |
+
+### Backwards compatibility
+
+Fully backwards compatible. No skill file changed. Hosts without hook support ignore `hooks/`; skills behave exactly as in v2.5.0. The write gate adds one confirmation prompt per artifact write — the only visible change — and can be turned off per install.
+
+---
+
 ## v2.5.0 (2026-09-04)
 
 **Plugin components: what the host can enforce, the host now enforces.** Until this release everything the plugin needed from its host lived in prose — "look at the tools in the session for something matching `mcp__*__*Jira*`", "spawn a subagent that must not browse the web", "the checker must not see the maker's context". The model followed those instructions most of the time. This release moves three of the contracts into files the host parses — `.mcp.json`, `agents/`, `commands/` — so a connector shows its real state in the plugin card, a checker physically cannot browse, and a service command is never reached by accident. Hooks (a SessionStart context digest, a pre-write gate on Jira/Confluence tools) are designed and deferred to the next release pending environment tests — see `testing/test-cases.md` → v2.5.0 Stage 3.

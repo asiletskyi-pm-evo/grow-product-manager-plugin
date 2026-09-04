@@ -11,6 +11,8 @@ Before any other action, the skill MUST:
 
 ### 0a. Search for local-context.md
 
+**Shortcut (since v2.6.0):** if the session context contains a `GROW_PM_SESSION` digest (emitted by the plugin's SessionStart hook, `hooks/hooks.json`) that says `local-context.md: FOUND at <path>` — or the env variable `GROW_PM_CONTEXT_PATH` is set — take that path and skip the search below. The digest is a locator, not a substitute: still read the file and run 0c–0h. If the digest says `NOT VISIBLE`, it only means the hook's environment could not see the file (hosted sessions see the user's files through device tools, not the shell) — run the search below as usual and do **not** treat it as "not configured".
+
 Search in the following locations (in priority order):
 
 1. **`~/.grow-pm/local-context.md`** — persistent home directory (primary, survives plugin reinstalls)

@@ -1,0 +1,30 @@
+{
+  "description": "Grow PM host hooks (since v2.6.0). SessionStart: a context digest so every skill knows where local-context.md is (or that it is not visible from this environment). PreToolUse: a human-in-the-loop confirmation before creating/updating Jira issues and Confluence pages — the artifact quality gate report must be in the chat before this prompt appears. Both fail open: any script error allows the action.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh\"",
+            "timeout": 10,
+            "statusMessage": "Grow PM: locating local-context.md…"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*__(createJiraIssue|editJiraIssue|createConfluencePage|updateConfluencePage)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/write-gate.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

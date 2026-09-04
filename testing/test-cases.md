@@ -4,6 +4,38 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v2.6.0 — host hooks (SessionStart digest, PreToolUse write gate)
+
+> **Static stages run 2026-09-04 — verdict: fill after the local run.** Stage 3 needs the `.plugin` installed; hooks are the one component whose behavior depends on *where* the session runs (local VM vs hosted container), so the same test is run in both.
+
+### Stage 1 — Static lint (new checks)
+- **TC-val-260-hooks** | `hooks/hooks.json` + `scripts/` | valid JSON, events from the official list, every hook has `timeout`, every command points at an existing executable script, `.py` files compile | validator check 11 | expected: 2 hooks wired, 0 FAIL
+- **TC-val-260-counts** | manifests + README | `29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks` | check 10 | expected: 0 FAIL
+- **TC-lint-260-scope** | `scripts/*.py`, `scripts/*.sh` | org-data / org-signature / locale rules apply | `skill_lint.py` | expected: 0 FAIL
+
+### Stage 2 — Script fixtures (run in the cloud clone, 2026-09-04 — pass)
+- **TC-hook-260-found** | `session_start.py` with `local-context.example.md` at `$HOME/mnt/grow-pm/` | digest lists path, mode, language, 2 products, 1 team, flags, deferred steps; `GROW_PM_CONTEXT_PATH` appended to `$CLAUDE_ENV_FILE` | **pass**
+- **TC-hook-260-rank** | two connected copies (`$HOME/mnt/a-docs/` stale export, `$HOME/mnt/grow-pm/` store) | the `grow-pm` copy wins; the other is listed as "Other copies seen" — found live on the Mac VM, where the workspace folder held a v1.6.0 export | **pass**
+- **TC-hook-260-notfound** | no file anywhere | 3-line NOT VISIBLE digest naming searched locations; exit 0 | **pass**
+- **TC-hook-260-failopen** | garbage on stdin | exit 0, still emits a digest | **pass**
+- **TC-gate-260-create** | `createConfluencePage` | `permissionDecision: ask` with the 3-point reason | **pass**
+- **TC-gate-260-meta** | `editJiraIssue` with labels only | no output (allow) | **pass**
+- **TC-gate-260-content** | `editJiraIssue` with a 300-char description | `ask` | **pass**
+- **TC-gate-260-off** | `setup.py --write-gate off` then `createJiraIssue` | no output; `--write-gate on` restores | **pass**
+- **TC-gate-260-other** | tool `Bash` | no output (defensive against a loose matcher) | **pass**
+
+### Stage 3 — Host behavior (install the `.plugin`)
+- **TC-host-260-tab** | plugin card | **Hooks · 2** tab lists "Session start" and a PreToolUse entry | expected: visible
+- **TC-host-260-local** | a local Cowork session with the `grow-pm` folder connected | the first assistant turn has the `GROW_PM_SESSION … FOUND at $HOME/mnt/grow-pm/local-context.md` digest; a skill's Step 0a takes the path without searching | expected: FOUND
+- **TC-host-260-hosted** | a hosted (cloud) session | digest says NOT VISIBLE; a skill still reads the context through device tools and does **not** start onboarding | expected: no false onboarding
+- **TC-host-260-compact** | a long session that compacts | the digest re-appears after compaction (matcher `compact`) | expected: re-injected
+- **TC-host-260-ask** | `createConfluencePage` in the sandbox space | the host shows the write-gate prompt with the checklist; Cancel aborts the write | expected: prompt shown
+- **TC-host-260-setup** | `/grow-product-manager:setup --write-gate off` → same write | no prompt; `--show` reports `write_gate: off` and the hooks env flags | expected: silent
+- **TC-host-260-cli** | Claude Code CLI on the Mac | both hooks behave as in the local Cowork session (`~/.grow-pm/` found directly) | expected: FOUND, prompt shown
+
+### Stage 5 — Regression
+- **TC-reg-260** | Groups B / D / F / L | no routing change (no skill description edited) | expected: 100%
+
 ## Release v2.5.0 — plugin components (connectors, agents, commands)
 
 > **Static stages run 2026-09-04 in the dev repo — verdict: GREEN.** Validator 10 check groups 0 FAIL; `skill_lint.py` 18 checks GREEN with the org denylist active; seeded-leak test 12/12. Trigger eval Group L and Stages 3–4 are pending the `.plugin` install. Stages 3–4 need the `.plugin` installed in a Cowork desktop: they verify what the host does with the manifest, which no lint can.

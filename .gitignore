@@ -6,3 +6,7 @@ testing/org-tokens.local
 
 # Local Claude Code settings (personal permission rules) — never ship in the plugin.
 .claude/settings.local.json
+
+# python bytecode from validator check 11 (py_compile)
+__pycache__/
+*.pyc

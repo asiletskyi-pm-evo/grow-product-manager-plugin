@@ -1,6 +1,6 @@
 # Grow Product Manager
 
-**Version:** 2.5.0
+**Version:** 2.6.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
@@ -8,7 +8,9 @@ AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figm
 
 ## Overview
 
-**New in v2.5.0** — **Plugin components: connectors, agents, commands** (29 skills, 3 agents, 4 commands, 6 connectors). Until now everything the plugin needed from the host was described in prose — "look for a tool matching `mcp__*__*Jira*`", "spawn a subagent that must not browse". v2.5.0 moves three of those contracts into the manifest, where the host enforces them. **Connectors:** `.mcp.json` declares the six connectors the skills rely on (`atlassian`, `figma`, `gmail`, `google calendar`, `google drive`, `fireflies`); they appear in the plugin's Connectors tab with a connected state, and `references/integration-strategy.md` gains a *Declared connectors* table (key → connector → observed tool namespace) that replaces the stale `gcal_*`/`gmail_*` patterns. Tableau is deliberately not declared (a local server the user runs). **Agents:** three named subagents whose `tools:` line is the guarantee the protocols only asked for — `artifact-checker` (`tools: Read`; the maker–checker half in `requirements-creator`, `write-concept`, `task-creator`), `debater` (`tools: []`; one per role in Debate Mode), `extractor` (read-only fan-out worker per `subagent-delegation.md`). Each protocol keeps its fallback chain: named agent → `general-purpose` with the same prompt (reported) → inline with the marker. **Commands** (user-only, never auto-routed): `/grow-product-manager:status` (one-screen health: version, context path, vault level, connectors present vs declared), `config validate|view`, `release patch|minor|major`, `glossary-lint`. Validator: four new consistency checks (agents/commands frontmatter, `.mcp.json` ↔ table drift, component counts in the three public descriptions); the org-leak linter and the seeded test now cover `agents/` and `commands/`. Touched: `requirements-creator` v0.13.1, `write-concept` v0.11.1, `task-creator` v0.12.1, `brainstorm-features` v0.10.1, `plugin-configurator` v2.9.2, `release-manager` v0.2.0.
+**New in v2.6.0** — **Host hooks: a context digest at session start and a human in the loop before writes** (29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). `hooks/hooks.json` registers two hooks. **SessionStart** (also after `/clear` and compaction) runs `scripts/session_start.py`: it finds `local-context.md` wherever this session can see it — including connected folders under `$HOME/mnt/*/` in hosted sessions, where the shell's home is a sandbox — and injects a `GROW_PM_SESSION` digest (path, versions, `user.language`, products, onboarding state, vault/CJM/team-language flags), so Step 0a of `local-context-protocol.md` becomes a lookup instead of a four-location search; `GROW_PM_CONTEXT_PATH` is exported for Bash. **PreToolUse** on `createJiraIssue` / `editJiraIssue` / `createConfluencePage` / `updateConfluencePage` runs `scripts/write_gate.py`, which answers `ask` for content-bearing writes — the host shows a three-point checklist (gate report in chat, explicit go-ahead, not a sandbox) and waits; metadata-only edits pass. A hook sees only the tool call, never the conversation, so this is deliberately a confirmation, not a judge; `/grow-product-manager:setup --write-gate off` turns it off. Both hooks fail open. Validator check 11 verifies the wiring (events, timeouts, scripts exist and are executable, scripts compile); component counts now include hooks. No skill changed.
+
+**New in v2.5.0** — **Plugin components: connectors, agents, commands** (29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). Until now everything the plugin needed from the host was described in prose — "look for a tool matching `mcp__*__*Jira*`", "spawn a subagent that must not browse". v2.5.0 moves three of those contracts into the manifest, where the host enforces them. **Connectors:** `.mcp.json` declares the six connectors the skills rely on (`atlassian`, `figma`, `gmail`, `google calendar`, `google drive`, `fireflies`); they appear in the plugin's Connectors tab with a connected state, and `references/integration-strategy.md` gains a *Declared connectors* table (key → connector → observed tool namespace) that replaces the stale `gcal_*`/`gmail_*` patterns. Tableau is deliberately not declared (a local server the user runs). **Agents:** three named subagents whose `tools:` line is the guarantee the protocols only asked for — `artifact-checker` (`tools: Read`; the maker–checker half in `requirements-creator`, `write-concept`, `task-creator`), `debater` (`tools: []`; one per role in Debate Mode), `extractor` (read-only fan-out worker per `subagent-delegation.md`). Each protocol keeps its fallback chain: named agent → `general-purpose` with the same prompt (reported) → inline with the marker. **Commands** (user-only, never auto-routed): `/grow-product-manager:status` (one-screen health: version, context path, vault level, connectors present vs declared), `config validate|view`, `release patch|minor|major`, `glossary-lint`. Validator: four new consistency checks (agents/commands frontmatter, `.mcp.json` ↔ table drift, component counts in the three public descriptions); the org-leak linter and the seeded test now cover `agents/` and `commands/`. Touched: `requirements-creator` v0.13.1, `write-concept` v0.11.1, `task-creator` v0.12.1, `brainstorm-features` v0.10.1, `plugin-configurator` v2.9.2, `release-manager` v0.2.0.
 
 **New in v2.4.1** — **The "no org data" promise, enforced.** An audit found nine shipped lines that named the maintainer's own team as the authority behind a rule (`per <Team> convention`), signed reference examples with a team and a quarter, wrote a schema example in one team's language, or hardcoded an output language where `user.language` exists — all green under every existing check, because a leak that is an ordinary word has no lexical signature, only a position. Those lines are fixed, and three positional checks now catch the class: **`org-signature`**, **`example-locale`** (fenced blocks only — bilingual triggers in prose are the routing surface by design), **`example-keys`**. New **`testing/seeded_leak_test.py`**: ten known-bad lines injected one at a time, the linter must go RED on each — **10/10**, wired into both CI workflows. `testing/Testing-process.md` gains the written rule ("Every example in the plugin is universal") and two DoD items. Touched: `product-reporter` v0.5.2, `knowledge-library` v0.7.1, `plugin-configurator` v2.9.1.
 
@@ -705,9 +707,9 @@ All design deliverables pass WCAG 2.1 AA QA before publish (see `skills/design-b
 
 ---
 
-## Plugin Components (since v2.5.0)
+## Plugin Components (since v2.5.0; hooks since v2.6.0)
 
-Besides skills, the plugin ships three kinds of host-level components. They are declared in files the host parses, not described in prose — which is the point: the host enforces them.
+Besides skills, the plugin ships four kinds of host-level components. They are declared in files the host parses, not described in prose — which is the point: the host enforces them.
 
 **Connectors — `.mcp.json` (6).** The connectors the skills rely on: `atlassian`, `figma` (matched to your existing connection by URL), `gmail`, `google calendar`, `google drive`, `fireflies` (matched by name). Open the plugin → **Connectors** to see which are connected; a skill never searches the registry for a declared connector, it tells you which tab to connect it in. **Tableau is not declared** — it is a local MCP server you run yourself (see the Setup Guide); the skills detect it by pattern. The mapping key → connector → tool namespace lives in `references/integration-strategy.md` → *Declared connectors*.
 
@@ -729,8 +731,15 @@ Every protocol keeps a fallback chain (named agent → `general-purpose` with th
 | `/grow-product-manager:config` | `validate \| view` | Straight into `plugin-configurator`'s Validate / View mode |
 | `/grow-product-manager:release` | `patch \| minor \| major` | `release-manager` with the bump class pre-answered — for the plugin repo only |
 | `/grow-product-manager:glossary-lint` | `[file]` | Gate 3 team-language lint over a file or pasted text, standalone |
+| `/grow-product-manager:setup` | `--show \| --write-gate on\|off` | Host-level toggles (the write gate) and whether the hooks environment is wired in this session |
 
-Hooks are intentionally not part of v2.5.0 — a SessionStart context digest and a pre-write gate on Jira/Confluence tools are designed and will follow once the environment tests described in `testing/test-cases.md` pass.
+**Hooks — `hooks/hooks.json` (2).** Both run in the session's own environment and **fail open** — a script error can never block a session.
+
+| Hook | Event | Does |
+|---|---|---|
+| Context digest | `SessionStart` (startup, resume, clear, compact) | `scripts/session_start.py` looks for `local-context.md` where this session can see it (`~/.grow-pm/`, connected folders under `$HOME/mnt/*/`, the working directory) and hands the model a short `GROW_PM_SESSION` digest: path, configurator version, `user.language`, product names, onboarding mode and deferred steps, whether vault / CJM / team language are configured. Step 0a of every skill becomes a lookup. Re-runs after context compaction, so the location survives long sessions. In a hosted session where the shell cannot see your files it says so — skills then read the file through device tools as before. |
+| Write gate | `PreToolUse` on `createJiraIssue`, `editJiraIssue`, `createConfluencePage`, `updateConfluencePage` | `scripts/write_gate.py` asks you to confirm before a content-bearing write, with the checklist the artifact quality gate expects to be done by then (gate report in chat, your go-ahead, not a sandbox). Metadata-only edits pass silently. A hook sees only the tool call, never the conversation — so this is a human-in-the-loop step, not an automatic judge. Opt-out: `/grow-product-manager:setup --write-gate off`. |
+
 
 ---
 
@@ -840,5 +849,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 2.5.0  
+**Version:** 2.6.0  
 **Last Updated:** September 2026
