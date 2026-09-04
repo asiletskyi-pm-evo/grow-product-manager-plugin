@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.12.0
+version: 0.12.1
 description: Creates Jira tasks for feature implementation based on requirements from a Confluence page. Use when the user asks to create tasks for a feature, create Jira issues from Confluence requirements, break down a feature into development tasks (FE/BE/Android/iOS/Design/Analytics), set up feature tasks in an Epic, or says something like "create tasks from requirements". Also trigger when the user shares a Confluence link and asks to create Jira tasks from it. Українською — "створити задачі для фічі", "створити Jira-задачі з вимог у Confluence", "розбити фічу на задачі", "завести задачі в Epic", "створити задачі з вимог".
 ---
 
@@ -263,7 +263,7 @@ Before drafting descriptions, load the team style preamble (`references/artifact
 
 #### Batch quality gate before creation
 
-After drafting all task descriptions and BEFORE creating issues in Jira, run `references/artifact-style-gate.md` over the batch (maker–checker; tasks are a critical artifact → two lenses: form / groundedness). The checker receives the drafted descriptions + the requirements page content + the checklists. Typical catches: engineering steps in "How" that are absent from the requirements (Gate 1), "What"/"How" written as paragraph prose instead of lists (Gate 2). Apply fixes, surface disputed findings, include the one-line gate report in the pre-creation summary.
+After drafting all task descriptions and BEFORE creating issues in Jira, run `references/artifact-style-gate.md` over the batch (maker–checker; tasks are a critical artifact → two lenses: form / groundedness). The checker is the `grow-product-manager:artifact-checker` agent (one call per lens); it receives the drafted descriptions + the requirements page content + the lens. Typical catches: engineering steps in "How" that are absent from the requirements (Gate 1), "What"/"How" written as paragraph prose instead of lists (Gate 2). Apply fixes, surface disputed findings, include the one-line gate report in the pre-creation summary.
 
 #### Work-type specific fields:
 
@@ -349,7 +349,7 @@ Pick one of the created tasks (preferably a development task — FE or BE — as
 
 Use `getJiraIssue` to fetch the created task with all fields. This ensures we verify what was actually saved, not what we intended to send.
 
-**Maker–checker separation (v0.11.0):** the agent that created the tasks does not evaluate them. The maker fetches the raw task data (this step), then passes it — together with the requirements content and the check table below — to an independent **checker subagent** (`references/artifact-style-gate.md` → Execution model) that has no access to this conversation's reasoning. The checker returns findings; the maker applies fixes (12d). If subagents are unavailable — run inline and mark the report "незалежність перевірки знижена (inline)".
+**Maker–checker separation (v0.11.0):** the agent that created the tasks does not evaluate them. The maker fetches the raw task data (this step), then passes it — together with the requirements content and the check table below — to the **`grow-product-manager:artifact-checker`** agent (`references/artifact-style-gate.md` → Execution model) that has no access to this conversation's reasoning. The checker returns findings; the maker applies fixes (12d). If subagents are unavailable — run inline and mark the report "незалежність перевірки знижена (inline)".
 
 **12c. Run verification checks:**
 
@@ -421,7 +421,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.12.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.12.1", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode

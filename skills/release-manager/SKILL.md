@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.1.3
+version: 0.2.0
 description: Release a Claude plugin end-to-end — version bump across all manifests, CHANGELOG entry, README sync, consistency validation, commit/PR/merge, GitHub Release with tag, mirror sync, and post-release verification. Use when the user asks to "release the plugin", "prepare a release", "bump plugin version", "ship vX.Y.Z", "cut a release", "publish plugin release", or after a batch of plugin changes is ready to ship. Українською — "зарелізити плагін", "підготуй реліз", "bump версії плагіна", "випусти vX.Y.Z", "опублікуй реліз плагіна". Do NOT use for releasing product features in Jira (use product-reporter / sprint-planning) — this skill releases the plugin repository itself.
 ---
 
@@ -35,11 +35,14 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 2. Classify per the versioning table: wording/formatting → PATCH; new skill/step/section → MINOR; workflow restructure/breaking → MAJOR.
 3. Propose `vX.Y.Z` + draft scope summary. **Gate: user confirms version and scope.**
 
-### Step 3 — Apply the bump (the 4 mandatory places)
+### Step 3 — Apply the bump (the 5 mandatory places)
 1. `.claude-plugin/plugin.json` — `"version"` field + description tail `— vX.Y.Z (released YYYY-MM-DD)`.
 2. `.claude-plugin/marketplace.json` — plugin entry `"version"` + both description tails.
 3. `README.md` — header + footer `**Version:**`; if skills changed: section headers, Skills Summary rows, "New in vX.Y.Z" overview paragraph.
 4. `CHANGELOG.md` — prepend the entry (Added/Changed/Fixed, files table with skill version bumps, Backwards compatibility note). No editorial placeholders — write the final text directly (pitfall P3).
+5. **Component counts** (since v2.5.0) — the phrase `N skills, N agents, N commands, N connectors` in `plugin.json`, `marketplace.json` and README must equal what is on disk (`skills/*/`, `agents/*.md`, `commands/*.md`, `.mcp.json` keys). Validator check 10 fails the release otherwise. Adding an agent, a command or a connector is a MINOR bump.
+
+This pipeline is also reachable as `/grow-product-manager:release [patch|minor|major]` — the command pre-answers Step 2's classification and changes nothing else.
 
 Skill frontmatter versions are normally bumped in the feature PRs themselves; verify they match the CHANGELOG claims.
 

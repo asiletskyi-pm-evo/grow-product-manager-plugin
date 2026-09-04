@@ -92,6 +92,10 @@ Candidate terms: offer in one line to add as `status: candidate` to the glossary
 | **Maker** | The skill's main flow | Generates the draft; applies fixes |
 | **Checker** | A subagent with a fresh context | Runs the gate checklists over the draft; returns structured findings |
 
+**The checker is the plugin agent `grow-product-manager:artifact-checker`** (`agents/artifact-checker.md`, since v2.5.0) — invoked through the Agent tool with `subagent_type: "grow-product-manager:artifact-checker"`. It is defined with `tools: Read` only, so its independence is enforced by the host, not by prose: it cannot browse, write, or spawn. Pass in the prompt exactly the checker input below plus `lens`; it reads this reference itself, so the checklists are never copied into the call.
+
+Resolution order when the named agent is not available in the session: (1) `grow-product-manager:artifact-checker` → (2) a `general-purpose` subagent given the same input and told to read this reference → (3) inline self-check with the reduced-independence marker (see *Limits and fallback*). Steps 2 and 3 are fallbacks, not alternatives — always try 1 first.
+
 ### Checker input — and nothing else
 
 The checker receives ONLY: (1) the draft artifact, (2) the list of sources (user statements from the brief, concept, tickets, documents — as content or links), (3) the gate checklists. The checker must NOT see the maker's reasoning or the conversation history — otherwise it inherits the very biases it is meant to catch.
@@ -130,7 +134,7 @@ Two identical checkers add almost nothing over one; distinct perspectives catch 
 
 - ≤ 2 checkers per artifact; 1 re-check pass.
 - Checkers that read Atlassian MCP run **sequentially** (parallel subagents on one Atlassian MCP are known to cross-wire responses).
-- If subagents are unavailable → inline self-check with an explicit marker in the gate report: **"незалежність перевірки знижена (inline)"** — same pattern as the Debate Mode inline-simulation marker.
+- If the named agent is unavailable → a `general-purpose` subagent with the same input; if subagents are unavailable at all → inline self-check with an explicit marker in the gate report: **"незалежність перевірки знижена (inline)"** — same pattern as the Debate Mode inline-simulation marker. A `general-purpose` fallback is reported as **"checker: general-purpose"** so the user knows the tool restriction was not enforced.
 
 ### Configuration
 
@@ -163,7 +167,8 @@ A consuming skill adds one short step before its user-review step:
 
 ```
 ### Step G — Artifact quality gate
-Run `references/artifact-style-gate.md` on the draft (maker–checker; two lenses if the
-artifact will be published or materialized in Jira). Apply fixes, surface disputed
-findings, include the one-line gate report when presenting the draft.
+Run `references/artifact-style-gate.md` on the draft: spawn `grow-product-manager:artifact-checker`
+(one call per lens; two lenses if the artifact will be published or materialized in Jira)
+with the draft + source list + lens — never this conversation. Apply fixes, surface
+disputed findings, include the one-line gate report when presenting the draft.
 ```
