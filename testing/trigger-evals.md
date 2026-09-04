@@ -164,6 +164,21 @@ Collisions: knowledge-library (glossary/style) vs template-library vs plugin-con
 | K12 | згенеруй hi-fi екран фічі на нашій дизайн-системі | design-bridge |
 | K13 | розбери скарги покупців за липень на теми | feedback-triage |
 
+### Group L — Commands stay out of auto-routing (added 2026-09-04, v2.5.0)
+
+Commands in `commands/` carry `disable-model-invocation: true`; the model must never route a conversation into them. Every row here is a **negative** case: the expected target is a skill (or plain conversation), and any command in the answer is a failure. The command itself is reached only when the user types it.
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| L1 | який статус плагіна, чи все підключено? | plugin-configurator (Validate) — NOT `status` command |
+| L2 | покажи мій конфіг | plugin-configurator (View) — NOT `config` command |
+| L3 | перевір налаштування плагіна | plugin-configurator (Validate) — NOT `config` command |
+| L4 | зарелізь плагін як patch | release-manager — NOT `release` command |
+| L5 | випусти фічу Q&A в реліз наступного спринта | sprint-planning / product-reporter — NOT release-manager, NOT `release` command |
+| L6 | перевір термінологію в цьому тексті | knowledge-library — NOT `glossary-lint` command |
+| L7 | what is the plugin status | plugin-configurator (Validate) — NOT `status` command |
+| L8 | /grow-product-manager:status | `status` command (explicit invocation — the only way in) |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |

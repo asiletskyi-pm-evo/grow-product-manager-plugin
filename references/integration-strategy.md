@@ -12,9 +12,24 @@ This document defines how every skill in the Grow Product Manager plugin connect
 
 ### Step 1: Use existing MCP connector
 
-Check if an MCP connector for the target product is already available in the current session.
+Check if an MCP connector for the target product is already available in the current session. Two sources, in this order:
 
-**How to check**: Look at available tools in the session. MCP tools follow the pattern `mcp__<id>__<tool_name>`. Common connectors:
+**1a. Declared connectors (`.mcp.json`).** The plugin declares the connectors it relies on. The host matches each entry to the user's connections — by URL for remote servers, by name for entries with an empty `url` (first-party connectors whose endpoint is dynamic) — and lists them in the plugin's **Connectors** tab with a connected / not-connected state. Their tools appear in the session under the *connector's* namespace, not the plugin's:
+
+| `.mcp.json` key | Connector (host directory name) | Tool namespace observed | Ping (auth + access) |
+|---|---|---|---|
+| `atlassian` | Atlassian Rovo | `mcp__Atlassian_Rovo__*` | `getVisibleJiraProjects`, `getConfluenceSpaces` |
+| `figma` | Figma | `mcp__Figma__*` | `whoami` |
+| `gmail` | Gmail | `mcp__Gmail__*` | `list_labels` |
+| `google calendar` | Google Calendar | `mcp__Google_Calendar__*` | `list_calendars` |
+| `google drive` | Google Drive | `mcp__Google_Drive__*` | `list_recent_files` |
+| `fireflies` | Fireflies | `mcp__Fireflies__*` | `fireflies_get_user` |
+
+Namespaces are what the host showed in real sessions; a differently-named connection (an org's custom Atlassian server, a self-hosted Figma proxy) may expose a different prefix — that is what 1b is for. A declared connector that is **not connected** is the user's decision: say which tab to connect it in, do not search the registry for it (Step 2 is for products the plugin does not declare).
+
+**Not declared on purpose:** Tableau (a local MCP server the user runs; in hosted sessions it appears as `mcp__remote-devices__Tableau__*`), Notion, Slack, Obsidian — detected by pattern only.
+
+**1b. Pattern detection.** For anything not covered by 1a — or when the declared namespace is absent but the product might still be connected under another name — look at the available tools. MCP tools follow the pattern `mcp__<id>__<tool_name>`. Common connectors:
 
 | Product | Tool pattern to look for | Example tools |
 |---------|-------------------------|---------------|
@@ -24,11 +39,13 @@ Check if an MCP connector for the target product is already available in the cur
 | Figma | `mcp__*__get_screenshot`, `mcp__*__get_design_context` | `get_screenshot`, `get_metadata` |
 | Notion | `mcp__*__notion-*` | `notion-search`, `notion-create-pages` |
 | Tableau | `mcp__*__list-workbooks`, `mcp__*__query-datasource`, `mcp__*__get-view-data`, `mcp__*__get-view-image` | `list-workbooks`, `query-datasource`, `get-view-data`, `get-view-image`, `search-content`, `list-pulse-metric-definitions-from-definition-ids`, `list-pulse-metrics-from-metric-ids`, `generate-pulse-insight-brief`, `generate-pulse-metric-value-insight-bundle` |
-| Google Calendar | `mcp__*__gcal_*` | `gcal_list_events`, `gcal_create_event` |
-| Gmail | `mcp__*__gmail_*` | `gmail_search_messages`, `gmail_create_draft` |
-| Fireflies | `mcp__*__fireflies_*` | `fireflies_get_transcripts`, `fireflies_search` |
+| Google Calendar | `mcp__*__list_events`, `mcp__*__list_calendars` | `list_events`, `get_event`, `create_event` |
+| Gmail | `mcp__*__search_threads`, `mcp__*__list_labels` | `search_threads`, `get_thread`, `create_draft` |
+| Fireflies | `mcp__*__fireflies_*`, `mcp__*__get_transcripts` | `fireflies_get_transcripts`, `fireflies_search` |
 
 **If found** → use the MCP tools directly. Proceed with the skill workflow.
+
+> **Provenance:** when a datapoint could have come from either a declared connector or a pattern-detected one, name the actual server in the artifact's source marker (e.g. `Atlassian_Rovo`), not the product — the user can then audit which connection answered.
 
 ### Step 2: Search for an MCP server
 

@@ -91,5 +91,65 @@ if [ "$V_YAML" -eq 0 ] || [ "$R_YAML" -eq 0 ]; then
   err "GROW_LINT_REQUIRE_YAML must be set in BOTH workflows (validate=$V_YAML, release=$R_YAML) — otherwise the strict frontmatter parse degrades to a warning that gates nothing"
 fi
 
+# --- 7. Plugin agents (agents/*.md) ------------------------------------------
+# v2.5.0: the plugin ships named subagents. Their frontmatter is what the host
+# parses — a typo there means the agent silently never loads, and the skill
+# that chains to it falls back to inline mode without anyone noticing.
+if [ -d agents ]; then
+  for f in agents/*.md; do
+    base=$(basename "$f" .md)
+    head -12 "$f" | grep -q "^name: $base$"       || err "$f: frontmatter 'name:' must equal the file name ($base)"
+    head -12 "$f" | grep -q '^description: '      || err "$f: missing 'description:' in frontmatter"
+    head -12 "$f" | grep -Eq '^(tools|disallowedTools): ' || err "$f: an agent must declare 'tools:' or 'disallowedTools:' — an unrestricted agent is a general-purpose one and does not belong here"
+    head -12 "$f" | grep -Eq '^model: (sonnet|opus|haiku|inherit)$' || err "$f: 'model:' must be one of sonnet|opus|haiku|inherit"
+  done
+  ok "agents frontmatter: $(ls agents/*.md | wc -l | tr -d ' ') agents checked"
+fi
+
+# --- 8. Plugin commands (commands/*.md) --------------------------------------
+# Every command is user-only by policy: they are service entry points, and the
+# reason they exist is to stay OUT of the model's auto-routing (trigger-evals L).
+if [ -d commands ]; then
+  for f in commands/*.md; do
+    head -8 "$f" | grep -q '^description: '                    || err "$f: missing 'description:' in frontmatter"
+    head -8 "$f" | grep -q '^argument-hint: '                  || err "$f: missing 'argument-hint:' in frontmatter"
+    head -8 "$f" | grep -q '^disable-model-invocation: true$'  || err "$f: commands are user-only — set 'disable-model-invocation: true'"
+  done
+  ok "commands frontmatter: $(ls commands/*.md | wc -l | tr -d ' ') commands checked"
+fi
+
+# --- 9. Declared connectors (.mcp.json) <-> integration-strategy table --------
+# The host reads .mcp.json; the skills read the table in integration-strategy.md.
+# If they drift, a skill looks for a namespace no connector provides (or a
+# connector is declared that no skill knows how to call).
+if [ -f .mcp.json ]; then
+  MCP_KEYS=$(python3 -c 'import json,sys; d=json.load(open(".mcp.json")); print("\n".join(sorted(d.get("mcpServers", d).keys())))' 2>/dev/null) \
+    || err ".mcp.json is not valid JSON"
+  DOC_KEYS=$(sed -n '/^\*\*1a\. Declared connectors/,/^\*\*1b\./p' references/integration-strategy.md \
+             | grep -v '^| `.mcp.json` key' | grep -oE '^\| `[^`]+`' | sed 's/^| `//; s/`$//' | sort)
+  if [ "$MCP_KEYS" != "$DOC_KEYS" ]; then
+    err "declared connectors drift: .mcp.json keys != integration-strategy.md 'Declared connectors' table
+  .mcp.json: $(echo "$MCP_KEYS" | tr '\n' ' ')
+  table:     $(echo "$DOC_KEYS" | tr '\n' ' ')"
+  else
+    ok "declared connectors: .mcp.json == integration-strategy.md ($(echo "$MCP_KEYS" | wc -l | tr -d ' ') servers)"
+  fi
+fi
+
+# --- 10. Component counts in the three public descriptions -------------------
+# "29 skills across five contours" lives in plugin.json, marketplace.json and
+# README. With agents/commands/connectors the counts multiply; grep them all.
+N_SKILLS=$(ls -d skills/*/ | wc -l | tr -d ' ')
+N_AGENTS=$([ -d agents ] && ls agents/*.md 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+N_COMMANDS=$([ -d commands ] && ls commands/*.md 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+N_CONNECTORS=$([ -f .mcp.json ] && echo "$MCP_KEYS" | grep -c . || echo 0)
+for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json README.md; do
+  grep -qF "$N_SKILLS skills"        "$f" || err "$f: does not state '$N_SKILLS skills' (actual count)"
+  grep -qF "$N_AGENTS agents"        "$f" || err "$f: does not state '$N_AGENTS agents' (actual count)"
+  grep -qF "$N_COMMANDS commands"    "$f" || err "$f: does not state '$N_COMMANDS commands' (actual count)"
+  grep -qF "$N_CONNECTORS connectors" "$f" || err "$f: does not state '$N_CONNECTORS connectors' (actual count)"
+done
+ok "component counts: $N_SKILLS skills, $N_AGENTS agents, $N_COMMANDS commands, $N_CONNECTORS connectors"
+
 echo
 if [ $FAIL -eq 0 ]; then echo "✅ All consistency checks passed (v$PLUGIN_VER)"; else echo "❌ Consistency checks failed"; exit 1; fi

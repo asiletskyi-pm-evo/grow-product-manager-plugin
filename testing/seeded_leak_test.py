@@ -19,6 +19,16 @@ root = os.path.abspath(sys.argv[1] if len(sys.argv) > 1
 
 # (name, target file, injected text, expected check tag)
 SEEDS = [
+    # v2.5.0: agents/ and commands/ are shipped prose too. Without this seed a
+    # leak in an agent's system prompt would pass every check green.
+    ("component: real Atlassian host inside an agent prompt",
+     "agents/artifact-checker.md",
+     "Spot-check claims against https://zorg.atlassian.net/wiki when in doubt.",
+     "org-data"),
+    ("component: authority citation inside a command",
+     "commands/status.md",
+     "- Report format: per Zorg convention — one table, then one action line.",
+     "org-signature"),
     ("authority: per <Org> convention",
      "references/dependency-model.md",
      "- Link direction: per Zorg convention — a Blocks chain plus Relates pairs.",

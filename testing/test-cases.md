@@ -4,6 +4,38 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v2.5.0 — plugin components (connectors, agents, commands)
+
+> **Static stages run 2026-09-04 in the dev repo — verdict: GREEN.** Validator 10 check groups 0 FAIL; `skill_lint.py` 18 checks GREEN with the org denylist active; seeded-leak test 12/12. Trigger eval Group L and Stages 3–4 are pending the `.plugin` install. Stages 3–4 need the `.plugin` installed in a Cowork desktop: they verify what the host does with the manifest, which no lint can.
+
+### Stage 1 — Static lint (new checks)
+- **TC-val-250-agents** | `agents/*.md` | frontmatter: name == file, description, tools or disallowedTools, model ∈ enum | validator check 7 | expected: 3 checked, 0 FAIL
+- **TC-val-250-commands** | `commands/*.md` | description, argument-hint, `disable-model-invocation: true` on every command | validator check 8 | expected: 4 checked, 0 FAIL
+- **TC-val-250-mcp** | `.mcp.json` ↔ `integration-strategy.md` *Declared connectors* | same key set both sides; valid JSON | validator check 9 | expected: 6 servers, 0 FAIL
+- **TC-val-250-counts** | plugin.json, marketplace.json, README | `29 skills, 3 agents, 4 commands, 6 connectors` matches disk | validator check 10 | expected: 0 FAIL
+- **TC-lint-250-scope** | `agents/`, `commands/` | org-data / org-signature / locale / stale-name rules apply to component files | `skill_lint.py` (component_files) | expected: 0 FAIL on the clean tree
+
+### Stage 1b — Seeded-leak test
+- **TC-seed-250** | temp copy | two new seeds (an Atlassian host inside `agents/artifact-checker.md`; an authority citation inside `commands/status.md`) make the linter RED with `org-data` / `org-signature` | expected: 12/12
+
+### Stage 2 — Trigger eval
+- **TC-trig-250-L** | Group L (8 negative rows) | no phrase routes to a command; L8 reaches `status` only by explicit invocation | expected: 8/8
+
+### Stage 3 — Host behavior (install the `.plugin` in Cowork desktop)
+- **TC-host-250-tabs** | plugin card | tabs show **Connectors · 6**, **Agents · 3**, **Commands · 4**; Skills stays 29 | expected: all four counts visible
+- **TC-host-250-connectors** | Connectors tab | `atlassian` and `figma` show as *Connected* against the user's existing connections (no second Atlassian / Figma entry appears in the org connector list); `gmail` / `google calendar` / `google drive` / `fireflies` resolve by name | expected: 6 rows, no duplicates
+- **TC-host-250-namespace** | a fresh session | tools of declared connectors appear under the connector's namespace (`mcp__Atlassian_Rovo__*`, `mcp__Figma__*`, …), never under a plugin-prefixed one | expected: matches the *Declared connectors* table
+- **TC-host-250-notools** | `debater` | `Agent(subagent_type: "grow-product-manager:debater")` with an evidence pack: the agent answers in the Round-1 structure and, when asked to "check the vault first", reports it has no tools rather than trying | expected: no tool calls in its transcript. **If `tools: []` is ignored by the host** → switch to `disallowedTools` only (already present) and record it here
+- **TC-host-250-checker** | `artifact-checker` | spawned from requirements-creator Step 4.5 with lens=form on a draft with one prose-formatted requirement | expected: one Gate-2 finding with location + proposed_fix; no rewrite
+- **TC-host-250-cmd-hidden** | `/grow-product-manager:status` | "який статус плагіна" does NOT invoke it; typing the command does | expected: L1 and L8 pass live
+
+### Stage 4 — Integration
+- **TC-int-250-onboarding** | plugin-configurator Step 3a | with the six connectors connected, no registry search is proposed; Tableau/Notion still pinged by pattern | expected: readiness table lists 6 declared + pattern rows
+- **TC-int-250-fallback** | any host without plugin agents | gate/debate/fan-out fall back to `general-purpose`, report says so | expected: marker present, behavior unchanged
+
+### Stage 5 — Regression
+- **TC-reg-250** | Groups B / D / F / I re-run | no routing change from the description edits in four skills | expected: 100%
+
 ## Release v2.4.1 — org-leak audit (examples that were not universal)
 
 > **Run 2026-07-31 — verdict: GREEN.** 18 checks, 0 FAIL; seeded-leak test 10/10. The nine defects here were all green under the previous 15 checks: none of them is a host, an id or an email, so no shape-based rule saw them, and the one layer that would have — the gitignored `org-tokens.local` denylist — did not exist on any machine. The lesson is written into the linter's own comments: an optional layer that nobody notices is absent is a layer that does not run.
