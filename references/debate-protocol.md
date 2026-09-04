@@ -41,7 +41,7 @@ Do NOT debate: factual questions (research them), routine backlog ranking (ICE/P
 
 ## Step D2 — Round 1: parallel opening positions
 
-One subagent per role (Agent tool), all spawned in a single parallel dispatch. Each receives its role card + the debate question + the full evidence pack — and nothing else (no other roles' output).
+One subagent per role, all spawned in a single parallel dispatch. **Each debater is the plugin agent `grow-product-manager:debater`** (`agents/debater.md`, since v2.5.0) — Agent tool with `subagent_type: "grow-product-manager:debater"`. It is defined with `tools: []`, so the "no web, no vault, no files" guardrail is enforced by the host. Each receives its role card + the debate question + the full evidence pack + `round: 1` — and nothing else (no other roles' output). If the named agent is not available, spawn `general-purpose` with the same prompt and note **"debater: general-purpose (tool restriction not enforced)"** in the report; if no subagents at all — inline simulation (see Guardrails).
 
 Subagent prompt template:
 
@@ -126,4 +126,4 @@ Saved under `Debates/{product}/` per `references/vault-schema.md`.
 - **Data policy:** debaters are local subagents without web access — internal data never leaves the session (`references/data-policy.md`).
 - **Cost cap:** default 4 roles × 2 rounds = 8 subagent calls; hard cap **12** total (covers 4×3 rounds, or 5 roles × 2 + re-runs). Responses are compact structured payloads per `subagent-delegation.md`, never free-form essays.
 - **Mid-debate role addition:** if an affected interest group turns out uncovered, the facilitator MAY add exactly **one** role mid-debate — with the user's confirmation and within the cost cap. The new role receives the evidence pack + all prior rounds' outputs and joins the current round.
-- **Fallback without the Agent tool:** inline simulation — the main agent plays the roles sequentially in one context, same prompts, same response formats, same caps. The report MUST carry the visible note **"inline simulation: role independence reduced"** and the vault frontmatter MUST set `inline_simulation: true`.
+- **Fallback chain:** `grow-product-manager:debater` → `general-purpose` with the same prompt (report notes the unenforced restriction) → inline simulation. **Fallback without the Agent tool:** inline simulation — the main agent plays the roles sequentially in one context, same prompts, same response formats, same caps. The report MUST carry the visible note **"inline simulation: role independence reduced"** and the vault frontmatter MUST set `inline_simulation: true`.

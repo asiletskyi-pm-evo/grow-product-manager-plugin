@@ -1,6 +1,6 @@
 ---
 name: brainstorm-features
-version: 0.10.0
+version: 0.10.1
 description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis. Also hosts Debate mode — "run a debate", "role debate", "red team this idea", "have agents argue / discuss from different roles", "stress-test via debate". Українською — "брейншторм фіч", "згенерувати гіпотези", "знайти точки росту", "гіпотези для CJM-воронки", "ICE-оцінка гіпотез", "проведи дебати", "нехай агенти подискутують", "розглянь з різних ролей", "red team цю ідею", "круглий стіл ролей". This is the ideation engine — for the full CJM research pipeline (anomaly detection → enrichment → hypotheses) use cjm-research, which delegates here. Do NOT use for meeting transcript discussions (meeting-processor) or for recording an already made decision (decision-log).
 ---
 
@@ -224,7 +224,7 @@ The full mode workflow lives in `references/cjm-hypotheses-mode.md` (skill-local
 
 ### Step 3D — Debate mode (role-based adversarial discussion)
 
-Executes `references/debate-protocol.md` — the shared engine: D0 applicability check → D1 setup (question, roles, evidence pack) → parallel debate rounds → facilitator synthesis → output & save. Activates in three ways:
+Executes `references/debate-protocol.md` — the shared engine: D0 applicability check → D1 setup (question, roles, evidence pack) → parallel debate rounds (one `grow-product-manager:debater` agent per role, fallback chain per the protocol) → facilitator synthesis → output & save. Activates in three ways:
 
 1. **Explicit request** — the user asks for a debate / role discussion / red-team («проведи дебати», "red team this idea", «круглий стіл ролей», "stress-test via debate").
 2. **Offered after 3A–3C** — when top hypotheses are contested, touch ≥ 2 interest groups, and an evidence base exists (Step 4 proposes the stress-test).
@@ -354,10 +354,10 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 IF vault_level > L0 AND vault sync_mode != "off":
 
 1. For **each finalized hypothesis** (Step 5), save a separate artifact:
-   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.10.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.10.1", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
 2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
 3. For **debate sessions** (Step 3D), additionally save the debate itself:
-   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.10.0", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
+   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.10.1", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
    Display: "Saved to Vault: Debates/{product}/…"
 
 ## Quality standards

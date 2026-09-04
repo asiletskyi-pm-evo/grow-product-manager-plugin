@@ -61,7 +61,10 @@ If `selected_mode == test` — switch all storage paths from `~/.grow-pm/` to `~
 
 **3a. Scan available MCP connectors** in the session.
 
-For each known connector, attempt a lightweight ping:
+Start from the plugin's **declared connectors** (`.mcp.json` → table in `references/integration-strategy.md` → *Declared connectors*): for each declared server, the host already knows whether it is connected — check for its tool namespace in the session and, if present, run the ping from that table. A declared connector that is absent is reported as "not connected — enable it in the plugin's Connectors tab"; do not search the registry for it.
+
+Then, for the connectors the plugin does not declare (Tableau, Notion, Slack, Obsidian) — detect by pattern and ping:
+
 
 | Connector | Ping call | What it confirms |
 |-----------|-----------|------------------|

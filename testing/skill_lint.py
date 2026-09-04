@@ -22,7 +22,7 @@ CHECKS = """
  6. stale-names          pre-rename identifiers outside CHANGELOG history
  7. duplicate-h1         a doc containing itself twice
  8. readme-versions      README skill versions == SKILL.md frontmatter
- 9. org-data             real org identifiers in shipped example/templates/refs
+ 9. org-data             real org identifiers in shipped example/templates/refs/agents/commands
 10. deck-subtypes        deck-subtypes.yaml keys == built-in template subtypes
 11. vault-types          every vault_save type is in the taxonomy AND TYPE_FOLDER_MAP
 12. artifact-types       every Step T artifact_type is in the template-protocol enum
@@ -78,6 +78,10 @@ SKILLS = {os.path.basename(os.path.dirname(p)) for p in skill_files}
 # every reference/doc file, recursively (the old linter globbed one level only)
 ref_files = glob.glob(os.path.join(root, "references", "**", "*.*"), recursive=True) + \
             glob.glob(os.path.join(root, "skills", "*", "references", "**", "*.*"), recursive=True)
+# v2.5.0: agents/ and commands/ ship too — they are prose the model reads, so every
+# org-leak / locale / stale-name rule that applies to a reference applies to them.
+component_files = sorted(glob.glob(os.path.join(root, "agents", "*.md")) +
+                         glob.glob(os.path.join(root, "commands", "*.md")))
 REF_BASENAMES = {os.path.basename(p) for p in ref_files}
 IGNORE_MD = {"local-context.md", "local-context.example.md", "SKILL.md", "README.md",
              "CHANGELOG.md", "library.md", "sources.md", "categories.md", "_registry.json",
@@ -302,7 +306,7 @@ STALE = {
     "feature-task-creator": "task-creator",
     "Feature-task-creator": "Task-creator",
 }
-for f in skill_files + [p for p in ref_files if p.endswith(".md")] + \
+for f in skill_files + [p for p in ref_files if p.endswith(".md")] + component_files + \
          glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True) + \
          [os.path.join(root, "README.md")]:
     if not os.path.isfile(f): continue
@@ -446,7 +450,7 @@ scan_targets = [os.path.join(root, "local-context.example.md"),
                 os.path.join(root, "README.md")] + \
                glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True) + \
                glob.glob(os.path.join(root, "testing", "**", "*.md"), recursive=True) + \
-               [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files
+               [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files + component_files
 for f in scan_targets:
     if not os.path.isfile(f): continue
     rel_name = os.path.relpath(f, root)
@@ -567,7 +571,7 @@ for f in scan_targets:
 # Second: a hardcoded output language. "Language: <Lang> by default" pinned one
 # team's language into a skill that has `user.language` for exactly this.
 NON_LATIN = re.compile(r"[Ѐ-ӿ֐-׿؀-ۿ一-鿿぀-ヿ]")
-locale_targets = [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files
+locale_targets = [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files + component_files
 for f in locale_targets:
     rel_name = os.path.relpath(f, root)
     in_fence = False

@@ -12,6 +12,64 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v2.5.0 (2026-09-04)
+
+**Plugin components: what the host can enforce, the host now enforces.** Until this release everything the plugin needed from its host lived in prose — "look at the tools in the session for something matching `mcp__*__*Jira*`", "spawn a subagent that must not browse the web", "the checker must not see the maker's context". The model followed those instructions most of the time. This release moves three of the contracts into files the host parses — `.mcp.json`, `agents/`, `commands/` — so a connector shows its real state in the plugin card, a checker physically cannot browse, and a service command is never reached by accident. Hooks (a SessionStart context digest, a pre-write gate on Jira/Confluence tools) are designed and deferred to the next release pending environment tests — see `testing/test-cases.md` → v2.5.0 Stage 3.
+
+### Added — connectors (`.mcp.json`, 6)
+
+- **`.mcp.json`** declares the six connectors the skills rely on: `atlassian` and `figma` by URL (matched to the user's existing connection — no second entry is created), `gmail`, `google calendar`, `google drive`, `fireflies` by name (first-party connectors with a dynamic endpoint). They appear in the plugin's **Connectors** tab with a connected / not-connected state. **Tableau is deliberately not declared** — it is a local MCP server the user runs, and declaring a bundled one would duplicate it.
+- **`references/integration-strategy.md`** — Step 1 splits into **1a Declared connectors** (a table: `.mcp.json` key → connector name → tool namespace observed in real sessions → ping call) and **1b Pattern detection** (the old wildcard table, kept for undeclared products). A declared-but-unconnected connector is reported as "enable it in the Connectors tab", never searched for in the registry. The stale `gcal_*` / `gmail_*` patterns — which matched no real tool — are replaced with the actual names. New provenance rule: name the answering server, not the product.
+- **`skills/plugin-configurator/references/onboarding-steps.md`** Step 3a — reads declared connectors first, pings by pattern only for Tableau / Notion / Slack / Obsidian.
+
+### Added — agents (`agents/`, 3)
+
+Three named subagents. Each is the executable form of a protocol that already existed; what is new is the `tools:` line, which the host enforces.
+
+- **`artifact-checker`** (`tools: Read`; no Write/Edit/Bash/web/Agent) — the checker half of maker–checker in `references/artifact-style-gate.md`. Receives the draft + source list + `lens` (form | groundedness) + optional Gate-3 lint findings; reads the gate reference itself (checklists are never copied into the call); returns per-section findings in a fixed schema; an empty report without per-section commentary is invalid.
+- **`debater`** (`tools: []`) — one role in Debate Mode (`references/debate-protocol.md`). "No web, no vault, no files" was the protocol's core guardrail on the honor system; now it is a host rule. Fixed Round-1 / Round-2+ response structures; every argument cites `E#`/`A#`.
+- **`extractor`** (`tools: Read, Glob, Grep`) — the fan-out worker in `references/subagent-delegation.md`: `batch` + `schema` + optional `filters` / `read_via` in, structured rows with source markers out; `nothing_found: true` instead of silence; `unreadable` instead of improvising when a named tool is missing.
+- Each protocol gains an explicit **fallback chain**: named agent → `general-purpose` with the same prompt (the report says "checker: general-purpose" / "debater: general-purpose" so the user knows the restriction was not enforced) → inline with the existing reduced-independence marker. Nothing breaks in a host without plugin agents.
+
+### Added — commands (`commands/`, 4; all user-only)
+
+Every command carries `disable-model-invocation: true` — the model never routes a conversation into one, which also keeps them out of trigger collisions (new trigger-evals **Group L**, eight negative rows).
+
+- **`/grow-product-manager:status [--verbose]`** — one-screen health: plugin version, where `local-context.md` was found (including connected folders in hosted sessions) and its schema version, vault level, declared connectors vs tools present in this session, deferred onboarding steps; one suggested next action. Read-only, never launches the configurator.
+- **`/grow-product-manager:config validate|view`** — straight into `plugin-configurator`'s Validate / View mode; never starts Onboarding.
+- **`/grow-product-manager:release patch|minor|major`** — `release-manager` with Step 2's classification pre-answered; for the plugin repo only.
+- **`/grow-product-manager:glossary-lint [file]`** — Gate 3 team-language lint over a file or pasted text, standalone; findings only, nothing written.
+
+### Changed — validation follows the new surface
+
+- **`testing/validate-consistency.sh`** — four new checks: **7** agents frontmatter (name == file, description, `tools`/`disallowedTools`, `model` ∈ enum), **8** commands frontmatter (description, argument-hint, `disable-model-invocation: true`), **9** `.mcp.json` keys == the *Declared connectors* table (both directions; valid JSON), **10** the phrase `N skills, N agents, N commands, N connectors` in plugin.json, marketplace.json and README equals what is on disk.
+- **`testing/skill_lint.py`** — `agents/*.md` and `commands/*.md` join the org-data, org-signature, example-locale and stale-name scans (`component_files`). **`testing/seeded_leak_test.py`** — two new seeds prove it (an Atlassian host inside an agent prompt; an authority citation inside a command): 12/12.
+- **`skills/release-manager` → v0.2.0** — Step 3 has a fifth mandatory place (component counts); adding an agent / command / connector is a MINOR bump; the `/release` command is documented.
+- **`skills/requirements-creator` → v0.13.1**, **`skills/write-concept` → v0.11.1**, **`skills/task-creator` → v0.12.1** — the gate step names `grow-product-manager:artifact-checker` (one call per lens) instead of "an independent checker subagent". **`skills/brainstorm-features` → v0.10.1** — Step 3D names `grow-product-manager:debater`. **`skills/plugin-configurator` → v2.9.2** — onboarding Step 3a.
+- **README** — new section *Plugin Components*; **`testing/test-cases.md`** — v2.5.0 block with the host-behavior stage (tabs, no duplicate connectors, namespace, `tools: []` enforcement, hidden commands).
+
+| File | From | To | Change |
+|------|------|----|--------|
+| `.mcp.json` | — | new | 6 declared connectors |
+| `agents/artifact-checker.md`, `agents/debater.md`, `agents/extractor.md` | — | new | tool-restricted subagents |
+| `commands/status.md`, `config.md`, `release.md`, `glossary-lint.md` | — | new | user-only service commands |
+| `references/integration-strategy.md` | — | — | Step 1a/1b, provenance rule, fixed patterns |
+| `references/artifact-style-gate.md`, `debate-protocol.md`, `subagent-delegation.md` | — | — | named agents + fallback chains |
+| `skills/requirements-creator/SKILL.md` | 0.13.0 | 0.13.1 | Step 4.5 names the agent |
+| `skills/write-concept/SKILL.md` | 0.11.0 | 0.11.1 | Step 4.5 names the agent |
+| `skills/task-creator/SKILL.md` | 0.12.0 | 0.12.1 | batch gate + Step 12 name the agent |
+| `skills/brainstorm-features/SKILL.md` | 0.10.0 | 0.10.1 | Step 3D names the agent |
+| `skills/plugin-configurator/SKILL.md` (+ `references/onboarding-steps.md`) | 2.9.1 | 2.9.2 | Step 3a declared-first |
+| `skills/release-manager/SKILL.md` | 0.1.3 | 0.2.0 | fifth mandatory place, `/release` |
+| `testing/validate-consistency.sh`, `skill_lint.py`, `seeded_leak_test.py`, `trigger-evals.md`, `test-cases.md` | — | — | checks 7–10, component scope, seeds, Group L, v2.5.0 cases |
+| `.claude-plugin/plugin.json`, `marketplace.json`, `README.md` | 2.4.1 | 2.5.0 | version, counts, Plugin Components section |
+
+### Backwards compatibility
+
+Fully backwards compatible. Skills that never used the gate, Debate Mode or fan-out are untouched; the three protocols keep their inline behavior as the last fallback; `.mcp.json` only *declares* connectors the skills already looked for by pattern. The one visible change for an existing install is the plugin card gaining Connectors / Agents / Commands tabs. No `local-context.md` schema change.
+
+---
+
 ## v2.4.1 (2026-07-31)
 
 **The plugin's own promise, enforced.** Both manifests state that the plugin "ships no hardcoded brand or organization data". An audit of the tree found nine lines where that was not true — not hosts or ids (those were already checked) but ordinary words: the maintainer's team cited as the authority behind a rule, examples signed with a team and a quarter, a schema example written in one team's language, and an output language hardcoded where `user.language` exists. Every check in the linter passed green over them, because a leak that is an ordinary word has no lexical signature — only a position. This release fixes the lines and adds the checks that make the class visible.

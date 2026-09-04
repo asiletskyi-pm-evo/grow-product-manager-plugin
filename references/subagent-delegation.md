@@ -14,7 +14,7 @@ Do NOT delegate trivial single reads, or work that needs tight back-and-forth wi
 ## How (the pattern)
 
 1. **Split** the work into independent batches (by source, by page, by item group). Keep batches comparable in size.
-2. **Spawn subagents in parallel** — one per batch — in a single dispatch when batches are independent.
+2. **Spawn subagents in parallel** — one per batch — in a single dispatch when batches are independent. Use the plugin agent **`grow-product-manager:extractor`** (`agents/extractor.md`, since v2.5.0; Agent tool `subagent_type: "grow-product-manager:extractor"`): pass `batch`, `schema` (the row format from the table below), optional `filters` and `read_via` (the exact MCP tool names for items behind a connector). It is read-only by definition (`tools: Read, Glob, Grep`; no Bash, no web), which is what makes the fan-out safe under `data-policy.md`. If the named agent is unavailable, use `general-purpose` with the same prompt; if no subagents at all, run the batches inline.
 3. Each subagent does its reads and returns a **compact structured result** (only the fields the next step needs) — never raw document dumps. Include source links/keys for traceability.
 4. The **main agent aggregates** the structured results (merge, dedupe, rank), then proceeds.
 

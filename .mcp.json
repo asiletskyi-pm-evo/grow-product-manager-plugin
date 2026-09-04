@@ -1,0 +1,29 @@
+{
+  "_comment": "Connectors the plugin declares. Remote servers (atlassian, figma) are matched to an existing connection by URL; entries with an empty url are matched by NAME to the host's connector directory (first-party connectors whose endpoint is dynamic). Tableau is deliberately NOT declared — it is a local MCP server the user runs themselves (see README → Plugin components). Tool namespaces observed per server live in references/integration-strategy.md → Declared connectors.",
+  "mcpServers": {
+    "atlassian": {
+      "type": "http",
+      "url": "https://mcp.atlassian.com/v1/mcp"
+    },
+    "figma": {
+      "type": "http",
+      "url": "https://mcp.figma.com/mcp"
+    },
+    "gmail": {
+      "type": "http",
+      "url": ""
+    },
+    "google calendar": {
+      "type": "http",
+      "url": ""
+    },
+    "google drive": {
+      "type": "http",
+      "url": ""
+    },
+    "fireflies": {
+      "type": "http",
+      "url": ""
+    }
+  }
+}

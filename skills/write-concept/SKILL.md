@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.11.0
+version: 0.11.1
 description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document. Do NOT use for a full requirements/spec document with numbered functional requirements — use requirements-creator (a concept is the input to it). Українською — "написати концепт", "створити PRD", "описати фічу", "написати специфікацію", "оформити ідею в документ".
 ---
 
@@ -211,7 +211,7 @@ Before writing, load the team style preamble — `references/artifact-style-gate
 
 ### 4.5. Artifact quality gate
 
-Run `references/artifact-style-gate.md` on the draft PRD. Maker–checker: an independent checker subagent gets the draft + the source list + the checklists — never this conversation's reasoning. A PRD headed for Confluence is a critical artifact → two checker lenses (form / groundedness). Apply fixes, keep disputed findings visible, include the one-line gate report when presenting the draft in Step 5.
+Run `references/artifact-style-gate.md` on the draft PRD. Maker–checker: the `grow-product-manager:artifact-checker` agent (one call per lens; fallback chain per the reference) gets the draft + the source list + the lens — never this conversation's reasoning. A PRD headed for Confluence is a critical artifact → two checker lenses (form / groundedness). Apply fixes, keep disputed findings visible, include the one-line gate report when presenting the draft in Step 5.
 
 ### 5. Review with the user
 
@@ -298,7 +298,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.11.0",
+     skill_version: "0.11.1",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],
