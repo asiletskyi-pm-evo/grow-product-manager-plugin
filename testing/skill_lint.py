@@ -81,7 +81,9 @@ ref_files = glob.glob(os.path.join(root, "references", "**", "*.*"), recursive=T
 # v2.5.0: agents/ and commands/ ship too — they are prose the model reads, so every
 # org-leak / locale / stale-name rule that applies to a reference applies to them.
 component_files = sorted(glob.glob(os.path.join(root, "agents", "*.md")) +
-                         glob.glob(os.path.join(root, "commands", "*.md")))
+                         glob.glob(os.path.join(root, "commands", "*.md")) +
+                         glob.glob(os.path.join(root, "scripts", "*.py")) +
+                         glob.glob(os.path.join(root, "scripts", "*.sh")))
 REF_BASENAMES = {os.path.basename(p) for p in ref_files}
 IGNORE_MD = {"local-context.md", "local-context.example.md", "SKILL.md", "README.md",
              "CHANGELOG.md", "library.md", "sources.md", "categories.md", "_registry.json",

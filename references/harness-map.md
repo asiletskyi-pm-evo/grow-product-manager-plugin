@@ -10,7 +10,7 @@
 | **Tools** | Functions/MCP/APIs + prose on when to call them | `integration-strategy.md` (MCP → Registry → Browser fallback), `jira-data-protocol.md`, Tableau/Atlassian/Figma/Fireflies/GWorkspace MCPs |
 | **Sandboxes / execution** | Where code runs, what it can reach | Cowork Linux sandbox (bash), `~/.grow-pm/` persistent store, `~/.grow-pm-sandbox/` (dry-run onboarding), Vault mirror |
 | **Orchestration** | Sub-agent spawning, routing, hand-offs | `subagent-delegation.md`, skill-to-skill chaining (focus-advisor → executors; cjm-research → brainstorm-features), description collision groups |
-| **Guardrails / hooks** | Deterministic checks at set points | `data-integrity-protocol.md` (5-gate), `data-policy.md` (internal data never leaves session), Step 0 config gate, `release-manager` pre-flight gates |
+| **Guardrails / hooks** | Deterministic checks at set points | **Host hooks (`hooks/hooks.json`, v2.6.0):** SessionStart context digest (`scripts/session_start.py`), PreToolUse write gate before Jira/Confluence writes (`scripts/write_gate.py`, `ask`); tool-restricted agents (`agents/`, v2.5.0); `data-integrity-protocol.md` (5-gate), `data-policy.md` (internal data never leaves session), Step 0 config gate, `release-manager` pre-flight gates |
 | **Observability** | Logs, traces, evals, drift detection | `testing/trigger-evals.md` (trajectory/routing), `testing/output-evals.md` (artifact quality — planned), `validate-consistency.sh` (CI), CHANGELOG/release verification |
 
 **Reading:** guardrails and observability are the plugin's strongest layers; **observability's output-eval half and the Examples context type are the current thin spots** (see §2 and `testing/output-evals.md`).

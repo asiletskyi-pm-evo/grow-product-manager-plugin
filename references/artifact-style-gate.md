@@ -157,6 +157,10 @@ One line, attached to the draft presentation:
 
 With the inline fallback, append the reduced-independence marker.
 
+## Host write gate (since v2.6.0)
+
+`hooks/hooks.json` registers a PreToolUse hook on `createJiraIssue`, `editJiraIssue`, `createConfluencePage`, `updateConfluencePage` (any connector). Before a content-bearing write the host **asks the user** to confirm, showing a three-point checklist: the gate report line is in the chat, the user has said "publish", the target is not a sandbox. Metadata-only edits pass silently. Consequence for skills: **present the gate report and get the user's go-ahead before the write step**, not after — otherwise the user meets the prompt without the information it asks for. The hook does not read the artifact (a hook sees only the tool call); the gate itself stays in the skill. Opt-out: `/grow-product-manager:setup --write-gate off`.
+
 ## Boundary with Debate Mode
 
 Maker–checker is the light, everyday check of every artifact against fixed checklists. Debate Mode (`references/debate-protocol.md`, D0–D5) is the heavy instrument for contested decisions with conflicting interest groups. The gate neither replaces nor invokes debates.
