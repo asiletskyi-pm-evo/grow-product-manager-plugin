@@ -9,7 +9,15 @@ allowed-tools: Bash(python3:*)
 
 Backend: `scripts/setup.py`. One Bash call, then present the JSON as a short table.
 
-!`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/setup.py" $ARGUMENTS`
+Run exactly once:
+
+```bash
+python3 "${PLUGIN_ROOT}/scripts/setup.py"
+```
+
+`${CLAUDE_PLUGIN_ROOT}` on Claude; if neither variable expands, walk up to the directory that contains `skills/` — `references/host-profiles.md` §6.
+
+If the user typed a toggle after the command name — `--show`, or `--write-gate on` / `--write-gate off` — append exactly that to the command above. If they typed nothing, run it bare: the script reports the current state and changes nothing.
 
 ## Present
 

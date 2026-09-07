@@ -11,9 +11,11 @@ Thin entry point into `plugin-configurator`'s maintenance modes. It exists so th
 
 ## Routing
 
-- `$1` = `validate` → invoke the `plugin-configurator` skill and state up front: **mode = Validate** (`references/maintenance-modes.md` → V-1..V-6). Produce the readiness report.
-- `$1` = `view` (or no argument) → invoke `plugin-configurator`, **mode = View** (VW-1..VW-4).
-- Any other argument → answer with the two accepted values and stop.
+If the user typed a mode after the command name, use it; if they typed nothing, treat it as `view`.
+
+- `validate` → invoke the `plugin-configurator` skill and state up front: **mode = Validate** (`references/maintenance-modes.md` → V-1..V-6). Produce the readiness report.
+- `view`, or nothing typed → invoke `plugin-configurator`, **mode = View** (VW-1..VW-4).
+- Anything else → answer with the two accepted values and stop.
 
 ## Rules
 
