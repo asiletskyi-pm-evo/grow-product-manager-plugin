@@ -96,6 +96,8 @@ Candidate terms: offer in one line to add as `status: candidate` to the glossary
 
 Resolution order when the named agent is not available in the session: (1) `grow-product-manager:artifact-checker` → (2) a `general-purpose` subagent given the same input and told to read this reference → (3) inline self-check with the reduced-independence marker (see *Limits and fallback*). Steps 2 and 3 are fallbacks, not alternatives — always try 1 first.
 
+**On a host without SUBAGENT** (`host-profiles.md` §1 — Codex CLI by default, ChatGPT) the resolution above lands on level 2, not level 3: the checker runs as **sequential passes in the same session**, one per lens, with a role reset between them — the checker input below is re-stated from scratch and the maker's reasoning is not carried over. Where two lenses are required they therefore run one after the other rather than in parallel. The level is fixed once at Step 0h and held for the whole run.
+
 ### Checker input — and nothing else
 
 The checker receives ONLY: (1) the draft artifact, (2) the list of sources (user statements from the brief, concept, tickets, documents — as content or links), (3) the gate checklists. The checker must NOT see the maker's reasoning or the conversation history — otherwise it inherits the very biases it is meant to catch.
@@ -135,6 +137,7 @@ Two identical checkers add almost nothing over one; distinct perspectives catch 
 - ≤ 2 checkers per artifact; 1 re-check pass.
 - Checkers that read Atlassian MCP run **sequentially** (parallel subagents on one Atlassian MCP are known to cross-wire responses).
 - If the named agent is unavailable → a `general-purpose` subagent with the same input; if subagents are unavailable at all → inline self-check with an explicit marker in the gate report: **"незалежність перевірки знижена (inline)"** — same pattern as the Debate Mode inline-simulation marker. A `general-purpose` fallback is reported as **"checker: general-purpose"** so the user knows the tool restriction was not enforced.
+- **Markers are per level.** Sequential in-session lens passes with a role reset carry **"checker: sequential in-session"** — the check did happen, only its isolation is weaker. The reduced-independence marker **"незалежність перевірки знижена (inline)"** belongs to level 3 alone, where a single self-check runs without a role reset. Do not use the level-3 marker for level 2.
 
 ### Configuration
 
@@ -160,6 +163,8 @@ With the inline fallback, append the reduced-independence marker.
 ## Host write gate (since v2.6.0)
 
 `hooks/hooks.json` registers a PreToolUse hook on `createJiraIssue`, `editJiraIssue`, `createConfluencePage`, `updateConfluencePage` (any connector). Before a content-bearing write the host **asks the user** to confirm, showing a three-point checklist: the gate report line is in the chat, the user has said "publish", the target is not a sandbox. Metadata-only edits pass silently. Consequence for skills: **present the gate report and get the user's go-ahead before the write step**, not after — otherwise the user meets the prompt without the information it asks for. The hook does not read the artifact (a hook sees only the tool call); the gate itself stays in the skill. Opt-out: `/grow-product-manager:setup --write-gate off`.
+
+**On a host without HOOKS** (`host-profiles.md` §1 — Codex CLI, where plugin hooks are not loaded, and ChatGPT) there is no host-side gate at all: the hook is simply absent, and its absence is silent. The skill therefore asks for the confirmation itself, immediately before the write step, showing the same three-point checklist — the gate report line is in the chat, the user has said "publish", the target is not a sandbox. Same decision, one level up: the model asks where the host would have.
 
 ## Boundary with Debate Mode
 
