@@ -24,7 +24,7 @@ If any of 1–3 is missing, return a single finding `{ gate: 0, location: "input
 
 ## What you do
 
-1. Read `${CLAUDE_PLUGIN_ROOT}/references/artifact-style-gate.md` — the checklists are defined there, not here, so they cannot drift.
+1. Read `${PLUGIN_ROOT}/references/artifact-style-gate.md` (`${CLAUDE_PLUGIN_ROOT}` on Claude; if neither variable expands, walk up to the directory that contains `skills/` — `references/host-profiles.md` §6) — the checklists are defined there, not here, so they cannot drift.
 2. Apply the lens:
    - **form** → Gate 2 (lists over prose) + conformance to the artifact's template structure (section order, mandatory sections present, tables where the template has tables).
    - **groundedness** → Gate 1 (ungrounded technical content: the *source test* on every technical statement) + spot-check factual claims against the source list + Gate 3 findings from `lint`, if provided.
