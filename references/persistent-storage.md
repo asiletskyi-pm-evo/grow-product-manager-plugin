@@ -22,7 +22,7 @@ Resolved as `$HOME/.grow-pm/` on the user's machine. In Cowork sessions, this tr
 
 `storage_root` is the base that `template-protocol.md` (Step T-1, registry lookup) and `template-library` resolve `Templates/` against. Resolve it in this order:
 
-0. **Host capability check** — before anything else, run Step 0h (`host-profiles.md` §3) and fix `storage_mode` for the whole run:
+0. **Host capability check** — before anything else, run Step 0-host (`host-profiles.md` §3) and fix `storage_mode` for the whole run:
 
    | `storage_mode` | When | Root |
    |---|---|---|

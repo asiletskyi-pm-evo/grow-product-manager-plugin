@@ -2,7 +2,7 @@
 
 This document defines how every skill in the Grow Product Manager plugin connects to external products and services. Follow this three-step fallback chain **every time** a skill needs to interact with an external tool.
 
-> **Host capabilities**: which of the three steps below exist at all depends on the host — see `host-profiles.md` (capability **MCP**, and Step 0h for how to observe it). Tool namespaces in particular are host-specific: a namespace named here is an observation from one host, never a contract.
+> **Host capabilities**: which of the three steps below exist at all depends on the host — see `host-profiles.md` (capability **MCP**, and Step 0-host for how to observe it). Tool namespaces in particular are host-specific: a namespace named here is an observation from one host, never a contract.
 >
 > **Data confidentiality**: Before gathering any data, also read and follow `data-policy.md`. Confidential data (Tableau, internal analytics, research materials, trade secrets) must NOT be passed to external LLMs or third-party services. This restriction applies regardless of which integration method is used.
 
@@ -18,16 +18,16 @@ Check if an MCP connector for the target product is already available in the cur
 
 **1a. Declared connectors (`.mcp.json`).** The plugin declares the connectors it relies on. The host matches each entry to the user's connections — by URL for remote servers, by name for entries with an empty `url` (first-party connectors whose endpoint is dynamic) — and lists them in the plugin's **Connectors** tab with a connected / not-connected state. Their tools appear in the session under the *connector's* namespace, not the plugin's:
 
-The namespace is **host-dependent**: the same declared server gets a different prefix on a different host, so the namespace columns are one observation per host, not a contract — the source of truth is **1b (pattern detection)**, which matches on the tool name. The Codex column is filled in during the v3.0.0 pilot (stage 3).
+The namespace is **host-dependent**: the same declared server gets a different prefix on a different host, so the namespace columns are one observation per host, not a contract — the source of truth is **1b (pattern detection)**, which matches on the tool name. Codex column from the v3.0.0 pilot: it does not match a connector by name — an entry with an empty `url` is opened as an HTTP transport and fails with `relative URL without a base` at every session start, so those four are dead there and only pattern detection (1b) can find an equivalent. The remote entries stay TBD until a Codex session with an authorized connector is measured.
 
 | `.mcp.json` key | Connector (host directory name) | Namespace — Claude / Cowork | Namespace — Codex CLI | Ping (auth + access) |
 |---|---|---|---|---|
 | `atlassian` | Atlassian Rovo | `mcp__Atlassian_Rovo__*` | TBD — verify in stage 3 | `getVisibleJiraProjects`, `getConfluenceSpaces` |
 | `figma` | Figma | `mcp__Figma__*` | TBD — verify in stage 3 | `whoami` |
-| `gmail` | Gmail | `mcp__Gmail__*` | TBD — verify in stage 3 | `list_labels` |
-| `google calendar` | Google Calendar | `mcp__Google_Calendar__*` | TBD — verify in stage 3 | `list_calendars` |
-| `google drive` | Google Drive | `mcp__Google_Drive__*` | TBD — verify in stage 3 | `list_recent_files` |
-| `fireflies` | Fireflies | `mcp__Fireflies__*` | TBD — verify in stage 3 | `fireflies_get_user` |
+| `gmail` | Gmail | `mcp__Gmail__*` | — not usable: empty `url` fails at session start (pilot, v3.0.0) | `list_labels` |
+| `google calendar` | Google Calendar | `mcp__Google_Calendar__*` | — not usable: empty `url` fails at session start (pilot, v3.0.0) | `list_calendars` |
+| `google drive` | Google Drive | `mcp__Google_Drive__*` | — not usable: empty `url` fails at session start (pilot, v3.0.0) | `list_recent_files` |
+| `fireflies` | Fireflies | `mcp__Fireflies__*` | — not usable: empty `url` fails at session start (pilot, v3.0.0) | `fireflies_get_user` |
 
 Namespaces are what the host showed in real sessions; a differently-named connection (an org's custom Atlassian server, a self-hosted Figma proxy) may expose a different prefix — that is what 1b is for. A declared connector that is **not connected** is the user's decision: say which tab to connect it in, do not search the registry for it (Step 2 is for products the plugin does not declare).
 

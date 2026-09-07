@@ -27,7 +27,7 @@ Profiles are shorthand for a capability set. They are documentation, not a switc
 | `chatgpt` | ❌ | ❌ | ❌ | ✅ | ❌ | Skills and connectors only. The storage, vault and script contours are unavailable. |
 | `codex-cloud` | ⚠️ | ✅ | ⚠️ | ? | ❌ | Its own sandbox filesystem — **not** the user's `~/.grow-pm/`. Treat FS as present but empty: never assume prior state, always write results back through a connector or the repo. |
 
-## 3. Step 0h — the host check
+## 3. Step 0-host — the host check
 
 Any skill that touches storage, subagents or scripts runs this before its first real step. It is three lines of reasoning, not a tool call:
 
@@ -75,7 +75,9 @@ Never hardcode an absolute path, and never assume either variable expanded — a
 
 Facts, measured — see `Codex-Compat-Findings.md` in the design workspace:
 
-- **Codex truncates a skill's `description` at ~530 characters.** Anything a skill needs *for routing* — triggers, "Do NOT use" boundaries — must fit in the first 500 characters of the description; the rest belongs in the body of `SKILL.md`.
+- **Codex shortens skill `description`s to fit a context budget** — ~530 characters with this plugin alone, less when more skills or plugins are enabled (the warning is literal: *"Skill descriptions were shortened to fit the skills context budget"*). Anything a skill needs *for routing* — triggers, "Do NOT use" boundaries — must come first; the rest belongs in the body of `SKILL.md`.
 - **Codex does not load `agents/*.md` or `hooks/hooks.json`** from a plugin (hooks: openai/codex#17331).
 - **Codex skips a command whose body contains `$1` or `$ARGUMENTS`** when migrating `commands/` into skills.
-- **A marketplace entry needs a string `source`** (`"."` or `"./subdir"`); the object form is silently ignored.
+- **A marketplace entry needs a string `source` with a `./` prefix** (`"./"` for a plugin at the repository root, `"./subdir"` otherwise); Codex silently ignores the object form, and Claude Code rejects a bare `"."` (`plugins.0.source: Invalid input`).
+- **Codex resolves a bare `references/<file>.md` against the skill's own folder**, not the plugin root — the shared protocols are copied into the plugin cache but are not found from a skill without the resolution rule in `local-context-protocol.md`.
+- **Codex does not match a connector by name.** An `.mcp.json` entry with an empty `url` is opened as an HTTP transport and fails at every session start (`relative URL without a base`); on Codex those connectors exist only through pattern detection (`integration-strategy.md` 1b).

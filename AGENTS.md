@@ -22,7 +22,7 @@ The **Grow Product Manager** plugin — a set of skills for a product manager's 
 
 A bare `references/<file>.md` in a skill means the **shared** folder at the plugin root, not the skill's own. When a relative read of it fails, resolve the plugin root through `${PLUGIN_ROOT}` → `${CLAUDE_PLUGIN_ROOT}` → the directory that contains `skills/` (`references/host-profiles.md` §6) and read it from there. Do not silently continue without a protocol the skill named.
 
-## Step 0h — do this before the first real step of any skill
+## Step 0-host — do this before the first real step of any skill
 
 Hosts differ in what they can do. Branch on an **observed capability**, never on a brand name:
 
@@ -44,10 +44,11 @@ Person profiles are stricter still: `references/people-context-protocol.md` keep
 
 Measured, not assumed. Work with them rather than around them:
 
-1. **Skill descriptions are truncated at roughly 530 characters.** Anything a skill needs *for routing* lives in the first 500; the rest of its triggers and boundaries are in the body of `SKILL.md`. If a skill looks wrong for the request, read its body before rejecting it.
+1. **Skill descriptions are shortened to fit a context budget** — roughly 530 characters with this plugin alone, less with more plugins enabled. Anything a skill needs *for routing* comes first; the rest of its triggers and boundaries are in the body of `SKILL.md`. If a skill looks wrong for the request, read its body before rejecting it.
 2. **`agents/*.md` are not loaded.** Codex spawns a subagent only when the user explicitly asks for one, so treat SUBAGENT as absent by default: the quality gate runs as sequential in-session lens passes with a role reset between them, and fan-out reads run as sequential batches. See `references/artifact-style-gate.md` and `references/subagent-delegation.md`. Manual equivalents of the three agents are in `.codex/agents/`.
 3. **`hooks/hooks.json` is not loaded** ([openai/codex#17331](https://github.com/openai/codex/issues/17331)). Two consequences: the SessionStart context digest is absent, so run `references/local-context-protocol.md` Step 0a in full; and there is no host write gate, so ask the user for confirmation yourself immediately before writing to Jira or Confluence, showing the three-point checklist from `references/artifact-style-gate.md`.
 4. **`${CLAUDE_PLUGIN_ROOT}` is not defined here.** A literal `${...}` left in text means the host did not expand it — that is signal, not an error to hide. Use the resolution order above.
+5. **Connectors declared with an empty `url` in `.mcp.json` do not work here** (`gmail`, `google calendar`, `google drive`, `fireflies`) — Codex opens them as HTTP transports and they fail at session start. Find an equivalent by pattern detection (`references/integration-strategy.md` 1b) or say the connector is unavailable.
 
 ## Working in this repository
 

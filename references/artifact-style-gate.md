@@ -96,7 +96,7 @@ Candidate terms: offer in one line to add as `status: candidate` to the glossary
 
 Resolution order when the named agent is not available in the session: (1) `grow-product-manager:artifact-checker` → (2) a `general-purpose` subagent given the same input and told to read this reference → (3) inline self-check with the reduced-independence marker (see *Limits and fallback*). Steps 2 and 3 are fallbacks, not alternatives — always try 1 first.
 
-**On a host without SUBAGENT** (`host-profiles.md` §1 — Codex CLI by default, ChatGPT) the resolution above lands on level 2, not level 3: the checker runs as **sequential passes in the same session**, one per lens, with a role reset between them — the checker input below is re-stated from scratch and the maker's reasoning is not carried over. Where two lenses are required they therefore run one after the other rather than in parallel. The level is fixed once at Step 0h and held for the whole run.
+**On a host without SUBAGENT** (`host-profiles.md` §1 — Codex CLI by default, ChatGPT) the resolution above lands on level 2, not level 3: the checker runs as **sequential passes in the same session**, one per lens, with a role reset between them — the checker input below is re-stated from scratch and the maker's reasoning is not carried over. Where two lenses are required they therefore run one after the other rather than in parallel. The level is fixed once at Step 0-host and held for the whole run.
 
 ### Checker input — and nothing else
 

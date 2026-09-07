@@ -5,6 +5,8 @@ This document defines how every skill in the plugin reads and uses `local-contex
 For persistent storage details, see **`references/persistent-storage.md`**.
 For Vault integration details, see **`references/vault-protocol.md`**.
 
+> **Where `references/…` lives.** A bare `references/<file>.md` in a skill means the **shared** folder at the plugin root — not the skill's own `references/`. Hosts that hand the skill only its own directory (Codex CLI does: it resolves the bare path against `skills/<name>/`, measured in the v3.0.0 pilot) will not find it there. Resolve the plugin root in the order `${PLUGIN_ROOT}` → `${CLAUDE_PLUGIN_ROOT}` → walk up from the skill folder to the directory that contains `skills/` (`references/host-profiles.md` §6), and read the protocol from `<plugin root>/references/`. Never continue without a protocol the skill named.
+
 ## Step 0 — Check and read local-context.md (MANDATORY)
 
 Before any other action, the skill MUST:
