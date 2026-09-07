@@ -30,7 +30,12 @@ Do NOT delegate trivial single reads, or work that needs tight back-and-forth wi
 - **Cap batch size** and total subagents (sensible limit, e.g. ≤ 6 parallel) to avoid overload; queue the rest.
 - **Dedupe** across batch results in aggregation.
 - **Determinism over cleverness:** subagents extract/summarize per a fixed schema; the main agent makes decisions.
-- **Fallback:** if subagents are unavailable, the skill runs the fan-out inline (slower, heavier context) — behavior unchanged, just less efficient.
+- **Fallback — a three-level degradation chain.** The level is decided **once, at the skill's Step 0h** (`host-profiles.md` §3) from the capabilities actually observed in the session, and carried for the whole run — never re-derived before each batch:
+  1. **Parallel `extractor` subagents** — capability SUBAGENT present. The pattern above, unchanged.
+  2. **Sequential inline passes** in the same session, one batch at a time, resetting the role between passes: re-state the batch scope and the schema from scratch and do not carry the previous batch's rows or reasoning into the next. This is the **default on Codex CLI**, which spawns a subagent only when the user explicitly asks for one. Same data, same schema — slower and heavier on context.
+  3. **A single pass over fewer sources**, with the reduction named explicitly in the report ("N of M sources read") — the last resort when even sequential passes do not fit.
+
+  See `host-profiles.md` §4, row *Fan-out reads*.
 
 ## Fan-out points by skill
 
