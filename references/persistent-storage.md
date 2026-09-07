@@ -16,9 +16,21 @@ All persistent user data is stored under:
 
 Resolved as `$HOME/.grow-pm/` on the user's machine. In Cowork sessions, this translates to the user's home directory (e.g., `/Users/username/.grow-pm/`).
 
+> Every path in this document is written for `storage_mode: local` (see below). Under `connector` the same layout hangs off a connector-backed root; under `session` it does not exist at all.
+
 ### `storage_root` resolution
 
 `storage_root` is the base that `template-protocol.md` (Step T-1, registry lookup) and `template-library` resolve `Templates/` against. Resolve it in this order:
+
+0. **Host capability check** — before anything else, run Step 0h (`host-profiles.md` §3) and fix `storage_mode` for the whole run:
+
+   | `storage_mode` | When | Root |
+   |---|---|---|
+   | `local` | capability **FS** present — the default | resolved by points 1–2 below; current behaviour, unchanged |
+   | `connector` | no FS, but capability **MCP** present | the Google Drive folder or Confluence space named in `local-context.md` under `storage.connector_root` |
+   | `session` | neither FS nor a usable connector | none — the artifact lives in the session and **MUST** be exported at the end |
+
+   In `connector` mode the `Templates/` layout, the vault mirror and every other tree below are read and written through the connector's tools (`integration-strategy.md` Step 1) relative to `storage.connector_root`. In `session` mode the skill states it in one line at the start — "no persistent storage on this host: the artifact stays in the chat and is exported at the end" — and skips every write step; contours that have no meaningful degraded mode are listed in `host-profiles.md` §5 and say so instead of pretending.
 
 1. **Obsidian Vault configured** (`vault_level ≥ L1`, `sync_mode != "off"`) → `storage_root = {vault_path}/{plugin_folder}` — templates live beside the artifacts they render, so the whole knowledge base moves as one unit.
 2. **Otherwise** → `storage_root = ~/.grow-pm` — the standalone home. `Templates/` sits directly under it.
@@ -87,7 +99,7 @@ When any skill needs to locate `local-context.md` (or any other persistent file)
 | 3 | User's workspace/outputs folder | Session workspace (Cowork outputs) |
 | 4 | Session working directory | Current session directory |
 
-**Important:** When saving files, ALWAYS write to `~/.grow-pm/`. The lower-priority locations are only checked for backward compatibility with pre-v1.4.0 data.
+**Important:** In `storage_mode: local`, when saving files ALWAYS write to `~/.grow-pm/`. The lower-priority locations are only checked for backward compatibility with pre-v1.4.0 data.
 
 Similarly for `knowledge-library/` and `template-library/`:
 
