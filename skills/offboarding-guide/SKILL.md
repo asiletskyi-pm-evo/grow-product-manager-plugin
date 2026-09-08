@@ -1,7 +1,7 @@
 ---
 name: offboarding-guide
 version: 0.1.1
-description: Guide a manager through parting ways with an underperforming team member — respectfully, on evidence, via a structured four-meeting algorithm. Checks that an evidence base (goals + reports) exists first, diagnoses "can't" vs "doesn't want", and drafts each conversation's ARCV follow-up plus a neutral team message. Use when the user asks to "help me let someone go", "offboarding", "PIP / probation for underperformance", "termination conversation", "how do I fire <person> fairly", "is it time to part ways". Українською — "допоможи звільнити", "офбординг", "випробувальний термін через недосягнення", "розмова про звільнення", "як коректно розлучитися зі співробітником", "чи час прощатися". Do NOT use for a routine review (performance-review), for setting corrective goals alone (goal-setter), or for hiring a replacement (hiring-designer — chain there after). This is the hardest manager conversation — the tone is deliberate and the data is strictly local.
+description: Guide a manager through parting with an underperformer — evidence check, "can't" vs "won't", four-meeting algorithm, ARCV follow-ups. Not a routine review (performance-review). UA — «допоможи звільнити», «офбординг», «випробувальний термін», «чи час прощатися». EN — "help me let someone go", "offboarding", "PIP / probation for underperformance", "termination conversation", "how do I fire <person> fairly", "is it time to part ways". Also UA — «розмова про звільнення», «як коректно розлучитися зі співробітником». Drafts a neutral team message. Do NOT use for corrective goals alone (goal-setter) or hiring a replacement (hiring-designer — chain there after). Data strictly local; the tone is deliberate.
 ---
 
 # Offboarding Guide

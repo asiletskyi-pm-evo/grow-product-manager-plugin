@@ -1,5 +1,5 @@
 ---
-description: Run the team-language lint (Gate 3 — glossary terms, avoid-list, style profile) over a file or pasted text, standalone, without generating anything
+description: Typed command /grow-product-manager:glossary-lint only — never for a conversational «перевір термінологію» or "check terminology" (that is knowledge-library). Runs the team-language lint (Gate 3 — glossary terms, avoid-list, style profile) over a file or pasted text, standalone.
 argument-hint: "[path-to-file]"
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep

@@ -1,5 +1,5 @@
 ---
-description: Show or change the plugin's host-level toggles — currently the PreToolUse write gate (confirmation before Jira/Confluence writes) — and report whether the hooks environment is wired
+description: Typed command /grow-product-manager:setup only — never for a conversational request to change the write gate (answer by pointing to this command instead). Shows or changes the plugin's host-level toggles — currently the PreToolUse write gate — and reports whether the hooks environment is wired.
 argument-hint: "[--show | --write-gate on|off]"
 disable-model-invocation: true
 allowed-tools: Bash(python3:*)

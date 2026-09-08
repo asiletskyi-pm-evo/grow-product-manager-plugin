@@ -1,7 +1,7 @@
 ---
 name: project-planning
 version: 0.2.3
-description: Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph and sequence, computes duration under a given team allocation % to the direction, and lays out a multi-quarter project roadmap with rolling-reforecast. Use when the user asks "how long will the project take", "project roadmap", "epic sequence", "feature dependencies", "when will we finish the initiative", "team % on a direction", "critical path", "replan the project". Українською — "скільки займе проєкт", "roadmap проєкту", "послідовність епіків", "залежності фіч", "коли завершимо ініціативу", "% команди на напрямок", "критичний шлях", "переплан проєкту". Horizon = beyond one quarter (mission/initiative arcs) — for a single quarter's roadmap use quarterly-planning; for structure/labeling without dates use roadmap-architect.
+description: Multi-quarter delivery forecast for a project or mission — dependencies, critical path, duration at a team-% share. Not one quarter (quarterly-planning), not structure (roadmap-architect). UA — «скільки займе проєкт/місія», «roadmap проєкту на 3 квартали», «критичний шлях», «% команди на напрямок». EN — "how long will the project take", "project roadmap", "epic sequence", "feature dependencies", "when will we finish the initiative", "team % on a direction", "replan the project". Also UA — «послідовність епіків», «залежності фіч», «переплан проєкту». Rolling reforecast; horizon = beyond one quarter.
 ---
 
 # Project Planning

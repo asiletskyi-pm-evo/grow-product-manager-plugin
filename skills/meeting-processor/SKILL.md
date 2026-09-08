@@ -1,7 +1,7 @@
 ---
 name: meeting-processor
 version: 0.13.4
-description: Process meeting recordings, transcripts, and notes to extract ARCV-standard action items, decisions, and structured reports. Use when the user asks to "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or provides a meeting transcript/recording. Supports Fireflies, other meeting tools via MCP, uploaded files, and pasted text. Detects 1-1 meetings and redirects to one-on-one. Chains to task-creator, requirements-creator, product-research, and brainstorm-features. Українською — "підсумувати зустріч", "нотатки зустрічі", "що обговорювали", "action items", "MoM", "опрацювати транскрипт зустрічі". Do NOT use for a 1-1 meeting (one-on-one handles those with signals + profile update).
+description: Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «action items», «розбери транскрипт зустрічі», «що обговорювали». EN — "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or any pasted/uploaded transcript. Sources — Fireflies, other meeting tools via MCP, files, pasted text. Chains to task-creator, requirements-creator, product-research, brainstorm-features and decision-log.
 ---
 
 # Meeting Processor

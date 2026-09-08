@@ -1,7 +1,7 @@
 ---
 name: brainstorm-features
 version: 0.10.1
-description: Help Product Manager brainstorm features, hypotheses, and CJM Hypotheses. Use when the user asks to "brainstorm features", "generate hypotheses", "find growth opportunities", needs CJM funnel-driven hypothesis generation, or requires ICE scoring with funnel impact analysis. Also hosts Debate mode — "run a debate", "role debate", "red team this idea", "have agents argue / discuss from different roles", "stress-test via debate". Українською — "брейншторм фіч", "згенерувати гіпотези", "знайти точки росту", "гіпотези для CJM-воронки", "ICE-оцінка гіпотез", "проведи дебати", "нехай агенти подискутують", "розглянь з різних ролей", "red team цю ідею", "круглий стіл ролей". This is the ideation engine — for the full CJM research pipeline (anomaly detection → enrichment → hypotheses) use cjm-research, which delegates here. Do NOT use for meeting transcript discussions (meeting-processor) or for recording an already made decision (decision-log).
+description: Brainstorm features and hypotheses with ICE, or run a role debate (Debate mode). Not the CJM pipeline (cjm-research), not meeting transcripts (meeting-processor). UA — «брейншторм фіч», «згенеруй гіпотези», «проведи дебати», «red team цю ідею». EN — "brainstorm features", "generate hypotheses", "find growth opportunities", "run a debate", "have agents argue from different roles", "stress-test via debate". Also UA — «знайти точки росту», «гіпотези для CJM-воронки», «нехай агенти подискутують», «круглий стіл ролей», «розглянь з різних ролей». The ideation engine — cjm-research delegates here. Do NOT use to record a decision already made (decision-log).
 ---
 
 # Brainstorm Features and Hypotheses

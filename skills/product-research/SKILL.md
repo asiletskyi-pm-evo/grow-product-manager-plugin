@@ -1,7 +1,7 @@
 ---
 name: product-research
 version: 0.10.3
-description: Conduct comprehensive product research — competitive analysis, user research, market research, or UX benchmark research. Use when the user asks to "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks", or needs SWOT, TAM SAM SOM, or PESTEL analysis. Do NOT use for a plain lookup in the knowledge library — use knowledge-library (this skill calls it for enrichment during research). Українською — "дослідити конкурентів", "проаналізувати ринок", "конкурентний аналіз", "синтез інтервʼю з користувачами", "знайти ринкові тренди", "порівняти з галузевими бенчмарками".
+description: Competitive, market, user and UX-benchmark research — interview synthesis, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks". Also UA — «проаналізуй ринок», «конкурентний аналіз», «ринкові тренди». Calls knowledge-library for enrichment during research.
 ---
 
 # Product Research

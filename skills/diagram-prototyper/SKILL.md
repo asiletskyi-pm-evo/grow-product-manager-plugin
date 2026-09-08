@@ -1,7 +1,7 @@
 ---
 name: diagram-prototyper
 version: 0.10.0
-description: Create diagrams, flowcharts, BPMN processes, UI prototypes, infographics — and annotate screenshots with numbered markers and arrows. Use when the user asks to "create a diagram", "draw a flowchart", "visualize this process", "make a prototype", "create an infographic", "BPMN diagram", "wireframe", "mockup", "annotate this screenshot", "add arrows to this screen", or when another skill suggests visualizing a concept. Supports generation via Gemini, ChatGPT, NotebookLM, Figma, Draw.io, and built-in Mermaid/HTML; annotation runs locally (Pillow). Українською — "створити діаграму", "намалювати блок-схему", "візуалізувати цей процес", "зробити прототип", "створити інфографіку", "BPMN-діаграма", "вайрфрейм", "макет", "анотуй скріншот", "додай стрілки на скрін", "познач на скріншоті". Do NOT use for brand-themed decks, prototypes, or handoffs built on your Design System — use design-bridge for those.
+description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «додай стрілки на скрін». EN — "create a diagram", "draw a flowchart", "visualize this process", "make a prototype" (no DS mentioned), "mockup", "annotate this screenshot". Also UA — «візуалізуй процес», «зроби прототип», «інфографіка», «познач на скріншоті». Generation via Mermaid/HTML, Gemini, ChatGPT, NotebookLM, Figma, Draw.io; annotation runs locally.
 ---
 
 # Diagram & Prototype Creator
