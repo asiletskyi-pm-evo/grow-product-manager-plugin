@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.2.0
+version: 0.2.1
 description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…», «bump версії плагіна». EN — "release the plugin", "prepare a release", "bump plugin version", "ship vX.Y.Z", "cut a release", "publish plugin release". Also UA — «випусти vX.Y.Z», «опублікуй реліз плагіна». Conversational "release the plugin" routes here; the user-typed /release command is a shortcut into the same skill.
 ---
 

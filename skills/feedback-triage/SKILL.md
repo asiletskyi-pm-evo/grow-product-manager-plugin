@@ -1,6 +1,6 @@
 ---
 name: feedback-triage
-version: 0.2.2
+version: 0.2.3
 description: Triage a feedback stream — tickets, complaints, reviews, NPS — into themes with frequency, severity and trend. Not interview synthesis (product-research), not ideation (brainstorm-features). UA — «розбери скарги/відгуки», «кластеризуй тікети», «що болить сегменту», «тренд тем скарг». EN — "triage feedback", "cluster support tickets", "top user complaints for the period", "what hurts a given user segment", "feedback themes trend". Also UA — «тріаж фідбеку», «топ проблем за місяць». Produces a pain list and hypothesis candidates; do NOT use to save individual sources (knowledge-library); chain to brainstorm-features after triage.
 ---
 
@@ -59,7 +59,7 @@ Publishing: Confluence (default) / local — ask. Every number carries inline pe
 - → **`task-creator`**: quick-fix themes straight to Jira (the SH-step formulations feed directly in)
 
 ### Step V — Save to Vault
-`vault_save({type: "feedback-triage", product, skill: "feedback-triage", skill_version: "0.2.2", tags: [segment, period, top theme slugs], content: full report, related: [previous triage artifact, spawned hypotheses], extra_frontmatter: {period, segment, sources_count, items_total, items_usable, top_pain_score}})` → Research/feedback/. This artifact is the baseline for the next run's trends.
+`vault_save({type: "feedback-triage", product, skill: "feedback-triage", skill_version: "0.2.3", tags: [segment, period, top theme slugs], content: full report, related: [previous triage artifact, spawned hypotheses], extra_frontmatter: {period, segment, sources_count, items_total, items_usable, top_pain_score}})` → Research/feedback/. This artifact is the baseline for the next run's trends.
 
 ## Quality Standards
 - Theme names in the users' language of pain, verbatims verbatim (PII stripped: names, emails, order numbers masked).

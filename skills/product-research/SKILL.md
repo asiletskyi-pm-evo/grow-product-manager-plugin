@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.10.3
+version: 0.10.4
 description: Competitive, market, user and UX-benchmark research — interview synthesis, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks". Also UA — «проаналізуй ринок», «конкурентний аналіз», «ринкові тренди». Calls knowledge-library for enrichment during research.
 ---
 
@@ -426,7 +426,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.10.3", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.10.4", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
    (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added.)
 2. Display: "Saved to Vault: Research/{product}/…"
 

@@ -1,6 +1,6 @@
 ---
 name: offboarding-guide
-version: 0.1.1
+version: 0.1.2
 description: Guide a manager through parting with an underperformer — evidence check, "can't" vs "won't", four-meeting algorithm, ARCV follow-ups. Not a routine review (performance-review). UA — «допоможи звільнити», «офбординг», «випробувальний термін», «чи час прощатися». EN — "help me let someone go", "offboarding", "PIP / probation for underperformance", "termination conversation", "how do I fire <person> fairly", "is it time to part ways". Also UA — «розмова про звільнення», «як коректно розлучитися зі співробітником». Drafts a neutral team message. Do NOT use for corrective goals alone (goal-setter) or hiring a replacement (hiring-designer — chain there after). Data strictly local; the tone is deliberate.
 ---
 

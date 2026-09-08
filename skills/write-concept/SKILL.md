@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.11.1
+version: 0.11.2
 description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ». A concept is the input to requirements-creator.
 ---
 
@@ -300,7 +300,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.11.1",
+     skill_version: "0.11.2",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],

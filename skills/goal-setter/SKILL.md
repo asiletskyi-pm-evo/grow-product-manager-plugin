@@ -1,6 +1,6 @@
 ---
 name: goal-setter
-version: 0.1.2
+version: 0.1.3
 description: Set and audit goals — SMARTCBP for a person, OKR for a product or direction; goal letters, cascades. Not progress reports (product-reporter), not a performance review (performance-review). UA — «постав ціль», «сформулюй цілі для…», «OKR на квартал», «аудит цілі». EN — "set a goal", "write goals for <person>", "audit this goal", "is this goal SMART", "goal letter", "cascade goals", "objectives and key results". Also UA — «ціль за SMARTCBP», «лист цілей», «каскад цілей», «цілі напрямку». Formulates and commits goals; other skills track and report them. Do NOT use for delivery roadmaps (quarterly-/project-planning).
 ---
 

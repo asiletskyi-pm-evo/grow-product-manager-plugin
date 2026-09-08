@@ -1,6 +1,6 @@
 ---
 name: experiment-tracker
-version: 0.2.3
+version: 0.2.4
 description: Experiment registry — proposed → specced → running → readout → decided, with stale-test reminders. Not analyzing results (product-analysis), not the A/B spec (requirements-creator). UA — «які тести зараз біжать», «заведи експеримент», «зафіксуй запуск тесту», «завислі тести». EN — "what experiments are running", "experiment status", "register an experiment", "log the test launch", "which tests await a decision", "remind me about stale tests". Also UA — «статус експериментів», «які тести чекають рішення». Tracks state and chains to product-analysis, requirements-creator and brainstorm-features.
 ---
 

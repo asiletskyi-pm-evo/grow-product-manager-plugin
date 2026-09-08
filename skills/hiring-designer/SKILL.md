@@ -1,6 +1,6 @@
 ---
 name: hiring-designer
-version: 0.1.1
+version: 0.1.2
 description: Design a role and vacancy — goal letter first, then profile, killer questions, screening criteria, candidate evaluation, offer draft. Not feature requirements (requirements-creator). UA — «відкрити вакансію», «профіль вакансії», «оцінити кандидатів», «чернетка оферу». EN — "open a vacancy", "design a role", "write a job profile", "hiring", "killer questions", "screening criteria", "evaluate candidates", "draft an offer". Also UA — «спроєктувати посаду», «найм», «критерії скринінгу». Chains to goal-setter for the role goals; do NOT use for an existing employee's goals outside a hire.
 ---
 

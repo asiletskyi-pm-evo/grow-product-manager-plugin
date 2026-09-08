@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.13.1
+version: 0.13.2
 description: Write or review a requirements document with numbered functional requirements, incl. A/B test specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію», «опиши фічу як вимоги». EN — "write requirements", "create feature spec", "write A/B test requirements", "review / analyze / improve requirements", "check my spec". Also UA — «створи специфікацію фічі», «переглянь вимоги», «покращ вимоги». A concept from write-concept is the input; task-creator consumes the output.
 ---
 
@@ -399,7 +399,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.13.1", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.13.2", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 
