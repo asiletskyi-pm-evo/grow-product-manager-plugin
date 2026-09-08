@@ -169,6 +169,80 @@ print(n)') || err "hooks/hooks.json is not valid JSON"
   for f in scripts/*.py; do python3 -m py_compile "$f" 2>/dev/null || err "$f does not compile"; done
 fi
 
+# --- 12. Description routing order (cross-host budget) -----------------------
+# v3.0.0: Codex shares one ~15k-character budget across every listed skill, so a
+# host with 80 skills shows ~190 characters per description. Routing must
+# survive that cut: the guard against the nearest neighbour ("Not …") has to end
+# inside the first 192 characters, and a parenthesised neighbour must be a real
+# skill. Ukrainian keywords («…») must be present somewhere in the description.
+SKILL_NAMES=$(ls -d skills/*/ | xargs -n1 basename)
+DESC_ISSUES=$(python3 - <<'PY_CHECK'
+import re,glob,os
+names={os.path.basename(os.path.dirname(f)) for f in glob.glob("skills/*/SKILL.md")}
+for f in sorted(glob.glob("skills/*/SKILL.md")):
+    m=re.search(r"^description: (.+)$", open(f,encoding="utf-8").read(), re.M)
+    d=m.group(1) if m else ""
+    lead=d[:192]                       # characters, not bytes — the Codex cut is character-based
+    if not re.search(r"\b(Not|Never|never)\b", lead):
+        print(f"{f}: no routing guard ('Not …' / 'Never …') inside the first 192 characters of the description")
+    if "«" not in d:
+        print(f"{f}: description has no Ukrainian keywords («…»)")
+    for n in set(re.findall(r"\(([a-z][a-z-]+)\)", lead)):
+        if n not in names:
+            print(f"{f}: guard names '({n})' inside the lead but no such skill exists")
+PY_CHECK
+)
+[ -z "$DESC_ISSUES" ] || { echo "$DESC_ISSUES" | while IFS= read -r line; do err "$line"; done; FAIL=1; }
+ok "description routing order: $(ls skills/*/SKILL.md | wc -l | tr -d ' ') leads carry a guard within 192 chars + Ukrainian keywords"
+
+# --- 13. Commands stay typed-only on every host -----------------------------
+# Claude honours disable-model-invocation (check 8); Codex migrates commands
+# into routable skills and skips any whose body has $1 / $ARGUMENTS. So a
+# command must (a) describe its argument in prose and (b) open its description
+# with the typed-only guard naming itself — trigger-evals Group L, measured.
+if [ -d commands ]; then
+  for f in commands/*.md; do
+    base=$(basename "$f" .md)
+    grep -Eq '\$1\b|\$ARGUMENTS' "$f" && err "$f: contains \$1 / \$ARGUMENTS — Codex skips such commands; describe the argument in prose"
+    head -8 "$f" | grep -q "^description: Typed command /grow-product-manager:$base only" \
+      || err "$f: description must open with 'Typed command /grow-product-manager:$base only' (conversational phrases route to skills, trigger-evals L)"
+  done
+  ok "commands typed-only: $(ls commands/*.md | wc -l | tr -d ' ') commands guarded, no argument placeholders"
+fi
+
+# --- 14. Host packaging: path rule, Codex agent ports, host matrix -----------
+# A bare references/<file>.md resolves against the skill's own folder on Codex,
+# so every skill and every command that names a reference opens with the Path
+# rule. agents/*.md are the source of truth for .codex/agents/*.toml — a
+# missing or renamed port silently leaves Codex without that role. The host
+# matrix must list every skill exactly once.
+for f in skills/*/SKILL.md; do
+  grep -q '^> \*\*Path rule\.\*\*' "$f" || err "$f: missing the Path rule paragraph (references/ resolution on hosts that hand the skill only its own folder)"
+done
+for f in commands/*.md; do
+  if grep -q 'references/' "$f"; then
+    grep -q '^> \*\*Path rule\.\*\*' "$f" || err "$f: names a references/ file but has no Path rule paragraph"
+  fi
+done
+if [ -d agents ]; then
+  for f in agents/*.md; do
+    base=$(basename "$f" .md)
+    [ -f ".codex/agents/$base.toml" ] || err "agents/$base.md has no Codex port at .codex/agents/$base.toml"
+    [ -f ".codex/agents/$base.toml" ] && grep -q "^name = \"$base\"" ".codex/agents/$base.toml" \
+      || err ".codex/agents/$base.toml: name must equal \"$base\""
+  done
+fi
+if [ -f testing/host-matrix.md ]; then
+  for n in $SKILL_NAMES; do
+    [ "$(grep -c "^| \`$n\` |" testing/host-matrix.md)" = "1" ] || err "testing/host-matrix.md: skill '$n' must appear exactly once"
+  done
+  N_ROWS=$(grep -cE '^\| `[a-z-]+` \|' testing/host-matrix.md)
+  [ "$N_ROWS" = "$(echo "$SKILL_NAMES" | wc -l | tr -d ' ')" ] || err "testing/host-matrix.md: $N_ROWS skill rows, expected one per skill"
+else
+  err "testing/host-matrix.md is missing (skill × host × full/degraded/n-a)"
+fi
+ok "host packaging: path rule in every skill, $(ls agents/*.md 2>/dev/null | wc -l | tr -d ' ') Codex agent ports, host matrix covers every skill"
+
 # --- 10. Component counts in the three public descriptions -------------------
 # "29 skills across five contours" lives in plugin.json, marketplace.json and
 # README. With agents/commands/connectors the counts multiply; grep them all.

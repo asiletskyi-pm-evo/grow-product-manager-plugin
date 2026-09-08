@@ -43,6 +43,14 @@ Every check exists because the defect class it catches actually shipped. The v2.
 | `example-locale` | a localized sample value inside a code block; an output language hardcoded in a doc | the glossary schema example shipped its terms, synonyms and definitions in one team's language; `Language: <Lang> by default` in a skill that has `user.language` |
 | `example-keys` | an example issue/space key outside the placeholder vocabulary | a real project key in place of `PROJ-1234`, or a real space key in place of `SPACE` — both an org leak and an example the reader cannot run (this very row was written with a real-looking key first, and the check rejected it) |
 
+Validator checks added for the cross-host release (v3.0.0), in `validate-consistency.sh`:
+
+| Check | Catches | Shipped example it would have caught |
+|-------|---------|--------------------------------------|
+| 12 `description routing order` | a routing guard that does not survive Codex's ~190-character cut; a guard naming a non-existent skill; a description with no Ukrainian keywords | the v2.x order put "Do NOT use" and every Ukrainian trigger after character 400 — cut on every real Codex host |
+| 13 `commands typed-only` | `$1` / `$ARGUMENTS` in a command body (Codex skips the command); a command description that does not open with the typed-only guard | 4 of 5 commands never migrated; once they did, `«який статус плагіна»` routed to `source-command-status` (trigger-evals L 4/9) |
+| 14 `host packaging` | a skill or command without the Path rule; an `agents/*.md` without its `.codex/agents/*.toml` port; a skill missing from `testing/host-matrix.md` | Codex resolved `references/data-policy.md` against the skill folder — 3 of 4 shared protocols unreachable from write-concept |
+
 Two design rules keep the linter honest: it is **stdlib-only** (PyYAML only adds an extra strict parse — CI installs it and sets `GROW_LINT_REQUIRE_YAML=1` so its absence is a blocker there, while a local run without it degrades to a warning), and the `ghost-skill` vocabulary is **auto-derived from `templates/built-in/`** rather than hand-listed, so new template types do not create false positives.
 
 ## Every example in the plugin is universal
