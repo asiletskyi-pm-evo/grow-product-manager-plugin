@@ -1,7 +1,7 @@
 ---
 name: roadmap-architect
 version: 0.2.3
-description: Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree. Use when "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal", "direction structure". Українською — "навести лад у структурі", "розмітити епіки/фічі", "знайти розриви розмітки", "побудувати дерево roadmap", "звʼязати епік з ціллю", "структура напрямків". This skill owns structure and labeling only — no dates, no capacity. For a quarter plan use quarterly-planning, for multi-quarter forecasts use project-planning.
+description: Own the work structure — missions → initiatives → epics → features, labeling, roadmap tree — no dates, no capacity. Not quarter plans (quarterly-planning), not forecasts (project-planning). UA — «наведи лад у структурі», «розміть епіки/фічі», «дерево roadmap», «звʼяжи епік з ціллю». EN — "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal", "direction structure". Also UA — «знайди розриви розмітки», «структура напрямків».
 ---
 
 # Roadmap Architect

@@ -1,7 +1,7 @@
 ---
 name: hiring-designer
 version: 0.1.1
-description: Design a role and a vacancy profile the way strong hiring is done — the goal letter (SMARTCBP goals on a 3/6/12-month horizon) is written BEFORE the vacancy, and the offer = goals + conditions. Produces a universal vacancy profile, killer questions, screening criteria based strictly on past experience vs goals, interview questions from the role goals, a candidate-evaluation table, and an offer draft. Use when the user asks to "open a vacancy", "design a role", "write a job profile", "hiring", "killer questions", "screening criteria", "evaluate candidates", "draft an offer". Українською — "відкрити вакансію", "спроєктувати посаду", "профіль вакансії", "найм", "вітальні запитання", "критерії скринінгу", "оцінити кандидатів", "чернетка оферу". Do NOT use to write product/feature requirements (requirements-creator) or to set an existing employee's goals outside a hire (goal-setter — which this skill chains to for the role goals).
+description: Design a role and vacancy — goal letter first, then profile, killer questions, screening criteria, candidate evaluation, offer draft. Not feature requirements (requirements-creator). UA — «відкрити вакансію», «профіль вакансії», «оцінити кандидатів», «чернетка оферу». EN — "open a vacancy", "design a role", "write a job profile", "hiring", "killer questions", "screening criteria", "evaluate candidates", "draft an offer". Also UA — «спроєктувати посаду», «найм», «критерії скринінгу». Chains to goal-setter for the role goals; do NOT use for an existing employee's goals outside a hire.
 ---
 
 # Hiring Designer

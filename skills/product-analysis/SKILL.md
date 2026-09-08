@@ -1,7 +1,7 @@
 ---
 name: product-analysis
 version: 0.12.2
-description: Analyze product data — dashboards, tables, reports, metrics — to find trends, anomalies, growth opportunities, and generate data-backed hypotheses. Use when the user asks to "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", or "CJM funnel analysis". Українською — "проаналізувати метрики", "подивитись дашборд", "знайти аномалії", "пояснити ці дані", "аналіз після релізу", "аналіз результатів A/B-тесту", "аналіз CJM-воронки". This skill analyzes data only — for the end-to-end CJM research pipeline (anomalies → enrichment → hypothesis backlog) use cjm-research instead.
+description: Analyze product data — dashboards, metrics, A/B results, funnel vs baseline — explain anomalies; data only. Not the CJM research pipeline (cjm-research), not focus triage (focus-advisor). UA — «проаналізуй метрики/дашборд», «результати A/B-тесту», «чому впала конверсія», «воронка проти baseline». EN — "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", "CJM funnel analysis (data only)". Also UA — «знайди аномалії», «поясни ці дані», «аналіз після релізу». Generates data-backed hypotheses; for anomalies → enrichment → backlog use cjm-research.
 ---
 
 # Product Analysis

@@ -1,7 +1,7 @@
 ---
 name: sprint-planning
 version: 0.3.2
-description: Helps the PM efficiently estimate and run sprint pre-planning — derives focuses from the quarterly roadmap/missions/projects, highlights what's READY to pull right now (dependencies cleared), catches work-sequence violations (e.g. client-side work planned ahead of analytics coverage), gathers per-member capacity, analyzes carryover risk from the last sprint, suggests assignees for unowned tasks, and fills the sprint to capacity. Use when "plan the sprint", "sprint pre-planning", "what can we pull into the next sprint", "what's ready from the backlog", "check sprint dependencies", "build sprint focuses", "distribute the sprint", "who takes the tasks". Українською — "спланувати спринт", "передпланування спринта", "що можна взяти у наступний спринт", "що готове з беклогу", "перевір залежності спринта", "сформуй фокуси спринта", "розподілити спринт", "хто візьме задачі".
+description: Sprint pre-planning — focuses from the roadmap, what is READY to pull, dependencies, capacity per member, assignees. Not daily focus (focus-advisor), not a quarter plan (quarterly-planning). UA — «сплануй спринт», «що можна взяти у спринт», «розподіли задачі спринта», «фокуси спринта». EN — "plan the sprint", "sprint pre-planning", "what can we pull into the next sprint", "what's ready from the backlog", "check sprint dependencies", "who takes the tasks". Also UA — «передпланування спринта», «що готове з беклогу», «хто візьме задачі», «випусти фічу в реліз наступного спринта».
 ---
 
 # Sprint Planning

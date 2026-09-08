@@ -1,7 +1,7 @@
 ---
 name: feedback-triage
 version: 0.2.2
-description: Triage a stream of user feedback — support tickets, complaints, reviews, Q&A, NPS verbatims — into clustered themes with frequency, severity, and trend scoring, producing a prioritized pain list and hypothesis candidates. Use when the user asks to "triage feedback", "cluster support tickets", "top user complaints for the period", "what hurts a given user segment", "feedback themes trend". Українською — "розбери відгуки/скарги", "тріаж фідбеку", "що болить сегменту користувачів", "кластеризуй support-тікети", "топ проблем за місяць", "тренди тем фідбеку". Do NOT use for deep interview synthesis (product-research or design research-synthesis), saving individual sources (knowledge-library), or ideation (brainstorm-features — chain there after triage).
+description: Triage a feedback stream — tickets, complaints, reviews, NPS — into themes with frequency, severity and trend. Not interview synthesis (product-research), not ideation (brainstorm-features). UA — «розбери скарги/відгуки», «кластеризуй тікети», «що болить сегменту», «тренд тем скарг». EN — "triage feedback", "cluster support tickets", "top user complaints for the period", "what hurts a given user segment", "feedback themes trend". Also UA — «тріаж фідбеку», «топ проблем за місяць». Produces a pain list and hypothesis candidates; do NOT use to save individual sources (knowledge-library); chain to brainstorm-features after triage.
 ---
 
 # Feedback Triage

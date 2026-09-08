@@ -1,7 +1,7 @@
 ---
 name: requirements-creator
 version: 0.13.1
-description: Create structured feature requirements documents or analyze and improve existing ones, acting as an experienced Business Analyst. Use when the user asks to "write requirements", "describe a feature", "create feature spec", "write A/B test requirements", "review requirements", "analyze requirements", "improve requirements", "check my spec", or needs help turning a feature idea into a structured requirements document or improving an existing one. Do NOT use for a high-level product concept or PRD — use write-concept (its output is this skill's input). Українською — "написати вимоги", "створити специфікацію фічі", "вимоги до A/B-тесту", "переглянути вимоги", "проаналізувати вимоги", "покращити вимоги", "перевірити мою специфікацію".
+description: Write or review a requirements document with numbered functional requirements, incl. A/B test specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію», «опиши фічу як вимоги». EN — "write requirements", "create feature spec", "write A/B test requirements", "review / analyze / improve requirements", "check my spec". Also UA — «створи специфікацію фічі», «переглянь вимоги», «покращ вимоги». A concept from write-concept is the input; task-creator consumes the output.
 ---
 
 # Feature and Hypothesis Requirements Creator

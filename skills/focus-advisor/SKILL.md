@@ -1,7 +1,7 @@
 ---
 name: focus-advisor
 version: 0.5.0
-description: PM attention dispatcher — scans the PM's context (sprint cycle, calendar, mail, meetings, Jira, roadmap drift, backlog, A/B tests awaiting decisions, capacity, goals, metrics) and recommends focuses with reasons and next steps at three horizons — daily, tactical (sprint–quarter), strategic (quarter–year) — chaining to the right skill. Use whenever the PM asks what to do or focus on — "на чому сфокусуватись", "що мені робити зараз/сьогодні", "фокус дня/тижня", "тактичний фокус", "стратегічний фокус", "куди фокусувати команду", "де великі можливості для продукту", "розбери мою пошту і календар", "до яких зустрічей готуватись", "чи все ок з метриками", "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "покажи focus board" — and for scheduled/headless briefs. Do NOT use for planning the sprint (sprint-planning), building roadmaps (quarterly-/project-planning), or deep metric analysis (product-analysis / cjm-research) — it recommends and chains, it does not execute.
+description: Attention dispatcher — what to focus on today, this sprint or this quarter; recommends and chains, never executes. Not sprint planning (sprint-planning), not analysis (product-analysis). UA — «на чому сфокусуватись», «ранковий бриф», «розбери мою пошту й календар», «чи все ок з метриками». EN — "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "show focus board". Also UA — «що мені робити сьогодні», «фокус дня/тижня», «до яких зустрічей готуватись», «де великі можливості для продукту», «куди фокусувати команду». Also for scheduled/headless briefs. Do NOT use to build roadmaps (quarterly-/project-planning).
 ---
 
 # Focus Advisor

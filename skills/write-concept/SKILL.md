@@ -1,7 +1,7 @@
 ---
 name: write-concept
 version: 0.11.1
-description: Write a product concept (PRD) document from a feature idea, problem statement, or existing research. Use when the user asks to "write a concept", "create a PRD", "describe a feature", "write a spec", or needs help turning a vague idea into a structured product document. Do NOT use for a full requirements/spec document with numbered functional requirements — use requirements-creator (a concept is the input to it). Українською — "написати концепт", "створити PRD", "описати фічу", "написати специфікацію", "оформити ідею в документ".
+description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ». A concept is the input to requirements-creator.
 ---
 
 # Write Concept (PRD)
