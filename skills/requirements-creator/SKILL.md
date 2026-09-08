@@ -6,6 +6,8 @@ description: Create structured feature requirements documents or analyze and imp
 
 # Feature and Hypothesis Requirements Creator
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Create structured, high-quality feature requirements documents as an experienced Business Analyst. The output is a complete requirements document ready for implementation by product teams (Back-end, Front-end, Android, iOS, Design).
 
 ## Integration prerequisite

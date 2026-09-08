@@ -6,6 +6,8 @@ description: Set and audit goals for a person, team, product, direction, project
 
 # Goal Setter
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Formulates and audits **goals** — the foundation of the People-contour. Without a well-set goal, neither reporting (3T5F), nor performance review, nor a hiring offer works. The skill chooses the right methodology (SMARTCBP for personal goals, OKR for product/direction), produces or audits the goal, drives it to **commitment** (Tell and Sell), and records it on the person's profile.
 
 The PM decides; the skill formulates, audits, and records. It never invents a baseline or a link it cannot source.

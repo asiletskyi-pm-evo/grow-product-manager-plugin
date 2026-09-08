@@ -6,6 +6,8 @@ description: Help Product Manager brainstorm features, hypotheses, and CJM Hypot
 
 # Brainstorm Features and Hypotheses
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Help Product Manager conduct a structured brainstorm to generate, evaluate, and prioritize feature ideas and hypotheses. Supports two main modes: standard interactive brainstorm and CJM Hypotheses mode for funnel-driven hypothesis generation. This is an interactive, dialogue-driven skill — ideas are discussed live, iterated on, and only saved when the user is ready.
 
 ## Integration prerequisite

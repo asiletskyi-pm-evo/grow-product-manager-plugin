@@ -6,6 +6,8 @@ description: Guide a manager through parting ways with an underperforming team m
 
 # Offboarding Guide
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Companies need goals achieved — a rational stance. The core message: **don't "drag" a person at the expense of your own management**. When someone "doesn't want" (Hersey-Blanchard) and every motivation tool is exhausted, parting ways is the right call. Dragging it out statistically doesn't work (roughly only 1 in 4 reanimations succeed), so the moment underperformance makes you consider it — act by the algorithm, respectfully and on evidence.
 
 > **Tone & data:** this is the heaviest conversation a manager has. Be delicate, factual, and respectful. All materials are **strictly local/vault** (`data-policy.md`) — never Confluence/Jira, never external LLMs.

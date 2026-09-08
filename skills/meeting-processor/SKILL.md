@@ -6,6 +6,8 @@ description: Process meeting recordings, transcripts, and notes to extract ARCV-
 
 # Meeting Processor
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Process meetings from any source — Fireflies, other recording tools, uploaded files, or pasted text — to extract action items, decisions, and structured meeting reports. The skill classifies the meeting type, adapts the output format, and chains to other plugin skills for follow-up actions.
 
 ## Integration prerequisite

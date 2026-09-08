@@ -6,6 +6,8 @@ description: Orchestrate Claude's Design skills (research-synthesis, ux-copy, de
 
 # Design Bridge
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Orchestrator that connects the Grow PM pipeline with Claude Design skills, the Figma MCP, a brand Design System, and a pptx template. One skill handles four scenarios: **deck**, **prototype**, **handoff**, **research-enrichment**.
 
 All brand-specific values (Design System spec, pptx theme, base template, brand tokens, Figma `fileKey`) are read from `local-context.md` — the plugin ships **no** hardcoded brand assets. Users configure their own brand via the `plugin-configurator` skill or by editing `local-context.md` manually.

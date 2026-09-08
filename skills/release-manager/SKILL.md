@@ -6,6 +6,8 @@ description: Release a Claude plugin end-to-end — version bump across all mani
 
 # Release Manager
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Releases the plugin repository itself: one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Built from the real v1.26.1–v1.27.0 release experience — every known pitfall has a guard. **The user stays in the loop:** every irreversible step (commit, push, merge, publish) is gated.
 
 Generic by design: works for any Claude plugin repo with `.claude-plugin/` manifests + CHANGELOG + README. Org-specific details (mirrors, VPN hosts, Confluence changelog page) come from `local-context.md`, never hardcoded.
