@@ -1,5 +1,5 @@
 ---
-description: Start the plugin release pipeline (release-manager) with the bump class already chosen — for the plugin repository itself, never for product features
+description: Typed command /grow-product-manager:release only — never for a conversational «зарелізь плагін» (that is release-manager) and never for product feature releases in Jira. Starts the plugin release pipeline (release-manager) with the bump class already chosen.
 argument-hint: "[patch|minor|major]"
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Bash(git:*), Bash(bash:*), Bash(python3:*), Skill, AskUserQuestion

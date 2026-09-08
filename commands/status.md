@@ -1,5 +1,5 @@
 ---
-description: Show the plugin's health in one screen — version, where local-context.md was found and its schema version, vault level, declared connectors vs tools actually present in this session, deferred onboarding steps
+description: Typed command /grow-product-manager:status only — never for a conversational question like «який статус плагіна» or "what is the plugin status" (that is plugin-configurator, Validate). Shows the plugin's health in one screen — version, local-context.md and its schema version, vault level, declared connectors vs tools present in this session, deferred onboarding steps.
 argument-hint: "[--verbose]"
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep

@@ -1,5 +1,5 @@
 ---
-description: Open plugin-configurator directly in Validate or View mode without going through mode detection
+description: Typed command /grow-product-manager:config only — never for a conversational «покажи мій конфіг» or «перевір налаштування» (that is plugin-configurator). Opens plugin-configurator directly in Validate or View mode without mode detection.
 argument-hint: "[validate|view]"
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Skill, AskUserQuestion
