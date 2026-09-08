@@ -6,6 +6,8 @@ Purpose: verify that user phrases trigger the **intended** skill, especially in 
 
 **Manual protocol (baseline):** in a fresh Cowork session with the plugin installed, paste each phrase as a user message. Record which skill triggers (or none). Pass = expected skill; borderline pass = Claude asks a clarifying question naming the expected skill among options.
 
+**Codex CLI (since v3.0.0):** install the branch as a local marketplace, then for each phrase run `codex exec -s read-only` with a **single-line** prompt asking for the bare skill name only (a multi-line prompt argument hangs `codex exec` 0.153 before the session starts). Score on the host's *real* configuration — Codex shares one ~15k-character budget across every listed skill, so a machine with 80 skills shows ~190 characters per description; that is the configuration the descriptions must route on. Runner and scorer: see the v3.0.0 pilot notes in the design workspace.
+
 **Automated (preferred when available):** the `skill-creator` skill ships an eval harness — feed it this table as scenarios (`phrase` → `expected_skill`) and let it benchmark triggering accuracy across N runs. Record the accuracy per group below.
 
 Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per group. Any ✗ → tighten the losing/winning skill descriptions ("Do NOT use" hints), bump PATCH, re-run.
