@@ -12,6 +12,83 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.0.0 (2026-09-08)
+
+**One plugin, three hosts — Claude Code / Cowork, Codex CLI and app, ChatGPT.** Codex reads the same `.claude-plugin/` manifests, loads all 29 skills under the same `grow-product-manager:` namespace and registers the same connectors, so nothing was forked. What changed is how the skills behave where a host lacks something: every skill now branches on **observed capabilities**, never on a host name. MAJOR because the marketplace `source` format changes, every `SKILL.md` and every command description changes, and the plugin now promises a defined behaviour on hosts it previously ignored. Measured on Codex CLI 0.153.2 and Claude Code 2.1.126 throughout (`Codex-Compat-Findings.md`, stages 0–5, in the design workspace).
+
+### Added
+
+- **`references/host-profiles.md`** — the cross-host contract: five observable capabilities (FS, SHELL, SUBAGENT, MCP, HOOKS), four profiles (`claude-cowork`, `codex-cli` incl. the Codex app, `chatgpt`, `codex-cloud`), **Step 0-host** run once per skill, the degradation matrix per contour, the contours with no meaningful degraded mode, `${PLUGIN_ROOT}` → `${CLAUDE_PLUGIN_ROOT}` → walk-up resolution, and the measured host gaps.
+- **Path rule** paragraph at the top of every `SKILL.md` and of every command that names a reference — Codex resolves a bare `references/<file>.md` against the skill's own folder and does not walk up (3 of 4 shared protocols were unreachable from `write-concept`); the rule sends the read to the plugin root. Verified 7/7 in Codex, incl. a natural activation.
+- **`AGENTS.md`** (5 KB) — standing brief for hosts that read it: where things live, Step 0-host, the data-policy requirement, the measured Codex gaps.
+- **`.codex/agents/*.toml`** — manual Codex ports of `artifact-checker`, `debater`, `extractor` (Codex does not load `agents/*.md` and spawns a subagent only on request), generated from the markdown sources, with a README on their weaker independence.
+- **`testing/host-matrix.md`** — 29 skills × 4 hosts × full / degraded / n-a, derived from what each skill invokes: codex-cli 15 full / 14 degraded, chatgpt 19 degraded / 10 n/a, codex-cloud 20 degraded / 9 n/a.
+- **Validator checks 12–14** — description routing order (guard inside the first 192 characters, neighbour is a real skill, Ukrainian keywords present); commands typed-only (no `$1` / `$ARGUMENTS`, description opens with `Typed command … only`); host packaging (Path rule everywhere, a Codex port per agent, every skill in the host matrix). Each negative-tested on the defect it targets. `testing/Testing-process.md` documents them.
+- **README → Hosts** — capability table per host, per-skill result, Codex install and the two-command manual update.
+
+### Changed
+
+- **All 29 skill descriptions** rewritten under a priority-order rule, because Codex shares one ≈15,000-character budget across every listed skill (~530 characters each with this plugin alone, ~190 on a host listing 80 skills): essence with the discriminating nouns + the guard against the nearest neighbour inside the first 190 characters, then Ukrainian keywords, then EN triggers, then chains. No `: ` in any description (strict YAML). **Trigger-evals, 102 phrases:** Codex CLI on the author's real configuration 91.2 % → **100 % in two consecutive runs**, identical answers; Claude Code headless **101/102** where the one miss (`/grow-product-manager:status` → `none`) is the correct Claude answer for a host-executed command.
+- **All 5 command descriptions** open with `Typed command /grow-product-manager:<name> only — never for a conversational «…» (that is <skill>)` — Codex migrates commands into routable skills without `disable-model-invocation`, and they captured conversational status/config/terminology/write-gate phrases (Group L 4/9 before, 9/9 after). Command bodies describe their argument in prose instead of `$1` / `$ARGUMENTS` (Codex skipped 4 of 5); `setup.md` no longer pre-executes its script.
+- **`.claude-plugin/marketplace.json`** — `"source": "./"` instead of the `git-subdir` object. Codex silently ignores the object form (marketplace added, zero plugins); Claude Code rejects a bare `"."` (`plugins.0.source: Invalid input`) and accepts `"./"`. Relative sources resolve against the local marketplace copy, so `owner/repo` installs keep working; only a marketplace added by direct URL to `marketplace.json` would not.
+- **`references/persistent-storage.md`** — step 0 of `storage_root` resolution: `storage_mode: local | connector | session` from Step 0-host (`local` = current behaviour; `connector` = a Drive folder or Confluence space from `storage.connector_root`; `session` = artifact stays in the chat and is exported at the end). Named `storage_mode`, not a letter — L0/L1/L2 already mean vault levels.
+- **`references/subagent-delegation.md`** — the one-line fallback is a three-level chain: parallel `extractor` subagents → sequential inline passes with a role reset (the Codex default) → a single pass over fewer sources, stated. Level fixed once at Step 0-host.
+- **`references/artifact-style-gate.md`** — on a host without SUBAGENT the checker lands on level 2 (sequential in-session lens passes, `checker: sequential in-session`), the reduced-independence marker stays reserved for level 3; on a host without HOOKS the skill asks for the write confirmation itself with the same three-point checklist.
+- **`references/integration-strategy.md`** — host-capabilities preamble; §1a namespaces are host-dependent (1b pattern detection is the source of truth) with a Codex column: name-matched empty-`url` connectors work in the Codex **app** but fail at session start in the **CLI** (`relative URL without a base`) — kept on purpose as Claude's convention, documented in `.mcp.json` and `AGENTS.md`.
+- **`references/local-context-protocol.md`** — where a bare `references/…` lives (skill-local if the file exists there, otherwise the shared folder at the plugin root, resolution per host-profiles §6).
+- **Portable `${PLUGIN_ROOT}`** ahead of `${CLAUDE_PLUGIN_ROOT}` in `agents/*.md`, `commands/status.md`, the validator; `hooks/hooks.json` keeps the Claude variable (hooks load only there).
+- **`testing/trigger-evals.md`** — Codex run protocol (single-line prompts — a multi-line prompt argument hangs `codex exec` 0.153 before the session starts; score on the host's real configuration) and the two-host results rows.
+
+### Known host gaps (documented, not hidden)
+
+Codex does not load `agents/*.md` or `hooks/hooks.json` (openai/codex#17331); Codex CLI fails empty-`url` connectors at session start (the app matches them by name); Codex has no auto-update — `codex plugin marketplace upgrade <name>` then `codex plugin add …` after each release; ChatGPT has no filesystem, shell or subagents — the storage-bound contours say so and stop.
+
+### Files
+
+| File | Version | Change |
+|------|---------|--------|
+| `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` | 2.6.0 → 3.0.0 | version, description tails, string `source` |
+| `skills/brainstorm-features/SKILL.md` | 0.10.1 → 0.10.2 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/cjm-research/SKILL.md` | 0.7.3 → 0.7.4 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/decision-log/SKILL.md` | 0.2.4 → 0.2.5 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/delegation-coach/SKILL.md` | 0.1.2 → 0.1.3 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/design-bridge/SKILL.md` | 0.4.1 → 0.4.2 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/diagram-prototyper/SKILL.md` | 0.10.0 → 0.10.1 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/experiment-tracker/SKILL.md` | 0.2.3 → 0.2.4 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/feedback-triage/SKILL.md` | 0.2.2 → 0.2.3 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/focus-advisor/SKILL.md` | 0.5.0 → 0.5.1 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/goal-setter/SKILL.md` | 0.1.2 → 0.1.3 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/hiring-designer/SKILL.md` | 0.1.1 → 0.1.2 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/knowledge-library/SKILL.md` | 0.7.1 → 0.7.2 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/meeting-processor/SKILL.md` | 0.13.4 → 0.13.5 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/offboarding-guide/SKILL.md` | 0.1.1 → 0.1.2 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/one-on-one/SKILL.md` | 0.1.2 → 0.1.3 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/performance-review/SKILL.md` | 0.1.1 → 0.1.2 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/plugin-configurator/SKILL.md` | 2.9.2 → 2.9.3 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/product-analysis/SKILL.md` | 0.12.2 → 0.12.3 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/product-reporter/SKILL.md` | 0.5.2 → 0.5.3 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/product-research/SKILL.md` | 0.10.3 → 0.10.4 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/project-planning/SKILL.md` | 0.2.3 → 0.2.4 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/quarterly-planning/SKILL.md` | 0.3.3 → 0.3.4 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/release-manager/SKILL.md` | 0.2.0 → 0.2.1 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/requirements-creator/SKILL.md` | 0.13.1 → 0.13.2 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/roadmap-architect/SKILL.md` | 0.2.3 → 0.2.4 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/sprint-planning/SKILL.md` | 0.3.2 → 0.3.3 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/task-creator/SKILL.md` | 0.12.1 → 0.12.2 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/template-library/SKILL.md` | 0.2.3 → 0.2.4 | Path rule paragraph; description rewritten under the routing-order rule |
+| `skills/write-concept/SKILL.md` | 0.11.1 → 0.11.2 | Path rule paragraph; description rewritten under the routing-order rule |
+| `commands/*.md` (5) | — | typed-only guard, prose arguments, Path rule |
+| `agents/*.md` (3) | — | `${PLUGIN_ROOT}` first |
+| `references/host-profiles.md`, `AGENTS.md`, `.codex/agents/*` , `testing/host-matrix.md` | new | see Added |
+| `references/persistent-storage.md`, `subagent-delegation.md`, `artifact-style-gate.md`, `integration-strategy.md`, `local-context-protocol.md` | — | see Changed |
+| `testing/validate-consistency.sh` (checks 12–14), `testing/skill_lint.py` (unchanged), `testing/trigger-evals.md`, `testing/Testing-process.md` | — | see Added / Changed |
+
+### Backwards compatibility
+
+Claude Code / Cowork behaviour is unchanged: every degraded mode is gated on an absent capability that Claude has, the Path rule is a no-op where `references/` already resolves from the plugin root, and commands keep `disable-model-invocation: true`. Existing installs from `owner/repo` keep working with the string `source`. Skill folder names, chain contracts, vault types and `local-context.md` keys are unchanged; `storage.connector_root` is a new optional key read only in `storage_mode: connector`.
+
+---
+
 ## v2.6.0 (2026-09-04)
 
 **Host hooks: the session knows where its context is, and a human confirms before a write.** v2.5.0 moved connectors, agents and commands into the manifest. This release adds the fourth component, hooks — two of them, chosen by a rule: a hook must be *deterministic*, *fail-open*, and do something a skill cannot do reliably from prose. A hook runs in the session's own environment (a local VM or a hosted container) and sees only its event's JSON, never the conversation — both hooks are designed around that.
