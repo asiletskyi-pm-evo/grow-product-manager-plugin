@@ -7,9 +7,19 @@ allowed-tools: Bash(python3:*)
 
 # /grow-product-manager:setup
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Backend: `scripts/setup.py`. One Bash call, then present the JSON as a short table.
 
-!`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/setup.py" $ARGUMENTS`
+Run exactly once:
+
+```bash
+python3 "${PLUGIN_ROOT}/scripts/setup.py"
+```
+
+`${CLAUDE_PLUGIN_ROOT}` on Claude; if neither variable expands, walk up to the directory that contains `skills/` — `references/host-profiles.md` §6.
+
+If the user typed a toggle after the command name — `--show`, or `--write-gate on` / `--write-gate off` — append exactly that to the command above. If they typed nothing, run it bare: the script reports the current state and changes nothing.
 
 ## Present
 

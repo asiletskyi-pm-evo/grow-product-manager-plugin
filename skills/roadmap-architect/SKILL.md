@@ -6,6 +6,8 @@ description: Maintains the canonical structure of work — maps missions/goals �
 
 # Roadmap Architect
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Keeper of the structure (foundation, outside time). Maps the Goal→Initiative→Epic→Feature hierarchy, **enforces labeling conventions**, finds gaps, and builds the structure tree. Doesn't plan the quarter/sprint and doesn't touch capacity — only structural integrity. **The PM decides.**
 
 Supplies clean structure to the rest of the planning-suite. Integrates with `product-reporter` (Jira plumbing) and `cjm-research`/`brainstorm-features` (new candidates).

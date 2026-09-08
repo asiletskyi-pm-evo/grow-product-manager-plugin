@@ -154,7 +154,7 @@ for e,groups in d["hooks"].items():
             n+=1
             if "timeout" not in h: print("NOTIMEOUT:"+e); sys.exit(0)
             if h.get("type")=="command":
-                cmd=h["command"].replace("${CLAUDE_PLUGIN_ROOT}/","").strip("\"")
+                cmd=h["command"].replace("${CLAUDE_PLUGIN_ROOT}/","").replace("${PLUGIN_ROOT}/","").strip("\"")
                 import os
                 if not os.path.isfile(cmd): print("MISSING:"+cmd); sys.exit(0)
                 if not os.access(cmd, os.X_OK): print("NOEXEC:"+cmd); sys.exit(0)

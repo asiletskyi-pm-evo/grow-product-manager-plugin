@@ -6,6 +6,8 @@ description: Prepare for and analyze 1-1 meetings with a team member — a meeti
 
 # One-on-One
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 A 1-1 is a regular manager↔person meeting for **feedback, the person's problems, and trust** — a meeting *for the person and about the person*, shifting from the "manager-subordinate" vertical to a "human-human" horizontal. The most common mistake is treating it as a task/status meeting (that's a separate sync). **The manager prepares** and **the manager writes the follow-up** (a sign of care — the person shouldn't have to).
 
 ## Prerequisites

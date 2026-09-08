@@ -6,6 +6,8 @@ description: Helps the PM efficiently estimate and run sprint pre-planning — d
 
 # Sprint Planning
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 PM advisor for sprint pre-planning (finest slice). It doesn't just fill the sprint — it **highlights readiness and work-order violations**, computes per-person capacity, accounts for carryover risk, and suggests assignees. **The PM decides.**
 
 Part of the planning-suite: takes scope from `quarterly-planning` and direction priority from `project-planning`; tasks → `task-creator`. Integrates with `product-reporter` (last sprint ← `sprint-review`+`member-review`; approved plan → rendered as a `sprint-plan` report).

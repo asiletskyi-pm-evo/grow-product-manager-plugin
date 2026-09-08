@@ -6,6 +6,8 @@ description: Design a role and a vacancy profile the way strong hiring is done �
 
 # Hiring Designer
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Hiring is the manager's most important skill — a well-hired specialist "pulls everything out of any swamp". The base principle is **"designing the role"**: the goal letter (SMARTCBP goals) is prepared **before** the vacancy opens, and the offer = goals + conditions. Screening evaluates **past experience against the role's goals** — never impressions or "voodoo recruiting".
 
 ## Prerequisites

@@ -6,6 +6,8 @@ description: Triage a stream of user feedback — support tickets, complaints, r
 
 # Feedback Triage
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Turns a raw pile of feedback (hundreds of tickets, reviews, Q&A entries) into a ranked map of pains: clustered themes, how often each hurts, how badly, and whether it's growing — with direct chains to hypothesis generation. Built for feedback-ecosystem work where the stream never stops and the question is always "що болить найбільше ЗАРАЗ".
 
 ## Prerequisites

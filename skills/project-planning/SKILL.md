@@ -6,6 +6,8 @@ description: Plans and forecasts delivery of a project/mission/initiative beyond
 
 # Project Planning
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Project/mission planning orchestrator (vertical axis: one direction across time). Estimates volume, builds dependencies and the critical path, forecasts duration under a team allocation %, lays out the arc (multi-quarter roadmap), and **replans** it against actuals (rolling-reforecast). **AI is the PM's advisor.**
 
 Part of the planning-suite: supplies arcs and allocation % to `quarterly-planning`. Integrates with `product-reporter` (current state / % done ← `initiative-status`).

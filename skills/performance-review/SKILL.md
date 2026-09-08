@@ -6,6 +6,8 @@ description: Run a structured performance review of a team member — not Jira t
 
 # Performance Review
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Assesses a person on the People-contour's coordinates — **goal achievement, GTD-index, situational-leadership type, and signals** — not raw Jira metrics. Renders the assessment into the employer's standard review template and outputs a clear action recommendation. The manager decides; the skill assembles the evidence and drafts the review.
 
 > **Data:** strictly local/vault (`data-policy.md`) — a performance review is highest-sensitivity People-data. Feedback is factual/NVC, describing the work, not the person.

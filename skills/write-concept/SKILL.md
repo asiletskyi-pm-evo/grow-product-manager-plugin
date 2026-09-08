@@ -6,6 +6,8 @@ description: Write a product concept (PRD) document from a feature idea, problem
 
 # Write Concept (PRD)
 
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
 Turn a feature idea or problem statement into a structured product concept document and publish it as a Confluence page.
 
 ## Integration prerequisite
