@@ -1,6 +1,6 @@
 ---
 name: focus-advisor
-version: 0.5.0
+version: 0.5.1
 description: What to focus on today, this sprint or quarter — scans mail, calendar, Jira, metrics; recommends and chains. Not sprint planning (sprint-planning), not analysis (product-analysis). UA — «на чому сфокусуватись», «ранковий бриф», «розбери мою пошту й календар», «чи все ок з метриками». EN — "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "show focus board". Also UA — «що мені робити сьогодні», «фокус дня/тижня», «до яких зустрічей готуватись», «де великі можливості для продукту», «куди фокусувати команду». Also for scheduled/headless briefs. Do NOT use to build roadmaps (quarterly-/project-planning).
 ---
 

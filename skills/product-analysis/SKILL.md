@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.12.2
+version: 0.12.3
 description: Analyze product data — dashboards, metrics, A/B results, funnel vs baseline; data only. Not the CJM funnel pipeline (cjm-research), not a quick «чи все ок» health glance (focus-advisor). UA — «проаналізуй метрики/дашборд», «результати A/B-тесту», «чому впала конверсія», «воронка проти baseline». EN — "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", "CJM funnel analysis (data only)". Also UA — «знайди аномалії», «поясни ці дані», «аналіз після релізу». Generates data-backed hypotheses; for anomalies → enrichment → backlog use cjm-research.
 ---
 
@@ -247,7 +247,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "product-analysis",
-     skill_version: "0.12.2",
+     skill_version: "0.12.3",
      tags: [metric names analyzed, platforms, analysis_mode],
      content: full_analysis_markdown,
      related: [source hypothesis, source requirements, previous analyses from Step 0.5],

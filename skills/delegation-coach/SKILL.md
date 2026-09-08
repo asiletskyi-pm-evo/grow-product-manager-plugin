@@ -1,6 +1,6 @@
 ---
 name: delegation-coach
-version: 0.1.2
+version: 0.1.3
 description: Audit a manager's operational load on the 7 delegation levels and plan the hand-off (S1→S4). Not daily focus (focus-advisor), not task creation (task-creator). UA — «аудит делегування», «що можна делегувати», «перевантажений операційкою», «вийти з операційки». EN — "audit my delegation", "what can I delegate", "I'm overloaded with ops", "delegation levels", "hand-off plan", "who can I give this to". Also UA — «рівні делегування», «план передачі», «кому це віддати». Picks candidates from team profiles (D-type, GTD-index); diagnoses and plans the transfer, goal-setter and task-creator execute it.
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: template-library
-version: 0.2.3
+version: 0.2.4
 description: Manage artifact templates — concepts, requirements, research, tasks, decks — create, clone, edit, import, export, validate, backup. Not the glossary or knowledge sources (knowledge-library). UA — «додай шаблон», «керуй шаблонами», «покажи шаблони», «імпортуй шаблони з папки». EN — "manage templates", "add a template", "create a template", "edit a template", "import templates from a folder", "show templates", "backup templates". Also called by other skills to render an artifact via Step T of references/template-protocol.md.
 ---
 

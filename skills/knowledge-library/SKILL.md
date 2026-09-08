@@ -1,6 +1,6 @@
 ---
 name: knowledge-library
-version: 0.7.1
+version: 0.7.2
 description: Curated knowledge library with trust scores, plus the team glossary and writing-style profile. Not artifact templates (template-library), not competitor research (product-research). UA — «додай у бібліотеку», «які джерела маємо», «збери глосарій», «додай термін», «перевір термінологію», «навчись нашого стилю». EN — "add to library", "search knowledge", "what sources do we have on [topic]", "import sources", "build a glossary", "how do we call X", "check terminology", "learn our writing style". Also UA — «пошук у знаннях», «як ми називаємо…», «покажи бібліотеку». Also called by other skills for enrichment search or a terminology lint.
 ---
 

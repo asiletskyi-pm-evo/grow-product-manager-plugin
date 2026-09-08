@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.10.0
+version: 0.10.1
 description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «додай стрілки на скрін». EN — "create a diagram", "draw a flowchart", "visualize this process", "make a prototype" (no DS mentioned), "mockup", "annotate this screenshot". Also UA — «візуалізуй процес», «зроби прототип», «інфографіка», «познач на скріншоті». Generation via Mermaid/HTML, Gemini, ChatGPT, NotebookLM, Figma, Draw.io; annotation runs locally.
 ---
 
@@ -511,7 +511,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.10.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.10.1", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Mode: Annotate (standalone screenshot annotation)

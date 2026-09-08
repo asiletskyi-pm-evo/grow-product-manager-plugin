@@ -1,6 +1,6 @@
 ---
 name: project-planning
-version: 0.2.3
+version: 0.2.4
 description: Multi-quarter delivery forecast for a project or mission — dependencies, critical path, duration at a team-% share. Not one quarter (quarterly-planning), not structure (roadmap-architect). UA — «скільки займе проєкт/місія», «roadmap проєкту на 3 квартали», «критичний шлях», «% команди на напрямок». EN — "how long will the project take", "project roadmap", "epic sequence", "feature dependencies", "when will we finish the initiative", "team % on a direction", "replan the project". Also UA — «послідовність епіків», «залежності фіч», «переплан проєкту». Rolling reforecast; horizon = beyond one quarter.
 ---
 
@@ -67,7 +67,7 @@ Trigger: quarter boundary / on-demand / scheduled.
 - R6. Update roadmap + risks; save the new baseline.
 
 ### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "project-planning", skill_version: "0.2.3", tags: [project/mission key, directions], content: project arc + forecast (or replan drift report), related: [[goal artifact]], [[quarterly roadmaps]], extra_frontmatter: { subtype: "project-arc", baseline_date, forecast_date } })` → "Saved to Vault: Roadmaps/{product}/…". The saved baseline is what `replan` mode compares drift against.
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "project-planning", skill_version: "0.2.4", tags: [project/mission key, directions], content: project arc + forecast (or replan drift report), related: [[goal artifact]], [[quarterly roadmaps]], extra_frontmatter: { subtype: "project-arc", baseline_date, forecast_date } })` → "Saved to Vault: Roadmaps/{product}/…". The saved baseline is what `replan` mode compares drift against.
 
 ## Integration
 ↔ `quarterly-planning` (down: arcs + allocation %; up: actuals + carryover → `replan`). ← `product-reporter` `initiative-status` (state / % done). ← `roadmap-architect` (structure). → `diagram-prototyper` (arc presentation). → `decision-log` (re-sequencing and scope calls made during `replan`).

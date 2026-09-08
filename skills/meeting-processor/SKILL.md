@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.13.4
+version: 0.13.5
 description: Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «action items», «розбери транскрипт зустрічі», «що обговорювали». EN — "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or any pasted/uploaded transcript. Sources — Fireflies, other meeting tools via MCP, files, pasted text. Chains to task-creator, requirements-creator, product-research, brainstorm-features and decision-log.
 ---
 
@@ -487,7 +487,7 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.13.4", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.13.5", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
 2. Key decisions from the meeting may additionally be recorded as ADR-style records — offer, don't force: "The meeting produced N decisions. Log them in the decision log so the 'why' survives?" → invoke `decision-log` (log mode) per decision, passing: what was decided, the context and options discussed, who decided, and a link back to these notes. decision-log owns the `decision` artifact; do not hand-write `Decisions/` files here.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 
