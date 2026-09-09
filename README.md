@@ -380,7 +380,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 19. Release Manager (v0.2.1) — NEW in v1.28.0
+### 19. Release Manager (v0.2.2) — NEW in v1.28.0
 
 **Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
 
@@ -504,7 +504,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Project Planning | v0.2.4 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.3.4 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.3.3 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
-| Release Manager | v0.2.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
+| Release Manager | v0.2.2 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 | Focus Advisor | v0.5.1 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.2.4 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.2.5 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
@@ -821,11 +821,12 @@ See the plugin's `references/` folder for the complete list of available materia
 
 ## Testing & Contributing
 
-Two validators gate every push and PR (`.github/workflows/validate.yml`), and they are the same hard gate the release runs:
+Two validators gate every push and PR (`.github/workflows/validate.yml`), and a third — the two-host smoke test — gates every release (it needs a logged-in Claude and an installed Codex, so it runs on the release machine, not in CI):
 
 ```bash
 bash testing/validate-consistency.sh   # 14 checks: versions, frontmatter, paths, components, hooks, cross-host packaging
-python3 testing/skill_lint.py          # 13 named checks
+python3 testing/skill_lint.py          # 18 named checks
+bash testing/host-smoke.sh             # loads the tree on Claude Code AND Codex CLI — release blocker, run locally
 ```
 
 Every check exists because the defect class it catches actually shipped, and each is verified by injecting that defect into a repo copy. `testing/trigger-evals.md` is run on **both** hosts before a description-touching release (`codex exec` and `claude -p --plugin-dir`, single-line prompts, scored on the host's real configuration); `testing/host-matrix.md` is the skill × host result. When you find a new defect class, **add a check — never a manual step** (see `testing/Testing-process.md`).

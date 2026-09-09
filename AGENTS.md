@@ -52,6 +52,6 @@ Measured, not assumed. Work with them rather than around them:
 
 ## Working in this repository
 
-- `bash testing/validate-consistency.sh` and `python3 testing/skill_lint.py` must both stay green. Run them before proposing a change as finished.
+- `bash testing/validate-consistency.sh` and `python3 testing/skill_lint.py` must both stay green. Run them before proposing a change as finished. Before a release, `bash testing/host-smoke.sh` must also pass — it loads the tree on Claude Code and Codex CLI and is the only check that catches a host-level regression.
 - Version numbers live in five files at once (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md`) and are bumped by the `release-manager` skill, never by hand.
 - Protocol content belongs in `references/`; a skill that starts explaining a protocol inline is drifting.

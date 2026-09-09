@@ -143,7 +143,13 @@ The case registry is `testing/test-cases.md`; updated EVERY release (new cases f
 
 Rule: heavy read/eval passes — by subagents (keep the main context clean); fix and bump decisions — main agent, with PM confirmation on risky ones.
 
+## Stage 1c — the two-host smoke (`testing/host-smoke.sh`)
+
+Static checks prove the tree is consistent; they cannot prove a host still loads it — v3.0.0's `git-subdir` source was valid JSON and Codex listed zero plugins. `host-smoke.sh` installs the working tree on both hosts and fails on the first regression: Claude Code must validate the manifest, load every skill on disk, run the SessionStart hook and state the current version; Codex CLI must list every skill plus every migrated command and carry `references/` and `.codex-plugin/plugin.json` in its cache. Its summary line is pasted into every release PR. Add a host here when the plugin starts supporting one.
+
 ## Version Definition of Done
+
+- `bash testing/host-smoke.sh` green on the release machine, summary line in the release PR (since v3.0.2).
 
 - Lint: 0 FAIL.
 - Seeded-leak test: 10/10 caught (and a new seed for every new check).
