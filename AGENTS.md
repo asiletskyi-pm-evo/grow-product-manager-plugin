@@ -53,5 +53,5 @@ Measured, not assumed. Work with them rather than around them:
 ## Working in this repository
 
 - `bash testing/validate-consistency.sh` and `python3 testing/skill_lint.py` must both stay green. Run them before proposing a change as finished.
-- Version numbers live in four places at once (`plugin.json`, `marketplace.json`, `README.md`, `CHANGELOG.md`) and are bumped by the `release-manager` skill, never by hand.
+- Version numbers live in five files at once (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md`) and are bumped by the `release-manager` skill, never by hand.
 - Protocol content belongs in `references/`; a skill that starts explaining a protocol inline is drifting.

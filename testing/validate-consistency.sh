@@ -32,6 +32,23 @@ FOOTER_COUNT=$(grep -cF "**Version:** $README_VER" README.md || true)
 grep -qF "v$PLUGIN_VER" .claude-plugin/plugin.json      || err "plugin.json description tail does not mention v$PLUGIN_VER"
 grep -qF "v$PLUGIN_VER" .claude-plugin/marketplace.json || err "marketplace.json description tail does not mention v$PLUGIN_VER"
 
+# Codex manifest (since v3.0.1): same version and description as plugin.json,
+# plus the interface block that draws the card — logo files must exist.
+if [ -f .codex-plugin/plugin.json ]; then
+  CODEX_VER=$(python3 -c 'import json;print(json.load(open(".codex-plugin/plugin.json"))["version"])' 2>/dev/null)
+  [ "$PLUGIN_VER" = "$CODEX_VER" ] || err "version mismatch: plugin.json=$PLUGIN_VER .codex-plugin/plugin.json=$CODEX_VER"
+  python3 - <<'PYEOF' || err ".codex-plugin/plugin.json: description differs from .claude-plugin/plugin.json or interface assets missing"
+import json,os,sys
+a=json.load(open(".claude-plugin/plugin.json")); c=json.load(open(".codex-plugin/plugin.json"))
+ok = a["description"]==c["description"] and c.get("skills")=="./skills/"
+i=c.get("interface",{})
+for k in ("logo","composerIcon"):
+    ok = ok and os.path.isfile(i.get(k,""))
+sys.exit(0 if ok else 1)
+PYEOF
+  ok "codex manifest: .codex-plugin/plugin.json in sync with plugin.json, logo assets present"
+fi
+
 # --- 2. SKILL.md frontmatter --------------------------------------------------
 for f in skills/*/SKILL.md; do
   head -6 "$f" | grep -q '^name: '        || err "$f: missing 'name:' in frontmatter"
@@ -250,7 +267,8 @@ N_SKILLS=$(ls -d skills/*/ | wc -l | tr -d ' ')
 N_AGENTS=$([ -d agents ] && ls agents/*.md 2>/dev/null | wc -l | tr -d ' ' || echo 0)
 N_COMMANDS=$([ -d commands ] && ls commands/*.md 2>/dev/null | wc -l | tr -d ' ' || echo 0)
 N_CONNECTORS=$([ -f .mcp.json ] && echo "$MCP_KEYS" | grep -c . || echo 0)
-for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json README.md; do
+for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json README.md; do
+  [ -f "$f" ] || continue
   grep -qF "$N_SKILLS skills"        "$f" || err "$f: does not state '$N_SKILLS skills' (actual count)"
   grep -qF "$N_AGENTS agents"        "$f" || err "$f: does not state '$N_AGENTS agents' (actual count)"
   grep -qF "$N_COMMANDS commands"    "$f" || err "$f: does not state '$N_COMMANDS commands' (actual count)"

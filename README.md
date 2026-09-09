@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" alt="Grow Product Manager" width="128"></p>
+
 # Grow Product Manager
 
 **Version:** 3.0.0
@@ -759,6 +761,8 @@ The plugin is defined against Claude Code / Cowork and degrades by **observed ca
 | Commands | ✅ 5, user-only | ✅ 5, migrated to typed-only skills | ❌ | ⚠️ |
 | Skill descriptions | full | shortened to fit one shared ≈15k-character budget (~190 chars each on a host with 80 skills) — descriptions are ordered for that cut | ? | ? |
 | Per-skill result | 29 full | 15 full / 14 degraded | 19 degraded / 10 n/a | 20 degraded / 9 n/a |
+
+**Codex card.** `.codex-plugin/plugin.json` carries the `interface` block Codex and ChatGPT render — display name, category, brand color and the logo in `assets/` (`logo.png` 512, `composer-icon.png` 128). Claude Code has no logo field, so it reads `.claude-plugin/` only; validator check 1 keeps the two manifests' version and description identical.
 
 **Codex — install and update.** Codex has no auto-update for marketplaces or plugins: the marketplace is a git snapshot and the plugin cache is keyed by version.
 
