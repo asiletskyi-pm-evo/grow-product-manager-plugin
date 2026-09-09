@@ -12,6 +12,27 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.0.1 (2026-09-09)
+
+**Plugin logo and the Codex card.** The plugin now has its own mark — a white "G" with a compass arrow on the Prom violet — and a `.codex-plugin/plugin.json` that Codex and ChatGPT render as the plugin card. Packaging only: no skill, protocol or command changed.
+
+### Added
+
+- **`assets/logo.png`** (512×512) and **`assets/composer-icon.png`** (128×128) — the chosen "G-compass" mark; the card rounds the tile itself, as with the bundled OpenAI plugins.
+- **`.codex-plugin/plugin.json`** — mirrors `.claude-plugin/plugin.json` (name, version, description, author) and adds `skills: "./skills/"` plus the `interface` block: `displayName`, `shortDescription`, `longDescription`, `developerName`, `category: Productivity`, `websiteURL`, `brandColor: #7B04DF`, `logo`, `composerIcon`. Verified on a fixture and on the pilot stand that the manifest keeps the 29 skills loading and the 5 commands migrating (34 entries, no duplicates).
+- README shows the logo and documents the card.
+
+### Changed
+
+- **`testing/validate-consistency.sh`** — check 1 keeps the two manifests' version and description identical and requires the logo files; check 10 counts components in the Codex manifest as well.
+- **`release-manager`** Step 3 — six mandatory bump places (the Codex manifest is 2a). `AGENTS.md` names the five version-bearing files.
+
+### Backwards compatibility
+
+Full. Claude Code has no logo field and ignores `.codex-plugin/` and `assets/` (headless load test on the branch: skills, commands and the SessionStart hook unchanged; `claude plugin validate` passes). On Codex the logo appears after the two-step manual update (`codex plugin marketplace upgrade …`, then `codex plugin add …`) because the plugin cache is keyed by version — the reason this is a release and not a silent change on `main`.
+
+---
+
 ## v3.0.0 (2026-09-08)
 
 **One plugin, three hosts — Claude Code / Cowork, Codex CLI and app, ChatGPT.** Codex reads the same `.claude-plugin/` manifests, loads all 29 skills under the same `grow-product-manager:` namespace and registers the same connectors, so nothing was forked. What changed is how the skills behave where a host lacks something: every skill now branches on **observed capabilities**, never on a host name. MAJOR because the marketplace `source` format changes, every `SKILL.md` and every command description changes, and the plugin now promises a defined behaviour on hosts it previously ignored. Measured on Codex CLI 0.153.2 and Claude Code 2.1.126 throughout (`Codex-Compat-Findings.md`, stages 0–5, in the design workspace).
