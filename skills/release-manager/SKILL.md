@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.2.2
+version: 0.2.3
 description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…», «bump версії плагіна». EN — "release the plugin", "prepare a release", "bump plugin version", "ship vX.Y.Z", "cut a release", "publish plugin release". Also UA — «випусти vX.Y.Z», «опублікуй реліз плагіна». Conversational "release the plugin" routes here; the user-typed /release command is a shortcut into the same skill.
 ---
 
@@ -52,6 +52,8 @@ Skill frontmatter versions are normally bumped in the feature PRs themselves; ve
 ### Step 4 — Validate (static + both hosts)
 1. `bash testing/validate-consistency.sh` and `python3 testing/skill_lint.py` locally. Any `FAIL:` → fix before proceeding. Never ship with a red validator — CI will reject the PR anyway.
 2. **`bash testing/host-smoke.sh`** (since v3.0.2) — loads the working tree on **both hosts** and fails if either breaks: Claude Code (`claude plugin validate .`, then a headless `claude -p --plugin-dir` run that must report every skill on disk, the SessionStart digest and this version) and Codex CLI (a throw-away marketplace install that must list every skill + every migrated command, carry `references/` and the Codex manifest in its cache). CI cannot run it (no host auth), so its final line — `✅ host-smoke passed (vX.Y.Z: Claude + Codex)` — goes verbatim into the release PR body. A red host-smoke is a release blocker exactly like a red validator; `SKIP_CLAUDE=1` / `SKIP_CODEX=1` only for a host that is not installed on the release machine, and say so in the PR.
+
+3. **Host claims carry a source.** Every sentence in README, CHANGELOG, `references/host-profiles.md` or `testing/host-matrix.md` that says what a host *does* (update cadence, filesystem, connectors, subagents) is either **measured** in this release (name the host version and the command) or **vendor-documented** (link the doc, issue or PR). A claim with neither is not shipped — rewrite it as "not verified" or drop it. Two wrong claims reached stakeholders in v3.0.0 because stage-0 assumptions ("Codex has no auto-update", "ChatGPT has no filesystem") were never re-checked against the vendor docs.
 
 ### Step 5 — Commit & push (terminal block, gated)
 Claude's sandbox has no user git credentials — generate one copy-paste terminal block and wait for the result:

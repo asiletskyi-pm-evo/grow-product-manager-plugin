@@ -24,7 +24,7 @@ Profiles are shorthand for a capability set. They are documentation, not a switc
 |---|---|---|---|---|---|---|
 | `claude-cowork` | ✅ | ✅ | ✅ | ✅ | ✅ | Reference host. Everything in the plugin is defined against it. |
 | `codex-cli` | ✅ | ✅ | ⚠️ | ✅ | ❌ | Codex spawns a subagent only on an explicit user request → treat SUBAGENT as absent unless the user asked for it. Plugin agents (`agents/*.md`) are not loaded; hooks are not loaded. The Codex **desktop app** is the same profile, except that it matches `.mcp.json` connectors by name like Claude does (the CLI does not — §7). |
-| `chatgpt` | ❌ | ❌ | ❌ | ✅ | ❌ | Skills and connectors only. The storage, vault and script contours are unavailable. |
+| `chatgpt` | ❌ | ❌ | ❌ | ✅ | ❌ | ChatGPT on **web / mobile**: skills and connectors only; the storage, vault and script contours are unavailable. The ChatGPT **desktop app with a Local Project** attaches local folders read/write (vendor doc) — observe FS as present and apply the `codex-cli` row. Not yet run with the plugin: derived, not measured. |
 | `codex-cloud` | ⚠️ | ✅ | ⚠️ | ? | ❌ | Its own sandbox filesystem — **not** the user's `~/.grow-pm/`. Treat FS as present but empty: never assume prior state, always write results back through a connector or the repo. |
 
 ## 3. Step 0-host — the host check
@@ -73,7 +73,12 @@ Never hardcode an absolute path, and never assume either variable expanded — a
 
 ## 7. Known host gaps (v3.0.0)
 
-Facts, measured — see `Codex-Compat-Findings.md` in the design workspace:
+Each item names its source — **measured** (this plugin's pilot, Codex CLI 0.153.2, September 2026; details in `Codex-Compat-Findings.md` in the design workspace) or **vendor** (a Codex/ChatGPT document or issue). A host limitation with neither source does not belong here, in README, or in a release note.
+
+- **Codex refreshes Git marketplaces only when it starts** — on plugin startup and on `codex plugin list` — and then refreshes the installed plugin cache; it does not check periodically while the app stays open. *Vendor:* openai/codex#17425, openai/codex#38401. After a release: restart Codex, or `codex plugin marketplace upgrade <name>` + `codex plugin add …`. *(An earlier note here said "no auto-update" — that was an app left open across a merge.)*
+- **ChatGPT on web / mobile has no filesystem; the ChatGPT desktop app's Local Projects attach local folders read/write.** *Vendor:* Projects docs. The plugin has not been run on either surface — the `chatgpt` profile is derived.
+
+Measured on Codex CLI:
 
 - **Codex shares one ~15,000-character budget across every listed skill's `description`** (measured: 80 skills → ~190 characters each; this plugin alone → ~530). The warning is literal: *"Skill descriptions were shortened to fit the skills context budget"*. Hence the description order enforced since v3.0.0: essence with the discriminating nouns and the guard against the nearest neighbour inside the first 190 characters, then Ukrainian keywords, then EN triggers, then chains. Migrated commands count against the same budget.
 - **Codex does not load `agents/*.md` or `hooks/hooks.json`** from a plugin (hooks: openai/codex#17331).

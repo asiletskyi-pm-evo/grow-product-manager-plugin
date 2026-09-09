@@ -10,7 +10,7 @@ AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figm
 
 ## Overview
 
-**New in v3.0.0** — **One plugin, three hosts: Claude Code / Cowork, Codex CLI and app, ChatGPT** (29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). Nothing was forked: Codex reads the same `.claude-plugin/` manifests, loads all 29 skills under the same `grow-product-manager:` namespace and registers the same connectors. What changed is how the skills *behave* where a host lacks something. `references/host-profiles.md` defines five observable capabilities — filesystem, shell, subagents, connectors, hooks — and every skill runs **Step 0-host** once, marks them present or absent from the session's own tool list (never from a brand name), and picks the matching mode: `storage_mode: local | connector | session`, sequential in-session checker passes instead of subagents, an in-skill confirmation instead of the write-gate hook. Measured on Codex, not assumed: Codex resolves a bare `references/<file>.md` against the skill's own folder, so every skill and command now opens with a **Path rule**; Codex shares one ≈15k-character budget across every listed skill's description (~190 characters each on a machine with 80 skills), so all 29 descriptions were rewritten with the essence and the neighbour guard inside the first 190 characters — trigger-evals 102/102 on both hosts; migrated commands are routable skills there, so each is guarded as *typed-only*. Packaging: `marketplace.json` `"source": "./"` (Codex ignores the object form; Claude rejects a bare `"."`), `AGENTS.md`, `.codex/agents/*.toml`, portable `${PLUGIN_ROOT}`. Validator checks 12–14 and `testing/host-matrix.md` keep all of it mechanical. Known Codex gaps are documented, not hidden: no plugin agents or hooks, empty-`url` connectors fail in the CLI (the app matches them by name), and updates are a two-command manual step — see **Hosts** below.
+**New in v3.0.0** — **One plugin, three hosts: Claude Code / Cowork, Codex CLI and app, ChatGPT** (29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). Nothing was forked: Codex reads the same `.claude-plugin/` manifests, loads all 29 skills under the same `grow-product-manager:` namespace and registers the same connectors. What changed is how the skills *behave* where a host lacks something. `references/host-profiles.md` defines five observable capabilities — filesystem, shell, subagents, connectors, hooks — and every skill runs **Step 0-host** once, marks them present or absent from the session's own tool list (never from a brand name), and picks the matching mode: `storage_mode: local | connector | session`, sequential in-session checker passes instead of subagents, an in-skill confirmation instead of the write-gate hook. Measured on Codex, not assumed: Codex resolves a bare `references/<file>.md` against the skill's own folder, so every skill and command now opens with a **Path rule**; Codex shares one ≈15k-character budget across every listed skill's description (~190 characters each on a machine with 80 skills), so all 29 descriptions were rewritten with the essence and the neighbour guard inside the first 190 characters — trigger-evals 102/102 on both hosts; migrated commands are routable skills there, so each is guarded as *typed-only*. Packaging: `marketplace.json` `"source": "./"` (Codex ignores the object form; Claude rejects a bare `"."`), `AGENTS.md`, `.codex/agents/*.toml`, portable `${PLUGIN_ROOT}`. Validator checks 12–14 and `testing/host-matrix.md` keep all of it mechanical. Known Codex gaps are documented, not hidden: no plugin agents or hooks, empty-`url` connectors fail in the CLI (the app matches them by name), and Codex picks up a new version only when it starts (restart the app, or run two commands) — see **Hosts** below.
 
 **New in v2.6.0** — **Host hooks: a context digest at session start and a human in the loop before writes** (29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). `hooks/hooks.json` registers two hooks. **SessionStart** (also after `/clear` and compaction) runs `scripts/session_start.py`: it finds `local-context.md` wherever this session can see it — including connected folders under `$HOME/mnt/*/` in hosted sessions, where the shell's home is a sandbox — and injects a `GROW_PM_SESSION` digest (path, versions, `user.language`, products, onboarding state, vault/CJM/team-language flags), so Step 0a of `local-context-protocol.md` becomes a lookup instead of a four-location search; `GROW_PM_CONTEXT_PATH` is exported for Bash. **PreToolUse** on `createJiraIssue` / `editJiraIssue` / `createConfluencePage` / `updateConfluencePage` runs `scripts/write_gate.py`, which answers `ask` for content-bearing writes — the host shows a three-point checklist (gate report in chat, explicit go-ahead, not a sandbox) and waits; metadata-only edits pass. A hook sees only the tool call, never the conversation, so this is deliberately a confirmation, not a judge; `/grow-product-manager:setup --write-gate off` turns it off. Both hooks fail open. Validator check 11 verifies the wiring (events, timeouts, scripts exist and are executable, scripts compile); component counts now include hooks. No skill changed.
 
@@ -380,7 +380,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 19. Release Manager (v0.2.2) — NEW in v1.28.0
+### 19. Release Manager (v0.2.3) — NEW in v1.28.0
 
 **Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
 
@@ -504,7 +504,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Project Planning | v0.2.4 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.3.4 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.3.3 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
-| Release Manager | v0.2.2 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
+| Release Manager | v0.2.3 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 | Focus Advisor | v0.5.1 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.2.4 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.2.5 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
@@ -755,7 +755,7 @@ The plugin is defined against Claude Code / Cowork and degrades by **observed ca
 |---|---|---|---|---|
 | Skills (29) | ✅ | ✅ same namespace | ✅ (expected) | ✅ (expected) |
 | Connectors | ✅ | ✅ URL-matched; name-matched ones (`gmail`, `google calendar`, `google drive`, `fireflies`) work in the **app**, fail at session start in the **CLI** | ✅ | ? |
-| Filesystem `~/.grow-pm/`, vault | ✅ | ✅ | ❌ → `storage_mode: session`, artifact exported at the end | own sandbox → via connector or the repo |
+| Filesystem `~/.grow-pm/`, vault | ✅ | ✅ | ❌ on web / mobile → `storage_mode: session`, artifact exported at the end; ✅ in the desktop app with a *Local Project* (attached folder, read/write) → behaves as the Codex column | own sandbox → via connector or the repo |
 | Subagents (checker, debater, extractor) | ✅ automatic | ⚠️ only on explicit request → sequential in-session passes (`.codex/agents/` for manual use) | ❌ | ⚠️ |
 | Hooks (context digest, write gate) | ✅ | ❌ ([openai/codex#17331](https://github.com/openai/codex/issues/17331)) → Step 0a in full, in-skill confirmation before writes | ❌ | ❌ |
 | Commands | ✅ 5, user-only | ✅ 5, migrated to typed-only skills | ❌ | ⚠️ |
@@ -764,21 +764,21 @@ The plugin is defined against Claude Code / Cowork and degrades by **observed ca
 
 **Codex card.** `.codex-plugin/plugin.json` carries the `interface` block Codex and ChatGPT render — display name, category, brand color and the logo in `assets/` (`logo.png` 512, `composer-icon.png` 128). Claude Code has no logo field, so it reads `.claude-plugin/` only; validator check 1 keeps the two manifests' version and description identical.
 
-**Codex — install and update.** Codex has no auto-update for marketplaces or plugins: the marketplace is a git snapshot and the plugin cache is keyed by version.
+**Codex — install and update.** Codex refreshes configured Git marketplaces **when it starts** (plugin startup and `codex plugin list`) and then refreshes the installed plugin cache — [openai/codex#17425](https://github.com/openai/codex/pull/17425); it does **not** check periodically while the app stays open — [openai/codex#38401](https://github.com/openai/codex/issues/38401). So a release reaches a running Codex only after a restart, or after the two commands below.
 
 ```
 codex plugin marketplace add asiletskyi-pm-evo/grow-product-manager-plugin
 codex plugin add grow-product-manager@grow-product-manager-plugins
 ```
 
-After every release:
+After every release, if Codex stayed open (otherwise the next start does this itself):
 
 ```
 codex plugin marketplace upgrade grow-product-manager-plugins
 codex plugin add grow-product-manager@grow-product-manager-plugins
 ```
 
-**ChatGPT** gets roughly half of the plugin — the artifact and research skills on connectors, with the artifact delivered in the chat and exported at the end; the storage-bound contours (Focus Board, experiment registry, the whole People contour, template and knowledge libraries) say so in one line and stop. **Codex Cloud** runs in its own sandbox: never assume prior state, always write results back through a connector or the repository.
+**ChatGPT on web / mobile** gets roughly half of the plugin — the artifact and research skills on connectors, with the artifact delivered in the chat and exported at the end; the storage-bound contours (Focus Board, experiment registry, the whole People contour, template and knowledge libraries) say so in one line and stop. **The ChatGPT desktop app with a *Local Project*** attaches local folders read/write ([Projects docs](https://www.codex-docs.com/en/docs/projects)) — Step 0-host then observes FS as present and the Codex column applies. Neither ChatGPT surface has been run with the plugin yet; the column is derived, not measured. **Codex Cloud** runs in its own sandbox: never assume prior state, always write results back through a connector or the repository.
 
 ---
 
