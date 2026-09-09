@@ -62,7 +62,7 @@ Full. Claude Code has no logo field and ignores `.codex-plugin/` and `assets/` (
 
 ### Known host gaps (documented, not hidden)
 
-Codex does not load `agents/*.md` or `hooks/hooks.json` (openai/codex#17331); Codex CLI fails empty-`url` connectors at session start (the app matches them by name); Codex has no auto-update — `codex plugin marketplace upgrade <name>` then `codex plugin add …` after each release; ChatGPT has no filesystem, shell or subagents — the storage-bound contours say so and stop.
+Codex does not load `agents/*.md` or `hooks/hooks.json` (openai/codex#17331); Codex CLI fails empty-`url` connectors at session start (the app matches them by name); Codex refreshes Git marketplaces only at startup (openai/codex#17425, #38401) — restart Codex after a release, or `codex plugin marketplace upgrade <name>` then `codex plugin add …`; ChatGPT on web / mobile has no filesystem, shell or subagents — the storage-bound contours say so and stop (the desktop app with a *Local Project* has a filesystem and behaves like Codex). *Corrected 2026-09-09: the original entry said "no auto-update" and "no filesystem" without qualification — both were assumptions, not measurements.*
 
 ### Files
 

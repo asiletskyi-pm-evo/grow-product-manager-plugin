@@ -6,7 +6,7 @@ Legend: **full** — as designed on the reference host · **degraded** — same 
 
 **claude-cowork** 29 full / 0 degraded / 0 n/a · **codex-cli** 15 full / 14 degraded / 0 n/a · **chatgpt** 0 full / 19 degraded / 10 n/a · **codex-cloud** 0 full / 20 degraded / 9 n/a
 
-Profiles: `claude-cowork` = Claude Code / Cowork (reference). `codex-cli` = Codex CLI and the Codex desktop app (the app additionally matches connectors by name). `chatgpt` = skills and connectors only, no filesystem, no shell, no subagents. `codex-cloud` = sandbox filesystem that is not the user's `~/.grow-pm/`.
+Profiles: `claude-cowork` = Claude Code / Cowork (reference). `codex-cli` = Codex CLI and the Codex desktop app (the app additionally matches connectors by name). `chatgpt` = ChatGPT on web / mobile — skills and connectors only, no filesystem, no shell, no subagents (derived, not measured); the ChatGPT desktop app with a *Local Project* attaches folders read/write — treat it as `codex-cli`. `codex-cloud` = sandbox filesystem that is not the user's `~/.grow-pm/`.
 
 | Skill | claude-cowork | codex-cli | chatgpt | codex-cloud | Degraded mode / reason |
 |---|---|---|---|---|---|
