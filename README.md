@@ -1,6 +1,8 @@
+<p align="center"><img src="assets/logo.png" alt="Grow Product Manager" width="128"></p>
+
 # Grow Product Manager
 
-**Version:** 3.0.0
+**Version:** 3.0.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
@@ -760,6 +762,8 @@ The plugin is defined against Claude Code / Cowork and degrades by **observed ca
 | Skill descriptions | full | shortened to fit one shared ≈15k-character budget (~190 chars each on a host with 80 skills) — descriptions are ordered for that cut | ? | ? |
 | Per-skill result | 29 full | 15 full / 14 degraded | 19 degraded / 10 n/a | 20 degraded / 9 n/a |
 
+**Codex card.** `.codex-plugin/plugin.json` carries the `interface` block Codex and ChatGPT render — display name, category, brand color and the logo in `assets/` (`logo.png` 512, `composer-icon.png` 128). Claude Code has no logo field, so it reads `.claude-plugin/` only; validator check 1 keeps the two manifests' version and description identical.
+
 **Codex — install and update.** Codex has no auto-update for marketplaces or plugins: the marketplace is a git snapshot and the plugin cache is keyed by version.
 
 ```
@@ -894,5 +898,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.0.0  
+**Version:** 3.0.1  
 **Last Updated:** September 2026

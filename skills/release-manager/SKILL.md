@@ -37,9 +37,10 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 2. Classify per the versioning table: wording/formatting → PATCH; new skill/step/section → MINOR; workflow restructure/breaking → MAJOR.
 3. Propose `vX.Y.Z` + draft scope summary. **Gate: user confirms version and scope.**
 
-### Step 3 — Apply the bump (the 5 mandatory places)
+### Step 3 — Apply the bump (the 6 mandatory places)
 1. `.claude-plugin/plugin.json` — `"version"` field + description tail `— vX.Y.Z (released YYYY-MM-DD)`.
 2. `.claude-plugin/marketplace.json` — plugin entry `"version"` + both description tails.
+2a. `.codex-plugin/plugin.json` (since v3.0.1) — `"version"` + the same description as plugin.json; validator check 1 compares them.
 3. `README.md` — header + footer `**Version:**`; if skills changed: section headers, Skills Summary rows, "New in vX.Y.Z" overview paragraph.
 4. `CHANGELOG.md` — prepend the entry (Added/Changed/Fixed, files table with skill version bumps, Backwards compatibility note). No editorial placeholders — write the final text directly (pitfall P3).
 5. **Component counts** (since v2.5.0) — the phrase `N skills, N agents, N commands, N connectors` in `plugin.json`, `marketplace.json` and README must equal what is on disk (`skills/*/`, `agents/*.md`, `commands/*.md`, `.mcp.json` keys). Validator check 10 fails the release otherwise. Adding an agent, a command or a connector is a MINOR bump.
