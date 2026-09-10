@@ -129,6 +129,7 @@ Sort descending: first by scope (product > user-global > built-in), then by tota
 
 - **Zero candidates** → walk the built-in ladder for `artifact_type`, first hit wins:
   1. `builtin://{artifact_type}/{subtype}-v1.md` — the requested subtype, when one was declared.
+     Example: `artifact_type: research`, `subtype: walkthrough` → `builtin://research/walkthrough-v1.md` (flow-walkthrough report, since v3.1.0).
   2. `builtin://{artifact_type}/default-v1.md` — the type's generic default.
   3. The type's **only** built-in, if it ships exactly one (e.g. `cjm/funnel-v1.md`).
   4. Nothing matched → warn the user and proceed template-free (the skill renders its own structure). This is a normal outcome, not an error.
