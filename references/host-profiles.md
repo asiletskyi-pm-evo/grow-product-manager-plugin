@@ -4,7 +4,7 @@
 >
 > **Rule of the file:** never branch on a brand name. Branch on an **observed capability**. A host that grows a capability tomorrow then works without a plugin change.
 
-## 1. The five capabilities that matter
+## 1. The six capabilities that matter
 
 | Capability | How to observe it | If absent |
 |---|---|---|
@@ -13,6 +13,7 @@
 | **SUBAGENT** — spawning an independent agent with a fresh context | an agent/task tool is present **and** the host spawns without asking the user each time | `subagent-delegation.md` → inline passes; `artifact-style-gate.md` → sequential lens passes |
 | **MCP** — connector tools in the session | tools matching `mcp__<id>__<tool>` are listed | `integration-strategy.md` Step 2 → Step 3 |
 | **HOOKS** — deterministic host-side gates | the SessionStart digest `GROW_PM_SESSION` is present in context | `local-context-protocol.md` Step 0a runs in full; write gate becomes an in-skill confirmation |
+| **APP-DRIVE** — a tool that can observe a running product and act on it | browser tools, app-scoped screenshot/click tools, full-screen control tools, or `adb`/`simctl` through SHELL — levels in `app-drive-protocol.md` §1 | `app-drive-protocol.md` §6 → user-driven variant (the user walks and pastes screenshots) |
 
 **Do not ask the user which host they are on.** Every row above is observable from the session itself.
 
@@ -20,19 +21,19 @@
 
 Profiles are shorthand for a capability set. They are documentation, not a switch.
 
-| Profile | FS | SHELL | SUBAGENT | MCP | HOOKS | Notes |
-|---|---|---|---|---|---|---|
-| `claude-cowork` | ✅ | ✅ | ✅ | ✅ | ✅ | Reference host. Everything in the plugin is defined against it. |
-| `codex-cli` | ✅ | ✅ | ⚠️ | ✅ | ❌ | Codex spawns a subagent only on an explicit user request → treat SUBAGENT as absent unless the user asked for it. Plugin agents (`agents/*.md`) are not loaded; hooks are not loaded. The Codex **desktop app** is the same profile, except that it matches `.mcp.json` connectors by name like Claude does (the CLI does not — §7). |
-| `chatgpt` | ❌ | ❌ | ❌ | ✅ | ❌ | ChatGPT on **web / mobile**: skills and connectors only; the storage, vault and script contours are unavailable. The ChatGPT **desktop app with a Local Project** attaches local folders read/write (vendor doc) — observe FS as present and apply the `codex-cli` row. Not yet run with the plugin: derived, not measured. |
-| `codex-cloud` | ⚠️ | ✅ | ⚠️ | ? | ❌ | Its own sandbox filesystem — **not** the user's `~/.grow-pm/`. Treat FS as present but empty: never assume prior state, always write results back through a connector or the repo. |
+| Profile | FS | SHELL | SUBAGENT | MCP | HOOKS | APP-DRIVE | Notes |
+|---|---|---|---|---|---|---|---|
+| `claude-cowork` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ web / desktop-background / foreground (measured 2026-09-10) | Reference host. Everything in the plugin is defined against it. |
+| `codex-cli` | ✅ | ✅ | ⚠️ | ✅ | ❌ | ⚠️ assumed | Codex spawns a subagent only on an explicit user request → treat SUBAGENT as absent unless the user asked for it. Plugin agents (`agents/*.md`) are not loaded; hooks are not loaded. The Codex **desktop app** is the same profile, except that it matches `.mcp.json` connectors by name like Claude does (the CLI does not — §7). |
+| `chatgpt` | ❌ | ❌ | ❌ | ✅ | ❌ | ⚠️ web only, assumed | ChatGPT on **web / mobile**: skills and connectors only; the storage, vault and script contours are unavailable. The ChatGPT **desktop app with a Local Project** attaches local folders read/write (vendor doc) — observe FS as present and apply the `codex-cli` row. Not yet run with the plugin: derived, not measured. |
+| `codex-cloud` | ⚠️ | ✅ | ⚠️ | ? | ❌ | ❌ | Its own sandbox filesystem — **not** the user's `~/.grow-pm/`. Treat FS as present but empty: never assume prior state, always write results back through a connector or the repo. |
 
 ## 3. Step 0-host — the host check
 
 Any skill that touches storage, subagents or scripts runs this before its first real step. It is three lines of reasoning, not a tool call:
 
 1. Look at the tool list actually available in this session.
-2. Mark the five capabilities from §1 as present / absent.
+2. Mark the six capabilities from §1 as present / absent.
 3. Carry that mark for the whole run — do not re-derive it per step.
 
 Then, and only then, resolve the contours that depend on it (storage mode, delegation mode, gate mode).
@@ -49,6 +50,7 @@ Then, and only then, resolve the contours that depend on it (storage mode, deleg
 | Fan-out reads | parallel `extractor` subagents | sequential batches inline | fewer sources, stated explicitly |
 | Deterministic scripts | `scripts/*.py` | the same logic as prose steps | — |
 | Write gate | PreToolUse hook (`ask`) | in-skill confirmation before the write step | — |
+| Product drive (`flow-walkthrough`) | best level per `app-drive-protocol.md` §1 | a lower level (foreground instead of background; sequential compare) | user-driven variant — the user walks, the agent logs |
 
 ## 5. Contours that have no meaningful degraded mode
 
@@ -77,6 +79,12 @@ Each item names its source — **measured** (this plugin's pilot, Codex CLI 0.15
 
 - **Codex refreshes Git marketplaces only when it starts** — on plugin startup and on `codex plugin list` — and then refreshes the installed plugin cache; it does not check periodically while the app stays open. *Vendor:* openai/codex#17425, openai/codex#38401. After a release: restart Codex, or `codex plugin marketplace upgrade <name>` + `codex plugin add …`. *(An earlier note here said "no auto-update" — that was an app left open across a merge.)*
 - **ChatGPT on web / mobile has no filesystem; the ChatGPT desktop app's Local Projects attach local folders read/write.** *Vendor:* Projects docs. The plugin has not been run on either surface — the `chatgpt` profile is derived.
+
+Measured on Claude Cowork (2026-09-10, this plugin's flow-walkthrough spike):
+
+- **Background window capture fails for iPhone apps running on a Mac** (apps installed from the Mac App Store on Apple Silicon) — they are driven at the `foreground` level only (`app-drive-protocol.md` §2).
+- **Transparent overlay windows of utilities block clicks** (a grammar checker's floating window did); quit them for the run.
+- **An App Store build can never run in the iOS Simulator** — it is a device binary; a simulator build from the mobile team is needed.
 
 Measured on Codex CLI:
 

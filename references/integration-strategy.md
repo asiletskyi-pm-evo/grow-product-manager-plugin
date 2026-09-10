@@ -93,6 +93,8 @@ If no MCP connector or server covers the needed functionality, use Claude in Chr
 - If the user needs to log in, ask them to do so first and then retry
 - Be mindful of rate limits on web applications
 
+**Driving the product itself** (walking a customer journey step by step, on web, desktop or a phone) is not an integration fallback — it is its own protocol: `references/app-drive-protocol.md`, owned by `flow-walkthrough`.
+
 ---
 
 ## Decision Flow Summary
