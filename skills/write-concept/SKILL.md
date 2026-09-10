@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.11.2
+version: 0.11.3
 description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ». A concept is the input to requirements-creator.
 ---
 
@@ -188,7 +188,7 @@ If the context does not make it clear which users are affected — ask separatel
   - What they gain from this feature
   - What they lose or what changes in their existing flow
 
-If the concept changes **existing UI**, offer an annotated screenshot of the current state per `references/visual-annotation-protocol.md` (numbered markers = numbered changes, legend table under the image, preview cycle with the user). It lands in the "What Changes for Users" block and later feeds requirements-creator Step 4.2. Skip gracefully if declined.
+If the concept changes **existing UI**, offer an annotated screenshot of the current state per `references/visual-annotation-protocol.md` (numbered markers = numbered changes, legend table under the image, preview cycle with the user). It lands in the "What Changes for Users" block and later feeds requirements-creator Step 4.2. Prefer `steps/NN.png` from a `flow-walkthrough` evidence pack when a run exists for this flow. Skip gracefully if declined.
 
 ### 4. Draft the PRD
 
@@ -300,7 +300,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.11.2",
+     skill_version: "0.11.3",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],

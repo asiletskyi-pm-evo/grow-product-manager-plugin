@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.13.2
+version: 0.13.3
 description: Write or review a requirements document with numbered functional requirements, incl. A/B test specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію», «опиши фічу як вимоги». EN — "write requirements", "create feature spec", "write A/B test requirements", "review / analyze / improve requirements", "check my spec". Also UA — «створи специфікацію фічі», «переглянь вимоги», «покращ вимоги». A concept from write-concept is the input; task-creator consumes the output.
 ---
 
@@ -254,7 +254,7 @@ If the user asked for technical recommendations, add them as a separate block at
 
 ### Step 4.2 — Requirements visualization (annotated screenshot)
 
-If the requirements change **existing UI**, offer an annotated screenshot per `references/visual-annotation-protocol.md`: obtain the current screen (user upload → Figma frame from Step 1c → live product via browser), place numbered markers where **marker № = functional requirement №**, preview with the user, store in the project repo (`{feature-code}-screen-{N}.png`), and put the image + legend table into the Functional requirements / UI&UX sections. Attach to the published page via the protocol's REST chain in Step 6. Never block on this — skip gracefully if declined or no source exists.
+If the requirements change **existing UI**, offer an annotated screenshot per `references/visual-annotation-protocol.md`: obtain the current screen (a `flow-walkthrough` pack's `steps/NN.png` if a run exists for this flow → user upload → Figma frame from Step 1c → live product via browser; no source and the UI is reachable → offer **Flow Walkthrough** in walk mode, 3–5 steps, to capture the as-is screens), place numbered markers where **marker № = functional requirement №**, preview with the user, store in the project repo (`{feature-code}-screen-{N}.png`), and put the image + legend table into the Functional requirements / UI&UX sections. Attach to the published page via the protocol's REST chain in Step 6. Never block on this — skip gracefully if declined or no source exists.
 
 ### Step 4.5 — Artifact quality gate
 
@@ -399,7 +399,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.13.2", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.13.3", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 

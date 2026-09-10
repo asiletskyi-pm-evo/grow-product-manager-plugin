@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.12.2
+version: 0.12.3
 description: Create Jira tasks from requirements (usually a Confluence page) — FE/BE/Android/iOS/Design/Analytics breakdown inside an Epic. Not writing the requirements (requirements-creator). UA — «створи задачі для фічі», «Jira-задачі з вимог у Confluence», «розбий фічу на задачі», «заведи задачі в Epic». EN — "create tasks from requirements", "create Jira issues from Confluence requirements", "break down a feature into development tasks", or a shared Confluence link with a request for Jira tasks.
 ---
 
@@ -294,7 +294,7 @@ Some fields may not be settable during creation. After creating each task, use `
 
 ### Step 8.5: Attach Annotated Screenshots
 
-If the source requirements carry annotated screenshots (created by `requirements-creator` Step 4.2), or the user asks to visualize the tasks: attach the relevant `{feature-code}-screen-{N}.png` to the **Design and FE tasks** (the ones with UI changes) via `references/visual-annotation-protocol.md` Step V-6 (REST chain → browser → manual placeholder), and put the legend table into the task description. Markers on the image = functional requirement numbers the task implements. Skip silently when there are none.
+If the source requirements carry annotated screenshots (created by `requirements-creator` Step 4.2), or the user asks to visualize the tasks: attach the relevant `{feature-code}-screen-{N}.png` to the **Design and FE tasks** (the ones with UI changes) via `references/visual-annotation-protocol.md` Step V-6 (REST chain → browser → manual placeholder), and put the legend table into the task description. Markers on the image = functional requirement numbers the task implements. Prefer `steps/NN.png` from a `flow-walkthrough` evidence pack when one exists for the feature's flow (already verified, already local). Skip silently when there are none.
 
 ### Step 9: Ask About Linking
 
@@ -423,7 +423,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.12.2", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.12.3", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode

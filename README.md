@@ -72,7 +72,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.7.4)
+### 1. CJM Research (v0.7.5)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -106,7 +106,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 3. Product Research (v0.10.4)
+### 3. Product Research (v0.10.5)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -135,7 +135,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 5. Write Concept (v0.11.2)
+### 5. Write Concept (v0.11.3)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -145,7 +145,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 6. Requirements Creator (v0.13.2)
+### 6. Requirements Creator (v0.13.3)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -159,7 +159,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 7. Task Creator (v0.12.2)
+### 7. Task Creator (v0.12.3)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -173,7 +173,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 8. Diagram & Prototype Creator (v0.10.1)
+### 8. Diagram & Prototype Creator (v0.10.2)
 
 **Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
 
@@ -486,14 +486,14 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.7.4 | Customer Journey Map analysis and hypothesis validation |
+| CJM Research | v0.7.5 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.12.3 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.10.4 | Competitive analysis, user research, market trends, UX benchmarking |
+| Product Research | v0.10.5 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.10.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
-| Write Concept | v0.11.2 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.13.2 | Create and analyze feature requirements |
-| Task Creator | v0.12.2 | Create Jira tasks from requirements |
-| Diagram & Prototype Creator | v0.10.1 | Visualize concepts with diagrams, prototypes, infographics |
+| Write Concept | v0.11.3 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.13.3 | Create and analyze feature requirements |
+| Task Creator | v0.12.3 | Create Jira tasks from requirements |
+| Diagram & Prototype Creator | v0.10.2 | Visualize concepts with diagrams, prototypes, infographics |
 | Meeting Processor | v0.13.5 | Process meetings and extract action items |
 | Plugin Configurator | v2.9.3 | Configure plugin for your organization |
 | Knowledge Library | v0.7.2 | Manage curated knowledge sources |

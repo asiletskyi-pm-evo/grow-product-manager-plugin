@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.10.4
+version: 0.10.5
 description: Competitive, market, user and UX-benchmark research — interview synthesis, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks". Also UA — «проаналізуй ринок», «конкурентний аналіз», «ринкові тренди». Calls knowledge-library for enrichment during research.
 ---
 
@@ -315,6 +315,7 @@ Apply the appropriate framework(s) based on research type. See `references/frame
 - Secondary source: web search for fresh benchmarks
 - Output format: benchmark matrix (practice, industry standard, our current state, gap, priority)
 - This type is commonly used by `cjm-research` during enrichment steps
+- **Hands-on benchmark:** chain to **Flow Walkthrough** (`flow-walkthrough`, `compare` mode — own product vs `product.competitors`, same scenario, same surface) and fold its `compare.yaml` into the benchmark matrix as the "our current state" and "competitor state" columns. Competitor runs are read-only (`references/app-drive-protocol.md` §5).
 
 > **Debate hook.** If the user asks for a debate / role discussion / red-team («проведи дебати», "have agents argue from different roles"), or a researched decision is contested and touches ≥ 2 interest groups — run `references/debate-protocol.md` on the structured findings: evidence pack E1…En = findings that passed the Source Validation Gate (Step 1.5), roles chosen with the user (Skeptic mandatory), parallel rounds → facilitator synthesis. The «Debates» section embeds in the published report (Step 4), and the verdict corrects ICE Confidence of any hypotheses derived from this research.
 
@@ -382,6 +383,7 @@ After sharing the research summary, **always** propose transitioning to the next
 
 If UX Benchmark Research was conducted, also offer:
 > "Run **CJM Research** to analyze your funnel using these benchmarks as evidence"
+> "Run **Flow Walkthrough** to compare this flow with [competitor] on [surface] hands-on"
 
 If the user agrees to Write Concept:
 - Pass the full research context to the Write Concept / PRD skill: Confluence page link, key findings, identified opportunities, data sources used
@@ -426,7 +428,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.10.4", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.10.5", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
    (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added.)
 2. Display: "Saved to Vault: Research/{product}/…"
 
