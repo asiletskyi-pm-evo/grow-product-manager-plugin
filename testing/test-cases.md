@@ -217,8 +217,8 @@ output evals) belongs in `trigger-evals.md` / `output-evals.md`, not here.
 
 ### v3.1.0 — flow-walkthrough (added 2026-09-10)
 
-- **TC-flow-walkthrough-lint-1** | skills/flow-walkthrough | frontmatter, path rule, Step T subtype `walkthrough` resolves to `research/walkthrough-v1.md`, vault type `walkthrough` in TYPE_FOLDER_MAP | expected: `skill_lint.py` 0 FAIL | status: run in the repo
-- **TC-flow-walkthrough-trigger-1..8** | flow-walkthrough | trigger-evals Group M (M1–M4 positive, M5–M8 neighbours) | expected: 8/8 | status: run at release
+- **TC-flow-walkthrough-lint-1** | skills/flow-walkthrough | frontmatter, path rule, Step T subtype `walkthrough` resolves to `research/walkthrough-v1.md`, vault type `walkthrough` in TYPE_FOLDER_MAP | expected: `skill_lint.py` 0 FAIL | **pass** (2026-09-10: skill_lint GREEN, validate-consistency green, seeded-leak 12/12, host-smoke: Claude lists 30 skills incl. flow-walkthrough, Codex 35 entries)
+- **TC-flow-walkthrough-trigger-1..8** | flow-walkthrough | trigger-evals Group M (M1–M4 positive, M5–M8 neighbours) | expected: 8/8 | **pass** (2026-09-10, Claude Code live, 8/8)
 - **TC-flow-walkthrough-scenario-1** | walk mode | `examples/marketplace-review-flow.md` as the scenario, iphone-on-mac, test account, default write boundary | expected: preflight table, overlay warning, `steps/00.png` read back, ≥ 8 steps in `steps.yaml`, verdict `blocked_at:N` with `write boundary`, `findings.md` lists the six expected frictions, report through `research-builtin-walkthrough` | status: manual, Claude Cowork
 - **TC-flow-walkthrough-scenario-2** | setup mode | android-adb on a machine without adb | expected: preflight row `missing`, the brew step proposed and NOT run before the user confirms, user-only rows handed over as numbered instructions | status: manual
 - **TC-flow-walkthrough-integration-1** | cjm-research → flow-walkthrough | anomaly on a stage, user asks to see it | expected: chain offered, source marker `walkthrough-local` in Sources | status: scenario read-through
