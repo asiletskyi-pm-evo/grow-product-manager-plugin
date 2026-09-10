@@ -12,6 +12,37 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.1.0 (2026-09-10)
+
+**Walk the flow in the real product.** New skill `flow-walkthrough` drives the product the way a customer does — a web app in a browser, a desktop app, an iPhone app installed from the Mac App Store on Apple Silicon, an Android phone or emulator over adb — one step at a time with a screenshot per step, friction graded per step, a local evidence pack (`~/.grow-pm/walkthroughs/`) and a `research/walkthrough` report. Four modes: `setup` (agent-guided readiness + install, user-only actions marked, smoke test), `walk`, `compare` (one scenario across surfaces or against competitors — read-only there), `audit`. MINOR: new skill, new shared protocol, new observed capability. Built on a measured spike (2026-09-10, Claude Cowork): a marketplace buyer app from the Mac App Store was walked end-to-end up to the publish step.
+
+### Added
+
+- **`references/app-drive-protocol.md`** — capability **APP-DRIVE** (levels `web` / `desktop-background` / `foreground` / `device` / `none`, measured vs assumed per host), driver table, preflight, step cycle (act → wait → screenshot → verify → log), safety (credentials user-only, write boundary, competitors read-only, screenshots local), degradation (user-driven variant), evidence-pack layout (`run.yaml`, `steps.yaml`, `steps/NN.png`, `findings.md`, `compare.yaml`).
+- **`skills/flow-walkthrough`** v0.1.0 with the reference example `examples/marketplace-review-flow.md` (12 expected steps, 6 expected frictions, driver facts).
+- **`scripts/walkthrough_preflight.sh`** — per-surface readiness table `SURFACE | STATUS | MISSING | WHO`, fail-open.
+- **`templates/built-in/research/walkthrough-v1.md`** (25 seed templates); vault type `walkthrough` → `Research/walkthroughs/` (35 types); storage folder `~/.grow-pm/walkthroughs/`.
+- `host-profiles.md`: sixth capability in §1 and the profile table, "Product drive" row in §4, three measured facts in §7 (background capture fails for iPhone apps on a Mac; overlay utilities block clicks; App Store builds never run in the Simulator). `integration-strategy.md` Step 3 points to the protocol. `template-protocol.md` shows the `research/walkthrough` built-in on the ladder.
+- Lint: `walkthrough-local`, `iphone-on-mac`, `android-adb`, `ios-simulator`, `desktop-background` join the non-skill vocabulary. Trigger-evals Group M; test-cases for the new skill.
+
+### Changed
+
+- `cjm-research` v0.7.5 — Step 3 "Walk the stage" via `flow-walkthrough`; source marker `walkthrough-local` in Step 3.5.e; chaining offer. `references/cjm-protocol.md` documents the marker as qualitative stage evidence.
+- `product-research` v0.10.5 — hands-on UX benchmark through `flow-walkthrough` compare mode (competitors read-only); post-research offer.
+- `requirements-creator` v0.13.3, `task-creator` v0.12.3, `write-concept` v0.11.3 — a walkthrough pack's `steps/NN.png` is screenshot source 0 (`visual-annotation-protocol.md` V-1); requirements-creator offers a short walk when no source exists.
+- `diagram-prototyper` v0.10.2 — `steps.yaml` is a valid flowchart input (node per step intent, friction as a red note, blocked step as a terminal node).
+- `vault-protocol.md` skill→types table gains `flow-walkthrough`; `requirements-creator` may read `walkthrough`.
+
+### Not in this version (next)
+
+iOS Simulator builds from the mobile team, iPhone Mirroring, installing an Android emulator with system images, video recording, automated accessibility audit; Codex and ChatGPT drive levels stay `assumed` until measured.
+
+### Backwards compatibility
+
+Full. No existing skill changes behaviour unless a walkthrough pack exists or the user asks for a walk; the write boundary defaults to "stop before any irreversible action".
+
+---
+
 ## v3.0.1 (2026-09-09)
 
 **Plugin logo and the Codex card.** The plugin now has its own mark — a white "G" with a compass arrow on the Prom violet — and a `.codex-plugin/plugin.json` that Codex and ChatGPT render as the plugin card. Packaging only: no skill, protocol or command changed.

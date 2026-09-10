@@ -182,6 +182,21 @@ Commands in `commands/` carry `disable-model-invocation: true`; the model must n
 | L8 | /grow-product-manager:status | `status` command (explicit invocation — the only way in) |
 | L9 | вимкни підтвердження перед записом у Confluence | conversation → point to `/grow-product-manager:setup --write-gate off` — NOT the `setup` command itself (added v2.6.0) |
 
+### Group M — Flow walkthrough vs neighbours (added 2026-09-10, v3.1.0)
+
+Collisions: flow-walkthrough vs design-bridge (Figma review) vs product-analysis (dashboards) vs cjm-research (pipeline) vs diagram-prototyper (annotate).
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| M1 | пройди шлях покупця у застосунку до створення відгуку | flow-walkthrough |
+| M2 | перевір зручність каталогу в реальному застосунку на iPhone | flow-walkthrough |
+| M3 | порівняй флоу оформлення замовлення на web і Android | flow-walkthrough |
+| M4 | налаштуй adb, щоб проходити флоу на телефоні | flow-walkthrough |
+| M5 | проаналізуй дашборд конверсії каталогу | product-analysis |
+| M6 | зроби дизайн-рев'ю макета каталогу у Figma | design-bridge |
+| M7 | анотуй цей скріншот номерами вимог | diagram-prototyper |
+| M8 | CJM-дослідження воронки з гіпотезами | cjm-research |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
