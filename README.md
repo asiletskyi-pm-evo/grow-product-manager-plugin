@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.1.0
+**Version:** 3.2.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.2.0** — **Test accounts by role and multi-role walkthrough legs** (30 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). A product's production **test accounts** are declared once in `local-context.md` (`#### Test Accounts`: label, role, surfaces, where access is obtained, sandbox flag — never a password or a one-time code) through a new plugin-configurator add-on (`add Test accounts`). A `flow-walkthrough` scenario can now be several **legs** played by different roles in sequence — the test buyer places an order, the test seller confirms and ships it, the buyer reviews — with **hand-off** values (order id, tracking) captured from screenshots and passed to the next leg; the user logs in before each leg. The **write boundary follows the account**: `stop-before-irreversible` on the user's own account, `sandbox-confirm` on a sandbox test account (irreversible actions inside the test contour are allowed, each confirmed in one line before the tap; "confirm all in this leg" switches to `sandbox-auto`), `read-only` on competitors — and two hard stops nothing lifts: real money and actions visible to real users. The pack gains `legs[]` in `run.yaml`, `leg`/`role` on every step, `steps/L<leg>-<NN>.png`; the report gets a leg summary table. Reference example: `examples/marketplace-order-to-review-flow.md` (three legs, four confirmations).
 
 **New in v3.1.0** — **Walk the flow in the real product** (30 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). New skill **`flow-walkthrough`** drives the product the way a customer does — a web app in a browser, a desktop app, an iPhone app installed from the **Mac App Store** on Apple Silicon, an Android phone or emulator over adb — one step at a time with a screenshot per step, friction graded per step (severity + Nielsen heuristic or CJM stage), a local evidence pack (`~/.grow-pm/walkthroughs/<run>/`: `run.yaml`, `steps.yaml`, `steps/NN.png`, `findings.md`) and a `research/walkthrough` report with a **flow strip** (marker = step number, via `visual-annotation-protocol.md`). Four modes: `setup` (agent-guided readiness table from `scripts/walkthrough_preflight.sh`, installs confirmed one by one, user-only actions marked, smoke test), `walk`, `compare` (one scenario across surfaces or against competitors — competitors are read-only), `audit`. New shared `references/app-drive-protocol.md` adds the sixth observed capability **APP-DRIVE** (levels `web` / `desktop-background` / `foreground` / `device`, **measured vs assumed per host**), a driver table, preflight (overlay utilities quit, machine-busy warning, write boundary restated, first screenshot read back), the step cycle (act → wait → screenshot → **verify** → log) and safety (credentials and one-time codes are user-only; stop before any irreversible production action by default; screenshots stay local). Measured on Claude Cowork: background window capture fails for iPhone apps on a Mac (foreground only), transparent overlay windows block clicks, App Store builds never run in the iOS Simulator. Consumers wired: `cjm-research` (source `walkthrough-local`), `product-research` (hands-on UX benchmark via compare), `requirements-creator` / `task-creator` / `write-concept` (walkthrough pack as screenshot source 0), `diagram-prototyper` (`steps.yaml` → flowchart). Next: iOS Simulator builds, iPhone Mirroring, Android emulator install, Codex/ChatGPT drive levels measured.
 
@@ -488,6 +490,8 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Description:** Walks a customer flow in the **real product** — web, desktop, an iPhone app on an Apple Silicon Mac (installed from the Mac App Store), Android via adb — step by step with a screenshot per step, friction graded per step, a local evidence pack and a `research/walkthrough` report with a flow strip. Modes: `setup` (readiness table + guided install + smoke test), `walk`, `compare` (surfaces or competitors, read-only there), `audit`. Everything about *how* to drive lives in `references/app-drive-protocol.md` (capability APP-DRIVE, driver table, preflight, step cycle, safety, degradation to a user-driven variant). Chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper; called by cjm-research, product-research and requirements-creator.
 
+**Legs (v3.2.0):** a scenario may run as several legs on declared test accounts (buyer → seller → buyer) with hand-off values between them and a write boundary resolved per account (`stop-before-irreversible` / `sandbox-confirm` / `sandbox-auto` / `read-only`); real money and actions visible to real users always stop.
+
 **Trigger phrases:** "пройди флоу", "пройди шлях покупця в застосунку", "перевір зручність … у застосунку", "порівняй флоу на iOS і web", "налаштуй емулятор/adb для проходу", "walk the flow", "compare the flow across platforms"
 
 ---
@@ -911,5 +915,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.1.0  
+**Version:** 3.2.0  
 **Last Updated:** September 2026

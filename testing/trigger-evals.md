@@ -197,6 +197,21 @@ Collisions: flow-walkthrough vs design-bridge (Figma review) vs product-analysis
 | M7 | анотуй цей скріншот номерами вимог | diagram-prototyper |
 | M8 | CJM-дослідження воронки з гіпотезами | cjm-research |
 
+### Group N — Multi-role legs and test accounts (added 2026-09-11, v3.2.0)
+
+Collisions: flow-walkthrough (legs) vs plugin-configurator (test accounts setup) vs task-creator / decision-log / one-on-one / requirements-creator.
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| N1 | пройди як покупець, потім як продавець: замовлення → відправка → відгук | flow-walkthrough |
+| N2 | прогони шлях покупця на тестовому акаунті з оформленням замовлення | flow-walkthrough |
+| N3 | додай тестові акаунти для продукту | plugin-configurator |
+| N4 | налаштуй тестові акаунти продавця і покупця | plugin-configurator |
+| N5 | створи задачі для фічі відгуків | task-creator |
+| N6 | зафіксуй рішення: тестові акаунти лише на проді | decision-log |
+| N7 | підготуй мене до 1-1 з продавцем | one-on-one |
+| N8 | перевір мою специфікацію тестових акаунтів | requirements-creator |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
