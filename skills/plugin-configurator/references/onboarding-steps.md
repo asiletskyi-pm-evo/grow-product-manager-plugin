@@ -820,3 +820,14 @@ Collected via `AskUserQuestion`/dialog, per product:
 2. **For each account** — label (unique), role, surfaces it can be used on, access description (a link to the team's test-accounts page is ideal), sandbox `yes|no` (is every action of this account confined to a test contour — test shop ↔ test buyer?).
 3. **Write** the `#### Test Accounts` table under the product; **existence check**: a table already there → offer review/update, never duplicate labels.
 4. **Say** the rule out loud once: "before each leg you log in as the named account yourself; under `sandbox-confirm` I ask before every irreversible action; real money and actions reaching real users always stop".
+
+## Step — Landscape setup (Extended, since v3.3.0)
+
+Configures `product-landscape` (format — `references/context-schema.md` → Landscape section). Mode-gate: Extended; in Basic — add `landscape` to `onboarding.deferred_steps`. Standalone triggers: "add Landscape", "set up the competitor map", "налаштуй карту конкурентів".
+
+Collected via `AskUserQuestion`/dialog:
+
+1. **Bookmarks consent** — may `scan` ask to read Chrome/Safari bookmarks each time (`ask`), or never (`never`)? Browser history is never read either way.
+2. **Category per product** — the store genre or a free tag (e.g. Shopping / marketplace) used to rank candidates.
+3. **Import competitors** — offer to register every entry of `product.competitors` in the landscape registry as a `direct-competitor` candidate (calls `product-landscape` `add` per entry; the user confirms the batch there). `product.competitors` stays as the seed.
+4. **Write** the `## Landscape` section; existence check → offer review/update.

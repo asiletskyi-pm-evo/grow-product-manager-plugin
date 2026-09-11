@@ -1,6 +1,6 @@
 ---
 name: flow-walkthrough
-version: 0.2.0
+version: 0.2.1
 description: Walk a customer flow in the REAL product — web, desktop, iPhone app on a Mac, Android via adb — screenshot per step, friction, evidence pack, report, emulator/adb setup. Not Figma review (design-bridge), not dashboards (product-analysis), not the CJM pipeline (cjm-research calls here). Multi-role legs on test accounts with sandbox-confirm (declaring the accounts is plugin-configurator). UA — «пройди флоу», «пройди шлях покупця в застосунку», «перевір зручність … у застосунку», «порівняй флоу на iOS і web», «налаштуй емулятор/adb для проходу». EN — "walk the flow", "walk through the app as a user", "test this journey in the real app", "compare the flow across platforms", "set up the emulator". Modes setup / walk / compare / audit; chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper.
 ---
 
@@ -68,11 +68,11 @@ Stop conditions: the write boundary (log `blocked_reason: write boundary`), a `b
 
 ## Step 4 — Compare (compare mode)
 
-Run Step 2–3 once per (product, surface); in parallel per `references/subagent-delegation.md` only when the surfaces do not share the screen (web tabs and adb can run alongside; two `foreground` runs cannot). Then `compare.yaml` (protocol §7): align steps by **intent**, not by index; a step present on one surface only is a finding.
+Run Step 2–3 once per (product, surface); in parallel per `references/subagent-delegation.md` only when the surfaces do not share the screen (web tabs and adb can run alongside; two `foreground` runs cannot). Then `compare.yaml` (protocol §7): align steps by **intent**, not by index; a step present on one surface only is a finding. Candidates for the product side of a compare come from the landscape registry (`{storage_root}/landscape/`, the record's `surfaces` decide what can be walked); every walked product is registered or updated through **Product Landscape** (`product-landscape` `add`/`update`, `status: auto`, `walkthroughs[]`).
 
 ## Step 5 — Audit (audit mode, or after walk/compare)
 
-Input: a pack (path or chat). For every friction: confirm severity against the screenshot, add the heuristic if missing, and write one recommendation. Rank by severity, then by how early in the flow it hits. With Lazyweb present: one `lazyweb_search` per major-or-worse friction (2–6 word pattern, platform mobile/desktop) and cite the reference in the recommendation. Output the findings section of the report.
+Input: a pack (path or chat). For every friction: confirm severity against the screenshot, add the heuristic if missing, and write one recommendation. Rank by severity, then by how early in the flow it hits. With Lazyweb present: one `lazyweb_search` per major-or-worse friction (2–6 word pattern, platform mobile/desktop) and cite the reference in the recommendation; a reference the user acts on registers that product in the landscape as `inspiration`. Output the findings section of the report.
 
 ## Step 6 — Report and flow strip
 
@@ -84,7 +84,7 @@ Render the report through Step T. Multi-leg runs put a **leg summary table** (le
 
 IF vault_level > L0 AND sync_mode != "off":
 
-1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.2.0", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
+1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.2.1", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
 2. Display: "Saved to Vault: Research/walkthroughs/{product}/…"
 
 ## Setup mode
@@ -101,9 +101,11 @@ IF vault_level > L0 AND sync_mode != "off":
 - → **CJM Research** — "Use this walkthrough as stage evidence for the funnel"
 - → **Diagram & Prototype Creator** — "Draw the flow from steps.yaml"
 - → **Decision Log** — "Log the decision on the blocker"
+- → **Product Landscape** — "Register this product / propose more products for the same flow"
 - ← `cjm-research` (walks a funnel stage as the enrichment source `walkthrough-local`)
 - ← `product-research` (UX benchmark: compare mode on competitors)
 - ← `requirements-creator` (needs an as-is screen and no screenshot source exists)
+- ← `product-landscape` (research mode picks the products and starts compare)
 
 ## Quality standards
 
