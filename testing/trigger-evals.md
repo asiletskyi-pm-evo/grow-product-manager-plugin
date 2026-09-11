@@ -212,6 +212,21 @@ Collisions: flow-walkthrough (legs) vs plugin-configurator (test accounts setup)
 | N7 | підготуй мене до 1-1 з продавцем | one-on-one |
 | N8 | перевір мою специфікацію тестових акаунтів | requirements-creator |
 
+### Group O — Product landscape vs neighbours (added 2026-09-11, v3.3.0)
+
+Collisions: product-landscape vs product-research (a single competitive report) vs knowledge-library (sources) vs flow-walkthrough (the walk) vs plugin-configurator (Landscape setup).
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| O1 | просканируй мої застосунки і скажи, які з них конкуренти | product-landscape |
+| O2 | хто конкуренти й дотичні у сфері онлайн-покупок | product-landscape |
+| O3 | додай продукт у реєстр конкурентів | product-landscape |
+| O4 | досліди однакове флоу оформлення замовлення на конкурентах | product-landscape |
+| O5 | досліди конкурентів для картки товару | product-research |
+| O6 | які джерела маємо по Q&A | knowledge-library |
+| O7 | пройди флоу відгуку в застосунку | flow-walkthrough |
+| O8 | налаштуй карту конкурентів | plugin-configurator |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |

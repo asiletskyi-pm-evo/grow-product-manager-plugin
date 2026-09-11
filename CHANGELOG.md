@@ -12,6 +12,33 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.3.0 (2026-09-11)
+
+**Product landscape — a registry of competitors, adjacent players and benchmarks, and six optional research connectors.** New skill `product-landscape` scans the user's machine, discovers products by category and market, categorises and characterises them with sources, maps the category, and starts the same-flow research across any number of products the user picks. MINOR: new skill, new storage folder, new vault type, new optional connectors.
+
+### Added
+
+- **`skills/product-landscape`** v0.1.0 — modes `scan` / `discover` / `add` / `update` / `characterize` / `map` / `research`; shared registry `~/.grow-pm/landscape/` (`registry.yaml`, `products/<slug>.md` with kind, category, markets, platforms, walkable surfaces, size signals, characterization, per-product role links, sources, status, `last_researched`, `walkthroughs[]`); candidates confirmed in batches of 10–15; research proposals ranked with **no cap**; any product the plugin touches is registered as `status: auto`; example `examples/shopping-category-scan.md`.
+- **`scripts/landscape_scan.sh`** — one JSON line per candidate: Mac apps, iPhone apps installed from the Mac App Store (`/Applications/*.app/Wrapper`), adb packages; Chrome/Safari bookmark domains only with `--bookmarks` (after a per-scan yes); never browser history.
+- **Six optional connectors** in `.mcp.json` — `lazyweb`, `similarweb`, `mobbin`, `semrush`, `tavily`, `apify` (URL-matched; the user's own accounts; no skill requires them); rows in `integration-strategy.md` 1a and a paragraph on when each matters (`tavily` for hosts without web search, `apify` for Google Play data).
+- `templates/built-in/research/landscape-v1.md` (26 seed templates); vault type `landscape` → `Research/landscape/` (36 types); storage folder `landscape/`.
+- plugin-configurator **Landscape setup** (Extended add-on, deferred id `landscape`): bookmarks consent, product category, import of `product.competitors` into the registry; schema section `## Landscape`.
+- Trigger-evals Group O; test cases for scan, discover, map, research and the no-registry regression; lint vocabulary for roles and source types.
+
+### Changed
+
+- `product-research` 0.10.6 — competitor list from the registry when it exists, new competitors registered as `auto`, post-study offer; `flow-walkthrough` 0.2.1 — compare candidates from the registry, walked products registered, acted-on references registered as `inspiration`; `cjm-research` 0.7.6 and `brainstorm-features` 0.10.3 — landscape offers, `landscape:<slug>` evidence; `plugin-configurator` 2.9.5; `local-context-protocol.md` documents `product.competitors` as the registry seed.
+
+### Not in this version (next)
+
+Periodic re-scans and change alerts, price monitoring, review-sentiment mining across stores, automatic app installs; competitor account creation — never.
+
+### Backwards compatibility
+
+Full. Without a registry every skill behaves as before (`product.competitors`); the six connectors are optional and unconnected by default.
+
+---
+
 ## v3.2.0 (2026-09-11)
 
 **Test accounts by role and multi-role walkthrough legs.** A product's production test accounts (test buyer, test seller companies, admin) are declared once — labels, roles, surfaces, where access is obtained, sandbox flag; never a secret — and a `flow-walkthrough` scenario can run as several **legs** played by different roles in sequence with hand-off values between them. The write boundary now follows the account instead of being one global rule. MINOR: new step in flow-walkthrough, new configurator add-on.

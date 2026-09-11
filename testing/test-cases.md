@@ -230,3 +230,11 @@ output evals) belongs in `trigger-evals.md` / `output-evals.md`, not here.
 - **TC-plugin-configurator-test-accounts-1** | Test accounts setup | `додай тестові акаунти` with two accounts, then a pasted password | expected: `#### Test Accounts` table written with labels/roles/surfaces/access/sandbox; the password is not written anywhere and the skill says so | **pass** (2026-09-11: table written for the reference product with three labelled accounts — buyer, two sellers — access as links only; trigger N3/N4 → plugin-configurator 2/2 after the description fix)
 - **TC-flow-walkthrough-regression-2** | walk mode, single leg, own account | the v3.1.0 review scenario | expected: identical behaviour to v3.1.0 (`leg: 1`, `stop-before-irreversible`, stop at Publish) | status: scenario read-through
 
+### v3.3.0 — product-landscape (added 2026-09-11)
+
+- **TC-product-landscape-scan-1** | scan mode | dev machine with iPhone apps from the Mac App Store; user says no to bookmarks | expected: `landscape_scan.sh` lines parse as JSON with bundle ids, App Store lookup fills genre/rating/seller, candidates ranked by category match, first batch of 10–15 presented, bookmarks not read | status: run at release
+- **TC-product-landscape-discover-1** | discover mode | product category + primary market | expected: App Store genre search candidates deduplicated against the registry, proposed roles, batches | status: run at release
+- **TC-product-landscape-map-1** | map mode | ≥ 3 confirmed records | expected: `research/landscape` artifact rendered from the built-in template, user's product highlighted, stale list | status: run at release
+- **TC-product-landscape-research-1** | research mode | registry with ≥ 5 records | expected: ranked list with reasons and no cap, the user picks or names products, unknown ones registered as `auto`, chains offered (flow-walkthrough compare / product-research / brainstorm-features) | status: scenario read-through
+- **TC-product-research-regression-3** | product-research | no landscape registry on disk | expected: competitor list from `product.competitors` exactly as in v3.2.0 | status: scenario read-through
+
