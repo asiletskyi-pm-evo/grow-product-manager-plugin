@@ -23,9 +23,15 @@ if [ "${SKIP_CLAUDE:-0}" != "1" ]; then
   "$CLAUDE" plugin validate . 2>&1 | grep -q "Validation passed" && ok "claude plugin validate ." || err "claude plugin validate . failed"
   if "$CLAUDE" auth status 2>/dev/null | grep -q '"loggedIn": true'; then
     TMP=$(mktemp -d); OUT=$(cd "$TMP" && "$CLAUDE" -p --plugin-dir "$ROOT" --no-session-persistence --max-turns 1 --output-format json \
-      "Diagnostic only, reply with exactly three lines and nothing else: SKILLS=<exact count of skills whose name starts with grow-product-manager:>; DIGEST=<yes|no — did a GROW_PM_SESSION block appear in your context>; VERSION=<the plugin version the digest states, or none>" </dev/null 2>/dev/null)
-    RES=$(printf '%s' "$OUT" | python3 -c 'import sys,json
-try: d=json.load(sys.stdin); print(d.get("result","").replace("\n"," ")); print("ERR="+str(d.get("is_error")))
+      "Diagnostic only, reply with nothing but these lines: one line per skill whose name starts with grow-product-manager: (the full name, one per line, no numbering); then DIGEST=<yes|no — did a GROW_PM_SESSION block appear in your context>; then VERSION=<the plugin version the digest states, or none>" </dev/null 2>/dev/null)
+    # Count the skill NAMES the model lists instead of trusting a self-reported number: the
+    # count-only prompt returned 29, 32 and 27 for the same 30 skills on three runs (v3.1.0–v3.2.0).
+    RES=$(printf '%s' "$OUT" | python3 -c 'import sys,json,re
+try:
+    d=json.load(sys.stdin); r=d.get("result","")
+    names=sorted(set(re.findall(r"grow-product-manager:[a-z0-9-]+", r)))
+    print("SKILLS=%d DIGEST=%s VERSION=%s" % (len(names), ("yes" if re.search(r"DIGEST=\s*yes", r) else "no"), (re.search(r"VERSION=\s*([0-9.]+|none)", r) or [None,"?"])[1]))
+    print("ERR="+str(d.get("is_error")))
 except Exception: print("ERR=parse")')
     echo "      $RES" | head -1
     printf '%s' "$RES" | grep -q "ERR=False" || err "claude -p reported an error"
