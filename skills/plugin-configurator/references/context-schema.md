@@ -75,6 +75,7 @@ Every key an onboarding step may append, and the step that writes it. A skill ch
 | `people` | People setup | People-contour (roster, cadences, HR form) |
 | `terminology` | Terminology & Style setup | Team glossary + style profile (lint_mode, style_preamble, extraction sources) |
 | `attachments-rest` | Attachments setup | Atlassian REST attachments (site, email, token env NAME) |
+| `test-accounts` | Test accounts setup | Test accounts per product (labels, roles, surfaces, access, sandbox) |
 
 > `okrs` and `competitors` were listed here until v2.1.0 but no step ever wrote them (both are collected inside Step 6, which has no defer path); `key-metrics`, `analytics-extended`, `tableau-mcp-required`, `planning`, `focus` and `people` were written but unlisted — for five sections the "is it deferred?" check could not be answered.
 
@@ -140,6 +141,28 @@ Every key an onboarding step may append, and the step that writes it. A skill ch
 | Field | Required | Used by | Description |
 |-------|----------|---------|-------------|
 | competitors | optional | Product Research, Brainstorm | List of main competitors with URLs |
+
+#### Test Accounts (per product, since v3.2.0)
+
+Labels and roles only — the plugin never stores passwords, tokens or one-time codes; the user logs in themselves before each walkthrough leg.
+
+| Field | Required | Used by | Description |
+|-------|----------|---------|-------------|
+| test_accounts[].label | yes | flow-walkthrough | Unique per product, e.g. `test-buyer-1` |
+| test_accounts[].role | yes | flow-walkthrough | Free text; suggested `buyer`, `seller`, `admin`, `support`, `courier` |
+| test_accounts[].surfaces | yes | flow-walkthrough | Subset of `web`, `desktop`, `iphone-on-mac`, `android-adb` |
+| test_accounts[].access | yes | flow-walkthrough | Where/how the user obtains access — a link to the team's test-accounts page or one sentence; never the secret itself |
+| test_accounts[].sandbox | yes | flow-walkthrough | `yes` = the account's actions stay inside a test contour (irreversible actions allowed under `sandbox-confirm`); `no` = treated like the user's own account (`stop-before-irreversible`) |
+
+Section format in `local-context.md`:
+
+```markdown
+#### Test Accounts
+| Label | Role | Surfaces | Access | Sandbox |
+|-------|------|----------|--------|---------|
+| test-buyer-1 | buyer | web, iphone-on-mac | team page "Test accounts" (link) — phone login, code by e-mail | yes |
+| test-seller-shop-a | seller | web | same page — company "Shop A" | yes |
+```
 
 #### Repositories (per product)
 

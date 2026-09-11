@@ -223,3 +223,10 @@ output evals) belongs in `trigger-evals.md` / `output-evals.md`, not here.
 - **TC-flow-walkthrough-scenario-2** | setup mode | android-adb on a machine without adb | expected: preflight row `missing`, the brew step proposed and NOT run before the user confirms, user-only rows handed over as numbered instructions | status: manual
 - **TC-flow-walkthrough-integration-1** | cjm-research → flow-walkthrough | anomaly on a stage, user asks to see it | expected: chain offered, source marker `walkthrough-local` in Sources | status: scenario read-through
 - **TC-flow-walkthrough-regression-1** | requirements-creator Step 4.2 | no walkthrough pack exists | expected: source chain unchanged from v3.0.1 (upload → Figma → browser), no error | status: scenario read-through
+
+### v3.2.0 — test accounts and legs (added 2026-09-11)
+
+- **TC-flow-walkthrough-scenario-3** | walk mode, 3 legs | `examples/marketplace-order-to-review-flow.md`, test buyer + test seller, sandbox-confirm | expected: leg summary in the report, four one-line confirmations (place order, confirm, ship, publish), `run.yaml.legs[]` with `order_id` and `tracking` hand-offs, screenshots `steps/L<leg>-<NN>.png`, worst-leg verdict; real-payment-only checkout → `blocked_reason: real money` | status: manual, needs the user's logins
+- **TC-plugin-configurator-test-accounts-1** | Test accounts setup | `додай тестові акаунти` with two accounts, then a pasted password | expected: `#### Test Accounts` table written with labels/roles/surfaces/access/sandbox; the password is not written anywhere and the skill says so | **pass** (2026-09-11: table written for the reference product with three labelled accounts — buyer, two sellers — access as links only; trigger N3/N4 → plugin-configurator 2/2 after the description fix)
+- **TC-flow-walkthrough-regression-2** | walk mode, single leg, own account | the v3.1.0 review scenario | expected: identical behaviour to v3.1.0 (`leg: 1`, `stop-before-irreversible`, stop at Publish) | status: scenario read-through
+

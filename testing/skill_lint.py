@@ -69,6 +69,8 @@ KNOWN_NON_SKILL_TOKENS = {
     "add-language", "add-template", "list-templates", "edit-template",
     # flow-walkthrough vocabulary (app-drive-protocol.md): source marker, surfaces, drive levels
     "walkthrough-local", "iphone-on-mac", "android-adb", "ios-simulator", "desktop-background",
+    # v3.2.0: configurator deferred step id + write-boundary values
+    "test-accounts", "stop-before-irreversible", "sandbox-confirm", "sandbox-auto", "read-only",
 }
 
 # ---------------------------------------------------------------- inventories

@@ -12,6 +12,33 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.2.0 (2026-09-11)
+
+**Test accounts by role and multi-role walkthrough legs.** A product's production test accounts (test buyer, test seller companies, admin) are declared once — labels, roles, surfaces, where access is obtained, sandbox flag; never a secret — and a `flow-walkthrough` scenario can run as several **legs** played by different roles in sequence with hand-off values between them. The write boundary now follows the account instead of being one global rule. MINOR: new step in flow-walkthrough, new configurator add-on.
+
+### Added
+
+- **`#### Test Accounts`** per product in `local-context.md` (`skills/plugin-configurator/references/context-schema.md`), deferred step id `test-accounts`, and the Extended add-on **Test accounts setup** in `onboarding-steps.md` with standalone triggers `add Test accounts` / `додай тестові акаунти`; the add-on refuses to write a pasted password or one-time code.
+- **Legs** in `flow-walkthrough` v0.2.0 — Step 1 collects `role`, `account`, `surface`, `goal`, `handoff_in/out` per leg; Step 2 asks the user to log in before each leg; Step 3 confirms every irreversible tap under `sandbox-confirm`, captures hand-off values from screenshots, and starts the next leg only when its inputs exist; Step 6 adds a leg summary table.
+- **Write-boundary policy** in `references/app-drive-protocol.md` §3 item 6: `stop-before-irreversible` (own), `sandbox-confirm` / `sandbox-auto` (sandbox test accounts in the user's own product), `read-only` (competitors); two hard stops under every boundary — real money, actions visible to real users. §7 pack layout: `legs[]` in `run.yaml`, `leg`/`role` on every step, `steps/L<leg>-<NN>.png`, `blocked_reason: user declined`.
+- `templates/built-in/research/walkthrough-v1.md` 1.1.0 — leg summary table and a `Leg / Role` column.
+- `skills/flow-walkthrough/examples/marketplace-order-to-review-flow.md` — the three-leg reference (test buyer orders → test seller confirms and ships → buyer reviews; four confirmations; real-payment-only checkout ends leg 1 with `blocked_reason: real money`).
+- Lint vocabulary: `test-accounts` and the four boundary values; trigger-evals Group N; test-cases for the 3-leg scenario, the configurator add-on and the single-leg regression.
+
+### Changed
+
+- `flow-walkthrough` 0.1.0 → 0.2.0, `plugin-configurator` 2.9.3 → 2.9.4; `local-context.example.md` shows the Test Accounts table with placeholder labels.
+
+### Not in this version (next)
+
+Parallel legs on two devices at once (legs are sequential; two surfaces may stay open), automatic account switching, storing any secret (never).
+
+### Backwards compatibility
+
+Full. A single-leg run is byte-for-byte the v3.1.0 behaviour (`leg: 1`, `stop-before-irreversible` on an own account); products without a Test Accounts table simply have no sandbox option.
+
+---
+
 ## v3.1.0 (2026-09-10)
 
 **Walk the flow in the real product.** New skill `flow-walkthrough` drives the product the way a customer does — a web app in a browser, a desktop app, an iPhone app installed from the Mac App Store on Apple Silicon, an Android phone or emulator over adb — one step at a time with a screenshot per step, friction graded per step, a local evidence pack (`~/.grow-pm/walkthroughs/`) and a `research/walkthrough` report. Four modes: `setup` (agent-guided readiness + install, user-only actions marked, smoke test), `walk`, `compare` (one scenario across surfaces or against competitors — read-only there), `audit`. MINOR: new skill, new shared protocol, new observed capability. Built on a measured spike (2026-09-10, Claude Cowork): a marketplace buyer app from the Mac App Store was walked end-to-end up to the publish step.
