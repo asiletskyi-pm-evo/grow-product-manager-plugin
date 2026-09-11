@@ -1,7 +1,7 @@
 ---
 name: flow-walkthrough
-version: 0.1.0
-description: Walk a customer flow in the REAL product — web, desktop, iPhone app on a Mac, Android via adb — screenshot per step, friction, evidence pack, report, emulator/adb setup. Not Figma review (design-bridge), not dashboards (product-analysis), not the CJM pipeline (cjm-research calls here). UA — «пройди флоу», «пройди шлях покупця в застосунку», «перевір зручність … у застосунку», «порівняй флоу на iOS і web», «налаштуй емулятор/adb для проходу». EN — "walk the flow", "walk through the app as a user", "test this journey in the real app", "compare the flow across platforms", "set up the emulator". Modes setup / walk / compare / audit; chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper.
+version: 0.2.0
+description: Walk a customer flow in the REAL product — web, desktop, iPhone app on a Mac, Android via adb — screenshot per step, friction, evidence pack, report, emulator/adb setup. Not Figma review (design-bridge), not dashboards (product-analysis), not the CJM pipeline (cjm-research calls here). Multi-role legs on test accounts with sandbox-confirm. UA — «пройди флоу», «пройди шлях покупця в застосунку», «перевір зручність … у застосунку», «порівняй флоу на iOS і web», «налаштуй емулятор/adb для проходу». EN — "walk the flow", "walk through the app as a user", "test this journey in the real app", "compare the flow across platforms", "set up the emulator". Modes setup / walk / compare / audit; chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper.
 ---
 
 # Flow Walkthrough
@@ -40,12 +40,14 @@ Scope for `walk` / `compare` — collect, then restate in one block before start
 1. **Product** — own (from local-context) or a competitor (`product.competitors`; anything else the user names is fine). Competitors are read-only, always.
 2. **Surface** — `web | desktop | iphone-on-mac | android-adb` (`ios-simulator` needs a build from the mobile team — v1.1).
 3. **Scenario** — one sentence, the customer's goal, e.g. "leave a review for a delivered order". Split a long journey into at most 12 steps; longer → two runs.
-4. **Account** — `test` preferred, `own` allowed, `anonymous` for browse-only. The user logs in themselves. The agent never types passwords, one-time codes or payment data.
-5. **Write boundary** — default *stop before any irreversible action* (publish, pay, send, delete, place an order). The user may lift it for this run, own product only. Restate it: "I will stop at the Publish button".
+4. **Legs** — one leg by default. Two roles in the request ("as buyer, then as seller"), or a goal that needs another role to progress, make it multi-leg. Per leg: `role`, `account` (a label from the product's `#### Test Accounts` table in `local-context.md`, or `own` / `anonymous`), `surface`, `goal` (one sentence), `handoff_in` (values this leg needs from the previous one) and `handoff_out` (values it must capture, e.g. the order id). No test account for a needed role → offer `add Test accounts` (plugin-configurator) or fall back to `own`. The user logs in themselves; the agent never types passwords, one-time codes or payment data.
+5. **Write boundary per leg** — resolved from the account per `references/app-drive-protocol.md` §3 item 6 (`stop-before-irreversible` / `sandbox-confirm` / `sandbox-auto` / `read-only`) and restated in one line per leg: "Leg 1 buyer (test-buyer-1, sandbox-confirm): I will place a real order in the test shop and ask before each irreversible tap". The two hard stops — real money, actions visible to real users — hold under every boundary.
 
 ## Step 2 — Preflight
 
-Run `scripts/walkthrough_preflight.sh` when SHELL is present and parse the `SURFACE | STATUS | MISSING | WHO` lines; without SHELL, ask the user the same questions (macOS? Apple Silicon? adb installed? phone attached?). Then `references/app-drive-protocol.md` §3 in full: target visible, overlay utilities quit (name them), machine-busy warning for `foreground`, account and boundary restated, `steps/00.png` saved **and read back**.
+Run `scripts/walkthrough_preflight.sh` when SHELL is present and parse the `SURFACE | STATUS | MISSING | WHO` lines; without SHELL, ask the user the same questions (macOS? Apple Silicon? adb installed? phone attached?). Then `references/app-drive-protocol.md` §3 in full: target visible, overlay utilities quit (name them), machine-busy warning for `foreground`, account and boundary restated, `steps/L<leg>-00.png` saved **and read back**.
+
+Per leg: the account label exists for the role; the surface is ready; ask the user to log in as that account and wait for "done"; on a surface shared with the previous leg, log the previous role out first.
 
 Create the pack folder `{storage_root}/walkthroughs/<YYYY-MM-DD>-<product-slug>-<flow-slug>/` with `steps/` inside (`references/persistent-storage.md`). No FS → keep the pack in the chat (`references/app-drive-protocol.md` §6).
 
@@ -57,6 +59,8 @@ Follow `references/app-drive-protocol.md` §4 for each step: intent → action �
 - `major` — finishes, but with an error, a wrong mental model, or a lost input
 - `minor` — extra taps, hidden entry points, unclear labels
 - `cosmetic` — alignment, wording, spacing
+
+**Legs and confirmations.** Screenshot names are `steps/L<leg>-<NN>.png`; every `steps.yaml` row carries `leg` and `role`. Under `sandbox-confirm`, before every irreversible tap (place order, confirm, ship, publish, send) the skill stops and asks in one line — "Leg 2 / seller: confirm order 123456 — proceed?" — and waits; "no" logs `blocked_reason: user declined` and ends the leg; "confirm all in this leg" switches that leg to `sandbox-auto`. The two hard stops (real money, actions visible to real users) are never asked, always stopped. **Hand-off:** after a leg's last step, read every `handoff_out` value from the screenshot (order id, tracking number), write it to `run.yaml → legs[n].handoff`, echo it to the user; the next leg starts only when all its `handoff_in` values exist — otherwise pause and ask.
 
 Each friction names a heuristic: Nielsen `N1`…`N10` (N1 visibility of status, N2 match with the real world, N3 user control, N4 consistency, N5 error prevention, N6 recognition over recall, N7 flexibility, N8 minimalism, N9 error recovery, N10 help) or a CJM stage id from `references/cjm-protocol.md`.
 
@@ -72,7 +76,7 @@ Input: a pack (path or chat). For every friction: confirm severity against the s
 
 ## Step 6 — Report and flow strip
 
-Render the report through Step T. **Flow strip**: annotate `steps/NN.png` per `references/visual-annotation-protocol.md` with marker number = step number, legend = the step table; preview with the user (V-4); store per V-5; attach per V-6 when publishing. Publish like product-research (Confluence space from `product.confluence_space`, or local). The Sources section names the pack ids and the account type; screenshots of an `own` account are not attached to shared pages unless the user says so.
+Render the report through Step T. Multi-leg runs put a **leg summary table** (leg, role, account label, surface, steps, verdict) before the step table, and the step table carries a `Leg / Role` column. **Flow strip**: annotate `steps/NN.png` per `references/visual-annotation-protocol.md` with marker number = step number, legend = the step table; preview with the user (V-4); store per V-5; attach per V-6 when publishing. Publish like product-research (Confluence space from `product.confluence_space`, or local). The Sources section names the pack ids and the account type; screenshots of an `own` account are not attached to shared pages unless the user says so.
 
 ## Step 7 — Save to Vault (optional)
 
@@ -80,7 +84,7 @@ Render the report through Step T. **Flow strip**: annotate `steps/NN.png` per `r
 
 IF vault_level > L0 AND sync_mode != "off":
 
-1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.1.0", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
+1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.2.0", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
 2. Display: "Saved to Vault: Research/walkthroughs/{product}/…"
 
 ## Setup mode
@@ -111,4 +115,4 @@ IF vault_level > L0 AND sync_mode != "off":
 
 ## Example
 
-`examples/marketplace-review-flow.md` — the reference walk (leave a review in a marketplace buyer app, iPhone app on a Mac): expected step list, expected frictions, and the driver facts it taught. Use it to dry-run `audit` and to sanity-check a new driver.
+`examples/marketplace-review-flow.md` — the single-leg reference walk (leave a review in a marketplace buyer app, iPhone app on a Mac): expected step list, expected frictions, and the driver facts it taught. `examples/marketplace-order-to-review-flow.md` — the three-leg reference (test buyer orders → test seller confirms and ships → buyer reviews) with hand-offs and sandbox confirmations. Use them to dry-run `audit` and to sanity-check a new driver.

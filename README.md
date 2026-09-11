@@ -484,7 +484,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 ---
 
-### 30. Flow Walkthrough (v0.1.0) — NEW in v3.1.0
+### 30. Flow Walkthrough (v0.2.0) — NEW in v3.1.0
 
 **Description:** Walks a customer flow in the **real product** — web, desktop, an iPhone app on an Apple Silicon Mac (installed from the Mac App Store), Android via adb — step by step with a screenshot per step, friction graded per step, a local evidence pack and a `research/walkthrough` report with a flow strip. Modes: `setup` (readiness table + guided install + smoke test), `walk`, `compare` (surfaces or competitors, read-only there), `audit`. Everything about *how* to drive lives in `references/app-drive-protocol.md` (capability APP-DRIVE, driver table, preflight, step cycle, safety, degradation to a user-driven variant). Chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper; called by cjm-research, product-research and requirements-creator.
 
@@ -504,7 +504,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Requirements Creator | v0.13.3 | Create and analyze feature requirements |
 | Task Creator | v0.12.3 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.10.2 | Visualize concepts with diagrams, prototypes, infographics |
-| Flow Walkthrough | v0.1.0 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
+| Flow Walkthrough | v0.2.0 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Meeting Processor | v0.13.5 | Process meetings and extract action items |
 | Plugin Configurator | v2.9.4 | Configure plugin for your organization |
 | Knowledge Library | v0.7.2 | Manage curated knowledge sources |
