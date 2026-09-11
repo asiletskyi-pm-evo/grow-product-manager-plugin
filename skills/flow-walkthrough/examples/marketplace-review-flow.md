@@ -34,3 +34,5 @@ Measured 2026-09-10 on Claude Cowork, driver level `foreground`, account `own`, 
 - a grammar-checker overlay blocked clicks until it was quit
 - wheel scroll and drag-swipe both work; typing without a focused field is lost
 - the batch tool's save-to-disk did not surface paths → save screenshots with `screencapture` and read them back
+- window-scoped `screencapture -x -l <window id>` works for these apps (2026-09-11): the pack holds only the app window, and the part hidden under the Dock is rendered
+- re-run through the skill (2026-09-11, 9 steps, verdict blocked_at:7): the six frictions reproduced; the "All" link in the reviews block did not respond to two taps that day

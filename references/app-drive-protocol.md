@@ -18,7 +18,7 @@ Every level carries a **measured / assumed** mark per host. Measured rows come f
 
 | Host (profile) | web | desktop-background | foreground | device | Source |
 |---|---|---|---|---|---|
-| `claude-cowork` | measured 2026-09-10 | measured 2026-09-10 (native Mac apps) | measured 2026-09-10 (iPhone app installed from the Mac App Store) | assumed (adb via SHELL) | this plugin's spike |
+| `claude-cowork` | measured 2026-09-10 | measured 2026-09-10 (native Mac apps) | measured 2026-09-10 and 2026-09-11 (iPhone app installed from the Mac App Store, 9-step run through the skill) | assumed (adb via SHELL) | this plugin's spike |
 | `codex-cli` / Codex app | assumed | assumed | assumed | assumed (adb via SHELL) | not yet run |
 | `chatgpt` | assumed (agent browser) | — | — | — | not yet run |
 
@@ -28,7 +28,7 @@ Every level carries a **measured / assumed** mark per host. Measured rows come f
 |---|---|---|---|---|
 | Web app | browser tools (`web`) | the tool's own screenshot, saved to the pack path; if the tool returns an image only, save it with the FS tool | click / form input / scroll / navigate back | login is the user's; cookie banners: decline non-essential |
 | Desktop app | app-scoped tools (`desktop-background`) | app screenshot tool with the window id | app click / app type / app scroll | menu-presenting controls may need the menu tool |
-| iPhone app on an Apple Silicon Mac (installed from the Mac App Store) | full-screen tools (`foreground`) | `screencapture -x <path>` via SHELL, or the tool's screenshot saved to disk; **re-read the file** to prove it exists | click; wheel scroll **and** drag-swipe both work; keyboard typing only after a click focused a field | background window capture **fails** for these apps; transparent overlay windows of utilities block clicks — quit them for the run; another app taking focus halts the run; typing into an unfocused field is lost silently |
+| iPhone app on an Apple Silicon Mac (installed from the Mac App Store) | full-screen tools (`foreground`) | **`screencapture -x -l <window id> <path>`** via SHELL (window id from the app's window list) — window-scoped, keeps the desktop out of the pack and renders the part hidden under the Dock (measured 2026-09-11); fallback `screencapture -x <path>` full display; **re-read the file** to prove it exists | click; wheel scroll **and** drag-swipe both work; keyboard typing only after a click focused a field | background window capture **fails** for these apps; transparent overlay windows of utilities block clicks — quit them for the run; another app taking focus halts the run; typing into an unfocused field is lost silently |
 | Android phone (USB debugging) or a running emulator | `adb` via SHELL (`device`) | `adb exec-out screencap -p > <path>` | `adb shell input tap X Y` / `input text` / `input swipe` / `input keyevent KEYCODE_BACK` | assumed until measured: coordinates are device pixels; the IME may swallow non-ASCII `input text` — prefer the clipboard or the on-screen keyboard for non-Latin text |
 
 Availability of an iPhone app on the Mac is a property of the app, not of the machine: the App Store page lists **Mac** under Compatibility when the developer allows it. Check the page before promising this route; the fallback is a simulator build from the mobile team (v1.1). An App Store build can never run in the iOS Simulator — it is a device binary.
@@ -54,7 +54,7 @@ For every step `n`:
 5. **Verify** — the screenshot shows the state the intent expected. Not verified → do **not** proceed: retry once with a different mechanism (drag instead of wheel, click then type), then log `blocked` with the reason.
 6. **Log** the `steps.yaml` row (§7). Friction goes in as it is seen, not at the end.
 
-Rules: a blocked step is a finding, not an error; an app that takes focus → pause, say so, resume only when the user says the machine is free; never fight for focus; never click through a system dialog you did not expect.
+Rules: a blocked step is a finding, not an error; an app that takes focus → pause, say so, resume only when the user says the machine is free; never fight for focus; never click through a system dialog you did not expect. A click refused because a notification banner sits on the point is transient — wait 3 s, screenshot, retry once. Switching to a tab may restore the app's previous navigation stack — screenshot before assuming the tab's root screen.
 
 ## 5. Safety
 
