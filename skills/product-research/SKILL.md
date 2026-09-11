@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.10.5
+version: 0.10.6
 description: Competitive, market, user and UX-benchmark research — interview synthesis, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks". Also UA — «проаналізуй ринок», «конкурентний аналіз», «ринкові тренди». Calls knowledge-library for enrichment during research.
 ---
 
@@ -31,7 +31,7 @@ Before gathering any data, also read and comply with `references/data-policy.md`
 
 Key context used by this skill:
 - `product.name`, `product.description`, `product.url` — for product context in research
-- `product.competitors` — pre-fill competitor list for competitive analysis, always include user's product in comparisons
+- `product.competitors` — pre-fill competitor list for competitive analysis, always include user's product in comparisons. Since v3.3.0: when the landscape registry exists (`{storage_root}/landscape/registry.yaml`), the list comes from its links for the active product (roles `direct-competitor`, `benchmark`) and `product.competitors` is only the seed; competitors discovered during research are registered through **Product Landscape** (`product-landscape` `add`, `status: auto`, source `websearch` / `appstore-api`).
 - `product.confluence_space` — default publishing destination
 - `organization.domain` — for understanding company context
 - `user.language` — for output language
@@ -383,6 +383,9 @@ After sharing the research summary, **always** propose transitioning to the next
 
 If UX Benchmark Research was conducted, also offer:
 > "Run **CJM Research** to analyze your funnel using these benchmarks as evidence"
+
+After a competitive study, also offer:
+> "Run **Product Landscape** to map this category and pick products for a hands-on comparison"
 > "Run **Flow Walkthrough** to compare this flow with [competitor] on [surface] hands-on"
 
 If the user agrees to Write Concept:
@@ -428,7 +431,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.10.5", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.10.6", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
    (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added.)
 2. Display: "Saved to Vault: Research/{product}/…"
 

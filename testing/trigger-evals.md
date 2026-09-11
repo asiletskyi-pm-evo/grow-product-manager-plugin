@@ -212,6 +212,21 @@ Collisions: flow-walkthrough (legs) vs plugin-configurator (test accounts setup)
 | N7 | підготуй мене до 1-1 з продавцем | one-on-one |
 | N8 | перевір мою специфікацію тестових акаунтів | requirements-creator |
 
+### Group O — Product landscape vs neighbours (added 2026-09-11, v3.3.0)
+
+Collisions: product-landscape vs product-research (a single competitive report) vs knowledge-library (sources) vs flow-walkthrough (the walk) vs plugin-configurator (Landscape setup).
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| O1 | просканируй мої застосунки і скажи, які з них конкуренти | product-landscape |
+| O2 | хто конкуренти й дотичні у сфері онлайн-покупок | product-landscape |
+| O3 | додай продукт у реєстр конкурентів | product-landscape |
+| O4 | досліди однакове флоу оформлення замовлення на конкурентах | product-landscape |
+| O5 | досліди конкурентів для картки товару | product-research |
+| O6 | які джерела маємо по Q&A | knowledge-library |
+| O7 | пройди флоу відгуку в застосунку | flow-walkthrough |
+| O8 | налаштуй карту конкурентів | plugin-configurator |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -224,6 +239,7 @@ Collisions: flow-walkthrough (legs) vs plugin-configurator (test accounts setup)
 | 2026-09-08 | **Claude Code 2.1.126, live** (`claude -p --plugin-dir <repo> --max-turns 1`, model claude-opus-4-7, 102 phrases, 4 shards) — replaces the earlier in-context simulation | A–K 100; L 8/9 → **effectively 100**: the one miss is L8 (`/grow-product-manager:status` → `none`), which is the correct Claude answer — a typed command with `disable-model-invocation` is executed by the host, not routed by the model, so "none" is what routing should say (in Codex the migrated command is a skill and `source-command-status` was correct there). J6 → write-concept. | None. Both hosts route the whole set on the v3.0.0 descriptions. |
 | 2026-09-10 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, one run of the 8 Group M phrases), pre-release v3.1.0 | M 100 (8/8) | None. New Group M routes cleanly on first run: M1–M4 → flow-walkthrough (walk, real app on iPhone, cross-platform compare, adb setup); neighbours held — M5 → product-analysis, M6 → design-bridge, M7 → diagram-prototyper, M8 → cjm-research. Codex not re-run this version (drive levels there are `assumed`, see host-matrix). |
 | 2026-09-11 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, Group N, 8 phrases), pre-release v3.2.0 | N 7/8 → **8/8** after one description fix | N4 «налаштуй тестові акаунти продавця і покупця» → flow-walkthrough on run 1 (its description mentioned test accounts, the configurator's did not name them). Fix: «додай/налаштуй тестові акаунти» added to plugin-configurator's UA keywords and a guard «declaring the accounts is plugin-configurator» to flow-walkthrough; re-run N1–N4 → 4/4. Also: host-smoke now counts the skill names the model lists (self-reported counts were 29/32/27 for 30 skills). |
+| 2026-09-11 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, Group O, 8 phrases), pre-release v3.3.0 | O 7/8 → **8/8** after one fix | O8 «налаштуй карту конкурентів» → product-landscape on run 1 (its description opened with «карта конкурентів»). Fix: guard «setup of consent and category is plugin-configurator» in the description and a hand-over line in Step 1; re-run O1–O4 + O8 → 5/5. |
 | (fill after each run) | | | |
 
 ## Maintenance

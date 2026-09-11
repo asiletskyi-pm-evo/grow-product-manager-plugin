@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.2.0
+**Version:** 3.3.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.3.0** — **Product landscape: a registry of competitors, adjacent players and benchmarks, and six optional research connectors** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks). New skill **`product-landscape`** keeps one shared registry (`~/.grow-pm/landscape/`: `registry.yaml`, `products/<slug>.md`, `scans/`, `maps/`) with what every product is — kind, category, markets, platforms, **walkable surfaces** (web URL, App Store id and Mac availability, Android package), size signals, characterization — and a **role per user product** (`direct-competitor` / `adjacent` / `benchmark` / `inspiration`); `product.competitors` becomes the seed the registry imports. Modes: `scan` (`scripts/landscape_scan.sh` lists Mac apps, iPhone apps installed from the Mac App Store and adb packages; App Store lookup fills genre, rating and seller; Chrome/Safari bookmarks only after a per-scan "yes", never history), `discover` (App Store search by genre and market, Play pages, web search, and Similarweb / Semrush / Lazyweb / Mobbin / Apify when connected), `add` / `update` / `characterize`, `map` (the `research/landscape` artifact), and `research` — a ranked candidate list with **no cap**, the user picks any subset or names other products, then the same flow runs across them through `flow-walkthrough` compare (competitors read-only), `product-research` and `brainstorm-features` with `landscape:<slug>` evidence. Any product the plugin touches is registered as `status: auto`. Six **optional** connectors are declared in `.mcp.json` — `lazyweb`, `similarweb`, `mobbin`, `semrush`, `tavily`, `apify` — each the user's own account, none required. plugin-configurator gains **Landscape setup** (bookmarks consent, product category, competitors import).
 
 **New in v3.2.0** — **Test accounts by role and multi-role walkthrough legs** (30 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). A product's production **test accounts** are declared once in `local-context.md` (`#### Test Accounts`: label, role, surfaces, where access is obtained, sandbox flag — never a password or a one-time code) through a new plugin-configurator add-on (`add Test accounts`). A `flow-walkthrough` scenario can now be several **legs** played by different roles in sequence — the test buyer places an order, the test seller confirms and ships it, the buyer reviews — with **hand-off** values (order id, tracking) captured from screenshots and passed to the next leg; the user logs in before each leg. The **write boundary follows the account**: `stop-before-irreversible` on the user's own account, `sandbox-confirm` on a sandbox test account (irreversible actions inside the test contour are allowed, each confirmed in one line before the tap; "confirm all in this leg" switches to `sandbox-auto`), `read-only` on competitors — and two hard stops nothing lifts: real money and actions visible to real users. The pack gains `legs[]` in `run.yaml`, `leg`/`role` on every step, `steps/L<leg>-<NN>.png`; the report gets a leg summary table. Reference example: `examples/marketplace-order-to-review-flow.md` (three legs, four confirmations).
 
@@ -76,7 +78,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.7.5)
+### 1. CJM Research (v0.7.6)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -110,7 +112,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 3. Product Research (v0.10.5)
+### 3. Product Research (v0.10.6)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -124,7 +126,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 4. Brainstorm Features (v0.10.2)
+### 4. Brainstorm Features (v0.10.3)
 
 **Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation. Hosts Debate mode — a role-based adversarial discussion over an evidence pack (`references/debate-protocol.md`).
 
@@ -242,7 +244,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 10. Plugin Configurator (v2.9.4)
+### 10. Plugin Configurator (v2.9.5)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -486,7 +488,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 ---
 
-### 30. Flow Walkthrough (v0.2.0) — NEW in v3.1.0
+### 30. Flow Walkthrough (v0.2.1) — NEW in v3.1.0
 
 **Description:** Walks a customer flow in the **real product** — web, desktop, an iPhone app on an Apple Silicon Mac (installed from the Mac App Store), Android via adb — step by step with a screenshot per step, friction graded per step, a local evidence pack and a `research/walkthrough` report with a flow strip. Modes: `setup` (readiness table + guided install + smoke test), `walk`, `compare` (surfaces or competitors, read-only there), `audit`. Everything about *how* to drive lives in `references/app-drive-protocol.md` (capability APP-DRIVE, driver table, preflight, step cycle, safety, degradation to a user-driven variant). Chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper; called by cjm-research, product-research and requirements-creator.
 
@@ -496,21 +498,30 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 ---
 
+### 31. Product Landscape (v0.1.0) — NEW in v3.3.0
+
+**Description:** Registry and map of the products around yours — competitors, adjacent players, benchmarks, inspiration. `scan` lists what is installed on the Mac (including iPhone apps from the Mac App Store) and on an adb device and fills genre, rating and seller from the App Store; `discover` finds more by category and market through stores, web search and the optional connectors; `characterize` describes a product with sources; `map` renders the category map (`research/landscape`); `research` proposes a ranked list of products (no cap — you pick or name others) and starts the same flow on them through flow-walkthrough compare, product-research and brainstorm-features. Roles are per product of yours; bookmarks are read only with a per-scan yes; competitors stay read-only.
+
+**Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
+
+---
+
 ## Skills Summary
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.7.5 | Customer Journey Map analysis and hypothesis validation |
+| CJM Research | v0.7.6 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.12.3 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.10.5 | Competitive analysis, user research, market trends, UX benchmarking |
-| Brainstorm Features | v0.10.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
+| Product Research | v0.10.6 | Competitive analysis, user research, market trends, UX benchmarking |
+| Brainstorm Features | v0.10.3 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
 | Write Concept | v0.11.3 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.13.3 | Create and analyze feature requirements |
 | Task Creator | v0.12.3 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.10.2 | Visualize concepts with diagrams, prototypes, infographics |
-| Flow Walkthrough | v0.2.0 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
+| Flow Walkthrough | v0.2.1 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
+| Product Landscape | v0.1.0 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.13.5 | Process meetings and extract action items |
-| Plugin Configurator | v2.9.4 | Configure plugin for your organization |
+| Plugin Configurator | v2.9.5 | Configure plugin for your organization |
 | Knowledge Library | v0.7.2 | Manage curated knowledge sources |
 | Template Library | v0.2.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.4.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
@@ -648,7 +659,7 @@ variables: [feature_name, problem_statement, ...]
 
 ### Built-in templates (shipped in v1.9.0–v3.1.0)
 
-25 seed templates; localize via additional `<!-- lang:xx -->` blocks:
+26 seed templates; localize via additional `<!-- lang:xx -->` blocks:
 
 - `concept/default-v1` — PRD skeleton
 - `requirements/default-v1` — general feature requirements
@@ -656,6 +667,7 @@ variables: [feature_name, problem_statement, ...]
 - `research/competitive-v1` — competitive analysis + SWOT
 - `research/user-research-v1` — user research synthesis
 - `research/walkthrough-v1` — flow walkthrough report: step table, flow strip, friction, comparison (**new in v3.1.0**)
+- `research/landscape-v1` — product landscape map: product table, us vs them, gaps, candidates for research (**new in v3.3.0**)
 - `cjm/funnel-v1` — CJM funnel analysis with ICE table
 - `epic/default-v1` — Jira epic description
 - `task/default-v1` — Jira task with DoD and AC
@@ -731,7 +743,7 @@ All design deliverables pass WCAG 2.1 AA QA before publish (see `skills/design-b
 
 Besides skills, the plugin ships four kinds of host-level components. They are declared in files the host parses, not described in prose — which is the point: the host enforces them.
 
-**Connectors — `.mcp.json` (6).** The connectors the skills rely on: `atlassian`, `figma` (matched to your existing connection by URL), `gmail`, `google calendar`, `google drive`, `fireflies` (matched by name). Open the plugin → **Connectors** to see which are connected; a skill never searches the registry for a declared connector, it tells you which tab to connect it in. **Tableau is not declared** — it is a local MCP server you run yourself (see the Setup Guide); the skills detect it by pattern. The mapping key → connector → tool namespace lives in `references/integration-strategy.md` → *Declared connectors*.
+**Connectors — `.mcp.json` (12).** The connectors the skills rely on: `atlassian`, `figma` (matched to your existing connection by URL), `gmail`, `google calendar`, `google drive`, `fireflies` (matched by name). Open the plugin → **Connectors** to see which are connected; a skill never searches the registry for a declared connector, it tells you which tab to connect it in. **Tableau is not declared** — it is a local MCP server you run yourself (see the Setup Guide); the skills detect it by pattern. The mapping key → connector → tool namespace lives in `references/integration-strategy.md` → *Declared connectors*. Since v3.3.0 six **optional** research connectors are declared as well — `lazyweb`, `similarweb`, `mobbin`, `semrush`, `tavily`, `apify` — used by `product-landscape` and `flow-walkthrough` when present, never required; each is your own account.
 
 **Agents — `agents/` (3).** Named subagents with an enforced tool set:
 
@@ -915,5 +927,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.2.0  
+**Version:** 3.3.0  
 **Last Updated:** September 2026

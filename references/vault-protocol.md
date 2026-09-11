@@ -144,6 +144,7 @@ Defines which artifact types are relevant to each skill. `local-context-protocol
 | brainstorm-features | cjm-analysis, competitive-analysis, ab-test-results, ux-benchmark, decision, debate |
 | requirements-creator | concept, hypothesis, competitive-analysis, decision, ab-test-results, walkthrough |
 | flow-walkthrough | walkthrough, ux-benchmark, cjm-analysis, requirements |
+| product-landscape | landscape, competitive-analysis, ux-benchmark, walkthrough |
 | meeting-processor | meeting-notes, decision, concept, requirements |
 | product-research | competitive-analysis, market-research, ux-benchmark, knowledge-source |
 | knowledge-library | knowledge-source |
