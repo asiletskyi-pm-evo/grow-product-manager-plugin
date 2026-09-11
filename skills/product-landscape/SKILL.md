@@ -1,7 +1,7 @@
 ---
 name: product-landscape
 version: 0.1.0
-description: Registry and map of competitor, adjacent and benchmark products — scan installed apps, discover by category and market, categorise, characterise, start same-flow research across products. Not a single competitive report (product-research), not a source library (knowledge-library), not the walk itself (flow-walkthrough). UA — «карта конкурентів», «реєстр продуктів», «просканируй мої застосунки», «хто конкуренти й дотичні у сфері …», «додай продукт у реєстр», «досліди однакове флоу на конкурентах». EN — "competitor map", "product registry", "scan my apps", "who are the competitors and adjacent players", "add product to the registry", "research the same flow across products". Modes scan / discover / add / update / characterize / map / research; chains to flow-walkthrough, product-research, brainstorm-features.
+description: Registry and map of competitor, adjacent and benchmark products — scan installed apps, discover by category and market, categorise, characterise, start same-flow research across products. Not a single competitive report (product-research), not a source library (knowledge-library), not the walk itself (flow-walkthrough); setup of consent and category is plugin-configurator. UA — «карта конкурентів», «реєстр продуктів», «просканируй мої застосунки», «хто конкуренти й дотичні у сфері …», «додай продукт у реєстр», «досліди однакове флоу на конкурентах». EN — "competitor map", "product registry", "scan my apps", "who are the competitors and adjacent players", "add product to the registry", "research the same flow across products". Modes scan / discover / add / update / characterize / map / research; chains to flow-walkthrough, product-research, brainstorm-features.
 ---
 
 # Product Landscape
@@ -80,6 +80,8 @@ For `map`: `artifact_type: research`, `subtype: landscape`, built-in fallback `b
 | `add` / `update` / `characterize` | "add X to the registry", "characterize X", "set X as adjacent to <product>" | one record written or updated |
 | `map` | "competitor map for category …", "show the registry" | the `research/landscape` artifact |
 | `research` | "research the same flow on competitors", "find ideas at competitors for …", or an accepted offer from another skill | ranked candidate list → the user picks → chained runs |
+
+A request phrased as setup — "set up the competitor map", "налаштуй карту конкурентів", consent or category questions — is **Landscape setup** in `plugin-configurator`: hand over there instead of starting a scan.
 
 ## Step 2 — Sources present
 
