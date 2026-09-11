@@ -240,7 +240,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 10. Plugin Configurator (v2.9.3)
+### 10. Plugin Configurator (v2.9.4)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -506,7 +506,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Diagram & Prototype Creator | v0.10.2 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.1.0 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Meeting Processor | v0.13.5 | Process meetings and extract action items |
-| Plugin Configurator | v2.9.3 | Configure plugin for your organization |
+| Plugin Configurator | v2.9.4 | Configure plugin for your organization |
 | Knowledge Library | v0.7.2 | Manage curated knowledge sources |
 | Template Library | v0.2.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.4.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |

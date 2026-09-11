@@ -807,3 +807,16 @@ Collected via `AskUserQuestion`/dialog:
 5. **HR-form field map (hiring)** — the employer's vacancy-form fields and their controlled values (e.g. selects for Budget / Team / Position / Employment type / Probation length). Store under `people.hr_form` so `hiring-designer` can map the universal vacancy profile onto the employer's form field-by-field. Values are employer-specific — nothing is hardcoded in the plugin.
 
 Existence check: if a `people` section already exists → offer review/update, do not duplicate. Never fabricate profile fields (D-type, GTD, signals) — leave unknowns empty.
+
+## Step — Test accounts setup (Extended, since v3.2.0)
+
+Configures the per-product **Test Accounts** table used by `flow-walkthrough` for multi-role legs and sandbox walks (format — `references/context-schema.md` → Test Accounts). Mode-gate: Extended; in Basic — add `test-accounts` to `onboarding.deferred_steps`. Standalone triggers: "add Test accounts", "set up test accounts", "додай тестові акаунти", "налаштуй тестові акаунти".
+
+> **Never a secret.** Collect labels, roles, surfaces and *where* access is obtained. If the user pastes a password or a one-time code, do not write it anywhere; say so and continue.
+
+Collected via `AskUserQuestion`/dialog, per product:
+
+1. **Does this product have test accounts on production?** (roles: buyer / seller / admin / support / courier …) — "no" → mark the step done, nothing written.
+2. **For each account** — label (unique), role, surfaces it can be used on, access description (a link to the team's test-accounts page is ideal), sandbox `yes|no` (is every action of this account confined to a test contour — test shop ↔ test buyer?).
+3. **Write** the `#### Test Accounts` table under the product; **existence check**: a table already there → offer review/update, never duplicate labels.
+4. **Say** the rule out loud once: "before each leg you log in as the named account yourself; under `sandbox-confirm` I ask before every irreversible action; real money and actions reaching real users always stop".
