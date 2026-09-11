@@ -274,3 +274,5 @@ Each product/organization should build a metric → sources mapping in `local-co
 | (e.g.) `<Funnel stages>` | `<CJM master workbook>` | `<per-stage workbooks>` | — |
 
 This catalog enables Gate Check 3 (Multi-Source Cross-Validation) to operate automatically — the skill knows which secondary source to query for each metric.
+
+Qualitative stage evidence has its own marker: `walkthrough-local` — a `flow-walkthrough` evidence pack (`steps.yaml`, `findings.md`) for the stage's scenario, step-numbered, local only (`app-drive-protocol.md`). It never substitutes for a metric source; it explains one.

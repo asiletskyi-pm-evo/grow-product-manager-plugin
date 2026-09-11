@@ -182,6 +182,21 @@ Commands in `commands/` carry `disable-model-invocation: true`; the model must n
 | L8 | /grow-product-manager:status | `status` command (explicit invocation — the only way in) |
 | L9 | вимкни підтвердження перед записом у Confluence | conversation → point to `/grow-product-manager:setup --write-gate off` — NOT the `setup` command itself (added v2.6.0) |
 
+### Group M — Flow walkthrough vs neighbours (added 2026-09-10, v3.1.0)
+
+Collisions: flow-walkthrough vs design-bridge (Figma review) vs product-analysis (dashboards) vs cjm-research (pipeline) vs diagram-prototyper (annotate).
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| M1 | пройди шлях покупця у застосунку до створення відгуку | flow-walkthrough |
+| M2 | перевір зручність каталогу в реальному застосунку на iPhone | flow-walkthrough |
+| M3 | порівняй флоу оформлення замовлення на web і Android | flow-walkthrough |
+| M4 | налаштуй adb, щоб проходити флоу на телефоні | flow-walkthrough |
+| M5 | проаналізуй дашборд конверсії каталогу | product-analysis |
+| M6 | зроби дизайн-рев'ю макета каталогу у Figma | design-bridge |
+| M7 | анотуй цей скріншот номерами вимог | diagram-prototyper |
+| M8 | CJM-дослідження воронки з гіпотезами | cjm-research |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -192,6 +207,7 @@ Commands in `commands/` carry `disable-model-invocation: true`; the model must n
 | 2026-07-29 | 2 independent agent runs (descriptions-only simulation), pre-release v2.4.0 | B 100 / E 100 / J 100 / K 100 | None. New Group K (team language + annotation) routes cleanly on first run: glossary/style → knowledge-library, setup phrasing → plugin-configurator, annotate → diagram-prototyper without stealing design-bridge hi-fi. Regression re-run limited to groups whose members' descriptions changed (B, E, J — knowledge-library + diagram-prototyper): no regressions. 36/36 phrases, full agreement between runs. |
 | 2026-09-08 | **Codex CLI 0.153.2, live** (`codex exec`, the author's real configuration: 80 skills listed, ~190 chars shown per description), pre-release v3.0.0 — 3 full runs of 102 phrases | run 1 (descriptions rewritten, commands unguarded): overall 91.2 — A 88 / B 100 / C 100 / D 100 / E 100 / F 100 / G 80 / H 100 / I 100 / J 100 / K 92 / **L 44**. run 2 and run 3 (after fixes): **100 / 100 on every group, 102/102 identical answers between runs** | Run-1 failures: L1/L2/L6/L7/L9 and K4 — the five migrated commands are real skills in Codex with no `disable-model-invocation`, and their descriptions captured conversational status/config/terminology/write-gate phrases → every command description now opens with "Typed command … only — never for a conversational …" naming the owning skill. A1 (explicit CJM funnel → product-analysis), G3 (mail cue lost when the lead was trimmed), G7 (quick health glance) → three leads adjusted within the 190-char cut. L8 (`/grow-product-manager:status` typed) correctly routes to the command; L9 → none. |
 | 2026-09-08 | **Claude Code 2.1.126, live** (`claude -p --plugin-dir <repo> --max-turns 1`, model claude-opus-4-7, 102 phrases, 4 shards) — replaces the earlier in-context simulation | A–K 100; L 8/9 → **effectively 100**: the one miss is L8 (`/grow-product-manager:status` → `none`), which is the correct Claude answer — a typed command with `disable-model-invocation` is executed by the host, not routed by the model, so "none" is what routing should say (in Codex the migrated command is a skill and `source-command-status` was correct there). J6 → write-concept. | None. Both hosts route the whole set on the v3.0.0 descriptions. |
+| 2026-09-10 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, one run of the 8 Group M phrases), pre-release v3.1.0 | M 100 (8/8) | None. New Group M routes cleanly on first run: M1–M4 → flow-walkthrough (walk, real app on iPhone, cross-platform compare, adb setup); neighbours held — M5 → product-analysis, M6 → design-bridge, M7 → diagram-prototyper, M8 → cjm-research. Codex not re-run this version (drive levels there are `assumed`, see host-matrix). |
 | (fill after each run) | | | |
 
 ## Maintenance

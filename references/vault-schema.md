@@ -279,7 +279,7 @@ target_date: date (project completion target, YYYY-MM-DD)
 
 ## Type Taxonomy
 
-The Grow Product Manager Plugin defines 34 artifact types, each with a specific purpose, source skill, and folder location.
+The Grow Product Manager Plugin defines 35 artifact types, each with a specific purpose, source skill, and folder location.
 
 > **This table is the single source of truth for vault layout.** `vault-protocol.md` (save/init) and `obsidian-setup-guide.md` (setup smoke tests) conform to it, not the other way round. A type that is not listed here cannot be saved — `vault_save` resolves its folder from TYPE_FOLDER_MAP below, so an unlisted type has no destination. When a skill starts producing a new artifact type, add the row **and** the map entry in the same change; `testing/skill_lint.py` → `vault-types` enforces this.
 
@@ -323,6 +323,7 @@ People artifacts key by person because that is the access pattern the contour is
 | handoff | design-bridge | Handoffs/ | Design → dev handoff package |
 | vacancy-profile | hiring-designer | Hiring/ | Role design + vacancy profile + offer draft |
 | debate | brainstorm-features Step 3D + Debate hooks (product-research, cjm-research, write-concept, decision-log) | Debates/ | Role-based adversarial debate: question, evidence pack, verdict, minority report |
+| walkthrough | flow-walkthrough | Research/walkthroughs/ | Flow walkthrough report (steps, friction, comparison) — the evidence pack stays local in `~/.grow-pm/walkthroughs/` |
 
 #### People-contour types (highest-sensitivity tier)
 
@@ -353,6 +354,7 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
   "competitive-analysis": "Research/",
   "market-research": "Research/",
   "ux-benchmark": "Research/",
+  "walkthrough": "Research/walkthroughs/",
   "cjm-analysis": "CJM/full-reports/",
   "cjm-health-check": "CJM/health-checks/",
   "funnel-anomaly": "CJM/anomalies/",
@@ -648,6 +650,7 @@ All artifact files follow a consistent naming pattern to support automated organ
 | competitive-analysis | `competitive-analysis-stripe-checkout-ux-2026-04-14.md` | Competitor and area analyzed |
 | market-research | `market-research-buy-now-pay-later-market-2026-04-14.md` | Market segment or topic |
 | ux-benchmark | `ux-benchmark-mobile-payment-flows-2026-04-14.md` | Area benchmarked |
+| walkthrough | `walkthrough-write-review-iphone-on-mac-2026-09-10.md` | Scenario and surface walked |
 | post-release | `post-release-guest-checkout-impact-2026-04-14.md` | Feature and impact focus |
 | knowledge-source | `knowledge-source-stripe-api-docs-2026-04-14.md` | Source name or topic |
 | funnel-anomaly | `funnel-anomaly-checkout-mobile-drop-2026-04-14.md` | Stage and anomaly description |
@@ -1087,7 +1090,7 @@ Planned work for {ProductName}:
 The Vault Schema defines a consistent, extensible structure for storing and organizing product artifacts in an Obsidian Vault. It includes:
 
 - **Frontmatter Standard** — Base and type-specific fields for classification, relations, and lifecycle management
-- **Type Taxonomy** — 34 artifact types mapped to skills, folders, and purposes
+- **Type Taxonomy** — 35 artifact types mapped to skills, folders, and purposes
 - **Tag Taxonomy** — Hierarchical tags for funnel, platform, metric, status, impact, research, and phase classification
 - **Folder Structure** — Complete directory organization for {Vault}/{PluginFolder}/
 - **Naming Convention** — Consistent {type}-{topic-slug}-{YYYY-MM-DD}.md pattern

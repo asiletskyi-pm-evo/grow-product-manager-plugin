@@ -18,6 +18,7 @@ Profiles: `claude-cowork` = Claude Code / Cowork (reference). `codex-cli` = Code
 | `diagram-prototyper` | full | full | degraded | degraded | storage: session mode, export at the end; config/storage: via connector or the repo, never assume prior state |
 | `experiment-tracker` | full | full | n/a | n/a | needs the user's ~/.grow-pm/, not a sandbox FS; needs FS — read-only when the user pastes the data |
 | `feedback-triage` | full | degraded | degraded | degraded | fan-out: sequential batches; storage: session mode, export at the end; fan-out: sequential batches; config/storage: via connector or the repo, never assume prior state; subagents: as codex-cli |
+| `flow-walkthrough` | full | degraded | degraded | degraded | drive level: best available per app-drive-protocol.md §1 (Codex/ChatGPT levels assumed, not measured); storage: session mode, export at the end; config/storage: via connector or the repo, never assume prior state; compare: sequential without subagents |
 | `focus-advisor` | full | degraded | n/a | n/a | fan-out: sequential batches; needs the user's ~/.grow-pm/, not a sandbox FS; needs FS — read-only when the user pastes the data |
 | `goal-setter` | full | full | degraded | degraded | storage: session mode, export at the end; config/storage: via connector or the repo, never assume prior state |
 | `hiring-designer` | full | full | n/a | n/a | needs the user's ~/.grow-pm/, not a sandbox FS; needs FS — read-only when the user pastes the data |

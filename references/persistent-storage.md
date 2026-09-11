@@ -66,6 +66,7 @@ Both modes use the **same** `Templates/` layout (registry + partials + scopes), 
 ├── experiments/                  # experiment-tracker registry
 ├── decisions/                    # decision-log records (L0 fallback)
 ├── focus/                        # focus-advisor journal + board.html
+├── walkthroughs/                 # flow-walkthrough evidence packs: <date>-<product>-<flow>/ (run.yaml, steps.yaml, steps/NN.png, findings.md)
 └── backups/                      # Auto-backups before migrations
     ├── pre-migration-1.4.0/      # Backup taken before migrating to v1.4.0
     │   ├── local-context.md

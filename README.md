@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.0.1
+**Version:** 3.1.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.1.0** — **Walk the flow in the real product** (30 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). New skill **`flow-walkthrough`** drives the product the way a customer does — a web app in a browser, a desktop app, an iPhone app installed from the **Mac App Store** on Apple Silicon, an Android phone or emulator over adb — one step at a time with a screenshot per step, friction graded per step (severity + Nielsen heuristic or CJM stage), a local evidence pack (`~/.grow-pm/walkthroughs/<run>/`: `run.yaml`, `steps.yaml`, `steps/NN.png`, `findings.md`) and a `research/walkthrough` report with a **flow strip** (marker = step number, via `visual-annotation-protocol.md`). Four modes: `setup` (agent-guided readiness table from `scripts/walkthrough_preflight.sh`, installs confirmed one by one, user-only actions marked, smoke test), `walk`, `compare` (one scenario across surfaces or against competitors — competitors are read-only), `audit`. New shared `references/app-drive-protocol.md` adds the sixth observed capability **APP-DRIVE** (levels `web` / `desktop-background` / `foreground` / `device`, **measured vs assumed per host**), a driver table, preflight (overlay utilities quit, machine-busy warning, write boundary restated, first screenshot read back), the step cycle (act → wait → screenshot → **verify** → log) and safety (credentials and one-time codes are user-only; stop before any irreversible production action by default; screenshots stay local). Measured on Claude Cowork: background window capture fails for iPhone apps on a Mac (foreground only), transparent overlay windows block clicks, App Store builds never run in the iOS Simulator. Consumers wired: `cjm-research` (source `walkthrough-local`), `product-research` (hands-on UX benchmark via compare), `requirements-creator` / `task-creator` / `write-concept` (walkthrough pack as screenshot source 0), `diagram-prototyper` (`steps.yaml` → flowchart). Next: iOS Simulator builds, iPhone Mirroring, Android emulator install, Codex/ChatGPT drive levels measured.
 
 **New in v3.0.0** — **One plugin, three hosts: Claude Code / Cowork, Codex CLI and app, ChatGPT** (29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). Nothing was forked: Codex reads the same `.claude-plugin/` manifests, loads all 29 skills under the same `grow-product-manager:` namespace and registers the same connectors. What changed is how the skills *behave* where a host lacks something. `references/host-profiles.md` defines five observable capabilities — filesystem, shell, subagents, connectors, hooks — and every skill runs **Step 0-host** once, marks them present or absent from the session's own tool list (never from a brand name), and picks the matching mode: `storage_mode: local | connector | session`, sequential in-session checker passes instead of subagents, an in-skill confirmation instead of the write-gate hook. Measured on Codex, not assumed: Codex resolves a bare `references/<file>.md` against the skill's own folder, so every skill and command now opens with a **Path rule**; Codex shares one ≈15k-character budget across every listed skill's description (~190 characters each on a machine with 80 skills), so all 29 descriptions were rewritten with the essence and the neighbour guard inside the first 190 characters — trigger-evals 102/102 on both hosts; migrated commands are routable skills there, so each is guarded as *typed-only*. Packaging: `marketplace.json` `"source": "./"` (Codex ignores the object form; Claude rejects a bare `"."`), `AGENTS.md`, `.codex/agents/*.toml`, portable `${PLUGIN_ROOT}`. Validator checks 12–14 and `testing/host-matrix.md` keep all of it mechanical. Known Codex gaps are documented, not hidden: no plugin agents or hooks, empty-`url` connectors fail in the CLI (the app matches them by name), and Codex picks up a new version only when it starts (restart the app, or run two commands) — see **Hosts** below.
 
@@ -72,7 +74,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.7.4)
+### 1. CJM Research (v0.7.5)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -106,7 +108,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 3. Product Research (v0.10.4)
+### 3. Product Research (v0.10.5)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -135,7 +137,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 5. Write Concept (v0.11.2)
+### 5. Write Concept (v0.11.3)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -145,7 +147,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 6. Requirements Creator (v0.13.2)
+### 6. Requirements Creator (v0.13.3)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -159,7 +161,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 7. Task Creator (v0.12.2)
+### 7. Task Creator (v0.12.3)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -173,7 +175,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 8. Diagram & Prototype Creator (v0.10.1)
+### 8. Diagram & Prototype Creator (v0.10.2)
 
 **Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
 
@@ -482,18 +484,27 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 ---
 
+### 30. Flow Walkthrough (v0.1.0) — NEW in v3.1.0
+
+**Description:** Walks a customer flow in the **real product** — web, desktop, an iPhone app on an Apple Silicon Mac (installed from the Mac App Store), Android via adb — step by step with a screenshot per step, friction graded per step, a local evidence pack and a `research/walkthrough` report with a flow strip. Modes: `setup` (readiness table + guided install + smoke test), `walk`, `compare` (surfaces or competitors, read-only there), `audit`. Everything about *how* to drive lives in `references/app-drive-protocol.md` (capability APP-DRIVE, driver table, preflight, step cycle, safety, degradation to a user-driven variant). Chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper; called by cjm-research, product-research and requirements-creator.
+
+**Trigger phrases:** "пройди флоу", "пройди шлях покупця в застосунку", "перевір зручність … у застосунку", "порівняй флоу на iOS і web", "налаштуй емулятор/adb для проходу", "walk the flow", "compare the flow across platforms"
+
+---
+
 ## Skills Summary
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.7.4 | Customer Journey Map analysis and hypothesis validation |
+| CJM Research | v0.7.5 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.12.3 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.10.4 | Competitive analysis, user research, market trends, UX benchmarking |
+| Product Research | v0.10.5 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.10.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
-| Write Concept | v0.11.2 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.13.2 | Create and analyze feature requirements |
-| Task Creator | v0.12.2 | Create Jira tasks from requirements |
-| Diagram & Prototype Creator | v0.10.1 | Visualize concepts with diagrams, prototypes, infographics |
+| Write Concept | v0.11.3 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.13.3 | Create and analyze feature requirements |
+| Task Creator | v0.12.3 | Create Jira tasks from requirements |
+| Diagram & Prototype Creator | v0.10.2 | Visualize concepts with diagrams, prototypes, infographics |
+| Flow Walkthrough | v0.1.0 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Meeting Processor | v0.13.5 | Process meetings and extract action items |
 | Plugin Configurator | v2.9.3 | Configure plugin for your organization |
 | Knowledge Library | v0.7.2 | Manage curated knowledge sources |
@@ -631,15 +642,16 @@ variables: [feature_name, problem_statement, ...]
 <!-- Add additional languages as needed, e.g. <!-- lang:es --> ... <!-- /lang:es --> -->
 ```
 
-### Built-in templates (shipped in v1.9.0–v2.0.0)
+### Built-in templates (shipped in v1.9.0–v3.1.0)
 
-24 seed templates; localize via additional `<!-- lang:xx -->` blocks:
+25 seed templates; localize via additional `<!-- lang:xx -->` blocks:
 
 - `concept/default-v1` — PRD skeleton
 - `requirements/default-v1` — general feature requirements
 - `requirements/ab-test-v1` — A/B test spec
 - `research/competitive-v1` — competitive analysis + SWOT
 - `research/user-research-v1` — user research synthesis
+- `research/walkthrough-v1` — flow walkthrough report: step table, flow strip, friction, comparison (**new in v3.1.0**)
 - `cjm/funnel-v1` — CJM funnel analysis with ICE table
 - `epic/default-v1` — Jira epic description
 - `task/default-v1` — Jira task with DoD and AC
@@ -899,5 +911,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.0.1  
+**Version:** 3.1.0  
 **Last Updated:** September 2026

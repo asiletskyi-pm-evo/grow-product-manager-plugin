@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.7.4
+version: 0.7.5
 description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».
 ---
 
@@ -213,6 +213,8 @@ Receive from `product-analysis`:
 
 For `comparison` mode: invoke `product-analysis` separately for each platform being compared.
 
+**Walk the stage** (`walkthrough-local`) — when a funnel stage has an anomaly and the user wants to see it as a customer, chain to **Flow Walkthrough** (`flow-walkthrough`, walk mode, scenario = the stage's goal, surface = the platform under study) and cite the pack's `findings.md` as qualitative stage evidence. Screenshots stay local (`references/app-drive-protocol.md` §5); the report cites step numbers.
+
 ### Step 3.5 — Data Integrity Gate (MANDATORY, v0.4.0+)
 
 **Internal logic (cjm-research).** Executes before Step 4 (Anomaly detection). Every metric from Step 3 passes 5 universal gate checks per `references/data-integrity-protocol.md`. Without passing the gate, the metric MUST NOT be used in anomaly detection or reporting.
@@ -265,7 +267,7 @@ Methodology section at the top of the report is **not sufficient** — readers c
 
 Tag every source with type per Gate Check 5 of `data-integrity-protocol.md`:
 
-- Internal: `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `confluence-internal`, `jira-internal`
+- Internal: `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `walkthrough-local`, `confluence-internal`, `jira-internal`
 - This enables audit trail in the final Sources section
 
 **Output of Step 3.5:**
@@ -320,7 +322,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.7.4",
+     skill_version: "0.7.5",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
@@ -348,6 +350,7 @@ After report assembly, offer the user next actions based on the mode:
 
 **Always offer:**
 - → **Diagram & Prototype Creator** — "Create a visual funnel diagram or infographic from this report"
+- → **Flow Walkthrough** — "Walk the [stage] as a customer on [platform]" (stage evidence for the next run)
 
 **From `hypotheses` and `full` modes:**
 - → **Requirements Creator** — "Write detailed requirements for the top hypothesis"

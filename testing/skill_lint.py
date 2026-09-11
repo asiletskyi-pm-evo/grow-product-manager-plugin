@@ -67,6 +67,8 @@ KNOWN_NON_SKILL_TOKENS = {
     "code-first-research",
     # template-library modes
     "add-language", "add-template", "list-templates", "edit-template",
+    # flow-walkthrough vocabulary (app-drive-protocol.md): source marker, surfaces, drive levels
+    "walkthrough-local", "iphone-on-mac", "android-adb", "ios-simulator", "desktop-background",
 }
 
 # ---------------------------------------------------------------- inventories

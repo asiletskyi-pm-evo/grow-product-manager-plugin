@@ -19,6 +19,7 @@ Offer (do not force) an annotated screenshot when the artifact describes changes
 
 ## Step V-1 — Obtain the screenshot (source priority)
 
+0. **Walkthrough pack**: if `~/.grow-pm/walkthroughs/*/steps.yaml` has a run for this flow, use its `steps/NN.png` — already verified against the intent, already local (`app-drive-protocol.md` §7).
 1. **User-provided** (fastest): the user pastes or uploads a screenshot. Use it as-is.
 2. **Figma**: if a Figma link to the current design exists in context (e.g. requirements-creator Step 1c found it) — `get_screenshot` via Figma MCP for the specific frame.
 3. **Live product via browser**: navigate to the page (Claude in Chrome / browser fallback per `references/integration-strategy.md`) and capture the current state. Ask the user for the exact URL and state (logged in / specific product page) before capturing.
