@@ -71,6 +71,8 @@ KNOWN_NON_SKILL_TOKENS = {
     "walkthrough-local", "iphone-on-mac", "android-adb", "ios-simulator", "desktop-background",
     # v3.2.0: configurator deferred step id + write-boundary values
     "test-accounts", "stop-before-irreversible", "sandbox-confirm", "sandbox-auto", "read-only",
+    # v3.3.0: product-landscape roles and source types
+    "direct-competitor", "scan-mac", "scan-adb", "scan-iphone-on-mac", "appstore-api", "play-web",
 }
 
 # ---------------------------------------------------------------- inventories
