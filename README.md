@@ -76,7 +76,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Skills
 
-### 1. CJM Research (v0.7.5)
+### 1. CJM Research (v0.7.6)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -110,7 +110,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 3. Product Research (v0.10.5)
+### 3. Product Research (v0.10.6)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -124,7 +124,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 4. Brainstorm Features (v0.10.2)
+### 4. Brainstorm Features (v0.10.3)
 
 **Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation. Hosts Debate mode — a role-based adversarial discussion over an evidence pack (`references/debate-protocol.md`).
 
@@ -242,7 +242,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ---
 
-### 10. Plugin Configurator (v2.9.4)
+### 10. Plugin Configurator (v2.9.5)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -486,7 +486,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 ---
 
-### 30. Flow Walkthrough (v0.2.0) — NEW in v3.1.0
+### 30. Flow Walkthrough (v0.2.1) — NEW in v3.1.0
 
 **Description:** Walks a customer flow in the **real product** — web, desktop, an iPhone app on an Apple Silicon Mac (installed from the Mac App Store), Android via adb — step by step with a screenshot per step, friction graded per step, a local evidence pack and a `research/walkthrough` report with a flow strip. Modes: `setup` (readiness table + guided install + smoke test), `walk`, `compare` (surfaces or competitors, read-only there), `audit`. Everything about *how* to drive lives in `references/app-drive-protocol.md` (capability APP-DRIVE, driver table, preflight, step cycle, safety, degradation to a user-driven variant). Chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper; called by cjm-research, product-research and requirements-creator.
 
@@ -500,17 +500,17 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.7.5 | Customer Journey Map analysis and hypothesis validation |
+| CJM Research | v0.7.6 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.12.3 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.10.5 | Competitive analysis, user research, market trends, UX benchmarking |
-| Brainstorm Features | v0.10.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
+| Product Research | v0.10.6 | Competitive analysis, user research, market trends, UX benchmarking |
+| Brainstorm Features | v0.10.3 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
 | Write Concept | v0.11.3 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.13.3 | Create and analyze feature requirements |
 | Task Creator | v0.12.3 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.10.2 | Visualize concepts with diagrams, prototypes, infographics |
-| Flow Walkthrough | v0.2.0 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
+| Flow Walkthrough | v0.2.1 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Meeting Processor | v0.13.5 | Process meetings and extract action items |
-| Plugin Configurator | v2.9.4 | Configure plugin for your organization |
+| Plugin Configurator | v2.9.5 | Configure plugin for your organization |
 | Knowledge Library | v0.7.2 | Manage curated knowledge sources |
 | Template Library | v0.2.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.4.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |

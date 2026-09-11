@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.7.5
+version: 0.7.6
 description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».
 ---
 
@@ -322,7 +322,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.7.5",
+     skill_version: "0.7.6",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
@@ -351,6 +351,7 @@ After report assembly, offer the user next actions based on the mode:
 **Always offer:**
 - → **Diagram & Prototype Creator** — "Create a visual funnel diagram or infographic from this report"
 - → **Flow Walkthrough** — "Walk the [stage] as a customer on [platform]" (stage evidence for the next run)
+- → **Product Landscape** — "Run the same stage on the landscape products" (`product-landscape` research mode; the user picks the products)
 
 **From `hypotheses` and `full` modes:**
 - → **Requirements Creator** — "Write detailed requirements for the top hypothesis"

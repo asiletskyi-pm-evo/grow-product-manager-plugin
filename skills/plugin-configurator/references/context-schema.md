@@ -76,6 +76,7 @@ Every key an onboarding step may append, and the step that writes it. A skill ch
 | `terminology` | Terminology & Style setup | Team glossary + style profile (lint_mode, style_preamble, extraction sources) |
 | `attachments-rest` | Attachments setup | Atlassian REST attachments (site, email, token env NAME) |
 | `test-accounts` | Test accounts setup | Test accounts per product (labels, roles, surfaces, access, sandbox) |
+| `landscape` | Landscape setup | Landscape (bookmarks consent, product category, competitors import into the registry) |
 
 > `okrs` and `competitors` were listed here until v2.1.0 but no step ever wrote them (both are collected inside Step 6, which has no defer path); `key-metrics`, `analytics-extended`, `tableau-mcp-required`, `planning`, `focus` and `people` were written but unlisted — for five sections the "is it deferred?" check could not be answered.
 
@@ -313,6 +314,18 @@ The blocks below are the exact `local-context.md` output formats the Plugin Conf
 
 #### Configured Google Drive Folders (for CJM search)
 - [Folder ID]: [description]
+```
+
+### Landscape section format (since v3.3.0)
+
+Read by `product-landscape`. Per product, `category` is the store genre or a free tag used to rank scan and discover candidates; `bookmarks_consent` decides whether `scan` may ask to read Chrome/Safari bookmarks (`ask`) or never asks (`never`). The registry itself lives in `{storage_root}/landscape/`, not in local-context; `product.competitors` is the seed the registry imports on first run.
+
+```markdown
+## Landscape
+- bookmarks_consent: ask        # ask | never
+
+### Product: Product 1
+- category: Shopping            # store genre or a free tag
 ```
 
 ### Terminology & Style section format

@@ -189,7 +189,7 @@ Once the context is loaded and active product selected, skills should:
 - Use `product.locales` as defaults for locale questions
 - Use `product.jira_project_key` for Jira queries
 - Use `product.confluence_space` as default publishing destination
-- Use `product.competitors` when building comparison matrices (always include user's product)
+- Use `product.competitors` when building comparison matrices (always include user's product); since v3.3.0 prefer the landscape registry links (`{storage_root}/landscape/registry.yaml`, roles direct-competitor / benchmark) when the registry exists — `product.competitors` is the seed it imported
 - Use `product.key_metrics` when discussing metrics (pre-fill known metrics)
 - Use `product.current_okrs` to align hypotheses and analysis with strategic goals
 - Use `organization.tableau_base_url` and `product.ab_test_dashboards` for analytics access
