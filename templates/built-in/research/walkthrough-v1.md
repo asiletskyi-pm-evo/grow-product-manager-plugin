@@ -8,10 +8,10 @@ scope: built-in
 products: []
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.1.0"
 author: "grow-pm"
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-11
 tags: [research, walkthrough, ux, flow]
 description: "Flow walkthrough report: scenario, surfaces, step table with flow strip, friction by severity, comparison matrix, recommendations"
 status: active
@@ -60,9 +60,15 @@ variables:
 
 ## 2. Step table and flow strip
 
-| # | Intent | Action | Observed | Status | Friction |
-|---|--------|--------|----------|--------|----------|
-| 1 | | | | ok / friction / blocked | |
+Leg summary (multi-leg runs):
+
+| Leg | Role | Account | Surface | Steps | Verdict |
+|-----|------|---------|---------|-------|---------|
+| 1 | | | | | |
+
+| # | Leg / Role | Intent | Action | Observed | Status | Friction |
+|---|------------|--------|--------|----------|--------|----------|
+| 1 | L1 / | | | | ok / friction / blocked | |
 
 Flow strip: one annotated screenshot per step, marker number = step number (per `visual-annotation-protocol.md`), legend = this table.
 
@@ -96,4 +102,4 @@ Each item: `step N` — what the customer expected — what happened — heurist
 {{/each}}
 - Evidence packs listed in §1 (local, internal data — not attached)
 
-<!-- template: research-builtin-walkthrough version: 1.0.0 -->
+<!-- template: research-builtin-walkthrough version: 1.1.0 -->
