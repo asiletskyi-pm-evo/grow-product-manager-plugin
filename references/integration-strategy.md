@@ -28,10 +28,18 @@ The namespace is **host-dependent**: the same declared server gets a different p
 | `google calendar` | Google Calendar | `mcp__Google_Calendar__*` | CLI: not usable, empty `url` fails at session start; app: connected by name (pilot, v3.0.0) | `list_calendars` |
 | `google drive` | Google Drive | `mcp__Google_Drive__*` | CLI: not usable, empty `url` fails at session start; app: connected by name (pilot, v3.0.0) | `list_recent_files` |
 | `fireflies` | Fireflies | `mcp__Fireflies__*` | CLI: not usable, empty `url` fails at session start; app: connected by name (pilot, v3.0.0) | `fireflies_get_user` |
+| `lazyweb` | Lazyweb | `mcp__lazyweb__*` (measured, Cowork 2026-09-10) | TBD | `lazyweb_health` |
+| `similarweb` | Similarweb | TBD | TBD | `get-websites-website-rank` |
+| `mobbin` | Mobbin | TBD | TBD | `search_screens` |
+| `semrush` | Semrush | TBD | TBD | `domain_overview` |
+| `tavily` | Tavily | TBD | TBD | `tavily_search` |
+| `apify` | Apify | TBD | TBD | `search-actors` |
 
 Namespaces are what the host showed in real sessions; a differently-named connection (an org's custom Atlassian server, a self-hosted Figma proxy) may expose a different prefix — that is what 1b is for. A declared connector that is **not connected** is the user's decision: say which tab to connect it in, do not search the registry for it (Step 2 is for products the plugin does not declare).
 
 **Not declared on purpose:** Tableau (a local MCP server the user runs; in hosted sessions it appears as `mcp__remote-devices__Tableau__*`), Notion, Slack, Obsidian — detected by pattern only.
+
+**Optional research connectors (v3.3.0).** `lazyweb`, `similarweb`, `mobbin`, `semrush`, `tavily`, `apify` are declared so the Connectors tab shows them, but no skill requires them: `product-landscape` and `flow-walkthrough` say in one line which optional sources are present and continue without the rest. Each is a paid or account service the user registers for; keys live in the host's connector configuration, never in the plugin. `tavily` matters on hosts without a built-in web search (Codex, ChatGPT); `apify` is the only route to Google Play charts and reviews.
 
 **1b. Pattern detection.** For anything not covered by 1a — or when the declared namespace is absent but the product might still be connected under another name — look at the available tools. MCP tools follow the pattern `mcp__<id>__<tool_name>`. Common connectors:
 

@@ -1,5 +1,5 @@
 {
-  "_comment": "Connectors the plugin declares. Remote servers (atlassian, figma) are matched to an existing connection by URL; entries with an empty url are matched by NAME to the host's connector directory (first-party connectors whose endpoint is dynamic). Tableau is deliberately NOT declared — it is a local MCP server the user runs themselves (see README → Plugin components). Tool namespaces observed per server live in references/integration-strategy.md → Declared connectors. Empty-url entries are a Claude convention, kept deliberately: Codex CLI (0.153) does not match by name and fails them at session start — see integration-strategy.md §1a; they may start working there if Codex adopts the convention.",
+  "_comment": "Connectors the plugin declares. Remote servers (atlassian, figma) are matched to an existing connection by URL; entries with an empty url are matched by NAME to the host's connector directory (first-party connectors whose endpoint is dynamic). Tableau is deliberately NOT declared — it is a local MCP server the user runs themselves (see README → Plugin components). Tool namespaces observed per server live in references/integration-strategy.md → Declared connectors. Empty-url entries are a Claude convention, kept deliberately: Codex CLI (0.153) does not match by name and fails them at session start — see integration-strategy.md §1a; they may start working there if Codex adopts the convention. Since v3.3.0 six OPTIONAL research connectors are declared (lazyweb, similarweb, mobbin, semrush, tavily, apify): URL-matched, each user connects their own account/key in the host; every skill works without them.",
   "mcpServers": {
     "atlassian": {
       "type": "http",
@@ -24,6 +24,30 @@
     "fireflies": {
       "type": "http",
       "url": ""
+    },
+    "lazyweb": {
+      "type": "http",
+      "url": "https://www.lazyweb.com/mcp"
+    },
+    "similarweb": {
+      "type": "http",
+      "url": "https://mcp.similarweb.com/"
+    },
+    "mobbin": {
+      "type": "http",
+      "url": "https://api.mobbin.com/mcp"
+    },
+    "semrush": {
+      "type": "http",
+      "url": "https://mcp.semrush.com/claude/v1/mcp"
+    },
+    "tavily": {
+      "type": "http",
+      "url": "https://mcp.tavily.com/mcp"
+    },
+    "apify": {
+      "type": "http",
+      "url": "https://mcp.apify.com"
     }
   }
 }
