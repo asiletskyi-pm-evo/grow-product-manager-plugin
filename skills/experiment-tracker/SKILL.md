@@ -1,6 +1,6 @@
 ---
 name: experiment-tracker
-version: 0.2.4
+version: 0.3.0
 description: Experiment registry — proposed → specced → running → readout → decided, with stale-test reminders. Not analyzing results (product-analysis), not the A/B spec (requirements-creator). UA — «які тести зараз біжать», «заведи експеримент», «зафіксуй запуск тесту», «завислі тести». EN — "what experiments are running", "experiment status", "register an experiment", "log the test launch", "which tests await a decision", "remind me about stale tests". Also UA — «статус експериментів», «які тести чекають рішення». Tracks state and chains to product-analysis, requirements-creator and brainstorm-features.
 ---
 
@@ -71,6 +71,10 @@ experiments:
 
 ### Step 0 — Local context
 Per `local-context-protocol.md`. Then **Step R** — load/create the registry.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Mode: status
 1. Read registry; if vault_level > L0 — cross-check `Hypotheses/` artifacts with `status: proposed|testing` that are missing from the registry → offer to import.

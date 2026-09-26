@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.11.3
+version: 0.12.0
 description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ». A concept is the input to requirements-creator.
 ---
 
@@ -34,6 +34,10 @@ Key context used by this skill:
 - `product.confluence_space` — default publishing destination
 - `product.key_metrics`, `product.current_okrs` — for Success Metrics and Goals sections
 - `user.language` — for output language
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step 0.5: Vault Context Search (Optional)
 
@@ -136,21 +140,9 @@ Ask the user:
 - Where to gather context: conversation, Confluence, Google Drive, web, uploaded files, Deep Research via LLM?
 - The user chooses the sources or provides data directly
 
-**Figma designs check — if working with existing product or existing functionality:**
-
-If the product or feature already exists (i.e., not being built from scratch), ask via AskUserQuestion:
-
-> "Are there current designs / mockups / prototypes of this functionality in Figma?"
-
-- **If the user provides a link** — open it via Figma MCP (`get_design_context`, `get_screenshot`) or browser fallback, read and extract: current UX flows, screens, key UI patterns. Use this as context when drafting the concept (especially for "What Changes for Users", "Proposed Solution", and "Design & UX" blocks)
-- **If the user believes designs should exist but cannot provide a link** — offer to search:
-  > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
-  - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
-    - Try to understand the structure of the design system: look for sections like "Current design", "Production", "Live", "Ready for dev", "Latest state"
-    - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
-  - If Figma MCP is unavailable — follow `references/integration-strategy.md` fallback chain
-- **If no designs exist** — note this and proceed without design context
-- **If relevant designs are confirmed** — use them throughout the PRD: reference current UX state in the Problem Statement, describe what changes vs. current design in "What Changes for Users", include links to relevant frames in the Sources section
+**Figma designs check — if working with existing product or existing functionality:** if the product or feature already exists (not built from scratch), run `references/figma-designs-check.md` with:
+- *use as context for:* drafting the concept — especially the "What Changes for Users", "Proposed Solution" and "Design & UX" blocks;
+- *when designs are confirmed:* reference the current UX state in the Problem Statement, describe what changes vs. the current design in "What Changes for Users", and include links to relevant frames in the Sources section.
 
 Summarize the full brief back to the user and get confirmation before proceeding.
 
@@ -300,7 +292,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.11.3",
+     skill_version: "0.12.0",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],

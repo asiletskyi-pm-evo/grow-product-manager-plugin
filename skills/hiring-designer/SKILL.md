@@ -1,6 +1,6 @@
 ---
 name: hiring-designer
-version: 0.1.2
+version: 0.2.0
 description: Design a role and vacancy — goal letter first, then profile, killer questions, screening criteria, candidate evaluation, offer draft. Not feature requirements (requirements-creator). UA — «відкрити вакансію», «профіль вакансії», «оцінити кандидатів», «чернетка оферу». EN — "open a vacancy", "design a role", "write a job profile", "hiring", "killer questions", "screening criteria", "evaluate candidates", "draft an offer". Also UA — «спроєктувати посаду», «найм», «критерії скринінгу». Chains to goal-setter for the role goals; do NOT use for an existing employee's goals outside a hire.
 ---
 
@@ -36,6 +36,10 @@ The skill maps this universal profile onto the **employer's HR-form fields** (fr
 
 ### Step 0 — Local context
 Per `local-context-protocol.md`. Load the HR-form field map; if absent, offer to set it up via `plugin-configurator` → People-setup (or collect ad-hoc for this vacancy).
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step T — Template resolution
 `artifact_type: vacancy-profile`, resolve per `template-protocol.md`.

@@ -1,6 +1,6 @@
 ---
 name: delegation-coach
-version: 0.1.3
+version: 0.2.0
 description: Audit a manager's operational load on the 7 delegation levels and plan the hand-off (S1→S4). Not daily focus (focus-advisor), not task creation (task-creator). UA — «аудит делегування», «що можна делегувати», «перевантажений операційкою», «вийти з операційки». EN — "audit my delegation", "what can I delegate", "I'm overloaded with ops", "delegation levels", "hand-off plan", "who can I give this to". Also UA — «рівні делегування», «план передачі», «кому це віддати». Picks candidates from team profiles (D-type, GTD-index); diagnoses and plans the transfer, goal-setter and task-creator execute it.
 ---
 
@@ -29,6 +29,10 @@ Delegation is transferring tasks **and responsibility** for them to the team —
 
 ### Step 0 — Local context
 Per `local-context-protocol.md`.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step T — Template resolution
 Per `template-protocol.md`: `artifact_type: delegation-audit`. No dedicated built-in template ships — resolve if a user template exists, otherwise render the audit-table + transfer-plan internal structure below.

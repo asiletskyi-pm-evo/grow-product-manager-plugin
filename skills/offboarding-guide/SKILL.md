@@ -1,6 +1,6 @@
 ---
 name: offboarding-guide
-version: 0.1.2
+version: 0.2.0
 description: Guide a manager through parting with an underperformer — evidence check, "can't" vs "won't", four-meeting algorithm, ARCV follow-ups. Not a routine review (performance-review). UA — «допоможи звільнити», «офбординг», «випробувальний термін», «чи час прощатися». EN — "help me let someone go", "offboarding", "PIP / probation for underperformance", "termination conversation", "how do I fire <person> fairly", "is it time to part ways". Also UA — «розмова про звільнення», «як коректно розлучитися зі співробітником». Drafts a neutral team message. Do NOT use for corrective goals alone (goal-setter) or hiring a replacement (hiring-designer — chain there after). Data strictly local; the tone is deliberate.
 ---
 
@@ -28,6 +28,10 @@ Companies need goals achieved — a rational stance. The core message: **don't "
 
 ### Step 0 — Local context · Step P — Person context
 Load the person's profile: goals, last reports (Forecast QA), D-type, 1-1 history.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step T — Template resolution
 Per `template-protocol.md`: `artifact_type: offboarding-plan` for the case plan, `followup-arcv` for each meeting's follow-up. Built-in templates; escape hatch uses the internal structure.

@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.10.2
+version: 0.11.0
 description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «додай стрілки на скрін». EN — "create a diagram", "draw a flowchart", "visualize this process", "make a prototype" (no DS mentioned), "mockup", "annotate this screenshot". Also UA — «візуалізуй процес», «зроби прототип», «інфографіка», «познач на скріншоті». Generation via Mermaid/HTML, Gemini, ChatGPT, NotebookLM, Figma, Draw.io; annotation runs locally.
 ---
 
@@ -32,6 +32,10 @@ Key context used by this skill:
 - `user.language` — for text localization on diagrams and prototypes
 
 ---
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ## Step T — Template Resolution (presentations only)
 
@@ -163,24 +167,9 @@ Provide a recommendation based on context:
 
 ### Step 3b — Infographic style selection (for infographics only)
 
-If the user chose "Infographic" in Step 1, ask for the visual style via AskUserQuestion:
+If the user chose "Infographic" in Step 1, ask for the visual style via AskUserQuestion — Data-driven, Process / timeline, Comparison, Informational / educational or Statistical / report — and mark the one that fits the context as recommended.
 
-> "What style should the infographic have?"
-
-| Style | When to recommend | Description |
-|-------|------------------|-------------|
-| **Data-driven** | Metrics, KPIs, A/B test results, analytics | Charts, numbers, progress bars, comparisons. Focus on quantitative data storytelling |
-| **Process / timeline** | Onboarding flows, roadmaps, release timelines, step-by-step guides | Sequential steps, numbered stages, timeline with milestones. Focus on progression |
-| **Comparison** | Feature comparison, competitive analysis, before/after, plan tiers | Side-by-side layouts, comparison tables, pros/cons. Focus on evaluating options |
-| **Informational / educational** | Product overviews, how-it-works explanations, market research summaries | Icons, illustrations, text blocks, visual hierarchy. Focus on communicating a concept |
-| **Statistical / report** | Quarterly reports, market size, survey results | Pie charts, bar charts, stat callouts, percentages. Focus on presenting research findings |
-
-Provide a recommendation based on context:
-- Analytics data, metrics review → recommend Data-driven
-- User journey, onboarding, roadmap → recommend Process / timeline
-- Competitive research, feature evaluation → recommend Comparison
-- Concept explanation, product overview → recommend Informational / educational
-- Research results, survey data, quarterly numbers → recommend Statistical / report
+The full procedure — the style table and the recommendation rules — lives in `references/tool-procedures.md` (skill-local). Read it when the visualization type is Infographic.
 
 ### Step 4 — Tool selection
 
@@ -218,85 +207,9 @@ Mark the recommended option with "(Recommended)" in the AskUserQuestion options.
 
 ### Step 5 — Prompt construction
 
-Based on all gathered context, construct a detailed prompt for the selected tool. The prompt must include:
+Based on all gathered context, construct a detailed prompt for the selected tool: the core elements every prompt carries (5a), the type-specific additions (5b), the quality instructions (5c), and data confidentiality (5d) — no internal URLs, metric values, employee names, Jira keys or Confluence IDs reach an external LLM; confidential infographic data steers the user to HTML/CSS (built-in) or to placeholder values.
 
-**5a. Core elements for every prompt:**
-
-1. **Goal** — what is being visualized and why (concept pitch, technical flow, user journey, etc.)
-2. **Type** — diagram / prototype / mind map / infographic / presentation
-3. **Notation** (for diagrams) — flowchart / BPMN 2.0 / simple schema
-4. **Fidelity** (for prototypes) — lo-fi / mid-fi
-5. **Style** (for infographics) — data-driven / process / comparison / informational / statistical
-6. **Content** — the actual information to visualize (process steps, screen elements, nodes, data points, etc.)
-7. **Text locale** — language for all labels and text on the image
-8. **Visual style** — clean, professional, minimalistic. Consistent color scheme. High contrast for readability
-
-**5b. Additional elements based on type:**
-
-**For diagrams:**
-- List all actors, steps, decision points, branches
-- Describe start and end conditions
-- For BPMN: specify pools, lanes, events, gateways
-- For flowcharts: specify decision diamonds, process boxes, connectors
-
-**For prototypes:**
-- Platform (Web / iOS / Android)
-- Screen dimensions guidance (e.g., "desktop viewport 1440px wide" or "mobile 390px wide")
-- UI elements to include (navigation, buttons, forms, cards, modals, etc.)
-- Placeholder content or real content
-- For mid-fi: specify basic styling (light/dark, brand colors if known)
-
-**For mind maps:**
-- Central topic and branch hierarchy
-- Level of depth (2-3 levels typical)
-- Key relationships between nodes
-
-**For infographics:**
-- **Main headline / title** — the key takeaway or topic
-- **Data points and metrics** — specific numbers, percentages, KPIs to display
-- **Visual hierarchy** — what should be the most prominent element, secondary elements, supporting details
-- **Section structure** — logical sections of the infographic (e.g., "Problem → Solution → Results" or "Before → After")
-- **Chart types** (for data-driven/statistical) — bar charts, pie charts, donut charts, progress bars, stat callouts, sparklines
-- **Icons and visual elements** — use simple geometric icons or emoji-style markers; describe each icon's meaning
-- **Color scheme** — suggest 2-3 primary colors that match the topic or brand; use color to encode meaning (e.g., green = positive, red = negative)
-- **Dimensions / format** — vertical scroll (800px wide), A4-like (portrait), slide-sized (16:9), social media format (1080x1080)
-- **Footer** — source attribution, date, product name if applicable
-- **Style-specific guidance:**
-  - Data-driven: emphasize numbers with large font sizes, use progress bars and chart visualizations, include trend indicators (arrows up/down)
-  - Process / timeline: use numbered steps or timeline dots, clear directional flow (top-to-bottom or left-to-right), connector lines between stages
-  - Comparison: use columns or side-by-side blocks, checkmarks/crosses for feature presence, consistent structure across compared items
-  - Informational: balance text and visuals, use icon+text pairs, group related information in visual blocks
-  - Statistical: lead with the most impactful stat, use chart diversity (don't repeat the same chart type), include context for numbers (benchmarks, periods)
-
-**For presentations:**
-- Number of slides
-- Key messages per slide
-- Visual style (corporate, creative, minimal)
-
-**5c. Quality instructions in the prompt:**
-
-Always include:
-- "Use clean, professional visual style"
-- "Ensure all text is legible and in [specified locale]"
-- "Use consistent color coding for different types of elements"
-- "White or light background for readability"
-- "No decorative elements that don't convey information"
-
-**Additional quality instructions for infographics:**
-- "Maintain clear visual hierarchy — the most important data/message should be the most visually prominent"
-- "Use whitespace generously to avoid visual clutter"
-- "Ensure all data visualizations are accurately proportioned (e.g., bar heights match actual values)"
-- "Include units and labels for all data points"
-- "Use a consistent icon style throughout (all outline, all filled, or all emoji)"
-
-**5d. Data confidentiality in prompts:**
-
-When constructing prompts for external LLMs:
-- **DO NOT include**: internal URLs, API endpoints, Tableau dashboard links, internal metric values, employee names, Jira project keys, Confluence page IDs
-- **DO include**: general product descriptions, feature concepts described in abstract terms, user flow logic, UI structure descriptions
-- If the user's requirements contain confidential data — generalize it before including in the prompt. Inform the user: "I've generalized some internal details for the prompt to comply with the data policy."
-
-**Note for infographics with confidential data:** If the user wants to include internal metrics or KPIs in the infographic and the selected tool is an external LLM (Gemini/ChatGPT), warn the user and recommend switching to the **HTML/CSS (built-in)** tool, which processes data locally and does not send it externally. If the user insists on using an external tool — replace real numbers with placeholder values and note this in the output.
+The full procedure — the element checklists, per-type additions, quality phrases and confidentiality rules — lives in `references/prompt-construction.md` (skill-local). Read it every time Step 5 runs, for any tool.
 
 ### Step 6 — Generation
 
@@ -312,84 +225,11 @@ Execute the generation based on the selected tool:
 
 For BPMN 2.0 in Mermaid — use `flowchart` with subgraphs for lanes and styled nodes for events/gateways.
 
-**6a2. HTML/CSS (built-in) — for infographics:**
+**6a2. HTML/CSS (built-in) — for infographics:** one self-contained HTML file (inline CSS, inline SVG charts, a CSS-variable palette, print styles), validated and saved as `.html`; skip to Step 7.
 
-1. Generate a single self-contained HTML file with:
-   - Inline CSS for styling (no external dependencies)
-   - SVG elements for charts and icons (or use simple CSS shapes)
-   - Responsive layout that looks good at the target dimensions
-   - Print-friendly styles (if the infographic is for A4/PDF)
-2. **HTML structure guidelines for infographics:**
-   - Use a fixed-width container (e.g., `max-width: 800px; margin: 0 auto`)
-   - Structure with semantic sections: header (title + subtitle), body sections, footer
-   - Use CSS Grid or Flexbox for layout
-   - For charts: use inline SVG with `<rect>`, `<circle>`, `<text>`, `<path>` elements — no external charting libraries required
-   - For icons: use simple SVG icons or Unicode symbols (e.g., ✓, ✗, ▲, ▼, ●)
-   - For progress bars: use simple `<div>` elements with percentage-based widths
-   - Include `@media print` styles for clean printing
-3. **Color and typography:**
-   - Define a color palette at the top of the `<style>` block as CSS variables (`--color-primary`, `--color-secondary`, `--color-accent`, `--color-bg`, `--color-text`)
-   - Use system fonts or Google Fonts (import via `<link>`)
-   - Minimum font size: 12px for body, 14px for labels, 24px+ for headline stats
-4. Validate the HTML (check for unclosed tags, valid CSS)
-5. Save as `.html` file in the user's workspace
-6. Present the result to the user (the HTML file will render in the chat)
-7. Skip to Step 7 (no LLM quality loop needed)
+**6b–6f. External tools:** Google Gemini (6b), ChatGPT (6c), NotebookLM (6d), Figma via MCP or browser (6e), Draw.io — local `.drawio` XML first, browser as fallback (6f). Every browser-driven result proceeds to Step 6g (Quality check).
 
-**6b. Google Gemini (via browser):**
-
-1. Open browser → navigate to `gemini.google.com`
-2. Ensure the strongest available model is selected
-3. Activate **Nano Banana mode** for image generation (if applicable, enable the canvas/image generation feature)
-4. Paste the constructed prompt
-5. Wait for the result to generate
-6. Take a screenshot of the result
-7. Proceed to Step 6g (Quality check)
-
-**6c. ChatGPT (via browser):**
-
-1. Open browser → navigate to `chatgpt.com`
-2. Ensure the strongest available model is selected (GPT-4o or newer)
-3. If image generation is needed — use DALL-E or the canvas mode
-4. Paste the constructed prompt
-5. Wait for the result to generate
-6. Take a screenshot or download the generated image
-7. Proceed to Step 6g (Quality check)
-
-**6d. NotebookLM (via browser):**
-
-1. Open browser → navigate to `notebooklm.google.com`
-2. Create a new notebook or use an existing one
-3. Add the context as a source (paste text or provide document)
-4. For **Mind Map**: use the Mind Map feature to generate a visual map
-5. For **Presentation**: use the Presentation feature to generate slides
-6. Take a screenshot of the result
-7. Proceed to Step 6g (Quality check)
-
-**6e. Figma (via MCP or browser):**
-
-1. If Figma MCP is available — use `create_new_file` to create a new Figma file, then use Figma MCP tools to build the prototype
-2. If Figma MCP is not available — open browser → navigate to `figma.com`, create a new file, and build the prototype using the browser UI
-3. Take a screenshot of the result using `get_screenshot` (MCP) or browser screenshot
-4. Proceed to Step 6g (Quality check)
-
-**6f. Draw.io:**
-
-**Priority: local XML generation**
-1. Generate the diagram as Draw.io XML format based on the prompt
-2. Validate the XML structure
-3. Save as `.drawio` file in the user's workspace
-4. Provide the file to the user
-
-**Fallback: browser**
-If the diagram is too complex for XML generation or the user requests browser mode:
-1. Open browser → navigate to `app.diagrams.net`
-2. Create a new diagram
-3. Build the diagram using the browser UI
-4. Export as image (PNG/SVG)
-5. Proceed to Step 6g (Quality check)
-
-For Draw.io XML — offer to also export as PNG/SVG for preview.
+The full procedure — HTML structure, color and typography rules for 6a2 and the step-by-step browser/MCP runs for 6b–6f — lives in `references/tool-procedures.md` (skill-local). Read it when the selected tool is anything other than Mermaid.
 
 **6g. Quality check (for LLM-generated results):**
 
@@ -451,42 +291,7 @@ Present options via AskUserQuestion:
 | **Local file** | Save as PNG/SVG/drawio/mermaid/html in the user's workspace folder |
 | **No** | End the skill, result stays in the chat |
 
-**8b. Confluence publishing:**
-
-- Ask which page to attach the image to (existing page or create new)
-- Upload the image as an attachment
-- Add inline image with caption using Confluence markup
-- If publishing alongside a concept or requirements page — offer to embed on that page
-
-**8c. Notion publishing:**
-
-- Ask which page or database to add the image to
-- Upload and embed the image block
-- Add caption
-
-**8d. Figma publishing:**
-
-- If the artifact was already created in Figma — provide the link
-- If created elsewhere — upload the image to the user's Figma workspace as a new file or frame
-
-**8e. Local file:**
-
-- Save the file to the user's workspace folder
-- Provide a download link
-- Format: PNG for raster images, SVG for vector diagrams, .drawio for Draw.io files, .mermaid for Mermaid code, .html for infographics
-
-**8f. Additional export for infographics:**
-
-After saving the primary format, offer additional export options:
-> "Would you also like to export this infographic as a different format?"
-
-| Format | When useful |
-|--------|------------|
-| **PNG** | For embedding in presentations, Confluence pages, or sharing via chat |
-| **PDF** | For printing or formal document attachments |
-| **HTML** | For interactive viewing in a browser (if not already HTML) |
-
-If the user selects PNG or PDF — use browser rendering or a conversion tool to generate from HTML.
+**8b–8f. Destinations and export:** Confluence (8b — existing or new page, image attachment with caption), Notion (8c), Figma (8d), local file (8e — PNG / SVG / .drawio / .mermaid / .html), plus an extra PNG / PDF / HTML export for infographics (8f). The full procedure for each destination lives in `references/tool-procedures.md` (skill-local). Read it when the user picks any destination other than "No".
 
 ### Step 9 — Skill chaining
 
@@ -512,7 +317,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.10.2", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.11.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Mode: Annotate (standalone screenshot annotation)
@@ -562,6 +367,8 @@ When invoking this skill from another skill, pass:
 ## Additional Resources
 
 - **`references/visual-annotation-protocol.md`** — screenshot annotation: sources, Pillow rendering, marker=requirement binding, preview cycle, attachment chain
+- **`references/prompt-construction.md`** (skill-local) — Step 5: core, per-type and quality prompt elements; data confidentiality in prompts
+- **`references/tool-procedures.md`** (skill-local) — Step 3b infographic styles, Steps 6a2–6f per-tool generation, Steps 8b–8f publishing and export
 
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)

@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.9.5
+version: 2.10.0
 description: Configure the plugin — organization, products, teams, data sources — validate or view the config; also when local-context.md is missing. Not the typed /status or /config commands. UA — «налаштуй плагін», «додай продукт», «додай/налаштуй тестові акаунти», «налаштуй карту конкурентів», «перевір налаштування», «покажи мій конфіг», «статус плагіна, чи все підключено». EN — "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", "what is the plugin status". Also UA — «сетап плагіна», «налаштувати контекст», «оновити конфігурацію».
 ---
 
@@ -92,6 +92,12 @@ At the start of execution, every skill MUST follow `references/local-context-pro
 - This is pre-v1.4.0 data → offer migration to `~/.grow-pm/` (see Reinstall / Migration mode)
 - If user agrees → migrate, then continue
 - If user declines → use in-place, warn about persistence risk
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
+
+The configurator's own setup run has no judgment points; the contract binds the skills it configures.
 
 ## Workflow entry points
 

@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.12.3
+version: 0.13.0
 description: Create Jira tasks from requirements (usually a Confluence page) — FE/BE/Android/iOS/Design/Analytics breakdown inside an Epic. Not writing the requirements (requirements-creator). UA — «створи задачі для фічі», «Jira-задачі з вимог у Confluence», «розбий фічу на задачі», «заведи задачі в Epic». EN — "create tasks from requirements", "create Jira issues from Confluence requirements", "break down a feature into development tasks", or a shared Confluence link with a request for Jira tasks.
 ---
 
@@ -32,6 +32,10 @@ Key context used by this skill:
 - `team.members` — for discovering assignees and roles
 - `product.confluence_space` — for Confluence page links
 - `user.language` — for output language
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ## Step T — Template Resolution
 
@@ -190,32 +194,9 @@ For each selected work type, create a Jira issue with these fields:
 
 #### Task title format:
 
-Standard development:
-```
-[WorkType] FeatureName
-```
+`[WorkType] FeatureName`, or `[WorkType] - Grooming - A/B Test - FeatureName` keeping only the qualifiers that apply (Grooming only for FE/BE/Android/iOS; Design and Analytics are never affected by it).
 
-If Grooming (only for FE/BE/Android/iOS tasks):
-```
-[WorkType] - Grooming - FeatureName
-```
-
-If A/B test:
-```
-[WorkType] - A/B Test - FeatureName
-```
-
-If both Grooming AND A/B test (FE/BE/Android/iOS only):
-```
-[WorkType] - Grooming - A/B Test - FeatureName
-```
-
-Examples:
-- `[FE] User Reviews - Product page review section`
-- `[BE] - Grooming - User Reviews - Product page review section`
-- `[iOS] - A/B Test - Compact product specs block`
-- `[Android] - Grooming - A/B Test - Compact product specs block`
-- `[Design] User Reviews - Product page review section` *(Design is never affected by Grooming)*
+The full format — every title variant with worked examples, the work-type fields table (issue type + labels per work type) and the A/B-test Analytics pair — lives in `references/task-format.md` (skill-local). Read it before drafting task titles and labels in Step 7, every run.
 
 #### Description format (markdown):
 
@@ -269,22 +250,11 @@ After drafting all task descriptions and BEFORE creating issues in Jira, run `re
 
 #### Work-type specific fields:
 
-| Work Type | Issue Type | Labels | +Grooming label |
-|---|---|---|---|
-| **FE** | Task | `frontend` | + `grooming` if grooming mode |
-| **BE** | Task | `backend` | + `grooming` if grooming mode |
-| **Android** | Task | `Android`, `app` | + `grooming` if grooming mode |
-| **iOS** | Task | `iOS`, `app` | + `grooming` if grooming mode |
-| **Design** | Design (if available) or Task | `design` | not affected |
-| **Analytics** | Analytics (if available) or Task | `Analytics` | not affected |
+Issue Type and work-type labels per work type (+ `grooming` for FE/BE/Android/iOS in grooming mode) — the table is in `references/task-format.md` (skill-local).
 
 #### Analytics special case — A/B Test:
 
-If the feature is an A/B test, create **2** Analytics tasks:
-1. `[Analytics] {FeatureName} - Analytics coverage` — for defining analytics requirements
-2. `[Analytics] {FeatureName} - Test results analysis` — for analyzing test results after completion
-
-> **Note:** Use the user's preferred language (`user.language`) for analytics task titles if required by your team's conventions.
+An A/B test gets **2** Analytics tasks (coverage + test results analysis) — titles in `references/task-format.md` (skill-local).
 
 ### Step 8: Set Additional Fields via Edit
 
@@ -343,68 +313,9 @@ Include:
 
 **After creating all tasks, automatically verify one task** to ensure it matches the requirements, rules, and field conventions. This is a mandatory quality gate.
 
-**12a. Select a task for verification:**
+Pick one created task (preferably FE or BE), read it back from Jira and hand it — with the requirements content and the check table — to the `grow-product-manager:artifact-checker` agent (maker–checker, `references/artifact-style-gate.md`); report discrepancies, apply confirmed fixes to ALL created tasks, re-verify.
 
-Pick one of the created tasks (preferably a development task — FE or BE — as they have the most complex field set).
-
-**12b. Read the task back from Jira:**
-
-Use `getJiraIssue` to fetch the created task with all fields. This ensures we verify what was actually saved, not what we intended to send.
-
-**Maker–checker separation (v0.11.0):** the agent that created the tasks does not evaluate them. The maker fetches the raw task data (this step), then passes it — together with the requirements content and the check table below — to the **`grow-product-manager:artifact-checker`** agent (`references/artifact-style-gate.md` → Execution model) that has no access to this conversation's reasoning. The checker returns findings; the maker applies fixes (12d). If subagents are unavailable — run inline and mark the report "незалежність перевірки знижена (inline)".
-
-**12c. Run verification checks:**
-
-| Check | What to verify | How to verify |
-|-------|---------------|--------------|
-| **Title format** | Matches the pattern: `[WorkType] - Grooming/A/B Test - FeatureName` | Compare with the expected title from Step 7 rules |
-| **Parent** | Linked to the correct Epic | Check `parent` field matches the Epic key |
-| **Reporter** | Set to the user's accountId | Compare with `user.jira_account_id` |
-| **Team** | Set to the correct team | Compare with the confirmed team value from Step 6b |
-| **Labels** | Contains all required labels: feature code, work type label, `a/b_test` if applicable, `grooming` if applicable | Check labels array against expected values |
-| **Components** | Matches the confirmed components | Compare with the confirmed values from Step 6b |
-| **Description** | Contains "Why", "What", "How", "Definition of Done" and "Requirements" (with Confluence link) sections — the Step 7 format | Parse description content |
-| **Issue Type** | Correct type (Task/Design/Analytics) | Check issue type field |
-| **Links** | Correct dependency links created (if linking was confirmed) | Check issue links via `getJiraIssue` |
-| **List formatting** | "What"/"How"/DoD are lists or short structured blocks, not paragraph prose | Gate 2 checklist (`references/artifact-style-gate.md`) |
-| **No ungrounded tech content** | No technical assumptions outside the "Технічні рекомендації (AI)" section; that section (if present) opens with the AI callout | Gate 1 source test against the requirements page |
-
-**12d. Report verification results:**
-
-**If all checks pass:**
-> "I verified task [KEY] and all fields are correct: title format, parent, reporter, team, labels, components, description, and links all match the expected values."
-
-**If issues are found:**
-
-Present a clear report to the user:
-
-> "I verified task [KEY] and found the following discrepancies:"
-
-| # | Field | Expected | Actual | Severity |
-|---|-------|----------|--------|----------|
-| 1 | Labels | `frontend`, `PROJ-1234.5` | `frontend` (missing feature code) | Critical |
-| 2 | Team | Team Name | (not set) | Critical |
-| 3 | Title | `[FE] Feature Name` | `[FE] - Feature Name` (extra dash) | Minor |
-
-Then propose fixes:
-
-> "I can fix these issues automatically. Here is what I'll do:
-> 1. Add missing label `PROJ-1234.5` to [KEY] and all other created tasks
-> 2. Set Team field on [KEY] and all other created tasks
-> 3. Update title on [KEY]
->
-> Should I apply these fixes?"
-
-- If user confirms → apply fixes using `editJiraIssue` for ALL affected tasks (not just the verified one — the same issues likely affect all tasks)
-- If user wants to review first → show the proposed changes for each task before applying
-- After fixes are applied → re-verify the same task to confirm the fixes worked
-
-**12e. Cross-task fix propagation:**
-
-If an issue is found in the verified task, assume it may affect ALL created tasks (since they were created with the same logic). When fixing:
-- Fix the verified task first
-- Apply the same fix to all other tasks
-- Report how many tasks were fixed
+The full procedure — task selection (12a), read-back and the maker–checker hand-off with its inline fallback (12b), the verification check table (12c), the result report and fix proposal (12d), cross-task fix propagation (12e) — lives in `references/post-creation-verification.md` (skill-local). Read it after the Jira issues are created, every run.
 
 ### Step 13: Feedback and self-improvement
 
@@ -423,7 +334,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.12.3", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.13.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode
@@ -447,6 +358,8 @@ This skill can work together with **Write Concept / PRD** — if a PRD was just 
 
 ## Additional Resources
 
+- **`references/task-format.md`** (skill-local) — Step 7 title variants with examples, work-type fields table, A/B-test Analytics pair
+- **`references/post-creation-verification.md`** (skill-local) — Step 12 (12a–12e): read-back, maker–checker check table, fix report, cross-task propagation
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy

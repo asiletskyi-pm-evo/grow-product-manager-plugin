@@ -1,6 +1,6 @@
 ---
 name: one-on-one
-version: 0.1.3
+version: 0.2.0
 description: Prepare and analyze 1-1s — a meeting for and about the person — agenda, NVC feedback, burnout signals. Not status meetings (meeting-processor), not a formal review (performance-review). UA — «підготуй мене до 1-1», «розбери 1-1», «з ким давно не було 1-1». EN — "prepare for a 1-1", "1-1 with <person>", "analyze this 1-1", "who haven't I had a 1-1 with", "questions for a 1-1". Also UA — «нотатки 1-1», «питання для 1-1», «сигнали по вигоранню». Returns an ARCV follow-up and a profile update. Do NOT use to set goals (goal-setter). meeting-processor detects a 1-1 and redirects here.
 ---
 
@@ -36,6 +36,10 @@ A task/status meeting, a goals-planning meeting, or a hybrid of all three in one
 
 ### Step 0 — Local context
 Per `local-context-protocol.md`.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step P — Person context
 Per `people-context-protocol.md`. Load the profile: `d_type`, active goals, `one_on_one` history + last follow-up, `gtd_index` trend, `signals`. If no profile — offer to create one.

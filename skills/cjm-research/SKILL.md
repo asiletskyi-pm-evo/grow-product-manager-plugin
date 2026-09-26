@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.7.6
+version: 0.8.0
 description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».
 ---
 
@@ -110,6 +110,12 @@ Follow `references/vault-protocol.md` — Step 0.5:
 - Detect vault_level per `vault-protocol.md` → "Vault Level Detection" (L0, L1, L2)
 - If vault_level > L0 → note that vault context search will be available in Step 1.5
 - If vault_level = L0 or vault sync_mode = "off" → vault steps will be skipped
+
+**1f. Judgment contract (all modes):**
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step 1.5: Vault Context Search (Optional)
 
@@ -221,54 +227,15 @@ For `comparison` mode: invoke `product-analysis` separately for each platform be
 
 **Why this exists:** historic incidents where uncritical citation of raw data points produced cascading errors (incomplete-period extrapolation, Week-1 holiday zriz cited as YoY trend, derived claims propagated without re-verification, missing inline-period annotation). The gate prevents these patterns systematically. See `data-integrity-protocol.md` for the full incident catalog and anti-pattern examples.
 
-**3.5.a — Period/Context Completeness Check:**
+**Sub-checks.** Each sub-check runs the matching Gate Check of `references/data-integrity-protocol.md` — criteria, thresholds and actions live there; the note column is what cjm-research adds on top.
 
-For each timeseries metric loaded in Step 3:
-- Verify Tableau/dashboard extract date against the last data point in the series
-- If `last_point_date + period_length > extract_date` → the last point is INCOMPLETE
-- Action: normalize on full period (raw × full_days / actual_days), OR exclude the partial point from analysis, OR wait for end-of-period
-- **This is a blocker for PoP comparison.** Do not compare an incomplete period against complete periods without normalization.
-
-**3.5.b — Seasonal/Cyclical Screening:**
-
-Detect overlap of analysis period with known holiday/seasonal windows (per `cjm-protocol.md` → Holiday Screening Windows):
-
-- Ukraine default: Week 1 (Jan 1-7), Mar 7-8, Easter ± 1 week, May 1-3, BF week, Dec 22-31
-- Global products: also Chinese NY, Diwali, Ramadan, US Thanksgiving / BF, Boxing Day
-
-If an anomaly week aligns with a holiday window:
-- ⚠️ FLAG: "Holiday-affected period — interpretation is week-specific, not a trend"
-- Search for sustained pattern in non-holiday weeks
-- For YoY comparison: never cite a holiday week as a year-trend; always read the full YoY table
-
-**3.5.c — Multi-Source Cross-Validation:**
-
-For every critical CR / GMV / Order / Revenue / Retention metric:
-- Require ≥ 2 independent sources (two different Tableau workbooks, or Tableau + an internal live-metrics tool, or Tableau + GA, etc.)
-- Variance tolerance ≤ 15% between sources
-- Variance > 15% → ⚠️ FLAG, resolve before reporting
-
-**Special case — extreme values (drop > 25% or lift > 50% or sensational claim):**
-- Auto-promote to ≥ 3 sources (not 2)
-- Methodology change check (read DT-* / DATA-* tickets in the analysis period)
-- Reference period analysis (full YoY/PoP table, never single cell)
-
-**3.5.d — Period Definition Lock + Inline Annotation:**
-
-Pre-compute inline-annotation strings for every metric per Gate Check 4 of `data-integrity-protocol.md`. Examples:
-
-- `Catalog CR 0.99% (12mo rolling, 1.05.2025 → 7.05.2026)`
-- `Listing GMV +20% YoY (May 2025 → May 2026, weeks 18-19, non-holiday window)`
-- `Brand pages ~48K sessions/month (normalized to 30 days from 7-day extract, May 2026)`
-
-Methodology section at the top of the report is **not sufficient** — readers copy individual numbers into Slack, slides, follow-up docs without surrounding context.
-
-**3.5.e — Source Type Marker:**
-
-Tag every source with type per Gate Check 5 of `data-integrity-protocol.md`:
-
-- Internal: `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `walkthrough-local`, `confluence-internal`, `jira-internal`
-- This enables audit trail in the final Sources section
+| Sub-check | Gate Check in data-integrity-protocol.md | CJM-specific note |
+|---|---|---|
+| **3.5.a** — Period/Context Completeness | Gate Check 1 (internal data) | Run on every timeseries metric loaded in Step 3 against the Tableau/dashboard extract date. **A blocker for PoP comparison** — do not compare an incomplete period against complete periods without normalization. |
+| **3.5.b** — Seasonal/Cyclical Screening | Gate Check 2 (internal data) | Windows per `cjm-protocol.md` → Holiday Screening Windows (Ukraine default; global products also Chinese NY, Diwali, Ramadan, US Thanksgiving / BF, Boxing Day). **Automated health-check never asks:** when `product.primary_market` is unset, apply these windows as before instead of Gate Check 2's one-time question, and note it. For YoY comparison: never cite a holiday week as a year-trend; always read the full YoY table. |
+| **3.5.c** — Multi-Source Cross-Validation | Gate Check 3, incl. the extreme-values special case | Every critical CR / GMV / Order / Revenue / Retention metric. Extreme-value methodology change check = DT-* / DATA-* tickets in the analysis period; reference period analysis = the full YoY/PoP table, never a single cell. |
+| **3.5.d** — Period Definition Lock + Inline Annotation | Gate Check 4 | Pre-compute the inline-annotation string for every metric here, before Step 4 — e.g. `Catalog CR 0.99% (12mo rolling, 1.05.2025 → 7.05.2026)`, `Listing GMV +20% YoY (May 2025 → May 2026, weeks 18-19, non-holiday window)`, `Brand pages ~48K sessions/month (normalized to 30 days from 7-day extract, May 2026)`. |
+| **3.5.e** — Source Type Marker | Gate Check 5 | Internal markers: `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `walkthrough-local`, `confluence-internal`, `jira-internal` — `walkthrough-local` (a Flow Walkthrough pack cited in Step 3) is this skill's addition to the protocol list. Enables the audit trail in the final Sources section. |
 
 **Output of Step 3.5:**
 
@@ -322,7 +289,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.7.6",
+     skill_version: "0.8.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],

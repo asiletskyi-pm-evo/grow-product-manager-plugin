@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.12.3
+version: 0.13.0
 description: Analyze product data — dashboards, metrics, A/B results, funnel vs baseline; data only. Not the CJM funnel pipeline (cjm-research), not a quick «чи все ок» health glance (focus-advisor). UA — «проаналізуй метрики/дашборд», «результати A/B-тесту», «чому впала конверсія», «воронка проти baseline». EN — "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", "CJM funnel analysis (data only)". Also UA — «знайди аномалії», «поясни ці дані», «аналіз після релізу». Generates data-backed hypotheses; for anomalies → enrichment → backlog use cjm-research.
 ---
 
@@ -37,6 +37,10 @@ Key context used by this skill:
 - `product.jira_project_key` — for post-release analysis (reading Jira tasks)
 - CJM Configuration section — funnel stages, dashboard URLs, baselines, thresholds (for CJM mode)
 - `user.language` — for output language
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Vault context prerequisite
 
@@ -247,7 +251,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "product-analysis",
-     skill_version: "0.12.3",
+     skill_version: "0.13.0",
      tags: [metric names analyzed, platforms, analysis_mode],
      content: full_analysis_markdown,
      related: [source hypothesis, source requirements, previous analyses from Step 0.5],
