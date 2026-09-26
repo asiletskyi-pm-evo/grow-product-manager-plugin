@@ -65,15 +65,33 @@ Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input br
 | hypothesis | Hypothesis with confidence + next step (chain to brainstorm-features) | 1 |
 | sources | ≥2 sources for critical anomalies, all period-annotated | 1 |
 
+### meeting-processor — minutes of meeting (since v3.4.0)
+- **Artifact:** Structured MoM · **Gold:** `skills/meeting-processor/references/examples/mom-example-v1.md` · **Fixture:** `testing/fixtures/meeting-processor/brief-v1.md` · **pass_threshold:** 0.8
+
+| id | Criterion | Weight |
+|----|-----------|--------|
+| decisions_extracted | Every decision taken in the meeting is recorded, with its rationale; parked ideas and tentative dates are not promoted to decisions | 2 |
+| action_items_with_owner | Every action item has exactly one owner, an active verb and a date | 2 |
+| no_hallucinated_content | Nothing absent from the transcript (names, emails, numbers, commitments) | 2 |
+| structured_summary | The Structured MoM sections are present and filled | 1 |
+| chain_offer | Next-step offers to the skills that fit the meeting type | 1 |
+
+### task-creator — Jira discipline tasks (since v3.4.0)
+- **Artifact:** tasks under an epic · **Gold:** `skills/task-creator/references/examples/tasks-example-v1.md` · **Fixture:** `testing/fixtures/task-creator/brief-v1.md` · **pass_threshold:** 0.8
+
+| id | Criterion | Weight |
+|----|-----------|--------|
+| tasks_per_discipline | One task per affected discipline (FE / BE / iOS / Android / QA / Analytics), none missing, none invented | 2 |
+| derived_from_requirements | Every task bullet traces to a requirement or acceptance criterion; no ungrounded technical content (artifact-style-gate Gate 1) | 2 |
+| acceptance_in_task | Each task carries its acceptance criteria / Definition of Done | 2 |
+| correct_epic_link | Parent epic and links set as the skill prescribes | 1 |
+| estimates_or_labels | Work-type labels (and estimates only when sourced) | 1 |
+
 ### Lighter rubrics (fixtures TBD — add exemplars first)
 
 **product-analysis** (analysis report): period_annotation (2), gate_passed (2), trend_vs_baseline (2), anomaly_or_insight (2), hypothesis_backed (1), sources (1). pass 0.85.
 
 **brainstorm-features** (hypothesis backlog): ice_scored (2), hypothesis_structure IF/THEN/measurable (2), funnel_impact_link (2), validation_method (1), prioritized (1). pass 0.8.
-
-**meeting-processor** (MoM): decisions_extracted (2), action_items_with_owner (2), no_hallucinated_content (2), structured_summary (1), chain_offer (1). pass 0.8.
-
-**task-creator** (Jira tasks): tasks_per_discipline FE/BE/etc (2), derived_from_requirements (2), acceptance_in_task (2), correct_epic_link (1), estimates_or_labels (1). pass 0.8.
 
 > **Rubric-authoring rule:** a criterion must be observable and binary-ish (0/1/2 with clear anchors). Vague criteria ("well written") are not allowed — they measure nothing.
 
@@ -83,7 +101,17 @@ Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input br
 - **Definition of Done** — for a release touching an artifact skill, its output-eval must be ≥ pass_threshold (the same way trigger-evals gate description releases).
 - **On regression** — a dropped criterion score points at the harness layer to fix (usually Instructions or Examples); see `references/self-improvement.md`.
 
-## Coverage status (rubrics/fixtures as of v1.39.0 — no run logged since)
+## Results log
+
+| Date | Release | Skill | Before (main) | After (branch) | Runner | Note |
+|------|---------|-------|---------------|----------------|--------|------|
+| 2026-09-25 | v3.4.0 | write-concept | 1.00 ✅ | 1.00 ✅ | maker subagent per version + one blind LM judge scoring both (order alternated per skill) | thin-core regression: no material difference |
+| 2026-09-25 | v3.4.0 | requirements-creator | 0.91 ✅ | 1.00 ✅ | same | `decision_rule` 1 → 2; the judge attributes it to run variance, not to the moved publishing / handoff text |
+| 2026-09-25 | v3.4.0 | cjm-research | 0.86 ✅ | 0.86 ✅ | same | identical scores after Step 3.5 became a pointer table (threshold 0.85) |
+| 2026-09-25 | v3.4.0 | meeting-processor | 0.88 ✅ | 1.00 ✅ | same | first run of the new fixture + gold; `action_items_with_owner` 1 → 2, run variance |
+| 2026-09-25 | v3.4.0 | task-creator | 1.00 ✅ | 1.00 ✅ | same | first run of the new fixture + gold |
+
+## Coverage status (rubrics/fixtures as of v3.4.0)
 
 > **Stage 3b is a blocker** (`Testing-process.md`), yet no 3b run is recorded anywhere for
 > v2.0.x or v2.1.x — and those releases changed `requirements-creator`, `meeting-processor`,
@@ -98,7 +126,7 @@ Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input br
 | cjm-research | ✅ | ✅ | ✅ |
 | product-analysis | ✅ light | ⬜ | ⬜ |
 | brainstorm-features | ✅ light | ⬜ | ⬜ |
-| meeting-processor | ✅ light | ⬜ | ⬜ |
-| task-creator | ✅ light | ⬜ | ⬜ |
+| meeting-processor | ✅ (v3.4.0) | ✅ | ✅ |
+| task-creator | ✅ (v3.4.0) | ✅ | ✅ |
 
 Next: add golden exemplars + fixtures for the four light-rubric skills, then promote their rubrics to full.
