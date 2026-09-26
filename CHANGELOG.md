@@ -12,6 +12,81 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.4.0 (2026-09-25)
+
+**Judgment contract and a thinner core.** First release of the Judgment Core + Role Layer programme (v3.4.0 → v3.9.0). The plugin gets an explicit model of its user as a Product Manager in the AI era and a ten-principle behaviour contract, and every skill now names its judgment points at a new Step 0j. This version publishes the contract and changes no question and no output; the mechanisms behind principles 2–10 arrive in v3.5.0–v3.9.0. The skill cores were slimmed so that every `SKILL.md` is ≤ 400 lines, and a validator check keeps them there. MINOR: new shared reference, new step in every skill, new validator check.
+
+### Added
+
+- **`references/pm-mental-model.md`** — who the user is (the PM owns outcomes; six pillars and one cross-cutting discipline), the north star (decision quality and speed to evidence, not artifact count), **ten principles** (provenance by default, human hypothesis first, calibrated confidence with a falsifier, built-in opponent, no sycophancy, build before you argue, synthetic users are rehearsal, learning-preserving modes, decision ownership, hand back at the frontier), the anti-patterns they prevent, and six **evidence classes** (`observed`, `measured`, `reported`, `external`, `simulated`, `assumed`).
+- **Step 0j — Judgment contract** in `references/local-context-protocol.md`, and a three-line block in all 31 skills whose first line is always `> **Judgment contract (Step 0j).**`: note the run's judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output; **a principle acts only through a step that implements it**, so until the version that implements a step, every question, gate and output of the skill stays exactly as it is. Each principle's *Binds* list in `pm-mental-model.md` carries the version that implements it. (The specification called it "Step 0.5-J"; Step 0.5 is already the Vault Context Search.)
+- **`references/figma-designs-check.md`** — the Figma designs check that write-concept, requirements-creator, brainstorm-features and product-research each carried in full; each skill keeps its own trigger, "use as context for" and "when designs are confirmed" lines next to the pointer.
+- **Validator check 15 `thin core`** — every `SKILL.md` ≤ 400 lines (`testing/validate-consistency.sh`, row in `testing/Testing-process.md`).
+- README **Principles** section (ten one-line principles); `harness-map.md` names the contract in the Instructions layer.
+- Output evals: full rubrics, fixtures and gold exemplars for **meeting-processor** (`testing/fixtures/meeting-processor/brief-v1.md`, `skills/meeting-processor/references/examples/mom-example-v1.md`) and **task-creator** (`testing/fixtures/task-creator/brief-v1.md`, `skills/task-creator/references/examples/tasks-example-v1.md`) — the two skills with the largest moves, evaluated before and after the slimming.
+
+### Changed
+
+- **Thin core** — long procedures moved verbatim into new skill-local references; each `SKILL.md` keeps the step heading, a short summary and a pointer:
+
+| Skill | New skill-local references (what moved) |
+|---|---|
+| `meeting-processor` | `calendar-enrichment.md`, `meeting-type-blocks.md`, `mom-format.md`, `search-mode.md`, `chaining.md` (M1d, M5b, M6a skeleton, Search mode S1–S4, M9 context tables + input-source discovery) |
+| `diagram-prototyper` | `prompt-construction.md`, `tool-procedures.md` (Step 5; Steps 3b, 6a2–6f, 8b–8f) |
+| `product-research` | `source-validation-gate.md`, `deep-research-llm.md` (Step 1.5 sub-checks; Deep Research procedures) |
+| `task-creator` | `post-creation-verification.md`, `task-format.md` (Step 12; Step 7 format tables) |
+| `design-bridge` | `design-bridge-playbook.md` (end-to-end example, failure modes, per-source extraction, pptx render, in-file history) + Step 4g appended to `figma-playbook.md` |
+| `requirements-creator` | `publishing-destinations.md`, `design-bridge-handoff.md` (Step 6; Step 8) |
+
+  `cjm-research` Step 3.5 sub-checks 3.5.a–e, which restated `data-integrity-protocol.md` Gate Checks 1–5, became a pointer table that keeps every CJM-specific instruction; where the old restatement and the shared protocol differed (the extreme-value verification list), the shared protocol governs. Longest `SKILL.md` after the change: 380 lines (was 617).
+- All 31 skills bumped MINOR (new Step 0j):
+
+| Skill | Version |
+|---|---|
+| `brainstorm-features` | 0.10.3 → 0.11.0 |
+| `cjm-research` | 0.7.6 → 0.8.0 |
+| `decision-log` | 0.2.5 → 0.3.0 |
+| `delegation-coach` | 0.1.3 → 0.2.0 |
+| `design-bridge` | 0.4.2 → 0.5.0 |
+| `diagram-prototyper` | 0.10.2 → 0.11.0 |
+| `experiment-tracker` | 0.2.4 → 0.3.0 |
+| `feedback-triage` | 0.2.3 → 0.3.0 |
+| `flow-walkthrough` | 0.2.1 → 0.3.0 |
+| `focus-advisor` | 0.5.1 → 0.6.0 |
+| `goal-setter` | 0.1.3 → 0.2.0 |
+| `hiring-designer` | 0.1.2 → 0.2.0 |
+| `knowledge-library` | 0.7.2 → 0.8.0 |
+| `meeting-processor` | 0.13.5 → 0.14.0 |
+| `offboarding-guide` | 0.1.2 → 0.2.0 |
+| `one-on-one` | 0.1.3 → 0.2.0 |
+| `performance-review` | 0.1.2 → 0.2.0 |
+| `plugin-configurator` | 2.9.5 → 2.10.0 |
+| `product-analysis` | 0.12.3 → 0.13.0 |
+| `product-landscape` | 0.1.0 → 0.2.0 |
+| `product-reporter` | 0.5.3 → 0.6.0 |
+| `product-research` | 0.10.6 → 0.11.0 |
+| `project-planning` | 0.2.4 → 0.3.0 |
+| `quarterly-planning` | 0.3.4 → 0.4.0 |
+| `release-manager` | 0.2.3 → 0.3.0 |
+| `requirements-creator` | 0.13.3 → 0.14.0 |
+| `roadmap-architect` | 0.2.4 → 0.3.0 |
+| `sprint-planning` | 0.3.3 → 0.4.0 |
+| `task-creator` | 0.12.3 → 0.13.0 |
+| `template-library` | 0.2.4 → 0.3.0 |
+| `write-concept` | 0.11.3 → 0.12.0 |
+
+- README: stale counts fixed (37 shared references, 26 built-in templates, 31 skills in the Hosts table, six host capabilities); `testing/host-matrix.md` per-host tallies recomputed from its 31 rows (codex-cli 15 full / 16 degraded, chatgpt 21 degraded / 10 n/a, codex-cloud 22 degraded / 9 n/a).
+
+### Not in this version (next)
+
+v3.5.0 — role layer: `user.role` and eight role profiles that change defaults only (altitude, horizon, template, evidence emphasis, vocabulary), Step 0i role resolution, `## Judgment` switches, the altitude line (`Altitude: L2 · ↑ serves · ↓ next`) and Gate 4 of the artifact quality gate, lint checks 19–22. Then role defaults and templates (v3.6.0); hypothesis-first questions, the confidence-and-falsifier footer and the new decision-record fields (v3.7.0); evidence classes as Data Integrity Gate Check 6 and `simulated` labels (v3.8.0); prototype path, pre-mortem and kill criteria, learning-preserving modes and the self-improvement guard (v3.9.0).
+
+### Backwards compatibility
+
+Full. No new question, no removed question or gate, no changed output and no new `local-context.md` field; an existing `local-context.md` works exactly as in v3.3.0. The moved procedures are loaded from the skill-local references at the same step, with the same content. One governance nuance: cjm-research Step 3.5.c now defers to `data-integrity-protocol.md` Gate Check 3, whose extreme-value list is slightly longer than the old inline restatement (a methodology-change-suspicion trigger, an original-source check and a publication-date check); the automated health-check still never asks — with `product.primary_market` unset it applies the holiday windows exactly as before.
+
+---
+
 ## v3.3.0 (2026-09-11)
 
 **Product landscape — a registry of competitors, adjacent players and benchmarks, and six optional research connectors.** New skill `product-landscape` scans the user's machine, discovers products by category and market, categorises and characterises them with sources, maps the category, and starts the same-flow research across any number of products the user picks. MINOR: new skill, new storage folder, new vault type, new optional connectors.
