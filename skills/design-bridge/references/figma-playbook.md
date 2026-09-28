@@ -95,3 +95,19 @@ See `local-context.example.md` → Design System section for the full schema.
 - `get_screenshot` sometimes returns low-res output for large frames → prefer calling it on compact nodes rather than an entire page.
 - Components with variants need a `variant` prop — if unset, Figma returns the default.
 - Non-Latin characters: verify that the brand font covers the target language's glyph set (e.g., Cyrillic, Greek, CJK). If the font falls back to a system default, screenshots may not match the design.
+
+## Step 4g — Figma context / screenshots
+
+> Loaded on demand at `design-bridge` Step 4g, when `embeds=yes` AND (Figma URL in sources OR user provided a link). The trigger and a one-paragraph summary stay in SKILL.md.
+
+Workflow:
+1. Parse URL → `fileKey`, `nodeId`
+2. `get_design_context(nodeId, fileKey)` — text context of the frame (layer names, variants)
+3. `get_screenshot(nodeId, fileKey)` — image in temp
+4. Insert into Deck IR slide as `media: [path/to/screenshot.png]`
+5. If seat is View and an edit is required → skip hi-fi prototype, warn in the outline
+
+**Policy** (from `references/data-policy.md`):
+- Do not embed Figma frames from competitive research
+- Embeds from private files owned by your brand — only in internal decks (not published externally)
+- Permission error (403) → graceful fallback: placeholder "[Design: see Figma {{url}}]"

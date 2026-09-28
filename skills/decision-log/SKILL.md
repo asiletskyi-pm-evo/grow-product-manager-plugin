@@ -1,6 +1,6 @@
 ---
 name: decision-log
-version: 0.2.5
+version: 0.3.0
 description: Log and retrieve product decisions as ADR records — context, options, rationale, consequences. Not meeting notes (meeting-processor), not experiment state (experiment-tracker). UA — «зафіксуй рішення», «чому ми вирішили…», «покажи рішення по…», «журнал рішень». EN — "log this decision", "why did we decide X", "show decisions about Y", "supersede that decision", "decision log". Also UA — «перегляньмо це рішення», «зафіксуй рішення після дебатів». Also invoked by meeting-processor, experiment-tracker and planning skills when their outcome contains a decision worth recording.
 ---
 
@@ -16,6 +16,10 @@ Product decisions evaporate from chats and meetings; three months later nobody r
 - `references/persistent-storage.md` — fallback storage when no vault is configured.
 - `references/roi-frameworks.md` — optional cost-of-decision (ROAIP) field.
 - `references/goal-frameworks.md` — optional Tell-and-Sell commitment status.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ## Storage
 - **Vault configured (L1/L2):** `Decisions/{product}/decision-{topic}-{date}.md` via `vault_save({type: "decision", …})`.

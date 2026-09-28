@@ -1,6 +1,6 @@
 ---
 name: brainstorm-features
-version: 0.10.3
+version: 0.11.0
 description: Brainstorm features and hypotheses with ICE, or run a role debate (Debate mode). Not the CJM pipeline (cjm-research), not meeting transcripts (meeting-processor). UA — «брейншторм фіч», «згенеруй гіпотези», «проведи дебати», «red team цю ідею». EN — "brainstorm features", "generate hypotheses", "find growth opportunities", "run a debate", "have agents argue from different roles", "stress-test via debate". Also UA — «знайти точки росту», «гіпотези для CJM-воронки», «нехай агенти подискутують», «круглий стіл ролей», «розглянь з різних ролей». The ideation engine — cjm-research delegates here. Do NOT use to record a decision already made (decision-log).
 ---
 
@@ -40,6 +40,10 @@ Key context used by this skill:
 - CJM Configuration section — funnel stages, baselines, thresholds (for CJM Hypotheses mode)
 - Knowledge Library section — search modes, available sources count
 
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
+
 ## Step T — Template Resolution (when saving brainstorm output)
 
 The brainstorm itself is interactive and dialogue-driven — no template is needed for in-chat iteration. Step T runs only when the user asks to **save** or **publish** the result as a structured artifact.
@@ -73,21 +77,9 @@ If the user says "do not use a template" → skip Step T and use the skill's int
 - **Which product or part of the product ecosystem** are we brainstorming for? (if not explicitly stated — ask before proceeding)
 - **New or existing functionality?** — Are we generating ideas for completely new functionality, or are we brainstorming improvements/changes to existing functionality? (if not clear — ask explicitly)
 
-**Figma designs check — if working with existing product or existing functionality:**
-
-If the product or feature already exists, ask via AskUserQuestion:
-
-> "Are there current designs / mockups / prototypes of this functionality in Figma?"
-
-- **If the user provides a link** — open it via Figma MCP (`get_design_context`, `get_screenshot`) or browser fallback, read and extract: current UX flows, screens, key UI patterns. Use this as context for brainstorming — ideas should build on or consciously change the current state
-- **If the user believes designs should exist but cannot provide a link** — offer to search:
-  > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
-  - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
-    - Try to understand the structure of the design system: look for sections like "Current design", "Production", "Live", "Ready for dev", "Latest state"
-    - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
-  - If Figma MCP is unavailable — follow `references/integration-strategy.md` fallback chain
-- **If no designs exist** — note this and proceed without design context
-- **If relevant designs are confirmed** — use them throughout the brainstorm: reference the current UX state when generating ideas, describe how hypotheses change or build on the current design. Include links to relevant frames in the saved output
+**Figma designs check — if working with existing product or existing functionality:** if the product or feature already exists, run `references/figma-designs-check.md` with:
+- *use as context for:* brainstorming — ideas should build on or consciously change the current state;
+- *when designs are confirmed:* reference the current UX state when generating ideas, describe how hypotheses change or build on the current design, and include links to relevant frames in the saved output.
 
 Identify which starting situation applies:
 
@@ -358,10 +350,10 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 IF vault_level > L0 AND vault sync_mode != "off":
 
 1. For **each finalized hypothesis** (Step 5), save a separate artifact:
-   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.10.3", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.11.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
 2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
 3. For **debate sessions** (Step 3D), additionally save the debate itself:
-   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.10.3", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
+   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.11.0", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
    Display: "Saved to Vault: Debates/{product}/…"
 
 ## Quality standards

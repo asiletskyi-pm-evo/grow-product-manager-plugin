@@ -13,7 +13,7 @@ Before any other action, the skill MUST:
 
 ### 0a. Search for local-context.md
 
-**Shortcut (since v2.6.0):** if the session context contains a `GROW_PM_SESSION` digest (emitted by the plugin's SessionStart hook, `hooks/hooks.json`) that says `local-context.md: FOUND at <path>` — or the env variable `GROW_PM_CONTEXT_PATH` is set — take that path and skip the search below. The digest is a locator, not a substitute: still read the file and run 0c–0h. If the digest says `NOT VISIBLE`, it only means the hook's environment could not see the file (hosted sessions see the user's files through device tools, not the shell) — run the search below as usual and do **not** treat it as "not configured".
+**Shortcut (since v2.6.0):** if the session context contains a `GROW_PM_SESSION` digest (emitted by the plugin's SessionStart hook, `hooks/hooks.json`) that says `local-context.md: FOUND at <path>` — or the env variable `GROW_PM_CONTEXT_PATH` is set — take that path and skip the search below. The digest is a locator, not a substitute: still read the file and run 0c–0h and 0j. If the digest says `NOT VISIBLE`, it only means the hook's environment could not see the file (hosted sessions see the user's files through device tools, not the shell) — run the search below as usual and do **not** treat it as "not configured".
 
 Search in the following locations (in priority order):
 
@@ -128,6 +128,16 @@ Follow the detection algorithm from `references/vault-protocol.md` → "Vault Le
 Store `vault_level` and `vault_configs` in session context for use by Step 0.5 and vault_save.
 
 **If vault_level is L0** — no further vault-related actions in this session. All vault operations will be silently skipped.
+
+### 0j. Judgment contract (every skill)
+
+Every skill carries a three-line block that points here; its first line is always `> **Judgment contract (Step 0j).**`. The contract itself is `references/pm-mental-model.md`: the plugin **creates freely and decides carefully**.
+
+1. Before the first real step, read `pm-mental-model.md` §0 and §2 and note — internally, with no output — this run's **judgment points**: where the run scores, ranks, gives a verdict, sets a priority, recommends ship/kill or frames a debate question. Drafting, searching, clustering and prototyping are creation steps: they get no added friction, and their existing questions stay.
+2. **A principle acts only through a step that implements it.** At a judgment point, use only what the skill's own steps, and the shared protocols those steps already call, contain (for example, where a skill already has them: sources and period annotations, the Data Integrity Gate, the decision rule, a Skeptic in debates). Do not improvise anything those steps do not contain — a question, a section, a check, a footer, a confidence line, an evidence label, a record field, a hand-back proposal or any other output. Each principle's *Binds* list in `pm-mental-model.md` is the map of where it is or will be implemented, with the version in brackets; it is not an instruction. Until an implementing step exists, every question, gate and output of the skill stays exactly as it is, in every kind of run.
+3. **Questions that later versions add at judgment points** (the Principle 2 "your estimate first" question, from v3.7.0) will be switchable in the `## Judgment` section of `local-context.md` and never asked in a run with no user present — a scheduled health-check, a headless brief, a skill invoked only for a return payload. This rule does not touch any question a skill already asks.
+
+> Why a sub-step of Step 0 and not "Step 0.5": Step 0.5 is the Vault Context Search below. The specification that introduced the contract called it "Step 0.5-J".
 
 ## Step 0.5 — Vault Context Search (OPTIONAL)
 

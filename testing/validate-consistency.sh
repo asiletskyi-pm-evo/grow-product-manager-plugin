@@ -260,6 +260,20 @@ else
 fi
 ok "host packaging: path rule in every skill, $(ls agents/*.md 2>/dev/null | wc -l | tr -d ' ') Codex agent ports, host matrix covers every skill"
 
+# --- 15. Thin core: every SKILL.md <= 400 lines ----------------------------
+# v3.4.0: the thin-core rule ("skill cores <= 400 lines; long procedures live in
+# skill-local references/") was prose until seven cores had drifted to 405-617
+# lines. A limit nobody measures is a limit nobody keeps, so measure it.
+THIN_MAX=400
+THIN_BAD=0
+for f in skills/*/SKILL.md; do
+  n=$(wc -l < "$f" | tr -d ' ')
+  if [ "$n" -gt "$THIN_MAX" ]; then
+    err "$f: $n lines — thin core is <= $THIN_MAX; move long procedures to skills/<skill>/references/"; THIN_BAD=1
+  fi
+done
+[ "$THIN_BAD" -eq 0 ] && ok "thin core: every SKILL.md <= $THIN_MAX lines (longest: $(wc -l skills/*/SKILL.md | grep -v ' total$' | sort -n | tail -1 | awk '{print $1" "$2}'))"
+
 # --- 10. Component counts in the three public descriptions -------------------
 # "29 skills across five contours" lives in plugin.json, marketplace.json and
 # README. With agents/commands/connectors the counts multiply; grep them all.

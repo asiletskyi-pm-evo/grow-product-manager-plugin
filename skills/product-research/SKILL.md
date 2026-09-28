@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.10.6
+version: 0.11.0
 description: Competitive, market, user and UX-benchmark research — interview synthesis, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks". Also UA — «проаналізуй ринок», «конкурентний аналіз», «ринкові тренди». Calls knowledge-library for enrichment during research.
 ---
 
@@ -42,6 +42,10 @@ Key context used by this skill:
 - `knowledge_library.default_search_modes` — which search modes to use (`library` / `confluence` / `gdrive` / `baymard` / `internet` — the set `knowledge-library` implements)
 - `knowledge_library.baymard_access` — access to Baymard UX benchmarks (if configured)
 - `knowledge_library.confluence_spaces` — integrated Confluence spaces for knowledge enrichment
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ## Step T — Template Resolution
 
@@ -105,21 +109,9 @@ Follow `references/local-context-protocol.md` — Step 0g:
 - If user confirms → library sources will be included in Step 2
 - If not available → skip, no impact on workflow
 
-**Figma designs check — if researching existing product or existing functionality:**
-
-If the product or feature area already exists (i.e., not being built from scratch), ask via AskUserQuestion:
-
-> "Are there current designs / mockups / prototypes of this functionality in Figma?"
-
-- **If the user provides a link** — open it via Figma MCP (`get_design_context`, `get_screenshot`) or browser fallback, read and extract: current UX flows, screens, key UI patterns. Use this as context for the research (e.g., when analyzing competitor UX, reference the current state)
-- **If the user believes designs should exist but cannot provide a link** — offer to search:
-  > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
-  - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
-    - Try to understand the structure of the design system: look for sections like "Current design", "Production", "Live", "Ready for dev", "Latest state"
-    - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
-  - If Figma MCP is unavailable — follow `references/integration-strategy.md` fallback chain
-- **If no designs exist** — note this and proceed without design context
-- **If relevant designs are confirmed** — use them as primary context for understanding the current state. Reference design frames in the final research output
+**Figma designs check — if researching existing product or existing functionality:** if the product or feature area already exists (not built from scratch), run `references/figma-designs-check.md` with:
+- *use as context for:* the research (e.g., when analyzing competitor UX, reference the current state);
+- *when designs are confirmed:* use them as primary context for understanding the current state and reference design frames in the final research output.
 
 Summarize the full research brief back to the user and get confirmation before proceeding.
 
@@ -129,79 +121,9 @@ Summarize the full research brief back to the user and get confirmation before p
 
 **Why this exists:** historic incidents where stale benchmarks, geographically mismatched data (US benchmark cited for UA market), or sensational claims from a single source produced misleading research conclusions. See `data-integrity-protocol.md` for the full incident catalog.
 
-**1.5.a — Recency Check (date relevance):**
+**Sub-checks 1.5.a–1.5.e**, applied to every external source as it is gathered: **1.5.a** recency against per-data-type thresholds; **1.5.b** geographic/cultural fit to `product.primary_market`; **1.5.c** multi-source cross-validation (≥ 2 independent sources, ≥ 3 for sensational claims); **1.5.d** bias screening; **1.5.e** source-type marker + inline annotation.
 
-For each external source, determine publication / data collection date. Apply recency thresholds:
-
-| Data type | Recency threshold |
-|-----------|-------------------|
-| E-commerce CR / AOV benchmarks | ≤ 2 years |
-| UX best practices, fundamental research | ≤ 5 years |
-| Market trends, sizing | ≤ 1 year |
-| Competitor pricing / UX details | ≤ 6 months |
-| Technology stacks, platform changes | ≤ 6 months |
-
-- ✅ Recent → use freely
-- ⚠️ Aging → use for stable patterns only (UX best practices); cite with year caveat
-- ❌ Stale → do not cite; request newer source
-
-**Special case — Baymard guidelines:** check `research_id` and year. Foundational UX patterns (#253, #261, etc.) stay valid for 5+ years; specific metric values need recency check.
-
-**1.5.b — Geographic/Cultural Context Check:**
-
-For each external source — determine geography and cultural relevance to the active product's market.
-
-Rank each source against the product's own market (local-context → `product.primary_market`), not against a fixed list:
-- ✅ **Direct fit** — players in the same market and category as the product
-- ✅ **Regional comparable** — neighbouring markets with similar buying behaviour and payment/delivery norms
-- ⚠️ **Global with adaptation** — global giants; cite with an adaptation note (their scale distorts CR/AOV benchmarks)
-- ⚠️ **Mature-market reference** — good for **UX patterns**, caveat every CR/AOV number
-- ❌ **Heavily local elsewhere** — a market whose norms don't transfer; do not use as-is
-
-*Worked example, `primary_market: UA` e-commerce:* direct fit = the local marketplaces and category leaders; regional comparable = Allegro (PL), eMag (RO); global with adaptation = Amazon, eBay, AliExpress; mature-market reference = ASOS, IKEA; heavily local = US-only retailers. Keep your own per-market list in local-context (`product.competitors`) rather than re-deriving it each run.
-
-**Action when citing non-target geography:** explicit caveat about cultural fit + propose A/B-validation for the target market.
-
-**1.5.c — Multi-Source Cross-Validation (especially for extreme claims):**
-
-For every critical research finding that will appear in the final report:
-- ≥ 2 independent sources (Knowledge Library + web, Baymard + Confluence, 2 competitor sources, etc.)
-- Variance > 25% between sources → flag for resolution
-- Avoid double-citing: 2 articles from the same site = 1 source
-
-**Special case — sensational claims:**
-- "X has 25% CR" (extreme for e-commerce)
-- "Y grew 10× in N months"
-- "Best practice: do Z" (new claim, not from Baymard)
-- "#1 in industry" / "only player"
-
-→ Auto-promote to ≥ 3 sources, original primary source check (not secondhand reporting), date + methodology + sample-size verification.
-
-**1.5.d — Bias Screening:**
-
-Detect potential bias sources:
-- Vendor reports = marketing, not neutral analysis (e.g., Shopify state-of-commerce reports)
-- Industry-sponsored research = conflict of interest
-- Single competitor PR = biased self-reporting
-- Social-media data = selection bias (loud minority)
-
-**Action:** when citing the above — explicit caveat about potential bias in the final report.
-
-**1.5.e — Source Type Marker + Inline Annotation:**
-
-Tag every external source by type:
-- `baymard-premium` — Baymard Premium UX-Query / guidelines (include guideline #N)
-- `web-search` — general web search (include domain, year)
-- `kb-source` — Knowledge Library source (include trust score)
-- `competitor-website` — direct from competitor's site (include URL snapshot date)
-- `user-research` — user research synthesis (include N interviews, date, persona type)
-- `deep-research-llm` — ChatGPT/Gemini Deep Research (cross-checked with second source)
-
-Inline-annotation convention:
-- `(Baymard Premium, Guideline #N, YYYY research)`
-- `(Source domain, YYYY, geography)`
-- `(Competitor name, YYYY snapshot, source URL)`
-- `(N interviews YYYY-MM, persona-type)`
+The full procedure — the recency table, the geography tiers with the worked example, the cross-validation and bias rules, the source-type markers and the inline-annotation convention — lives in `references/source-validation-gate.md` (skill-local). Read it at the start of Step 2 — before spawning any fan-out subagents (their prompts need the thresholds) and before validating the first source.
 
 ### Output of Step 1.5
 
@@ -264,37 +186,9 @@ When the research requires quantitative data — product metrics, dashboard anal
 
 This delegation ensures accurate computation (via pandas/numpy) and consistent analysis methodology across all skills.
 
-**Deep Research via ChatGPT** (if confirmed by user in Step 1):
+**Deep Research via ChatGPT / Gemini** (if confirmed by user in Step 1): open each enabled LLM in the browser, pick the strongest model, run Deep Research on a prompt built from the Step 1 scope, extract the findings and cross-reference them with each other and with the other sources — LLM output enriches the analysis and is never a primary source. Prompts carry **public information only** (`references/data-policy.md`).
 
-1. Open ChatGPT via browser (`navigate` to `https://chatgpt.com`)
-2. Select the strongest model available in the user's interface (e.g., GPT-4o, o3)
-3. Activate **Deep Research** mode if available in the interface
-4. Compose a detailed research prompt based on the agreed scope from Step 1 — include specific questions, competitors, market segments, and what data points are needed.
-   **`data-policy.md` applies here:** the prompt goes to a third-party LLM, so it carries **public information only**. Step 1's scope may include internal documents, metrics and hypotheses — generalize them ("a marketplace of our size" rather than the figure) or leave them out. Never paste Tableau numbers, internal URLs, or unreleased plans.
-5. Submit the prompt and wait for the full response
-6. Read and extract the findings using `read_page` / `get_page_text`
-7. Use the extracted data as additional context — cross-reference with other sources, note any contradictions or unique insights
-
-**Deep Research via Google Gemini** (if confirmed by user in Step 1):
-
-1. Open Gemini via browser (`navigate` to `https://gemini.google.com`)
-2. Select the strongest model available in the user's interface (e.g., Gemini 2.5 Pro)
-3. Activate **Deep Research** mode if available in the interface
-4. Compose a detailed research prompt — can be the same as for ChatGPT, or adjusted based on ChatGPT's results if it was run first (to fill gaps or verify claims). **Same `data-policy.md` rule: public information only** — generalize anything internal from Step 1.
-5. Submit the prompt and wait for the full response
-6. Read and extract the findings using `read_page` / `get_page_text`
-7. Use the extracted data as additional context — cross-reference with ChatGPT results (if both are used) and other sources
-
-**If both ChatGPT and Gemini are used:**
-- Run both Deep Research sessions
-- Cross-reference findings — note where both LLMs agree (higher confidence) and where they diverge (flag for verification)
-- Present a unified view in the research output, citing which LLM provided each insight
-
-**Important guidelines for LLM-sourced data:**
-- Always cross-verify claims from LLMs against web search or internal data
-- Mark LLM-sourced insights in the final output (e.g., "Source: ChatGPT Deep Research" or "Source: Gemini Deep Research")
-- If LLMs provide conflicting information, present both perspectives with a note
-- Do NOT treat LLM output as primary source — use it to enrich and deepen the analysis
+The full procedure — the ChatGPT and Gemini steps, cross-referencing when both run, and the guidelines for LLM-sourced data — lives in `references/deep-research-llm.md` (skill-local). Read it when the user enabled either LLM in Step 1.
 
 ### 3. Analyze and structure findings
 
@@ -431,7 +325,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.10.6", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.11.0", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
    (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added.)
 2. Display: "Saved to Vault: Research/{product}/…"
 
@@ -452,6 +346,8 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - **`references/data-integrity-protocol.md`** — **MANDATORY (v0.8.0+)** — 5 universal gate checks for any cited external source (Step 1.5)
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/frameworks.md`** — detailed templates for each research framework
+- **`references/source-validation-gate.md`** — Step 1.5 sub-checks 1.5.a–1.5.e: recency thresholds, geography tiers, cross-validation, bias screening, source-type markers and inline annotation (skill-local)
+- **`references/deep-research-llm.md`** — Step 2 Deep Research via ChatGPT / Gemini: per-LLM steps, cross-referencing, guidelines for LLM-sourced data (skill-local)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms

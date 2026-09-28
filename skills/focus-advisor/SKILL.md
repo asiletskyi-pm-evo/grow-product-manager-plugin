@@ -1,6 +1,6 @@
 ---
 name: focus-advisor
-version: 0.5.1
+version: 0.6.0
 description: What to focus on today, this sprint or quarter — scans mail, calendar, Jira, metrics; recommends and chains. Not sprint planning (sprint-planning), not analysis (product-analysis). UA — «на чому сфокусуватись», «ранковий бриф», «розбери мою пошту й календар», «чи все ок з метриками». EN — "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "show focus board". Also UA — «що мені робити сьогодні», «фокус дня/тижня», «до яких зустрічей готуватись», «де великі можливості для продукту», «куди фокусувати команду». Also for scheduled/headless briefs. Do NOT use to build roadmaps (quarterly-/project-planning).
 ---
 
@@ -41,6 +41,10 @@ Invocation from a scheduled task prompt: `focus-advisor mode={now|tactics|strate
 
 ### Step 0 — Local context
 Per `local-context-protocol.md`: product, Planning (anchor/cadence), Focus section. Focus section missing → run once with safe defaults (mail/calendar on, 7-day window, default thresholds) and offer Focus setup via `plugin-configurator` at the end.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step 1 — Horizon + scope. Gate (skipped in headless)
 Confirm horizon (auto-detect from phrasing/cycle position: "сьогодні/зараз" → now, "квартал/команда/беклог" → tactics, "рік/можливості/напрямки" → strategy; quarter boundary nudges toward strategy) and period.

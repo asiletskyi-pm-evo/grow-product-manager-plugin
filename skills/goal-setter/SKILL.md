@@ -1,6 +1,6 @@
 ---
 name: goal-setter
-version: 0.1.3
+version: 0.2.0
 description: Set and audit goals — SMARTCBP for a person, OKR for a product or direction; goal letters, cascades. Not progress reports (product-reporter), not a performance review (performance-review). UA — «постав ціль», «сформулюй цілі для…», «OKR на квартал», «аудит цілі». EN — "set a goal", "write goals for <person>", "audit this goal", "is this goal SMART", "goal letter", "cascade goals", "objectives and key results". Also UA — «ціль за SMARTCBP», «лист цілей», «каскад цілей», «цілі напрямку». Formulates and commits goals; other skills track and report them. Do NOT use for delivery roadmaps (quarterly-/project-planning).
 ---
 
@@ -48,6 +48,10 @@ Selection follows the MBO-vs-OKR table in `goal-frameworks.md`. When both could 
 
 ### Step 0 — Local context
 Per `local-context-protocol.md`. Load the active product, Mission Atlas / `goal_map`, and `product.current_okrs`.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step P — Person context (when the goal is for a person)
 Per `people-context-protocol.md`. Load or offer to create the profile; read `d_type` (a D4 gets a goal, not tasks — confirm scope fits), reporting cadence, and any existing `active_goal_letter`.

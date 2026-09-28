@@ -1,6 +1,6 @@
 ---
 name: template-library
-version: 0.2.4
+version: 0.3.0
 description: Manage artifact templates — concepts, requirements, research, tasks, decks — create, clone, edit, import, export, validate, backup. Not the glossary or knowledge sources (knowledge-library). UA — «додай шаблон», «керуй шаблонами», «покажи шаблони», «імпортуй шаблони з папки». EN — "manage templates", "add a template", "create a template", "edit a template", "import templates from a folder", "show templates", "backup templates". Also called by other skills to render an artifact via Step T of references/template-protocol.md.
 ---
 
@@ -27,6 +27,10 @@ Before any operation, follow these shared references:
 - **`references/template-protocol.md`** — template format, resolution protocol, registry schema
 - **`references/vault-protocol.md`** — write rendered artifacts into the vault with YAML frontmatter and wikilinks
 - **`references/data-policy.md`** — confidentiality rules for template body content
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ## Actions
 

@@ -9,7 +9,7 @@ Also exports GROW_PM_CONTEXT_PATH for later Bash calls via CLAUDE_ENV_FILE.
 Design rules (see references/harness-map.md → hooks):
 - Fail open. Any exception → exit 0, no output. A hook must never block a session.
 - Header only. The digest carries paths, versions, names and flags — never
-  URLs, ids, emails or tokens. Skills still parse the file themselves (0c–0h).
+  URLs, ids, emails or tokens. Skills still parse the file themselves (0c–0h) and run 0j.
 - Environment-agnostic. The user's home is a sandbox in hosted sessions; the
   context arrives through a connected folder mounted under $HOME/mnt/<name>/.
 """
@@ -119,7 +119,7 @@ def digest(path, facts, searched, version):
     lines.append(
         "Skills: take this path for Step 0a of references/local-context-protocol.md and skip the "
         "location search; still parse the file for 0c–0h (product selection, required fields, vault "
-        "level). Env GROW_PM_CONTEXT_PATH is set for Bash."
+        "level) and run 0j. Env GROW_PM_CONTEXT_PATH is set for Bash."
     )
     return "\n".join(lines[:MAX_LINES])
 

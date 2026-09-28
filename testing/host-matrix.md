@@ -1,10 +1,10 @@
 # host-matrix.md — skill × host
 
-> What each of the 29 skills can do on each host profile from `references/host-profiles.md`. **Derived, not hand-typed:** the mode follows from the capabilities the skill's `SKILL.md` actually invokes (quality gate, fan-out reads, debate, Jira/Confluence writes, local storage) crossed with the profile's capability set. Regenerate when a skill gains or drops one of those; validator check 14 requires every skill to appear exactly once.
+> What each of the 31 skills can do on each host profile from `references/host-profiles.md`. **Derived, not hand-typed:** the mode follows from the capabilities the skill's `SKILL.md` actually invokes (quality gate, fan-out reads, debate, Jira/Confluence writes, local storage) crossed with the profile's capability set. Regenerate when a skill gains or drops one of those; validator check 14 requires every skill to appear exactly once.
 
 Legend: **full** — as designed on the reference host · **degraded** — same result through the degraded mode named in the last column (`host-profiles.md` §4) · **n/a** — the skill says so in one line and stops (`host-profiles.md` §5); read-only use still works when the user pastes the data.
 
-**claude-cowork** 29 full / 0 degraded / 0 n/a · **codex-cli** 15 full / 14 degraded / 0 n/a · **chatgpt** 0 full / 19 degraded / 10 n/a · **codex-cloud** 0 full / 20 degraded / 9 n/a
+**claude-cowork** 31 full / 0 degraded / 0 n/a · **codex-cli** 15 full / 16 degraded / 0 n/a · **chatgpt** 0 full / 21 degraded / 10 n/a · **codex-cloud** 0 full / 22 degraded / 9 n/a
 
 Profiles: `claude-cowork` = Claude Code / Cowork (reference). `codex-cli` = Codex CLI and the Codex desktop app (the app additionally matches connectors by name). `chatgpt` = ChatGPT on web / mobile — skills and connectors only, no filesystem, no shell, no subagents (derived, not measured); the ChatGPT desktop app with a *Local Project* attaches folders read/write — treat it as `codex-cli`. `codex-cloud` = sandbox filesystem that is not the user's `~/.grow-pm/`.
 
@@ -44,6 +44,6 @@ Profiles: `claude-cowork` = Claude Code / Cowork (reference). `codex-cli` = Code
 
 ## Measured in the v3.0.0 pilot (Codex CLI 0.153.2)
 
-- Shared `references/` resolution from a skill with its own `references/` (write-concept), without (task-creator), a migrated command (status), a different cwd, and a natural activation — 7/7, `Codex-Compat-Findings.md` → Етап 3b.
+- Shared `references/` resolution from a skill with its own `references/` (write-concept), without (task-creator, which had no skill-local `references/` until v3.4.0 — decision-log is the current example), a migrated command (status), a different cwd, and a natural activation — 7/7, `Codex-Compat-Findings.md` → Етап 3b.
 - Routing: trigger-evals, 102 phrases, on a host listing 80 skills (~190 characters shown per description) — 100 % in two consecutive runs, identical answers.
 - Not yet measured per skill: a full artifact run of the `write-concept → requirements-creator → task-creator` chain on Codex with an authorized Atlassian connector (real MCP namespaces).

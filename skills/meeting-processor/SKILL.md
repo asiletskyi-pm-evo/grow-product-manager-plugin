@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.13.5
+version: 0.14.0
 description: Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «action items», «розбери транскрипт зустрічі», «що обговорювали». EN — "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or any pasted/uploaded transcript. Sources — Fireflies, other meeting tools via MCP, files, pasted text. Chains to task-creator, requirements-creator, product-research, brainstorm-features and decision-log.
 ---
 
@@ -37,6 +37,10 @@ Key context used by this skill:
 - `user.language` — for output language
 
 ---
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ## Step T — Template Resolution (MoM report only)
 
@@ -126,67 +130,9 @@ The skill is **tool-agnostic** — it accepts meetings from any source. Determin
 
 ### M1d — Calendar enrichment (optional)
 
-After determining the meeting source, **ask the user if they want to pull additional context from the calendar event:**
+After determining the meeting source, **ask the user if they want to pull additional context from the calendar event:** "Would you like me to check the calendar for this meeting? I can get the participant list, agenda, attached documents, and any linked materials." If the user agrees — look up the matching Google / Microsoft Calendar event and merge it with the meeting data; if the user declines — skip to M2.
 
-> "Would you like me to check the calendar for this meeting? I can get the participant list, agenda, attached documents, and any linked materials."
-
-If the user agrees — proceed with calendar lookup. If the user declines — skip to M2.
-
-**M1d-1. Detect available calendar connector:**
-
-| Calendar | How to detect | MCP tools |
-|----------|--------------|-----------|
-| **Google Calendar** | A Google Calendar connector is present (its list/get event tools, e.g. `list_events` / `get_event`) | List events by date/title → read the matching event's details |
-| **Microsoft Calendar** | Microsoft Calendar / Outlook MCP is connected | Use the available MCP tools to search and fetch events |
-| **No calendar** | No calendar MCP detected | Offer to search the MCP registry: "No calendar tool is connected. Would you like me to search for available calendar connectors?" |
-
-**M1d-2. Find the matching calendar event:**
-
-Search for the event using available data:
-- Meeting title (from Fireflies, file name, or user input)
-- Meeting date
-- Participant names or emails
-
-If multiple events match — present a list and ask the user to choose.
-
-**M1d-3. Extract calendar event data:**
-
-From the calendar event, extract:
-
-| Data point | Where to find | How to use |
-|-----------|--------------|-----------|
-| **Participants** | Attendee list (names + emails + RSVP status) | Enrich the participant list with full names, emails, and attendance status. Match against `team.members` from `local-context.md` to add roles |
-| **Agenda / description** | Event description / body | Use as context for understanding meeting goals and structure |
-| **Attached documents** | Event attachments or links in description (Google Docs, Confluence pages, presentations, PDFs) | Read attached materials to enrich meeting context. These may contain the agenda, pre-read materials, or relevant specs |
-| **Meeting link** | Conference URL (Google Meet, Zoom, Teams) | Use to cross-reference with Fireflies/other meeting tools if needed |
-| **Organizer** | Event organizer field | Identify the meeting owner |
-| **Recurrence** | Recurring event info | Note if this is a recurring meeting (useful for context: "weekly grooming", "bi-weekly sync") |
-
-**M1d-4. Read attached materials:**
-
-If the calendar event contains links to documents:
-- **Google Docs / Slides / Sheets** — read via Google Drive MCP or browser
-- **Confluence pages** — read via Confluence MCP (respect `noindex` label rule from `local-context.md`)
-- **Figma links** — read via Figma MCP
-- **PDF / PPTX / other files** — download and read content
-- **Other URLs** — note them as reference materials
-
-Present discovered materials to the user:
-
-> "I found the following materials attached to the calendar event:
-> 1. [Document title] — [type: Google Doc / Confluence page / etc.]
-> 2. [Document title] — [type]
->
-> Would you like me to read them for additional context?"
-
-If the user confirms — read the materials and use their content to enrich the meeting analysis (better understanding of topics, decisions, and action items).
-
-**M1d-5. Merge calendar data with meeting data:**
-
-Combine the calendar event data with the transcript/recording data:
-- **Participants:** merge attendee list from calendar with speakers from transcript. Calendar provides full names + emails + roles; transcript provides who actually spoke
-- **Context:** use agenda/description and attached materials to better classify meeting topics and understand decisions
-- **Mark absent participants:** if someone was on the calendar invite but not in the transcript — note as "invited but did not attend" (useful for status meetings)
+The full procedure — calendar connector detection (M1d-1), finding the event (M1d-2), the event-data table (M1d-3), reading attached materials (M1d-4) and merging calendar with transcript data (M1d-5) — lives in `references/calendar-enrichment.md` (skill-local). Read it when the user agrees to the calendar lookup.
 
 ### M2 — Read meeting data
 
@@ -298,103 +244,17 @@ Analyze the transcript (or summary + transcript) to extract structured informati
 
 **M5b. Type-specific blocks:**
 
-**For Grooming / Planning:**
+Add the blocks specific to each type confirmed at M3: Grooming / Planning (estimates, priorities, assignments, blockers, sprint scope), Discovery / Interview (insights, quotes, pain points, needs / JTBD, opportunities), Demo / Retro (feature feedback, what went well / wrong, improvement proposals), Status / Agreements (progress, agreements, risks, blockers, deadlines), Brainstorm (ideas, evaluation, selected ideas, next steps).
 
-| Block | What to extract |
-|-------|----------------|
-| **Task estimates** | Story points or time estimates discussed per task |
-| **Priorities** | Priority assignments (P0, P1, P2) or ordering |
-| **Task assignments** | Who takes which task |
-| **Blockers** | Dependencies or blockers raised |
-| **Sprint scope** | What was included/excluded from the sprint |
-
-**For Discovery / Interview:**
-
-| Block | What to extract |
-|-------|----------------|
-| **User insights** | Key findings about user behavior, needs, or pain points |
-| **Quotes** | Direct user quotes that support insights (with speaker attribution) |
-| **Pain points** | Specific problems the user described |
-| **Needs / Jobs-to-be-done** | What the user is trying to accomplish |
-| **Opportunities** | Product opportunities identified from the discussion |
-
-**For Demo / Retro:**
-
-| Block | What to extract |
-|-------|----------------|
-| **Feature feedback** | Reactions to demonstrated features — positive and negative |
-| **What went well** | (Retro) Positive outcomes and practices to continue |
-| **What went wrong** | (Retro) Problems, failures, things to improve |
-| **Improvement proposals** | Suggested improvements and changes |
-
-**For Status / Agreements:**
-
-| Block | What to extract |
-|-------|----------------|
-| **Progress updates** | Status per project/feature/team member |
-| **Agreements** | Commitments with responsible person and deadline |
-| **Risks** | Risks or concerns raised |
-| **Blockers** | Current blockers and who is resolving them |
-| **Deadlines** | Mentioned deadlines and their status |
-
-**For Brainstorm:**
-
-| Block | What to extract |
-|-------|----------------|
-| **Ideas** | All ideas proposed during the session |
-| **Evaluation** | Pros/cons, voting results, rankings if discussed |
-| **Selected ideas** | Which ideas were chosen to pursue |
-| **Next steps** | What happens next with the selected ideas |
+The full per-type block tables — what to extract for each block — live in `references/meeting-type-blocks.md` (skill-local). Read it at M5 for every type the meeting was classified as.
 
 ### M6 — Generate output
 
 **M6a. Structured MoM format:**
 
-Generate the meeting report using the user's preferred language (`user.language`):
+Generate the full MoM in `user.language`: header (date, duration, type), participants table with attendance status, topics discussed, decisions table, action-items table, the type-specific section(s) from M5b, and open questions.
 
-```markdown
-## Meeting Notes — [Title]
-
-**Date:** [date] | **Duration:** [duration] | **Type:** [grooming, discovery, ...]
-
----
-
-### Participants
-| Name | Role | Email | Status |
-|------|------|-------|--------|
-| [name] | [role or "—"] | [email] | Attended / Invited, did not speak / Not on invite |
-
----
-
-### Topics Discussed
-1. **[Topic title]** — [2-3 sentence summary]
-2. **[Topic title]** — [2-3 sentence summary]
-
----
-
-### Decisions
-| # | Decision | Context | Owner |
-|---|----------|---------|-------|
-| 1 | [what was decided] | [why / context] | [who] |
-
----
-
-### Action Items
-| # | Action | Owner | Deadline | Status |
-|---|--------|-------|----------|--------|
-| 1 | [what needs to be done] | [who] | [when, if mentioned] | Open |
-
----
-
-### [Type-specific section(s)]
-[Content based on meeting type — see M5b]
-
----
-
-### Open Questions
-- [unresolved item 1]
-- [unresolved item 2]
-```
+The full procedure — the MoM markdown skeleton — lives in `references/mom-format.md` (skill-local). Read it whenever the Structured MoM format is chosen; a template selected at Step T takes precedence over the skeleton.
 
 **M6b. Short summary format:**
 
@@ -455,29 +315,9 @@ After publishing (or if the user decided not to save), offer the next step **bas
 | **Any type** | Decisions extracted (see M5a) | "Log these decisions so the 'why' survives?" → invoke `decision-log` (log mode) — see M10 |
 | **Status / Decision** | Decisions that change quarterly scope or direction focuses | "These decisions change the quarter's focuses. Fold them into the quarterly plan?" → invoke `quarterly-planning` |
 
-**Context to pass when invoking another skill:**
+**Context to pass when invoking another skill:** every invocation carries the full participant context (name, email, role, attendance status), meeting metadata, the meeting source link, attached materials, and the extracted content the target skill needs.
 
-Every skill invocation from meeting-processor must include the **full participant context** and relevant meeting data:
-
-| Context element | What to pass | Why |
-|----------------|-------------|-----|
-| **Participants** | Full list: name, email, role (from `team.members` match), attendance status (spoke / invited but silent / not invited but participated) | Task-creator uses participants for task assignment; product-research uses for interview attribution; brainstorm-features uses for idea ownership |
-| **Meeting metadata** | Title, date, duration, type(s), organizer, recurrence info | Context for all downstream skills |
-| **Meeting source link** | Fireflies link, calendar event link, or file reference | For traceability in created documents |
-| **Extracted content** | Depends on target skill (see table below) | Core input for the target skill |
-| **Attached materials** | Links to agenda, pre-read docs, presentations found in calendar | Additional context for requirements, research, concepts |
-
-**Content to pass per target skill:**
-
-| Target skill | What to pass |
-|-------------|-------------|
-| **task-creator** | Action items (who, what, deadline), task estimates, priorities, Epic reference if mentioned, participants with roles for task assignment |
-| **requirements-creator** | Feature discussion fragments, functional requirements mentioned, user scenarios discussed, participants as stakeholders |
-| **product-research** | User insights, quotes with speaker attribution, pain points, needs, participants as interview subjects |
-| **brainstorm-features** | Ideas, hypotheses, evaluation criteria, voting results, participants as idea owners |
-| **diagram-prototyper** | Process descriptions, flow logic, architecture discussed, participants as actors in diagrams |
-| **decision-log** | Per decision: what was decided, context/rationale, options discussed, who decided, link back to these notes |
-| **quarterly-planning** | Decisions that shift scope or focuses, with the meeting as the source link |
+The full procedure — the context-element table and the per-target-skill content table (task-creator, requirements-creator, product-research, brainstorm-features, diagram-prototyper, decision-log, quarterly-planning) — lives in `references/chaining.md` (skill-local). Read it before invoking any skill from the table above.
 
 If no chaining is relevant or the user declines — end the workflow gracefully.
 
@@ -487,7 +327,7 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.13.5", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.14.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
 2. Key decisions from the meeting may additionally be recorded as ADR-style records — offer, don't force: "The meeting produced N decisions. Log them in the decision log so the 'why' survives?" → invoke `decision-log` (log mode) per decision, passing: what was decided, the context and options discussed, who decided, and a link back to these notes. decision-log owns the `decision` artifact; do not hand-write `Decisions/` files here.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 
@@ -495,103 +335,17 @@ IF vault_level > L0 AND vault sync_mode != "off":
 
 ## Mode: Search — Workflow
 
-> **Subagent delegation (large fan-out).** When the query spans many meetings, delegate per `references/subagent-delegation.md`: split the meetings into batches, spawn subagents in parallel, each returns a compact structured result (per-meeting decisions / action items / relevant quotes + link), and the main agent aggregates (merge, dedupe, rank). Falls back to inline if subagents are unavailable.
+Find what was discussed, decided or assigned about a topic across many meetings: parse the query — topic, time range, participants, meeting-type filter (S1); search the connected meeting tools and keep only the relevant fragments (S2); compile a chronological synthesis with all decisions and action items on the topic (S3); present it with follow-ups — Process mode for one meeting, publishing, or tasks via task-creator (S4). A query spanning many meetings delegates the per-meeting reads per `references/subagent-delegation.md`.
 
-### S1 — Understand the query
-
-Parse the user's request to determine:
-- **What** they're looking for: topic, feature name, decision, person, action item
-- **Time range**: "last month", "this sprint", "since January", specific dates
-- **Participants**: specific people involved (optional)
-- **Meeting type filter**: "in groomings", "in status meetings" (optional)
-
-If the query is ambiguous — ask clarifying questions via AskUserQuestion.
-
-### S2 — Search across meetings
-
-**S2a. Determine available search sources:**
-
-Check which meeting tool MCPs are connected:
-- Fireflies MCP → use `fireflies_search` with keyword, date range, participants
-- Other meeting MCPs → use their search APIs
-- If no MCP connected → inform the user: "No meeting tool is connected. Would you like me to search the MCP registry for available meeting connectors?" Follow integration fallback chain
-
-**S2b. Execute the search:**
-
-- Use keyword search with the extracted topic/feature name
-- Apply date range filters
-- Apply participant filters if specified
-- Limit to 10-20 most relevant results
-
-**S2c. For each relevant meeting found:**
-
-1. Read the summary via `fireflies_get_summary` (or equivalent)
-2. Check if the meeting content matches the query — filter out false positives
-3. Extract only the relevant fragments (not the entire transcript)
-
-### S3 — Aggregate and synthesize
-
-Compile results into a chronological synthesis:
-
-```markdown
-## Search Results — "[query]"
-
-**Period:** [date range] | **Meetings found:** [N]
-
----
-
-### Timeline
-
-#### [Date] — [Meeting title]
-**Participants:** [list]
-**Relevant discussion:**
-[Summary of what was discussed about the searched topic in this meeting]
-**Decisions:** [if any decisions were made]
-**Action items:** [if any action items related to the query]
-
-#### [Date] — [Meeting title]
-...
-
----
-
-### Summary
-[2-3 sentences synthesizing the overall trajectory: how the discussion evolved, what was decided over time, current status]
-
-### All decisions on this topic
-| # | Date | Decision | Meeting | Owner |
-|---|------|----------|---------|-------|
-
-### All action items on this topic
-| # | Date | Action | Meeting | Owner | Status |
-|---|------|--------|---------|-------|--------|
-```
-
-### S4 — Present results
-
-Show the synthesis to the user. Offer follow-up actions:
-- "Would you like to see the full transcript of any of these meetings?" → switch to Process mode for the selected meeting
-- "Would you like to publish this summary?" → publish to Confluence/Notion
-- "Would you like to create tasks from the action items?" → invoke task-creator
+The full procedure — S1–S4, the search sources and filters (S2a–S2c), the synthesis template and the large-fan-out delegation rule — lives in `references/search-mode.md` (skill-local). Read it when Search mode is selected.
 
 ---
 
 ## Input Source Discovery Protocol
 
-At the start of skill execution (before M1 or S1), if the user didn't explicitly specify a source:
+At the start of skill execution (before M1 or S1), if the user didn't explicitly specify a source: use an attached file if there is one; otherwise scan for connected meeting-tool MCPs and present the available sources (connected tools, file upload, pasted text), offering an MCP-registry search when no meeting tool is connected and the user expects one.
 
-1. **Check for uploaded files** — if the user attached a file in the message, use it
-2. **Scan for meeting tool MCPs** — check which connectors are available:
-   - Fireflies MCP → note as available
-   - Other meeting tool MCPs → note as available
-3. **Present available options** to the user:
-
-> "I can get meeting data from the following sources:"
-> - [List connected meeting tools]
-> - Upload a file (audio, video, or text transcript)
-> - Paste text directly in the chat
-
-If no meeting tool MCP is connected and the user expects one — offer to search the MCP registry:
-> "No meeting recording tool is connected. Would you like me to search for available connectors?"
+The full procedure — the discovery steps and the prompts to show — lives in `references/chaining.md` (skill-local). Read it when the user hasn't named a meeting source.
 
 ---
 
@@ -614,4 +368,9 @@ If no meeting tool MCP is connected and the user expects one — offer to search
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering); People-data tier for 1-1s
 - **`references/communication-frameworks.md`** — ARCV follow-up standard (Actions/Responsible/Clearly/Verbs + Decisions block)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
+- **`references/calendar-enrichment.md`** — M1d calendar enrichment: connector detection, event matching, event data, attached materials, merge rules (skill-local)
+- **`references/meeting-type-blocks.md`** — M5b type-specific extraction blocks per meeting type (skill-local)
+- **`references/mom-format.md`** — M6a Structured MoM skeleton (skill-local)
+- **`references/chaining.md`** — M9 context to pass per target skill + Input Source Discovery Protocol (skill-local)
+- **`references/search-mode.md`** — Search mode workflow S1–S4 with the fan-out delegation rule (skill-local)
 - **`skills/one-on-one/SKILL.md`** — dedicated handler for 1-1 meetings (redirect target)

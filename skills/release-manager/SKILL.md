@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.2.3
+version: 0.3.0
 description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…», «bump версії плагіна». EN — "release the plugin", "prepare a release", "bump plugin version", "ship vX.Y.Z", "cut a release", "publish plugin release". Also UA — «випусти vX.Y.Z», «опублікуй реліз плагіна». Conversational "release the plugin" routes here; the user-typed /release command is a shortcut into the same skill.
 ---
 
@@ -24,6 +24,10 @@ Release config in local-context (`plugin_release` section, all optional — ask 
 
 ### Step 0 — Local context
 Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collect repo path + remotes interactively and offer to save.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step 1 — Pre-flight (guards)
 1. Repo reachable? If the path is under an iCloud-synced folder (macOS `~/Documents`, `~/Desktop`) — materialize first: `brctl download <repo>` + bulk-read sweep (pitfall P1).

@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.13.3
+version: 0.14.0
 description: Write or review a requirements document with numbered functional requirements, incl. A/B test specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію», «опиши фічу як вимоги». EN — "write requirements", "create feature spec", "write A/B test requirements", "review / analyze / improve requirements", "check my spec". Also UA — «створи специфікацію фічі», «переглянь вимоги», «покращ вимоги». A concept from write-concept is the input; task-creator consumes the output.
 ---
 
@@ -38,6 +38,10 @@ Key context used by this skill:
 - `product.confluence_space`, `product.confluence_template_url` — for publishing and template
 - `product.key_metrics` — for metrics section
 - `user.language` — for output language
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ## Mode Selection
 
@@ -97,21 +101,9 @@ In both cases, proactively gather additional information from the user:
 - What is the expected behavior? Edge cases?
 - Analyze provided information, propose alternatives and improvements as an experienced BA would
 
-**1c. Figma designs check — if modifying UI/UX of existing functionality:**
-
-If the requirements involve changing UI/UX for any user type, ask via AskUserQuestion:
-
-> "Are there current designs / mockups / prototypes of this functionality in Figma?"
-
-- **If the user provides a link** — open via Figma MCP (`get_design_context`, `get_screenshot`) or browser fallback. Read and extract: current UX flows, screens, key UI patterns. Use as context for writing functional requirements and understanding current state
-- **If the user believes designs should exist but cannot provide a link** — offer to search:
-  > "I can search for relevant mockups in Figma from your account. Would you like me to search?"
-  - If agreed — search via Figma MCP or browser (`https://www.figma.com`):
-    - Try to understand the structure of the design system: look for sections like "Current design", "Production", "Live", "Ready for dev", "Latest state"
-    - Show the user the found files/frames and ask them to confirm which are relevant and up-to-date
-  - If Figma MCP is unavailable — follow `references/integration-strategy.md` fallback chain
-- **If no designs exist** — note this and proceed without design context
-- **If relevant designs are confirmed** — use throughout the requirements: reference current state in functional requirements, describe what changes in the UI, include Figma links in the UI&UX section
+**1c. Figma designs check — if modifying UI/UX of existing functionality:** if the requirements involve changing UI/UX for any user type, run `references/figma-designs-check.md` with:
+- *use as context for:* writing functional requirements and understanding the current state;
+- *when designs are confirmed:* reference the current state in functional requirements, describe what changes in the UI, and include Figma links in the UI&UX section.
 
 **1d. Template — already resolved in Step T; do not ask again.**
 
@@ -275,74 +267,9 @@ Run `references/artifact-style-gate.md` on the draft. Maker–checker: the `grow
 
 ### Step 6 — Publishing
 
-**6a. Ask if the user wants to save the document:**
+Ask whether to save the document — if not, the results stay in the dialogue; if yes, ask where (Confluence by default, Notion, Google Doc, other) and under which space / parent page. Title the page `[Feature number] - [A/B Test type if applicable] - [Feature name]` and publish with the destination's native elements (Confluence: `createConfluencePage` with the ToC and Jira work items macros), following the integration fallback chain; a local document is the last resort.
 
-> "Would you like to save the requirements document? If yes — which tool should I use?"
-
-- If no — end the skill, results stay in the dialogue
-- If yes — ask where:
-  - **Confluence** (default)
-  - **Notion**
-  - **Google Doc**
-  - **Other** — user specifies
-
-**6b. Ask for location:**
-
-- Which **space** (Confluence) / **workspace** (Notion) / **folder** (Google Drive)?
-- Which **parent page/document** to nest under?
-- Should the article be a **child page** of the specified location?
-- Offer to search existing pages to help decide
-
-**6c. Document title — template:**
-
-`[Feature number] - [A/B Test type if applicable] - [Feature name]`
-
-Rules:
-- Feature number = Epic key + `.` + sequential number (e.g., PROJ-1234.3)
-- If no feature number — skip this part
-- Add "A/B Test" or "A/B/C Test" only if this approach was selected
-- Feature name = concise description of the feature
-
-Examples:
-- `PROJ-1234.3 - A/B Test - Add wishlist button to product comparison`
-- `PROJ-5678.1 - Move Buy button higher on product page`
-- `PROJ-5678.1 - A/B/C Test - Promo block layout on product page`
-
-**6d. Publishing to Confluence:**
-
-Use Confluence-native elements:
-- **Table of Contents macro** (heading levels 1-6)
-- **Jira work items macro** with JQL filter: `parent = EPIC-KEY AND labels = FEATURE-CODE`, sorted by Sprint
-- **Horizontal rule/divider** between sections
-- **Panels** where appropriate
-- **Bold**, headings H1/H2/H3, tables
-
-Publish via Confluence MCP (`createConfluencePage`). If unavailable — follow integration fallback chain.
-
-**6e. Publishing to Notion:**
-
-Adapt structure to Notion elements:
-- Table of Contents block
-- Dividers between sections
-- Toggle headings for collapsible sections where appropriate
-- Tables, bold text, headings hierarchy
-
-Publish via Notion MCP. If unavailable — follow integration fallback chain.
-
-**6f. Publishing to Google Docs:**
-
-Adapt structure to Google Docs:
-- Table of Contents
-- Horizontal lines between sections
-- Tables, bold text, headings hierarchy
-
-Follow integration fallback chain: Google Docs MCP → registry → browser.
-
-**6g. Publishing to other destinations:**
-
-Follow integration fallback chain for the specified tool. Adapt format to platform capabilities.
-
-As a last resort for any destination — generate a local document and provide to the user for manual publishing.
+The full procedure — 6a–6g: the save prompt, location questions, title rules with examples, and the Confluence / Notion / Google Docs / other-destination adaptations — lives in `references/publishing-destinations.md` (skill-local). Read it when the user has confirmed the draft in Step 5 (or at A8 in Analyze & Improve mode).
 
 ### Step 7 — Skill chaining
 
@@ -366,32 +293,9 @@ If the user agrees → invoke `experiment-tracker` (register mode) with: hypothe
 
 > Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
 
-Requirements often serve as the entry point for developer handoff and low-fi prototypes. Via `AskUserQuestion`:
+Offer a design-side deliverable via `AskUserQuestion` — developer handoff spec (recommended if the requirements included UI changes), low-fi UI prototype, deck for dev-review, or skip — and invoke `design-bridge` with `intent: handoff` / `prototype` / `deck` and `source: requirements_page_url`. Never block the workflow.
 
-> "Requirements published. Create a design-side deliverable?"
-> 1. **Developer handoff spec** — complete specification for front-end (tokens, components, states, breakpoints, a11y) — recommended if requirements included UI changes
-> 2. **Low-fi UI prototype** — for visual validation before development
-> 3. **Deck for dev-review** — 6-8 slides with scope + UI flow + edge cases
-> 4. **Skip**
-
-IF user selects 1 → invoke `design-bridge` with:
-- `intent: handoff`
-- `source: requirements_page_url`
-- `a11y_audit: true` (mandatory for handoff)
-- `figma_context: from requirements_page OR ask user`
-
-IF user selects 2 → invoke `design-bridge` with:
-- `intent: prototype`
-- `source: requirements_page_url`
-- `fidelity: lo-fi | mid-fi` (ask)
-
-IF user selects 3 → invoke `design-bridge` with:
-- `intent: deck`
-- `subtype: feature` (closest match to requirements pitch)
-- `audience: dev_handoff`
-- `length: 6-8`
-
-Fallback: if `design-bridge` is not installed — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Do not block the workflow.
+The full procedure — the offer wording, the exact `design-bridge` parameters per option and the not-installed fallback message — lives in `references/design-bridge-handoff.md` (skill-local). Read it when you reach this step after Step 7.
 
 ### Step 9 — Save to Vault (Optional)
 
@@ -399,7 +303,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.13.3", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.14.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 
@@ -431,6 +335,8 @@ The full A1–A9 workflow lives in the skill-local `references/analyze-improve-m
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/requirements-template.md`** — detailed standard template with section descriptions and instructions
 - **`references/analyze-improve-mode.md`** — skill-local: the full Analyze & Improve workflow (A1–A9); load only in that mode
+- **`references/publishing-destinations.md`** — skill-local: Step 6 publishing (6a–6g) — save prompt, location, title template, Confluence / Notion / Google Docs / other adaptations; load at Step 6 (and A8)
+- **`references/design-bridge-handoff.md`** — skill-local: Step 8 Design Bridge handoff — offer wording and `design-bridge` parameters per option; load at Step 8
 - **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), maker–checker execution model (Step 4.5 / A6)
 - **`references/examples/feature-spec-example-v1.md`** — worked golden feature-spec exemplar with A/B + acceptance criteria (few-shot; load on demand in Step 4)
 - **`references/approach-recommendation.md`** — implementation approach recommendation logic (feature flag, A/B test, etc.)

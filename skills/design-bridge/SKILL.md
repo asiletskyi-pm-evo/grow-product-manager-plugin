@@ -1,6 +1,6 @@
 ---
 name: design-bridge
-version: 0.4.2
+version: 0.5.0
 description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку/презентацію», «hi-fi прототип/екран», «design handoff», «дизайн-рев'ю», «через мій дизайн-тулкіт». EN — "create a deck", "make a presentation", "build a prototype on our DS", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review". Also UA — «передати дизайн у розробку». Orchestrates research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff and Figma MCP; the next step after write-concept, requirements-creator, brainstorm-features or product-research when a deck or prototype is needed.
 ---
 
@@ -64,6 +64,10 @@ Before gathering data, read `references/data-policy.md`. Figma embeds from compe
 If `local-context.md` is missing → follow `local-context-protocol.md` Step 0b (launch `plugin-configurator`, let its mode selection decide).
 
 If the **Design System** keys are absent, do **not** hard-redirect: there is no configurator step that writes them, so the redirect used to be a dead end. Instead say what is missing, point at the block in `local-context.example.md` → Design System for the user to fill, and continue on the fallbacks in "Failure modes" below — every Design System key is optional by design, and the deliverable degrades rather than blocks.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ## Step T — Template Resolution
 
@@ -144,25 +148,7 @@ Via `AskUserQuestion`:
 
 ### Step 3 — Source extraction
 
-Depending on **upstream**:
-
-**a. Confluence page** (`write-concept`, `requirements-creator`) — parse via `getConfluencePage`; extract:
-- `title`, `problem_statement`, `solution_summary`, `key_metrics`, `scope`, `phases`, `risks`, `ask`
-- any embedded diagram URLs → remap in Step 4c
-
-**b. Research output** (`product-research`, `cjm-research`, `meeting-processor`) — parse markdown:
-- themes, insights, recommendations
-- quotes (for research decks)
-- anomalies / funnel drops (for CJM decks)
-
-**c. Brainstorm output** (`brainstorm-features`) — json/md:
-- top-3 hypotheses with ICE scores
-- mapped funnel steps
-
-**d. A/B test data** (`product-analysis`, Tableau) — csv/markdown:
-- metrics, control vs treatment, CI, lift
-
-**e. User-provided** — raw text / pasted context / uploaded files.
+Depending on **upstream**, pull the fields the deliverable needs from a Confluence page (`write-concept`, `requirements-creator`), research output (`product-research`, `cjm-research`, `meeting-processor`), brainstorm output (`brainstorm-features`), A/B test data (`product-analysis`, Tableau) or user-provided text / files. The per-source field list (a–e) — what to parse and extract from each — lives in `references/design-bridge-playbook.md` (skill-local). Read it before extracting from an upstream artifact.
 
 Normalize into **Deck IR** (intermediate representation).
 
@@ -254,17 +240,7 @@ Auto-fix what can be fixed (split, reorder, add section); for everything else, a
 
 **Trigger**: `embeds=yes` AND (Figma URL in sources OR user provided a link).
 
-Workflow:
-1. Parse URL → `fileKey`, `nodeId`
-2. `get_design_context(nodeId, fileKey)` — text context of the frame (layer names, variants)
-3. `get_screenshot(nodeId, fileKey)` — image in temp
-4. Insert into Deck IR slide as `media: [path/to/screenshot.png]`
-5. If seat is View and an edit is required → skip hi-fi prototype, warn in the outline
-
-**Policy** (from `references/data-policy.md`):
-- Do not embed Figma frames from competitive research
-- Embeds from private files owned by your brand — only in internal decks (not published externally)
-- Permission error (403) → graceful fallback: placeholder "[Design: see Figma {{url}}]"
+Pulls the linked frame's design context and a screenshot into the Deck IR as slide media; a View seat skips any hi-fi edit, competitive-research frames are never embedded, private brand frames go only into internal decks, and a 403 becomes a placeholder. The full procedure — URL parsing, the `get_design_context` / `get_screenshot` calls, the View-seat rule and the embed policy from `references/data-policy.md` — lives in `references/figma-playbook.md` → "Step 4g — Figma context / screenshots" (skill-local). Read it when the trigger fires.
 
 ### Step 5 — Render deliverable
 
@@ -272,19 +248,7 @@ Routing by `intent`:
 
 #### 5a. intent=deck → .pptx
 
-1. Load the base template from `product.base_pptx` (path in local-context): `Presentation(<base_pptx_path>)`. If unset or missing → create a blank `Presentation()` and position shapes manually.
-2. Load the theme yaml from `product.pptx_theme`.
-3. For each slide in Deck IR:
-   - resolve the layout name via `implementation_hints.slide_layout_index.mapping`
-   - `slide_layout = prs.slide_layouts.get_by_name(<mapping>)`
-   - `new_slide = prs.slides.add_slide(slide_layout)`
-   - fill placeholders or add shapes by rect coordinates (see your theme yaml → `layouts.<name>.elements`)
-   - apply colors/fonts from `theme.colors` / `theme.typography` (values come from `product.brand.*`)
-4. Embed media (images, charts).
-5. Save: `{vault_root}/Presentations/{product}/{date}-{slug}-{subtype}.pptx`.
-6. In parallel, produce a markdown outline companion in the same folder (`.md`) for quick review.
-
-Fallback: if the pptx skill is unavailable → outline.md + outline.html (copy-pasteable into Google Slides).
+Renders the Deck IR on `product.base_pptx` (blank `Presentation()` when unset) with the `product.pptx_theme` colours and fonts, saves `{vault_root}/Presentations/{product}/{date}-{slug}-{subtype}.pptx` plus a markdown outline companion; pptx skill unavailable → outline.md + outline.html. The full procedure — layout mapping, placeholder / shape filling, media embedding and save paths — lives in `references/design-bridge-playbook.md` (skill-local). Read it when rendering a deck.
 
 #### 5b. intent=prototype → HTML / Mermaid / Figma
 
@@ -343,7 +307,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.4.2",
+  skill_version: "0.5.0",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],
@@ -369,8 +333,9 @@ vault_save({
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback
 - **`references/data-policy.md`** — Figma embed and publish restrictions
 - **`references/deck-subtypes.yaml`** — slide outlines for all 4 subtypes (layout sequence, required slots, recommended media)
-- **`references/figma-playbook.md`** — how to resolve a `fileKey`, safe patterns, known limitations (View seat)
+- **`references/figma-playbook.md`** — how to resolve a `fileKey`, safe patterns, known limitations (View seat), Step 4g procedure (frame context, screenshots, embed policy)
 - **`references/a11y-checklist.md`** — checklist for Step 6 QA
+- **`references/design-bridge-playbook.md`** — skill-local: Step 3 per-source extraction (a–e), Step 5a pptx rendering, the failure-mode table, the end-to-end concept → deck example, version history
 - **`references/vault-protocol.md`** — Step 8 vault save
 - **`local-context.example.md`** → Design System section — schema for brand configuration (DS spec path, pptx theme path, base pptx path, brand tokens, Figma file key)
 
@@ -386,60 +351,12 @@ vault_save({
 
 ## Failure modes & fallbacks
 
-| Failure | Behavior |
-|---|---|
-| `product.base_pptx` unset or missing | blank `Presentation()` + explicit shape positioning from theme yaml rect coords |
-| Template not found | fall back to `presentation-builtin-{subtype}`; if that's missing too — ad-hoc outline |
-| DS yaml won't parse | fall back to brand tokens in `product.brand.*`; if those are missing — neutral defaults (dark text on white) |
-| `product.pptx_theme` unset / theme yaml missing / no `qa_rules` | Step 6 QA still runs on defaults: WCAG AA on title/body/CTA pairs, slide max = the subtype's `max_length` from `deck-subtypes.yaml`. The gate never silently no-ops for want of config — it is the only blocking gate on the deck path |
-| No Design System keys at all (fresh install) | proceed on neutral defaults; name the missing keys once in the outline footer, do not block or redirect |
-| Figma MCP 403 / seat=View | skip hi-fi; embed only screenshots (if `get_screenshot` works); on fail — placeholder |
-| `design:*` plugin missing | propose install; fall back to native rewrite (ux-copy), manual critique outline |
-| pptx skill unavailable | fall back to outline.md + outline.html |
-| Source content < 100 words | ask user to fill manually; do not generate "lorem ipsum" |
-| A11y fail on handoff | release blocker; in deck mode — footer warning |
-| Language not in `available_languages` | pick the closest and note it in the outline |
-| `design_toolkits` empty / absent | skip Step 0.5; built-in hi-fi path (Figma) — unchanged behaviour |
-| Declared toolkit entry unavailable at runtime | note it, offer `setup_hint`, fall back to built-in path; never hard-fail |
-| Two+ toolkits match one request | `AskUserQuestion` which to use |
-| Toolkit `contract_version` mismatch | warn (don't block); verify payload/return shape |
+Every dependency degrades rather than blocks: a missing base pptx, template, theme, DS yaml or Design System keys fall back to built-in or neutral defaults; a missing `design:*` plugin or pptx skill to native / outline output; an unavailable toolkit to the built-in path; thin source content (< 100 words) → ask the user, never lorem ipsum. The Step 6 QA gate still runs on defaults, and an a11y fail on handoff is a release blocker (a footer warning in deck mode). The full failure → behaviour table lives in `references/design-bridge-playbook.md` (skill-local). Read it when any dependency is missing, unparseable or fails at runtime.
 
 ## End-to-end example: concept → deck
 
-**Trigger**: user says "make a direction-review deck from concept PROJ-1234 (Q&A — Product Page Integration)".
-
-```
-design-bridge:
-  Step 0  → load local-context + DS yaml (from product.design_system_spec)
-            + theme yaml (from product.pptx_theme)
-  Step 1  → intent=deck (user explicit), subtype=feature
-  Step 2  → audience=direction_review (default), language=en, length=10,
-            brand=brand_default, embeds=ask
-  Step T  → template-library.resolve(presentation, feature, <product>, en)
-            → selected: presentation-builtin-feature@1.0.0
-  Step 3  → parse Confluence PROJ-1234 page → Deck IR populated:
-              title="Q&A on Product Page", subtitle="Direction review",
-              problem, solution, metrics, ask, scope, phases
-  Step 4b → design:ux-copy polishes titles + CTAs (max 72 chars, brand tone)
-  Step 4c → design:design-critique flags:
-              • Slide 4 (Evidence) has 7 bullets → split into 4a+4b
-              • Slide 7 (MVP scope) → add "Out of scope" sub-section
-  Step 4g → user pastes a Figma frame URL for the Q&A block
-            → get_screenshot(nodeId, ds_file_key) → image for slide 7
-  Step 5a → open product.base_pptx, apply theme
-            → 10 slides added via slide_layouts.get_by_name(…)
-            → save: Presentations/<product>/2026-04-20-qa-product-page-direction.pptx
-  Step 6  → QA pass (contrast, 10 slides, no empty slots, brand font OK,
-            brand.primary used on 3 slides)
-  Step 7  → attach to PROJ-1234 Confluence page as attachment
-            → comment in Jira PROJ-1234 with computer:// link
-            → update Obsidian Vault: Presentations/<product>/2026-04-20/
-  Step 8  → vault_save(type=presentation, subtype=feature, …)
-  → output: "[View deck](computer://…/2026-04-20-qa-product-page-direction.pptx)"
-```
+A worked trace of a direction-review deck built from a concept page (Step 0 → 1 → 2 → T → 3 → 4b/4c/4g → 5a → 6 → 7 → 8, with Step T running after Step 1) lives in `references/design-bridge-playbook.md` (skill-local). Read it when unsure of the call order.
 
 ## Changelog
 
-- `0.3.0` (2026-07-10) — Became the routing host for external design toolkits. Added Step 0.5 (tier-0 provider check → delegate → ingest returns) per `references/design-toolkit-protocol.md`. hi-fi prototype now delegates to a declared toolkit when one covers the request, else falls back to the Figma path (unchanged when `design_toolkits` is empty). QA-ownership rule (no double review), vault `design_delivery` marker, new failure modes. No hardcoded toolkit reference — all org-specifics live in `local-context.md`.
-- `0.2.0` (2026-04-20) — Removed hardcoded brand assets and `design-integration/` coupling. All brand specifics (DS spec, pptx theme, base pptx, brand tokens, Figma fileKey) now read from `local-context.md`. English-only copy. Added graceful fallbacks when brand config is partial or missing.
-- `0.1.0` (2026-04-20) — Initial release. Supports 4 intents, 4 deck subtypes, 7 design-skill hooks, Figma MCP integration.
+Version history up to 0.3.0 lives in `references/design-bridge-playbook.md` → History (skill-local); later releases are recorded in `CHANGELOG.md`.
