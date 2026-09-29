@@ -1,6 +1,6 @@
 ---
 name: experiment-tracker
-version: 0.3.0
+version: 0.4.0
 description: Experiment registry — proposed → specced → running → readout → decided, with stale-test reminders. Not analyzing results (product-analysis), not the A/B spec (requirements-creator). UA — «які тести зараз біжать», «заведи експеримент», «зафіксуй запуск тесту», «завислі тести». EN — "what experiments are running", "experiment status", "register an experiment", "log the test launch", "which tests await a decision", "remind me about stale tests". Also UA — «статус експериментів», «які тести чекають рішення». Tracks state and chains to product-analysis, requirements-creator and brainstorm-features.
 ---
 
@@ -44,6 +44,7 @@ experiments:
     start_date: null
     planned_end: null
     readout_ref: ""           # vault link / Confluence URL of the product-analysis readout
+    readout_signoff: null     # optional {by, date}: who signed off the readout (since v3.6.0)
     verdict: null             # winner | loser | inconclusive (from readout only)
     decision: null            # rollout | rollout-with-caveats | iterate | extend | rollback
     decision_ref: ""          # decision-log record link
@@ -103,8 +104,10 @@ Per `local-context-protocol.md`. Then **Step R** — load/create the registry.
 ### Mode: readout
 1. Pick the running/overdue experiment.
 2. **Chain to `product-analysis` → A/B Test Results mode**, passing: flag/test name, dashboards, start/end dates, platforms, traffic split, spec link. product-analysis runs its own Data Integrity Gate and returns the verdict.
+2a. **Gate emphasis (since v3.6.0).** When `role_defaults.gate_emphasis` holds `srm-exposure-peeking` or `ci-vs-point`, those tokens travel in the readout payload too, and the readout adds their ⚠️ caveat lines (`references/data-integrity-protocol.md` → Gate emphasis). Nothing is asked; the verdict rules stay the same.
 3. Record `verdict` + `readout_ref`; the experiment stays in `awaiting-readout` until the PM decides (Mode: decide) — with `verdict` now set, stale detection reports it as "awaiting your decision", not "readout pending". The linked hypothesis artifact's status is updated by product-analysis' own Vault Save (winner → validated, loser → rejected, inconclusive → stays `testing`, per `vault-protocol.md` → Hypothesis Lifecycle).
 4. Never compute or adjust the verdict here — the tracker records what product-analysis concluded, including "inconclusive".
+5. **Sign-off (optional, since v3.6.0).** When the user says who signed off the readout — now or in a later run — record `readout_signoff: {by, date}` (date defaults to today) through the usual gated write. It is never asked for, adds no lifecycle state, and its absence changes no stale flag.
 
 ### Mode: decide
 1. Pick an experiment with a recorded verdict.

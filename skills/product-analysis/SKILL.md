@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.14.0
+version: 0.15.0
 description: Analyze product data — dashboards, metrics, A/B results, funnel vs baseline; data only. Not the CJM funnel pipeline (cjm-research), not a quick «чи все ок» health glance (focus-advisor). UA — «проаналізуй метрики/дашборд», «результати A/B-тесту», «чому впала конверсія», «воронка проти baseline». EN — "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", "CJM funnel analysis (data only)". Also UA — «знайди аномалії», «поясни ці дані», «аналіз після релізу». Generates data-backed hypotheses; for anomalies → enrichment → backlog use cjm-research.
 ---
 
@@ -55,7 +55,7 @@ Runs **after Step 1b (mode selection) and before data acquisition**, and only wh
 Follow `references/template-protocol.md`:
 
 - `artifact_type`: `research` for the three analysis reports; **`cjm` for CJM Funnel Analysis** — that report is the same artifact `cjm-research` produces, and a `research`-typed request can never match the `cjm`-typed built-in (or any custom CJM template the user registered), which is why the declared `cjm-funnel` fallback below was unreachable until v2.1.1.
-- `subtype`: inferred from selected mode
+- `subtype`: inferred from selected mode — `role_defaults.template_defaults` (e.g. `research/insight-memo`) applies only as T-0 says, never over a mode's own subtype below (since v3.6.0)
   - Full structured report → `metrics-analysis`
   - Post-Release Analysis → `post-release`
   - A/B Test Results → `ab-test-results`
@@ -223,6 +223,8 @@ Methodology section at the top is **not sufficient** — readers copy individual
 
 Tag every source: `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `pdf-upload`, `confluence-internal`, `jira-internal`, `user-text`.
 
+**1.5.f — Gate emphasis (since v3.6.0):** each token in `role_defaults.gate_emphasis` (Step 0i; a hat overlays it) that this gate has a step for adds its extra check from `references/data-integrity-protocol.md` → Gate emphasis, on top of 1.5.a–e: `instrumentation`, `comparability`, `trend-vs-objective` (against `product.current_okrs` or the stated target) and `base-rates` (Step 4 estimates) in every mode; `srm-exposure-peeking` and `ci-vs-point` in A/B mode; `period-completeness` and `source-type` add nothing here — 1.5.a and 1.5.e already run on every source. A failed extra check adds one ⚠️ caveat line to the metric or section, carried into the report like any caveat — never a question, a Blocked status, a changed verdict or a halted run; other tokens are ignored. A run chained from another skill (CJM Research, Experiment Tracker) applies only the tokens passed in its payload; a scheduled or headless run applies none.
+
 ### Output of Step 1.5
 
 Every metric receives status: ✅ Verified / ⚠️ Caveat / ❌ Blocked.
@@ -253,7 +255,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "product-analysis",
-     skill_version: "0.14.0",
+     skill_version: "0.15.0",
      tags: [metric names analyzed, platforms, analysis_mode],
      content: full_analysis_markdown,
      related: [source hypothesis, source requirements, previous analyses from Step 0.5],
@@ -338,7 +340,7 @@ When Product Analysis is invoked by another skill (Product Research, Write Conce
 - **Trends summary** — direction and magnitude of relevant metrics
 - **Anomalies** — any unexpected findings relevant to the calling skill's context
 - **Relevant hypotheses** — data-backed hypotheses that fit the calling skill's scope
-- **Data quality notes** — caveats, limitations, data freshness
+- **Data quality notes** — caveats, limitations, data freshness (incl. the 1.5.f gate-emphasis ⚠️ lines, since v3.6.0)
 - **CJM-specific data** (when returning to `cjm-research`) — structured per-stage anomaly list with severity, deviation, and trend
 
 The calling skill should incorporate these results into its workflow without re-analyzing the same data.

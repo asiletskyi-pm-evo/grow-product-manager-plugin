@@ -1,6 +1,6 @@
 ---
 name: product-landscape
-version: 0.3.0
+version: 0.4.0
 description: Registry and map of competitor, adjacent and benchmark products — scan installed apps, discover by category and market, categorise, characterise, start same-flow research across products. Not a single competitive report (product-research), not a source library (knowledge-library), not the walk itself (flow-walkthrough); setup of consent and category is plugin-configurator. UA — «карта конкурентів», «реєстр продуктів», «просканируй мої застосунки», «хто конкуренти й дотичні у сфері …», «додай продукт у реєстр», «досліди однакове флоу на конкурентах». EN — "competitor map", "product registry", "scan my apps", "who are the competitors and adjacent players", "add product to the registry", "research the same flow across products". Modes scan / discover / add / update / characterize / map / research; chains to flow-walkthrough, product-research, brainstorm-features.
 ---
 
@@ -119,7 +119,7 @@ Update `registry.yaml` (index) and `products/<slug>.md`; append the run to `scan
 
 > Requires: `references/vault-protocol.md` → Vault Save
 
-IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", product: active_product, skill: "product-landscape", skill_version: "0.3.0", tags: [category, market], content: the map, related: [registry slugs] })`. Display: "Saved to Vault: Research/landscape/{product}/…".
+IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", product: active_product, skill: "product-landscape", skill_version: "0.4.0", tags: [category, market], content: the map, related: [registry slugs] })`. Display: "Saved to Vault: Research/landscape/{product}/…".
 
 ## Skill Chaining
 
@@ -131,6 +131,8 @@ IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", pro
 - ← `flow-walkthrough` (compare candidates; walked products registered)
 - ← `cjm-research` and `brainstorm-features` (offer a landscape run)
 - ← `plugin-configurator` (Landscape setup imports `product.competitors`)
+
+**Next-step order (since v3.6.0).** When `role_defaults.planning_view` is `rollup`, the next steps offered after a `scan`, `discover`, `add` / `update` / `characterize` or `research` run list the category map (`map` mode) first, then the chains above. Nothing else changes — modes, questions and writes are the same for every profile, and every other profile sees the next steps as before.
 
 ## Quality standards
 

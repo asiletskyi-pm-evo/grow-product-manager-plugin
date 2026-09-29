@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.12.0
+version: 0.13.0
 description: Competitive, market, user and UX-benchmark research — interview synthesis, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks". Also UA — «проаналізуй ринок», «конкурентний аналіз», «ринкові тренди». Calls knowledge-library for enrichment during research.
 ---
 
@@ -55,7 +55,7 @@ Follow `references/template-protocol.md`.
 
 Declare:
 - `artifact_type: research`
-- `subtype: {inferred from research type — "competitive" | "user-research" | "market" | "ux-benchmark" | null}`
+- `subtype`: inferred from the research type — `competitive` | `user-research` | `market` | `ux-benchmark`; since v3.6.0 also from the artifact asked for — "research plan" / «план дослідження» → `research-plan`, "discussion guide" or "interview guide" / «гайд для інтерв'ю» → `discussion-guide`, "insight report" / «звіт з інсайтами» → `insight-report`, "insight memo" / «інсайт-мемо» → `insight-memo`; none inferred → `null` as before (the role default does not apply here: this skill runs the research itself, so a plan, guide, report or memo is rendered only when the user asks for it)
 - `product_id: {from local-context.md active product}`
 - `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
 
@@ -63,9 +63,11 @@ Run Steps T-1 → T-5 via the `template-library` helper routines. Render the res
 
 If the user says "do not use a template" → skip Step T and use the skill's internal structure.
 
-If no template applies → fall back to built-in `research-builtin-competitive` (for competitive), `research-builtin-user-research` (for user research), or skill's internal structure for other subtypes.
+If no template applies → the built-in ladder resolves `builtin://research/{subtype}-v1.md` — `research-builtin-competitive` (for competitive), `research-builtin-user-research` (for user research) and, since v3.6.0, the four artifact subtypes above; other subtypes use the skill's internal structure.
 
 **Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
+
+**Role extra sections (since v3.6.0).** T-5 step 3b inserts each `role_defaults.extra_sections.research` partial (e.g. `repository-entry`) above the judgment footer when the report — template or internal structure alike — has no section with that heading; derived, never asked.
 
 ## Workflow
 
@@ -123,9 +125,9 @@ Summarize the full research brief back to the user and get confirmation before p
 
 **Why this exists:** historic incidents where stale benchmarks, geographically mismatched data (US benchmark cited for UA market), or sensational claims from a single source produced misleading research conclusions. See `data-integrity-protocol.md` for the full incident catalog.
 
-**Sub-checks 1.5.a–1.5.e**, applied to every external source as it is gathered: **1.5.a** recency against per-data-type thresholds; **1.5.b** geographic/cultural fit to `product.primary_market`; **1.5.c** multi-source cross-validation (≥ 2 independent sources, ≥ 3 for sensational claims); **1.5.d** bias screening; **1.5.e** source-type marker + inline annotation.
+**Sub-checks 1.5.a–1.5.e**, applied to every external source as it is gathered: **1.5.a** recency against per-data-type thresholds; **1.5.b** geographic/cultural fit to `product.primary_market`; **1.5.c** multi-source cross-validation (≥ 2 independent sources, ≥ 3 for sensational claims); **1.5.d** bias screening; **1.5.e** source-type marker + inline annotation. **1.5.f** (since v3.6.0) adds the extra checks of the `triangulation`, `human-validated`, `market-recency` and `source-type` tokens in `role_defaults.gate_emphasis` — caveat lines and flags only: never a question, never a changed source status, never a blocked run.
 
-The full procedure — the recency table, the geography tiers with the worked example, the cross-validation and bias rules, the source-type markers and the inline-annotation convention — lives in `references/source-validation-gate.md` (skill-local). Read it at the start of Step 2 — before spawning any fan-out subagents (their prompts need the thresholds) and before validating the first source.
+The full procedure — the recency table, the geography tiers with the worked example, the cross-validation and bias rules, the source-type markers, the inline-annotation convention and the 1.5.f gate-emphasis checks — lives in `references/source-validation-gate.md` (skill-local). Read it at the start of Step 2 — before spawning any fan-out subagents (their prompts need the thresholds) and before validating the first source.
 
 ### Output of Step 1.5
 
@@ -327,8 +329,8 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.12.0", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
-   (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added.)
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.13.0", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+   (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added; since v3.6.0 a research plan, discussion guide, insight report or insight memo saves the same way, tagged with its subtype.)
 2. Display: "Saved to Vault: Research/{product}/…"
 
 ## Quality standards
@@ -348,7 +350,8 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - **`references/data-integrity-protocol.md`** — **MANDATORY (v0.8.0+)** — 5 universal gate checks for any cited external source (Step 1.5)
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/frameworks.md`** — detailed templates for each research framework
-- **`references/source-validation-gate.md`** — Step 1.5 sub-checks 1.5.a–1.5.e: recency thresholds, geography tiers, cross-validation, bias screening, source-type markers and inline annotation (skill-local)
+- **`references/source-validation-gate.md`** — Step 1.5 sub-checks 1.5.a–1.5.f: recency thresholds, geography tiers, cross-validation, bias screening, source-type markers and inline annotation, role gate emphasis (skill-local)
+- **`references/examples/research-plan-example-v1.md`** — golden exemplar for the `research-plan` subtype (since v3.6.0; load on demand when rendering it)
 - **`references/deep-research-llm.md`** — Step 2 Deep Research via ChatGPT / Gemini: per-LLM steps, cross-referencing, guidelines for LLM-sourced data (skill-local)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)

@@ -1,7 +1,7 @@
 ---
 name: product-reporter
-version: 0.7.0
-description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a performance review (performance-review). UA — «звіт по спринту», «результати кварталу», «скільки закрив за квартал», «звіт по релізах», «звіт по цілі». EN — "sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points", "goal report", "3T5F", "audit this report against the goal". Also UA — «статус епіка/фічі/місії», «операційний звіт команди», «звіт для стейкхолдерів», «які фічі виїхали в реліз». Do NOT use to analyze A/B or dashboard metrics (product-analysis) or to release the plugin (release-manager).
+version: 0.8.0
+description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a performance review (performance-review). UA — «звіт по спринту», «результати кварталу», «скільки закрив за квартал», «звіт по релізах», «звіт по цілі». EN — "sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points", "goal report", "3T5F", "audit this report against the goal". Also UA — «статус епіка/фічі/місії», «операційний звіт команди», «звіт для стейкхолдерів», «які фічі виїхали в реліз», «QBR за квартал», «звіт для борду»; EN — "QBR", "board update". Do NOT use to analyze A/B or dashboard metrics (product-analysis) or to release the plugin (release-manager).
 ---
 
 # Product Reporter
@@ -50,7 +50,7 @@ If `local-context.md` is missing → redirect to Plugin Configurator.
 
 Runs before Step 1 (every mode produces an artifact). Follow `references/template-protocol.md`:
 - `artifact_type: ops-report` for operational modes; `artifact_type: report-3t5f` for `goal-report`.
-- `subtype`: `sprint-plan` | `sprint-review` | `quarter-review` | `initiative-status` | `member-review` | `goal-3t5f` (the subtype is already scoped by `artifact_type: ops-report` — it carries no `ops-` prefix, which is also why the built-in filenames resolve)
+- `subtype`: `sprint-plan` | `sprint-review` | `quarter-review` | `initiative-status` | `member-review` | `goal-3t5f` (the subtype is already scoped by `artifact_type: ops-report` — it carries no `ops-` prefix, which is also why the built-in filenames resolve). Since v3.6.0 a request for a "QBR", a "board update" or «звіт для борду» runs the `quarter-review` mode and renders it as `qbr` / `board-update`; a user's quarter request that names neither takes `role_defaults.template_defaults.ops-report` when that is `qbr` or `board-update` (the T-0 role default, applied within the quarter pipeline; a hat overlays it) — a `quarter-review` that another skill asks for keeps its subtype. Same pipeline and data; a section the data cannot fill stays `TBD`, never guessed; the money-bridge rows come from the `product.key_metrics` rows that carry a `Revenue driver` — derived, never asked.
 - `product_id`, `language` from local-context.
 - Run **T-0 → T-5 exactly as `references/template-protocol.md` names them** — T-0 declare context, T-1 load registry, T-2 score/rank, T-3 decide (per `templates.preference`: `auto`/`always_ask`/`smart`), T-4 collect variables (during Step 3), T-5 render + record. Do not renumber the steps locally: other skills cite "Step T-4" meaning the protocol's T-4.
 - **Fallback**: if no custom template, the protocol's built-in ladder resolves `builtin://ops-report/{subtype}-v1.md` (e.g. `sprint-plan-v1.md`); for `goal-report` — `templates/built-in/report-3t5f/default-v1.md`.
@@ -91,6 +91,7 @@ Follow `references/jira-data-protocol.md`. Per mode, build the JQL and fetch the
 - **Closed vs open** (`sprint-review`/`quarter-review`): use status-category `done` for "closed"; record `resolutiondate` inside the period.
 - **Dedup**: a member can be Assignee+Developer+QA on the same issue — count per role, never double-count totals.
 - **SP nulls** → treat as 0; flag features with missing estimates.
+- **Gate emphasis (since v3.6.0; ops modes)**: for each of `comparability`, `trend-vs-objective`, `hippo-check` in `role_defaults.gate_emphasis` — and `money-bridge` only in the quarter-review, qbr and board-update renders — run its extra check from `references/data-integrity-protocol.md` → Gate emphasis; a failed one adds a ⚠️ caveat line to the metric or section it concerns — never a question, never a blocked report; a run another skill asks for only for its data returns without them (the caller applies its own).
 
 ### Step 3 — Process (Python)
 
@@ -161,7 +162,7 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.7.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.8.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
    - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
 
@@ -183,6 +184,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - `references/roi-frameworks.md` — quantify Top-3 Highlights in $ / ROI.
 - `references/goal-frameworks.md` — SMARTCBP Target; boundary with `goal-setter`.
 - `templates/built-in/ops-report/` + `templates/built-in/report-3t5f/` — built-in fallback skeletons for the report subtypes.
+- `references/examples/qbr-example-v1.md` — golden exemplar for the `qbr` subtype (since v3.6.0; load on demand when rendering it).
 - `references/template-protocol.md` — template-library resolution (shared).
 - `references/local-context-protocol.md` — Step 0 (shared).
 - `references/integration-strategy.md` — MCP → registry → browser (shared).
@@ -198,3 +200,6 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - **Quarter-review** — fetch **per month** and sum (full-quarter JQL times out).
 - **Output format** — ask each run (Confluence / local md+xlsx / both). **Visualizations** — propose, build on accept.
 - See `references/jira-data-protocol.md` for the exact field map, JQL, and extraction patterns.
+
+## Skill Chaining
+← `quarterly-planning` (`quarter-review` actuals for its retro; since v3.6.0 also its board readout, rendered here as the board-update `ops-report` from the retro and plan data it passes — no new fetch; scope and destination come from the caller when it passes them; a board readout from quarterly-planning arrives with `destination: chat draft` and `visuals: none`, so Steps 5–6 are skipped and nothing is published until the user asks) · ← `sprint-planning` (`sprint-review` + `member-review`) · ← `project-planning` (`initiative-status`) · ← `goal-setter` (3T5F reporting) · ← `performance-review` (goal report and member-review data) · ← `focus-advisor` (rituals, unread goal reports) · → `goal-setter` (a goal report with no known Target)

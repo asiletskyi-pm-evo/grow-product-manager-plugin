@@ -210,7 +210,8 @@ Collisions: flow-walkthrough (legs) vs plugin-configurator (test accounts setup)
 | N5 | створи задачі для фічі відгуків | task-creator |
 | N6 | зафіксуй рішення: тестові акаунти лише на проді | decision-log |
 | N7 | підготуй мене до 1-1 з продавцем | one-on-one |
-| N8 | перевір мою специфікацію тестових акаунтів | requirements-creator |
+| N8 | перевір мою специфікацію фічі тестових акаунтів для продавців | requirements-creator (reworded v3.6.0 — see N9) |
+| N9 | перевір мою специфікацію тестових акаунтів | plugin-configurator or requirements-creator — ambiguous: "my test-accounts specification" reads as the configured accounts; the original N8 wording, kept since v3.6.0 |
 
 ### Group O — Product landscape vs neighbours (added 2026-09-11, v3.3.0)
 
@@ -229,7 +230,7 @@ Collisions: product-landscape vs product-research (a single competitive report) 
 
 ### Group R — Roles and hats (added 2026-09-28, v3.5.0)
 
-Collisions: a hat or a role word must never move routing — the skill is chosen by the task, and the hat only changes that run's defaults (`references/role-profiles.md` §4; hat parsing is verified in TC-role-350-hat, not here). «змінити роль» / "set role" belongs to plugin-configurator, not to the typed `/config` or `/setup` commands. Designer-hat phrases about a live flow must not drift to design-bridge. Artifact-dependent rows (QBR, design brief, research plan, strategy-memo pair) join this group in v3.6.0, when their templates ship.
+Collisions: a hat or a role word must never move routing — the skill is chosen by the task, and the hat only changes that run's defaults (`references/role-profiles.md` §4; hat parsing is verified in TC-role-350-hat, not here). «змінити роль» / "set role" belongs to plugin-configurator, not to the typed `/config` or `/setup` commands. Designer-hat phrases about a live flow must not drift to design-bridge. Artifact-dependent rows R15–R20 (design brief, research plan, QBR, board update, the strategy-memo pair) joined in v3.6.0 with their templates.
 
 | # | Phrase | Expected |
 |---|--------|----------|
@@ -247,6 +248,12 @@ Collisions: a hat or a role word must never move routing — the skill is chosen
 | R12 | as a designer, write the concept for saved searches | write-concept (hat: product_designer) |
 | R13 | подивись на цей макет у Figma очима дизайнера | design-bridge |
 | R14 | як аналітик, знайди аномалії у воронці CJM | cjm-research (hat: product_analyst) |
+| R15 | дизайн-бриф для фічі збережених пошуків | write-concept (subtype design-brief, v3.6.0) |
+| R16 | research plan for onboarding interviews | product-research (subtype research-plan, v3.6.0) |
+| R17 | QBR за квартал | product-reporter (subtype qbr, v3.6.0) |
+| R18 | board update for the quarter | product-reporter (subtype board-update, v3.6.0) |
+| R19 | стратегічний меморандум по продукту на рік: ставки і що зупиняємо | write-concept (subtype strategy-memo, v3.6.0) |
+| R20 | на чому фокусуватись у кварталі | focus-advisor — the attention memo, not write-concept's strategy memo |
 
 ## Results log
 
@@ -263,6 +270,7 @@ Collisions: a hat or a role word must never move routing — the skill is chosen
 | 2026-09-11 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, Group O, 8 phrases), pre-release v3.3.0 | O 7/8 → **8/8** after one fix | O8 «налаштуй карту конкурентів» → product-landscape on run 1 (its description opened with «карта конкурентів»). Fix: guard «setup of consent and category is plugin-configurator» in the description and a hand-over line in Step 1; re-run O1–O4 + O8 → 5/5. |
 | 2026-09-25 | 2 independent agent runs (descriptions-only simulation over the 31 skill + 5 command descriptions), pre-release v3.4.0 | A 100 / B 100 / C 100 / D 100 / E 100 / F 100 / G 100 / H 100 / I 100 / J 100 / K 100 / L 100 / M 100 / N 100 / O 100 (both runs) | None. v3.4.0 changes no `description` (only the `version` field of every skill), so no live pass is required by the DoD; the simulation confirms the thin-core moves and the Step 0j block left routing untouched. |
 | 2026-09-28 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, current default model), pre-release v3.5.0 — all 140 phrases once, then Groups K, L, N, O, R three times each (majority of 3) | A 8/8 · B 9/9 · C 9/9 · D 4/4 · E 5/5 · F 4/4 · G 10/10 · H 14/14 · I 8/8 · J 9/9 · K 13/13 · L 9/9 · M 8/8 · **N 7/8** · O 8/8 · **R 13/14** | **N8** «перевір мою специфікацію тестових акаунтів» → plugin-configurator 3/3 — reproduced on v3.4.0 `main` (3/3), so pre-existing drift, not a v3.5.0 regression; a description guard in plugin-configurator did not move it and was reverted; open for a follow-up. **R4** "wear the business owner hat and review last quarter's results" → 1/3, while the same task without the idiom and the «як власник бізнесу, …» / "as a business owner, …" forms route 3/3 — the "wear the … hat" idiom disturbs routing; role-profiles §4 now recommends the "as a …" form (no hat phrases in descriptions, by design). **R1** reworded (the first draft «подивись на цей roadmap як CPO» had no task and routed to none on `main` too). **L9** label widened: plugin-configurator now explains `/grow-product-manager:setup --write-gate off`, so routing there is correct. **J6**, **L8** = scorer artefacts (J6 → write-concept; L8 → none is the accepted Claude answer since 2026-09-08). |
+| 2026-09-29 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`), pre-release v3.6.0 — all 146 phrases once (misses and rate-limited rows re-run 3×, majority), then Groups B, C, F, G, J, R again after the description fixes | A 8/8 · B 9/9 · C 9/9 · D 4/4 · E 5/5 · F 4/4 · G 10/10 · H 14/14 · I 8/8 · J 9/9 · K 13/13 · L 9/9 · M 8/8 · **N 9/9** · O 8/8 · **R 19/20** | New rows R15 «дизайн-бриф …» → design-bridge, R19 «стратегічний меморандум …» → none, R20 «на чому фокусуватись у кварталі» → quarterly-planning on the first run: write-concept's description gained «дизайн-бриф», «стратегічний меморандум», «мемо рішення», «бізнес-кейс» and the EN forms, focus-advisor's gained «фокус кварталу» / «на чому фокусуватись у кварталі», product-reporter's «QBR», «звіт для борду», "board update" → 3/3 each; neighbours held (quarterly roadmap, decks). **N8** reworded to an unambiguous spec-review phrase (3/3 requirements-creator) and the original wording kept as **N9** accepting either skill — "my test-accounts specification" reads as the configured accounts. R4 is the known weak "wear the … hat" idiom. Seven first-run rows were API rate-limit errors, re-run clean. |
 | (fill after each run) | | | |
 
 ## Maintenance

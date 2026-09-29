@@ -176,6 +176,30 @@ This audit trail enables users to verify which retrieval method produced each da
 
 ---
 
+## Gate emphasis — role extra checks (since v3.6.0)
+
+`role_defaults.gate_emphasis` (`references/role-profiles.md` §2) names extra checks run **on top of** Gate Checks 1–5 — never instead of them, and never relaxing one. A skill applies a token only where it has a step for it (the "Applied by" column lists those skills); other tokens are ignored in that run. Automated runs apply none of their own; a skill invoked only for a return payload applies exactly the tokens its interactive caller passes, never the role's own. A failed extra check adds a ⚠️ caveat line to the metric or section (the statuses below stay the same) — never a new question and never a blocked run.
+
+| Token | Extra check | Applied by |
+|-------|-------------|-----------|
+| `period-completeness` | Gate Check 1 also on context metrics, not only on the headline ones | product-analysis, cjm-research |
+| `source-type` | Gate Check 5 marker on every source, context ones included | product-analysis, cjm-research, product-research |
+| `comparability` | Compared teams / periods / segments share the metric definition, period length and population; non-comparable pairs are flagged, not ranked | product-analysis, product-reporter |
+| `trend-vs-objective` | Every trend is shown against its objective or target, not only period-over-period | product-analysis, product-reporter |
+| `market-recency` | External market data older than 12 months is flagged as stale | product-research, write-concept |
+| `base-rates` | A forecast, bet or estimate states a base rate / outside view, or says that none is known | product-analysis, write-concept |
+| `triangulation` | A qualitative finding is called conclusive only when two independent source types agree; the number of real users and the method are stated; synthetic input counts as hypothesis only | product-research, feedback-triage |
+| `human-validated` | Themes synthesised by a model carry a `human-validated: yes/no` flag | product-research, feedback-triage |
+| `instrumentation` | The events behind a metric change are confirmed to fire as specified (tracking plan / event dictionary) before the change is trusted | product-analysis, cjm-research |
+| `srm-exposure-peeking` | An A/B readout checks sample-ratio mismatch, exposure logging and early peeking before the verdict | product-analysis (A/B readout, also when experiment-tracker chains it) |
+| `ci-vs-point` | Effects are reported with a confidence interval, not only a point estimate | product-analysis (A/B readout, also when experiment-tracker chains it) |
+| `spec-readiness` | A spec names problem, outcome, scope, constraints and verification; missing ones are flagged (the full readiness gate lands in v3.9.0) | requirements-creator |
+| `nfr-present` | The NFR section exists and is not TBD | requirements-creator |
+| `money-bridge` | A metric claim is linked to revenue / margin / CAC / LTV through `product.key_metrics` → `Revenue driver`; without a mapping the section's single line "No revenue mapping configured" is the whole result — no per-claim caveats | product-reporter, write-concept (business case) |
+| `hippo-check` | A decision that leans on a senior opinion names the evidence behind it, or labels the input `assumed` | write-concept, product-reporter |
+
+---
+
 ## Output statuses
 
 After running all 5 gate checks, each metric/source gets a status:

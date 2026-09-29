@@ -1,4 +1,4 @@
-# Source Validation Gate — Step 1.5 sub-checks (1.5.a–1.5.e)
+# Source Validation Gate — Step 1.5 sub-checks (1.5.a–1.5.f)
 
 > Part of `product-research`. Loaded on demand when Step 1.5 validates the sources gathered in Step 2. The gate itself — its purpose, the ✅ Verified / ⚠️ Caveat / ❌ Blocked output and the Blocked-source rule — stays in SKILL.md; the universal gate checks are in `references/data-integrity-protocol.md`.
 
@@ -75,3 +75,18 @@ Inline-annotation convention:
 - `(Source domain, YYYY, geography)`
 - `(Competitor name, YYYY snapshot, source URL)`
 - `(N interviews YYYY-MM, persona-type)`
+
+## 1.5.f — Role gate emphasis (since v3.6.0)
+
+`role_defaults.gate_emphasis` (Step 0i of `references/local-context-protocol.md`; a hat overlays it) can name extra checks that run **on top of** 1.5.a–1.5.e — the mapping is `references/data-integrity-protocol.md` → Gate emphasis. This skill applies the four tokens below; any other token is ignored in this run, and with none of them present the gate runs exactly as 1.5.a–1.5.e describe.
+
+Every extra check only adds: a ⚠️ caveat line next to the source, finding or theme it concerns, or a flag on a theme. It never asks a question, never changes the ✅ / ⚠️ / ❌ status that 1.5.a–1.5.e gave a source, never drops a source and never blocks the run.
+
+| Token | Extra check in this skill | Added when the check fails |
+|-------|---------------------------|----------------------------|
+| `market-recency` | Every external **market** datum — market sizing, trends, CR / AOV and other market benchmarks, pricing, competitor metrics — dated more than 12 months before the run, even when it is inside its 1.5.a threshold. UX guidelines and fundamental research are not market data. | `⚠️ Stale market data: (source, YYYY-MM) — older than 12 months` |
+| `triangulation` | A qualitative finding (interviews, usability sessions, reviews, open survey answers) is called conclusive only when two independent **source types** agree — e.g. interviews and support tickets, usability sessions and analytics. Each qualitative finding states the number of real users and the method. Synthetic input — simulated users, synthetic personas, model-written answers about users — counts as hypothesis only. | `⚠️ One source type — indicative, not conclusive (n = N real users, method)` · `⚠️ Synthetic input — hypothesis only` |
+| `human-validated` | Every theme a model synthesised (Step 3 user-research themes, a design research-synthesis appendix) carries `human-validated: yes` or `human-validated: no`. `yes` only when a person has confirmed the theme — the source says a researcher coded or reviewed it, or the user confirmed it in this session; `no` otherwise. The flag is derived, never asked for. | `human-validated: no` on the theme |
+| `source-type` | Already met by this skill: 1.5.e marks every external source, and the Sources section (Step 4) marks the type of every source, internal and context ones included. The token adds nothing here — it is the `pm` baseline. | — |
+
+The caveat lines follow the caveat-propagation rule of the Quality standards: they stay visible in the section that cites the source or finding, never folded into a generic "based on research".

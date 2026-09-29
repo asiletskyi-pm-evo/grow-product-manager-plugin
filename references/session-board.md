@@ -43,6 +43,8 @@ The tactical/operational sessions **prepare** the readout: work with the team fi
 
 Bring **worked-through** questions — each with the owner's proposal and argument, ideally the answer already; the responsible manager picks and recommends the option.
 
+Since v3.6.0 the readout itself has one template and one owner: `product-reporter` renders it as `ops-report/board-update`, `quarterly-planning` hands its retro and plan over to it, and this checklist is what that template covers.
+
 1. **Follow-up statuses from the previous board** — all prior decisions should be done; track the **GTD coefficient** (target ≥ 80%).
 2. **Planned vs actual, previous period** — budget/plan vs fact for the period, full-year forecast at current trend, deviations + causes. If the revenue/goal plan is missing — show the brainstorm results on how to catch up immediately.
 3. **Strategic & operational goals** — status, year-end forecast; if deviating — why and how it's being solved; if a goal changed — the detailed reason; new goals + the resources for them. Headline goals as **SMARTCBP**; report progress as **3T5F** (`references/reporting-3t5f.md`).

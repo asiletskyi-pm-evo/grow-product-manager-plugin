@@ -37,6 +37,8 @@ Templates define *structure*; they do not show a *worked, high-quality instance*
 
 These golden artifacts double as fixtures for `testing/output-evals.md` (one asset, two jobs).
 
+Role-default exemplars (since v3.6.0) — one per role-specific subtype that a role ranks first: `skills/write-concept/references/examples/` (design brief, strategy memo), `skills/product-research/references/examples/` (research plan), `skills/product-reporter/references/examples/` (QBR).
+
 ## 3. Static vs dynamic boundary (pointer)
 
 The static/dynamic context boundary is a first-class, versioned architectural decision — budgeted separately in `references/context-budget.md` (planned). Rule of thumb: **static** = loaded every skill turn (Step 0 core of `local-context.md`, core guardrails); **dynamic** = loaded on task match (skill-local references, on-demand `local-context.md` sections, knowledge-library, vault context). Progressive disclosure (metadata → full instructions → deep references) is how a skill carries dozens of capabilities while paying only for the one in use.

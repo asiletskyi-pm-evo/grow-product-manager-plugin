@@ -1,6 +1,6 @@
 ---
 name: flow-walkthrough
-version: 0.4.0
+version: 0.5.0
 description: Walk a customer flow in the REAL product — web, desktop, iPhone app on a Mac, Android via adb — screenshot per step, friction, evidence pack, report, emulator/adb setup. Not Figma review (design-bridge), not dashboards (product-analysis), not the CJM pipeline (cjm-research calls here). Multi-role legs on test accounts with sandbox-confirm (declaring the accounts is plugin-configurator). UA — «пройди флоу», «пройди шлях покупця в застосунку», «перевір зручність … у застосунку», «порівняй флоу на iOS і web», «налаштуй емулятор/adb для проходу». EN — "walk the flow", "walk through the app as a user", "test this journey in the real app", "compare the flow across platforms", "set up the emulator". Modes setup / walk / compare / audit; chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper.
 ---
 
@@ -90,7 +90,7 @@ Render the report through Step T. Multi-leg runs put a **leg summary table** (le
 
 IF vault_level > L0 AND sync_mode != "off":
 
-1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.4.0", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
+1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.5.0", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
 2. Display: "Saved to Vault: Research/walkthroughs/{product}/…"
 
 ## Setup mode
@@ -112,6 +112,8 @@ IF vault_level > L0 AND sync_mode != "off":
 - ← `product-research` (UX benchmark: compare mode on competitors)
 - ← `requirements-creator` (needs an as-is screen and no screenshot source exists)
 - ← `product-landscape` (research mode picks the products and starts compare)
+
+**Design vocabulary (since v3.6.0).** When `role_defaults.question_defaults` is `design`, the Skill Chaining offer lists Diagram & Prototype Creator first (Recommended), and the question headings and option labels this skill writes follow `role_defaults.vocabulary_set` (`references/vocabulary-sets.md`). Modes, questions, the severity scale, the heuristics and the ranking stay the same for every profile; an automated run (a `cjm-research` enrichment) is unchanged.
 
 ## Quality standards
 

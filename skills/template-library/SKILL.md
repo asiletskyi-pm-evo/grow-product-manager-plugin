@@ -1,6 +1,6 @@
 ---
 name: template-library
-version: 0.3.1
+version: 0.3.2
 description: Manage artifact templates — concepts, requirements, research, tasks, decks — create, clone, edit, import, export, validate, backup. Not the glossary or knowledge sources (knowledge-library). UA — «додай шаблон», «керуй шаблонами», «покажи шаблони», «імпортуй шаблони з папки». EN — "manage templates", "add a template", "create a template", "edit a template", "import templates from a folder", "show templates", "backup templates". Also called by other skills to render an artifact via Step T of references/template-protocol.md.
 ---
 
@@ -38,7 +38,7 @@ The skill dispatches on the user's request into one of 12 actions. If ambiguous,
 
 | Action | Trigger phrases | Purpose |
 |--------|-----------------|---------|
-| `list` | "show templates", "list templates", "what templates do we have" | Print the registry table with filters |
+| `list` | "show templates", "list templates", "what templates do we have" | Print the registry table with filters, merged with the current built-ins from `{plugin-root}/templates/built-in/` (except `partial/`) so an older registry never hides them |
 | `show` | "show template X", "open template X" | Full content + metadata for one template |
 | `add` | "add a template", "create a template", "new template" | Wizard: artifact_type → scope → base → edit |
 | `clone` | "clone template X", "copy template X" | Copy built-in / user-global into new user scope |
@@ -61,6 +61,7 @@ The skill dispatches on the user's request into one of 12 actions. If ambiguous,
    - `product` (pick one from `local-context.md` products list)
 3. **Base** — via `AskUserQuestion`:
    - Clone a built-in template (pick one)
+     - since v3.6.0 the built-ins include the role subtypes — concept `design-brief` · `strategy-memo` · `decision-memo` · `business-case`; research `research-plan` · `discussion-guide` · `insight-report` · `insight-memo`; ops-report `qbr` · `board-update` — offered to every user, none hidden by role; `partial` built-ins are never offered (Rebuild-registry)
    - Clone an existing user template (pick one)
    - Start blank (use minimal frontmatter seed)
 4. **Languages** — via `AskUserQuestion` (multiSelect):
@@ -146,8 +147,8 @@ Full pass:
 
 Walk `Templates/` recursively:
 
-- For each `*.md` file outside `_archive/`, `_partials/`, `_System/`: parse frontmatter, build a registry entry.
-- Include built-in templates by scanning `{plugin-root}/templates/built-in/` and using `builtin://` URIs — except `templates/built-in/partial/` (protocol-inserted partials such as the judgment footer are never listed, offered or cloned; since v3.5.0).
+- For each `*.md` file outside `_archive/`, `_partials/`, `_System/`: parse frontmatter, build a registry entry (copy `match` when present — since v3.6.0).
+- Include built-in templates by scanning `{plugin-root}/templates/built-in/` and using `builtin://` URIs — except `templates/built-in/partial/` (protocol-inserted partials — the judgment footer since v3.5.0; the role extra sections and the money bridge since v3.6.0 — are never listed, offered or cloned).
 - Preserve `usage_count` and `last_used` from the previous registry (match by `template_id`).
 - Write new `_registry.json` atomically (write to `.tmp`, rename).
 
@@ -191,11 +192,13 @@ Default output — concise markdown tables and short confirmations. Always inclu
 Example `list` output:
 
 ```
-Templates (12 total — 4 built-in, 6 user-global, 2 product-specific)
+Templates (44 total — 36 built-in, 6 user-global, 2 product-specific)
 
 | ID                            | Type         | Scope         | Lang   | Updated    |
 |-------------------------------|--------------|---------------|--------|------------|
 | concept-builtin-default       | concept      | built-in      | uk, en | 2026-04-17 |
+| concept-builtin-strategy-memo | concept      | built-in      | en     | 2026-09-29 |
+| research-builtin-insight-memo | research     | built-in      | en     | 2026-09-29 |
 | requirements-builtin-default  | requirements | built-in      | uk, en | 2026-04-17 |
 | requirements-ab-test-v1       | requirements | user-global   | uk, en | 2026-04-17 |
 | requirements-acme-marketplace  | requirements | product:acme  | uk     | 2026-04-17 |

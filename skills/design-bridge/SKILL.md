@@ -1,6 +1,6 @@
 ---
 name: design-bridge
-version: 0.6.0
+version: 0.7.0
 description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку/презентацію», «hi-fi прототип/екран», «design handoff», «дизайн-рев'ю», «через мій дизайн-тулкіт». EN — "create a deck", "make a presentation", "build a prototype on our DS", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review". Also UA — «передати дизайн у розробку». Orchestrates research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff and Figma MCP; the next step after write-concept, requirements-creator, brainstorm-features or product-research when a deck or prototype is needed.
 ---
 
@@ -138,6 +138,8 @@ Via `AskUserQuestion` if not passed from an upstream skill:
 - dedicated Confluence page (markdown + screenshots)
 - inline in a Jira ticket as attachment
 - standalone .md in `deliverables/handoffs/`
+
+**Role defaults (since v3.6.0).** When `role_defaults.question_defaults` is `design`, the branded-or-plain question, Q1, Q3 and the Step 4c confirmations list the state, DS-component and a11y options first and pre-select the design defaults; when `role_defaults.template_defaults` has a `presentation` entry, Q2 pre-selects that subtype. The questions, their count and Steps 4d / 4e / 6 stay the same for every profile, and an automated run is unchanged — the table is in `references/design-bridge-playbook.md` → "Role defaults".
 
 ### Step 2 — Audience & constraints
 
@@ -309,7 +311,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.6.0",
+  skill_version: "0.7.0",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],
@@ -337,7 +339,7 @@ vault_save({
 - **`references/deck-subtypes.yaml`** — slide outlines for all 4 subtypes (layout sequence, required slots, recommended media)
 - **`references/figma-playbook.md`** — how to resolve a `fileKey`, safe patterns, known limitations (View seat), Step 4g procedure (frame context, screenshots, embed policy)
 - **`references/a11y-checklist.md`** — checklist for Step 6 QA
-- **`references/design-bridge-playbook.md`** — skill-local: Step 3 per-source extraction (a–e), Step 5a pptx rendering, the failure-mode table, the end-to-end concept → deck example, version history
+- **`references/design-bridge-playbook.md`** — skill-local: Step 3 per-source extraction (a–e), Step 5a pptx rendering, the failure-mode table, the end-to-end concept → deck example, Step 1 role defaults, version history
 - **`references/vault-protocol.md`** — Step 8 vault save
 - **`local-context.example.md`** → Design System section — schema for brand configuration (DS spec path, pptx theme path, base pptx path, brand tokens, Figma file key)
 
