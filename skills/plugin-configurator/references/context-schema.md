@@ -153,7 +153,7 @@ Every key an onboarding step may append, and the step that writes it. A skill ch
 
 | Field | Required | Used by | Description |
 |-------|----------|---------|-------------|
-| key_metrics | optional | Product Analysis, Brainstorm, Write Concept | List of primary product metrics with descriptions |
+| key_metrics | optional | Product Analysis, Brainstorm, Write Concept, Product Reporter | List of primary product metrics with descriptions; optional column `Revenue driver` (since v3.6.0) — the revenue / margin / CAC / LTV line the metric moves, used by the money-bridge section of QBR, board update and business case |
 | current_okrs | optional | Product Analysis, Write Concept | Current quarter OKRs |
 | metric_targets | optional | Product Analysis, Requirements Creator | Target values for key metrics |
 

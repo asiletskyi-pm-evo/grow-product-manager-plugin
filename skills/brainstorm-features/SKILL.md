@@ -1,6 +1,6 @@
 ---
 name: brainstorm-features
-version: 0.12.0
+version: 0.13.0
 description: Brainstorm features and hypotheses with ICE, or run a role debate (Debate mode). Not the CJM pipeline (cjm-research), not meeting transcripts (meeting-processor). UA — «брейншторм фіч», «згенеруй гіпотези», «проведи дебати», «red team цю ідею». EN — "brainstorm features", "generate hypotheses", "find growth opportunities", "run a debate", "have agents argue from different roles", "stress-test via debate". Also UA — «знайти точки росту», «гіпотези для CJM-воронки», «нехай агенти подискутують», «круглий стіл ролей», «розглянь з різних ролей». The ideation engine — cjm-research delegates here. Do NOT use to record a decision already made (decision-log).
 ---
 
@@ -43,6 +43,8 @@ Key context used by this skill:
 > **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
 > judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
 > a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
+
+**Vocabulary (since v3.6.0).** The headings and option labels this skill writes itself — its questions, the Step 3B idea groups, the summary tables — are worded with `role_defaults.vocabulary_set` via the shared `references/vocabulary-sets.md` (the user's glossary wins; `core` is the wording used before v3.6.0). Nothing else changes: the same questions, options, order and scores, the Step 3C return fields and the Debate-mode role cards keep their names, and user text is never reworded.
 
 ## Step T — Template Resolution (when saving brainstorm output)
 
@@ -352,10 +354,10 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 IF vault_level > L0 AND vault sync_mode != "off":
 
 1. For **each finalized hypothesis** (Step 5), save a separate artifact:
-   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.12.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.13.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
 2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
 3. For **debate sessions** (Step 3D), additionally save the debate itself:
-   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.12.0", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
+   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.13.0", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
    Display: "Saved to Vault: Debates/{product}/…"
 
 ## Quality standards

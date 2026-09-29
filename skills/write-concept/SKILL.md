@@ -1,7 +1,7 @@
 ---
 name: write-concept
-version: 0.13.0
-description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ». A concept is the input to requirements-creator.
+version: 0.14.0
+description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ», «дизайн-бриф», «стратегічний меморандум», «мемо рішення», «бізнес-кейс»; EN — "design brief", "strategy memo", "decision memo", "business case". A concept is the input to requirements-creator.
 ---
 
 # Write Concept (PRD)
@@ -76,7 +76,8 @@ Follow `references/template-protocol.md`.
 
 Declare:
 - `artifact_type: concept`
-- `subtype: {null | inferred from user input, e.g. "lightweight", "technical-spec"}`
+- `subtype`: inferred from the request — "design brief" / «дизайн-бриф» → `design-brief`, "strategy memo" / «стратегічне мемо» → `strategy-memo`, "decision memo" / «мемо рішення» → `decision-memo`, "business case" / «бізнес-кейс» → `business-case` (these four since v3.6.0), or a user subtype such as `lightweight`, `technical-spec`; none inferred → `role_defaults.template_defaults.concept` (T-0, since v3.6.0; a hat overlays it; its value `default` keeps the subtype `null`), else `null`
+  - Boundary (since v3.6.0): this strategy memo is the concept-level memo of bets; the quarterly attention memo is `focus-advisor` `strategy` mode; a decision memo asks for a decision — the record once it is taken is `decision-log`.
 - `product_id: {from local-context.md active product}`
 - `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
 
@@ -89,7 +90,7 @@ Run Steps T-1 → T-5 via the `template-library` helper routines:
 
 If the user explicitly says "do not use a template" → skip Step T and use the skill's internal structure (the workflow below).
 
-If no template applies → fall back to the built-in `concept-builtin-default` template; if that's also missing, use the skill's internal structure.
+If no template applies → the protocol's built-in ladder: `builtin://concept/{subtype}-v1.md` for a declared subtype, else the built-in `concept-builtin-default` template; if that's also missing, use the skill's internal structure.
 
 The resolved template may reshape the sections and questions of the workflow below. Variables from the template take precedence over the generic discovery questions for overlapping fields.
 
@@ -200,6 +201,7 @@ Before writing, load the team style preamble — `references/artifact-style-gate
 - **Technical Considerations carries only confirmed constraints and dependencies** — statements that pass the source test ("can I point to where this came from — the user, a document, a ticket?"). AI technical assumptions (technology choices, API/schema design, architecture, effort estimates) are prohibited by default; on explicit user request they go into a separate "Технічні рекомендації (AI)" block at the end with the mandatory AI callout (`references/artifact-style-gate.md`, Gate 1)
 - Any sequence — phases, changes, risks, criteria — is a list or a table, never paragraph prose (Gate 2)
 - Include only the blocks confirmed in Step 1
+- **Gate emphasis (since v3.6.0):** for each of `base-rates`, `hippo-check` and `market-recency` in `role_defaults.gate_emphasis` — and `money-bridge` when it is in `gate_emphasis` and the subtype is `business-case` — run that extra check (`references/data-integrity-protocol.md` → Gate emphasis) on the draft; a failed one adds a ⚠️ caveat line under the bet, estimate, decision or metric claim it concerns — never a question, never a blocked draft
 - Add Alternative Solutions block if confirmed
 - Include any custom blocks the user requested
 - Cross-reference data from multiple sources
@@ -226,7 +228,7 @@ If the user has not already specified where to publish — use AskUserQuestion:
 - Which **parent page** to nest the PRD under? (offer to search existing pages to help decide)
 - Suggest a logical location based on the project structure
 
-Page title format: `[PRD] Feature Name`
+Page title format: `[PRD] Feature Name` — for a design brief, strategy memo, decision memo or business case, that name replaces `PRD` (since v3.6.0)
 
 **Confluence formatting requirements — mandatory for every PRD page:**
 
@@ -294,7 +296,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.13.0",
+     skill_version: "0.14.0",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],
@@ -348,6 +350,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 - **`references/prd-structure.md`** — detailed templates for each PRD block
 - **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), maker–checker execution (Step 4.5)
 - **`references/examples/prd-example-v1.md`** — worked golden PRD exemplar (few-shot; load on demand in Step 4)
+- **`references/examples/design-brief-example-v1.md`**, **`strategy-memo-example-v1.md`** — golden exemplars for the `design-brief` and `strategy-memo` subtypes (since v3.6.0; load on demand when rendering that subtype)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms

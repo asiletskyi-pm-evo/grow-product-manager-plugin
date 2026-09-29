@@ -39,6 +39,7 @@ artifact_type: requirements              # one of the artifact_type enum above
 subtype: ab-test                         # optional specialization
 scope: user-global                       # built-in | user-global | product
 products: []                             # [] = all products; else list
+match: subtype                           # optional (since v3.6.0): a candidate only when the request subtype equals this subtype
 default_language: uk
 available_languages: [uk, en]
 version: "1.0.0"
@@ -98,7 +99,7 @@ Standard flow any consumer skill runs before writing the artifact.
 The skill declares:
 
 - `artifact_type` (required) — e.g. `requirements`
-- `subtype` (optional) — e.g. `ab-test`
+- `subtype` (optional) — e.g. `ab-test`, the skill's own inference; when the skill declares none and its Step T opts in (write-concept, requirements-creator, product-reporter's quarter mode), `role_defaults.template_defaults[artifact_type]` (Step 0i; a hat overlays it) becomes the request subtype (since v3.6.0; a value `default` or none keeps the subtype null; not in automated runs). A role-derived or explicit subtype brings that type's `match: subtype` built-in into T-1 and makes it decisive among the built-ins (T-3); the user's own templates still sort first by scope. A skill may let the role subtype replace one of its generic mode subtypes only where its own step says so (product-reporter's quarter mode is the one such place)
 - `product_id` (optional) — from `local-context.md` active product
 - `language` (required) — from `local-context.md` or explicit request
 
@@ -106,7 +107,7 @@ The skill declares:
 
 Read `{storage_root}/Templates/_registry.json`. Use `references/persistent-storage.md` resolution to locate `storage_root`. If the registry is missing or malformed, run `template-library: rebuild-registry` on the fly (walk `Templates/` and rebuild) before continuing.
 
-Filter candidates: `artifact_type` matches AND `status=active` AND `min_plugin_version ≤ current_plugin_version`.
+Built-ins are always read from `{plugin-root}/templates/built-in/` (except `partial/`) — a built-in missing from an older registry is still a candidate; the registry adds only usage stats and the user's own templates, and `match` is read from the template's frontmatter. Filter candidates: `artifact_type` matches AND `status=active` AND `min_plugin_version ≤ current_plugin_version` AND (no `match: subtype`, or the request subtype equals the candidate's subtype). The role-specific built-ins of v3.6.0 carry `match: subtype`, so a request without that subtype resolves exactly as in v3.5.0 — no new candidate, no new question; they remain listable and pickable in the `template-library` wizard.
 
 ### Step T-2. Score and rank
 
@@ -136,6 +137,7 @@ Sort descending: first by scope (product > user-global > built-in), then by tota
 
   > Rungs 1 and 3 exist because several types deliberately ship **no** `default-v1`: `ops-report`, `presentation`, `research` and `cjm` are meaningful only per subtype — a generic "default ops report" is not a document anyone wants. Until v2.0.2 the rule named only `default-v1`, so those four types always fell through to the warning even though a perfectly good built-in existed.
 - **Exactly one candidate** → use it silently. (The artifact is marked in T-5, which defines the one marker format — do not restate it here.)
+- **An exact `match: subtype` hit** (since v3.6.0) — a built-in carrying `match: subtype` whose subtype equals the request subtype, when no user-global or product template of this `artifact_type` is a candidate → use it silently under `smart` and `auto` (language and usage bonuses never outrank it); `always_ask` still asks, listing it first. With a user or product template among the candidates, the rules below apply as before (scope sorts first).
 - **Multiple candidates** → ask the user via `AskUserQuestion`:
   > "I found {N} templates for {artifact_type}. Which one should I use?"
   >  1. {top.name} — {scope}, updated {date}
@@ -169,6 +171,7 @@ Optional variables may be pre-populated or left unset.
 2. Resolve the language block (match `request.language` → else `default_language` → else first available, with warning).
 3. Expand `{{#if}}`, `{{#each}}`, `{{> partial}}` (user `_partials/` first, then `builtin://partial/`).
 3a. **Judgment footer (since v3.5.0).** When `artifact_type` belongs to the Product contour (the enum above; not `partial`), close the body with the judgment footer: a user override `_partials/judgment-footer.md` if present, else `builtin://partial/judgment-footer-v1.md`. Its variables are **derived by the skill, never asked** (T-4 does not apply to the footer): `altitude` from Step 0i step 5 (`local-context-protocol.md`); `serves` = a product or direction goal, OKR, strategic intent, or the parent initiative / epic that the request or the artifact's sources explicitly link — never a person's goal or profile (People-contour data stays local), and the OKR list in `local-context.md` alone is not a link; `— (no linked goal)` otherwise; `next` from the step the skill proposes — a product or delivery step, never a People-contour action about a person; `— (no product step)` when there is none. The footer is the last content before the step-5 marker. It goes on the artifact the skill delivers, wherever it is kept (chat, file, vault, Confluence) and also when no template applied — but not on answers that are not the skill's artifact (a Q&A reply, a search-result list, a quick summary or escape-hatch notes, a clarifying reply) and not on a return payload to a calling skill (the caller's artifact carries it). Placement exceptions: a `presentation` puts it on the closing slide, or in the speaker notes of the last slide — for an external audience (customer, partner, external users, social media) only in the vault / outline companion, never on a slide or in speaker notes; `task-creator` puts it on the epic only when this run creates the epic (T-B) — an existing epic is never edited to add it — and on its Step 11 report, never on each task. People-contour artifacts carry no footer.
+3b. **Role extra sections (since v3.6.0; interactive runs; only in skills whose step implements it — requirements-creator for `requirements`, product-research and feedback-triage for `research`).** For each partial in `role_defaults.extra_sections[artifact_type]`, insert the expanded partial (user `_partials/` first, then `builtin://partial/{name}-v1.md`) above the judgment footer (the footer of 3a stays the last content) — only when the rendered body has no section with the same meaning — compared in the rendered language, case-insensitively, ignoring numbering, and matching headings that start with a synonym: `nfr` ↔ "Non-Functional Requirements"; `tracking-plan` ↔ "Tracking plan", "Analytics / Tracking", "Analytics coverage (requirements)"; `repository-entry` ↔ "Repository entry" (and their translations in `user.language`) (the built-in `requirements/default` already has NFR, `requirements/ab-test` already has Analytics / Tracking).
 4. Write the rendered artifact via `references/vault-protocol.md` to the vault (if configured) or to workspace.
 5. Append `<!-- template: {template_id} version: {version} -->` at the end — after the judgment footer, so the order is always body → footer → marker.
 6. Increment `usage_count` and update `last_used` in the registry.
@@ -223,6 +226,7 @@ Skills MUST NOT reimplement template search logic. All ranking / ask / render lo
     {
       "template_id": "requirements-ab-test-v1",
       "artifact_type": "requirements",
+      "match": null,
       "subtype": "ab-test",
       "scope": "user-global",
       "products": [],

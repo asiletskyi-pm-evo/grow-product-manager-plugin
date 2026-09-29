@@ -99,6 +99,8 @@ load(platform) = demand(platform) / ceiling(platform)
 
 Additional checks: concentration on one platform (bottleneck), share of unfinished work from the previous period, count of "waiting for details".
 
+**Tech-debt line (since v3.6.0):** when `role_defaults.planning_view` is `slice` (`planning-core.md` §7), show the tech-debt reserve as its own row of the capacity table (`raw(platform) × tech_debt_reserve`), not only folded into the ceiling. The numbers do not change.
+
 ---
 
 ## 8. Auto-estimating features by analogy (demand-side)

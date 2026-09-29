@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.9.0
+version: 0.10.0
 description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».
 ---
 
@@ -213,6 +213,7 @@ Pass context:
 - Time period and comparison baseline (from Step 2c)
 - Platforms (from Step 2d)
 - Anomaly thresholds from CJM Configuration
+- `role_defaults.gate_emphasis` tokens (since v3.6.0; none from the automated health-check)
 
 Receive from `product-analysis`:
 - Quantitative funnel data: conversion rates per stage, absolute values
@@ -238,6 +239,7 @@ For `comparison` mode: invoke `product-analysis` separately for each platform be
 | **3.5.c** — Multi-Source Cross-Validation | Gate Check 3, incl. the extreme-values special case | Every critical CR / GMV / Order / Revenue / Retention metric. Extreme-value methodology change check = DT-* / DATA-* tickets in the analysis period; reference period analysis = the full YoY/PoP table, never a single cell. |
 | **3.5.d** — Period Definition Lock + Inline Annotation | Gate Check 4 | Pre-compute the inline-annotation string for every metric here, before Step 4 — e.g. `Catalog CR 0.99% (12mo rolling, 1.05.2025 → 7.05.2026)`, `Listing GMV +20% YoY (May 2025 → May 2026, weeks 18-19, non-holiday window)`, `Brand pages ~48K sessions/month (normalized to 30 days from 7-day extract, May 2026)`. |
 | **3.5.e** — Source Type Marker | Gate Check 5 | Internal markers: `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `walkthrough-local`, `confluence-internal`, `jira-internal` — `walkthrough-local` (a Flow Walkthrough pack cited in Step 3) is this skill's addition to the protocol list. Enables the audit trail in the final Sources section. |
+| **3.5.f** — Gate emphasis (since v3.6.0) | Gate emphasis — role extra checks | Each `role_defaults.gate_emphasis` token whose "Applied by" cell names CJM adds its extra check on top of 3.5.a–e (`period-completeness` and `source-type` are already met by 3.5.a and 3.5.e); a failed one adds a ⚠️ caveat line (not repeated when the Step 3 data already carries it) — never a question, a Blocked status or a halt. The automated health-check applies none, so its output is unchanged. |
 
 **Output of Step 3.5:**
 
@@ -291,7 +293,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.9.0",
+     skill_version: "0.10.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],

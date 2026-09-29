@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.12.0
+version: 0.13.0
 description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «додай стрілки на скрін». EN — "create a diagram", "draw a flowchart", "visualize this process", "make a prototype" (no DS mentioned), "mockup", "annotate this screenshot". Also UA — «візуалізуй процес», «зроби прототип», «інфографіка», «познач на скріншоті». Generation via Mermaid/HTML, Gemini, ChatGPT, NotebookLM, Figma, Draw.io; annotation runs locally.
 ---
 
@@ -105,6 +105,8 @@ Based on the visualization type, ask targeted questions:
 - Which platform? (Web, iOS, Android — from `product.platforms`)
 - What elements should be present? (buttons, forms, lists, navigation, etc.)
 - Are there existing designs in Figma to reference?
+
+**Design vocabulary (since v3.6.0).** When `role_defaults.question_defaults` is `design`, the same questions are worded and ordered for design work: the elements question above lists states (empty / error / loading), DS components and a11y notes first; Step 3 pre-selects Mid-fi when the context names no phase; Step 4 marks Figma as Recommended where its table offers Figma (mid-fi mockup). No question is added or dropped, Step 6g is unchanged, and every other profile — and an automated run — sees these steps as before.
 
 **For mind maps:**
 - What is the central topic?
@@ -319,7 +321,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.12.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.13.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Mode: Annotate (standalone screenshot annotation)

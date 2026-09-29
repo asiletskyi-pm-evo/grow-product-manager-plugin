@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.15.0
+version: 0.16.0
 description: Write or review a requirements document with numbered functional requirements, incl. A/B test specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію», «опиши фічу як вимоги». EN — "write requirements", "create feature spec", "write A/B test requirements", "review / analyze / improve requirements", "check my spec". Also UA — «створи специфікацію фічі», «переглянь вимоги», «покращ вимоги». A concept from write-concept is the input; task-creator consumes the output.
 ---
 
@@ -66,7 +66,7 @@ Follow `references/template-protocol.md`.
 
 Declare:
 - `artifact_type: requirements`
-- `subtype: {inferred — "ab-test" when user mentions A/B test / experiment, "bugfix" when describing a bugfix spec, null otherwise}`
+- `subtype`: inferred — `ab-test` when the user mentions an A/B test / experiment, `bugfix` when describing a bugfix spec; none inferred → `role_defaults.template_defaults.requirements` (T-0, since v3.6.0; a hat overlays it; its value `default` keeps the subtype `null`), else `null`
 - `product_id: {from local-context.md active product}`
 - `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
 
@@ -79,6 +79,8 @@ If no template applies → fall back to the built-in `requirements-builtin-defau
 In **Analyze & Improve** mode, Step T is NOT run — the input document's structure drives the analysis.
 
 **Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — Create mode only; Analyze & Improve never adds it to the user's document.
+
+**Role extra sections (since v3.6.0).** T-5 step 3b inserts each `role_defaults.extra_sections.requirements` partial (`tracking-plan`, `nfr`) above the judgment footer when the document — template or internal structure alike — has no section with that heading; derived, never asked, Create mode only (Analyze & Improve never adds them to the user's document).
 
 ---
 
@@ -254,6 +256,8 @@ If the requirements change **existing UI**, offer an annotated screenshot per `r
 
 Run `references/artifact-style-gate.md` on the draft. Maker–checker: the `grow-product-manager:artifact-checker` agent (one call per lens; fallback chain per the reference) receives the draft + the source list + the lens — never this conversation's reasoning. A requirements document is a critical artifact (published and then materialized in Jira) → use two checker lenses (form / groundedness). Apply fixes, keep disputed findings visible, and include the one-line gate report when presenting the draft in Step 5.
 
+**Gate emphasis (since v3.6.0).** For each of `spec-readiness` and `nfr-present` in `role_defaults.gate_emphasis`, run that extra check (`references/data-integrity-protocol.md` → Gate emphasis) alongside this gate; a failed one adds a ⚠️ caveat line naming the gap to the draft and to the gate report — never a question, never a blocked draft. Create mode only.
+
 ### Step 5 — Review with the user
 
 **Before publishing, always present the full draft to the user for review.**
@@ -305,7 +309,7 @@ The full procedure — the offer wording, the exact `design-bridge` parameters p
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.15.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.16.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 

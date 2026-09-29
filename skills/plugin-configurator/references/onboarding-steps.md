@@ -123,7 +123,7 @@ If Jira MCP is available, use `lookupJiraAccountId` with the provided email to f
 
 #### 4a. Role and scope (Basic and Extended)
 
-Semantics — root `references/role-profiles.md` (§2 roles, §2b session defaults, §5 resolution). One sentence to the user before the question: the role sets where a run starts (the home altitude and the quick wins now; templates and other defaults from v3.6.0); it hides no skill and relaxes no check.
+Semantics — root `references/role-profiles.md` (§2 roles, §2b session defaults, §5 resolution). One sentence to the user before the question: the role sets where a run starts (the home altitude, the quick wins, the templates ranked first, the extra checks and the planning view); it hides no skill and relaxes no check.
 
 `AskUserQuestion` takes 2–4 options per question and up to 4 questions per call, so the eight roles are picked in **two calls**:
 

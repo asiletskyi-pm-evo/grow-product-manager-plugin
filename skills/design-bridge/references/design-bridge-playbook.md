@@ -1,6 +1,6 @@
-# Design Bridge playbook — source extraction (Step 3), deck rendering (Step 5a), failure modes, worked example, history
+# Design Bridge playbook — source extraction (Step 3), deck rendering (Step 5a), failure modes, worked example, role defaults, history
 
-> Part of `design-bridge`. Loaded on demand: Step 3 before extracting from an upstream artifact, Step 5a when rendering a deck, the failure-mode table when a dependency is missing or fails at runtime, the end-to-end example when checking the call order, History for version context. Step headings, triggers, the Deck IR schema, the copy / DS / a11y gates (4b, 4d, 4e), the Step 6 QA gate and the vault save stay in SKILL.md.
+> Part of `design-bridge`. Loaded on demand: Step 3 before extracting from an upstream artifact, Step 5a when rendering a deck, the failure-mode table when a dependency is missing or fails at runtime, the end-to-end example when checking the call order, Role defaults when Step 1 asks a question under a role default, History for version context. Step headings, triggers, the Deck IR schema, the copy / DS / a11y gates (4b, 4d, 4e), the Step 6 QA gate and the vault save stay in SKILL.md.
 
 ## Step 3 — Source extraction by upstream
 
@@ -93,6 +93,23 @@ design-bridge:
   Step 8  → vault_save(type=presentation, subtype=feature, …)
   → output: "[View deck](computer://…/2026-04-20-qa-product-page-direction.pptx)"
 ```
+
+## Role defaults — question order (since v3.6.0)
+
+Read from SKILL.md Step 1 when `role_defaults.question_defaults` is `design` or `role_defaults.template_defaults` has a `presentation` entry (`references/role-profiles.md` §2, §2b, §6; a hat overlays both fields for its run).
+
+Invariants for every row: a question is asked exactly when it was asked before (an upstream hand-off that passes the intent still skips it), keeps its options and their count, and the user can pick any option. Only the order, the pre-selected ("Recommended") option and the option wording change — the order and the pre-selection are this step's own (`references/role-profiles.md` §6), the labels below are this skill's design wording on top of the `design` set (`references/vocabulary-sets.md`), an approved glossary entry still wins over both, and the value an option passes on stays the same. Steps 4d (DS check), 4e (a11y audit) and 6 (QA gate) run for every profile exactly as SKILL.md states. An automated run (scheduled, headless, or a return payload to an upstream skill) asks nothing and is unchanged.
+
+| Question | Order and wording when `question_defaults` is `design` | Pre-selected |
+|---|---|---|
+| Branded or plain (manual "prototype" / "mockup") | branded — DS tokens and components · plain structure | branded |
+| Q1 deliverable | prototype · handoff · deck · research-enrichment | none — the request decides |
+| Q3 fidelity | mid-fi · hi-fi — DS components in Figma or the declared toolkit · lo-fi — structure only | mid-fi |
+| Step 4c issues that need confirmation | state, DS-token and a11y issues first, then the rest in critique order | — |
+
+Q4a, Q4b and Step 2 are unchanged for every profile.
+
+**Q2 deck subtype.** When `role_defaults.template_defaults` has a `presentation` entry, that subtype is listed first and pre-selected; otherwise Q2 is as before. The fallback profile has no `presentation` entry, so a user without a role sees Q2 unchanged. The subtype still has to be a key of `references/deck-subtypes.yaml`; an entry that is not one is ignored.
 
 ## History
 

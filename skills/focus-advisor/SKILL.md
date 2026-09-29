@@ -1,7 +1,7 @@
 ---
 name: focus-advisor
-version: 0.7.0
-description: What to focus on today, this sprint or quarter — scans mail, calendar, Jira, metrics; recommends and chains. Not sprint planning (sprint-planning), not analysis (product-analysis). UA — «на чому сфокусуватись», «ранковий бриф», «розбери мою пошту й календар», «чи все ок з метриками». EN — "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "show focus board". Also UA — «що мені робити сьогодні», «фокус дня/тижня», «до яких зустрічей готуватись», «де великі можливості для продукту», «куди фокусувати команду». Also for scheduled/headless briefs. Do NOT use to build roadmaps (quarterly-/project-planning).
+version: 0.8.0
+description: What to focus on today, this sprint or quarter — scans mail, calendar, Jira, metrics; recommends and chains. Not sprint planning (sprint-planning), not analysis (product-analysis). UA — «на чому сфокусуватись», «ранковий бриф», «розбери мою пошту й календар», «чи все ок з метриками». EN — "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "show focus board". Also UA — «що мені робити сьогодні», «фокус дня/тижня/кварталу», «на чому фокусуватись у кварталі», «до яких зустрічей готуватись», «де великі можливості для продукту», «куди фокусувати команду». Also for scheduled/headless briefs. Do NOT use to build roadmaps (quarterly-/project-planning).
 ---
 
 # Focus Advisor
@@ -49,7 +49,7 @@ Per `local-context-protocol.md`: product, Planning (anchor/cadence), Focus secti
 > a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step 1 — Horizon + scope. Gate (skipped in headless)
-Confirm horizon (auto-detect from phrasing/cycle position: "сьогодні/зараз" → now, "квартал/команда/беклог" → tactics, "рік/можливості/напрямки" → strategy; quarter boundary nudges toward strategy) and period.
+Confirm horizon (auto-detect from phrasing/cycle position: "сьогодні/зараз" → now, "квартал/команда/беклог" → tactics, "рік/можливості/напрямки" → strategy; quarter boundary nudges toward strategy) and period. When neither the phrasing nor the quarter boundary decides, the horizon proposed for confirmation follows `role_defaults.planning_view` (since v3.6.0): `rollup` → strategy first, `slice` → now first, as before (`references/focus-role-defaults.md` §1).
 
 ### Step 2 — Collect signals
 Per `focus-signals.md`, only the sources of the confirmed horizon. **now** (§3–4): cycle position, calendar (meetings needing prep), mail (live unanswered letters — two-stage filter), recent meetings' open action items, Jira tails. **tactics** (§6): quarterly roadmap plan-vs-actual and drift, backlog staleness (ICE age), features missing prerequisites ahead of next sprints, A/B tests awaiting decision, capacity and team-event signals. **strategy** (§7): product goals/missions (pinned source), NPS waves and love/hate themes, CJM/funnel trends (freshness-guarded), knowledge-library research signals, leadership-meeting mandates, white spaces in the PM's zones. Honor cache TTL. Fan out collectors via `subagent-delegation.md` when available; inline otherwise. Each collector returns signal packets only.
@@ -65,6 +65,8 @@ Per `focus-cadence.md`: due rituals (including recently missed ones) become high
 
 ### Step 4 — Score and rank
 Per `focus-scoring.md`: journal dedup → **now**: urgency+impact+unblock → 1–3 focuses; **tactics**: ICE + capacity realism + goal alignment (§4) → 3–5 candidates; **strategy**: goal/mission alignment × lever size × evidence strength (§5) → 2–4 bets. The rest goes to "також на радарі". Insufficient signals → say so honestly.
+
+**Source priority (since v3.6.0).** In an interactive run, collectors run in the order of `role_defaults.sources_priority`, and a tie that the mode's ordering rules leave open goes to the signal whose source is listed earlier (`references/focus-role-defaults.md` §2). Scores, caps, the radar list and every question are unchanged; a headless run keeps the v3.5.0 order and ranking.
 
 **"Choose one" final filter (daily / `now`).** After ranking the daily focuses, apply a final single-pick filter: if you could do only **one** thing today, which moves the goal most? Lead the brief with that one focus (the rest stay as "також на радарі"). Cuts the overloaded-PM's analysis paralysis — the daily brief has a clear #1, not a tie.
 
@@ -131,4 +133,4 @@ A persistent one-glance panel of the PM's attention. Contract:
 - Demarcation: team's sprint focuses belong to sprint-planning; this skill owns the PM's personal attention.
 
 ## Additional Resources
-`references/focus-cadence.md`, `references/focus-signals.md`, `references/focus-scoring.md`, `references/jira-data-protocol.md`, `references/integration-strategy.md`, `references/data-policy.md`, `references/persistent-storage.md`, `references/vault-protocol.md`, `references/subagent-delegation.md`, `references/self-improvement.md`.
+`references/focus-cadence.md`, `references/focus-signals.md`, `references/focus-scoring.md`, `references/jira-data-protocol.md`, `references/integration-strategy.md`, `references/data-policy.md`, `references/persistent-storage.md`, `references/vault-protocol.md`, `references/subagent-delegation.md`, `references/self-improvement.md`; skill-local `references/focus-role-defaults.md` (horizon proposal and source priority by role defaults).

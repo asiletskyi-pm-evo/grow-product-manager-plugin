@@ -1,6 +1,6 @@
 ---
 name: sprint-planning
-version: 0.5.0
+version: 0.6.0
 description: Sprint pre-planning — focuses from the roadmap, what is READY to pull, dependencies, capacity per member, assignees. Not daily focus (focus-advisor), not a quarter plan (quarterly-planning). UA — «сплануй спринт», «що можна взяти у спринт», «розподіли задачі спринта», «фокуси спринта». EN — "plan the sprint", "sprint pre-planning", "what can we pull into the next sprint", "what's ready from the backlog", "check sprint dependencies", "who takes the tasks". Also UA — «передпланування спринта», «що готове з беклогу», «хто візьме задачі», «випусти фічу в реліз наступного спринта».
 ---
 
@@ -68,6 +68,8 @@ If a downstream candidate is planned while upstream is below the readiness thres
 ### Step 6 — Estimate + fill
 Auto-estimate missing ones (analogy); fill to the sprint ceiling by platform/person from **Ready** candidates only; **sprint-gate** (don't exceed the platform ceiling); sprint goal. Free capacity → **pull-forward** Ready tasks from future sprints (sync the shift with `project-planning` arcs).
 
+**Capacity view (since v3.6.0, `references/planning-core.md` §7).** When `role_defaults.planning_view` is `slice`, the sprint ceiling table by platform shows the tech-debt reserve as its own row (`references/capacity-model.md` §7); `rollup` opens the plan with the Step 2 focuses and the initiatives they serve, then the per-person table. Only the rows shown and their order change — ceilings, the Ready-only fill, the gates and Jira writes are the same for every profile; an automated run keeps the pre-v3.6.0 view.
+
 ### Step 6b — Assignee suggestion
 For unowned tasks — propose assignment, **prioritizing those with no tasks yet / free capacity**; role-platform matching; account for the per-member budget (Step 3) and risk (Step 3b). **Delegation-level fit** (`references/people-context-protocol.md` → `delegation`, `d_type`): where profiles exist, prefer routing work a person owns at a high delegation level (5–7) or that fits their D-type; a stretch assignment to a D1/D2 is flagged as needing closer support (chains to `delegation-coach` for a transfer plan). Writing assignee to Jira — **gate**; respect team convention (where assignee is left empty until work starts — the suggestion stays in the plan, not on the task).
 
@@ -78,7 +80,7 @@ Show what doesn't fit / is blocked → choice. Live recompute.
 Sprint plan (Confluence / assignment into the Jira sprint) — **gate before writing to Jira**. Approved plan → can be rendered as a `sprint-plan` report via product-reporter.
 
 ### Step 9 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.5.0", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.6.0", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Only Ready candidates go into the fill; Blocked — with an explanation, not silently.

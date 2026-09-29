@@ -1,6 +1,6 @@
 ---
 name: quarterly-planning
-version: 0.5.0
+version: 0.6.0
 description: One-quarter roadmap, capacity stress-test and plan-vs-actual retro. Not multi-quarter (project-planning), not structure/labels (roadmap-architect), not a sprint (sprint-planning). UA — «зібери roadmap на квартал», «plan-vs-actual», «чи реалістичний план на Q3», «що команда встигне». EN — "build a quarterly roadmap", "quarterly planning", "plan-vs-actual for the quarter", "quarter retro", "plan capacity", "what the team can deliver". Also UA — «retro кварталу», «capacity плану». Scope = exactly one quarter.
 ---
 
@@ -76,14 +76,16 @@ If a platform is over the ceiling — **show the specific directions→epics→f
 ### Step 6 — Artifacts + storage
 Per `roadmap-artifacts.md`: (1) **Confluence roadmap** (focuses + Gantt + tree, features as `code—name`) — publish **after approval**; (2) **live dashboard**; (3) `q{N}` labels on epics (`editJiraIssue`, preserving existing); (4) workspace + library storage (draft/final kept separate).
 
-**Optional — quarterly board / stakeholder readout.** When the quarter is being reported up (not just planned), offer to frame the retro + plan as a **board-prep package** per `references/session-board.md`: previous-board follow-up statuses (GTD ≥ 80%), plan-vs-actual with causes, goal statuses & forecasts (SMARTCBP + 3T5F), AI/cost-savings table (ROAIP), the direction's health metrics/funnel, and worked-through questions for approval. This reuses the retro (Step 2) data — no new fetch.
+**Presentation order (since v3.6.0, `references/planning-core.md` §7).** When `role_defaults.planning_view` is `rollup`, the roadmap page, dashboard and chat summary open with the main focuses and the goal → initiative tree, then the Gantt and the capacity table; `slice` keeps the pre-v3.6.0 order (capacity → focuses → Gantt → tree) with the tech-debt reserve as its own capacity row (`references/capacity-model.md` §7). The sections, numbers, capacity gate and approvals are the same for every profile; an automated run keeps the pre-v3.6.0 order.
+
+**Optional — quarterly board / stakeholder readout (since v3.6.0: one template, one owner).** When the quarter is being reported up (not just planned), offer the readout as a hand-off to **product-reporter**, which renders it as `ops-report/board-update` from this run's retro (Step 2) and approved plan — no new fetch. This skill passes the data with `destination: chat draft` and `visuals: none` (product-reporter then asks nothing and publishes nothing until the user says so) and renders no readout of its own; the board-prep checklist behind the template is `references/session-board.md`.
 
 ### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.5.0", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.6.0", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Integration with product-reporter
 - Quarter actuals ← `quarter-review` (don't rewrite the fetch).
-- Approved roadmap → can be rendered as a stakeholder report via product-reporter.
+- Approved roadmap → can be rendered as a stakeholder report via product-reporter; the board / stakeholder readout is its `ops-report/board-update` (Step 6).
 - Shared Jira plumbing — `jira-data-protocol.md`.
 
 ## Skill Chaining

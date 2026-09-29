@@ -1,6 +1,6 @@
 ---
 name: knowledge-library
-version: 0.8.0
+version: 0.8.1
 description: Curated knowledge library with trust scores, plus the team glossary and writing-style profile. Not artifact templates (template-library), not competitor research (product-research). UA — «додай у бібліотеку», «які джерела маємо», «збери глосарій», «додай термін», «перевір термінологію», «навчись нашого стилю». EN — "add to library", "search knowledge", "what sources do we have on [topic]", "import sources", "build a glossary", "how do we call X", "check terminology", "learn our writing style". Also UA — «пошук у знаннях», «як ми називаємо…», «покажи бібліотеку». Also called by other skills for enrichment search or a terminology lint.
 ---
 
@@ -158,6 +158,8 @@ Trust score calculation (formula, type base scores, freshness, citation bonus, u
 
 The **team-language contour** — Glossary Build (GB-1..GB-6), Style Build (SB-1..SB-4), Glossary Manage (GM), Glossary Lint (GL-1..GL-3), storage schemas, and the Terminology & Style config — lives in `references/glossary-workflows.md` (skill-local). Read ONLY for the glossary/style modes. Key rule: read Atlassian MCP **sequentially** when mining.
 
+**Vocabulary sets (since v3.6.0).** `references/vocabulary-sets.md` (shared) holds the read-only sets that `role_defaults.vocabulary_set` selects to word the headings and option labels other skills write themselves. Precedence: product glossary > org glossary (`_org.yaml`) > vocabulary set — an approved glossary term always wins; a set never rewrites user text, never becomes a glossary entry and never drives a Glossary Lint replacement.
+
 ## Integration with Other Skills
 
 ### As a service (called by other skills)
@@ -266,6 +268,7 @@ At the beginning of Knowledge Library skill execution (after Step 0 context load
 - **`references/library-workflows.md`** (skill-local) — all eight mode workflows in full
 - **`references/trust-and-categories.md`** (skill-local) — trust formula, category taxonomy, KL onboarding
 - **`references/glossary-workflows.md`** (skill-local) — team-language contour: glossary + style profile workflows (GB/SB/GM/GL), schemas, config
+- **`references/vocabulary-sets.md`** (shared) — read-only role vocabulary sets, lowest precedence below the glossary (since v3.6.0)
 
 - **`references/persistent-storage.md`** — persistent storage protocol (`~/.grow-pm/`), mirror, backup, recovery
 - **`references/vault-protocol.md`** — Vault mirror sync, context mirror, recovery protocol

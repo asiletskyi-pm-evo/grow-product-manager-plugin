@@ -336,6 +336,7 @@ Follow `references/integration-strategy.md` → Tableau guidance. **MCP-first de
 - Were there any external factors (holidays, promotions, outages) during the test period?
 - Was the traffic split correct and stable?
 - Are there signs of selection bias or data quality issues?
+- Gate-emphasis caveats (SKILL.md Step 1.5.f, since v3.6.0) — the ⚠️ lines of the sample-ratio / exposure / peeking and confidence-interval checks go into the Test Validity Assessment (section 7) and next to the affected primary metric; the verdict and recommendation follow the same rules as without them.
 
 ### AB-4. Generate A/B test report
 

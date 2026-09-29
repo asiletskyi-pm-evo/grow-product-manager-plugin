@@ -94,3 +94,17 @@ Consumers: `sprint-planning` (readiness/violations), `project-planning` (macro d
 - Conventions (names/labels/statuses/flow) are overridden in local-context; do not hardcode in skills.
 - Features in any artifact — as a list of `code — name`, not bare numbers.
 - Mark marking recommendations "pending PM confirmation".
+
+## 7. Altitude views — Now / Next / Later (since v3.6.0)
+
+A view over the objects above — no new label, field or status, so marking (§2) and gap detection are unchanged.
+
+| View | Maps to | Default depth |
+|------|---------|---------------|
+| **Now** | the current `q{N}-{year}` label, the sprint plan | features and epics |
+| **Next** | the next `q{N}-{year}` label, the quarterly plan | epics and initiatives |
+| **Later** | initiatives and goals without a quarter label, the project arc | initiatives and goals |
+
+- `role_defaults.planning_view` (`references/role-profiles.md` §2b): `rollup` shows goals → initiatives first (Later / Next) and drills down on request; `slice` shows the delivery slice first (Now) and rolls up on request. Only the order, the depth and the tech-debt display row (`capacity-model.md` §7) change — the numbers, the capacity gate and the checks are the same.
+- No `planning_view` (pm, no or unconfirmed role, automated runs): every planning skill keeps its pre-v3.6.0 order, depth and table rows.
+- `role_defaults.horizon` sets project-planning's default arc window; quarterly-planning stays one quarter and sprint-planning one sprint.
