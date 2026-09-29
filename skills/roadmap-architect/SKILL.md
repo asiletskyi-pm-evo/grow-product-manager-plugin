@@ -1,6 +1,6 @@
 ---
 name: roadmap-architect
-version: 0.3.0
+version: 0.4.0
 description: Own the work structure — missions → initiatives → epics → features, labeling, roadmap tree — no dates, no capacity. Not quarter plans (quarterly-planning), not forecasts (project-planning). UA — «наведи лад у структурі», «розміть епіки/фічі», «дерево roadmap», «звʼяжи епік з ціллю». EN — "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal", "direction structure". Also UA — «знайди розриви розмітки», «структура напрямків».
 ---
 
@@ -25,6 +25,8 @@ Supplies clean structure to the rest of the planning-suite. Integrates with `pro
 `artifact_type: roadmap`, `subtype: structure-tree` (`tree` mode) or `gap-report` (`audit` mode), `product_id`, `language`. Resolve per `references/template-protocol.md` (T-1 → T-5); the resolved template shapes the Step 5 output. `map` and `onboard` mutate Jira/Confluence rather than producing a document — they skip Step T.
 
 **Fallback:** no template → use the structure-tree / gap-report formats in `references/roadmap-artifacts.md`.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — on the structure-tree and gap-report artifacts only; `onboard` and other Jira edits never get it.
 
 ## Modes
 
@@ -60,7 +62,7 @@ Propose label/link fixes (epic→goal, feature→epic, q-labels). **Gate before 
 Generate the Goal→Initiative→Epic→Feature tree (features as `code—name`) + gap report. Per `roadmap-artifacts.md` sec. 4. Workspace + library storage.
 
 ### Step 6 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.3.0", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.4.0", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Don't invent links — only Jira links / goal map / explicit PM input; the rest = "break, please formalize".

@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.13.0
+version: 0.14.0
 description: Create Jira tasks from requirements (usually a Confluence page) — FE/BE/Android/iOS/Design/Analytics breakdown inside an Epic. Not writing the requirements (requirements-creator). UA — «створи задачі для фічі», «Jira-задачі з вимог у Confluence», «розбий фічу на задачі», «заведи задачі в Epic». EN — "create tasks from requirements", "create Jira issues from Confluence requirements", "break down a feature into development tasks", or a shared Confluence link with a request for Jira tasks.
 ---
 
@@ -62,6 +62,8 @@ Append `<!-- template: {template_id} version: {version} -->` at the end of each 
 Fall back to built-in `task-builtin-default` and `epic-builtin-default` when no user template applies.
 
 If the user says "do not use a template" → skip Step T and use the skill's internal fallback structure.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — on the epic only when this run creates it (T-B; an existing epic is never edited to add it) and on the Step 11 report; never on each task.
 
 ## Workflow
 
@@ -334,7 +336,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.13.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.14.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode

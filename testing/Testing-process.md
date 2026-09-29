@@ -7,8 +7,8 @@
 | # | Stage | What it checks | How | Blocker? |
 |---|--------|--------------|-----|---------|
 | 0 | **Backup** | snapshot of the version before changes | `git tag` + copy of the folder into `_backups/<version>/` | — |
-| 1 | **Static lint** | 18 named checks — see the table below | `testing/skill_lint.py` (automated, in CI/locally) | yes |
-| 1b | **Seeded-leak test** | that the org-leak checks actually fire — 10 known-bad lines injected one at a time, linter must go RED on each | `testing/seeded_leak_test.py` (automated, in CI/locally) | yes |
+| 1 | **Static lint** | 22 named checks — see the table below | `testing/skill_lint.py` (automated, in CI/locally) | yes |
+| 1b | **Seeded-leak test** | that the checks whose failure mode is silence actually fire — 16 known-bad edits (a line appended, removed or replaced) applied one at a time, linter must go RED on each | `testing/seeded_leak_test.py` (automated, in CI/locally) | yes |
 | 2 | **Trigger eval** | description triggers on target phrases and does NOT hijack others | a set of positive/negative phrases per skill; judge subagent | yes |
 | 3a | **Trajectory / scenario walk** | skill takes the right steps: key steps, gates, tool calls, artifact structure | 1-2 scenarios per skill + mock local-context; subagent "dry run" verifies | yes (for changed skills) |
 | 3b | **Output eval** | artifact **quality** against a rubric (weighted 0/1/2, pass ≥ threshold) | `testing/output-evals.md` rubric + fixture + gold exemplar; LM-judge subagent | yes (for changed artifact-producing skills) |
@@ -20,7 +20,7 @@
 
 ## Stage 1 — what static lint actually checks
 
-Every check exists because the defect class it catches actually shipped. The v2.0.0 audit found 5 critical + 14 major defects while both validators reported green; each became a named check in v2.0.1. **When a new defect class is found, add a check here — do not rely on a manual step.** The rename regression `TC-reg-rename-02` was hand-run and reported *pass* while the stale name was still live; `stale-names` now answers that question mechanically.
+Checks 1–18 exist because the defect class each one catches actually shipped; checks 19–22 are the declared exception — preventive guards for the JCRL role layer (v3.5.0), written before any defect of their class could ship. The v2.0.0 audit found 5 critical + 14 major defects while both validators reported green; each became a named check in v2.0.1. **When a new defect class is found, add a check here — do not rely on a manual step.** The rename regression `TC-reg-rename-02` was hand-run and reported *pass* while the stale name was still live; `stale-names` now answers that question mechanically.
 
 | Check | Catches | Shipped example it would have caught |
 |-------|---------|--------------------------------------|
@@ -42,6 +42,10 @@ Every check exists because the defect class it catches actually shipped. The v2.
 | `org-signature` | a team/org name cited as the authority behind a rule, or an example signed with a team + quarter | four lines that made one team's habits read as the plugin's rules: `per <Team> convention`, `(<Team> formatting rules)`, `Reference example (<Team> Q3 2026…)`, `validated by a run of Q3 <Team>` |
 | `example-locale` | a localized sample value inside a code block; an output language hardcoded in a doc | the glossary schema example shipped its terms, synonyms and definitions in one team's language; `Language: <Lang> by default` in a skill that has `user.language` |
 | `example-keys` | an example issue/space key outside the placeholder vocabulary | a real project key in place of `PROJ-1234`, or a real space key in place of `SPACE` — both an org leak and an example the reader cannot run (this very row was written with a real-looking key first, and the check rejected it) |
+| `role-branching` | a `SKILL.md` that branches on a role name (`if role == cpo`, `when the user's role is …`, `role in [...]`), or reads a `role_defaults.<field>` that `role-profiles.md` §5 step 2 does not list — the allowed set is parsed from that step, so it cannot drift | preventive (JCRL v3.5.0): nothing has shipped yet. It guards "a role changes defaults, never capabilities" — a skill that gates a step on `cpo` silently skips every other role, including every role added later |
+| `persona-prompt` | a product-role identity handed to the model — "You are a CPO / product manager / tech lead …", or the Ukrainian «Ти — продакт-менеджер» form — in skills, references, agents and their Codex ports. Functional identities ("You are the **checker**", "You are one voice…") and the debate card's `You are {role}` placeholder pass, and so do a quoted counter-example on a line that forbids it and a condition ("if you are a PM") | preventive (JCRL v3.5.0): `role-profiles.md` §0 bans persona prompting; without the check that ban rests on every reviewer remembering it |
+| `judgment-footer` | a skill that declares a Product-contour `artifact_type` in Step T (types parsed from the `**Product contour:**` line of `template-protocol.md`, `partial` ignored) but never cites `partial/judgment-footer`; People-contour skills are exempt | preventive (JCRL v3.5.0): the altitude line lands in every Product-contour skill in one release — the next skill to add a Step T would ship without it |
+| `role-enum` | the `user.role` enum in `role-profiles.md` §2 ≠ the `role` enum in `context-schema.md`, or either line missing | preventive (JCRL v3.5.0): one enum kept in two files — drift means onboarding offers a role that Step 0i treats as "not in the enum" and asks about again, or the reverse |
 
 Validator checks added for the cross-host release (v3.0.0) and later, in `validate-consistency.sh`:
 
@@ -89,13 +93,13 @@ Tokens are matched **case-insensitively with word boundaries**, not as bare subs
 
 ## Stage 1b — the seeded-leak test
 
-A check nobody has watched fail is a promise, not a test: a regex that matches nothing reads exactly like a clean repo. `testing/seeded_leak_test.py` copies the tree to a temp dir, injects one known-bad line at a time, and asserts the linter goes RED with the expected check tag — ten seeds, one per defect class that actually shipped, written with a fictional org (`Zorg`, `ZORG`) so no real identifier enters the repository. It runs in both CI workflows and after any edit to `skill_lint.py`.
+A check nobody has watched fail is a promise, not a test: a regex that matches nothing reads exactly like a clean repo. `testing/seeded_leak_test.py` copies the tree to a temp dir, applies one known-bad edit at a time, and asserts the linter goes RED with the expected check tag. Sixteen seeds: twelve org-leak seeds, one per defect class that actually shipped, written with a fictional org (`Zorg`, `ZORG`) so no real identifier enters the repository; and four preventive role-layer seeds for checks 19–22 (JCRL v3.5.0) — a role-name branch appended to a `SKILL.md`, a persona prompt appended to a reference, the `partial/judgment-footer` citation removed from `write-concept`, `eng_lead` dropped from one of the two role enums. A seed appends a line, removes the first line matching a regex, or replaces a regex once; a seed that changes nothing is reported as missed, never as caught. It runs in both CI workflows and after any edit to `skill_lint.py`.
 
 ```
-baseline: GREEN ✅   seeds: 10
+baseline: GREEN ✅   seeds: 16
   ✅ authority: per <Org> convention  → expected [org-signature]
   …
-caught 10/10 seeded leaks
+caught 16/16 seeded defects
 ```
 
 **Rule:** a new check lands with its seed in the same commit. If you cannot write a line that the check must reject, the check does not describe anything.
@@ -153,7 +157,7 @@ Static checks prove the tree is consistent; they cannot prove a host still loads
 - `bash testing/host-smoke.sh` green on the release machine, summary line in the release PR (since v3.0.2).
 
 - Lint: 0 FAIL.
-- Seeded-leak test: 10/10 caught (and a new seed for every new check).
+- Seeded-leak test: 16/16 caught (and a new seed for every new check).
 - Every example added or touched this version is universal — placeholders, no team signature, language-neutral code blocks, no domain-specific detail.
 - Trigger: all target phrases trigger the target skill; 0 false hijacks of neighbors.
 - Scenario: for every changed skill the key steps/gates/format are present.

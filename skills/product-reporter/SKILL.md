@@ -1,6 +1,6 @@
 ---
 name: product-reporter
-version: 0.6.0
+version: 0.7.0
 description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a performance review (performance-review). UA — «звіт по спринту», «результати кварталу», «скільки закрив за квартал», «звіт по релізах», «звіт по цілі». EN — "sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points", "goal report", "3T5F", "audit this report against the goal". Also UA — «статус епіка/фічі/місії», «операційний звіт команди», «звіт для стейкхолдерів», «які фічі виїхали в реліз». Do NOT use to analyze A/B or dashboard metrics (product-analysis) or to release the plugin (release-manager).
 ---
 
@@ -55,6 +55,8 @@ Runs before Step 1 (every mode produces an artifact). Follow `references/templat
 - Run **T-0 → T-5 exactly as `references/template-protocol.md` names them** — T-0 declare context, T-1 load registry, T-2 score/rank, T-3 decide (per `templates.preference`: `auto`/`always_ask`/`smart`), T-4 collect variables (during Step 3), T-5 render + record. Do not renumber the steps locally: other skills cite "Step T-4" meaning the protocol's T-4.
 - **Fallback**: if no custom template, the protocol's built-in ladder resolves `builtin://ops-report/{subtype}-v1.md` (e.g. `sprint-plan-v1.md`); for `goal-report` — `templates/built-in/report-3t5f/default-v1.md`.
 - **Escape hatch**: "no template" / "blank slate" → skip Step T, use built-in skeleton.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — for `ops-report` artifacts (in a member review, `serves` and `next` never draw on person profiles or goal letters, and `next` is a delivery or product step — never a People-contour action about the person); the People-contour `report-3t5f` carries none.
 
 ## Workflow
 
@@ -159,7 +161,7 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.6.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.7.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
    - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
 

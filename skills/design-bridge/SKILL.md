@@ -1,6 +1,6 @@
 ---
 name: design-bridge
-version: 0.5.0
+version: 0.6.0
 description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку/презентацію», «hi-fi прототип/екран», «design handoff», «дизайн-рев'ю», «через мій дизайн-тулкіт». EN — "create a deck", "make a presentation", "build a prototype on our DS", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review". Also UA — «передати дизайн у розробку». Orchestrates research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff and Figma MCP; the next step after write-concept, requirements-creator, brainstorm-features or product-research when a deck or prototype is needed.
 ---
 
@@ -80,6 +80,8 @@ Follow `references/template-protocol.md`:
 - `language: {en|uk|…}`
 
 T-1..T-5 via `template-library`. If none found, fall back to `presentation-builtin-{subtype}` (shipped in `templates/built-in/presentation/`). If that's also missing, produce an ad-hoc outline using this SKILL.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — for a deck, on the closing slide (or in the last slide's speaker notes); for an external audience (customer, partner) only in the vault / outline companion, never inside the .pptx; prototypes, handoffs and research enrichment carry none.
 
 ## Workflow
 
@@ -307,7 +309,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.5.0",
+  skill_version: "0.6.0",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],

@@ -15,7 +15,8 @@
 | 1 | Welcome + map | info | — | — | 30 sec |
 | 2 | Basic vs Extended | choice | ✅ | ✅ | 30 sec |
 | 3 | Connector pre-check | auto | ✅ | ✅ | 30 sec |
-| 4 | User Profile | required | ✅ | ✅ | 1 min |
+| 4, 4a | User Profile + Role and scope | required | ✅ | ✅ | 1-2 min |
+| 4b | Judgment settings | hybrid | defaults, ⏭️ later | ✅ (`hats_allowed`) | 30 sec |
 | 5 | Organization | required | ✅ | ✅ | 1 min |
 | 6 | Product (core fields) | required | ✅ | ✅ | 1-2 min |
 | 6+ | Product (extended fields) | optional | — | ✅ | +2-3 min |
@@ -112,12 +113,55 @@ Save in session memory: `connector_inventory: { connected: [...], missing: [...]
 Ask via AskUserQuestion:
 
 - **Name** — user's display name (pre-fill from session context if available)
-- **Role** — role in the organization (Product Manager, Senior PM, Head of Product, etc.)
 - **Email** — for Jira account lookup
 - **Preferred language** — uk (Ukrainian) or en (English) for skill output
 
+The role is asked separately in 4a — after the language, so its questions are already in the user's language.
+
 **Auto-discover Jira account:**
 If Jira MCP is available, use `lookupJiraAccountId` with the provided email to find and store the user's Jira accountId.
+
+#### 4a. Role and scope (Basic and Extended)
+
+Semantics — root `references/role-profiles.md` (§2 roles, §2b session defaults, §5 resolution). One sentence to the user before the question: the role sets where a run starts (the home altitude and the quick wins now; templates and other defaults from v3.6.0); it hides no skill and relaxes no check.
+
+`AskUserQuestion` takes 2–4 options per question and up to 4 questions per call, so the eight roles are picked in **two calls**:
+
+**Call 1 — role group** (one question, four options; the host adds "Other" with free text by itself — never add it as a fifth option):
+
+| Option | Roles inside |
+|---|---|
+| Product | PM · Head of Product · CPO |
+| Design & research | Product Designer · UX Researcher |
+| Data & engineering | Product Analyst · Engineering Lead |
+| Business | Business Owner / head of a business line |
+
+**Call 2 — role inside the group + scope** (two questions in one call):
+
+1. **Role** — the 2–3 roles of the chosen group as options, mapped to the enum: PM → `pm`, Head of Product → `head_of_product`, CPO → `cpo`, Product Designer → `product_designer`, UX Researcher → `ux_researcher`, Product Analyst → `product_analyst`, Engineering Lead → `eng_lead`, Business Owner → `business_owner`. A group with a single role skips this question; call 2 then carries scope only.
+2. **Scope** — `product` (one product) · `area` (a direction or a group of products) · `org` (the whole product organisation).
+
+The host's own "Other" on call 2: a typed role is mapped with `role-profiles.md` §5 and confirmed once; a typed scope is mapped to the nearest of product / area / org and confirmed — free text is never written into `Role scope`.
+
+**"Other" in call 1** — map the free text with the keyword table in `references/role-profiles.md` §5 (the single source; never restate it here). Call 2 then asks, as its role question, to confirm the proposed enum: the proposed role (Recommended) · `other` (keep my wording, `pm` defaults). The typed text is kept as `Role label` either way.
+
+**Host without structured questions** (`references/host-profiles.md` §4): one numbered list of the eight roles plus `9. other — describe in your words`, then the three scopes as a second short list; parse the reply as a number or as text (free text → §5 keyword table → confirm once in plain text).
+
+**Record** in session memory for Step 16c (nothing is written before the file exists):
+
+- `- **Role:** <enum>`
+- `- **Role label:** <text>` — the user's own wording when typed ("Other"), otherwise the role's display name from the call-2 mapping (e.g. `Business Owner` for a single-role group)
+- `- **Role scope:** <product | area | org>`
+- `- **Level home:** <Lx>` — `level_home` from `role-profiles.md` §2b for the chosen role (`other` → the `pm` row); derived, never asked
+
+A Role holding an enum value counts as confirmed — no skill asks again (Step 0i). **Standalone:** `set role` / `change my role` / «змінити роль» runs this step alone on an existing `local-context.md`: an explicit request re-asks even when Role already holds an enum value, recomputes `Level home`, sets `Role label` to the new role's display name when the role changes (the user's own wording when typed) and keeps it when the role stays the same, writes the four lines in place and shows the changelog (`User Profile → Role | was | became`).
+
+#### 4b. Judgment settings
+
+Writes the `## Judgment` section (format and key semantics — `references/context-schema.md` → Judgment).
+
+- **Basic:** ask nothing. Record the defaults silently — `hypothesis_first: on`, `learning_mode: off`, `hats_allowed: all` — and append `judgment` to `onboarding.deferred_steps`.
+- **Extended:** ask only the switch that acts in v3.5.0 — **`hats_allowed`**: which one-run role overrides ("look at this as a CPO", `role-profiles.md` §4) the plugin may apply. Options: `all` (Recommended) · `none`; a list of roles is typed through the host's "Other" (each name matched first against the exact enum values, `pm` included, then against `role-profiles.md` §5 without its fall-through row — an unmatched name is listed as "not recognised" in the confirmation, never mapped to `pm`; the list confirmed once). Then show the other two in one line, not as questions: "Also set, changeable later with `update config → Judgment`: hypothesis-first question `on` (from v3.7.0), learning mode `off` (from v3.9.0)." Record all three.
 
 ### Step 5 — Organizations
 
@@ -536,10 +580,18 @@ Before generating the file, present ALL collected information to the user in a s
 
 ### User profile
 - Name: [name]
-- Role: [role]
+- Role: [enum]
+- Role label: [text]
+- Role scope: [product / area / org]
+- Level home: [L1-L4, derived from the role]
 - Email: [email]
 - Jira Account ID: [id or "will be auto-discovered"]
 - Language: [language]
+
+### Judgment
+- Hats allowed: [all / none / list of roles]
+- Hypothesis first: [on] (acts from v3.7.0)
+- Learning mode: [off] (acts from v3.9.0)
 
 ### Organization: [name]
 - Domain: [domain]
@@ -606,8 +658,16 @@ Format:
 
 ## User Profile
 - **Name:** ...
-- **Role:** ...
+- **Role:** [enum]
+- **Role label:** [text]
+- **Role scope:** [product | area | org]
+- **Level home:** [L1-L4]
 ...
+
+## Judgment
+- **Hypothesis first:** [on | off]
+- **Learning mode:** [off | pm_first | explain]
+- **Hats allowed:** [all | none | list of role enum values]
 
 ## Onboarding Status
 
@@ -659,9 +719,9 @@ Format:
 
 > The skeleton must contain a placeholder for **every** section any onboarding step writes — the later steps append into this file, and a section with no home here is a section written into an undefined place. Templates (O-T.7), Planning, Focus, Design Toolkits and People were all missing until v2.1.0.
 >
-> **Ordering note:** O-T.6/O-T.7 (Step 13) write the `Templates` section, but this skeleton is created here in Step 16c — later in the flow. Steps 13–15 therefore **buffer their sections in session memory** and Step 16c writes them into the skeleton in one pass. Nothing writes to `local-context.md` before it exists.
+> **Ordering note:** O-T.6/O-T.7 (Step 13) write the `Templates` section, but this skeleton is created here in Step 16c — later in the flow. Steps 4a–4b and 13–15 therefore **buffer their sections in session memory** and Step 16c writes them into the skeleton in one pass. Nothing writes to `local-context.md` before it exists.
 
-**Section formats** — all defined in `references/context-schema.md`, never restated here: CJM Configuration · Knowledge Library Configuration · Obsidian Vaults · Templates · Planning · Focus · Design Toolkits · People.
+**Section formats** — all defined in `references/context-schema.md`, never restated here: User Profile (role lines) · Judgment · CJM Configuration · Knowledge Library Configuration · Obsidian Vaults · Templates · Planning · Focus · Design Toolkits · People.
 
 **Obsidian Vaults Configuration section format:** See `references/context-schema.md` → Obsidian Vaults Configuration section format.
 
@@ -717,13 +777,15 @@ If Step 13 was already completed (user set up Template Library in Step 13), skip
 > - Knowledge Library: [initialized with N sources / not configured]
 > - Obsidian Vaults: [N vaults connected / not configured]
 > - Templates: [number] templates saved / library initialized / skipped
-> "You're ready to start! Try: 'brainstorm features for [product]' or 'write requirements for [feature name]'"
+> "You're ready to start — here are your first steps."
 
 ---
 
 ### Step 17 — Quick Wins
 
-After successful save and validation, present 2-3 concrete next-step recommendations the user can act on immediately.
+After successful save and validation, present 2-4 concrete next-step recommendations the user can act on immediately.
+
+**Role quick wins first:** resolve `role_defaults` from the Role recorded in Step 4a (`references/role-profiles.md` §2b; an `other` role reads the `pm` row) and take the first two entries of **`role_defaults.quick_wins`** in list order; an entry whose section is in `onboarding.deferred_steps` (product-landscape → `landscape` ~2 min; focus-advisor, quarterly-planning, project-planning, sprint-planning → `planning` ~5 min; cjm-research → `cjm` ~3–5 min; one-on-one, goal-setter, performance-review, delegation-coach → `people` ~5 min) is replaced by the pair "add <section> (~time), then <request>"; offer each, each as a runnable request on the active product (e.g. "`brainstorm features for [product]`"); name any remaining entries in one line. Never pick recommendations by the role name — only by the field. Then fill the remaining slots from the connector-based list below.
 
 **Generate from session context:**
 
@@ -734,7 +796,7 @@ After successful save and validation, present 2-3 concrete next-step recommendat
 - If `vault_level == L0` (Obsidian Vault not configured) → "When you have 5 minutes, connect an Obsidian Vault — your concepts, requirements, research, and CJM reports will mirror into your knowledge base automatically."
 - If `connector_inventory.missing` includes `Confluence` → "Connect Confluence MCP — it unlocks publishing of requirements and concepts."
 
-Present each recommendation as an option in `AskUserQuestion` so the user can immediately invoke the suggested action without typing the command.
+Present each recommendation as an option in `AskUserQuestion` (at most 4 options per question) so the user can immediately invoke the suggested action without typing the command.
 
 **End of Onboarding workflow.**
 

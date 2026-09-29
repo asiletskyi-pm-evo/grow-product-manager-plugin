@@ -1,6 +1,6 @@
 ---
 name: template-library
-version: 0.3.0
+version: 0.3.1
 description: Manage artifact templates — concepts, requirements, research, tasks, decks — create, clone, edit, import, export, validate, backup. Not the glossary or knowledge sources (knowledge-library). UA — «додай шаблон», «керуй шаблонами», «покажи шаблони», «імпортуй шаблони з папки». EN — "manage templates", "add a template", "create a template", "edit a template", "import templates from a folder", "show templates", "backup templates". Also called by other skills to render an artifact via Step T of references/template-protocol.md.
 ---
 
@@ -147,7 +147,7 @@ Full pass:
 Walk `Templates/` recursively:
 
 - For each `*.md` file outside `_archive/`, `_partials/`, `_System/`: parse frontmatter, build a registry entry.
-- Include built-in templates by scanning `{plugin-root}/templates/built-in/` and using `builtin://` URIs.
+- Include built-in templates by scanning `{plugin-root}/templates/built-in/` and using `builtin://` URIs — except `templates/built-in/partial/` (protocol-inserted partials such as the judgment footer are never listed, offered or cloned; since v3.5.0).
 - Preserve `usage_count` and `last_used` from the previous registry (match by `template_id`).
 - Write new `_registry.json` atomically (write to `.tmp`, rename).
 

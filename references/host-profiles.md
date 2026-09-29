@@ -50,6 +50,7 @@ Then, and only then, resolve the contours that depend on it (storage mode, deleg
 | Fan-out reads | parallel `extractor` subagents | sequential batches inline | fewer sources, stated explicitly |
 | Deterministic scripts | `scripts/*.py` | the same logic as prose steps | — |
 | Write gate | PreToolUse hook (`ask`) | in-skill confirmation before the write step | — |
+| Structured questions (`AskUserQuestion`: onboarding, Step 0i role, template choice) | the host's option picker (2–4 options per question, up to 4 questions per call) | a numbered list in chat; the answer is parsed from the user's reply (a number or the text) | — (no capability mark needed: every host can ask in plain text) |
 | Product drive (`flow-walkthrough`) | best level per `app-drive-protocol.md` §1 | a lower level (foreground instead of background; sequential compare) | user-driven variant — the user walks, the agent logs |
 
 ## 5. Contours that have no meaningful degraded mode

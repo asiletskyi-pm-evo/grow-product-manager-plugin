@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.8.0
+version: 0.9.0
 description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».
 ---
 
@@ -48,6 +48,8 @@ Run Steps T-1 → T-5 via the `template-library` helper routines. Render and app
 For `health-check` mode (automated), use the top-ranked template silently regardless of `templates.preference` to avoid prompting in background runs.
 
 If no template applies → fall back to `cjm-builtin-funnel`; if that's also missing, use the skill's internal report structure.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
 
 ## Modes of Operation
 
@@ -289,7 +291,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.8.0",
+     skill_version: "0.9.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],

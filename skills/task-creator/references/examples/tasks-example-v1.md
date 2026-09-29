@@ -339,6 +339,8 @@ Design links skipped (no Design task); no "Test results analysis" task (not an A
 - **Issues encountered:** the Team field was not accepted on create; set with `editJiraIssue` on all six tasks (Step 8).
 - **All tasks:** [`parent=PROJ-1234 AND labels=PROJ-1234.3 ORDER BY created DESC`](https://jira.example.com/issues/?jql=parent%3DPROJ-1234%20AND%20labels%3DPROJ-1234.3%20ORDER%20BY%20created%20DESC)
 
+Altitude: L1 · ↑ serves: Epic PROJ-1234 "Buyer self-service for orders" — share of buyer cancellations done in self-service · ↓ next: estimate PROJ-1301…PROJ-1306 at grooming (story points left unset)
+
 ## 7. Post-creation verification (Step 12)
 
 PROJ-1303 [FE] read back with `getJiraIssue` and checked by an independent checker agent against the requirements page.

@@ -86,6 +86,8 @@ One owner per action. Action 2 was first offered as a joint check by Person4 and
 ### Open Questions
 - **Which city should the estimate use when a buyer has no saved address (guests)?** Options raised: IP-based city — often wrong on mobile networks (Person3); a city field on the product page (Person5); the most frequent delivery city, clearly labelled as an estimate (Person4). Not decided — Person1: come back to it once the mockups are ready (Action 3, 2026-10-12). No owner was assigned in the meeting.
 
+Altitude: L2 · ↑ serves: — (no linked goal) · ↓ next: create Jira tasks for Action Items 1–5 under epic PROJ-1234 via task-creator
+
 ---
 
 Here are the meeting notes. Please review — are there any corrections or additions?

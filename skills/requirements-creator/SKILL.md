@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.14.0
+version: 0.15.0
 description: Write or review a requirements document with numbered functional requirements, incl. A/B test specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію», «опиши фічу як вимоги». EN — "write requirements", "create feature spec", "write A/B test requirements", "review / analyze / improve requirements", "check my spec". Also UA — «створи специфікацію фічі», «переглянь вимоги», «покращ вимоги». A concept from write-concept is the input; task-creator consumes the output.
 ---
 
@@ -77,6 +77,8 @@ If the user says "do not use a template" → skip Step T and use the skill's int
 If no template applies → fall back to the built-in `requirements-builtin-default` (or `requirements-builtin-ab-test` if subtype matched); if both are missing, use the skill's internal structure below.
 
 In **Analyze & Improve** mode, Step T is NOT run — the input document's structure drives the analysis.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — Create mode only; Analyze & Improve never adds it to the user's document.
 
 ---
 
@@ -303,7 +305,7 @@ The full procedure — the offer wording, the exact `design-bridge` parameters p
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.14.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.15.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 

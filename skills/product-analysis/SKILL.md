@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.13.0
+version: 0.14.0
 description: Analyze product data — dashboards, metrics, A/B results, funnel vs baseline; data only. Not the CJM funnel pipeline (cjm-research), not a quick «чи все ок» health glance (focus-advisor). UA — «проаналізуй метрики/дашборд», «результати A/B-тесту», «чому впала конверсія», «воронка проти baseline». EN — "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", "CJM funnel analysis (data only)". Also UA — «знайди аномалії», «поясни ці дані», «аналіз після релізу». Generates data-backed hypotheses; for anomalies → enrichment → backlog use cjm-research.
 ---
 
@@ -83,6 +83,8 @@ Run **Steps T-0 → T-5 exactly as `references/template-protocol.md` names them*
 **Escape hatch:** if the user says "don't use a template" or "blank slate", skip Step T entirely and use the built-in skeleton.
 
 **Chained invocation:** if this skill is invoked from `cjm-research`, `cjm-research` has already resolved the CJM template; this skill receives the resolved template id in passed context and skips T-2.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — not on a return payload to cjm-research (the caller's report carries it).
 
 ## Workflow
 
@@ -251,7 +253,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "product-analysis",
-     skill_version: "0.13.0",
+     skill_version: "0.14.0",
      tags: [metric names analyzed, platforms, analysis_mode],
      content: full_analysis_markdown,
      related: [source hypothesis, source requirements, previous analyses from Step 0.5],

@@ -140,7 +140,7 @@ For each approved improvement:
 
 After all improvements are applied — present the full updated document for final review.
 
-Before that final review, run `references/artifact-style-gate.md` on the improved document (maker–checker; two lenses if it will be re-published). Include the one-line gate report.
+Before that final review, run `references/artifact-style-gate.md` on the improved document (maker–checker; two lenses if it will be re-published). Pass `mode: analyze-improve` to the checker: Gate 4a is `n/a` here — the user's own document never gets the altitude line. Include the one-line gate report.
 
 ### A7 — Feasibility research (optional)
 

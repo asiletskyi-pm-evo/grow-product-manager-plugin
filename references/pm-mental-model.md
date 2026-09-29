@@ -83,7 +83,7 @@ Rules (enforced from v3.8.0 by Gate Check 6 and the artifact quality gate): `sim
 
 ## 6. Roles on top of the core
 
-The plugin is used by more than IC Product Managers — Heads of Product, CPOs, Product Designers, Product Analysts, UX Researchers, Engineering Leads and Business Owners work with the same requirements, research, tasks, people and plans at their own altitude. The role layer (role profiles, from v3.5.0) maps each role onto a home altitude (L1 delivery → L4 portfolio) and a set of *defaults* (horizon, template, evidence emphasis, vocabulary, sources). The core in this file — the pillars, the ten principles, the evidence classes — is identical for every role; a role never relaxes a gate, never hides a capability and never becomes a persona prompt.
+The plugin is used by more than IC Product Managers — Heads of Product, CPOs, Product Designers, Product Analysts, UX Researchers, Engineering Leads and Business Owners work with the same requirements, research, tasks, people and plans at their own altitude. The role layer (`role-profiles.md`, since v3.5.0 — altitude, hats and quick wins; templates, emphasis and planning defaults from v3.6.0) maps each role onto a home altitude (L1 delivery → L4 portfolio) and a set of *defaults* (horizon, template, evidence emphasis, vocabulary, sources). The core in this file — the pillars, the ten principles, the evidence classes — is identical for every role; a role never relaxes a gate, never hides a capability and never becomes a persona prompt.
 
 ## 7. Versioning
 

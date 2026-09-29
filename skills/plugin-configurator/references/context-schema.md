@@ -7,6 +7,8 @@ This document defines the complete structure of `local-context.md` — the organ
 ```
 local-context.md
 ├── User Profile
+│   └── Role · Role label · Role scope · Level home (role layer, v3.5.0)
+├── Judgment (optional, v3.5.0)
 ├── Onboarding Status (auto-managed)
 ├── Organizations (1+)
 │   ├── Organization metadata
@@ -34,10 +36,36 @@ local-context.md
 | Field | Required | Used by | Description |
 |-------|----------|---------|-------------|
 | name | ✅ | All skills | User's display name |
-| role | ✅ | All skills | User's role (e.g., Product Manager, Senior PM) |
+| role | ✅ | All skills (Step 0i) | Role enum (below) — selects role **defaults** only, never capabilities (`references/role-profiles.md`). Written as `- **Role:** <enum>` |
+| role_label | optional | Step 0i, Validate | The user's own wording (e.g. "Senior PM"), kept when the role was typed or migrated from free text; display only. `- **Role label:**` |
+| role_scope | optional | Step 0i | `product` · `area` · `org` — one product, a direction, or the whole product organisation. `- **Role scope:**` |
+| level_home | optional | Step 0i, altitude line | `L1`–`L4`; derived from the role (`role-profiles.md` §2b), never asked; editable. `- **Level home:**` |
 | email | ✅ | Task Creator | For Jira account lookup |
 | jira_account_id | optional | Task Creator | Jira accountId (auto-discovered if Jira MCP available) |
 | language | ✅ | All skills | Preferred language for skill output (uk/en) |
+
+**`role` enum:** `pm` · `head_of_product` · `cpo` · `product_designer` · `product_analyst` · `ux_researcher` · `eng_lead` · `business_owner` · `other`
+
+`other` keeps the user's text in `role_label` and reads the `pm` defaults. The enum is defined in `references/role-profiles.md` §2; the two lists must match (lint check 22 `role-enum`). Written by onboarding Step 4a, by `set role` / «змінити роль», by RM-4d migration, or by Step 0i of any skill when it asks once in an interactive run.
+
+### Judgment (optional)
+
+Written by onboarding Step 4b (Basic: defaults, deferred id `judgment`; Extended: `hats_allowed` asked). Absent section → the defaults below apply. Each switch acts only from the version shown; until then it is stored and changes nothing (`references/local-context-protocol.md` Step 0j).
+
+| Key | Label in file | Default | Values | Acts from | Effect |
+|---|---|---|---|---|---|
+| `hats_allowed` | `Hats allowed` | `all` | `all` · `none` · a list of role enum values | v3.5.0 | Which one-run role overrides ("hats", `role-profiles.md` §4) Step 0i may apply |
+| `hypothesis_first` | `Hypothesis first` | `on` | `on` · `off` | v3.7.0 | From v3.7.0: at a judgment point the implementing skills ask for the user's own estimate before showing theirs (`pm-mental-model.md` P2); never asked in a run with no user present |
+| `learning_mode` | `Learning mode` | `off` | `off` · `pm_first` · `explain` | v3.9.0 | From v3.9.0: synthesis skills offer a PM-first pass or explain their reasoning (`pm-mental-model.md` P8) |
+
+Section format in `local-context.md` (after `## User Profile`; each value alone on its line, like the role lines — the session digest parses `- **Role:**` and `- **Level home:**` to the end of the line):
+
+```markdown
+## Judgment
+- **Hypothesis first:** on
+- **Learning mode:** off
+- **Hats allowed:** all
+```
 
 ### Onboarding Status (required, auto-managed by Configurator)
 
@@ -58,6 +86,7 @@ Every key an onboarding step may append, and the step that writes it. A skill ch
 
 | Key | Written by | Deferred section |
 |---|---|---|
+| `judgment` | Step 4b | Judgment settings |
 | `key-metrics` | Step 8 | Product key metrics |
 | `teams` | Step 9 | Teams |
 | `repos` | Step 10 | Repositories |
@@ -207,6 +236,7 @@ Users can add any additional sections with free-form markdown content. The confi
 
 | Skill | Required context | Optional context |
 |-------|-----------------|-----------------|
+| **Every skill (Step 0i)** | — | user.role, role_label, role_scope, level_home → `role_defaults` (`role-profiles.md` §5; absent or non-enum → asked once in an interactive run, `pm` otherwise); judgment.hats_allowed (v3.5.0), judgment.hypothesis_first (from v3.7.0), judgment.learning_mode (from v3.9.0) |
 | **Product Analysis** | product.name | tableau URLs, ab_test_dashboards, key_metrics, OKRs |
 | **Requirements Creator** | product.name, jira_project_key, platforms | confluence_template_url, locales, key_metrics |
 | **Task Creator** | product.name, jira_project_key | team, members with jira_account_id, confluence_space |
@@ -236,6 +266,8 @@ Users can add any additional sections with free-form markdown content. The confi
 | **Quarterly Planning** | product.name, planning | product.current_okrs, team |
 | **Template Library** | — | templates.* (preference, default_language, favorite_templates, storage_root) |
 | **Release Manager** | — | plugin_release.* (repo path, remotes, protected branches) |
+| **Product Landscape** | — | product.name, landscape (category, bookmarks consent), product.competitors (registry seed) |
+| **Flow Walkthrough** | — | product.name, test_accounts (multi-role legs), product.platforms |
 
 > Every skill sent to Step 0e must have a row here — the step tells a skill to check "its required fields" against this table, so a missing row silently means "nothing required". 12 skills had no row until v2.1.1.
 
@@ -246,6 +278,12 @@ Users can add any additional sections with free-form markdown content. The confi
 2. At least 1 organization with name
 3. At least 1 product with: name, description, platforms, jira_project_key
 4. Onboarding Status: `mode` (basic/extended) and `basic_completed_at` (auto-set by Configurator)
+
+### Role layer and Judgment
+1. `role` holds an enum value. A value outside the enum (free text from an earlier onboarding) or a missing role is a **recommendation** in Validate — "run `set role`" — never a failure and never a completeness penalty; Step 0i maps it on the next interactive run.
+2. `level_home`, when present, is one of `L1`–`L4`; any other value is a finding — recompute it from the role (`role-profiles.md` §2b).
+3. `role_scope`, when present, is `product`, `area` or `org`.
+4. `## Judgment`, when present: `hypothesis_first` ∈ on/off, `learning_mode` ∈ off/pm_first/explain, `hats_allowed` = all, none or a list of role enum values. An absent section is valid (defaults apply).
 
 ### Optional but recommended
 1. Confluence space (for publishing)

@@ -1,6 +1,6 @@
 ---
 name: product-landscape
-version: 0.2.0
+version: 0.3.0
 description: Registry and map of competitor, adjacent and benchmark products — scan installed apps, discover by category and market, categorise, characterise, start same-flow research across products. Not a single competitive report (product-research), not a source library (knowledge-library), not the walk itself (flow-walkthrough); setup of consent and category is plugin-configurator. UA — «карта конкурентів», «реєстр продуктів», «просканируй мої застосунки», «хто конкуренти й дотичні у сфері …», «додай продукт у реєстр», «досліди однакове флоу на конкурентах». EN — "competitor map", "product registry", "scan my apps", "who are the competitors and adjacent players", "add product to the registry", "research the same flow across products". Modes scan / discover / add / update / characterize / map / research; chains to flow-walkthrough, product-research, brainstorm-features.
 ---
 
@@ -75,6 +75,8 @@ Roles are **per user product** (`links[].product`), never global: the same app m
 
 For `map`: `artifact_type: research`, `subtype: landscape`, built-in fallback `builtin://research/landscape-v1.md`. Other modes produce no document artifact.
 
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
+
 ## Step 1 — Mode
 
 | Mode | Trigger shape | Output |
@@ -117,7 +119,7 @@ Update `registry.yaml` (index) and `products/<slug>.md`; append the run to `scan
 
 > Requires: `references/vault-protocol.md` → Vault Save
 
-IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", product: active_product, skill: "product-landscape", skill_version: "0.2.0", tags: [category, market], content: the map, related: [registry slugs] })`. Display: "Saved to Vault: Research/landscape/{product}/…".
+IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", product: active_product, skill: "product-landscape", skill_version: "0.3.0", tags: [category, market], content: the map, related: [registry slugs] })`. Display: "Saved to Vault: Research/landscape/{product}/…".
 
 ## Skill Chaining
 

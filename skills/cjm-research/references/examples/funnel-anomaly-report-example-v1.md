@@ -38,3 +38,5 @@
 
 ## Sources
 - Funnel dashboard (marketplace workbook), period 1–31 May 2026 · Events pipeline (cross-validation) · both internal, period-annotated.
+
+Altitude: L2 · ↑ serves: — (no linked goal) · ↓ next: disambiguate the A1 driver by segment analysis, then feed H1 to brainstorm-features (ICE)

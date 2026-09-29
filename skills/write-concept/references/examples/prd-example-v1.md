@@ -64,3 +64,5 @@ A "Save for later" control on the product card and product page, plus a "Saved" 
 ## Sources
 - Product Analysis: product-page exit & return-session figures *(period-annotated)*
 - Web: marketplace wishlist/save-for-later UX benchmarks
+
+Altitude: L2 · ↑ serves: — (no linked goal) · ↓ next: check the "return for same item" pattern in session data — it blocks build-vs-defer
