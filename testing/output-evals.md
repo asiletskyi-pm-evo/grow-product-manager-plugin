@@ -87,6 +87,60 @@ Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input br
 | correct_epic_link | Parent epic and links set as the skill prescribes | 1 |
 | estimates_or_labels | Work-type labels (and estimates only when sourced) | 1 |
 
+### write-concept — design brief (since v3.6.0)
+- **Artifact:** design brief (`concept/design-brief`) · **Gold:** `skills/write-concept/references/examples/design-brief-example-v1.md` · **Fixture:** `testing/fixtures/write-concept/design-brief-v1.md` (setup: `user.role: product_designer`) · **pass_threshold:** 0.8
+
+| id | Criterion | Weight |
+|----|-----------|--------|
+| problem_not_solution | The problem is stated as a user problem — who hits it and what it costs them today, each claim with its source; no screen, component or solution is prescribed, and the stakeholder's live-map request stays input or goes out of scope, never a requirement | 2 |
+| users_segments | Every affected segment has its share, context of use and platform; the number of real users behind the evidence is stated, and the segment with no evidence (guests, 0 of 5 sessions) is flagged as a gap | 2 |
+| success_metric | One primary metric with baseline, period and target; one guardrail with baseline and limit; the usability-round bar for judging the explorations | 2 |
+| constraints | Confirmed constraints only, each with its source (carrier coverage, no courier location, notification channel, legal, Design System / WCAG); no technical assumption added | 1 |
+| jobs_to_be_done | Jobs in the "When … I want to … so I can …" form, each traced to evidence; a job resting on 2 of 5 sessions is marked as a hypothesis | 1 |
+| out_of_scope | Explicit out-of-scope list, including the item ruled out with its reason | 1 |
+| open_questions | Questions the explorations or research must answer before handoff, exactly one owner each, none invented | 1 |
+
+### write-concept — strategy memo (since v3.6.0)
+- **Artifact:** strategy memo (`concept/strategy-memo`) · **Gold:** `skills/write-concept/references/examples/strategy-memo-example-v1.md` · **Fixture:** `testing/fixtures/write-concept/strategy-memo-v1.md` (setup: `user.role: cpo`) · **pass_threshold:** 0.8
+
+| id | Criterion | Weight |
+|----|-----------|--------|
+| bets_with_tradeoffs | Each bet names its investment (teams, money, time), its expected return — or says it is not modelled — its stage (explore / expand / extract) and the intent it serves; the trade-offs between bets are stated | 2 |
+| proxy_metrics | Per bet, a leading indicator with baseline and period (or "not measured yet" with the first reading date), target, review cadence and source | 2 |
+| what_we_stop | Named work stopped, with the date and what it frees (teams, cost) | 2 |
+| kill_criteria | Per bet, a signal and a date at which we stop or pivot, fixed in the memo before the data arrives | 2 |
+| base_rates | Per bet, a reference class with its success rate and source, or an explicit "none known" — never an invented rate; the small sample (n = 3) is flagged | 2 |
+| intents_linked | Two to four strategic intents stated as outcomes, each linked to the objective it serves or marked as having none | 1 |
+| sources_dated | Every business and market fact carries its source and date; the market report older than 12 months is flagged | 1 |
+
+### product-research — research plan (since v3.6.0)
+- **Artifact:** research plan (`research/research-plan`) · **Gold:** `skills/product-research/references/examples/research-plan-example-v1.md` · **Fixture:** `testing/fixtures/product-research/research-plan-v1.md` (setup: `user.role: ux_researcher`) · **pass_threshold:** 0.8
+
+| id | Criterion | Weight |
+|----|-----------|--------|
+| decision_informed | One decision the study informs and one primary research question; each assumption says what would move the decision; a question that would not change it (the acquisition channel) is dropped with its reason | 2 |
+| method_fit | The method matches the question (why → interviews; how common → funnel data and tickets) and says why; simulated interviews may rehearse the guide but never count toward n or enter the synthesis | 2 |
+| participants_n | Planned n of real users per group (stopped vs contrast), participants as ids only, and what that n can and cannot support | 2 |
+| recruiting | Inclusion criteria, exclusions, screener, channel and incentive; a timeline with one owner per phase | 1 |
+| confidence_label | An expected-confidence label with its reason; high only where a second, independent source type is planned and agrees | 1 |
+| human_validated_flag | `Human-validated: no` on the model draft, in the plan and in the repository entry — never set to yes by the model | 1 |
+| repository_entry | The Repository entry section (role extra section, template-protocol T-5 step 3b) sits above the altitude line, filled from the plan, with no names or contacts | 1 |
+
+### product-reporter — QBR (since v3.6.0)
+- **Artifact:** QBR (`ops-report/qbr`, `quarter-review` mode) · **Gold:** `skills/product-reporter/references/examples/qbr-example-v1.md` · **Fixture:** `testing/fixtures/product-reporter/qbr-v1.md` (setup: `user.role: business_owner`) · **pass_threshold:** 0.8
+
+| id | Criterion | Weight |
+|----|-----------|--------|
+| financials_vs_plan | Every finance line with plan, actual, Δ and full-year forecast, the period and source stated, and each deviation with its cause | 2 |
+| money_bridge_or_stated_absence | Money-bridge rows only for Key Metrics that carry a Revenue driver; each expected effect cites the number behind it or says "— (not estimated)"; the metric with no mapping (Buyer NPS) carries "no revenue mapping configured"; nothing invented | 2 |
+| decisions_taken | Every decision of the quarter with its decision-log record and evidence; the one resting on a senior opinion (DL-12) carries a ⚠️ line that labels its input `assumed` | 2 |
+| commitments | Three to five measurable commitments for the next quarter, each with one owner and a date | 2 |
+| initiatives_status | Each initiative with the objective it serves, status, planned vs delivered (Jira numbers) and next step | 1 |
+| risks | Risks with likelihood, impact, owner and mitigation, as given — none invented | 1 |
+| org_health_aggregate | Org health in aggregates only; nothing from 1-1 notes, person profiles or reviews (the fixture's 1-1 remark is absent) | 1 |
+
+Not scored in the four rubrics above, noted in the Results log as for the v3.5.0 runs: the closing altitude line (`artifact-style-gate.md` Gate 4a) — `serves` is the goal the fixture links, `next` a product or delivery step.
+
 ### Lighter rubrics (fixtures TBD — add exemplars first)
 
 **product-analysis** (analysis report): period_annotation (2), gate_passed (2), trend_vs_baseline (2), anomaly_or_insight (2), hypothesis_backed (1), sources (1). pass 0.85.
@@ -115,8 +169,17 @@ Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input br
 | 2026-09-28 | v3.5.0 | cjm-research | — | 0.86 ✅ | same | threshold 0.85; altitude line present and correct |
 | 2026-09-28 | v3.5.0 | meeting-processor | — | 1.00 ✅ | same | altitude line present and correct |
 | 2026-09-28 | v3.5.0 | task-creator | — | 1.00 ✅ | same | altitude line on the report only, not on tasks |
+| 2026-09-29 | v3.6.0 | write-concept (design brief, new) | — | 0.95 ✅ | maker on the branch + LM judge | `concept-builtin-design-brief` resolved by the product_designer role default; Gate 4a correct |
+| 2026-09-29 | v3.6.0 | write-concept (strategy memo, new) | — | 1.00 ✅ | same | `concept-builtin-strategy-memo` for cpo |
+| 2026-09-29 | v3.6.0 | product-research (research plan, new) | — | 1.00 ✅ | same | `research-builtin-research-plan` by the explicit request (the ux_researcher profile adds the repository entry) |
+| 2026-09-29 | v3.6.0 | product-reporter (QBR, new) | — | 1.00 ✅ | same | `ops-report-builtin-qbr` for business_owner |
+| 2026-09-29 | v3.6.0 | write-concept (PRD) | — | 1.00 ✅ | same | regression: `concept-builtin-default` for pm, unchanged |
+| 2026-09-29 | v3.6.0 | requirements-creator | — | 1.00 ✅ | same | regression |
+| 2026-09-29 | v3.6.0 | cjm-research | — | 0.91 ✅ | same | regression (threshold 0.85) |
+| 2026-09-29 | v3.6.0 | meeting-processor | — | 0.88 ✅ | same | regression |
+| 2026-09-29 | v3.6.0 | task-creator | — | 1.00 ✅ | same | regression |
 
-## Coverage status (rubrics/fixtures as of v3.4.0)
+## Coverage status (rubrics/fixtures as of v3.6.0)
 
 > **Stage 3b is a blocker** (`Testing-process.md`), yet no 3b run is recorded anywhere for
 > v2.0.x or v2.1.x — and those releases changed `requirements-creator`, `meeting-processor`,
@@ -126,12 +189,16 @@ Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input br
 
 | Skill | Rubric | Fixture | Gold exemplar |
 |-------|--------|---------|---------------|
-| write-concept | ✅ | ✅ | ✅ |
+| write-concept — PRD | ✅ | ✅ | ✅ |
 | requirements-creator | ✅ | ✅ | ✅ |
 | cjm-research | ✅ | ✅ | ✅ |
 | product-analysis | ✅ light | ⬜ | ⬜ |
 | brainstorm-features | ✅ light | ⬜ | ⬜ |
 | meeting-processor | ✅ (v3.4.0) | ✅ | ✅ |
 | task-creator | ✅ (v3.4.0) | ✅ | ✅ |
+| write-concept — design brief | ✅ (v3.6.0) | ✅ | ✅ |
+| write-concept — strategy memo | ✅ (v3.6.0) | ✅ | ✅ |
+| product-research — research plan | ✅ (v3.6.0) | ✅ | ✅ |
+| product-reporter — QBR | ✅ (v3.6.0) | ✅ | ✅ |
 
-Next: add golden exemplars + fixtures for the four light-rubric skills, then promote their rubrics to full.
+Next: add golden exemplars + fixtures for the two light-rubric skills, then promote their rubrics to full.
