@@ -18,6 +18,7 @@ Use `getJiraIssue` to fetch the created task with all fields. This ensures we ve
 |-------|---------------|--------------|
 | **Title format** | Matches the pattern: `[WorkType] - Grooming/A/B Test - FeatureName` | Compare with the expected title from Step 7 rules |
 | **Parent** | Linked to the correct Epic | Check `parent` field matches the Epic key |
+| **No altitude line** (since v3.5.0) | A task body carries no `Altitude:` line — the judgment footer belongs on an epic this run created and on the Step 11 report only | Scan the description; a hit is reported, and the line is removed only after the user confirms — never propose an edit that adds one |
 | **Reporter** | Set to the user's accountId | Compare with `user.jira_account_id` |
 | **Team** | Set to the correct team | Compare with the confirmed team value from Step 6b |
 | **Labels** | Contains all required labels: feature code, work type label, `a/b_test` if applicable, `grooming` if applicable | Check labels array against expected values |

@@ -13,7 +13,7 @@ Before any other action, the skill MUST:
 
 ### 0a. Search for local-context.md
 
-**Shortcut (since v2.6.0):** if the session context contains a `GROW_PM_SESSION` digest (emitted by the plugin's SessionStart hook, `hooks/hooks.json`) that says `local-context.md: FOUND at <path>` — or the env variable `GROW_PM_CONTEXT_PATH` is set — take that path and skip the search below. The digest is a locator, not a substitute: still read the file and run 0c–0h and 0j. If the digest says `NOT VISIBLE`, it only means the hook's environment could not see the file (hosted sessions see the user's files through device tools, not the shell) — run the search below as usual and do **not** treat it as "not configured".
+**Shortcut (since v2.6.0):** if the session context contains a `GROW_PM_SESSION` digest (emitted by the plugin's SessionStart hook, `hooks/hooks.json`) that says `local-context.md: FOUND at <path>` — or the env variable `GROW_PM_CONTEXT_PATH` is set — take that path and skip the search below. The digest is a locator, not a substitute: still read the file and run 0c–0j. If the digest says `NOT VISIBLE`, it only means the hook's environment could not see the file (hosted sessions see the user's files through device tools, not the shell) — run the search below as usual and do **not** treat it as "not configured".
 
 Search in the following locations (in priority order):
 
@@ -24,7 +24,7 @@ Search in the following locations (in priority order):
 
 **If found in a legacy location (2-4) but NOT in `~/.grow-pm/`:** the file is from a pre-v1.4.0 install. Before proceeding, offer to migrate it to `~/.grow-pm/` (see `references/persistent-storage.md` → Legacy Data Discovery). If the user agrees — migrate, then continue. If the user declines — use it in-place but warn that data may be lost on plugin reinstall.
 
-**When saving:** ALWAYS write to `~/.grow-pm/local-context.md`. Never save to legacy locations.
+**When saving:** ALWAYS write to `~/.grow-pm/local-context.md`. Never save to legacy locations. (Exception: Step 0i writes the role lines into the file this step resolved, including a legacy location the user chose to keep.)
 
 ### 0b. If NOT found (anywhere) → redirect to Plugin Configurator
 
@@ -39,7 +39,7 @@ After the Configurator finishes — return to the original skill and continue it
 ### 0c. If found → read and parse
 
 Read `local-context.md` and extract:
-- Active user profile (name, role, email, language, jira_account_id)
+- Active user profile (name, role, role label, role scope, level home, email, language, jira_account_id) and the `## Judgment` section (`hypothesis_first`, `learning_mode`, `hats_allowed`; defaults `on` / `off` / `all` when the section is absent)
 - List of organizations and their products
 - Integration details for the current context
 
@@ -129,6 +129,22 @@ Store `vault_level` and `vault_configs` in session context for use by Step 0.5 a
 
 **If vault_level is L0** — no further vault-related actions in this session. All vault operations will be silently skipped.
 
+### 0i. Role resolution (every skill, since v3.5.0)
+
+The role layer is `references/role-profiles.md`: a role changes **defaults, never capabilities**, and a role field acts only through a step that implements it (the version in brackets in role-profiles §5).
+
+1. **Read** `- **Role:**` (and `Role label`, `Role scope`, `Level home`) from the User Profile.
+2. **Missing or not in the enum** — in an **interactive** run (the user is present in the chat), ask once:
+   - a free-text role (legacy file): ONE question — the keyword-mapped role from role-profiles §5 (Recommended) · `other` (keep my wording, `pm` defaults); Role scope stays unset;
+   - no role at all: the group and the role of the two-level picker (role-profiles §5 step 1; a group with a single role skips the role question) — scope is not asked here and stays unset (`set role` adds it) — or a numbered list on a host without structured questions (`host-profiles.md` §4).
+   Ask only when the file can be written. Write the answer into the `local-context.md` that Step 0a resolved — the digest path, `GROW_PM_CONTEXT_PATH`, or a legacy location the user chose to keep (this overrides 0a's "always write to `~/.grow-pm/`" rule; never create a new file for the role) — with a one-row changelog (`Role | was | became`); never ask again. When the file cannot be written (a read-only upload, a connector document, a sandbox), do not ask: use the keyword-mapped role (free text) or `pm` for the session and print one notice line with the role lines to paste. If the user skips the question, use `pm` for this session, write nothing, and ask again in the next interactive session.
+   Never ask in an **automated** run — a scheduled or headless run (`headless=true`, a scheduled-task prompt) or a skill invoked by another skill only for a return payload: use `pm` for that run and write nothing.
+   **`plugin-configurator` never asks here:** its own Step 4a, `set role` and RM-4d migration own the role question; Validate only reports a missing or free-text Role as a recommendation and never asks.
+3. **Resolve** `role_defaults` from role-profiles §2 and §2b. Active in v3.5.0: `level_home`, `reach`, `quick_wins`, and `hat` for the header; the other fields are carried for the steps that start using them in v3.6.0. Branch only on active fields, never on `role_defaults.role` or `hat` values.
+4. **Hat** — when the user asks for their own output to be viewed as another role ("as a CPO, …", «як аналітик, …»; "wear the … hat" also works, less reliably for routing) and `hats_allowed` accepts that role: state `Hat: <role> (profile: <role>)` at the top of the draft as presented in the chat — never inside slides, Jira fields or a published page body; in v3.5.0 that header is the hat's only effect (`level_home`, `reach`, `quick_wins` stay the profile's) (template and emphasis follow from v3.6.0). The profile is not rewritten. A role word describing another person (a People-contour request such as "goals for Person1 as an analyst") is never a hat, nor is a persona or test-account role walked in the product («пройди флоу як власник магазину», "as a seller / buyer / new user"). If `hats_allowed` excludes the role, say so in one line and continue without it.
+5. **Altitude** — infer the altitude of this run's artifact (L1–L4) from the request and the artifact, not from the role; `level_home` is only the fallback when the request implies none. The altitude line shows that value and nothing more — a jump outside the reach needs no extra notation.
+6. **One line, once per session, in an interactive run**, only when no `GROW_PM_SESSION` digest is in context at all (hosts without the SessionStart hook): `Role: <role>[ (hat: <hat>)] · Altitude home: <Lx>`. Not in automated runs, not in a skill invoked only for a return payload. No other output.
+
 ### 0j. Judgment contract (every skill)
 
 Every skill carries a three-line block that points here; its first line is always `> **Judgment contract (Step 0j).**`. The contract itself is `references/pm-mental-model.md`: the plugin **creates freely and decides carefully**.
@@ -205,6 +221,8 @@ Once the context is loaded and active product selected, skills should:
 - Use `organization.tableau_base_url` and `product.ab_test_dashboards` for analytics access
 - Use `user.language` for output language preference
 - Use `user.jira_account_id` for setting Reporter on Jira tasks
+- Use `role_defaults` (Step 0i) — never the role name — for defaults: the altitude inferred at Step 0i step 5 for the altitude line (`level_home` only as its fallback) and `quick_wins` in onboarding (v3.5.0); `template_defaults`, `gate_emphasis`, `planning_view`, `horizon`, `vocabulary_set` from v3.6.0 (`references/role-profiles.md` §5–§6)
+- Use `judgment.hypothesis_first`, `judgment.learning_mode`, `judgment.hats_allowed` only through the steps that implement them (hats from v3.5.0; the others from v3.7.0 / v3.9.0)
 - Use `team.jira_team_id` for setting Team field on Jira tasks
 - Use `cjm.stages` for CJM funnel analysis (name + dashboard + `baseline_cr` per stage)
 - Use `cjm.thresholds` for anomaly detection (`warning` / `critical`, % deviation from baseline)

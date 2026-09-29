@@ -114,9 +114,15 @@ Copy all current files to backup. Keep last 3 backups (delete oldest if exceeds)
 1. Read current `local-context.md`
 2. Identify fields present in current schema but missing from file → add with sensible defaults
 3. Identify deprecated fields → remove or rename
-4. Update `> Configurator version:` line
-5. Update `.schema-version`
-6. Show migration changelog to user:
+4. **Role layer (schema v3.5.0):**
+   - `- **Role:**` holds free text (an earlier onboarding wrote e.g. "Senior PM") → map it with the keyword table in `references/role-profiles.md` §5 — the single source; never restate or extend it here — and confirm **once** (one question: the proposed role (Recommended) · `other` — keep my wording, `pm` defaults). Write `- **Role:** <enum>`, keep the original text as `- **Role label:**`, and add `- **Level home:**` from `role-profiles.md` §2b. `Role scope` stays unset (optional; `set role` adds it).
+   - Role missing → ask the group and the role of onboarding Step 4a (no scope question here — `set role` adds it), same single confirmation budget.
+   - Entry was `set role` / «змінити роль» → skip both role questions here (Step 4a asks next); only add `Level home` and the `## Judgment` defaults.
+   - Role already an enum value → no question; only add a missing `Level home`.
+   - `## Judgment` absent → add it after `## User Profile` with the defaults (`hypothesis_first: on`, `learning_mode: off`, `hats_allowed: all`; format — `references/context-schema.md` → Judgment), no question.
+5. Update `> Configurator version:` line
+6. Update `.schema-version`
+7. Show migration changelog to user:
 
 > "Schema migrated from [old] to [new]. Changes:"
 >
@@ -124,6 +130,8 @@ Copy all current files to backup. Keep last 3 backups (delete oldest if exceeds)
 > |--------|---------|
 > | Added field | `product.new_field` — default: [value] |
 > | Removed field | `product.old_field` — no longer used |
+> | Mapped field | `User Profile → Role`: "Senior PM" → `pm` (text kept as Role label), Level home `L2` |
+> | Added section | `## Judgment` — defaults, change with `update config → Judgment` |
 
 **4e. Guided migration (major changes):**
 
@@ -172,7 +180,8 @@ Read the current `local-context.md`. Parse all sections.
 > "What would you like to update in the plugin configuration?"
 
 Present current sections as options via AskUserQuestion:
-- User Profile
+- User Profile (incl. role and scope)
+- Judgment (hats allowed; hypothesis-first and learning-mode switches)
 - Organization: [Name] (for each org)
 - Product: [Name] (for each product)
 - Add new product
@@ -197,6 +206,12 @@ Present current sections as options via AskUserQuestion:
 ### U-3. Update the selected section
 
 Follow the same collection flow as Onboarding for the selected section. Pre-fill all fields with current values so the user only needs to change what's different.
+
+**For User Profile updates:**
+- The role can be changed at any time — run onboarding Step 4a (the two-level picker; an explicit request re-asks even when Role already holds an enum value), recompute `Level home` from `references/role-profiles.md` §2b, keep the user's own wording as `Role label`, and show the changelog row `User Profile → Role | was | became`.
+
+**For Judgment updates:**
+- Run onboarding Step 4b as in Extended; `hypothesis_first` and `learning_mode` can also be set here — say in the same line that they act from v3.7.0 and v3.9.0 respectively and change nothing before that.
 
 **For CJM Configuration updates:**
 - Allow changing funnel template (with remapping prompt)
@@ -297,6 +312,8 @@ For each product in the context:
 ### V-4. Check context completeness
 
 First check the file-level requirements from `references/context-schema.md` → Validation Rules: the **User Profile** block (name, role, email, language) and the **Onboarding Status** block (`mode`, `deferred_steps`) must be present and well-formed. A missing User Profile is a finding no per-product score would surface.
+
+A `Role` outside the enum (free text from before v3.5.0) is reported under **Recommendations** — "run `set role`" — never as a failure and never as a completeness penalty; a missing `Role` stays the User Profile finding it was in v3.4.0. `Level home` outside L1–L4 and `## Judgment` values outside their sets are findings (`context-schema.md` → Validation Rules → Role layer and Judgment).
 
 Then score each product's context completeness:
 
@@ -404,7 +421,7 @@ Display each section with clear headings. For long sections (teams, metrics) —
 
 ### VW-2. Ask if changes are needed
 
-> "Would you like to change anything? Just tell me what — for example: 'change email', 'add competitor X', 'remove product Y', 'switch CJM template to SaaS', 'connect a vault'."
+> "Would you like to change anything? Just tell me what — for example: 'change email', 'change role', 'add competitor X', 'remove product Y', 'switch CJM template to SaaS', 'connect a vault'."
 
 ### VW-3. Apply inline changes
 

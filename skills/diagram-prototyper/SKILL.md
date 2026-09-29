@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.11.0
+version: 0.12.0
 description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «додай стрілки на скрін». EN — "create a diagram", "draw a flowchart", "visualize this process", "make a prototype" (no DS mentioned), "mockup", "annotate this screenshot". Also UA — «візуалізуй процес», «зроби прототип», «інфографіка», «познач на скріншоті». Generation via Mermaid/HTML, Gemini, ChatGPT, NotebookLM, Figma, Draw.io; annotation runs locally.
 ---
 
@@ -63,6 +63,8 @@ Run **Steps T-0 → T-5 exactly as `references/template-protocol.md` names them*
 **Escape hatch:** if the user says "don't use a template" or "free-form deck", skip Step T and use a blank outline.
 
 **Chained invocation:** if invoked from `write-concept`, the concept template is already resolved; request a presentation-specific template separately here (Step T is about the deck artifact, not the source concept).
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — only on a deck: on the closing slide (or the last slide's speaker notes), and for an external audience (customer, external users, social media) only in the outline markdown, never in the deck; diagrams, prototypes and mockups, wireframes, mind maps, infographics and annotated screenshots carry none.
 
 ---
 
@@ -317,7 +319,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.11.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.12.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Mode: Annotate (standalone screenshot annotation)

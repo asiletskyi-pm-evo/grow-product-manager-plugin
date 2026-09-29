@@ -6,7 +6,7 @@
 
 - After the draft is fully generated and **before** the "Review with the user" step (or, for `task-creator`, before the pre-creation summary and after task creation as the Step 12 verification).
 - Only on the final draft of an artifact — never on intermediate brainstorm text, clarifying questions, or conversational replies.
-- Gates 1–2 are self-contained checklists. Gate 3 (Team language) additionally has a **pre-generation touch** — the style preamble — because lively text must be born lively; fixing stilted prose post-hoc makes it worse.
+- Gates 1–2 and 4 are self-contained checklists. Gate 3 (Team language) additionally has a **pre-generation touch** — the style preamble — because lively text must be born lively; fixing stilted prose post-hoc makes it worse.
 
 ---
 
@@ -81,7 +81,24 @@ Candidate terms: offer in one line to add as `status: candidate` to the glossary
 
 ### Gate report extension
 
-> "Гейт якості (checker): N виправлень (техвставки: X, формат: Y, термінологія: Z), спірних: W."
+> "Гейт якості (checker): N виправлень (техвставки: X, формат: Y, термінологія: Z[, футер: F — only when F > 0]), спірних: W."
+
+## Gate 4 — Judgment footer (since v3.5.0)
+
+The defect: an artifact that does not say what it serves and what comes next is read at the wrong altitude — a leader reads a delivery slice as strategy, an IC reads a bet as a commitment. Gate 4 grows in three parts; each part is checked only from the version that implements it (`pm-mental-model.md` §5 — a principle acts only through a step that implements it).
+
+| Part | Checks | From |
+|------|--------|------|
+| **4a — Altitude line** | Only where `template-protocol.md` T-5 step 3a places the line (never on a Jira task body or a task batch, an Analyze & Improve document, a 1-1, a prototype or handoff, a deck for an external audience (outline companion only), a Q&A reply, a search-result list, a quick summary or escape-hatch notes, or a return payload — there 4a is `n/a`): the delivered Product-contour artifact ends with exactly one `Altitude: L1–L4 · ↑ serves: … · ↓ next: …` line, placed per `template-protocol.md` T-5 step 3a (last content before the template marker; closing slide for decks; epic and report for task-creator). `serves` names a product or direction goal, OKR, intent, or parent initiative / epic that the request or the sources explicitly link, or says `— (no linked goal)` — never invented, never a person's goal; `next` is a product or delivery step or `— (no product step)`. (The `Hat: … (profile: …)` line of a hat run is shown in the chat only and is not part of Gate 4a.) | v3.5.0 |
+| **4c — Confidence and falsifier** | Recommendations and verdicts carry a confidence, the assumption they are most sensitive to, and what would change them. | v3.7.0 |
+| **4b — Evidence labels** | Numbers and quotes carry an evidence class; `simulated` and `assumed` inputs are visible. | v3.8.0 |
+
+Two tiers of execution:
+
+1. **Self-check at T-5 — every Product-contour skill.** Before presenting, the skill confirms the footer and fixes a missing or malformed line silently. Skills that already print a gate report line count it there (`футер: F`, shown only when F > 0); skills without one print nothing new. This is the whole Gate 4 for skills without a maker–checker step (for example product-analysis, cjm-research, product-research).
+2. **Checker — where maker–checker already runs** (requirements-creator Step 4.5, write-concept 4.5, task-creator "Batch quality gate before creation", meeting-processor only when its opt-in gate runs). The **form** lens adds Gate 4a — the maker passes `artifact_type` and mode in the checker input, and the checker reports `4a: n/a` wherever step 3a places no line; from v3.8.0 the **groundedness** lens adds 4b. There is no third lens.
+
+People-contour artifacts are out of scope for Gate 4.
 
 ## Execution model: maker–checker
 
@@ -100,14 +117,14 @@ Resolution order when the named agent is not available in the session: (1) `grow
 
 ### Checker input — and nothing else
 
-The checker receives ONLY: (1) the draft artifact, (2) the list of sources (user statements from the brief, concept, tickets, documents — as content or links), (3) the gate checklists. The checker must NOT see the maker's reasoning or the conversation history — otherwise it inherits the very biases it is meant to catch.
+The checker receives ONLY: (1) the draft artifact with its `artifact_type` (and, since v3.5.0, `mode` — for Gate 4a applicability), (2) the list of sources (user statements from the brief, concept, tickets, documents — as content or links), (3) the gate checklists. The checker must NOT see the maker's reasoning or the conversation history — otherwise it inherits the very biases it is meant to catch.
 
 ### Checker output
 
 A structured findings list — the checker **reports, it does not rewrite** (two authors would drift the style and structure):
 
 ```
-{ gate: 1|2, location: "section / row / task field", finding: "what violates the gate",
+{ gate: 1|2|3|4, location: "section / row / task field", finding: "what violates the gate",
   severity: critical|minor, proposed_fix: "one-line suggestion" }
 ```
 
@@ -127,7 +144,7 @@ maker → checker → maker applies fixes → **one** re-check pass by the check
 
 For artifacts about to be **published** (Confluence page) or **materialized** (Jira issues), use **two checkers with distinct lenses** instead of one:
 
-- **(a) Form lens** — Gate 2 + template-structure conformance;
+- **(a) Form lens** — Gate 2 + template-structure conformance + Gate 4a (since v3.5.0);
 - **(b) Groundedness/language lens** — Gate 1 + spot-checking claims against the sources + Gate 3 lint findings (terminology and style).
 
 Two identical checkers add almost nothing over one; distinct perspectives catch distinct failure classes.
@@ -156,7 +173,7 @@ Gate 3 reads its own keys (`lint_mode`, `style_preamble`) from the **Terminology
 
 One line, attached to the draft presentation:
 
-> "Гейт якості (checker): N виправлень (техвставки: X, формат: Y), спірних: Z."
+> "Гейт якості (checker): N виправлень (техвставки: X, формат: Y[, термінологія: Z][, футер: F — only when F > 0]), спірних: W."
 
 With the inline fallback, append the reduced-independence marker.
 

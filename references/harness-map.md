@@ -6,7 +6,7 @@
 
 | Layer | What it is (paper) | Where it lives here |
 |-------|--------------------|---------------------|
-| **Instructions / rules** | Who the agent is, what it must/mustn't do | Skill cores (`skills/*/SKILL.md`, thin ≤400 lines — validator check 15), the judgment contract every skill reads at Step 0j (`pm-mental-model.md`, since v3.4.0), shared protocols (`planning-core.md`, `cjm-protocol.md`, `focus-*.md`), `local-context.md` (org/product rules) |
+| **Instructions / rules** | Who the agent is, what it must/mustn't do | Skill cores (`skills/*/SKILL.md`, thin ≤400 lines — validator check 15), the judgment contract every skill reads at Step 0j (`pm-mental-model.md`, since v3.4.0), the role layer resolved at Step 0i (`role-profiles.md`, since v3.5.0), shared protocols (`planning-core.md`, `cjm-protocol.md`, `focus-*.md`), `local-context.md` (org/product rules) |
 | **Tools** | Functions/MCP/APIs + prose on when to call them | `integration-strategy.md` (MCP → Registry → Browser fallback), `jira-data-protocol.md`, Tableau/Atlassian/Figma/Fireflies/GWorkspace MCPs |
 | **Sandboxes / execution** | Where code runs, what it can reach | Cowork Linux sandbox (bash), `~/.grow-pm/` persistent store, `~/.grow-pm-sandbox/` (dry-run onboarding), Vault mirror |
 | **Orchestration** | Sub-agent spawning, routing, hand-offs | `subagent-delegation.md`, skill-to-skill chaining (focus-advisor → executors; cjm-research → brainstorm-features), description collision groups |
@@ -21,7 +21,7 @@ Context engineering means balancing which of six context types the agent holds u
 
 | Context type | Definition | Covered by | Status |
 |--------------|------------|-----------|--------|
-| **Instructions** | Core role, goals, boundaries | Skill cores, `pm-mental-model.md` (who the user is + ten principles), `planning-core.md`, `cjm-protocol.md`, `focus-*.md`, `local-context.md` | ✅ strong |
+| **Instructions** | Core role, goals, boundaries | Skill cores, `pm-mental-model.md` (who the user is + ten principles), `role-profiles.md` (eight roles as defaults, altitude L1–L4), `planning-core.md`, `cjm-protocol.md`, `focus-*.md`, `local-context.md` | ✅ strong |
 | **Knowledge** | Retrieved docs, domain data | `knowledge-library`, `local-context.md` product data, `funnel-templates.md`, Confluence/Tableau via MCP | ✅ good |
 | **Memory** | Session + persistent project state | `vault-protocol.md`, `persistent-storage.md`, `~/.grow-pm/`, experiments `registry.yaml`, `focus/` | ✅ strong |
 | **Examples** | Few-shot demonstrations, reference patterns | `templates/built-in/` (structure only); **golden artifacts largely absent** | ⚠️ **thin — fill for heavy skills** |

@@ -1,6 +1,6 @@
 ---
 name: quarterly-planning
-version: 0.4.0
+version: 0.5.0
 description: One-quarter roadmap, capacity stress-test and plan-vs-actual retro. Not multi-quarter (project-planning), not structure/labels (roadmap-architect), not a sprint (sprint-planning). UA — «зібери roadmap на квартал», «plan-vs-actual», «чи реалістичний план на Q3», «що команда встигне». EN — "build a quarterly roadmap", "quarterly planning", "plan-vs-actual for the quarter", "quarter retro", "plan capacity", "what the team can deliver". Also UA — «retro кварталу», «capacity плану». Scope = exactly one quarter.
 ---
 
@@ -28,6 +28,8 @@ Planning section of local-context: team roster + capacity rules, sprints (cadenc
 
 ## Step T — Template Resolution
 Per `references/template-protocol.md`: `artifact_type: roadmap`, `subtype: quarterly | retro`, `product_id`, `language`. Fallback → structure from `roadmap-artifacts.md`.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
 
 ## Modes
 
@@ -77,7 +79,7 @@ Per `roadmap-artifacts.md`: (1) **Confluence roadmap** (focuses + Gantt + tree, 
 **Optional — quarterly board / stakeholder readout.** When the quarter is being reported up (not just planned), offer to frame the retro + plan as a **board-prep package** per `references/session-board.md`: previous-board follow-up statuses (GTD ≥ 80%), plan-vs-actual with causes, goal statuses & forecasts (SMARTCBP + 3T5F), AI/cost-savings table (ROAIP), the direction's health metrics/funnel, and worked-through questions for approval. This reuses the retro (Step 2) data — no new fetch.
 
 ### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.4.0", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.5.0", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Integration with product-reporter
 - Quarter actuals ← `quarter-review` (don't rewrite the fetch).

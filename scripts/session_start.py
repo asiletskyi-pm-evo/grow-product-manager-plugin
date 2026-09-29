@@ -9,7 +9,7 @@ Also exports GROW_PM_CONTEXT_PATH for later Bash calls via CLAUDE_ENV_FILE.
 Design rules (see references/harness-map.md → hooks):
 - Fail open. Any exception → exit 0, no output. A hook must never block a session.
 - Header only. The digest carries paths, versions, names and flags — never
-  URLs, ids, emails or tokens. Skills still parse the file themselves (0c–0h) and run 0j.
+  URLs, ids, emails or tokens. Skills still parse the file themselves (0c–0j).
 - Environment-agnostic. The user's home is a sandbox in hosted sessions; the
   context arrives through a connected folder mounted under $HOME/mnt/<name>/.
 """
@@ -20,6 +20,8 @@ import re
 import sys
 
 MAX_LINES = 25
+ROLE_ENUM = {"pm", "head_of_product", "cpo", "product_designer", "product_analyst",
+             "ux_researcher", "eng_lead", "business_owner", "other"}  # == references/role-profiles.md §2
 
 
 def read_stdin():
@@ -81,6 +83,14 @@ def parse(path):
     facts["language"] = m.group(1) if m else "unknown"
     m = re.search(r"^- \*\*Mode:\*\*\s*(basic|extended)\b", text, re.M)
     facts["onboarding_mode"] = m.group(1) if m else "unknown"
+    # Role layer (v3.5.0): print only what the file says — the enum value, "legacy"
+    # for a free-text role written before v3.5.0, or "absent". Never the free-text
+    # label (it may carry an org name); Step 0i derives level_home when missing.
+    m = re.search(r"^- \*\*Role:\*\*[ \t]*([^\n]*)$", text, re.M)
+    raw = re.sub(r"<!--.*?-->", "", m.group(1)).strip() if m else ""
+    facts["role"] = raw if raw in ROLE_ENUM else ("legacy" if raw else "absent")
+    m = re.search(r"^- \*\*Level home:\*\*\s*(L[1-4])\b", text, re.M)
+    facts["level_home"] = m.group(1) if m else "derived at Step 0i"
     facts["products"] = re.findall(r"^### Product:\s*(.+?)\s*$", text, re.M)
     facts["teams"] = re.findall(r"^### Team:\s*(.+?)\s*$", text, re.M)
     # deferred steps: indented bullets right after the marker line
@@ -88,6 +98,10 @@ def parse(path):
     m = re.search(r"^- \*\*Deferred steps:\*\*\s*\n((?:\s+- .+\n?)*)", text, re.M)
     if m:
         deferred = re.findall(r"^\s+- (\S+)", m.group(1), re.M)
+    if not deferred:  # the onboarding skeleton may write an inline comma list
+        m = re.search(r"^- \*\*Deferred steps:\*\*[ \t]*([^\n\[]+)$", text, re.M)
+        if m:
+            deferred = [s.strip() for s in m.group(1).split(",") if s.strip()]
     facts["deferred_steps"] = deferred
     vault = re.search(r"^## Obsidian Vaults", text, re.M) and re.search(r"^\s*-\s*path:\s*\S+", text, re.M)
     facts["vault_section"] = bool(vault)
@@ -103,6 +117,7 @@ def digest(path, facts, searched, version):
         "  configurator version: %s | updated: %s | onboarding mode: %s | user.language: %s"
         % (facts["configurator_version"], facts["updated"], facts["onboarding_mode"], facts["language"]),
     ]
+    lines.append("  user.role: %s | level_home: %s" % (facts["role"], facts["level_home"]))
     if facts["products"]:
         lines.append("  products (%d): %s" % (len(facts["products"]), "; ".join(facts["products"][:8])))
     else:
@@ -118,8 +133,8 @@ def digest(path, facts, searched, version):
         lines.append("  deferred onboarding steps: %s" % ", ".join(facts["deferred_steps"][:10]))
     lines.append(
         "Skills: take this path for Step 0a of references/local-context-protocol.md and skip the "
-        "location search; still parse the file for 0c–0h (product selection, required fields, vault "
-        "level) and run 0j. Env GROW_PM_CONTEXT_PATH is set for Bash."
+        "location search; still parse the file for 0c–0j (product selection, required fields, vault "
+        "level, role, judgment contract). Env GROW_PM_CONTEXT_PATH is set for Bash."
     )
     return "\n".join(lines[:MAX_LINES])
 

@@ -75,7 +75,7 @@ Light Handlebars-style syntax, Obsidian-friendly:
 | Variable | `{{feature_name}}` | Substitute variable |
 | Conditional | `{{#if has_baseline}} … {{/if}}` | Render only if truthy |
 | Loop | `{{#each success_metrics}} - {{this}} {{/each}}` | Iterate over list |
-| Partial | `{{> success-metrics-block}}` | Include partial from `_partials/` |
+| Partial | `{{> success-metrics-block}}` | Include a partial: `{storage_root}/Templates/_partials/{name}.md` first, then the built-in `builtin://partial/{name}-v1.md` (since v3.5.0) |
 | Lang block (HTML) | `<!-- lang:uk --> … <!-- /lang:uk -->` | Multilingual body block |
 | Lang block (fenced) | `::: lang uk` … `:::` | Alt syntax, also supported |
 
@@ -167,9 +167,10 @@ Optional variables may be pre-populated or left unset.
 
 1. Substitute variables in the body.
 2. Resolve the language block (match `request.language` → else `default_language` → else first available, with warning).
-3. Expand `{{#if}}`, `{{#each}}`, `{{> partial}}`.
+3. Expand `{{#if}}`, `{{#each}}`, `{{> partial}}` (user `_partials/` first, then `builtin://partial/`).
+3a. **Judgment footer (since v3.5.0).** When `artifact_type` belongs to the Product contour (the enum above; not `partial`), close the body with the judgment footer: a user override `_partials/judgment-footer.md` if present, else `builtin://partial/judgment-footer-v1.md`. Its variables are **derived by the skill, never asked** (T-4 does not apply to the footer): `altitude` from Step 0i step 5 (`local-context-protocol.md`); `serves` = a product or direction goal, OKR, strategic intent, or the parent initiative / epic that the request or the artifact's sources explicitly link — never a person's goal or profile (People-contour data stays local), and the OKR list in `local-context.md` alone is not a link; `— (no linked goal)` otherwise; `next` from the step the skill proposes — a product or delivery step, never a People-contour action about a person; `— (no product step)` when there is none. The footer is the last content before the step-5 marker. It goes on the artifact the skill delivers, wherever it is kept (chat, file, vault, Confluence) and also when no template applied — but not on answers that are not the skill's artifact (a Q&A reply, a search-result list, a quick summary or escape-hatch notes, a clarifying reply) and not on a return payload to a calling skill (the caller's artifact carries it). Placement exceptions: a `presentation` puts it on the closing slide, or in the speaker notes of the last slide — for an external audience (customer, partner, external users, social media) only in the vault / outline companion, never on a slide or in speaker notes; `task-creator` puts it on the epic only when this run creates the epic (T-B) — an existing epic is never edited to add it — and on its Step 11 report, never on each task. People-contour artifacts carry no footer.
 4. Write the rendered artifact via `references/vault-protocol.md` to the vault (if configured) or to workspace.
-5. Append `<!-- template: {template_id} version: {version} -->` at the end.
+5. Append `<!-- template: {template_id} version: {version} -->` at the end — after the judgment footer, so the order is always body → footer → marker.
 6. Increment `usage_count` and update `last_used` in the registry.
 7. Append one line to `Templates/_System/usage.log`:
    `[2026-04-17T12:34:56Z] {template_id} → {output_path}`
@@ -203,7 +204,7 @@ Skills MUST NOT reimplement template search logic. All ranking / ask / render lo
 ## Edge cases
 
 - **Duplicate `template_id`.** Registry MUST NOT contain duplicates. `template-library: validate` detects and prompts for rename or archive.
-- **Missing partial.** Replaced by `<!-- partial {name} not found -->`, logged as a warning, rendering continues.
+- **Missing partial.** Looked up in the user `_partials/` and then as `builtin://partial/{name}-v1.md`; if neither exists it is replaced by `<!-- partial {name} not found -->`, logged as a warning, rendering continues.
 - **`min_plugin_version` > current.** Hidden from resolution. `template-library: list` marks it with a warning.
 - **Language missing in selected template.** Fall back to `default_language`, warn the user.
 - **Registry schema version older than current plugin.** `template-library: rebuild-registry` is invoked; migration adds new fields with defaults.

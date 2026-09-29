@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.12.0
+version: 0.13.0
 description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ». A concept is the input to requirements-creator.
 ---
 
@@ -92,6 +92,8 @@ If the user explicitly says "do not use a template" → skip Step T and use the 
 If no template applies → fall back to the built-in `concept-builtin-default` template; if that's also missing, use the skill's internal structure.
 
 The resolved template may reshape the sections and questions of the workflow below. Variables from the template take precedence over the generic discovery questions for overlapping fields.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
 
 ## Workflow
 
@@ -292,7 +294,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.12.0",
+     skill_version: "0.13.0",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],

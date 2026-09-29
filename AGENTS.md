@@ -29,7 +29,7 @@ A bare `references/<file>.md` in a skill means the **shared** folder at the plug
 Hosts differ in what they can do. Branch on an **observed capability**, never on a brand name:
 
 1. Look at the tool list actually available in this session.
-2. Mark five capabilities present or absent: **FS** (a filesystem the user's data survives in), **SHELL** (running commands), **SUBAGENT** (spawning an independent agent), **MCP** (connector tools), **HOOKS** (host-side gates).
+2. Mark six capabilities present or absent: **FS** (a filesystem the user's data survives in), **SHELL** (running commands), **SUBAGENT** (spawning an independent agent), **MCP** (connector tools), **HOOKS** (host-side gates), **APP-DRIVE** (a tool that can observe and act on a running product).
 3. Carry that mark for the whole run; do not re-derive it per step.
 
 Then resolve the contours that depend on it — storage mode, delegation level, quality-gate mode. The full protocol, the degradation matrix and the contours that have no meaningful degraded mode are in **`references/host-profiles.md`**. Read it before deciding anything about storage, subagents or scripts.
