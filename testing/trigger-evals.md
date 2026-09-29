@@ -180,7 +180,7 @@ Commands in `commands/` carry `disable-model-invocation: true`; the model must n
 | L6 | перевір термінологію в цьому тексті | knowledge-library — NOT `glossary-lint` command |
 | L7 | what is the plugin status | plugin-configurator (Validate) — NOT `status` command |
 | L8 | /grow-product-manager:status | `status` command (explicit invocation — the only way in) |
-| L9 | вимкни підтвердження перед записом у Confluence | conversation → point to `/grow-product-manager:setup --write-gate off` — NOT the `setup` command itself (added v2.6.0) |
+| L9 | вимкни підтвердження перед записом у Confluence | plugin-configurator or none (conversation) → point to `/grow-product-manager:setup --write-gate off` — NOT the `setup` command itself (added v2.6.0; plugin-configurator accepted since v3.5.0, when it learned to explain the command) |
 
 ### Group M — Flow walkthrough vs neighbours (added 2026-09-10, v3.1.0)
 
@@ -227,6 +227,27 @@ Collisions: product-landscape vs product-research (a single competitive report) 
 | O7 | пройди флоу відгуку в застосунку | flow-walkthrough |
 | O8 | налаштуй карту конкурентів | plugin-configurator |
 
+### Group R — Roles and hats (added 2026-09-28, v3.5.0)
+
+Collisions: a hat or a role word must never move routing — the skill is chosen by the task, and the hat only changes that run's defaults (`references/role-profiles.md` §4; hat parsing is verified in TC-role-350-hat, not here). «змінити роль» / "set role" belongs to plugin-configurator, not to the typed `/config` or `/setup` commands. Designer-hat phrases about a live flow must not drift to design-bridge. Artifact-dependent rows (QBR, design brief, research plan, strategy-memo pair) join this group in v3.6.0, when their templates ship.
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| R1 | подивись як CPO: чи реалістичний план на квартал | quarterly-planning (hat: cpo) |
+| R2 | as an analyst, check this A/B test readout | product-analysis (hat: product_analyst) |
+| R3 | очима дизайнера пройди флоу оформлення замовлення в застосунку | flow-walkthrough (hat: product_designer) |
+| R4 | wear the business owner hat and review last quarter's results | product-reporter (hat: business_owner) |
+| R5 | як техлід, розбий ці вимоги на задачі | task-creator (hat: eng_lead) |
+| R6 | як дослідник, синтезуй ці інтерв'ю | product-research (hat: ux_researcher) |
+| R7 | змінити роль | plugin-configurator |
+| R8 | яка моя роль у плагіні | plugin-configurator |
+| R9 | set my role to head of product | plugin-configurator |
+| R10 | I'm a CPO — what should I focus on this quarter | focus-advisor |
+| R11 | як head of product, постав OKR команді на квартал | goal-setter (hat: head_of_product) |
+| R12 | as a designer, write the concept for saved searches | write-concept (hat: product_designer) |
+| R13 | подивись на цей макет у Figma очима дизайнера | design-bridge |
+| R14 | як аналітик, знайди аномалії у воронці CJM | cjm-research (hat: product_analyst) |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -241,6 +262,7 @@ Collisions: product-landscape vs product-research (a single competitive report) 
 | 2026-09-11 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, Group N, 8 phrases), pre-release v3.2.0 | N 7/8 → **8/8** after one description fix | N4 «налаштуй тестові акаунти продавця і покупця» → flow-walkthrough on run 1 (its description mentioned test accounts, the configurator's did not name them). Fix: «додай/налаштуй тестові акаунти» added to plugin-configurator's UA keywords and a guard «declaring the accounts is plugin-configurator» to flow-walkthrough; re-run N1–N4 → 4/4. Also: host-smoke now counts the skill names the model lists (self-reported counts were 29/32/27 for 30 skills). |
 | 2026-09-11 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, Group O, 8 phrases), pre-release v3.3.0 | O 7/8 → **8/8** after one fix | O8 «налаштуй карту конкурентів» → product-landscape on run 1 (its description opened with «карта конкурентів»). Fix: guard «setup of consent and category is plugin-configurator» in the description and a hand-over line in Step 1; re-run O1–O4 + O8 → 5/5. |
 | 2026-09-25 | 2 independent agent runs (descriptions-only simulation over the 31 skill + 5 command descriptions), pre-release v3.4.0 | A 100 / B 100 / C 100 / D 100 / E 100 / F 100 / G 100 / H 100 / I 100 / J 100 / K 100 / L 100 / M 100 / N 100 / O 100 (both runs) | None. v3.4.0 changes no `description` (only the `version` field of every skill), so no live pass is required by the DoD; the simulation confirms the thin-core moves and the Step 0j block left routing untouched. |
+| 2026-09-28 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, current default model), pre-release v3.5.0 — all 140 phrases once, then Groups K, L, N, O, R three times each (majority of 3) | A 8/8 · B 9/9 · C 9/9 · D 4/4 · E 5/5 · F 4/4 · G 10/10 · H 14/14 · I 8/8 · J 9/9 · K 13/13 · L 9/9 · M 8/8 · **N 7/8** · O 8/8 · **R 13/14** | **N8** «перевір мою специфікацію тестових акаунтів» → plugin-configurator 3/3 — reproduced on v3.4.0 `main` (3/3), so pre-existing drift, not a v3.5.0 regression; a description guard in plugin-configurator did not move it and was reverted; open for a follow-up. **R4** "wear the business owner hat and review last quarter's results" → 1/3, while the same task without the idiom and the «як власник бізнесу, …» / "as a business owner, …" forms route 3/3 — the "wear the … hat" idiom disturbs routing; role-profiles §4 now recommends the "as a …" form (no hat phrases in descriptions, by design). **R1** reworded (the first draft «подивись на цей roadmap як CPO» had no task and routed to none on `main` too). **L9** label widened: plugin-configurator now explains `/grow-product-manager:setup --write-gate off`, so routing there is correct. **J6**, **L8** = scorer artefacts (J6 → write-concept; L8 → none is the accepted Claude answer since 2026-09-08). |
 | (fill after each run) | | | |
 
 ## Maintenance

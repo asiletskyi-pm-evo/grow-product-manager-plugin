@@ -110,6 +110,11 @@ Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input br
 | 2026-09-25 | v3.4.0 | cjm-research | 0.86 ✅ | 0.86 ✅ | same | identical scores after Step 3.5 became a pointer table (threshold 0.85) |
 | 2026-09-25 | v3.4.0 | meeting-processor | 0.88 ✅ | 1.00 ✅ | same | first run of the new fixture + gold; `action_items_with_owner` 1 → 2, run variance |
 | 2026-09-25 | v3.4.0 | task-creator | 1.00 ✅ | 1.00 ✅ | same | first run of the new fixture + gold |
+| 2026-09-28 | v3.5.0 | write-concept | — | 1.00 ✅ | maker on the branch + LM judge | altitude line (Gate 4a) present and correct |
+| 2026-09-28 | v3.5.0 | requirements-creator | — | 1.00 ✅ | same | altitude line present and correct |
+| 2026-09-28 | v3.5.0 | cjm-research | — | 0.86 ✅ | same | threshold 0.85; altitude line present and correct |
+| 2026-09-28 | v3.5.0 | meeting-processor | — | 1.00 ✅ | same | altitude line present and correct |
+| 2026-09-28 | v3.5.0 | task-creator | — | 1.00 ✅ | same | altitude line on the report only, not on tasks |
 
 ## Coverage status (rubrics/fixtures as of v3.4.0)
 

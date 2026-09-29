@@ -4,9 +4,12 @@
 Usage: python3 skill_lint.py [PLUGIN_ROOT]   (default: cwd)
 FAIL = release blocker; WARN = take note.
 
-Every check below exists because the defect class it catches actually shipped.
+Checks 1-18 exist because the defect class each one catches actually shipped.
 The 2026-07-14 audit found 5 critical + 14 major defects that the previous
 linter passed green; each is now a named check (see CHECKS below).
+Checks 19-22 are the exception, and say so: they are preventive guards for the
+role layer (JCRL v3.5.0, references/role-profiles.md), written before any defect
+of their class could ship. Each one still has a seed in seeded_leak_test.py.
 
 Stdlib-only by design (runs in CI without pip install). PyYAML is used for an
 extra strict parse when available, but the hazard scan does not depend on it.
@@ -32,6 +35,10 @@ CHECKS = """
 16. org-signature        a team/org name cited as the authority behind a rule or example
 17. example-locale       non-Latin examples, or an output language hardcoded in a doc
 18. example-keys         example issue/space keys outside the placeholder vocabulary
+19. role-branching       a SKILL.md branching on a role name, or reading an unknown role_defaults field
+20. persona-prompt       "You are a <product role>" / «Ти — <роль>» handed to the model as an identity
+21. judgment-footer      a Product-contour Step T skill that never cites partial/judgment-footer
+22. role-enum            role-profiles.md user.role enum == context-schema.md role enum
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -793,17 +800,23 @@ for tp in sorted(glob.glob(os.path.join(root, "templates", "built-in", "**", "*.
 # Step T declares an artifact_type; template-protocol.md enumerates the legal set.
 # roadmap / meeting-notes / focus / delegation-audit were declared by skills but
 # absent from the enum, so template-library's wizard could not create them.
+# The declaration parser is shared with check 21 (judgment-footer), so the two
+# checks can never disagree about which types a skill declares.
+DECLARED_TYPE_RE = re.compile(r"`?artifact_type`?:\s*`?([a-z0-9-]+)`?")
+def declared_artifact_types(text):
+    """(type, offset) for every Step T artifact_type a SKILL.md declares."""
+    return [(m.group(1), m.start()) for m in DECLARED_TYPE_RE.finditer(text)
+            if m.group(1) not in ("from", "the", "inferred")]
+
 if not ARTIFACT_ENUM:
     warn("artifact-types", "template-protocol.md: could not locate the artifact_type enum block")
 else:
     for sf in skill_files:
         folder = os.path.basename(os.path.dirname(sf))
         text = open(sf, encoding="utf-8").read()
-        for m3 in re.finditer(r"`?artifact_type`?:\s*`?([a-z0-9-]+)`?", text):
-            t = m3.group(1)
-            if t in ("from", "the", "inferred"): continue
+        for t, pos in declared_artifact_types(text):
             if t not in ARTIFACT_ENUM:
-                line = text[:m3.start()].count("\n") + 1
+                line = text[:pos].count("\n") + 1
                 fail("artifact-types", f"{folder}:{line}: artifact_type '{t}' is not in the template-protocol enum")
 
 # ---------------------------------------------------- 13. chain contracts
@@ -831,6 +844,185 @@ for target, text in skill_text.items():
                 fail("chain-contracts",
                      f"{target}: claims '← {source}', but {source} never mentions {target} and "
                      f"{target} never calls {source} — wire the edge or drop the claim")
+
+# ============================================================ role layer (19-22)
+# JCRL v3.5.0 adds a role layer: `references/role-profiles.md`. Unlike 1-18 these
+# checks are PREVENTIVE — no defect of their class has shipped. They guard the
+# layer's promises before the first skill can break them: a role changes
+# defaults, never capabilities (19, 21, 22), and a role is never a persona (20).
+ROLE_PROFILES = os.path.join(root, "references", "role-profiles.md")
+CONTEXT_SCHEMA = os.path.join(root, "skills", "plugin-configurator", "references", "context-schema.md")
+_rp_text = open(ROLE_PROFILES, encoding="utf-8").read() if os.path.isfile(ROLE_PROFILES) else ""
+RP_REL = os.path.relpath(ROLE_PROFILES, root)
+CS_REL = os.path.relpath(CONTEXT_SCHEMA, root)
+
+def enum_line(text, prefix_re):
+    """(line_no, [values]) for the first line that starts with `prefix_re`.
+
+    The values are the first run of backticked tokens joined by `·` (or , | /)
+    after the prefix — not every backticked token on the line, because the line
+    goes on with a note ("free text kept in `user.role_label`, treated as `pm`")
+    whose tokens are not enum members."""
+    for i, line in enumerate(text.split("\n"), 1):
+        m = re.match(rf"^\s*(?:[-*]\s+)?{prefix_re}(.*)$", line)
+        if m:
+            run = re.search(r"`[a-z0-9_]+`(?:\s*[·,|/]\s*`[a-z0-9_]+`)*", m.group(1))
+            return i, (re.findall(r"`([a-z0-9_]+)`", run.group(0)) if run else [])
+    return None, []
+
+RP_ENUM_LINE, RP_ENUM = enum_line(_rp_text, r"`user\.role` enum:")
+ROLE_ENUM = set(RP_ENUM)
+
+# ---------------------------------------------------- 19. role branching
+# role-profiles §6: "never branch on the role name in a SKILL.md — branch on
+# `role_defaults.*` fields". A skill that says `if role == cpo` has turned a
+# default into a capability gate, and every new role silently falls through it.
+# Bare role nouns in prose ("people skills for a head of product") are fine;
+# conditional syntax on a role NAME is not.
+#
+# The legal field names are parsed from role-profiles §5 step 2 — the one place
+# that lists them — so this list cannot drift from the protocol.
+ROLE_FIELDS = set()
+_s5 = re.search(r"^## 5\..*?(?=^## |\Z)", _rp_text, re.S | re.M)
+if _s5:
+    _st2 = re.search(r"^2\.\s.*?(?=^\d+\.\s|\Z)", _s5.group(0), re.S | re.M)
+    if _st2:
+        for _tok in re.findall(r"`([^`]+)`", _st2.group(0)):
+            _mm = re.match(r"[a-z_][a-z0-9_]*", _tok)       # template_defaults{…} -> template_defaults
+            if _mm: ROLE_FIELDS.add(_mm.group(0))
+ROLE_FIELDS.discard("role_defaults")                        # the object itself, not a field
+if not ROLE_FIELDS:
+    fail("role-branching", f"{RP_REL}: §5 step 2 lists no backticked `role_defaults` fields — "
+                           f"the allowed set cannot be derived, so the check cannot run")
+
+# Role names: every enum value in its snake / spaced / hyphenated spelling, plus
+# the common English titles. `other` is left out — it is an ordinary word.
+_names = {"product manager", "chief product officer", "designer", "analyst",
+          "researcher", "engineering lead", "tech lead"}
+for _v in ROLE_ENUM - {"other"}:
+    _names |= {_v, _v.replace("_", " "), _v.replace("_", "-")}
+ROLE_ALT = "|".join(r"\s+".join(re.escape(w) for w in n.split())
+                    for n in sorted(_names, key=len, reverse=True))
+_Q = r"[`\"'*]*"
+ROLE_BRANCH_RULES = [
+    (re.compile(r"\b(?:user\.|role_defaults\.)?(?:role|hat)\s*(?:===?|!==?)", re.I),
+     "compares the role by name"),
+    (re.compile(r"\b(?:user\.|role_defaults\.)?role\s+(?:not\s+)?in\s*[\[({]", re.I),
+     "tests the role against a list of names"),
+    (re.compile(r"\b(?:if|when|unless|while)\s+(?:the\s+)?(?:user['’]s|user\.|your|their)\s+role\s+"
+                r"(?:is|isn['’]t|equals|matches)\b"
+                r"(?!\s+(?:missing|absent|unknown|unset|empty|undefined|resolved|not\s+(?:set|in)\b))", re.I),
+     "branches on the user's role"),
+    (re.compile(rf"\b(?:if|when|unless|while)\s+(?:the\s+)?role\s+(?:is|isn['’]t|equals|=)\s+"
+                rf"(?:not\s+)?(?:an?\s+|the\s+)?{_Q}(?:{ROLE_ALT})\b", re.I),
+     "branches on a role name"),
+    (re.compile(rf"\b(?:if|when|unless)\s+(?:the\s+user\s+is|you\s+are)\s+(?:not\s+)?"
+                rf"(?:an?\s+|the\s+)?{_Q}(?:{ROLE_ALT})\b", re.I),
+     "branches on who the user is"),
+]
+ROLE_FIELD_RE = re.compile(r"\brole_defaults\.([A-Za-z_][A-Za-z0-9_]*)")
+for sf in skill_files:
+    rel_name = os.path.relpath(sf, root)
+    for i, line in enumerate(open(sf, encoding="utf-8").read().split("\n"), 1):
+        for rx, why in ROLE_BRANCH_RULES:
+            m = rx.search(line)
+            if m:
+                fail("role-branching", f"{rel_name}:{i}: {why} ('{m.group(0).strip()}') — branch on a "
+                                       f"`role_defaults.*` field, never on the role name (role-profiles §6)")
+                break
+        if ROLE_FIELDS:
+            for m in ROLE_FIELD_RE.finditer(line):
+                if m.group(1) not in ROLE_FIELDS:
+                    fail("role-branching", f"{rel_name}:{i}: `role_defaults.{m.group(1)}` is not a field — "
+                                           f"role-profiles §5 step 2 lists {sorted(ROLE_FIELDS)}")
+
+# ---------------------------------------------------- 20. persona prompt
+# role-profiles §0: a role is never injected as a persona prompt — persona
+# prompting does not improve quality and shifts judgment unpredictably; altitude
+# + evidence + template do the work. So no shipped prose may hand the model a
+# PRODUCT ROLE identity. Functional identities stay legal ("You are the
+# **checker**", "You are an **extractor**", "You are one voice…"), and so does the
+# debate card's `You are {role}.` — `{role}` is a placeholder, not a role name,
+# and only literal role names match, so it is exempt by construction.
+_ADJ = r"(?:(?:senior|junior|lead|staff|principal|experienced|seasoned|expert|veteran|world-class)\s+)*"
+_PERSONA_EN = (r"cpo|chief\s+product\s+officer|head[\s_-]+of[\s_-]+product|product[\s_-]+manager|pm|"
+               r"product[\s_-]+designer|product[\s_-]+analyst|ux[\s_-]+researcher|"
+               r"engineering[\s_-]+lead|eng[\s_-]+lead|tech[\s_-]+lead|business[\s_-]+owner")
+_PERSONA_UA = (r"продакт[\s-]*менеджер\w*|керівни\w*\s+продукту|дизайнер\w*|аналітик\w*|"
+               r"дослідни\w*|техлід\w*|власни\w*\s+бізнесу")
+PERSONA_RULES = [
+    re.compile(rf"\byou(?:\s+are|['’]re)\s+(?:now\s+)?(?:a\s+|an\s+|the\s+)?[`*_\"]*{_ADJ}"
+               rf"(?:{_PERSONA_EN})\b(?!['’-]\w)", re.I),
+    re.compile(rf"(?<!\w)(?:ти|ви)\s*(?:[—–-]\s*)?(?:[^\W\d_]+(?:ий|ій|а)\s+){{0,2}}[`*_\"]*"
+               rf"(?:{_PERSONA_UA})", re.I),
+]
+# Two shapes are not an identity handed to the model. A quoted counter-example on
+# a line that forbids it is a citation — role-profiles §0: never injected as a
+# persona prompt ("You are a CPO…"). And "if you are a PM" is a condition, not an
+# assignment (inside a SKILL.md, check 19 already rejects it as a role branch).
+_QUOTE_OPEN = "\"“«'`"
+_PROHIBITION = re.compile(r"\b(?:never|not|avoid|don['’]t|do\s+not|instead\s+of|anti-pattern)\b|"
+                          r"(?<!\w)(?:ніколи|не)(?!\w)", re.I)
+_CONDITION = re.compile(r"(?:\b(?:if|when|whenever|unless|whether)|(?<!\w)(?:якщо|коли))\s*$", re.I)
+def _cited(line, m):
+    j = m.start() - 1
+    if j >= 0 and line[j] in _QUOTE_OPEN and _PROHIBITION.search(line):
+        return True
+    return bool(_CONDITION.search(line[:m.start()]))
+
+persona_targets = sorted(glob.glob(os.path.join(root, "skills", "**", "*.md"), recursive=True) +
+                         glob.glob(os.path.join(root, "references", "**", "*.md"), recursive=True) +
+                         glob.glob(os.path.join(root, "agents", "*.md")) +
+                         glob.glob(os.path.join(root, ".codex", "agents", "*.toml")))
+for f in persona_targets:
+    rel_name = os.path.relpath(f, root)
+    for i, line in enumerate(open(f, encoding="utf-8").read().split("\n"), 1):
+        for rx in PERSONA_RULES:
+            m = rx.search(line)
+            if m and not _cited(line, m):
+                fail("persona-prompt", f"{rel_name}:{i}: '{m.group(0).strip()}' gives the model a product-role "
+                                       f"identity — a role sets defaults (role_defaults), never a persona "
+                                       f"(role-profiles §0)")
+                break
+
+# --------------------------------------------------- 21. judgment footer
+# role-profiles §1: every Product-contour artifact ends with the altitude line,
+# rendered by templates/built-in/partial/judgment-footer-v1.md. A skill that
+# declares a Product-contour artifact_type in Step T and never cites the partial
+# ships its artifact without the line a CPO and an IC PM both read.
+# People-contour artifacts are exempt (role-profiles §6), and so is `partial`.
+PRODUCT_TYPES = set()
+if os.path.isfile(_proto):
+    _pc = re.search(r"^\*\*Product contour:\*\*(.*)$", open(_proto, encoding="utf-8").read(), re.M)
+    if _pc:
+        PRODUCT_TYPES = set(re.findall(r"`([a-z0-9-]+)`", _pc.group(1))) - {"partial"}
+    else:
+        fail("judgment-footer", "references/template-protocol.md: no line starting '**Product contour:**' — "
+                                "the Product-contour types cannot be derived")
+for sf in skill_files:
+    text = open(sf, encoding="utf-8").read()
+    product = [(t, pos) for t, pos in declared_artifact_types(text) if t in PRODUCT_TYPES]
+    if product and "partial/judgment-footer" not in text:
+        t, pos = product[0]
+        fail("judgment-footer", f"{os.path.relpath(sf, root)}:{text[:pos].count(chr(10)) + 1}: declares "
+                                f"Product-contour artifact_type '{t}' but never cites partial/judgment-footer — "
+                                f"its artifact would ship without the altitude line (role-profiles §1)")
+
+# -------------------------------------------------------- 22. role enum
+# The role enum lives in two places: the protocol (role-profiles §2) and the
+# schema the configurator writes local-context.md from. If they drift, onboarding
+# offers a role Step 0i treats as "not in the enum" and re-asks forever — or the
+# other way round.
+_cs_text = open(CONTEXT_SCHEMA, encoding="utf-8").read() if os.path.isfile(CONTEXT_SCHEMA) else ""
+CS_ENUM_LINE, CS_ENUM = enum_line(_cs_text, r"\*\*`role` enum:?\*\*:?")
+if RP_ENUM_LINE is None or not RP_ENUM:
+    fail("role-enum", f"{RP_REL}: no line starting '`user.role` enum:' with backticked values")
+if CS_ENUM_LINE is None or not CS_ENUM:
+    fail("role-enum", f"{CS_REL}: no line starting '**`role` enum:**' with backticked values")
+if RP_ENUM and CS_ENUM and set(RP_ENUM) != set(CS_ENUM):
+    only_rp, only_cs = sorted(set(RP_ENUM) - set(CS_ENUM)), sorted(set(CS_ENUM) - set(RP_ENUM))
+    fail("role-enum", f"{RP_REL}:{RP_ENUM_LINE} and {CS_REL}:{CS_ENUM_LINE}: role enums differ — "
+                      f"only in role-profiles {only_rp}; only in context-schema {only_cs}")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")
