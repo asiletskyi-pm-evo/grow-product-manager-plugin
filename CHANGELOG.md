@@ -12,6 +12,39 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.6.0 (2026-09-29)
+
+**Role defaults and templates.** Third release of the Judgment Core + Role Layer programme. The role now changes where a run starts — the template ranked first, extra sections, extra evidence checks, the planning view and the wording of questions — while every gate, question and route stays the same, and a user without a role (or with `pm`) sees exactly v3.5.0. MINOR: 14 new built-in templates, new steps in 18 skills, new shared reference.
+
+### Added
+
+- **14 built-in templates** (41 in total): `concept/design-brief`, `concept/strategy-memo`, `concept/decision-memo`, `concept/business-case`, `research/research-plan`, `research/discussion-guide`, `research/insight-report`, `research/insight-memo`, `ops-report/qbr`, `ops-report/board-update`, and partials `tracking-plan`, `nfr`, `repository-entry`, `money-bridge`. The ten non-partials carry the new frontmatter key **`match: subtype`** — a candidate only when the request subtype equals theirs (a role default or the user's own words), so no request resolves differently or asks a new "which template?" question because they exist.
+- **Template ranking by role** (`template-protocol.md` T-0 / T-1 / T-3): in write-concept, requirements-creator and product-reporter's quarter mode, a request without a declared subtype takes `role_defaults.template_defaults`; elsewhere (product-research included) the new subtypes are reached by the user's words. An exact `match: subtype` hit is used silently under `smart` / `auto` when the user has no template of that type (`always_ask` still asks); built-ins are always read from the plugin folder, so an upgraded registry cannot hide them.
+- **Role extra sections** (T-5 step 3b): `nfr` for engineering leads and `tracking-plan` for analysts on requirements, `repository-entry` for researchers on research — only when the artifact has no section with that meaning, only in requirements-creator, product-research and feedback-triage.
+- **Gate emphasis** (`data-integrity-protocol.md`): 15 tokens, each one extra check that adds a ⚠️ caveat line and never relaxes a gate — e.g. SRM / exposure / peeking and confidence intervals for analysts, comparability and trend-vs-objective for leaders, triangulation and human-validated flags for researchers, base rates and the HiPPO check for executives, the money bridge for business owners.
+- **Altitude views** (`planning-core.md` §7): Now / Next / Later as a view over existing labels; `planning_view: rollup` (leaders) or `slice` (delivery roles, with the tech-debt reserve as its own row — `capacity-model.md` §7); `horizon` sets project-planning's arc window.
+- **`references/vocabulary-sets.md`** — read-only role wording for headings and option labels, below the team glossary; **`question_defaults`** — designers see states / DS / a11y options first in design-bridge, diagram-prototyper and flow-walkthrough.
+- **Money bridge** — optional `Revenue driver` column in Key Metrics; QBR, board update and business case show a metric → revenue-driver table or one "No revenue mapping configured" line.
+- `experiment-tracker` records an optional `readout_signoff: {by, date}`; quarterly-planning hands the board readout to product-reporter (`ops-report/board-update`).
+- Output evals: fixtures, gold exemplars and rubrics for design brief, strategy memo, research plan and QBR; trigger-evals R15–R20 and N9.
+
+### Changed
+
+- `role-profiles.md` activates the v3.6.0 fields, adds `extra_sections` and `question_defaults`, and makes the `pm` row override nothing; `template_defaults` is the first subtype §2 lists per Product-contour type.
+- Descriptions: write-concept gains «дизайн-бриф», «стратегічний меморандум», «мемо рішення», «бізнес-кейс» and the EN forms; focus-advisor «фокус кварталу»; product-reporter «QBR», «звіт для борду», "board update".
+- Trigger-evals N8 reworded to an unambiguous spec-review phrase; the original wording is kept as N9, which accepts either skill.
+- Skill versions: `brainstorm-features` 0.12.0 → 0.13.0 · `cjm-research` 0.9.0 → 0.10.0 · `design-bridge` 0.6.0 → 0.7.0 · `diagram-prototyper` 0.12.0 → 0.13.0 · `experiment-tracker` 0.3.0 → 0.4.0 · `feedback-triage` 0.4.0 → 0.5.0 · `flow-walkthrough` 0.4.0 → 0.5.0 · `focus-advisor` 0.7.0 → 0.8.0 · `product-analysis` 0.14.0 → 0.15.0 · `product-landscape` 0.3.0 → 0.4.0 · `product-reporter` 0.7.0 → 0.8.0 · `product-research` 0.12.0 → 0.13.0 · `project-planning` 0.4.0 → 0.5.0 · `quarterly-planning` 0.5.0 → 0.6.0 · `requirements-creator` 0.15.0 → 0.16.0 · `roadmap-architect` 0.4.0 → 0.5.0 · `sprint-planning` 0.5.0 → 0.6.0 · `write-concept` 0.13.0 → 0.14.0 · `plugin-configurator` 2.11.0 → 2.11.1 · `template-library` 0.3.1 → 0.3.2 · `knowledge-library` 0.8.0 → 0.8.1.
+
+### Not in this version (next)
+
+v3.7.0 — judgment points: the user's estimate before the plugin's at scoring, readout, verdict and prioritisation (`hypothesis_first`), the confidence-and-falsifier footer (Gate 4c), decision-record fields and the quality-vs-outcome review. `requirements/ai-feature` and `partial/pre-mortem` ship in v3.9.0 with the steps that use them.
+
+### Backwards compatibility
+
+A user whose role is `pm`, missing or not yet confirmed, and every automated run (scheduled, headless, a return payload) get exactly the v3.5.0 templates, sections, checks, order and questions. A skill invoked only for a return payload applies just the gate-emphasis tokens its interactive caller passes. Visible for everyone: `template-library list` and the clone wizard show the 10 new non-partial built-ins (the 4 partials are protocol-inserted and never listed); an explicit request for one of the new artifact types (design brief, strategy memo, decision memo, business case, research plan, interview guide, insight report or memo, QBR, board update) renders that template; a **hat** («як CPO, …», "as an analyst, …") now applies that role's template, extra sections, gate-emphasis caveats, wording and question defaults for its one run — for a `pm` or role-less user too; «на чому фокусуватись у кварталі» / «фокус кварталу» now route to focus-advisor (they reached quarterly-planning before); the board readout of quarterly-planning is rendered by product-reporter as a chat draft that asks nothing and publishes nothing until the user says so. The new built-ins are English-only (`available_languages: [en]`), like most built-ins; the artifact is still written in `user.language`.
+
+---
+
 ## v3.5.0 (2026-09-28)
 
 **Role layer: eight roles that change defaults, never capabilities.** Second release of the Judgment Core + Role Layer programme. The plugin asks once who the user is — Product Manager, Head of Product, CPO, Product Designer, Product Analyst, UX Researcher, Engineering Lead or Business Owner — and keeps the core identical for everyone: the same skills, gates, routing and ten principles. In v3.5.0 a role sets the home altitude, the quick wins and the one-run hats; every Product-contour artifact now closes with an altitude line. Role-specific templates, gate emphasis and planning defaults arrive in v3.6.0. MINOR: new shared reference, new step in every skill, new onboarding step, new built-in partial, four lint checks.
