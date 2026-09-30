@@ -13,7 +13,7 @@ Purpose: verify that artifact-producing skills generate **high-quality outputs**
 
 1. **Judge**: an LM-judge subagent scores the artifact against the skill's rubric. Each criterion is scored **0 / 1 / 2** (0 = absent, 1 = present but weak/partial, 2 = fully met).
 2. **Gold reference**: the skill's golden exemplar (`skills/<skill>/references/examples/*-v1.md`) is given to the judge as the quality bar. Score the candidate's *rigor*, not its wording.
-3. **Score**: `weighted_score = Σ(criterion_score × weight) / Σ(2 × weight)`. **Pass = weighted_score ≥ pass_threshold** (default **0.8**).
+3. **Score**: `weighted_score = Σ(criterion_score × weight) / Σ(2 × weight)` over every criterion of the rubric plus the judgment criteria below; a criterion scored `n/a` is left out of both sums. **Pass = weighted_score ≥ pass_threshold** (default **0.8**).
 4. **Diagnose on fail**: cluster the failing criteria, route the fix via `references/self-improvement.md` (harness-first diagnosis), re-run.
 
 ## How to run
@@ -25,6 +25,15 @@ Purpose: verify that artifact-producing skills generate **high-quality outputs**
 Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input brief**; the matching gold reference is the skill's exemplar.
 
 ## Rubrics
+
+### Judgment criteria — every rubric (since v3.7.0)
+
+Added to each rubric below (spec FR-15). Each is scored only where its gate applies to that artifact and is `n/a` elsewhere. `evidence_labels` joins in v3.8.0 and `counter_argument` in v3.9.0, with the steps that implement them.
+
+| id | Criterion | Weight | `n/a` when |
+|----|-----------|--------|------------|
+| altitude_line | Exactly one `Altitude: L1–L4 · ↑ serves: … · ↓ next: …` line as the artifact's last content (Gate 4a): `serves` is a goal the fixture or its sources link, or `— (no linked goal)`, never a person's goal; `next` is a product or delivery step | 1 | Gate 4a is `n/a` (task bodies, A&I documents, 1-1s, prototypes, external decks, return payloads) |
+| confidence_falsifier | Exactly one `Confidence: known / likely / uncertain / unknown · most sensitive to: … · would change if: …` line directly above the altitude line (Gate 4c), with: one specific assumption; an observable change condition, not "more data"; and a level no higher than the Data Integrity Gate allows (an inconclusive verdict is at most `uncertain`) | 2 | `references/judgment-points.md` §1 names no confidence line for the skill and mode. A P3-format line that appears there anyway is logged as a defect in the Results log (improvised output, `pm-mental-model.md` §5); a skill's own confidence field or label is not such a line |
 
 ### write-concept — PRD
 - **Artifact:** PRD · **Gold:** `skills/write-concept/references/examples/prd-example-v1.md` · **Fixture:** `testing/fixtures/write-concept/brief-v1.md` · **pass_threshold:** 0.8
@@ -139,11 +148,25 @@ Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input br
 | risks | Risks with likelihood, impact, owner and mitigation, as given — none invented | 1 |
 | org_health_aggregate | Org health in aggregates only; nothing from 1-1 notes, person profiles or reviews (the fixture's 1-1 remark is absent) | 1 |
 
-Not scored in the four rubrics above, noted in the Results log as for the v3.5.0 runs: the closing altitude line (`artifact-style-gate.md` Gate 4a) — `serves` is the goal the fixture links, `next` a product or delivery step.
+Since v3.7.0 the closing altitude line is scored by `altitude_line` in the judgment criteria above; before v3.7.0 it was only noted in the Results log.
+
+### product-analysis — A/B test report (since v3.7.0)
+- **Artifact:** A/B test report (`ab-test-results`, standalone) · **Gold:** `skills/product-analysis/references/examples/ab-test-report-example-v1.md` · **Fixture:** `testing/fixtures/product-analysis/ab-readout-v1.md` · **pass_threshold:** 0.85 *(higher bar — a verdict drives a rollout)*
+
+| id | Criterion | Weight |
+|----|-----------|--------|
+| verdict_follows_thresholds | The overall verdict comes from the AB-4 set (won / lost / inconclusive) — here `lost`, because a pre-set guardrail is breached — and the verdict per platform and per guardrail follows the pre-set criteria: web met; Android inconclusive, because power is 41 % — never "won" or "lost"; support-contacts guardrail not met (+6 %, p = 0.04) | 2 |
+| no_anchoring | The verdict and recommendation follow the data although the brief leans "roll out everywhere". The PM's call and any "your estimate vs mine" comparison are absent from the report (chat only) | 2 |
+| validity | Validity names the single source (cross-validation pending), the Android power, the week-1 → week-2 fade and the pooled guardrails, and screens holidays / outages / methodology | 2 |
+| recommendation_rule | The recommendation follows the AB-4 definitions: a breached guardrail means the success criteria are not met, so "Stop and iterate" with what to change and how to re-test. Any rollout that leaves the guardrail breach unresolved scores 0 | 1 |
+| guardrail_cause | The "where is my delivery option" cause is carried into the change or a follow-up hypothesis | 1 |
+| period_annotation | Every cited metric carries the test window | 1 |
+
+With the judgment criteria, `confidence_falsifier` is scored here (weight 2). The gold's line reads `uncertain` — a single source with cross-validation pending, and Android inconclusive. It is most sensitive to the pooled support-contact rise holding on web, and would change if the web-only split shows no rise (Δ ≤ 0 %). A `likely` or `known` level fails `no inflation`. The altitude is L2: A/B readouts sit at L2 in `role-profiles.md` §1.
 
 ### Lighter rubrics (fixtures TBD — add exemplars first)
 
-**product-analysis** (analysis report): period_annotation (2), gate_passed (2), trend_vs_baseline (2), anomaly_or_insight (2), hypothesis_backed (1), sources (1). pass 0.85.
+**product-analysis** (analysis report, non-A/B modes): period_annotation (2), gate_passed (2), trend_vs_baseline (2), anomaly_or_insight (2), hypothesis_backed (1), sources (1). pass 0.85.
 
 **brainstorm-features** (hypothesis backlog): ice_scored (2), hypothesis_structure IF/THEN/measurable (2), funnel_impact_link (2), validation_method (1), prioritized (1). pass 0.8.
 
@@ -178,8 +201,11 @@ Not scored in the four rubrics above, noted in the Results log as for the v3.5.0
 | 2026-09-29 | v3.6.0 | cjm-research | — | 0.91 ✅ | same | regression (threshold 0.85) |
 | 2026-09-29 | v3.6.0 | meeting-processor | — | 0.88 ✅ | same | regression |
 | 2026-09-29 | v3.6.0 | task-creator | — | 1.00 ✅ | same | regression |
+| 2026-09-29 | v3.7.0 | product-analysis (A/B report, new) | — | 1.00 ✅ | maker on the branch + blind LM judge | threshold 0.85; verdict against the PM's leaning ("Stop and iterate"), `Confidence: uncertain` with an observable falsifier above an L2 altitude line; P2 not asked (the call was in the request), comparison in the chat only. The first gold draft was wrong (roll-out despite a breached guardrail, invented sources, L1) and was rewritten before judging |
+| 2026-09-29 | v3.7.0 | write-concept (PRD) | — | 1.00 ✅ | same | regression with the judgment criteria: `confidence_falsifier` n/a, no confidence line, no P2 question |
+| 2026-09-29 | v3.7.0 | meeting-processor | — | 0.83 ✅ | same | regression; decision-log payload carries only the fields said in the meeting; one undated action item (run variance) |
 
-## Coverage status (rubrics/fixtures as of v3.6.0)
+## Coverage status (rubrics/fixtures as of v3.7.0)
 
 > **Stage 3b is a blocker** (`Testing-process.md`), yet no 3b run is recorded anywhere for
 > v2.0.x or v2.1.x — and those releases changed `requirements-creator`, `meeting-processor`,
@@ -192,7 +218,8 @@ Not scored in the four rubrics above, noted in the Results log as for the v3.5.0
 | write-concept — PRD | ✅ | ✅ | ✅ |
 | requirements-creator | ✅ | ✅ | ✅ |
 | cjm-research | ✅ | ✅ | ✅ |
-| product-analysis | ✅ light | ⬜ | ⬜ |
+| product-analysis — analysis report | ✅ light | ⬜ | ⬜ |
+| product-analysis — A/B test report | ✅ (v3.7.0) | ✅ | ✅ |
 | brainstorm-features | ✅ light | ⬜ | ⬜ |
 | meeting-processor | ✅ (v3.4.0) | ✅ | ✅ |
 | task-creator | ✅ (v3.4.0) | ✅ | ✅ |

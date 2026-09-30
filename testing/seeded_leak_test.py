@@ -8,7 +8,8 @@ appended, removed or replaced — see SEEDS), and asserts the linter goes RED wi
 the expected check tag. The org-leak seeds are real defect classes that shipped —
 see CHANGELOG v2.4.1 and `Testing-process.md` — rewritten with a fictional org
 ("Zorg", "ZORG") so no real identifier enters the repository. The role-layer
-seeds (checks 19-22, JCRL v3.5.0) are preventive: their classes have not shipped.
+seeds (checks 19-22, JCRL v3.5.0) and the judgment-points seeds (check 23,
+v3.7.0) are preventive: their classes have not shipped.
 
 Usage: python3 testing/seeded_leak_test.py [PLUGIN_ROOT]   (default: repo root)
 Exit 0 = every seeded defect was caught; exit 1 = at least one slipped through.
@@ -92,6 +93,19 @@ SEEDS = [
      "references/role-profiles.md", "replace",
      (re.escape("`eng_lead` · "), ""),
      "role-enum"),
+    # v3.7.0: judgment-points.md §1 is the complete list of P2 / confidence-line steps.
+    ("judgment: a §1 row names a skill that never cites judgment-points.md",
+     "references/judgment-points.md", "replace",
+     (re.escape("| `quarterly-planning` · "), "| `roadmap-architect` · "),
+     "judgment-points"),
+    ("judgment: a P2 question outside the §1 list",
+     "skills/write-concept/SKILL.md", "append",
+     "Before the recommendation, ask the P2 question of the judgment protocol.",
+     "judgment-points"),
+    ("judgment: a P3 confidence line outside the §1 list",
+     "skills/cjm-research/SKILL.md", "append",
+     "Close the report with `Confidence: likely · most sensitive to: … · would change if: …`.",
+     "judgment-points"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare
