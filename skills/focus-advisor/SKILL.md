@@ -1,6 +1,6 @@
 ---
 name: focus-advisor
-version: 0.8.0
+version: 0.9.0
 description: What to focus on today, this sprint or quarter — scans mail, calendar, Jira, metrics; recommends and chains. Not sprint planning (sprint-planning), not analysis (product-analysis). UA — «на чому сфокусуватись», «ранковий бриф», «розбери мою пошту й календар», «чи все ок з метриками». EN — "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "show focus board". Also UA — «що мені робити сьогодні», «фокус дня/тижня/кварталу», «на чому фокусуватись у кварталі», «до яких зустрічей готуватись», «де великі можливості для продукту», «куди фокусувати команду». Also for scheduled/headless briefs. Do NOT use to build roadmaps (quarterly-/project-planning).
 ---
 
@@ -22,7 +22,7 @@ The 4th height of the suite — **the PM's attention** above structure/quarter/s
 ## Step T — Template Resolution
 `artifact_type: focus`, `subtype: daily-brief | tactical-brief | strategy-memo` (by mode), `product_id`, `language`.
 
-**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — the brief's last line, also in headless runs.
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — the brief's last line, also in headless runs; since v3.7.0 the confidence line for the brief's lead focus sits directly above it (`references/judgment-points.md` §3; Gate 4c).
 
 ## Modes
 
@@ -49,7 +49,7 @@ Per `local-context-protocol.md`: product, Planning (anchor/cadence), Focus secti
 > a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step 1 — Horizon + scope. Gate (skipped in headless)
-Confirm horizon (auto-detect from phrasing/cycle position: "сьогодні/зараз" → now, "квартал/команда/беклог" → tactics, "рік/можливості/напрямки" → strategy; quarter boundary nudges toward strategy) and period. When neither the phrasing nor the quarter boundary decides, the horizon proposed for confirmation follows `role_defaults.planning_view` (since v3.6.0): `rollup` → strategy first, `slice` → now first, as before (`references/focus-role-defaults.md` §1).
+Confirm horizon (auto-detect from phrasing/cycle position: "сьогодні/зараз" → now, "квартал/команда/беклог" → tactics, "рік/можливості/напрямки" → strategy; quarter boundary nudges toward strategy) and period. When neither the phrasing nor the quarter boundary decides, the horizon proposed for confirmation follows `role_defaults.planning_view` (since v3.6.0): `rollup` → strategy first, `slice` → now first, as before (`references/focus-role-defaults.md` §1). **Your prior (P2, since v3.7.0):** the same gate message also asks the P2 question of `references/judgment-points.md` §1–§2 — what the PM thinks matters most in this horizon — all its §2 rules apply (switch, known estimate, automated run, skip); the gate message is then plain text (the horizon to confirm and the prior, one reply), and a reply that only confirms the horizon counts as a skip; headless runs skip Step 1 and so never ask it.
 
 ### Step 2 — Collect signals
 Per `focus-signals.md`, only the sources of the confirmed horizon. **now** (§3–4): cycle position, calendar (meetings needing prep), mail (live unanswered letters — two-stage filter), recent meetings' open action items, Jira tails. **tactics** (§6): quarterly roadmap plan-vs-actual and drift, backlog staleness (ICE age), features missing prerequisites ahead of next sprints, A/B tests awaiting decision, capacity and team-event signals. **strategy** (§7): product goals/missions (pinned source), NPS waves and love/hate themes, CJM/funnel trends (freshness-guarded), knowledge-library research signals, leadership-meeting mandates, white spaces in the PM's zones. Honor cache TTL. Fan out collectors via `subagent-delegation.md` when available; inline otherwise. Each collector returns signal packets only.
@@ -71,7 +71,7 @@ Per `focus-scoring.md`: journal dedup → **now**: urgency+impact+unblock → 1�
 **"Choose one" final filter (daily / `now`).** After ranking the daily focuses, apply a final single-pick filter: if you could do only **one** thing today, which moves the goal most? Lead the brief with that one focus (the rest stay as "також на радарі"). Cuts the overloaded-PM's analysis paralysis — the daily brief has a clear #1, not a tie.
 
 ### Step 5 — Focus brief
-For each focus: what, why now (signals with links), cost of delay (one sentence), suggested next step. Subtype by mode: `daily-brief` / `tactical-brief` / `strategy-memo`. Tactical brief adds: quarter position (sprints left, capacity used vs plan) and a "decisions waiting on you" section (A/B tests, approvals). Strategy memo structure: current state (facts with sources) → 2–4 bets (each: what, why — data-backed, expected metric effect, first steps) → **"what we deliberately do NOT do"** → data-hygiene preconditions → next 2 weeks. A strategy memo without exclusions is a wish list. Footer: degraded collectors, cache ages. Language — `user.language`.
+For each focus: what, why now (signals with links), cost of delay (one sentence), suggested next step. When Step 1 recorded a prior, the "Your estimate vs mine" comparison follows the brief in the chat (since v3.7.0) — the ranking of Step 4 is not changed by it. Subtype by mode: `daily-brief` / `tactical-brief` / `strategy-memo`. Tactical brief adds: quarter position (sprints left, capacity used vs plan) and a "decisions waiting on you" section (A/B tests, approvals). Strategy memo structure: current state (facts with sources) → 2–4 bets (each: what, why — data-backed, expected metric effect, first steps) → **"what we deliberately do NOT do"** → data-hygiene preconditions → next 2 weeks. A strategy memo without exclusions is a wish list. Footer: degraded collectors, cache ages. Language — `user.language`.
 
 ### Step 6 — PM chooses. Gate (skipped in headless)
 Per focus: **(a) chain** to the executing skill with prepared arguments; (b) create a task/reminder; (c) snooze with a date. Chain map:

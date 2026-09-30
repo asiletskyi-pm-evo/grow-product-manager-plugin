@@ -118,7 +118,7 @@ vault_save({
 Saved under `Debates/{product}/` per `references/vault-schema.md`.
 
 **Chains — always offer:**
-- "Record the verdict as a decision?" → `decision-log` (the ADR inherits the verdict + minority report).
+- "Record the verdict as a decision?" → `decision-log` (the ADR inherits the verdict; since v3.7.0 the minority report goes into the record's `minority_report` field and its own Minority report section — `judgment-points.md` §4 — instead of Consequences & risks).
 - "Register the winning hypotheses?" → `experiment-tracker` (register mode, state `proposed`).
 
 ## Guardrails

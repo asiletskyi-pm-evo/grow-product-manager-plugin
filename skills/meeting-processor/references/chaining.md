@@ -25,7 +25,7 @@ Every skill invocation from meeting-processor must include the **full participan
 | **product-research** | User insights, quotes with speaker attribution, pain points, needs, participants as interview subjects |
 | **brainstorm-features** | Ideas, hypotheses, evaluation criteria, voting results, participants as idea owners |
 | **diagram-prototyper** | Process descriptions, flow logic, architecture discussed, participants as actors in diagrams |
-| **decision-log** | Per decision: what was decided, context/rationale, options discussed, who decided, link back to these notes |
+| **decision-log** | Per decision: what was decided, context/rationale, options discussed, who decided, link back to these notes; since v3.7.0 also the owner, rejected options with their reasons, a dissent and a revisit condition — only those said in the meeting (`references/judgment-points.md` §4) |
 | **quarterly-planning** | Decisions that shift scope or focuses, with the meeting as the source link |
 
 ## Input Source Discovery Protocol

@@ -101,7 +101,16 @@ alternatives_considered: int (number of alternatives evaluated)
 reversibility: string (easy|medium|hard - how easy to reverse)
 deadline: date (decision deadline, YYYY-MM-DD)
 revisit_by: date (when this decision should be re-examined, YYYY-MM-DD; optional)
+# Decision hygiene (since v3.7.0 — references/judgment-points.md §4; each optional — a key nothing states is left out, and the body says "not recorded" / "none found")
+owner: string (the one person accountable; decided_by stays the list of people who took the decision)
+rejected_alternatives: string[] (each option considered and not chosen, with a one-line reason; alternatives_considered stays the count)
+base_rate: string (outside view with its source — e.g. the experiment registry's win rate)
+revisit_trigger: string (the observable event that reopens the decision; revisit_by stays the date)
+minority_report: string (2-3 sentence strongest dissent, with who held it — from a debate or a named dissenter; omitted when there was none)
+evidence_classes: string[] (evidence classes of the inputs — observed|measured|reported|external|simulated|assumed; filled from v3.8.0)
 ```
+
+> The owner's confidence is a body line under the record's Decision section (`Confidence: known|likely|uncertain|unknown · most sensitive to: … · would change if: <revisit trigger>`), not a frontmatter key — the lifecycle `confidence` float keeps its meaning (`judgment-points.md` §3). A record written before v3.7.0 stays valid without the new keys.
 
 > `revisit_by` is a frontmatter field, not prose: `focus-advisor` surfaces overdue revisits as a tactical signal (`focus-signals.md`), and it can only do that by filtering the field. It lived only in the decision body's "Consequences" section until v2.1.1, so that signal was a permanent false negative. `deadline` is when the decision had to be *made*; `revisit_by` is when it should be *re-examined*.
 

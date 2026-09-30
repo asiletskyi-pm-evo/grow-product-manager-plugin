@@ -211,7 +211,7 @@ Follow the same collection flow as Onboarding for the selected section. Pre-fill
 - The role can be changed at any time — run onboarding Step 4a (the two-level picker; an explicit request re-asks even when Role already holds an enum value), recompute `Level home` from `references/role-profiles.md` §2b, keep the user's own wording as `Role label`, and show the changelog row `User Profile → Role | was | became`.
 
 **For Judgment updates:**
-- Run onboarding Step 4b as in Extended; `hypothesis_first` and `learning_mode` can also be set here — say in the same line that they act from v3.7.0 and v3.9.0 respectively and change nothing before that.
+- Run onboarding Step 4b as in Extended; `learning_mode` can also be set here — say in the same line that it acts from v3.9.0 and changes nothing before that.
 
 **For CJM Configuration updates:**
 - Allow changing funnel template (with remapping prompt)

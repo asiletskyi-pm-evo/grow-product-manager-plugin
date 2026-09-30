@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.11.1
+version: 2.12.0
 description: Configure the plugin — organization, products, teams, data sources — validate or view the config; also when local-context.md is missing. Not the typed /status or /config commands. UA — «налаштуй плагін», «додай продукт», «додай/налаштуй тестові акаунти», «налаштуй карту конкурентів», «перевір налаштування», «покажи мій конфіг», «статус плагіна, чи все підключено», «змінити роль», «яка моя роль у плагіні». EN — "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", "what is the plugin status", "set role", "change my role". Also UA — «сетап плагіна», «налаштувати контекст», «оновити конфігурацію».
 ---
 

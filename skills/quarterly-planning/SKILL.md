@@ -1,6 +1,6 @@
 ---
 name: quarterly-planning
-version: 0.6.0
+version: 0.7.0
 description: One-quarter roadmap, capacity stress-test and plan-vs-actual retro. Not multi-quarter (project-planning), not structure/labels (roadmap-architect), not a sprint (sprint-planning). UA — «зібери roadmap на квартал», «plan-vs-actual», «чи реалістичний план на Q3», «що команда встигне». EN — "build a quarterly roadmap", "quarterly planning", "plan-vs-actual for the quarter", "quarter retro", "plan capacity", "what the team can deliver". Also UA — «retro кварталу», «capacity плану». Scope = exactly one quarter.
 ---
 
@@ -29,7 +29,7 @@ Planning section of local-context: team roster + capacity rules, sprints (cadenc
 ## Step T — Template Resolution
 Per `references/template-protocol.md`: `artifact_type: roadmap`, `subtype: quarterly | retro`, `product_id`, `language`. Fallback → structure from `roadmap-artifacts.md`.
 
-**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a). Since v3.7.0 a plan with a Step 4.4 prioritisation also carries the confidence line for that prioritised list above it (`references/judgment-points.md` §3; Gate 4c).
 
 ## Modes
 
@@ -68,7 +68,7 @@ Per `capacity-model.md` sec. 2–5: (3a) team + involvement % (from local-contex
 1. Plan = carried-over unfinished work (Step 2) + new (label `q{N}`).
 2. **Auto-estimate by analogy** for features without an estimate (`capacity-model` sec. 8; flag "pending TL confirmation").
 3. **Capacity-gate** at the platform-slice level (`capacity-model` sec. 6–7): demand vs ceiling, 85/100% traffic light.
-4. Prioritization (ICE/RICE) of candidates above the ceiling.
+4. Prioritization (ICE/RICE) of candidates above the ceiling. **Since v3.7.0 (P2):** before the scores, ask the P2 question of `references/judgment-points.md` §1–§2 — which candidates the PM would keep first; all its §2 rules apply (switch, known estimate, automated run, skip). After the scores, show the "Your estimate vs mine" comparison. The scores and the capacity gate do not change with the answer. Asked once per run: a Step 5 recompute neither asks again nor repeats the comparison.
 
 ### Step 5 — Scope correction (loop with PM)
 If a platform is over the ceiling — **show the specific directions→epics→features that don't fit** (with estimates) and offer a choice (interactive capacity-gate from `roadmap-artifacts` sec. 5; feature / platform-slice toggles). Recompute after each edit. Repeat until the PM is confident. The PM decides.
@@ -81,7 +81,7 @@ Per `roadmap-artifacts.md`: (1) **Confluence roadmap** (focuses + Gantt + tree, 
 **Optional — quarterly board / stakeholder readout (since v3.6.0: one template, one owner).** When the quarter is being reported up (not just planned), offer the readout as a hand-off to **product-reporter**, which renders it as `ops-report/board-update` from this run's retro (Step 2) and approved plan — no new fetch. This skill passes the data with `destination: chat draft` and `visuals: none` (product-reporter then asks nothing and publishes nothing until the user says so) and renders no readout of its own; the board-prep checklist behind the template is `references/session-board.md`.
 
 ### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.6.0", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.7.0", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Integration with product-reporter
 - Quarter actuals ← `quarter-review` (don't rewrite the fetch).
@@ -91,7 +91,7 @@ Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_
 ## Skill Chaining
 ← `project-planning` (arcs + allocation %) · ← `roadmap-architect` (clean structure) · → `task-creator` (tasks from the plan) · → `sprint-planning` (nearest sprint) · → `diagram-prototyper` (presentation) · → `decision-log` (scope calls made in planning/retro — what got cut and why) · ← `meeting-processor` (decisions into focuses).
 
-**Scope decisions → decision-log.** When the capacity gate forces something out of the quarter, or the retro concludes a direction was mis-bet, offer to log it: "This cut is a decision someone will ask about next quarter. Log it?" → invoke `decision-log` (log mode) with the options considered, the capacity evidence, and what was cut.
+**Scope decisions → decision-log.** When the capacity gate forces something out of the quarter, or the retro concludes a direction was mis-bet, offer to log it: "This cut is a decision someone will ask about next quarter. Log it?" → invoke `decision-log` (log mode) with the options considered, the capacity evidence, and what was cut (since v3.7.0 the PM as `owner` and the cut items with their reasons as `rejected_alternatives` — `references/judgment-points.md` §4).
 
 ## Quality Standards
 - Human-in-the-loop: every input passes a "confirm/correct" gate.
