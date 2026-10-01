@@ -39,6 +39,7 @@ CHECKS = """
 20. persona-prompt       "You are a <product role>" / «Ти — <роль>» handed to the model as an identity
 21. judgment-footer      a Product-contour Step T skill that never cites partial/judgment-footer
 22. role-enum            role-profiles.md user.role enum == context-schema.md role enum
+23. judgment-points      a judgment-points.md §1 skill that never cites it, or a P2 question / confidence line outside §1
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1023,6 +1024,54 @@ if RP_ENUM and CS_ENUM and set(RP_ENUM) != set(CS_ENUM):
     only_rp, only_cs = sorted(set(RP_ENUM) - set(CS_ENUM)), sorted(set(CS_ENUM) - set(RP_ENUM))
     fail("role-enum", f"{RP_REL}:{RP_ENUM_LINE} and {CS_REL}:{CS_ENUM_LINE}: role enums differ — "
                       f"only in role-profiles {only_rp}; only in context-schema {only_cs}")
+
+# --------------------------------------------------- 23. judgment points
+# judgment-points.md §1 is the complete list of steps that ask the P2 "your
+# estimate first" question or render the confidence line (pm-mental-model §5).
+# A listed skill that never cites the file improvises the question from memory
+# or drops it; a skill outside the list that talks about "the P2 question" adds
+# a question no switch, skip rule or test covers.
+JP = os.path.join(root, "references", "judgment-points.md")
+if os.path.isfile(JP):
+    _jp = open(JP, encoding="utf-8").read()
+    _sec = re.search(r"^## 1\..*?(?=^## 2\.)", _jp, re.M | re.S)
+    jp_skills = re.findall(r"^\| `([a-z0-9-]+)` ·", _sec.group(0), re.M) if _sec else []
+    if not jp_skills:
+        fail("judgment-points", "references/judgment-points.md: §1 table lists no skill (rows start '| `skill` ·')")
+    for name in jp_skills:
+        folder = os.path.join(root, "skills", name)
+        if not os.path.isdir(folder):
+            fail("judgment-points", f"references/judgment-points.md §1: '{name}' is not a skill")
+            continue
+        texts = [open(os.path.join(dp, f), encoding="utf-8").read()
+                 for dp, _, fs in os.walk(folder) for f in fs if f.endswith(".md")]
+        if not any("judgment-points.md" in t for t in texts):
+            fail("judgment-points", f"skills/{name}: listed in judgment-points.md §1 but never cites it — "
+                                    f"the P2 question / confidence line has no implementing step")
+    for sf in skill_files:
+        name = os.path.basename(os.path.dirname(sf))
+        if name in jp_skills or name == "plugin-configurator":   # the configurator owns the switch
+            continue
+        folder = os.path.dirname(sf)
+        for dp, _, fs in os.walk(folder):
+            for f in fs:
+                if not f.endswith(".md"):
+                    continue
+                fp = os.path.join(dp, f)
+                t = open(fp, encoding="utf-8").read()
+                for m in re.finditer(r"P2 question", t):
+                    before = t[max(0, m.start() - 30):m.start()].lower()
+                    if re.search(r"\b(never|not|no)\b(\s+\w+){0,2}\s+$", before):
+                        continue          # "never asks the P2 question" states the boundary
+                    fail("judgment-points", f"{os.path.relpath(fp, root)}:{t[:m.start()].count(chr(10)) + 1}: "
+                                            f"asks the P2 question but '{name}' is not in judgment-points.md §1")
+                    break
+                m = re.search(r"most sensitive to\b|^(?!.*\b(never|not|no)\b).*confidence line.*judgment-points\.md", t, re.M)
+                if m:
+                    fail("judgment-points", f"{os.path.relpath(fp, root)}:{t[:m.start()].count(chr(10)) + 1}: "
+                                            f"renders the P3 confidence line but '{name}' is not in judgment-points.md §1")
+else:
+    fail("judgment-points", "references/judgment-points.md is missing")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

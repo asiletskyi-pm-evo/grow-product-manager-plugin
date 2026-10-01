@@ -1,6 +1,6 @@
 ---
 name: experiment-tracker
-version: 0.4.0
+version: 0.5.0
 description: Experiment registry — proposed → specced → running → readout → decided, with stale-test reminders. Not analyzing results (product-analysis), not the A/B spec (requirements-creator). UA — «які тести зараз біжать», «заведи експеримент», «зафіксуй запуск тесту», «завислі тести». EN — "what experiments are running", "experiment status", "register an experiment", "log the test launch", "which tests await a decision", "remind me about stale tests". Also UA — «статус експериментів», «які тести чекають рішення». Tracks state and chains to product-analysis, requirements-creator and brainstorm-features.
 ---
 
@@ -45,6 +45,7 @@ experiments:
     planned_end: null
     readout_ref: ""           # vault link / Confluence URL of the product-analysis readout
     readout_signoff: null     # optional {by, date}: who signed off the readout (since v3.6.0)
+    prediction: null          # optional {by, date, text}: the PM's prediction (since v3.7.0) — written by readout step 1a or when the user states one; never asked at register or start
     verdict: null             # winner | loser | inconclusive (from readout only)
     decision: null            # rollout | rollout-with-caveats | iterate | extend | rollback
     decision_ref: ""          # decision-log record link
@@ -103,7 +104,8 @@ Per `local-context-protocol.md`. Then **Step R** — load/create the registry.
 
 ### Mode: readout
 1. Pick the running/overdue experiment.
-2. **Chain to `product-analysis` → A/B Test Results mode**, passing: flag/test name, dashboards, start/end dates, platforms, traffic split, spec link. product-analysis runs its own Data Integrity Gate and returns the verdict.
+1a. **Prediction first (P2, since v3.7.0).** Before the chain, ask the P2 question of `references/judgment-points.md` §1–§2 unless the entry already has a `prediction` (all its §2 rules apply (switch, known estimate, automated run, skip)). An answer, or an estimate the user already gave in the request, is written to `prediction: {by, date, text}` with the step-3 write; it travels to product-analysis as `pm_estimate` (or `skipped` / `off`), so the readout compares it with the verdict and never asks again.
+2. **Chain to `product-analysis` → A/B Test Results mode**, passing: flag/test name, dashboards, start/end dates, platforms, traffic split, spec link, `pm_estimate`. product-analysis runs its own Data Integrity Gate and returns the verdict.
 2a. **Gate emphasis (since v3.6.0).** When `role_defaults.gate_emphasis` holds `srm-exposure-peeking` or `ci-vs-point`, those tokens travel in the readout payload too, and the readout adds their ⚠️ caveat lines (`references/data-integrity-protocol.md` → Gate emphasis). Nothing is asked; the verdict rules stay the same.
 3. Record `verdict` + `readout_ref`; the experiment stays in `awaiting-readout` until the PM decides (Mode: decide) — with `verdict` now set, stale detection reports it as "awaiting your decision", not "readout pending". The linked hypothesis artifact's status is updated by product-analysis' own Vault Save (winner → validated, loser → rejected, inconclusive → stays `testing`, per `vault-protocol.md` → Hypothesis Lifecycle).
 4. Never compute or adjust the verdict here — the tracker records what product-analysis concluded, including "inconclusive".
@@ -114,7 +116,7 @@ Per `local-context-protocol.md`. Then **Step R** — load/create the registry.
 2. Ask the PM's decision: rollout / rollout-with-caveats (name the caveats) / iterate (what changes) / extend (new planned_end) / rollback (why).
 2b. **Economics & commitment (optional):** capture the test **cost** and the decision's **ROI / annual return** (`references/roi-frameworks.md`), and the **commitment** status (`references/goal-frameworks.md` → Tell and Sell: who committed and how). These flow into the decision-log record.
 3. **Gate**, then write `decision`, `status: decided`, `cost`/`roi`/`commitment` if provided, history.
-4. **Chain to `decision-log`** with full context (experiment, verdict, options considered, decision, rationale) — the ADR record link comes back into `decision_ref`.
+4. **Chain to `decision-log`** with full context (experiment, verdict, options considered, decision, rationale; since v3.7.0 also `owner` — the PM deciding — the options the PM named and did not choose with the reason given (left out when not given), the `prediction` for the record's Context, and as `base_rate` the registry's win rate: winners / other experiments with a verdict (this one excluded), with n, when n ≥ 5 — `references/judgment-points.md` §4) — the ADR record link comes back into `decision_ref`.
 5. Follow-ups: rollout → offer `task-creator` (cleanup/rollout tasks, «Випилити прапор …» convention); iterate → offer `brainstorm-features`/`requirements-creator`; extend → update planned_end.
 
 ### Step V — Vault Save

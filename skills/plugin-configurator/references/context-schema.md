@@ -50,12 +50,12 @@ local-context.md
 
 ### Judgment (optional)
 
-Written by onboarding Step 4b (Basic: defaults, deferred id `judgment`; Extended: `hats_allowed` asked). Absent section → the defaults below apply. Each switch acts only from the version shown; until then it is stored and changes nothing (`references/local-context-protocol.md` Step 0j).
+Written by onboarding Step 4b (Basic: defaults, deferred id `judgment`; Extended: `hats_allowed` and, since v3.7.0, `hypothesis_first` asked). Absent section → the defaults below apply. Each switch acts only from the version shown; until then it is stored and changes nothing (`references/local-context-protocol.md` Step 0j).
 
 | Key | Label in file | Default | Values | Acts from | Effect |
 |---|---|---|---|---|---|
 | `hats_allowed` | `Hats allowed` | `all` | `all` · `none` · a list of role enum values | v3.5.0 | Which one-run role overrides ("hats", `role-profiles.md` §4) Step 0i may apply |
-| `hypothesis_first` | `Hypothesis first` | `on` | `on` · `off` | v3.7.0 | From v3.7.0: at a judgment point the implementing skills ask for the user's own estimate before showing theirs (`pm-mental-model.md` P2); never asked in a run with no user present |
+| `hypothesis_first` | `Hypothesis first` | `on` | `on` · `off` | v3.7.0 | At the judgment points of `references/judgment-points.md` §1 the skill asks for the user's own estimate before showing its own and then compares the two (`pm-mental-model.md` P2); never asked in a run with no user present; a skip word skips it once, «вимкни» / "turn off" writes `off` |
 | `learning_mode` | `Learning mode` | `off` | `off` · `pm_first` · `explain` | v3.9.0 | From v3.9.0: synthesis skills offer a PM-first pass or explain their reasoning (`pm-mental-model.md` P8) |
 
 Section format in `local-context.md` (after `## User Profile`; each value alone on its line, like the role lines — the session digest parses `- **Role:**` and `- **Level home:**` to the end of the line):
@@ -236,7 +236,7 @@ Users can add any additional sections with free-form markdown content. The confi
 
 | Skill | Required context | Optional context |
 |-------|-----------------|-----------------|
-| **Every skill (Step 0i)** | — | user.role, role_label, role_scope, level_home → `role_defaults` (`role-profiles.md` §5; absent or non-enum → asked once in an interactive run, `pm` otherwise); judgment.hats_allowed (v3.5.0), judgment.hypothesis_first (from v3.7.0), judgment.learning_mode (from v3.9.0) |
+| **Every skill (Step 0i)** | — | user.role, role_label, role_scope, level_home → `role_defaults` (`role-profiles.md` §5; absent or non-enum → asked once in an interactive run, `pm` otherwise); judgment.hats_allowed (v3.5.0), judgment.hypothesis_first (v3.7.0 — at the `judgment-points.md` §1 points only), judgment.learning_mode (from v3.9.0) |
 | **Product Analysis** | product.name | tableau URLs, ab_test_dashboards, key_metrics, OKRs |
 | **Requirements Creator** | product.name, jira_project_key, platforms | confluence_template_url, locales, key_metrics |
 | **Task Creator** | product.name, jira_project_key | team, members with jira_account_id, confluence_space |
@@ -283,7 +283,7 @@ Users can add any additional sections with free-form markdown content. The confi
 1. `role` holds an enum value. A value outside the enum (free text from an earlier onboarding) or a missing role is a **recommendation** in Validate — "run `set role`" — never a failure and never a completeness penalty; Step 0i maps it on the next interactive run.
 2. `level_home`, when present, is one of `L1`–`L4`; any other value is a finding — recompute it from the role (`role-profiles.md` §2b).
 3. `role_scope`, when present, is `product`, `area` or `org`.
-4. `## Judgment`, when present: `hypothesis_first` ∈ on/off, `learning_mode` ∈ off/pm_first/explain, `hats_allowed` = all, none or a list of role enum values. An absent section is valid (defaults apply).
+4. `## Judgment`, when present: `hypothesis_first` ∈ on/off (read without a trailing note in brackets: a legacy `on (acts from v3.7.0)` is valid and reads as `on`, `off (…)` as `off`), `learning_mode` ∈ off/pm_first/explain, `hats_allowed` = all, none or a list of role enum values. An absent section is valid (defaults apply).
 
 ### Optional but recommended
 1. Confluence space (for publishing)

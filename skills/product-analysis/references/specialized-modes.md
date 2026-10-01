@@ -267,6 +267,8 @@ Specialized mode for comprehensive analysis of A/B test outcomes. Can work with 
 
 If requirements exist in Confluence — read them to extract all this context automatically.
 
+When chained from `experiment-tracker` (readout), the payload already carries this context and, since v3.7.0, `pm_estimate` — the PM's prediction, `skipped` or `off` (`references/judgment-points.md` §2).
+
 ### AB-2. Gather test results data
 
 > **Subagent delegation (large fan-out).** The dimension iteration (platform / country / user-type / new-vs-returning) is a natural fan-out — delegate per `references/subagent-delegation.md`: batch by segment / dimension, spawn subagents in parallel, each returns a compact structured result (per segment: primary + secondary metric values per group, sample size, significance if available, source-type marker + link). The main agent aggregates, cross-validates, and runs the Step 1.5 Data Integrity Gate before AB-3. `data-policy.md` applies to subagents. Falls back to inline if subagents are unavailable.
@@ -338,6 +340,10 @@ Follow `references/integration-strategy.md` → Tableau guidance. **MCP-first de
 - Are there signs of selection bias or data quality issues?
 - Gate-emphasis caveats (SKILL.md Step 1.5.f, since v3.6.0) — the ⚠️ lines of the sample-ratio / exposure / peeking and confidence-interval checks go into the Test Validity Assessment (section 7) and next to the affected primary metric; the verdict and recommendation follow the same rules as without them.
 
+### AB-3b. Your call first (P2, since v3.7.0)
+
+Before AB-4 shows the verdict, ask the P2 question of `references/judgment-points.md` §1–§2 — in a standalone run only; chained, use the caller's `pm_estimate` and never ask. All its §2 rules apply (switch, known estimate, automated run, skip). The metrics may already be on screen; the verdict and the recommendation wait for the answer. After the report — only when an estimate exists (an answer, one given in the request, or a `pm_estimate` other than `skipped` / `off`) — show the "Your estimate vs mine" comparison in the chat, never inside the report. The verdict follows the same rules with or without an answer.
+
 ### AB-4. Generate A/B test report
 
 **Report structure for A/B test analysis:**
@@ -355,6 +361,8 @@ Follow `references/integration-strategy.md` → Tableau guidance. **MCP-first de
    - **Extend the test** — results are trending positive but not yet statistically significant — need more time/data
    - **Stop and iterate** — test did not meet success criteria, suggest what to change and re-test
    - **Stop and roll back** — test negatively impacted key metrics
+
+   The Recommendation's confidence line (since v3.7.0) is rendered in the judgment footer, not here: level, the one assumption it is most sensitive to, and what observable result would change it (`references/judgment-points.md` §3). Its level follows the no-inflation cap of `references/judgment-points.md` §3.
 10. **Hypotheses for follow-up** — based on test results, what new hypotheses emerge? (e.g., "Test won on Web but not Mobile — hypothesis: mobile UX needs adjustment")
 11. **Glossary** — explain terms and metrics. Use the user's preferred language (`user.language`).
 12. **Sources** — Tableau dashboards used, Jira tasks, Confluence requirements, uploaded reports

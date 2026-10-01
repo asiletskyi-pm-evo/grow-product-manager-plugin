@@ -12,6 +12,52 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.7.0 (2026-09-30)
+
+**Judgment points.** Fourth release of the Judgment Core + Role Layer programme. The plugin now slows down exactly where a judgment is made: at six scoring, readout, verdict, prioritisation and decision points it asks for **your estimate before showing its own** and then compares the two; the lead recommendation or verdict states its **confidence, the assumption it is most sensitive to and what would change it**; and a decision record names its owner, rejected alternatives, base rate, revisit trigger and minority report, with decision quality judged apart from its outcome at review. It is the first release that adds a question at a judgment point — one, switchable, skippable with one word, never asked in an automated run. MINOR: new shared reference, new steps in 8 skills, a new onboarding question in Extended mode.
+
+### Added
+
+- **`references/judgment-points.md`** — the implementing protocol for P2, P3 and P9 of `pm-mental-model.md`. §1 is the complete list of judgment points: brainstorm-features (top-N before ICE / PRO), experiment-tracker (prediction before the readout), product-analysis (your call before the A/B verdict), quarterly-planning (Step 4.4 priorities before ICE / RICE), focus-advisor (your prior in the Step 1 gate), decision-log (the owner's confidence and revisit trigger, in log mode and for the new decision in revisit). §2 the P2 question, §3 the confidence line and its scale, §4 the decision-record fields, §5 the resulting check, §6 where Gate 4c is checked.
+- **"Your estimate first" (P2)** — one question at each listed point, asked before the skill shows its own score, rank, verdict or priority, then a short "Your estimate vs mine" block in the chat: where they agree, where they differ and the evidence that separates them. The skill never moves its own result toward yours. Switch: `judgment.hypothesis_first` (default `on`). «пропусти» / "skip" skips once; «вимкни» / "turn off" writes `Hypothesis first: off` (only when `local-context.md` can be written). The first P2 question of a session says why and how to switch it off. Never asked in a scheduled, headless or return-payload run (a chained skill that shows its own gate or report counts as interactive), or when your estimate is already known — even partly — in the request, in the registry's `prediction`, or passed by the calling skill as `pm_estimate`; it is never asked for the missing part. Choices that do not fit the host's 2–4-option picker are asked as a numbered list.
+- **Confidence line (P3, Gate 4c active)** — `Confidence: known / likely / uncertain / unknown · most sensitive to: … · would change if: …`, rendered by the judgment-footer partial (1.1.0) directly above the altitude line on the A/B test report, the brainstorm result, a quarterly plan with a Step 4.4 prioritisation and the focus brief (headless too); under the Decision section of a decision record. Scale ↔ numbers: known ≈ ≥ 0.8 (high), likely ≈ 0.6 to < 0.8 (medium), uncertain ≈ < 0.6 (low), unknown = no number; frontmatter `confidence` fields keep their types, and the line never reads above the no-inflation cap: an inconclusive verdict, a ❌ Blocked or not cross-validated metric (a single source included) or an estimate by analogy is at most `uncertain`. "More data" is not a falsifier. A confidence line where §1 names none is removed by the self-check.
+- **Decision hygiene (P9)** — decision-log records gain `owner` (one accountable person; `decided_by` stays the list), `rejected_alternatives` (`alternatives_considered` stays the count), `base_rate`, `revisit_trigger` (`revisit_by` stays the date), `minority_report` (debates now pass it into this field and a Minority report section) and `evidence_classes` (filled from v3.8.0). Nothing is inferred: an unstated field reads `not recorded` / `none found`. experiment-tracker's decide passes the registry's win rate as the base rate (n ≥ 5); meeting-processor's Decisions block carries the owner, rejected options, dissent and revisit condition only when said in the meeting, and hands all chosen decisions to decision-log at once (one confidence question for the batch); quarterly-planning's scope cuts arrive as rejected alternatives.
+- **Resulting check** — decision-log revisit, new step 1b: decision quality judged on what was known then (`sound` / `mixed` / `flawed`), the outcome (`good` / `bad` / `too early`), and a "resulting" line naming luck or variance when quality and outcome disagree. Step 1b adds no question and no new mode (D25 = a step of revisit); revisit step 2 asks the P2 question once for the new decision.
+- **"No decision = status theater"** — product-reporter's quarter review (QBR and board update included) and initiative status print one ⚠️ chat line when the report records no decision taken this period and asks for none. A note, not a question; the report is unchanged; not printed when another skill asks for the report only for its data.
+- experiment-tracker registry: optional `prediction: {by, date, text}`.
+- plugin-configurator: Extended onboarding Step 4b asks `hypothesis_first` next to `hats_allowed` (Basic still asks nothing); `update config → Judgment` no longer says the switch acts later.
+- Tests: lint check 23 `judgment-points` (a §1 skill that never cites the protocol, or a P2 question or P3 confidence line outside §1; a negated mention such as "never asks the P2 question" passes) with three seeds (19/19); output-evals judgment criteria `altitude_line` and `confidence_falsifier` for every rubric, plus a full product-analysis A/B rubric with fixture and gold exemplar; test cases TC-jdg-370-*; trigger-evals H15–H16 (revisit / resulting phrases → decision-log).
+
+### Changed
+
+- `pm-mental-model.md`: the Binds of P2, P3, P4 (minority-report field) and P9 are active since v3.7.0; the core names the owner in the decision record (the judgment footer names none). `local-context-protocol.md` Step 0j step 3 states the P2 rule in the present tense.
+- `artifact-style-gate.md` Gate 4c: checked by the T-5 self-check and decision-log's save gate only where `judgment-points.md` §1 names a line; the artifact-checker gets no 4c lens (none of its four skills renders the line).
+- `template-protocol.md` T-5 step 3a: the confidence line joins the footer; a user override without its placeholders gets the built-in line above it.
+- Skill versions: `brainstorm-features` 0.13.0 → 0.14.0 · `decision-log` 0.3.0 → 0.4.0 · `experiment-tracker` 0.4.0 → 0.5.0 · `focus-advisor` 0.8.0 → 0.9.0 · `meeting-processor` 0.15.0 → 0.16.0 · `plugin-configurator` 2.11.1 → 2.12.0 · `product-analysis` 0.15.0 → 0.16.0 · `product-reporter` 0.8.0 → 0.9.0 · `quarterly-planning` 0.6.0 → 0.7.0.
+
+### Adaptations to the specification
+
+- P2 and P3 bind six skills, not seven: roadmap-architect has no scoring or verdict step, so the planning suite's P2 point is quarterly-planning Step 4.4 (D27); its pre-mortem and kill criteria arrive with P4 in v3.9.0.
+- product-analysis implements P2 / P3 in A/B mode only — the verdict the specification names; its other modes are unchanged.
+- The spec asks for the confidence line in every artifact rubric's gold. It is added only where a skill renders it: the new A/B gold. The nine existing golds belong to skills that render none, so their `confidence_falsifier` criterion is `n/a`, and a line appearing there counts as a defect.
+
+### Not in this version (next)
+
+v3.8.0 — evidence classes: Gate Check 6, `simulated` / `assumed` labels, vault `evidence:` / `altitude:` frontmatter, `evidence_classes` in decision records, Gate 4b.
+
+### Backwards compatibility
+
+- **With `hypothesis_first: off`, or in any automated run**, every skill asks exactly the v3.6.0 questions. The one exception is the configurator's Extended onboarding and `update config → Judgment`: they now offer `hypothesis_first` in the same message as `hats_allowed`. Basic onboarding still asks nothing.
+- **With the default `on`**, the only new question in a skill run is the P2 question at the six points above. One word skips it, and one word switches it off. brainstorm-features' "Choose one" starts from that answer instead of asking again.
+- **Visible for everyone:**
+  - one confidence line on the A/B report, the brainstorm result, a quarterly plan with a Step 4.4 prioritisation and the focus brief;
+  - the resulting lines in a decision revisit;
+  - the status-theater note on stakeholder reports without a decision;
+  - the new record fields — the MoM's Decisions table keeps its columns; meeting-processor extracts the fields for decision-log.
+- **Unchanged:** decision records written before v3.7.0 remain valid without the new keys, and no route or description changed.
+
+---
+
 ## v3.6.0 (2026-09-29)
 
 **Role defaults and templates.** Third release of the Judgment Core + Role Layer programme. The role now changes where a run starts — the template ranked first, extra sections, extra evidence checks, the planning view and the wording of questions — while every gate, question and route stays the same, and a user without a role (or with `pm`) sees exactly v3.5.0. MINOR: 14 new built-in templates, new steps in 18 skills, new shared reference.

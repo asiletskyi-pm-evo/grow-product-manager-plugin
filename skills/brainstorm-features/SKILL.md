@@ -1,6 +1,6 @@
 ---
 name: brainstorm-features
-version: 0.13.0
+version: 0.14.0
 description: Brainstorm features and hypotheses with ICE, or run a role debate (Debate mode). Not the CJM pipeline (cjm-research), not meeting transcripts (meeting-processor). UA — «брейншторм фіч», «згенеруй гіпотези», «проведи дебати», «red team цю ідею». EN — "brainstorm features", "generate hypotheses", "find growth opportunities", "run a debate", "have agents argue from different roles", "stress-test via debate". Also UA — «знайти точки росту», «гіпотези для CJM-воронки», «нехай агенти подискутують», «круглий стіл ролей», «розглянь з різних ролей». The ideation engine — cjm-research delegates here. Do NOT use to record a decision already made (decision-log).
 ---
 
@@ -70,7 +70,7 @@ Run Steps T-1 → T-5. Append `<!-- template: {template_id} version: {version} -
 
 If the user says "do not use a template" → skip Step T and use the skill's internal structure.
 
-**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — on the brainstorm result wherever it is kept; not on a return to a calling skill (a Debate-mode return, or the CJM Hypotheses result for cjm-research — the caller's report carries it).
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — on the brainstorm result wherever it is kept, with the confidence line for the ranked result's top pick above it since v3.7.0 (`references/judgment-points.md` §3; Gate 4c); not on a return to a calling skill (a Debate-mode return, or the CJM Hypotheses result for cjm-research — the caller's report carries the altitude line, and a confidence line only where `references/judgment-points.md` §1 names one for the caller).
 
 ## Workflow
 
@@ -131,6 +131,8 @@ After analysis, ask the user via AskUserQuestion:
 
 Both options can be selected — evaluate existing ideas AND generate new ones.
 
+**Your top-N first (P2, since v3.7.0).** Before the first ICE / PRO scores of this run are shown (the Step 3A evaluation, or the Step 3B idea cards — name the generated ideas first and show the cards with their scores after the answer), ask the P2 question of `references/judgment-points.md` §1–§2 — all its §2 rules apply (switch, known estimate, automated run, skip); after the scores, show the "Your estimate vs mine" comparison. Hypotheses product-analysis returned in Step 2 are listed without their ICE until then. Once per run; never in Step 3C or a Debate-mode return.
+
 ### Step 3A — Evaluate user's existing ideas (if provided)
 
 If the user has ideas and wants evaluation:
@@ -156,7 +158,7 @@ If the user has ideas and wants evaluation:
 See `references/ice-framework.md` for ICE scoring and `references/roi-frameworks.md` for PRO/ROAIP economics.
 
 **Overload / no-data prioritization methods** (offer when the backlog is large or data is missing):
-- **"Choose one"** — when the backlog is overloaded, force a single pick: which one idea, if you could only do one, moves the goal most? Cuts analysis paralysis.
+- **"Choose one"** — when the backlog is overloaded, force a single pick: which one idea, if you could only do one, moves the goal most? Cuts analysis paralysis. When the P2 question was answered in this run, start from that answer instead of asking again.
 - **"Olympic system"** — when ideas have no comparable data, rank by pairwise elimination (bracket): compare two at a time, the winner advances, until an ordering emerges — a relative ranking without absolute scores.
 
 After presenting the evaluation — propose discussing specific ideas in more depth if the user wants to explore alternatives or refine the approach.
@@ -354,10 +356,10 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 IF vault_level > L0 AND vault sync_mode != "off":
 
 1. For **each finalized hypothesis** (Step 5), save a separate artifact:
-   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.13.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.14.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
 2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
 3. For **debate sessions** (Step 3D), additionally save the debate itself:
-   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.13.0", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
+   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.14.0", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
    Display: "Saved to Vault: Debates/{product}/…"
 
 ## Quality standards
