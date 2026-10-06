@@ -7,8 +7,8 @@
 | # | Stage | What it checks | How | Blocker? |
 |---|--------|--------------|-----|---------|
 | 0 | **Backup** | snapshot of the version before changes | `git tag` + copy of the folder into `_backups/<version>/` | — |
-| 1 | **Static lint** | 22 named checks — see the table below | `testing/skill_lint.py` (automated, in CI/locally) | yes |
-| 1b | **Seeded-leak test** | that the checks whose failure mode is silence actually fire — 16 known-bad edits (a line appended, removed or replaced) applied one at a time, linter must go RED on each | `testing/seeded_leak_test.py` (automated, in CI/locally) | yes |
+| 1 | **Static lint** | 24 named checks — see the table below | `testing/skill_lint.py` (automated, in CI/locally) | yes |
+| 1b | **Seeded-leak test** | that the checks whose failure mode is silence actually fire — 23 known-bad edits (a line appended, removed or replaced) applied one at a time, linter must go RED on each | `testing/seeded_leak_test.py` (automated, in CI/locally) | yes |
 | 2 | **Trigger eval** | description triggers on target phrases and does NOT hijack others | a set of positive/negative phrases per skill; judge subagent | yes |
 | 3a | **Trajectory / scenario walk** | skill takes the right steps: key steps, gates, tool calls, artifact structure | 1-2 scenarios per skill + mock local-context; subagent "dry run" verifies | yes (for changed skills) |
 | 3b | **Output eval** | artifact **quality** against a rubric (weighted 0/1/2, pass ≥ threshold) | `testing/output-evals.md` rubric + fixture + gold exemplar; LM-judge subagent | yes (for changed artifact-producing skills) |
@@ -20,7 +20,7 @@
 
 ## Stage 1 — what static lint actually checks
 
-Checks 1–18 exist because the defect class each one catches actually shipped; checks 19–22 are the declared exception — preventive guards for the JCRL role layer (v3.5.0), written before any defect of their class could ship. The v2.0.0 audit found 5 critical + 14 major defects while both validators reported green; each became a named check in v2.0.1. **When a new defect class is found, add a check here — do not rely on a manual step.** The rename regression `TC-reg-rename-02` was hand-run and reported *pass* while the stale name was still live; `stale-names` now answers that question mechanically.
+Checks 1–18 exist because the defect class each one catches actually shipped; checks 19–24 are the declared exception — preventive guards for the JCRL role layer (v3.5.0), judgment points (v3.7.0) and evidence classes (v3.8.0), written before any defect of their class could ship. The v2.0.0 audit found 5 critical + 14 major defects while both validators reported green; each became a named check in v2.0.1. **When a new defect class is found, add a check here — do not rely on a manual step.** The rename regression `TC-reg-rename-02` was hand-run and reported *pass* while the stale name was still live; `stale-names` now answers that question mechanically.
 
 | Check | Catches | Shipped example it would have caught |
 |-------|---------|--------------------------------------|
@@ -46,6 +46,8 @@ Checks 1–18 exist because the defect class each one catches actually shipped; 
 | `persona-prompt` | a product-role identity handed to the model — "You are a CPO / product manager / tech lead …", or the Ukrainian «Ти — продакт-менеджер» form — in skills, references, agents and their Codex ports. Functional identities ("You are the **checker**", "You are one voice…") and the debate card's `You are {role}` placeholder pass, and so do a quoted counter-example on a line that forbids it and a condition ("if you are a PM") | preventive (JCRL v3.5.0): `role-profiles.md` §0 bans persona prompting; without the check that ban rests on every reviewer remembering it |
 | `judgment-footer` | a skill that declares a Product-contour `artifact_type` in Step T (types parsed from the `**Product contour:**` line of `template-protocol.md`, `partial` ignored) but never cites `partial/judgment-footer`; People-contour skills are exempt | preventive (JCRL v3.5.0): the altitude line lands in every Product-contour skill in one release — the next skill to add a Step T would ship without it |
 | `role-enum` | the `user.role` enum in `role-profiles.md` §2 ≠ the `role` enum in `context-schema.md`, or either line missing | preventive (JCRL v3.5.0): one enum kept in two files — drift means onboarding offers a role that Step 0i treats as "not in the enum" and asks about again, or the reverse |
+| `judgment-points` | a skill listed in `judgment-points.md` §1 that never cites it, or a skill outside §1 that asks the P2 question or renders the P3 confidence line (a negated mention passes) | preventive (JCRL v3.7.0): §1 is the complete list of judgment points — a question or line outside it has no switch, skip rule or test |
+| `evidence-classes` | the six-class enum of `pm-mental-model.md` §4 drifting from its canonical copies (vault-schema, Gate 4b), an invented class word inside a label, a P7-bound skill that never cites Gate Check 6, or a live "5 universal gate checks" count | preventive (JCRL v3.8.0): one vocabulary read by the gate, the checker, the vault and every artifact skill |
 
 Validator checks added for the cross-host release (v3.0.0) and later, in `validate-consistency.sh`:
 
@@ -53,7 +55,7 @@ Validator checks added for the cross-host release (v3.0.0) and later, in `valida
 |-------|---------|--------------------------------------|
 | 12 `description routing order` | a routing guard that does not survive Codex's ~190-character cut; a guard naming a non-existent skill; a description with no Ukrainian keywords | the v2.x order put "Do NOT use" and every Ukrainian trigger after character 400 — cut on every real Codex host |
 | 13 `commands typed-only` | `$1` / `$ARGUMENTS` in a command body (Codex skips the command); a command description that does not open with the typed-only guard | 4 of 5 commands never migrated; once they did, `«який статус плагіна»` routed to `source-command-status` (trigger-evals L 4/9) |
-| 14 `host packaging` | a skill or command without the Path rule; an `agents/*.md` without its `.codex/agents/*.toml` port; a skill missing from `testing/host-matrix.md` | Codex resolved `references/data-policy.md` against the skill folder — 3 of 4 shared protocols unreachable from write-concept |
+| 14 `host packaging` | a skill or command without the Path rule; an `agents/*.md` without its `.codex/agents/*.toml` port, or (since v3.8.0) a port whose instructions drift from the agent body beyond the host note; a skill missing from `testing/host-matrix.md` | Codex resolved `references/data-policy.md` against the skill folder — 3 of 4 shared protocols unreachable from write-concept |
 | 15 `thin core` (v3.4.0) | a `SKILL.md` longer than 400 lines — the thin-core rule | seven skill cores had drifted to 405–617 lines while `harness-map.md` still described them as "thin ≤400"; nothing measured it |
 
 Two design rules keep the linter honest: it is **stdlib-only** (PyYAML only adds an extra strict parse — CI installs it and sets `GROW_LINT_REQUIRE_YAML=1` so its absence is a blocker there, while a local run without it degrades to a warning), and the `ghost-skill` vocabulary is **auto-derived from `templates/built-in/`** rather than hand-listed, so new template types do not create false positives.
@@ -93,13 +95,13 @@ Tokens are matched **case-insensitively with word boundaries**, not as bare subs
 
 ## Stage 1b — the seeded-leak test
 
-A check nobody has watched fail is a promise, not a test: a regex that matches nothing reads exactly like a clean repo. `testing/seeded_leak_test.py` copies the tree to a temp dir, applies one known-bad edit at a time, and asserts the linter goes RED with the expected check tag. Sixteen seeds: twelve org-leak seeds, one per defect class that actually shipped, written with a fictional org (`Zorg`, `ZORG`) so no real identifier enters the repository; and four preventive role-layer seeds for checks 19–22 (JCRL v3.5.0) — a role-name branch appended to a `SKILL.md`, a persona prompt appended to a reference, the `partial/judgment-footer` citation removed from `write-concept`, `eng_lead` dropped from one of the two role enums. A seed appends a line, removes the first line matching a regex, or replaces a regex once; a seed that changes nothing is reported as missed, never as caught. It runs in both CI workflows and after any edit to `skill_lint.py`.
+A check nobody has watched fail is a promise, not a test: a regex that matches nothing reads exactly like a clean repo. `testing/seeded_leak_test.py` copies the tree to a temp dir, applies one known-bad edit at a time, and asserts the linter goes RED with the expected check tag. Twenty-three seeds: twelve org-leak seeds, one per defect class that actually shipped, written with a fictional org (`Zorg`, `ZORG`) so no real identifier enters the repository; four preventive role-layer seeds for checks 19–22 (JCRL v3.5.0) — a role-name branch appended to a `SKILL.md`, a persona prompt appended to a reference, the `partial/judgment-footer` citation removed from `write-concept`, `eng_lead` dropped from one of the two role enums; three judgment-point seeds for check 23 (v3.7.0); and four evidence-class seeds for check 24 (v3.8.0). A seed appends a line, removes the first line matching a regex (or, since v3.8.0, every matching line — `remove-all`, for a citation repeated in one file), or replaces a regex once; a seed that changes nothing is reported as missed, never as caught. It runs in both CI workflows and after any edit to `skill_lint.py`.
 
 ```
-baseline: GREEN ✅   seeds: 16
+baseline: GREEN ✅   seeds: 23
   ✅ authority: per <Org> convention  → expected [org-signature]
   …
-caught 16/16 seeded defects
+caught 23/23 seeded defects
 ```
 
 **Rule:** a new check lands with its seed in the same commit. If you cannot write a line that the check must reject, the check does not describe anything.
@@ -157,7 +159,7 @@ Static checks prove the tree is consistent; they cannot prove a host still loads
 - `bash testing/host-smoke.sh` green on the release machine, summary line in the release PR (since v3.0.2).
 
 - Lint: 0 FAIL.
-- Seeded-leak test: 16/16 caught (and a new seed for every new check).
+- Seeded-leak test: 23/23 caught (and a new seed for every new check).
 - Every example added or touched this version is universal — placeholders, no team signature, language-neutral code blocks, no domain-specific detail.
 - Trigger: all target phrases trigger the target skill; 0 false hijacks of neighbors.
 - Scenario: for every changed skill the key steps/gates/format are present.

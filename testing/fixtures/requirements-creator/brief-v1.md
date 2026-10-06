@@ -1,4 +1,4 @@
-<!-- Output-eval fixture (input brief) for requirements-creator. Feed as the user request; score the resulting requirements doc against the requirements-creator rubric in testing/output-evals.md. Gold reference: skills/requirements-creator/references/examples/feature-spec-example-v1.md. Generic, no org data. -->
+<!-- Output-eval fixture (input brief) for requirements-creator. Feed as the user request; score the resulting requirements doc against the requirements-creator rubric in testing/output-evals.md. Gold reference: skills/requirements-creator/references/examples/feature-spec-example-v1.md. Generic, no org data. For the evaluator only (never part of the input; moved out of the brief in v3.8.0): Expected: functional requirements, Given/When/Then acceptance criteria, an A/B decision rule (ship/iterate/kill), primary + guardrail metrics, analytics events, and explicit out-of-scope. -->
 
 # Input brief
 
@@ -9,5 +9,3 @@ Context the PM gives:
 - Goal: increase return-to-purchase without hurting checkout conversion.
 - Approach: A/B, 50/50, logged-in only.
 - Needs to be implementable by FE/BE without guessing.
-
-Expected: functional requirements, Given/When/Then acceptance criteria, an A/B decision rule (ship/iterate/kill), primary + guardrail metrics, analytics events, and explicit out-of-scope.

@@ -1,13 +1,15 @@
 <!-- Golden exemplar for the product-analysis skill (mode: A/B Test Results, since v3.7.0).
      Purpose: a worked A/B test report the skill can pattern-match against (few-shot Examples context type), and the gold reference for the product-analysis A/B rubric in testing/output-evals.md (fixture: testing/fixtures/product-analysis/ab-readout-v1.md).
      Generic marketplace test — NO org-specific data. Numbers are illustrative.
-     Demonstrates: a verdict per platform and per guardrail that follows the pre-set criteria and the AB-4 recommendation definitions rather than the PM's leaning ("roll it out everywhere"), validity limits made explicit (one source, Android power, the week-2 fade), and the judgment footer — the confidence line (references/judgment-points.md §3, Gate 4c) directly above the altitude line (Gate 4a). The PM's own call and the "Your estimate vs mine" comparison stay in the chat, never in the report. -->
+     Demonstrates: a verdict per platform and per guardrail that follows the pre-set criteria and the AB-4 recommendation definitions rather than the PM's leaning ("roll it out everywhere"), validity limits made explicit (one source, Android power, the week-2 fade), evidence labels (since v3.8.0: the results the PM pasted are `user-text`, so `reported` and not `measured`; a randomised readout gets no hand-back line; one group label under the verdict covers the report because every value shares class and source, the quoted support theme is attributed to the PM, not to a customer, and the pooled-guardrail assumption the confidence line rests on carries its `assumed` label), and the judgment footer — the confidence line (references/judgment-points.md §3, Gate 4c) directly above the altitude line (Gate 4a). The PM's own call and the "Your estimate vs mine" comparison stay in the chat, never in the report. -->
 
 # A/B Test Report — `one-page-checkout` (illustrative)
 
 ## 1. Executive Summary
 
 **Verdict: lost — the success criteria are not met** (test window 1–14 Sep 2026).
+
+Evidence: reported — results the PM pasted for 1–14 Sep 2026 (one source; see Sources).
 
 | Criterion | Result |
 |---|---|
@@ -39,7 +41,7 @@
 | Average order value | −0.4 % | n.s. | ✅ met |
 | Support contacts per order | +6 % | 0.04 | ❌ not met |
 
-⚠️ Most of the extra support contacts are "where is my delivery option" questions on the test page. The guardrails arrived pooled, so the breach cannot yet be attributed to one platform.
+⚠️ Most of the extra support contacts are "where is my delivery option" questions on the test page (reported · the PM's summary of the support contacts, 1–14 Sep 2026). The guardrails arrived pooled, so the breach cannot yet be attributed to one platform.
 
 ## 5. Segment Breakdown
 
@@ -97,7 +99,7 @@ What to monitor in the re-test:
 
 ## 12. Sources
 
-Results for `one-page-checkout` pasted by the PM (test window 1–14 Sep 2026): conversion, guardrails and weekly web lift. This is a single source; cross-validation is pending.
+Results for `one-page-checkout` pasted by the PM (test window 1–14 Sep 2026): conversion, guardrails and weekly web lift — `user-text` → `reported` (PM). This is a single source; cross-validation is pending.
 
-Confidence: uncertain · most sensitive to: the support-contact rise holding on web as well as Android (the +6 % for 1–14 Sep 2026 is pooled) · would change if: the web-only split of support contacts per order for 1–14 Sep 2026 shows no rise (Δ ≤ 0 %), which would move web to "roll out with caveats"
+Confidence: uncertain · most sensitive to: the support-contact rise holding on web as well as Android [assumed — the +6 % for 1–14 Sep 2026 is pooled] · would change if: the web-only split of support contacts per order for 1–14 Sep 2026 shows no rise (Δ ≤ 0 %), which would move web to "roll out with caveats"
 Altitude: L2 · ↑ serves: — (no linked goal) · ↓ next: move the delivery option above the payment block and re-test on web and Android at the planned power

@@ -6,6 +6,8 @@
      Written in English as a neutral reference; a real run writes in the user's `user.language`.
      The Repository entry section comes from role_defaults.extra_sections.research (template-protocol T-5 step 3b): a user whose
      profile lists no extra section for research gets the same plan without it. Participants appear as ids only.
+     Evidence classes (since v3.8.0): the ticket shares and the 2024-05 survey come from the researcher's brief (`user-text`), so
+     they are `reported`; the plan cites nothing else. Simulated interviews only rehearse the guide — never counted, never cited.
      A real run appends the template marker after the altitude line (template-protocol T-5 step 5); it is left out here. -->
 
 # Research Plan: Why new sellers stop listing in their first 30 days
@@ -22,7 +24,7 @@
 | A2 | Sellers find out about fees too late | "Fees unclear" — **29%** of new-seller tickets | Sellers learned the fees after listing and name them → fee clarity goes first |
 | A3 | A rejected listing gives no clear reason, and sellers give up | "Listing rejected" — **22%** of new-seller tickets | Rejections without a usable reason came right before stopping → listing creation goes first |
 
-Ticket shares: support-desk export, sellers in their first 30 days, 2026-07-01 – 2026-09-27.
+Evidence: reported — ticket shares from the support-desk export in Person1's brief (sellers in their first 30 days, 2026-07-01 – 2026-09-27).
 
 - **Dropped from the study:** the acquisition channel of each seller (Person5's request). The answer would not change which problem goes first, and it costs interview time. It can be raised as a separate analytics question.
 
@@ -78,7 +80,7 @@ Ticket shares: support-desk export, sellers in their first 30 days, 2026-07-01 �
 | The fee-credit incentive attracts sellers still thinking about selling | Stopped group skews towards "almost stayed" | Note it in the synthesis; compare with the funnel cut |
 | The seller-cabinet banner reaches only sellers who still log in | Stopped group recruited mainly by e-mail | Track the channel per participant (id only) |
 
-- ⚠️ The 2024-05 seller survey (n = 1,200) is older than 12 months — context only, not evidence for this decision.
+- ⚠️ The 2024-05 seller survey (reported · Person1's brief, n = 1,200) is older than 12 months — context only, not evidence for this decision.
 
 ## Repository entry
 
@@ -86,7 +88,7 @@ Ticket shares: support-desk export, sellers in their first 30 days, 2026-07-01 �
 |-------|-------|
 | Study | Why new sellers stop listing in their first 30 days — which problem weighs most |
 | Date | Fieldwork 2026-10-26 – 2026-11-06 (planned) |
-| Participants | Planned: 8 real sellers — P1–P5 stopped, P6–P8 contrast; simulated: none counted |
+| Participants | Planned: 8 real sellers — P1–P5 stopped, P6–P8 contrast; simulated: none counted (guide rehearsal only) |
 | Method | Interviews + analytics (onboarding funnel cut) |
 | Tags | seller onboarding · activation · first 30 days · listing creation · fees |
 | Confidence | medium (expected) |

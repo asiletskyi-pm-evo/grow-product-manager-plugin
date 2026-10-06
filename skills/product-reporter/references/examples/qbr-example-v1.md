@@ -6,6 +6,11 @@
      Written in English as a neutral reference; a real run writes in the user's `user.language`.
      The fixture's remark from 1-1 notes is deliberately absent: org health is aggregate only, and People-contour data stays local.
      The ⚠️ lines under the money bridge and on DL-12 come from role_defaults.gate_emphasis (money-bridge, hippo-check); they add caveats, never questions.
+     Evidence labels (since v3.8.0; class first in the existing annotation, one label per section where class and source are shared): the
+     finance export, the dashboard values, the HR export (tech-debt share included) and the decision records were pasted by Person1, so they
+     are `reported`; the Jira feature counts are pasted too in this dry run, so they are `reported (Person1)` — in a real run Steps 2–3
+     count them from Jira after the Step 2.5 gate and they are `measured`; Competitor A's moves are `external`, via Person1. Plans, targets, full-year forecasts and money-bridge effects carry no
+     class. Each cause of deviation is `reported` as Finance states it — the skill infers none, so no hand-back line appears.
      A real run appends the template marker after the altitude line (template-protocol T-5 step 5); it is left out here. -->
 
 # QBR: Product 1 marketplace direction · Q3 2026 (2026-07-01 – 2026-09-30)
@@ -17,11 +22,11 @@
 - **Biggest miss:** electronics GMV **−11% vs plan** after Competitor A's August price campaign; the counter-campaign added 0.2 M of marketing cost.
 - **Decision needed:** approve the four commitments for the next quarter below.
 
-Sources: finance export (Person5, 2026-10-05); analytics, ads and survey dashboards; `jira-internal`. Period for every number: 2026-07-01 – 2026-09-30 unless stated.
+Evidence: reported — figures pasted by Person1, unless a section or figure carries its own label. Sources: finance export (Person5, 2026-10-05); analytics, ads and survey dashboards; `jira-internal`. Period for every number: 2026-07-01 – 2026-09-30 unless stated.
 
 ## Financials
 
-Money in millions of the reporting currency. Source: finance export (Person5, 2026-10-05).
+Money in millions of the reporting currency. Evidence: reported — finance export (Person5, 2026-10-05), for actuals and causes.
 
 | Line | Plan | Actual | Δ | Full-year forecast | Cause of deviation |
 |------|-----:|-------:|--:|-------------------:|--------------------|
@@ -42,22 +47,22 @@ Money in millions of the reporting currency. Source: finance export (Person5, 20
 
 ## Initiatives
 
-Source: `jira-internal`, 2026-07-01 – 2026-09-30. Across the direction: **34 of 46** planned features closed (74%).
+Evidence: reported — Jira feature counts pasted by Person1 for this dry run, 2026-07-01 – 2026-09-30. Across the direction: **34 of 46** planned features closed (74%).
 
 | Initiative | Objective served | Status | Planned vs delivered | Next |
 |------------|------------------|--------|----------------------|------|
-| PROJ-1234 — Delivery cost transparency | KR3 checkout conversion | 🟡 At risk | 5 of 8 features | A/B test launch moved from 2026-10-26 to 2026-11-16 — the tariff API needs a cache (Person4, 2026-10-09) |
+| PROJ-1234 — Delivery cost transparency | KR3 checkout conversion | 🟡 At risk | 5 of 8 features | A/B test launch moved from 2026-10-26 to 2026-11-16 — the tariff API needs a cache (reported · Person4, 2026-10-09) |
 | PROJ-1300 — Sponsored listings for all sellers | KR2 contribution margin | ✅ Done — live since 2026-08-01 | 6 of 6 features | Closed; ad revenue tracked in next quarter's financials |
-| PROJ-1350 — Seller onboarding revamp | KR1 GMV | 🔴 Slipped | 2 of 7 features | The other 5 move to the next quarter; two engineering roles are open |
+| PROJ-1350 — Seller onboarding revamp | KR1 GMV | 🔴 Slipped | 2 of 7 features | The other 5 move to the next quarter; two engineering roles are open [reported: Person1] |
 
 ## Market
 
-- Competitor A ran an electronics price campaign, 2026-08-03 – 2026-08-31 (its website, 2026-08). It drove the GMV miss and the counter-campaign (DL-11).
-- Competitor A added free delivery above an order threshold from 2026-09-15 (its press release, 2026-09-15). It bears on the delivery-cost test (PROJ-1234), which targets the same buyer concern.
+- Competitor A ran an electronics price campaign, 2026-08-03 – 2026-08-31 (external · its website, 2026-08, via Person1). It drove the GMV miss and the counter-campaign (DL-11) [reported: Finance's comment, Person5].
+- Competitor A added free delivery above an order threshold from 2026-09-15 (external · its press release, 2026-09-15, via Person1). It bears on the delivery-cost test (PROJ-1234), which targets the same buyer concern.
 
 ## Org health
 
-Aggregate only. Source: HR export (2026-09-30); tech-debt share from `jira-internal`.
+Aggregate only. Evidence: reported — HR export (2026-09-30); tech-debt share from `jira-internal`.
 
 - Headcount **42 of 45** planned; **3** open roles (2 engineering, 1 analyst); **1** leaver in the quarter.
 - Capacity used **92%** of plan; tech-debt share **18%** of closed story points.
@@ -74,11 +79,11 @@ Aggregate only. Source: HR export (2026-09-30); tech-debt share from `jira-inter
 
 | Record | Date | Decision | Evidence |
 |--------|------|----------|----------|
-| DL-10 | 2026-07-14 | Open sponsored listings to all sellers on 2026-08-01, a month early | Beta advertiser retention 78% after 8 weeks (ads dashboard, 2026-05-01 – 2026-06-30) |
-| DL-11 | 2026-08-06 | A 3-week counter-campaign in electronics, +0.2 M marketing | Electronics GMV −14% week over week, 2026-08-03 – 2026-08-09 (analytics dashboard) |
+| DL-10 | 2026-07-14 | Open sponsored listings to all sellers on 2026-08-01, a month early | Beta advertiser retention 78% after 8 weeks (reported · ads dashboard, 2026-05-01 – 2026-06-30) |
+| DL-11 | 2026-08-06 | A 3-week counter-campaign in electronics, +0.2 M marketing | Electronics GMV −14% week over week, 2026-08-03 – 2026-08-09 (reported · analytics dashboard) |
 | DL-12 | 2026-08-20 | Pause the business-buyer pilot until 2027 | None recorded |
 
-- ⚠️ DL-12 rests on a senior opinion (the CEO's call in the leadership meeting) and its record names no evidence — the input is labelled `assumed`.
+- ⚠️ DL-12 rests on a senior opinion (the CEO's call in the leadership meeting) and its record names no evidence — the input is labelled `[assumed — senior opinion: the CEO]`.
 
 ## Commitments for next quarter
 

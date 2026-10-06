@@ -1,4 +1,4 @@
-<!-- Output-eval fixture (input brief) for write-concept. Feed this as the user request; score the resulting PRD against the write-concept rubric in testing/output-evals.md. Gold reference: skills/write-concept/references/examples/prd-example-v1.md. Generic, no org data. -->
+<!-- Output-eval fixture (input brief) for write-concept. Feed this as the user request; score the resulting PRD against the write-concept rubric in testing/output-evals.md. Gold reference: skills/write-concept/references/examples/prd-example-v1.md. Generic, no org data. For the evaluator only (never part of the input; moved out of the brief in v3.8.0): Expected: a PRD with a real problem statement, measurable success metric + guardrail, a verification/decision-rule, per-segment "what changes", scope with non-goals, and assumptions flagged. -->
 
 # Input brief
 
@@ -10,5 +10,3 @@ Context the PM gives:
 - Logged-in and guest buyers both browse; persistence differs.
 - No analytics numbers provided yet — the skill should mark quantitative claims as assumptions to validate.
 - Audience for the doc: the direction team.
-
-Expected: a PRD with a real problem statement, measurable success metric + guardrail, a verification/decision-rule, per-segment "what changes", scope with non-goals, and assumptions flagged.

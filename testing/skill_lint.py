@@ -7,9 +7,10 @@ FAIL = release blocker; WARN = take note.
 Checks 1-18 exist because the defect class each one catches actually shipped.
 The 2026-07-14 audit found 5 critical + 14 major defects that the previous
 linter passed green; each is now a named check (see CHECKS below).
-Checks 19-22 are the exception, and say so: they are preventive guards for the
-role layer (JCRL v3.5.0, references/role-profiles.md), written before any defect
-of their class could ship. Each one still has a seed in seeded_leak_test.py.
+Checks 19-24 are the exception, and say so: they are preventive guards for the
+role layer (19-22, JCRL v3.5.0, references/role-profiles.md), the judgment points
+(23, v3.7.0) and the evidence classes (24, v3.8.0), written before any defect of
+their class could ship. Each one still has a seed in seeded_leak_test.py.
 
 Stdlib-only by design (runs in CI without pip install). PyYAML is used for an
 extra strict parse when available, but the hazard scan does not depend on it.
@@ -40,6 +41,7 @@ CHECKS = """
 21. judgment-footer      a Product-contour Step T skill that never cites partial/judgment-footer
 22. role-enum            role-profiles.md user.role enum == context-schema.md role enum
 23. judgment-points      a judgment-points.md §1 skill that never cites it, or a P2 question / confidence line outside §1
+24. evidence-classes     the §4 class enum drifts, an invented class in a label, a P7-bound skill that never cites Gate Check 6, or a stale gate-check count
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -848,7 +850,8 @@ for target, text in skill_text.items():
 
 # ============================================================ role layer (19-22)
 # JCRL v3.5.0 adds a role layer: `references/role-profiles.md`. Unlike 1-18 these
-# checks are PREVENTIVE — no defect of their class has shipped. They guard the
+# checks — and the judgment (23) and evidence-class (24) guards below — are
+# PREVENTIVE: no defect of their class has shipped. 19-22 guard the
 # layer's promises before the first skill can break them: a role changes
 # defaults, never capabilities (19, 21, 22), and a role is never a persona (20).
 ROLE_PROFILES = os.path.join(root, "references", "role-profiles.md")
@@ -1072,6 +1075,227 @@ if os.path.isfile(JP):
                                             f"renders the P3 confidence line but '{name}' is not in judgment-points.md §1")
 else:
     fail("judgment-points", "references/judgment-points.md is missing")
+
+# ============================================================ evidence classes (24)
+# --------------------------------------------------- 24. evidence classes
+# pm-mental-model.md §4 owns the evidence-class vocabulary (since v3.8.0). The
+# words are restated where a reader cannot be sent to §4: the vault schema (the
+# `evidence_classes` key), the checker-facing Gate 4b table, and the Gate Check 6
+# marker map. Four drifts are guarded:
+#  (a) enum parity — every line that declares the FULL enum lists exactly the §4
+#      classes, and a mapping table (Gate Check 6a) uses no word outside them.
+#      Lines that name only some classes are not enum declarations and are not read;
+#  (b) marker vocabulary — a label shape ([word: …], [word — …], (word · …),
+#      "… · word", "Evidence: word") whose word looks like a class (ends in -ed,
+#      or is external / synthetic) uses a §4 word. The same words in plain prose
+#      ("the measured lift") are not labels and are not read;
+#  (c) P7 coverage — every skill the Principle 7 Binds line names has a SKILL.md or
+#      skill-local reference that cites Gate Check 6 (the step that keeps
+#      `simulated` out of findings); a bind with no implementing step is a promise;
+#  (d) gate count — "N universal gate checks", "all N gate checks" and, next to
+#      the data-integrity protocol, "N gate checks" / "N mandatory checks" agree
+#      with the number of `### Gate Check` headings. "Gate Checks 1–5" stays legal
+#      (the status and the `measured` definition mean checks 1–5).
+MM = os.path.join(root, "references", "pm-mental-model.md")
+EV_DEFAULT = ["observed", "measured", "reported", "external", "simulated", "assumed"]
+_mm = open(MM, encoding="utf-8").read() if os.path.isfile(MM) else ""
+
+def _line_of(text, pos): return text[:pos].count("\n") + 1
+
+def _section(text, start_re, end_re):
+    m = re.search(rf"({start_re}).*?(?={end_re}|\Z)", text, re.M | re.S)
+    return (m.group(0), m.start()) if m else (None, None)
+
+EV_CLASSES = []
+_s4, _ = _section(_mm, r"^## 4\.", r"^## 5\.")
+if _s4:
+    EV_CLASSES = re.findall(r"^\| `([a-z]+)` \|", _s4, re.M)
+if not EV_CLASSES:
+    fail("evidence-classes", "references/pm-mental-model.md: §4 has no class table (rows start '| `class` |') — "
+                             "the evidence-class enum cannot be derived")
+EV_SET = set(EV_CLASSES or EV_DEFAULT)
+_ev_order = EV_CLASSES or EV_DEFAULT
+
+def _ev_compare(rel, ln, what, got, ordered=False):
+    if not got:
+        fail("evidence-classes", f"{rel}:{ln}: {what} lists no class — expected {_ev_order} (pm-mental-model.md §4)")
+    elif set(got) != EV_SET or len(got) != len(set(got)):
+        fail("evidence-classes", f"{rel}:{ln}: {what} lists {got}; pm-mental-model.md §4 has {_ev_order} — "
+                                 f"missing {sorted(EV_SET - set(got))}, extra {sorted(set(got) - EV_SET)}")
+    elif ordered and EV_CLASSES and got != EV_CLASSES:
+        fail("evidence-classes", f"{rel}:{ln}: {what} promises the §4 order but lists {got}; "
+                                 f"pm-mental-model.md §4 order is {EV_CLASSES}")
+
+# (a) enum parity — the full-enum declarations only
+VS = os.path.join(root, "references", "vault-schema.md")
+_vs = open(VS, encoding="utf-8").read() if os.path.isfile(VS) else ""
+_m = re.search(r"^\| `evidence_classes` \|.*$", _vs, re.M)
+if not _m:
+    fail("evidence-classes", "references/vault-schema.md: no Judgment Fields row '| `evidence_classes` |'")
+else:
+    _o = re.search(r"in the order ([a-z]+(?:,\s*[a-z]+)+)", _m.group(0))
+    _ev_compare("references/vault-schema.md", _line_of(_vs, _m.start()),
+                "the Judgment Fields `evidence_classes` row",
+                re.split(r",\s*", _o.group(1)) if _o else [], ordered=True)
+_m = re.search(r"^evidence_classes:.*$", _vs, re.M)
+if not _m:
+    fail("evidence-classes", "references/vault-schema.md: no decision-record line 'evidence_classes: …'")
+else:
+    _o = re.search(r"\b([a-z]+(?:\|[a-z]+)+)\b", _m.group(0))
+    _ev_compare("references/vault-schema.md", _line_of(_vs, _m.start()),
+                "the decision `evidence_classes` enum", _o.group(1).split("|") if _o else [])
+ASG = os.path.join(root, "references", "artifact-style-gate.md")
+_asg = open(ASG, encoding="utf-8").read() if os.path.isfile(ASG) else ""
+_g4b, _g4bpos = _section(_asg, r"^### Gate 4b\b", r"^#{2,3} ")
+_tbl = re.search(r"^\*\*2\..*?(?=^\*\*3\.|\Z)", _g4b, re.M | re.S) if _g4b else None
+if not _tbl:
+    fail("evidence-classes", "references/artifact-style-gate.md: no '### Gate 4b' section with a '**2. …' class table")
+else:
+    _ev_compare("references/artifact-style-gate.md", _line_of(_asg, _g4bpos + _tbl.start()),
+                "the Gate 4b class table", re.findall(r"^\| `([a-z]+)` \|", _tbl.group(0), re.M))
+DIP = os.path.join(root, "references", "data-integrity-protocol.md")
+_dip = open(DIP, encoding="utf-8").read() if os.path.isfile(DIP) else ""
+_gc6, _gc6pos = _section(_dip, r"^### Gate Check 6\b", r"^#{2,3} ")
+_6a = re.search(r"^\*\*6a\b.*?(?=^\*\*6b\b|\Z)", _gc6, re.M | re.S) if _gc6 else None
+if not _6a:
+    fail("evidence-classes", "references/data-integrity-protocol.md: no '### Gate Check 6' section with a '**6a …' marker map")
+else:
+    for _row in re.finditer(r"^\|(.*)\|\s*$", _6a.group(0), re.M):
+        _cells = [c.strip() for c in _row.group(1).split("|")]
+        if len(_cells) < 2 or set(_cells[-1]) <= set("-: ") or _cells[-1] == "Class":
+            continue
+        _bad = [w for w in re.findall(r"`([a-z]+)`", _cells[-1]) if w not in EV_SET]
+        if _bad:
+            fail("evidence-classes", f"references/data-integrity-protocol.md:"
+                                     f"{_line_of(_dip, _gc6pos + _6a.start() + _row.start())}: Gate Check 6a maps to "
+                                     f"{_bad}, not an evidence class of pm-mental-model.md §4 {_ev_order}")
+for _rel, _txt in (("references/vault-protocol.md",
+                    open(os.path.join(root, "references", "vault-protocol.md"), encoding="utf-8").read()
+                    if os.path.isfile(os.path.join(root, "references", "vault-protocol.md")) else ""),
+                   ("references/pm-mental-model.md", _s4 or "")):
+    if "`evidence_classes`" not in _txt and "evidence_classes =" not in _txt:
+        fail("evidence-classes", f"{_rel}: never names the vault key `evidence_classes` "
+                                 f"(vault-schema.md Judgment Fields) — the key name has drifted")
+
+# (b) marker vocabulary — label shapes only, class-shaped words only
+def _class_shaped(w):
+    w = w.lower()
+    return (len(w) > 3 and w.endswith("ed")) or w in {"external", "synthetic"}
+
+def _open_paren(line, pos):
+    """Index of the '(' still open at `pos`, or -1."""
+    depth = 0
+    for k in range(pos - 1, -1, -1):
+        if line[k] == ")": depth += 1
+        elif line[k] == "(":
+            if depth == 0: return k
+            depth -= 1
+    return -1
+
+EV_MARKER_RULES = [
+    (re.compile(r"\[\s*([A-Za-z][\w-]*)\s*(?::|—|–)"), "bracket label"),
+    (re.compile(r"\bEvidence:\**\s*`?([A-Za-z][\w-]*)"), "group label"),
+    (re.compile(r"\(\s*\**([A-Za-z][\w-]*)\s+·\s"), "class-first annotation"),
+    (re.compile(r"\s·\s+\**([A-Za-z][\w-]*)\**\s*(?=[)`\]|,;*]|$)"), "trailing class"),
+]
+_EV_OPTIONS = re.compile(r"(?<![\w-])(?:[\w-]+\s+·\s+){2,}[\w-]+(?![\w-])")   # three or more one-word options
+_EV_PROHIBIT = re.compile(r"\b(?:never|not|no|avoid|instead\s+of|invented|anti-pattern)\b", re.I)
+ev_targets = sorted(set(
+    glob.glob(os.path.join(root, "references", "**", "*.md"), recursive=True) +
+    glob.glob(os.path.join(root, "skills", "**", "*.md"), recursive=True) +
+    glob.glob(os.path.join(root, "skills", "**", "*.yaml"), recursive=True) +
+    glob.glob(os.path.join(root, "templates", "built-in", "**", "*.md"), recursive=True) +
+    glob.glob(os.path.join(root, "agents", "*.md")) +
+    glob.glob(os.path.join(root, ".codex", "agents", "*.toml"))))
+for f in ev_targets:
+    rel_name = os.path.relpath(f, root)
+    for i, line in enumerate(open(f, encoding="utf-8").read().split("\n"), 1):
+        for rx, shape in EV_MARKER_RULES:
+            for m in rx.finditer(line):
+                w = m.group(1)
+                if w.lower() in EV_SET or not _class_shaped(w):
+                    continue
+                class_options = False
+                if "·" in m.group(0):
+                    # "(interviews · survey · mixed)" is a list of options, not a label —
+                    # unless it lists classes, when every class-shaped word in it must be one
+                    opts = next((o for o in _EV_OPTIONS.finditer(line)
+                                 if o.start() <= m.start(1) < o.end()), None)
+                    if opts:
+                        if not any(t.lower() in EV_SET for t in re.findall(r"[\w-]+", opts.group(0))):
+                            continue
+                        class_options = True
+                if shape == "trailing class" and not class_options:
+                    # "(measured · period-annotated)": the class came first, the rest is detail
+                    p = _open_paren(line, m.start())
+                    if p >= 0:
+                        first = re.match(r"\s*\**([A-Za-z][\w-]*)\s+·", line[p + 1:])
+                        if first and first.group(1).lower() in EV_SET:
+                            continue
+                # a counter-example quoted in backticks on a line that forbids it is a citation
+                if "`" in line[:m.start()] and line[:m.start()].count("`") % 2 == 1 and _EV_PROHIBIT.search(line):
+                    continue
+                fail("evidence-classes", f"{rel_name}:{i}: {shape} uses '{w}', which is not an evidence class — "
+                                         f"use one of {_ev_order} (pm-mental-model.md §4)")
+
+# (c) P7 coverage — each skill the Principle 7 Binds line names cites Gate Check 6
+_s2, _ = _section(_mm, r"^## 2\.", r"^## 3\.")
+_p7 = re.search(r"^7\.\s.*$", _s2, re.M) if _s2 else None
+_p7_binds = _p7.group(0).split("Binds", 1)[1] if _p7 and "Binds" in _p7.group(0) else ""
+P7_LINE = _line_of(_mm, _mm.find(_p7.group(0))) if _p7 else None
+p7_skills = []
+for _tok in re.findall(r"`([a-z0-9-]+)`", _p7_binds):
+    if _tok in SKILLS:
+        p7_skills.append(_tok)
+    elif "-" in _tok and _tok not in KNOWN_NON_SKILL_TOKENS:
+        fail("evidence-classes", f"references/pm-mental-model.md:{P7_LINE}: P7 Binds names '{_tok}', which is not a skill")
+if not p7_skills:
+    fail("evidence-classes", "references/pm-mental-model.md: §2 Principle 7 has no 'Binds' list naming a "
+                             "backticked skill — P7 coverage cannot be checked")
+_GC6_CITE = re.compile(r"Gate Checks? (?:1[–-])?6(?!\d)|data-integrity-protocol\.md.*\b6b\b|\b6b\b.*data-integrity-protocol\.md")
+for name in p7_skills:
+    folder = os.path.join(root, "skills", name)
+    cands = [os.path.join(folder, "SKILL.md")] + [
+        p for p in glob.glob(os.path.join(folder, "references", "**", "*.md"), recursive=True)
+        if os.sep + "examples" + os.sep not in p]          # a gold is output, not a step
+    if not any(_GC6_CITE.search(open(p, encoding="utf-8").read()) for p in cands if os.path.isfile(p)):
+        fail("evidence-classes", f"skills/{name}/SKILL.md: named in pm-mental-model.md:{P7_LINE} P7 Binds, but neither "
+                                 f"SKILL.md nor its references/ cite data-integrity-protocol.md Gate Check 6 — "
+                                 f"the bind has no implementing step (pm-mental-model.md §5)")
+
+# (d) gate count — the number of checks stated == the number of '### Gate Check' headings
+GC_COUNT = len(re.findall(r"^### Gate Check \d+\b", _dip, re.M))
+if not GC_COUNT:
+    fail("evidence-classes", "references/data-integrity-protocol.md: no '### Gate Check N' headings — "
+                             "the gate-check count cannot be derived")
+_NUMW = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+_N = r"(\d+|" + "|".join(_NUMW) + r")"
+GC_STRONG = re.compile(rf"\b{_N}\s+universal\s+gate\s+checks?\b|\ball\s+{_N}\s+(?:universal\s+)?gate\s+checks\b", re.I)
+GC_WEAK = re.compile(rf"\b{_N}\s+(?:gate|mandatory)\s+checks\b", re.I)
+_GC_CTX = re.compile(r"data[\s-]integrity", re.I)
+gc_targets = sorted(set(
+    [os.path.join(root, f) for f in ("README.md", "AGENTS.md") if os.path.isfile(os.path.join(root, f))] +
+    glob.glob(os.path.join(root, "references", "**", "*.md"), recursive=True) +
+    glob.glob(os.path.join(root, "skills", "**", "*.md"), recursive=True) +
+    glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True) +
+    glob.glob(os.path.join(root, "agents", "*.md")) + glob.glob(os.path.join(root, "commands", "*.md")) +
+    glob.glob(os.path.join(root, ".codex", "**", "*.*"), recursive=True)))
+if GC_COUNT:
+    for f in gc_targets:                                   # CHANGELOG.md and testing/ are history
+        if not f.endswith((".md", ".toml")):
+            continue
+        t = open(f, encoding="utf-8").read()
+        strong = list(GC_STRONG.finditer(t))
+        hits = strong + [m for m in GC_WEAK.finditer(t)        # "all 5 gate checks" is one hit, not two
+                         if not any(s.start() <= m.start() < s.end() for s in strong)
+                         and _GC_CTX.search(t[max(0, m.start() - 600):m.end() + 200])]
+        for m in hits:
+            n_raw = next(g for g in m.groups() if g)
+            n = int(n_raw) if n_raw.isdigit() else _NUMW[n_raw.lower()]
+            if n != GC_COUNT:
+                fail("evidence-classes", f"{os.path.relpath(f, root)}:{_line_of(t, m.start())}: '{m.group(0)}' — "
+                                         f"data-integrity-protocol.md has {GC_COUNT} '### Gate Check' headings "
+                                         f"(say 'Gate Checks 1–5' where only the status checks are meant)")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

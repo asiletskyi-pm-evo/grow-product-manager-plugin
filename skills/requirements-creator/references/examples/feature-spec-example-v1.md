@@ -63,6 +63,6 @@ Guest persistence, price-drop alerts, seller-side saves signal, wishlist sharing
 - Cap on saved-list size?
 
 ## Sources
-- Concept PRD (write-concept exemplar) · Product Analysis (period-annotated exit/return figures)
+- Concept PRD (write-concept exemplar) · Product Analysis (exit/return figures — to be run, none yet)
 
 Altitude: L1 · ↑ serves: parent Epic — buyer retention / product-page engagement · ↓ next: instrument the listed events, then launch the 50/50 test and apply the decision rule

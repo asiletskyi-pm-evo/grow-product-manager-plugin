@@ -6,6 +6,11 @@
      Written in English as a neutral reference; a real run writes in the user's `user.language`.
      Illustrates rigor and shape, not wording: every bet carries its investment, return, stage, proxy metric, kill criterion and base rate.
      This is the concept-level memo of bets — not focus-advisor's quarterly attention memo, and not a decision record (decision-log).
+     Evidence labels (since v3.8.0): every fact comes from the CPO's brief (`user-text`), so each is `reported` with the source it names —
+     write-concept has no data gate of its own, so only a figure that arrives through product-analysis would be `measured`. Competitor A's
+     press release is a named third-party source cited in the brief, so it is `external`, via Person1; the industry report is unnamed, so
+     `reported`. Targets, kill thresholds, investments and the finance-model returns are forward-looking and carry no class; base rates keep
+     the class of their source.
      A real run appends the template marker after the altitude line (template-protocol T-5 step 5); it is left out here. -->
 
 # Strategy memo: Product 1 beyond the core marketplace
@@ -18,9 +23,9 @@ Growth is slowing while the margin is still negative, and the board has set a br
 
 | Fact | Source · date |
 |------|---------------|
-| GMV growth **+9% YoY** in H1 2026, down from **+24% YoY** in H1 2025 | Finance dashboard · H1 2026 closed 2026-07-10 |
-| Take rate **7.5%** of GMV; contribution margin **−2.4%** of revenue | Finance dashboard · H1 2026 |
-| Commissions are **88%** of revenue; ads **6%**, delivery fees **6%** | Finance dashboard · H1 2026 |
+| GMV growth **+9% YoY** in H1 2026, down from **+24% YoY** in H1 2025 | reported · finance dashboard · H1 2026 closed 2026-07-10 |
+| Take rate **7.5%** of GMV; contribution margin **−2.4%** of revenue | reported · finance dashboard · H1 2026 |
+| Commissions are **88%** of revenue; ads **6%**, delivery fees **6%** | reported · finance dashboard · H1 2026 |
 | Company objective **O1 2027**: contribution-margin break-even for Product 1 by the end of 2027 | Board approval · 2026-09-15 |
 
 The strategic question: which bets outside the core commission business move Product 1 towards O1 2027, and what do we stop to fund them?
@@ -48,11 +53,11 @@ The strategic question: which bets outside the core commission business move Pro
 
 | Bet | Leading indicator | Baseline · period | Target | Review cadence | Source |
 |-----|-------------------|-------------------|--------|----------------|--------|
-| 1 | Share of active sellers buying ads | **8.8%** (1,850 of 21,000) · 2026-07-01 – 2026-09-30 | 15% by 2027-12-31 | Monthly product review; quarterly with the board | Ads dashboard |
-| 2 | Share of orders on integrated carriers | **≈ 70%** · 2026-07-01 – 2026-09-30 | 85% by 2027-12-31 | Monthly; quarterly with the board | Logistics dashboard |
+| 1 | Share of active sellers buying ads | **8.8%** (1,850 of 21,000) · 2026-07-01 – 2026-09-30 | 15% by 2027-12-31 | Monthly product review; quarterly with the board | reported · ads dashboard |
+| 2 | Share of orders on integrated carriers | **≈ 70%** · 2026-07-01 – 2026-09-30 | 85% by 2027-12-31 | Monthly; quarterly with the board | reported · logistics dashboard |
 | 3 | Company buyers with 2 or more orders | Not measured yet — first reading at pilot start, 2027-01 | 300 by 2027-06-30 | Monthly; quarterly with the board | Checkout data (company tax id) |
 
-Context for bet 2: orders on integrated carriers already get 38% fewer "where is my order" contacts than orders on custom rates (support-desk export, 2026-07-01 – 2026-09-30).
+Context for bet 2: orders on integrated carriers already get 38% fewer "where is my order" contacts than orders on custom rates (reported · support-desk export, 2026-07-01 – 2026-09-30).
 
 ## What we stop
 
@@ -60,6 +65,8 @@ Context for bet 2: orders on integrated carriers already get 38% fewer "where is
 |------|----|---------------|
 | Own-warehouse fulfilment pilot (one city since 2025-11, 0.8% of orders) | 2026-12-31 | 1 team → bet 1; ends a per-order cost of **2.3×** the carrier option (logistics finance review, 2026-08) |
 | Social-commerce feed (in discovery since 2026-06) | 2026-12-31 | 1 team → bet 1 |
+
+Evidence: reported — logistics finance review (2026-08).
 
 ## Kill criteria
 
@@ -75,13 +82,13 @@ Fixed in this memo, before the first reading arrives.
 
 | Bet | Reference class | Success rate | Source |
 |-----|-----------------|--------------|--------|
-| 1. Self-serve seller ads | New revenue lines launched by Product 1 in 2021–2025 | **2 of 6** (33%) reached their 18-month plan | Internal portfolio review, 2025-12 |
-| 2. Integrated delivery | Carrier integrations of 2023–2025 | **3 of 3** reached their planned order share within 12 months | Logistics review, 2025-12 |
+| 1. Self-serve seller ads | New revenue lines launched by Product 1 in 2021–2025 | **2 of 6** (33%) reached their 18-month plan | reported · internal portfolio review, 2025-12 |
+| 2. Integrated delivery | Carrier integrations of 2023–2025 | **3 of 3** reached their planned order share within 12 months | reported · logistics review, 2025-12 |
 | 3. Business-buyer pilot | — | **None known** — no internal history, no external source | — |
 
-- Bet 1: one in three is the outside view, so the 2027-06-30 kill date carries real weight. Competitor A launched self-serve seller ads on 2026-03-12 (its press release), but the outcome is not public, so it gives no rate.
+- Bet 1: one in three is the outside view, so the 2027-06-30 kill date carries real weight. Competitor A launched self-serve seller ads on 2026-03-12 (external · its press release, via Person1), but the outcome is not public, so it gives no rate.
 - ⚠️ Bet 2: n = 3 is a small sample — directional, not a rate to plan on.
-- ⚠️ The industry report on regional marketplace ad revenue (+30% in 2024) was published in 2025-02 — older than 12 months. Market context only, not a base rate for a launch.
+- ⚠️ The industry report on regional marketplace ad revenue (reported · industry report cited by Person1, +30% in 2024) was published in 2025-02 — older than 12 months. Market context only, not a base rate for a launch.
 - Bet 3: with no base rate, the 2027-03-31 kill date is the only guard against sunk cost.
 
 ## Related materials

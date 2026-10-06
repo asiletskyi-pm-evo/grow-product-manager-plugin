@@ -14,6 +14,8 @@
 
 **Source:** transcript pasted in chat, 00:00–00:29 · no calendar lookup, so emails are not in the source · notes kept by Person1
 
+**Evidence:** reported — meeting transcript 2026-10-06 (every figure and statement as its named speaker said it)
+
 ---
 
 ### Participants
@@ -41,7 +43,7 @@
 ### Decisions
 | # | Decision | Context | Owner |
 |---|----------|---------|-------|
-| 1 | Show an estimated delivery cost on the product page, for sellers on integrated carriers only, as a 50/50 A/B test. Primary metric: checkout completion from the delivery step. Guardrail: product-page add-to-cart rate. | Buyers learn the delivery cost too late: 41% leave at the delivery step, and "unexpected delivery cost" is the top exit reason at 27% (2026-09-07 – 2026-10-04). Integrated carriers only, because custom rates are free text; they still cover ~70% of orders in that period. A test rather than a direct ship, because a high estimate may lower add-to-cart. **Rejected alternative:** move the delivery step to the start of checkout (Person4). Rejected because buyers would still see the cost only after committing to checkout (Person3), and checkout is frozen for the payment-provider migration until mid-November (Person5); Person4 withdrew it. No numeric ship threshold was set in the meeting. | Person1 — stated the decision; Person2, Person3, Person4 and Person5 agreed, no objections |
+| 1 | Show an estimated delivery cost on the product page, for sellers on integrated carriers only, as a 50/50 A/B test. Primary metric: checkout completion from the delivery step. Guardrail: product-page add-to-cart rate. | Buyers learn the delivery cost too late: 41% leave at the delivery step, and "unexpected delivery cost" is the top exit reason at 27% (Person3, 2026-09-07 – 2026-10-04). Integrated carriers only, because custom rates are free text; they still cover ~70% of orders in that period (Person3). A test rather than a direct ship, because a high estimate may lower add-to-cart. **Rejected alternative:** move the delivery step to the start of checkout (Person4). Rejected because buyers would still see the cost only after committing to checkout (Person3), and checkout is frozen for the payment-provider migration until mid-November (Person5); Person4 withdrew it. No numeric ship threshold was set in the meeting. | Person1 — stated the decision; Person2, Person3, Person4 and Person5 agreed, no objections |
 
 Not decisions: the delivery-date idea (parked, Topic 5) and the 2026-10-26 launch date (tentative, see Deadlines).
 
@@ -107,5 +109,9 @@ Here are the meeting notes. Please review — are there any corrections or addit
        and all weekdays resolve against the meeting date 2026-10-06.
      no_hallucinated_content: no emails (none in the source), no numeric thresholds, no owner for the open question,
        "mid-November" kept as said, no extra topics beyond the transcript.
+     evidence labels (since v3.8.0): one artifact-level Evidence line — everything here was said in the meeting, so it is
+       `reported`; Person3's figures (00:02–00:03, 00:10) keep their speaker and stay `reported`, not `measured` — a number said
+       aloud is a statement, whatever it was read from. The label adds no content; no quote is taken from a summary. The two quote-marked
+       strings are names said in the meeting, verbatim: "unexpected delivery cost" (Person3, 00:03), "Delivery from X" (Person2, 00:05).
      structured_summary: the skill's Structured MoM skeleton (Step M6a) plus the Status / Agreements blocks (Step M5b).
      chain_offer: task-creator for agreements with deadlines and decision-log for the decision (Step M9); requirements-creator for Action 5. -->

@@ -231,8 +231,12 @@ fi
 # A bare references/<file>.md resolves against the skill's own folder on Codex,
 # so every skill and every command that names a reference opens with the Path
 # rule. agents/*.md are the source of truth for .codex/agents/*.toml — a
-# missing or renamed port silently leaves Codex without that role. The host
-# matrix must list every skill exactly once.
+# missing or renamed port silently leaves Codex without that role, and (since
+# v3.8.0) a port whose body drifted leaves Codex on an old checklist: the
+# toml developer_instructions must equal the agent body apart from the opening
+# "Host note:" paragraph, and the description must match. The host matrix must
+# list every skill exactly once.
+PREV_FAIL_14=$FAIL; FAIL=0   # check 14 reports ok only when it raised nothing itself
 for f in skills/*/SKILL.md; do
   grep -q '^> \*\*Path rule\.\*\*' "$f" || err "$f: missing the Path rule paragraph (references/ resolution on hosts that hand the skill only its own folder)"
 done
@@ -248,6 +252,52 @@ if [ -d agents ]; then
     [ -f ".codex/agents/$base.toml" ] && grep -q "^name = \"$base\"" ".codex/agents/$base.toml" \
       || err ".codex/agents/$base.toml: name must equal \"$base\""
   done
+  # Body parity (.codex/agents/README.md: "never let the two drift"). stderr is
+  # captured too, so a crash in the comparison reads as a failure, not as green.
+  PORT_ISSUES=$(python3 - 2>&1 <<'PY_PORT'
+import glob, json, os, re
+try:
+    import tomllib                  # Python >= 3.11 (CI): also proves the port is valid TOML
+except ImportError:
+    tomllib = None
+def port_fields(raw):
+    if tomllib:
+        t = tomllib.loads(raw)
+        return t.get("description"), t.get("developer_instructions")
+    # Older Python: the generated shape — a one-line basic-string description
+    # and a triple-quoted literal block, whose first newline TOML trims.
+    d = re.search(r'^description = (".*")$', raw, re.M)
+    i = re.search(r"^developer_instructions = '''\n?(.*?)'''", raw, re.S | re.M)
+    return (json.loads(d.group(1)) if d else None), (i.group(1) if i else None)
+for f in sorted(glob.glob("agents/*.md")):
+    port = ".codex/agents/" + os.path.basename(f)[:-3] + ".toml"
+    if not os.path.isfile(port):
+        continue                    # already reported above
+    m = re.match(r"---\n(.*?)\n---\n(.*)\Z", open(f, encoding="utf-8").read(), re.S)
+    if not m:
+        print(f"{f}: no frontmatter block, cannot compare it with {port}"); continue
+    fm, body = m.group(1), m.group(2)
+    try:
+        desc, di = port_fields(open(port, encoding="utf-8").read())
+    except Exception as e:
+        print(f"{port}: not valid TOML ({e})"); continue
+    md_desc = re.search(r"^description: (.*)$", fm, re.M)
+    if desc != (md_desc.group(1) if md_desc else None):
+        print(f"{port}: description differs from {f}; regenerate the port")
+    if di is None:
+        print(f"{port}: no developer_instructions"); continue
+    head, _, rest = di.lstrip("\n").partition("\n\n")
+    if not head.startswith("Host note:"):
+        print(f"{port}: developer_instructions must open with the 'Host note:' paragraph"); continue
+    a, b = body.strip().split("\n"), rest.strip().split("\n")
+    if a != b:
+        n = next((k for k in range(min(len(a), len(b))) if a[k] != b[k]), min(len(a), len(b)))
+        line = fm.count("\n") + 4 + (len(body) - len(body.lstrip("\n"))) + n
+        print(f"{port}: developer_instructions differ from the body of {f} beyond the host note "
+              f"(first difference at {f}:{line}); regenerate the port")
+PY_PORT
+)
+  [ -z "$PORT_ISSUES" ] || { echo "$PORT_ISSUES" | while IFS= read -r line; do err "$line"; done; FAIL=1; }
 fi
 if [ -f testing/host-matrix.md ]; then
   for n in $SKILL_NAMES; do
@@ -258,7 +308,8 @@ if [ -f testing/host-matrix.md ]; then
 else
   err "testing/host-matrix.md is missing (skill × host × full/degraded/n-a)"
 fi
-ok "host packaging: path rule in every skill, $(ls agents/*.md 2>/dev/null | wc -l | tr -d ' ') Codex agent ports, host matrix covers every skill"
+[ "$FAIL" = 0 ] && ok "host packaging: path rule in every skill, $(ls agents/*.md 2>/dev/null | wc -l | tr -d ' ') Codex agent ports (bodies in sync), host matrix covers every skill"
+[ "$PREV_FAIL_14" = 1 ] && FAIL=1
 
 # --- 15. Thin core: every SKILL.md <= 400 lines ----------------------------
 # v3.4.0: the thin-core rule ("skill cores <= 400 lines; long procedures live in

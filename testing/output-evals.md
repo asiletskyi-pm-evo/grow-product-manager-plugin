@@ -26,14 +26,16 @@ Fixtures live in `testing/fixtures/<skill>/`. Each fixture is a short **input br
 
 ## Rubrics
 
-### Judgment criteria — every rubric (since v3.7.0)
+### Judgment criteria — every rubric (since v3.7.0; evidence criteria since v3.8.0)
 
-Added to each rubric below (spec FR-15). Each is scored only where its gate applies to that artifact and is `n/a` elsewhere. `evidence_labels` joins in v3.8.0 and `counter_argument` in v3.9.0, with the steps that implement them.
+Added to each rubric below (spec FR-15). Each is scored only where its gate applies to that artifact and is `n/a` elsewhere. `counter_argument` joins in v3.9.0, with the step that implements it. The evidence criteria do not double-score what a rubric already scores (the research plan's `method_fit`, the QBR's `decisions_taken`, the PRD's `assumptions`): there they check only the label, not the content.
 
 | id | Criterion | Weight | `n/a` when |
 |----|-----------|--------|------------|
 | altitude_line | Exactly one `Altitude: L1–L4 · ↑ serves: … · ↓ next: …` line as the artifact's last content (Gate 4a): `serves` is a goal the fixture or its sources link, or `— (no linked goal)`, never a person's goal; `next` is a product or delivery step | 1 | Gate 4a is `n/a` (task bodies, A&I documents, 1-1s, prototypes, external decks, return payloads) |
 | confidence_falsifier | Exactly one `Confidence: known / likely / uncertain / unknown · most sensitive to: … · would change if: …` line directly above the altitude line (Gate 4c), with: one specific assumption; an observable change condition, not "more data"; and a level no higher than the Data Integrity Gate allows (an inconclusive verdict is at most `uncertain`) | 2 | `references/judgment-points.md` §1 names no confidence line for the skill and mode. A P3-format line that appears there anyway is logged as a defect in the Results log (improvised output, `pm-mental-model.md` §5); a skill's own confidence field or label is not such a line |
+| evidence_labels | Every evidence claim — a number stated as what is or was, a quote, a benchmark, a "users want X" — carries its class (`pm-mental-model.md` §4) in any visible form (inside the annotation, bracket, or a group label whose claims all share class and source), consistent with its source per Gate Check 6a: figures the user pasted are `reported`, never `measured`; quotes verbatim (masking, `[…]`, `(translated)` allowed); exemptions per Gate 4b §1 (targets, forecasts, plan totals, hypothesis statements…) carry none | 1 | Gate 4b is `n/a` (task bodies and batches, People contour, prototypes, handoffs, 1-1s, Q&A, return payloads) |
+| simulated_visible | `simulated` content is never a finding, never counted in n or frequencies, never quoted — it sits on one labelled `Simulated input` line or in hypotheses; `assumed` claims in a findings section are labelled; where the skill runs Gate Check 6 (cjm-research, product-analysis, product-research, feedback-triage), a frontier claim (6c) carries its hand-back line or stays a labelled hypothesis — elsewhere such a claim needs only its label | 2 | the fixture has no `simulated` / `assumed` input and no frontier claim |
 
 ### write-concept — PRD
 - **Artifact:** PRD · **Gold:** `skills/write-concept/references/examples/prd-example-v1.md` · **Fixture:** `testing/fixtures/write-concept/brief-v1.md` · **pass_threshold:** 0.8
@@ -164,6 +166,21 @@ Since v3.7.0 the closing altitude line is scored by `altitude_line` in the judgm
 
 With the judgment criteria, `confidence_falsifier` is scored here (weight 2). The gold's line reads `uncertain` — a single source with cross-validation pending, and Android inconclusive. It is most sensitive to the pooled support-contact rise holding on web, and would change if the web-only split shows no rise (Δ ≤ 0 %). A `likely` or `known` level fails `no inflation`. The altitude is L2: A/B readouts sit at L2 in `role-profiles.md` §1.
 
+### product-research — user research synthesis (since v3.8.0)
+- **Artifact:** user research report (`research/user-research`, built-in default template) · **Gold:** `skills/product-research/references/examples/user-research-synthesis-example-v1.md` · **Fixture:** `testing/fixtures/product-research/synthesis-v1.md` (setup: `user.role: pm`) · **pass_threshold:** 0.8
+
+| id | Criterion | Weight |
+|----|-----------|--------|
+| real_n | n = 6 real sellers (P1–P6) stated in Methodology; the three Persona Tool 1 interviews are absent from n, from every "X of N" frequency and from the segment list | 2 |
+| findings_real_only | Key Findings, Themes and Pains & Needs rest on P1–P6 only: verification rejections sellers cannot foresee or act on (4 of 6 — P1, P3, P4, P6), fees found after pricing or publishing (3 of 6 — P2, P3, P5), required listing fields that do not fit the product (3 of 6 — P1, P5, P6); the P2 import error and the P4 mobile upload stay single mentions; nothing a persona said appears there, even labelled | 2 |
+| simulated_quarantined | The persona material is `simulated` from its "generated with" origin, with no question asked about it; its content appears only on one `Simulated input — hypotheses only` line (and/or as labelled hypotheses) stating what, how many and the study that would check it — a Sources row naming it `simulated` is allowed. A persona answer in quote marks, or used to support or cross-validate a theme, scores 0 | 2 |
+| quotes_verbatim | Every quote is verbatim from the notes (masking, a marked […], a marked (translated) with the original allowed), with participant id and interview date, ending `· reported`; a paraphrase carries no quote marks | 1 |
+| themes_supported | Each theme states its evidence (class · participant ids) and its frequency as X of 6 real users, and the frequencies match the notes (P1 knew the fee from a friend; P4 and P6 did not raise fees) | 1 |
+| hand_back_or_hypothesis | Why sellers stuck at verification give up is not a finding: the supportable part (days to verify, P3 nearly gave up) is kept, Person1's "not serious" view stays a hypothesis labelled `[assumed — …]`, and one ⚠️ hand-back line next to the finding names a human step (interview sellers who stopped at verification), repeated in Research Limitations or Next Steps | 2 |
+| sources | Sources list each input with its marker and class: the interview notes `reported` (P1–P6 via Person1's notes); the dashboard figures `user-text` → `reported (Person1)`, never `measured`, labelled the same where §1 cites them | 1 |
+
+With the judgment criteria: `evidence_labels` (1) and `simulated_visible` (2) are scored, but here they check only that the labels are present and well-formed (`simulated` on the line, `[assumed — …]` on the hypothesis, a class on every claim) — placement and the hand-back are scored by `simulated_quarantined` and `hand_back_or_hypothesis`, not twice. `confidence_falsifier` is `n/a` (product-research is not in `references/judgment-points.md` §1; a P3-format line here is logged as a defect). `altitude_line`: L2, serves PROJ-1500, next a product step. A question about the persona interviews' origin is a trajectory defect (TC-jdg-380-simulated-persona), logged in the Results log, not scored here.
+
 ### Lighter rubrics (fixtures TBD — add exemplars first)
 
 **product-analysis** (analysis report, non-A/B modes): period_annotation (2), gate_passed (2), trend_vs_baseline (2), anomaly_or_insight (2), hypothesis_backed (1), sources (1). pass 0.85.
@@ -204,8 +221,18 @@ With the judgment criteria, `confidence_falsifier` is scored here (weight 2). Th
 | 2026-09-29 | v3.7.0 | product-analysis (A/B report, new) | — | 1.00 ✅ | maker on the branch + blind LM judge | threshold 0.85; verdict against the PM's leaning ("Stop and iterate"), `Confidence: uncertain` with an observable falsifier above an L2 altitude line; P2 not asked (the call was in the request), comparison in the chat only. The first gold draft was wrong (roll-out despite a breached guardrail, invented sources, L1) and was rewritten before judging |
 | 2026-09-29 | v3.7.0 | write-concept (PRD) | — | 1.00 ✅ | same | regression with the judgment criteria: `confidence_falsifier` n/a, no confidence line, no P2 question |
 | 2026-09-29 | v3.7.0 | meeting-processor | — | 0.83 ✅ | same | regression; decision-log payload carries only the fields said in the meeting; one undated action item (run variance) |
+| 2026-10-06 | v3.8.0 | product-research (user research synthesis, new — TC-jdg-02) | — | 1.00 ✅ | maker on the branch + blind LM judge | persona interviews `simulated` from their stated origin with no question; n = 6 real sellers; one hand-back line on the "why they quit" claim |
+| 2026-10-06 | v3.8.0 | requirements-creator | — | 1.00 ✅ | same | regression with evidence criteria; no evidence claims, `докази` omitted at E = 0 |
+| 2026-10-06 | v3.8.0 | product-reporter (QBR) | — | 0.97 ✅ | same | the candidate labelled the pasted Jira counts `reported`, the gold `measured` — gold corrected to `reported` for this dry-run fixture |
+| 2026-10-06 | v3.8.0 | product-analysis (A/B report) | — | 0.96 ✅ | same | threshold 0.85; pasted results `reported (PM)`; two hypotheses cite results without the test window |
+| 2026-10-06 | v3.8.0 | write-concept (design brief) | — | 0.96 ✅ | same | one constraint-excluded request missing from Out of scope |
+| 2026-10-06 | v3.8.0 | meeting-processor | — | 0.95 ✅ | same | one artifact-level `Evidence: reported` line; chain offers in the chat, not the artifact |
+| 2026-10-06 | v3.8.0 | write-concept (strategy memo) | — | 0.93 ✅ | same | one proxy-metric baseline without a first-reading date |
+| 2026-10-06 | v3.8.0 | product-research (research plan) | — | 0.93 ✅ | same | assumptions lack "what would move the decision" |
+| 2026-10-06 | v3.8.0 | write-concept (PRD) | — | 0.93 ✅ | same | the PM-only user-need premise carries no hand-back line — `simulated_visible` now scopes 6c to skills that run Gate Check 6; the gold's unlabelled motivation sentence labelled `[assumed — …]` |
+| 2026-10-06 | v3.8.0 | cjm-research | — | 0.92 ✅ | same | threshold 0.85; a template hint comment leaked into the body (T-5 step 3d now drops them). Caveat for this whole run: eight older fixtures still stated their "Expected:" line inside the input brief, so those makers saw the bar — the lines were moved into the evaluator comments afterwards; the next run is the first blind one for them |
 
-## Coverage status (rubrics/fixtures as of v3.7.0)
+## Coverage status (rubrics/fixtures as of v3.8.0)
 
 > **Stage 3b is a blocker** (`Testing-process.md`), yet no 3b run is recorded anywhere for
 > v2.0.x or v2.1.x — and those releases changed `requirements-creator`, `meeting-processor`,
@@ -220,6 +247,7 @@ With the judgment criteria, `confidence_falsifier` is scored here (weight 2). Th
 | cjm-research | ✅ | ✅ | ✅ |
 | product-analysis — analysis report | ✅ light | ⬜ | ⬜ |
 | product-analysis — A/B test report | ✅ (v3.7.0) | ✅ | ✅ |
+| product-research — user research synthesis | ✅ (v3.8.0) | ✅ | ✅ |
 | brainstorm-features | ✅ light | ⬜ | ⬜ |
 | meeting-processor | ✅ (v3.4.0) | ✅ | ✅ |
 | task-creator | ✅ (v3.4.0) | ✅ | ✅ |
