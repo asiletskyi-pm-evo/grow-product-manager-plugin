@@ -1,6 +1,6 @@
 ---
 name: flow-walkthrough
-version: 0.6.0
+version: 0.6.1
 description: Walk a customer flow in the REAL product — web, desktop, iPhone app on a Mac, Android via adb — screenshot per step, friction, evidence pack, report, emulator/adb setup. Not Figma review (design-bridge), not dashboards (product-analysis), not the CJM pipeline (cjm-research calls here). Multi-role legs on test accounts with sandbox-confirm (declaring the accounts is plugin-configurator). UA — «пройди флоу», «пройди шлях покупця в застосунку», «перевір зручність … у застосунку», «порівняй флоу на iOS і web», «налаштуй емулятор/adb для проходу». EN — "walk the flow", "walk through the app as a user", "test this journey in the real app", "compare the flow across platforms", "set up the emulator". Modes setup / walk / compare / audit; chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper.
 ---
 
@@ -41,7 +41,7 @@ Pick the mode from the request; ask one AskUserQuestion only when two modes fit:
 | `compare` | "compare … on …", two or more (product, surface) pairs | one pack per run + comparison report |
 | `audit` | "audit / rate / evaluate this walkthrough", or a pack path | graded findings + recommendations |
 
-Scope for `walk` / `compare` — collect, then restate in one block before starting:
+Scope for `walk` / `compare` — collect, then restate in one block before starting (a write-concept build-first payload fills what it carries, since v3.9.0 — Skill Chaining):
 
 1. **Product** — own (from local-context) or a competitor (`product.competitors`; anything else the user names is fine). Competitors are read-only, always.
 2. **Surface** — `web | desktop | iphone-on-mac | android-adb` (`ios-simulator` needs a build from the mobile team — v1.1).
@@ -90,7 +90,7 @@ Render the report through Step T. Multi-leg runs put a **leg summary table** (le
 
 IF vault_level > L0 AND sync_mode != "off":
 
-1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.6.0", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
+1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.6.1", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
 2. Display: "Saved to Vault: Research/walkthroughs/{product}/…"
 
 ## Setup mode
@@ -112,6 +112,7 @@ IF vault_level > L0 AND sync_mode != "off":
 - ← `product-research` (UX benchmark: compare mode on competitors)
 - ← `requirements-creator` (needs an as-is screen and no screenshot source exists)
 - ← `product-landscape` (research mode picks the products and starts compare)
+- ← `write-concept` (build-first, since v3.9.0: walk the as-is flow behind the concept's riskiest assumption in the real product; a prototype is design-bridge's, never walked here); the payload's flow, surface and assumption fill Step 1 scope (the assumption is the walk's question), and only what it leaves open is asked
 
 **Design vocabulary (since v3.6.0).** When `role_defaults.question_defaults` is `design`, the Skill Chaining offer lists Diagram & Prototype Creator first (Recommended), and the question headings and option labels this skill writes follow `role_defaults.vocabulary_set` (`references/vocabulary-sets.md`). Modes, questions, the severity scale, the heuristics and the ranking stay the same for every profile; an automated run (a `cjm-research` enrichment) is unchanged.
 

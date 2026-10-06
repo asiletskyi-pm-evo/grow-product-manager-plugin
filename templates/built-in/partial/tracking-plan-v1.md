@@ -8,12 +8,12 @@ scope: built-in
 products: []
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.1.0"
 author: "grow-pm"
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-10-06
 tags: [partial, tracking-plan, analytics, events, instrumentation]
-description: "Tracking-plan section (since v3.6.0): event, trigger, properties, owner, verification. Included by name, or inserted by template-protocol T-5 step 3b when role_defaults.extra_sections lists it and the body has no such section."
+description: "Tracking-plan section (since v3.6.0): event, trigger, properties, owner, verification. Included by name (requirements/ai-feature since v3.9.0), or inserted by template-protocol T-5 step 3b when role_defaults.extra_sections lists it and the body has no such section."
 status: active
 min_plugin_version: "3.6.0"
 variables: []

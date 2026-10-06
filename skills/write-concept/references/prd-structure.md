@@ -34,6 +34,7 @@ Detailed templates for each standard block. Use these as the foundation for Conf
 - **Metric**: [e.g., "30% of users abandon at step X (reported · <dashboard>, <period>, not gate-checked)" — `measured` only when it comes through product-analysis's data gate]
 - **User feedback**: [a verbatim quote with who and where (`reported`), or a summary without quote marks — a paraphrase is not a quote]
 - **Support volume**: [e.g., "50 tickets/month about this issue (reported · <helpdesk export>, <period>, not gate-checked)"]
+- **Build-first results** (since v3.9.0): [walk steps of the as-is flow (`observed`) and real-user session findings on a prototype, with the class product-research gives them — the prototype itself is not evidence]
 ```
 
 ---
@@ -185,7 +186,7 @@ Include only if confirmed by the user in Step 1.
 ```
 ### Design artifacts
 - **Figma link**: [URL]
-- **Prototype link**: [URL if available]
+- **Prototype link**: [URL if available — the build-first prototype (Step 1) or the Step 8 one; `reported` (file, frame), never validation]
 
 ### Key UI decisions
 - [Decision 1]: [rationale]
@@ -262,6 +263,8 @@ Include only if confirmed by the user in Step 1.
 - **Decision rule** (for experiments): ship if [primary hits target at significance AND no guardrail regression]; iterate if [inconclusive]; kill if [guardrail regresses OR primary negative]. State this **before** launch.
 ```
 
+Since v3.9.0 the kill criteria live in the pre-mortem (block 15): for an experiment whose decision rule states a kill branch with a threshold and a date, the pre-mortem points here instead of a second table; without one, it carries its own table, dated by the "After 1 quarter" checkpoint or the primary metric's window (`references/judgment-blocks.md` §4).
+
 ---
 
 ## 12. Risks & Mitigations
@@ -272,6 +275,8 @@ Include only if confirmed by the user in Step 1.
 | 1 | [Risk description] | Technical / Business / Dependency | High/Med/Low | High/Med/Low | [How to mitigate] |
 | 2 | ... | ... | ... | ... | ... |
 ```
+
+The pre-mortem and kill criteria (block 15) render right after this block — also when this block was not selected (then above the footer).
 
 ---
 
@@ -308,3 +313,14 @@ Include only if confirmed by the user in Step 1.
 | 1 | [Question] | [Person/team] | [date] | Open / Resolved |
 | 2 | [Question] | [Person/team] | [date] | Open / Resolved |
 ```
+
+---
+
+## 15. Pre-mortem & Kill Criteria (since v3.9.0)
+
+Pre-selected in Step 1; never on a design brief or a release-notes draft. Rendered from `templates/built-in/partial/pre-mortem-v1.md` by `references/template-protocol.md` T-5 step 3b — also when no template applied — right after block 12. Derived from the concept and its inputs, never asked (`references/judgment-points.md` §7):
+
+- **Pre-mortem** — "It is [date] and this did not work. Most likely why:" — 2–3 causes, each naming the section or input it rests on, with an observable early signal and what we do now. An `assumed` input keeps its label; causes carry no evidence class.
+- **Kill criteria** — signal, threshold, date, then (stop / pivot / descope / roll back); a threshold the concept does not state is `⚠️ TBD`, a missing date is derived from the checkpoint or window and a missing then from the default (`references/judgment-points.md` §7). A pointer instead of a table when the concept already has Kill criteria, an experiment decision rule (block 11) whose kill branch has a threshold and a date, or a Revisit trigger.
+
+Sources, order and variables: `references/judgment-blocks.md` §4.

@@ -1,6 +1,6 @@
 # Self-Improvement Protocol
 
-This protocol applies to ALL skills in the Grow Product Manager plugin. It runs at the very end of a skill's execution, after the main workflow is complete and the user has confirmed the final result.
+This protocol applies to ALL skills in the Grow Product Manager plugin. It runs at the very end of a skill's execution, after the main workflow is complete and the user has confirmed the final result. The Step 2 judgment guard (since v3.9.0) applies at the review step of every skill outside the People contour, also one whose SKILL.md names no self-improvement check.
 
 ---
 
@@ -40,6 +40,11 @@ After the corrections are applied and confirmed, internally analyze:
 - **What went wrong?** — What did the skill produce incorrectly or miss?
 - **Why did it go wrong?** — Is this a gap in the skill's instructions, a missing step, an unclear condition, or an edge case not covered?
 - **Is this a pattern?** — Could this same issue occur in future runs of this skill, or was it a one-off situation unique to this task?
+- **Is it a judgment-guard correction?** (since v3.9.0, Principle 5 of `pm-mental-model.md`) — a correction whose only effect is to remove or soften a counter-argument (a pre-mortem, kill criteria, a minority report, a Skeptic objection), a hand-back line, a confidence line or an evidence label; to turn a `simulated` / `assumed` item into a finding; or to move the skill's score, rank, verdict, theme, extraction or hypothesis to the PM's — including the PM's tags after a "Your tags vs mine" comparison — without new evidence ("agree more"). It is applied to this artifact only and never proposed as a skill change. Say so in one chat line in `user.language` that names the removed kinds, never their content (e.g. "Applied here only — removing a pre-mortem is not learned as a rule"). There is no other log. A removed footer or confidence line is not re-added on a re-render of this artifact (`template-protocol.md` T-5 step 3a).
+  - **A mixed correction is split:** its guarded part is a one-off with the chat line; the rest follows the normal flow.
+  - **`assumed` / `simulated` labels are the exception:** the label stays, or its item is dropped, and `simulated` content stays out of a findings section (`artifact-style-gate.md` Gate 4b §6, `template-protocol.md` T-5 step 3c). That gate's one line is the chat line — no second line, and no "applied here only" claim for it.
+  - **A confidence line** also covers raising its level above the no-inflation cap: an artifact keeps the cap (Gate 4c, `judgment-points.md` §6) and the chat line says so; a decision record keeps the owner's level.
+  - **Not in People-contour skills:** their corrections follow Steps 2–4 as before.
 - **Scope of improvement** — Would the fix improve only this skill, or should it apply to multiple skills?
 
 #### Harness-first diagnosis (run before proposing a fix)
@@ -73,7 +78,7 @@ If the analysis reveals a **pattern-level issue** (something that could recur), 
 - Be specific — describe the exact change to the skill's algorithm, not vague "improve quality"
 - Be minimal — propose the smallest change that fixes the pattern, don't over-engineer
 - Be honest — if the correction was a one-off (user preference, unique context), say so and don't propose a skill change
-- Evidence labels are never unlearned (since v3.8.0, Principle 5 of `pm-mental-model.md`) — a correction that removes an evidence label (`pm-mental-model.md` §4) or turns a `simulated` / `assumed` item into a finding is never proposed as a skill change, in this protocol or in any skill's own self-improvement check; treat it as a one-off under the rule above. The rest of the Principle 5 guard arrives in v3.9.0
+- Judgment guards are never unlearned (Principle 5 of `pm-mental-model.md`; evidence labels since v3.8.0, the rest since v3.9.0) — a judgment-guard correction (Step 2) is never proposed as a skill change, in this protocol or in any skill's own self-improvement check; treat it as a one-off under the rule above, with the one chat line of Step 2. A correction that adds evidence, or fixes a wrong number, is a normal correction
 - Multiple improvements — if several improvements are identified, present them as a numbered list and let the user choose which to apply
 
 ### 4. Implement improvement (if user agrees)

@@ -236,11 +236,11 @@ Labels follow `pm-mental-model.md` §4 (class words in English, details in `user
 | `market-recency` | External market data older than 12 months is flagged as stale | product-research, write-concept |
 | `base-rates` | A forecast, bet or estimate states a base rate / outside view, or says that none is known | product-analysis, write-concept |
 | `triangulation` | A qualitative finding is called conclusive only when two independent source types agree; the number of real users and the method are stated (keeping synthetic input out of findings is baseline Gate Check 6b since v3.8.0 — the `simulated` label is not repeated as a second ⚠️ line) | product-research, feedback-triage |
-| `human-validated` | Themes synthesised by a model carry a `human-validated: yes/no` flag | product-research, feedback-triage |
+| `human-validated` | Themes synthesised by a model carry a `human-validated: yes/no` flag; since v3.9.0 a PM-first tag (`judgment-points.md` §9) never sets `yes` — only an explicit confirmation of the theme does | product-research, feedback-triage |
 | `instrumentation` | The events behind a metric change are confirmed to fire as specified (tracking plan / event dictionary) before the change is trusted | product-analysis, cjm-research |
 | `srm-exposure-peeking` | An A/B readout checks sample-ratio mismatch, exposure logging and early peeking before the verdict | product-analysis (A/B readout, also when experiment-tracker chains it) |
 | `ci-vs-point` | Effects are reported with a confidence interval, not only a point estimate | product-analysis (A/B readout, also when experiment-tracker chains it) |
-| `spec-readiness` | A spec names problem, outcome, scope, constraints and verification; missing ones are flagged (the full readiness gate lands in v3.9.0) | requirements-creator |
+| `spec-readiness` | A spec names its outcomes, scope, constraints, prior decisions, breakdown and verification — the six elements of `artifact-style-gate.md` → Spec readiness (since v3.9.0); missing ones are flagged | requirements-creator (task-creator runs the same checklist for every user) |
 | `nfr-present` | The NFR section exists and is not TBD | requirements-creator |
 | `money-bridge` | A metric claim is linked to revenue / margin / CAC / LTV through `product.key_metrics` → `Revenue driver`; without a mapping the section's single line "No revenue mapping configured" is the whole result — no per-claim caveats | product-reporter, write-concept (business case) |
 | `hippo-check` | A decision that leans on a senior opinion names the evidence behind it, or labels the input `[assumed — senior opinion: <who>]` | write-concept, product-reporter |

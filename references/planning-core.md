@@ -109,3 +109,15 @@ A view over the objects above — no new label, field or status, so marking (§2
 - `role_defaults.planning_view` (`references/role-profiles.md` §2b): `rollup` shows goals → initiatives first (Later / Next) and drills down on request; `slice` shows the delivery slice first (Now) and rolls up on request. Only the order, the depth and the tech-debt display row (`capacity-model.md` §7) change — the numbers, the capacity gate and the checks are the same.
 - No `planning_view` (pm, no or unconfirmed role, automated runs): every planning skill keeps its pre-v3.6.0 order, depth and table rows.
 - `role_defaults.horizon` sets project-planning's default arc window; quarterly-planning stays one quarter and sprint-planning one sprint.
+
+## 8. Pre-mortem and kill criteria in the planning suite (since v3.9.0)
+
+P4 of `pm-mental-model.md`, rules in `judgment-points.md` §7, formats in `roadmap-artifacts.md` §8. Derived, never asked; a `⚠️ TBD` cell is counted, not filled by a question.
+
+- **Where it renders — two steps only:** the quarter plan at scope lock (`quarterly-planning`, plan and full modes) and a new mission, initiative or — with goal or outcome text in the request — epic at `roadmap-architect` onboard.
+- **Where it never renders:** a `project-planning` arc in any mode (its replan only reads criteria back); a sprint plan; the roadmap-architect tree, gap report or `map` edits; a feature or an existing entity; the quarterly retro; a quarterly refresh, which keeps an existing section verbatim and never adds one. No role, hat or `planning_view` changes this.
+- **Marked inputs.** A cause that rests on an item §6 marks keeps that marker as its label — no second label, no extra hand-back line, no question.
+- **Read-back.** The quarterly retro reads the previous quarter plan's kill criteria; a project-planning replan reads those on the mission, initiative or epics in its scope and the current quarter plan's criteria for the focuses its arc touches. Each criterion whose date has passed shows as fired or not fired, with the value that decided it, or as not measurable — next to the plan-vs-actual or the drift.
+  - Only data the step already fetched counts — the retro's Step 2, the replan's R1–R4. Anything else, and a `⚠️ TBD` threshold or date, reads not measurable: never a new fetch, delegation or question.
+  - A plan or entity without kill criteria (before v3.9.0, or the section deleted) shows nothing.
+  - Fired criteria join the step's existing decision-log offer as one batch, only when that offer is made — they never open an offer on their own.

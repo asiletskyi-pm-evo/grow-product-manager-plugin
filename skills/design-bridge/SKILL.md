@@ -1,6 +1,6 @@
 ---
 name: design-bridge
-version: 0.8.0
+version: 0.9.0
 description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку/презентацію», «hi-fi прототип/екран», «design handoff», «дизайн-рев'ю», «через мій дизайн-тулкіт». EN — "create a deck", "make a presentation", "build a prototype on our DS", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review". Also UA — «передати дизайн у розробку». Orchestrates research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff and Figma MCP; the next step after write-concept, requirements-creator, brainstorm-features or product-research when a deck or prototype is needed.
 ---
 
@@ -21,6 +21,7 @@ All brand-specific values (Design System spec, pptx theme, base template, brand 
 | Upstream skill | Trigger | Default intent |
 |---|---|---|
 | `write-concept` | after Step 8 (Design Bridge handoff) | `deck: subtype=feature` |
+| `write-concept` | Step 1 build-first line taken (since v3.9.0) | `prototype: lo-fi, scoped to the riskiest assumption` — playbook → Step 3 f |
 | `requirements-creator` | after Step 8 (Design Bridge handoff) | `handoff: components + copy + a11y` |
 | `brainstorm-features` | after Step 8, ICE ranking top-3 | `prototype: lo-fi per top hypothesis` |
 | `product-research` | after Step 8 (synthesis published) | `deck: subtype=research-highlights` |
@@ -143,7 +144,7 @@ Via `AskUserQuestion` if not passed from an upstream skill:
 
 ### Step 2 — Audience & constraints
 
-Via `AskUserQuestion`:
+Via `AskUserQuestion` (since v3.9.0 the build-first hand-off from write-concept Step 1 asks none of these — its values are in the playbook → Step 3 f):
 - **Audience** (default from upstream): direction_review / team / product_leads / stakeholders / c-level / customer / dev_handoff — the same set `deck-subtypes.yaml` uses in `typical_audience` (upstream skills pass values from it, e.g. brainstorm-features sends `product_leads`)
 - **Length** (for deck): recommended 10; cap 20
 - **Language**: from local-context `user.language`; user can override
@@ -152,9 +153,9 @@ Via `AskUserQuestion`:
 
 ### Step 3 — Source extraction
 
-Depending on **upstream**, pull the fields the deliverable needs from a Confluence page (`write-concept`, `requirements-creator`), research output (`product-research`, `cjm-research`, `meeting-processor`), brainstorm output (`brainstorm-features`), A/B test data (`product-analysis`, Tableau) or user-provided text / files. The per-source field list (a–e) — what to parse and extract from each — lives in `references/design-bridge-playbook.md` (skill-local). Read it before extracting from an upstream artifact.
+Depending on **upstream**, pull the fields the deliverable needs from a Confluence page (`write-concept`, `requirements-creator`), research output (`product-research`, `cjm-research`, `meeting-processor`), brainstorm output (`brainstorm-features`), A/B test data (`product-analysis`, Tableau) or user-provided text / files. The per-source field list (a–f; f, the build-first brief, since v3.9.0) — what to parse and extract from each — lives in `references/design-bridge-playbook.md` (skill-local). Read it before extracting from an upstream artifact.
 
-Normalize into **Deck IR** (intermediate representation). **Evidence labels (since v3.8.0):** the Deck IR keeps the evidence class every upstream number, quote and benchmark carries (`references/pm-mental-model.md` §4) — never stripped, never upgraded (the playbook's Step 3 lists the rules per source). A prototype or mockup is `reported` (file, frame) — it shows intended UI; a claim about users made on it alone ("users will understand X") is `assumed` (Prototype-as-validation); only real-user sessions on it are `observed` / `reported`, and those come from `product-research` (Gate Check 6a).
+Normalize into **Deck IR** (intermediate representation), or for a prototype the **Prototype IR** (since v3.9.0: screens, states including empty / error / loading, transitions, source frame or node — schema in the playbook → Prototype IR; built here, refined by 4b / 4d / 4e, completed at 5b). **Evidence labels (since v3.8.0):** the Deck IR keeps the evidence class every upstream number, quote and benchmark carries (`references/pm-mental-model.md` §4) — never stripped, never upgraded (the playbook's Step 3 lists the rules per source). A prototype or mockup is `reported` (file, frame) — it shows intended UI; a claim about users made on it alone ("users will understand X") is `assumed` (Prototype-as-validation); only real-user sessions on it are `observed` / `reported`, and those come from `product-research` (Gate Check 6a).
 
 **Read `references/deck-subtypes.yaml` first** and look the subtype up by its key — it gives the slide-by-slide outline (index, layout, role, required slots, media hint) for the chosen subtype, plus `target_length` / `max_length`. Build the IR's `slides` list from that outline and fill the slots from the sources extracted above; a slot with no source becomes an Open Question, not an invented fact. If the subtype has no entry, fall back to the generic structure below.
 
@@ -256,7 +257,7 @@ Renders the Deck IR on `product.base_pptx` (blank `Presentation()` when unset) w
 
 #### 5b. intent=prototype → HTML / Mermaid / Figma
 
-- lo-fi → `diagram-prototyper` (Mermaid + ASCII)
+- lo-fi → `diagram-prototyper` (Mermaid + ASCII). For the build-first hand-off, when Step 9 will run for it (playbook → Step 3 f; since v3.9.0), the call passes `return_to: design-bridge` with type prototype, the fidelity, a built-in tool (Mermaid or HTML — no external LLM sees the brief), the locale, the platform (from the brief, else `product.platforms`) and the Prototype IR; it asks nothing it was passed, skips its Steps 8–10 (this skill publishes and saves) and returns the result with the IR filled. Any other lo-fi prototype calls it as before, its Steps 8–10 included
 - mid-fi → HTML with inline brand tokens (from `product.brand.*`) + Tailwind-compatible classes
 - hi-fi → **if Step 0.5 routed to an external toolkit** → use its `returns` (Figma URL / branch / files) as the deliverable; **else** → `use_figma(…)` (Full seat only) → creates a Figma frame
 
@@ -294,7 +295,7 @@ Depending on the deliverable:
   - upstream Confluence page (if any) as attachment
   - Jira ticket (if source = ticket) as comment with link
   - both, if upstream has both
-- **prototype** → link from the concept / requirements page (inline)
+- **prototype** → link from the concept / requirements page (inline); a build-first prototype has no page yet — its link is shown and saved (Step 8) for the concept's Prototype link (PRD §9) when write-concept resumes (since v3.9.0)
 - **handoff** → new Confluence page in the design space, or attach to a Jira epic
 - **research-enrichment** → inline in the upstream skill
 
@@ -312,7 +313,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.8.0",
+  skill_version: "0.9.0",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],
@@ -330,6 +331,12 @@ vault_save({
 })
 ```
 
+## Step 9 — Prototype as spec (since v3.9.0)
+
+The second site of the build-first line (`references/judgment-points.md` §8; switch `judgment.build_first`, default `on`). It runs only with `judgment.build_first` `on`, after a Step 5b prototype, in an interactive run, when the upstream is the build-first hand-off (playbook → Step 3 f) or there is none and the prototype is mid-fi or hi-fi (a standalone lo-fi prototype is drawn without `return_to`, so the Prototype IR does not describe it). Never after requirements-creator or write-concept Step 8, for research-enrichment, in a scheduled or headless run, or in a return payload; a toolkit prototype whose Figma file cannot be read leaves the IR without screen references, and the line is left out.
+
+One line in `user.language` at the end of the Step 7 summary — not a question, once per run: when the prototype tests an assumption (the build-first one, or one the user named), first "show it to 3–5 real users" → `product-research`; for a build-first upstream, then resuming the concept from the printed brief → `write-concept`; then «прототип як специфікація» / "prototype as spec" → `requirements-creator`, which takes the Prototype IR (screens → functional requirements, shown states → acceptance criteria, missing states → open questions; payload and mapping in the playbook → Prototype as spec). Its first appearance in a session adds how to switch it off: «вимкни» / "turn off" writes `- **Build first:** off` (§8). The prototype stays `reported` (file, frame) — never validation.
+
 ## Additional Resources
 
 - **`references/local-context-protocol.md`** — Step 0 protocol
@@ -340,7 +347,7 @@ vault_save({
 - **`references/deck-subtypes.yaml`** — slide outlines for all 4 subtypes (layout sequence, required slots, recommended media)
 - **`references/figma-playbook.md`** — how to resolve a `fileKey`, safe patterns, known limitations (View seat), Step 4g procedure (frame context, screenshots, embed policy)
 - **`references/a11y-checklist.md`** — checklist for Step 6 QA
-- **`references/design-bridge-playbook.md`** — skill-local: Step 3 per-source extraction (a–e), Step 5a pptx rendering, the failure-mode table, the end-to-end concept → deck example, Step 1 role defaults, version history
+- **`references/design-bridge-playbook.md`** — skill-local: Step 3 per-source extraction (a–f), the Prototype IR, Step 9 prototype as spec (payload and mapping), Step 5a pptx rendering, the failure-mode table, the end-to-end concept → deck example, Step 1 role defaults, version history
 - **`references/vault-protocol.md`** — Step 8 vault save
 - **`local-context.example.md`** → Design System section — schema for brand configuration (DS spec path, pptx theme path, base pptx path, brand tokens, Figma file key)
 

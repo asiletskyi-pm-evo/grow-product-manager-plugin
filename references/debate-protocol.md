@@ -93,6 +93,8 @@ The main agent — the one that spawned the debaters — synthesizes:
 
 Validity check before synthesis: every role attacked at least one opposing argument in Round 2. A role that only agreed gets its round returned and re-run once (see Guardrails).
 
+**Into the pre-mortem (since v3.9.0, P4).** When the calling skill's artifact carries a pre-mortem (`judgment-points.md` §7 — for example a write-concept concept at Step 4), the Skeptic's unresolved objections and the minority report are its first failure causes, each named as coming from the debate and given its early signal. The debate stays opt-in through the existing offers: a pre-mortem never triggers, replaces or re-runs a debate, and the debate adds no question to it.
+
 ## Step D5 — Output & save
 
 **Artifact.** A «Debates» section embedded in the parent document (research report, brainstorm output, concept, ADR): round transcripts inside collapsed expand-blocks; the verdict table open:
@@ -126,6 +128,7 @@ Saved under `Debates/{product}/` per `references/vault-schema.md`.
 ## Guardrails
 
 - **Anti-sycophancy:** roles are forbidden to converge before Round 2. The facilitator verifies every role attacked at least one opposing argument in Round 2 — otherwise that role's round is returned and re-run (once per role, within the cost cap).
+- **Judgment guard (since v3.9.0, P5):** the minority report and the Skeptic's unresolved objections are counter-arguments under the `self-improvement.md` guard — a user correction that only removes or softens them applies to this artifact only and is never proposed as a skill change. Trimming the collapsed round transcripts while the verdict table, the minority report and the live disagreements stay is formatting, not a guarded correction.
 - **No new facts:** only the evidence pack; anything beyond it must be a marked assumption A#. Debaters get no web, vault, or file access.
 - **Data policy:** debaters are local subagents without web access — internal data never leaves the session (`references/data-policy.md`).
 - **Cost cap:** default 4 roles × 2 rounds = 8 subagent calls; hard cap **12** total (covers 4×3 rounds, or 5 roles × 2 + re-runs). Responses are compact structured payloads per `subagent-delegation.md`, never free-form essays.

@@ -16,7 +16,7 @@
 | 2 | Basic vs Extended | choice | ✅ | ✅ | 30 sec |
 | 3 | Connector pre-check | auto | ✅ | ✅ | 30 sec |
 | 4, 4a | User Profile + Role and scope | required | ✅ | ✅ | 1-2 min |
-| 4b | Judgment settings | hybrid | defaults, ⏭️ later | ✅ (`hats_allowed`, `hypothesis_first` — one message) | 30 sec |
+| 4b | Judgment settings | hybrid | defaults, ⏭️ later | ✅ (`hats_allowed`, `hypothesis_first` — one message; `learning_mode`, `build_first` shown, not asked) | 30 sec |
 | 5 | Organization | required | ✅ | ✅ | 1 min |
 | 6 | Product (core fields) | required | ✅ | ✅ | 1-2 min |
 | 6+ | Product (extended fields) | optional | — | ✅ | +2-3 min |
@@ -160,8 +160,8 @@ A Role holding an enum value counts as confirmed — no skill asks again (Step 0
 
 Writes the `## Judgment` section (format and key semantics — `references/context-schema.md` → Judgment).
 
-- **Basic:** ask nothing. Record the defaults silently — `hypothesis_first: on`, `learning_mode: off`, `hats_allowed: all` — and append `judgment` to `onboarding.deferred_steps`.
-- **Extended:** ask the two switches that act now, in one message. **`hats_allowed`**: which one-run role overrides ("look at this as a CPO", `role-profiles.md` §4) the plugin may apply. Options: `all` (Recommended) · `none`; a list of roles is typed through the host's "Other" (each name matched first against the exact enum values, `pm` included, then against `role-profiles.md` §5 without its fall-through row — an unmatched name is listed as "not recognised" in the confirmation, never mapped to `pm`; the list confirmed once). **`hypothesis_first`** (since v3.7.0): whether skills ask for your own estimate before showing theirs at scoring, readout, verdict, prioritisation and decision points — including focus-advisor's prior and decision-log's confidence question (`references/judgment-points.md` §1). Options: `on` (Recommended) · `off`. Then show the third in one line, not as a question: "Also set, changeable later with `update config → Judgment`: learning mode `off` (from v3.9.0)." Record all three.
+- **Basic:** ask nothing. Record the defaults silently — `hypothesis_first: on`, `learning_mode: off`, `hats_allowed: all`, `build_first: on` — and append `judgment` to `onboarding.deferred_steps`.
+- **Extended:** ask two switches in one message. **`hats_allowed`**: which one-run role overrides ("look at this as a CPO", `role-profiles.md` §4) the plugin may apply. Options: `all` (Recommended) · `none`; a list of roles is typed through the host's "Other" (each name matched first against the exact enum values, `pm` included, then against `role-profiles.md` §5 without its fall-through row — an unmatched name is listed as "not recognised" in the confirmation, never mapped to `pm`; the list confirmed once). **`hypothesis_first`** (since v3.7.0): whether skills ask for your own estimate before showing theirs at scoring, readout, verdict, prioritisation and decision points — including focus-advisor's prior and decision-log's confidence question (`references/judgment-points.md` §1). Options: `on` (Recommended) · `off`. Then show the other two in one line, not as a question, with their current values (the defaults on a new file): "Also set, changeable later with `update config → Judgment`: learning mode `<current, else off>`, build first `<current, else on>`." `learning_mode` (the PM-first pass or the "How I got here" block at four synthesis steps) and `build_first` (the one-line build-first offer in write-concept and design-bridge) act since v3.9.0 and add no onboarding question. Record only the two answers; the other two keep their current values (the defaults on a new file).
 
 ### Step 5 — Organizations
 
@@ -591,7 +591,8 @@ Before generating the file, present ALL collected information to the user in a s
 ### Judgment
 - Hats allowed: [all / none / list of roles]
 - Hypothesis first: [on / off]
-- Learning mode: [off] (acts from v3.9.0)
+- Learning mode: [off / pm_first / explain]
+- Build first: [on / off]
 
 ### Organization: [name]
 - Domain: [domain]
@@ -668,6 +669,7 @@ Format:
 - **Hypothesis first:** [on | off]
 - **Learning mode:** [off | pm_first | explain]
 - **Hats allowed:** [all | none | list of role enum values]
+- **Build first:** [on | off]
 
 ## Onboarding Status
 

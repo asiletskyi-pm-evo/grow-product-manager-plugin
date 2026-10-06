@@ -1,6 +1,6 @@
 ---
 name: feedback-triage
-version: 0.6.0
+version: 0.7.0
 description: Triage a feedback stream — tickets, complaints, reviews, NPS — into themes with frequency, severity and trend. Not interview synthesis (product-research), not ideation (brainstorm-features). UA — «розбери скарги/відгуки», «кластеризуй тікети», «що болить сегменту», «тренд тем скарг». EN — "triage feedback", "cluster support tickets", "top user complaints for the period", "what hurts a given user segment", "feedback themes trend". Also UA — «тріаж фідбеку», «топ проблем за місяць». Produces a pain list and hypothesis candidates; do NOT use to save individual sources (knowledge-library); chain to brainstorm-features after triage.
 ---
 
@@ -35,13 +35,15 @@ Turns a raw pile of feedback (hundreds of tickets, reviews, Q&A entries) into a 
 ### Step 2 — Normalize (Python)
 Pandas: dedupe (near-identical texts), parse dates, unify fields, drop empty/noise rows. Report intake stats: total received → usable after cleaning (coverage %); `generated` items are counted on their own, outside usable %. **Gate Check 1 (data-integrity):** if the period is only partially covered by the data (e.g., export ends mid-month) — flag it; trend claims for that period are blocked or annotated.
 
+**PM-first pass (since v3.9.0)** (`references/judgment-points.md` §9): with `judgment.learning_mode` `pm_first`, in an interactive run, the intake-stats message ends with one free-text question — tag these items with your own theme words; partial tags count, a skip word skips, «вимкни» / "turn off" writes `- **Learning mode:** off` (§9). The items: 10 drawn round-robin across channels, oldest first within a channel — `user` items only, never `summary` (AI summaries) or `generated` ones — masked as Quality Standards require; with fewer than 20 `user` items the sample is half of them, and below 10 there is no question. The first such question in a session adds one line on how to skip or switch it off. The monthly scheduled run never asks; `explain` asks nothing here.
+
 ### Step 3 — Cluster into themes
-Group semantically similar items into themes (language-agnostic — UA/RU/EN feedback lands in one theme). Every item except `generated` ones is clustered. For each theme: name (user's words, not internal jargon), item count, share %, 2-3 verbatim examples (`user` items only — channel, date, item id · `reported`), affected segment/platforms, funnel stage guess (`[assumed — …]`, per `funnel-templates.md` stages when applicable). Items may belong to one primary theme only; an `other/unclustered` bucket is honest, target < 15 %.
+Group semantically similar items into themes (language-agnostic — UA/RU/EN feedback lands in one theme). Every item except `generated` ones is clustered. For each theme: name (user's words, not internal jargon), item count, share %, 2-3 verbatim examples (`user` items only — channel, date, item id · `reported`), affected segment/platforms, funnel stage guess (`[assumed — …]`, per `funnel-templates.md` stages when applicable). Items may belong to one primary theme only; an `other/unclustered` bucket is honest, target < 15 %. Themes come from the items alone: a PM-first tag changes no theme, count, share, verbatim, pain score or rank (`references/judgment-points.md` §9).
 
 ### Step 4 — Score and rank
 `pain_score = frequency (share %) × severity (1-3: annoyance / blocks task / money-or-trust loss) × trend multiplier (×1.5 growing, ×1 flat, ×0.7 declining — only when a baseline exists)`.
 Rank themes; mark **new** themes (absent in baseline) explicitly — new+growing is the alarm quadrant.
-**Gate emphasis (since v3.6.0)** (`references/data-integrity-protocol.md` → Gate emphasis): with `triangulation` in `role_defaults.gate_emphasis`, a theme carried by one source type only (e.g. tickets but not reviews) gets a ⚠️ caveat line — indicative, not conclusive (n = its items, or distinct users when the data has them; method = its channels); with `human-validated`, each theme carries `human-validated: yes` only when the user named or confirmed it in this session, `no` otherwise. Caveat lines and flags only — never a question, never a changed pain score or rank.
+**Gate emphasis (since v3.6.0)** (`references/data-integrity-protocol.md` → Gate emphasis): with `triangulation` in `role_defaults.gate_emphasis`, a theme carried by one source type only (e.g. tickets but not reviews) gets a ⚠️ caveat line — indicative, not conclusive (n = its items, or distinct users when the data has them; method = its channels); with `human-validated`, each theme carries `human-validated: yes` only when the user explicitly named or confirmed that theme in this session — a PM-first tag never counts (`references/judgment-points.md` §9) — `no` otherwise. Caveat lines and flags only — never a question, never a changed pain score or rank.
 **Evidence classes and frontier (since v3.8.0)** (`references/data-integrity-protocol.md` Gate Check 6): item counts, shares and trends computed in Steps 2–4 are `measured`, verbatims and summaries of real tickets `reported`; `generated` items are `simulated` — never in a theme, a theme count, share, verbatim or pain score, only on one `Simulated input — hypotheses only` line under Hypothesis candidates, shown only when such items exist. A cause the report attributes to a theme that its items do not state (a release, a policy change, a motive) gets one hand-back line; a theme with no attributed cause gets none. The line sits in the theme's detail, worded in `user.language` with the human step (read the full tickets, call 5 users of the segment, check the release log with the team) — never a question, never a changed pain score or rank. The monthly scheduled run writes labels only: such a claim reads `[assumed — frontier: <human step>]`. When the baseline predates v3.8.0 and an interactive run set `generated` items aside, Trends carries one comparability ⚠️ line; the scheduled run adds none.
 
 ### Step 5 — Report (Step T applies)
@@ -56,6 +58,8 @@ Template: `artifact_type: research`, `subtype: feedback-triage`. Structure (fall
 8. Glossary + Sources (source-type markers per `data-integrity-protocol.md`, each with its evidence class)
 9. Role extra sections (since v3.6.0) — each `role_defaults.extra_sections.research` partial (e.g. `repository-entry`) the report lacks, inserted by T-5 step 3b above the judgment footer, with a custom template too; derived, never asked
 
+**Your tags vs mine / How I got here (since v3.9.0)** (`references/judgment-points.md` §9): in chat after Step 4 and before the publishing question, never in the report, never in a scheduled, headless or return-payload run. Under `pm_first` with an answer, "Your tags vs mine": per tagged item, the PM's tag next to the theme Step 3 gave it; which PM tag was matched to which theme (the matching is this skill's, shown so the PM can check it); agreements; and for each difference the items that separate them, or "no evidence decides this — your call". Under `explain`, "How I got here": the inputs used (sources, period, usable items), the grouping rule and the pain-score formula applied, and the two closest alternatives rejected (a merge or a split of themes). Neither asks anything, and neither moves a theme, count or rank toward the PM's.
+
 Publishing: Confluence (default) / local — ask (a scheduled run asks nothing: it publishes where its schedule prompt names a destination, else saves locally; a Confluence write still meets the host write gate). Every number carries inline period annotation; every count, share, trend and verbatim also carries its evidence class (Step 4).
 
 **Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
@@ -63,12 +67,12 @@ Publishing: Confluence (default) / local — ask (a scheduled run asks nothing: 
 ### Step 6 — Chains
 - → **`brainstorm-features`**: top pains as hypothesis input (the natural next step — offer first)
 - → **design `research-synthesis`**: when themes need deep qualitative synthesis
-- → **`cjm-research`**: when pains map to funnel stages with metric impact
+- → **`cjm-research`**: when pains map to funnel stages with metric impact (no `pm_first` is passed — funnel anomalies are not this run's material, `references/judgment-points.md` §9)
 - → **`decision-log`**: when triage triggers a priority decision
 - → **`task-creator`**: quick-fix themes straight to Jira (the SH-step formulations feed directly in)
 
 ### Step V — Save to Vault
-`vault_save({type: "feedback-triage", product, skill: "feedback-triage", skill_version: "0.6.0", tags: [segment, period, top theme slugs], content: full report, related: [previous triage artifact, spawned hypotheses], extra_frontmatter: {period, segment, sources_count, items_total, items_usable, top_pain_score}})` → Research/feedback/. This artifact is the baseline for the next run's trends.
+`vault_save({type: "feedback-triage", product, skill: "feedback-triage", skill_version: "0.7.0", tags: [segment, period, top theme slugs], content: full report, related: [previous triage artifact, spawned hypotheses], extra_frontmatter: {period, segment, sources_count, items_total, items_usable, top_pain_score}})` → Research/feedback/. This artifact is the baseline for the next run's trends.
 
 ## Quality Standards
 - Theme names in the users' language of pain, verbatims verbatim (PII stripped: names, emails, order numbers masked) — a masked `[name]` / `[order]`, a marked `[…]` or a `(translated)` verbatim stays `reported`; a paraphrase or a ticket summary is never shown in quote marks.

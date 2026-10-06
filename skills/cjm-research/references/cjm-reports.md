@@ -103,6 +103,8 @@
 
 ## Publishing
 
+**Before 12a — the PM-first comparison or `explain` (since v3.9.0).** In an interactive `hypotheses` / `full` run where `references/cjm-pipeline.md` Step 7.0 applied: "Your hypotheses vs mine" (`pm_first`, after an answer) or "How I got here" (`explain`) comes in chat once the report is assembled, before 12a — or before publishing to the Step 2e destination. It never enters the report and asks nothing; a change it prompts goes through the 12b feedback loop. The Automated Health-Check Protocol below is unchanged: no question, no block.
+
 **12a. Ask via AskUserQuestion (if not already specified in Step 2e):**
 
 > "Report is ready. Where should I publish it?"

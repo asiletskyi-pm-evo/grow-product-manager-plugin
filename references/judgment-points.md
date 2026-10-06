@@ -1,6 +1,6 @@
 # judgment-points.md
 
-> Shared protocol (since v3.7.0). Implements three principles of `pm-mental-model.md` at the judgment points of six skills: **P2 — human hypothesis first** (§2), **P3 — calibrated confidence with a falsifier** (§3) and **P9 — decision ownership and hygiene** (§4–§5). A skill applies this file only at the steps that cite it. The §1 table is the complete list: no other skill, step or mode asks the P2 question or renders the confidence line (`pm-mental-model.md` §5 — a principle acts only through a step that implements it).
+> Shared protocol (since v3.7.0). Implements principles of `pm-mental-model.md` at the judgment points of the skills that cite it: **P2 — human hypothesis first** (§2), **P3 — calibrated confidence with a falsifier** (§3), **P9 — decision ownership and hygiene** (§4–§5), and since v3.9.0 **P4 — the built-in opponent** (§7, pre-mortem and kill criteria), **P6 — build before you argue** (§8, the build-first offer) and **P8 — learning-preserving modes** (§9). A skill applies this file only at the steps that cite it. The §1 table is the complete list: no other skill, step or mode asks the P2 question or renders the confidence line (`pm-mental-model.md` §5 — a principle acts only through a step that implements it).
 
 ## 1. Implementing steps
 
@@ -28,7 +28,7 @@
    - **Skip** («пропусти», «не знаю», "skip", "don't know", "just show yours", an empty answer) → continue exactly as without the question; no comparison.
    - **Turn off** («вимкни», "turn off", "stop asking") → write `- **Hypothesis first:** off` into `## Judgment` of the `local-context.md` that Step 0a resolved (create the section with the defaults when it is absent) under the write rules of Step 0i step 2: only when the file can be written, with a one-row changelog `Judgment → Hypothesis first | on | off`. The answer is the consent — no further confirmation (Context Enrichment does not apply). When it cannot be written, keep it off for this session and print the line to paste. Then continue as for skip.
 5. **Compare, don't replace.** After the skill's own result, one short block — "Your estimate vs mine", in `user.language` — where they agree, where they differ, and for each difference the evidence that separates them, or "no evidence decides this — your call". The skill never moves its own score, rank or verdict toward the user's (P5), never withholds it, and never takes the decision for the user. The block stays in the chat; it enters an artifact only through a field §1 names.
-6. **Nothing else changes.** The P2 question is the only question v3.7.0 adds to a skill run (the configurator's Extended onboarding also offers the switch itself). It is not a gate, and every question a skill already asks keeps its wording and order — except that brainstorm-features' "Choose one" starts from a P2 answer when there is one. When the question is not asked and no estimate is known (step 1), the skill runs as in v3.6.0 apart from the outputs of §3–§5.
+6. **Nothing else changes.** The P2 question is the only question v3.7.0 adds to a skill run (the configurator's Extended onboarding also offers the switch itself). It is not a gate, and every question a skill already asks keeps its wording and order — except that brainstorm-features' "Choose one" starts from a P2 answer when there is one. When the question is not asked and no estimate is known (step 1), the skill runs as in v3.6.0 apart from the outputs of §3–§5. v3.9.0 adds no P2 point: its build-first line (§8) is not a question, and its PM-first question (§9) exists only under `learning_mode: pm_first` — neither is a §1 point, and neither travels as `pm_estimate`.
 
 ## 3. P3 — the confidence line
 
@@ -85,7 +85,7 @@ The three lines go into the new record's Context. They add no question: the owne
 ## 6. Gate 4c — where it is checked
 
 `artifact-style-gate.md` Gate 4c checks the confidence line wherever §1 names one:
-- **Artifacts** — the T-5 self-check, which also fixes a missing or malformed line silently.
+- **Artifacts** — the T-5 self-check, which also fixes a missing or malformed line silently — but never re-adds a confidence line the user removed at this run's review step (since v3.9.0; `self-improvement.md`).
 - **Decision records** — decision-log's save gate. The level there is the owner's and the gate never changes it; a clause that names nothing observable is shown as `not recorded` (v3.7.0) and never replaced by an invented one, and no v3.8.0 check edits the owner's clauses: a level above the no-inflation cap (the v3.8.0 frontier and `simulated` caps included) is kept, and a "Your estimate vs mine" comparison, when one is shown, names the cap or the unnamed weak input; `unknown (not stated)` and `not recorded` clauses are well-formed in a record (§4).
 
 A line is well-formed when:
@@ -94,3 +94,88 @@ A line is well-formed when:
 - the level respects the no-inflation rule (artifacts only — a decision record keeps the owner's level).
 
 The artifact-checker has no 4c lens, because no maker–checker skill renders the line.
+
+## 7. P4 — pre-mortem and kill criteria (since v3.9.0)
+
+The strongest case against a consequential artifact, written as if it already failed, with pre-committed conditions to stop. Rendered from `templates/built-in/partial/pre-mortem-v1.md` by `template-protocol.md` T-5 step 3b ("Inserted sections"), or directly where the table says so. Derived from the artifact and its inputs — never a question, never a P2 point.
+
+| Skill · step | Artifact | Kill criteria |
+|---|---|---|
+| `write-concept` · Step 4, through T-5 3b | every concept except the design brief and a release-notes draft; "Pre-mortem & kill criteria" is a pre-selected item of the Step 1 block list (deselected there → none) | its own table, or a pointer to the Kill criteria / Decision rule / Revisit trigger the subtype already has (strategy memo, business case, decision memo) |
+| `requirements-creator` · Step 4, A/B sections | an A/B-test spec | the existing decision rule (`Stopping / Decision Criteria`) — pointer only; causes are test-validity causes, each with a pre-launch check |
+| `requirements-creator` · Step 4, AI-feature sections | an AI-driven spec (`requirements/ai-feature`, or AI sections inserted) | the spec's own Kill criteria (2.4) — no second table |
+| `quarterly-planning` · at scope lock (end of Step 5 in plan mode; the published plan of Step 6 in full mode) | the quarter plan | one per main focus |
+| `roadmap-architect` · Step 4b (`onboard`) | a new mission or initiative; an epic only when the request carries goal or outcome text | one per entity, inside the existing approval preview and write |
+
+**Causes** (2–3), in this order of sources:
+1. the debate's unresolved Skeptic objections and minority report;
+2. `assumed` / `simulated` inputs and the riskiest assumption named in §8;
+3. the artifact's Risks section, guardrails and base rate;
+4. the skill's own signals (capacity, dependencies, open questions).
+
+Each cause names the input or section it rests on and has an observable early signal.
+
+**Kill criteria** use the same observable-signal rule as P3's `would change if`, plus a date. Each row:
+- an observable signal (never "more data");
+- a threshold from the artifact, else `⚠️ TBD`;
+- a date from the artifact, else derived: the launch or decision date plus the measurement window the artifact states (e.g. "4 weeks after launch"); for a plan, no later than its end;
+- then: from the artifact, else the default for the kind — roll back or switch off a shipped change, stop an experiment, descope a plan focus or a new roadmap entity.
+
+Only the threshold may be `⚠️ TBD` — the date too, only when the artifact states no date, window or end to derive it from (a roadmap-architect onboard entity, `roadmap-artifacts.md` §8).
+
+**Rules.**
+- Never asked; a `⚠️ TBD` cell is counted, not filled by a question.
+- Renders in any run where its step runs; it is never in a return payload or a People-contour artifact.
+- A user's or product's own template gets it only when the template includes `{{> pre-mortem}}`; built-ins get it inserted.
+- The PM edits it at the existing review. A deletion is respected for this artifact and never learned (`self-improvement.md`), and the self-check does not restore it.
+- `quarterly-planning` refresh keeps an existing pre-mortem verbatim and never adds one.
+- **Read-back:** the quarterly-planning retro (Step 2, in `retro` and `full` modes) and the project-planning replan show each earlier kill criterion whose date has passed as fired / not fired / not measurable. Reading the earlier plan's criteria is allowed; judging them uses only data that step already fetched — anything else is not measurable. A fired criterion joins the step's existing decision-log offer when that offer is made — it never opens one, and asks nothing.
+- No other skill or step renders a pre-mortem: not project-planning arcs, sprint plans, the roadmap tree or gap report, focus briefs, task bodies or release notes.
+
+## 8. P6 — the build-first offer (since v3.9.0)
+
+Switch `judgment.build_first` (default `on`; the value is read without a trailing note in brackets, any other value reads as `on`). Two sites only:
+
+| Skill · step | Line |
+|---|---|
+| `write-concept` · Step 1, inside the brief summary | when no `observed` / `measured` / `reported` evidence covers the concept's riskiest assumption (derived — it also feeds the pre-mortem), names it and the cheapest path that would settle it: a lo-fi prototype shown to 3–5 real users (design-bridge, then product-research), a walk of the as-is flow (flow-walkthrough), or an eval set for an AI behaviour (requirements-creator `ai-feature`); «спершу прототип» / "build first" takes that path |
+| `design-bridge` · Step 9, in the closing summary after a prototype is built — only for a build-first upstream or a standalone mid-fi or hi-fi prototype (a standalone lo-fi prototype is drawn by diagram-prototyper without `return_to`, so no Prototype IR describes it) | suggests the prototype as the spec → requirements-creator (screens → functional requirements, shown states → acceptance criteria, missing states → open questions); when the prototype tests an assumption, it first suggests showing it to 3–5 real users |
+
+**Rules.**
+- **One line, not a question.** It sits inside the existing confirmation or closing summary, once per run, and its first appearance in a session adds how to switch it off.
+- **When it is suppressed.** The line is left out when:
+  - (a) evidence covers the assumption — a Step 0.5 hit (taken as context or not) of type `walkthrough`, `ab-test-results` or a research type whose summary addresses it, or a non-`simulated` source the user named that addresses it;
+  - (b) the build path was already taken — a `prototype` hit, or a `requirements` hit of subtype `ai-feature` with an eval set (the assumption stays open in the pre-mortem until real-user sessions or eval results exist);
+  - (c) the assumption has no cheap build path (e.g. a market-size, pricing or legal question);
+  - (d) the concept is not a product change;
+  - (e) the run is automated or a return payload;
+  - (f) `judgment.build_first` is `off`.
+
+  Step 9 shows it only for a build-first upstream or a standalone mid-fi or hi-fi prototype (a standalone lo-fi one has no Prototype IR) — never after requirements-creator or write-concept Step 8.
+- **A prototype is never validation.** It stays `reported (file, frame)` (`data-integrity-protocol.md` 6a), and only real-user sessions on it are evidence.
+- **Turning it off.** «вимкни» / "turn off" writes `- **Build first:** off` under the write rules of §2 step 4.
+- **The creation steps it routes to are unchanged**, except their hand-off payloads:
+  - design-bridge asks none of its Step 1–2 questions for the build-first brief (its values are in the playbook → Step 3 f);
+  - requirements-creator skips the Step 1 questions a prototype or the brief already answers and, for a prototype source, leaves out Step 8 option 2 (the low-fi prototype);
+  - flow-walkthrough takes the flow, surface and assumption from the payload into its Step 1 scope and asks only what it leaves open;
+  - product-research receives the prototype for 3–5 real-user sessions;
+  - diagram-prototyper returns a lo-fi prototype to design-bridge on an explicit `return_to: design-bridge` (passed only for the build-first hand-off) and receives the platform with it.
+
+## 9. P8 — learning-preserving modes (since v3.9.0)
+
+Switch `judgment.learning_mode`: `off` (default) · `pm_first` · `explain` (stored since v3.5.0, acts since v3.9.0; read without a trailing note in brackets).
+
+| Skill · step | `pm_first` asks the PM to… |
+|---|---|
+| `feedback-triage` · end of Step 2 | tag a sample of up to 10 real items (round-robin across channels; not asked below 10 items) with their theme words |
+| `meeting-processor` · after the M4 format choice, Discovery / Interview meetings with a verbatim transcript, Structured MoM only | tag 5 interviewee excerpts |
+| `product-research` · before Step 3, interview synthesis | tag 10 excerpts, at most 2 per participant |
+| `cjm-research` · before pipeline Step 7 | write their own hypothesis (cause → change) for the top 3 gated anomalies — withheld from brainstorm-features 3C so the two sets stay independent |
+
+**Rules.**
+- **The question.** One free-text question per run per step, in `user.language`, only in an interactive run under `pm_first`. Never in a scheduled, headless or return-payload run. Its first appearance in a session adds one line on how to skip or switch it off. An interpretation the PM already gave for this material (themes or tags they named in the request or earlier in the run) counts as the answer and is not asked for again, as in §2 step 1.
+- **What the PM sees.** Only real items, with personal data masked — never `simulated` or `generated` ones.
+- **Answers.** Skip words, partial tags and «вимкни» (writes `- **Learning mode:** off` under §2 step 4) work as in P2.
+- **Compare, don't replace.** After the skill's synthesis, one chat block — "Your tags vs mine" (cjm-research names it "Your hypotheses vs mine"), in `user.language` — shows agreement and differences, with the evidence for each. The PM's tags never change a theme, count, rank, ICE score or verdict, never enter the artifact — unless the PM edits the artifact at the existing review, which is a guarded correction (`self-improvement.md` Step 2) — and never set `human-validated: yes`; only the existing explicit confirmation of a theme does that.
+- **Chains.** A run chained on the same material (meeting-processor → product-research) passes `pm_first: done | skipped | off` and is never asked twice about it.
+- **`explain`.** At the same four steps, one chat-only block, "How I got here": the inputs used, the grouping or scoring rule applied, and the two closest alternatives the skill rejected. It asks nothing and never enters the artifact.

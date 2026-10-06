@@ -1,7 +1,7 @@
 ---
 name: product-research
-version: 0.14.0
-description: Competitive, market, user and UX-benchmark research — interview synthesis, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks". Also UA — «проаналізуй ринок», «конкурентний аналіз», «ринкові тренди». Calls knowledge-library for enrichment during research.
+version: 0.15.0
+description: Competitive, market, user and UX-benchmark research — interview synthesis, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews" (also "let me tag the first interviews myself, then synthesize"), "find market trends", "compare against industry benchmarks". Also UA — «проаналізуй ринок», «конкурентний аналіз», «ринкові тренди». Calls knowledge-library for enrichment during research.
 ---
 
 # Product Research
@@ -117,6 +117,8 @@ Follow `references/local-context-protocol.md` — Step 0g:
 - *use as context for:* the research (e.g., when analyzing competitor UX, reference the current state);
 - *when designs are confirmed:* use them as primary context for understanding the current state and reference design frames in the final research output.
 
+**Inbound from a build-first prototype (since v3.9.0)** — ← `design-bridge` Step 9, or ← `write-concept` Step 1 through design-bridge (`references/judgment-points.md` §8): a prototype and the assumption it tests, to show to 3–5 real users. The payload answers the scope questions above; what is still asked, the subtype and the return to the concept: `references/frameworks.md` → Prototype sessions.
+
 Summarize the full research brief back to the user and get confirmation before proceeding.
 
 ### 1.5 — Source Validation Gate (MANDATORY, v0.8.0+)
@@ -195,6 +197,8 @@ This delegation ensures accurate computation (via pandas/numpy) and consistent a
 **Deep Research via ChatGPT / Gemini** (if confirmed by user in Step 1): open each enabled LLM in the browser, pick the strongest model, run Deep Research on a prompt built from the Step 1 scope, extract the findings and cross-reference them with each other and with the other sources — LLM output enriches the analysis and is never a primary source: a claim traced to a resolvable, recency-checked source takes that source's class, an untraceable claim about users or the market is `simulated` (1.5.g). Prompts carry **public information only** (`references/data-policy.md`).
 
 The full procedure — the ChatGPT and Gemini steps, cross-referencing when both run, and the guidelines for LLM-sourced data — lives in `references/deep-research-llm.md` (skill-local). Read it when the user enabled either LLM in Step 1.
+
+**PM-first pass (since v3.9.0)** (`references/judgment-points.md` §9): for interview synthesis — `user-research`, `insight-report` or `insight-memo` on real interview or session material — in an interactive run, after 1.5.g has classed the material: under `judgment.learning_mode` `pm_first`, one free-text question shows 10 excerpts for the PM to tag before Step 3; under `explain`, nothing is asked. Not asked when the caller passes `pm_first`, or when the PM already stated their themes for this material (in the request or at Step 1 — used as their tags). Step 3 synthesises from the material alone; the "Your tags vs mine" or "How I got here" chat block comes before Step 4 publishes. Sampling rule and both blocks: `references/frameworks.md` → PM-first pass.
 
 ### 3. Analyze and structure findings
 
@@ -290,7 +294,7 @@ After a competitive study, also offer:
 
 If the user agrees to Write Concept:
 - Pass the full research context to the Write Concept / PRD skill: Confluence page link, key findings with their evidence labels, identified opportunities, data sources used
-- The Write Concept skill will use these research results as primary input (Step 2 of its workflow)
+- The Write Concept skill will use these research results as primary input (Step 2 of its workflow); after prototype sessions (build-first, since v3.9.0) this return is offered first, and `write-concept` resumes from the brief it printed (`references/frameworks.md` → Prototype sessions)
 - No need to re-gather the same data — the research is already done
 
 If the user agrees to CJM Research:
@@ -331,7 +335,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.14.0", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.15.0", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
    (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added; since v3.6.0 a research plan, discussion guide, insight report or insight memo saves the same way, tagged with its subtype.)
 2. Display: "Saved to Vault: Research/{product}/…"
 

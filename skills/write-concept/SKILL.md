@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.14.1
+version: 0.15.0
 description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ», «дизайн-бриф», «стратегічний меморандум», «мемо рішення», «бізнес-кейс»; EN — "design brief", "strategy memo", "decision memo", "business case". A concept is the input to requirements-creator.
 ---
 
@@ -46,13 +46,13 @@ Key context used by this skill:
 IF vault_level > L0 (detected during Step 0h):
 
 1. Search vault for relevant prior artifacts:
-   - Types: `competitive-analysis`, `market-research`, `ux-benchmark`, `hypothesis`, `decision`, `requirements`
+   - Types: `competitive-analysis`, `market-research`, `ux-benchmark`, `hypothesis`, `decision`, `requirements`, and since v3.9.0, only while `judgment.build_first` is `on`, `walkthrough`, `ab-test-results`, `prototype` (they can suppress the Step 1 build-first line, `references/judgment-blocks.md` §2)
    - Product: active product
    - Tags: keywords from user's feature idea or problem statement
    - Status: `active`, `draft`
    - Sort: `created DESC`, limit: 10
 
-2. IF results found:
+2. IF results found (hits of only those three v3.9.0 types do not count — they then only suppress the build-first line, and join the list below only when other hits already show it):
    - Display: "Found {N} related artifacts in your knowledge base that may inform this concept:"
    - Show: title, type, date, brief summary
    - Ask: "Use as context? [Yes / Select specific / Skip]"
@@ -96,6 +96,8 @@ The resolved template may reshape the sections and questions of the workflow bel
 
 **Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
 
+**Pre-mortem and kill criteria (since v3.9.0, P4; `references/judgment-points.md` §7).** While block 15 of the Step 1 list stays selected (it is pre-selected), Step 4 inserts `templates/built-in/partial/pre-mortem-v1.md` after the Risks section through T-5 step 3b — derived, never asked; a missing threshold is `⚠️ TBD`. Not on a design brief or a release-notes draft; a user or product template gets it only with `{{> pre-mortem}}`; subtypes that already have Kill criteria or a Revisit trigger get a pointer, not a second table (detail: `references/judgment-blocks.md` §4).
+
 ## Workflow
 
 ### 1. Deep discovery — gather maximum context
@@ -131,6 +133,7 @@ Present the full standard block list and ask the user to confirm which blocks ar
 12. Risks & Mitigations
 13. Timeline & Milestones *(adaptive)*
 14. Open Questions
+15. Pre-mortem & kill criteria *(pre-selected; since v3.9.0 — not listed for a design brief or a release-notes draft)*
 
 Ask the user:
 - Which of these blocks are needed for this concept?
@@ -148,6 +151,8 @@ Ask the user:
 - *when designs are confirmed:* reference the current UX state in the Problem Statement, describe what changes vs. the current design in "What Changes for Users", and include links to relevant frames in the Sources section.
 
 Summarize the full brief back to the user and get confirmation before proceeding.
+
+**Build-first line (since v3.9.0, P6; `references/judgment-points.md` §8, detail in `references/judgment-blocks.md` §1–§3).** When `judgment.build_first` is `on` (default), the run is interactive and the concept proposes a product change, the summary ends with one line — not a question — naming the concept's riskiest assumption (derived, never asked) and the cheapest path that would settle it: a lo-fi prototype shown to 3–5 real users, a walk of the as-is flow, or an eval set for an AI behaviour; «спершу прототип» / "build first" takes it. The line is left out when evidence already covers the assumption (a Step 0.5 hit of type `walkthrough`, `ab-test-results` or a research type, or a non-`simulated` source the user named, that addresses it), when its path was already taken (a `prototype` hit, or a `requirements` hit of subtype `ai-feature` with an eval set — never evidence; the assumption stays open in the pre-mortem), when it has no cheap build path (demand, pricing, legal; `references/judgment-blocks.md` §1–§2), and in scheduled, headless or return-payload runs. Its first appearance in a session adds how to switch it off («вимкни» / "turn off" writes `- **Build first:** off`). Confirming the brief continues to Step 2 exactly as before; taking the path hands the brief and the assumption to `design-bridge`, `flow-walkthrough` or `requirements-creator` (then `product-research` for real-user sessions on a prototype) and ends this run with the brief printed for resuming.
 
 ### 2. Gather data from sources
 
@@ -189,7 +194,7 @@ If the concept changes **existing UI**, offer an annotated screenshot of the cur
 
 Before writing, load the team style preamble — `references/artifact-style-gate.md` Gate 3a; skip silently if no profile is configured. Build the concept document following the confirmed structure from Step 1:
 
-> For a worked, high-quality reference of the target shape and depth, load `references/examples/prd-example-v1.md` on demand. It is a generic exemplar (few-shot), not a rigid template — match its rigor (measurable Success Metrics, a Verification/decision-rule block, explicit `[assumed — …]` labels and evidence classes on cited figures), not its exact wording.
+> For a worked, high-quality reference of the target shape and depth, load `references/examples/prd-example-v1.md` on demand. It is a generic exemplar (few-shot), not a rigid template — match its rigor (measurable Success Metrics, a Verification/decision-rule block, a pre-mortem with dated kill criteria, explicit `[assumed — …]` labels and evidence classes on cited figures), not its exact wording.
 
 **Adaptive sections** — adjust depth based on feature type:
 - **Frontend/product feature** → expand Design & UX, minimize Technical Considerations
@@ -218,7 +223,7 @@ Present the full draft to the user before publishing. Iterate until confirmed:
 - Collect feedback and make edits
 - May require multiple iterations
 
-> **Debate hook (red-team).** Before publishing a contested concept (real trade-offs, ≥ 2 affected interest groups) — offer a red-team debate per `references/debate-protocol.md`: evidence pack from the concept's own research base and analysis, roles chosen with the user (Skeptic mandatory), rounds → facilitator synthesis. Unresolved objections land in Risks / Open Questions, and the verdict + minority report embed as a «Debates» section in the PRD before it ships.
+> **Debate hook (red-team).** Before publishing a contested concept (real trade-offs, ≥ 2 affected interest groups) — offer a red-team debate per `references/debate-protocol.md`: evidence pack from the concept's own research base and analysis, roles chosen with the user (Skeptic mandatory), rounds → facilitator synthesis. Unresolved objections become the pre-mortem's first causes (since v3.9.0, `references/judgment-blocks.md` §4) — in Risks / Open Questions when the concept has no pre-mortem — and the verdict + minority report embed as a «Debates» section in the PRD before it ships.
 
 ### 6. Confirm Confluence location and publish
 
@@ -237,7 +242,7 @@ Page title format: `[PRD] Feature Name` — for a design brief, strategy memo, d
 3. **Headings** — use proper H1/H2/H3 hierarchy for all sections and subsections
 4. **Bold text** — highlight key theses, important conclusions, and critical data points in bold
 5. **Tables** — use tables wherever structured data needs to be communicated: comparisons of alternatives, metrics, feature matrices, user impact summaries, risk/mitigation pairs
-6. **Sources** section at the bottom with links, marking each source type (Confluence, Google Drive, Web, ChatGPT Deep Research, Gemini Deep Research, uploaded file, Product Research) and, since v3.8.0, its evidence class (`measured`, `reported`, `external`, …)
+6. **Sources** section at the bottom with links, marking each source type (Confluence, Google Drive, Web, ChatGPT Deep Research, Gemini Deep Research, uploaded file, Product Research, and since v3.9.0 a build-first prototype — `reported` (file, frame), never validation) and, since v3.8.0, its evidence class (`measured`, `reported`, `external`, …)
 
 Publish via Confluence MCP (`createConfluencePage`). If unavailable — follow integration fallback chain. As a last resort, generate a local document for manual publishing.
 
@@ -296,7 +301,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.14.1",
+     skill_version: "0.15.0",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],
@@ -326,6 +331,8 @@ After successful publishing, automatically propose design-bridge for design-rela
 > 2. **UI prototype** — lo-fi Mermaid flow or mid-fi HTML mockup to visualize the proposed solution
 > 3. **Skip** — not needed right now
 
+Since v3.9.0, when a build-first prototype exists for this concept, option 2 offers to iterate that prototype — its link is already in PRD §9 — instead of building a second one (`references/judgment-blocks.md` §5); otherwise the options are unchanged.
+
 IF user selects 1 → invoke `design-bridge` with:
 - `intent: deck`
 - `subtype: feature`
@@ -337,6 +344,7 @@ IF user selects 2 → invoke `design-bridge` with:
 - `intent: prototype`
 - `source: confluence_page_url`
 - `fidelity: lo-fi` (default; upgrade to mid-fi upon request)
+- `prototype_ref: <the build-first prototype>` — only when one exists (since v3.9.0), so design-bridge iterates it
 
 If the concept already has a Figma link (Step 1: "Figma designs check"), pass it to `design-bridge` for embedding.
 
@@ -348,6 +356,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 - **`references/vault-protocol.md`** — vault context search and save protocols
 - **`references/vault-schema.md`** — vault artifact schema and metadata structure
 - **`references/prd-structure.md`** — detailed templates for each PRD block
+- **`references/judgment-blocks.md`** — skill-local (since v3.9.0): the riskiest assumption, the Step 1 build-first line and its paths, the Step 4 pre-mortem and kill criteria, Step 8 with a build-first prototype
 - **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), Gate 4 (altitude line, evidence labels), maker–checker execution (Step 4.5)
 - **`references/examples/prd-example-v1.md`** — worked golden PRD exemplar (few-shot; load on demand in Step 4)
 - **`references/examples/design-brief-example-v1.md`**, **`strategy-memo-example-v1.md`** — golden exemplars for the `design-brief` and `strategy-memo` subtypes (since v3.6.0; load on demand when rendering that subtype)

@@ -10,6 +10,8 @@ Requirements often serve as the entry point for developer handoff and low-fi pro
 > 3. **Deck for dev-review** — 6-8 slides with scope + UI flow + edge cases
 > 4. **Skip**
 
+**Prototype source (since v3.9.0).** When this run started from a prototype — the prototype-as-spec path of `references/ai-feature-section.md` §6b — option 2 is left out: the prototype already exists, and offering it again is circular. Option 1 is recommended (the handoff documents the existing design, and its `figma_context` is the prototype, not asked); options 1, 3 and 4 keep their wording and order.
+
 IF user selects 1 → invoke `design-bridge` with:
 - `intent: handoff`
 - `source: requirements_page_url`
