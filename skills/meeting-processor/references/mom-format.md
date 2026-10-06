@@ -9,6 +9,8 @@ Generate the meeting report using the user's preferred language (`user.language`
 
 **Date:** [date] | **Duration:** [duration] | **Type:** [grooming, discovery, ...]
 
+**Evidence:** reported — meeting [transcript | notes | recording] [date] (every figure and statement as its named speaker said it; an item of another class carries its own label)
+
 ---
 
 ### Participants
@@ -39,7 +41,7 @@ Generate the meeting report using the user's preferred language (`user.language`
 ---
 
 ### [Type-specific section(s)]
-[Content based on meeting type — see M5b]
+[Content based on meeting type — see M5b; quotes verbatim with speaker and timestamp]
 
 ---
 

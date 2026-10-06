@@ -8,10 +8,10 @@ scope: built-in
 products: []
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.0.1"
 author: "grow-pm"
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-10-06
 tags: [presentation, ab-test, experiment, readout]
 description: "A/B test readout (6 slides): hypothesis → primary metric → guardrails → interpretation → decision"
 status: active
@@ -86,6 +86,8 @@ variables:
 
 **Period:** {{date_range}} · **Platform:** {{platform}}{{#if segment}} · **Segment:** {{segment}}{{/if}}
 
+<!-- Evidence labels (since v3.8.0; pm-mental-model.md §4, artifact-style-gate.md Gate 4b): every number, quote and benchmark stated as fact carries its class in the slide's source caption or attribution — a quote verbatim, with who and when, ending `· reported`. `simulated` input never fills a quote, metric or evidence slide; `assumed` appears only labelled. Targets and forecasts carry no class. External audience (customer, partner, public): the class stays, internal source names go, and hand-back lines stay in the outline companion — never on a slide. A randomised test's primary and guardrail results keep their source's class (`measured` when the analysis read the experiment data itself, `reported (<who>)` when the results were pasted) and may be stated as caused by the change, segment cuts of the randomised comparison included; a "why" on the Interpretation slide with no real-user source is a hypothesis `[assumed — …]`. -->
+
 ---
 
 ## Slide 1. Title
@@ -110,7 +112,7 @@ variables:
 
 {{primary_result}}
 
-_(Chart: bar — control vs treatment with CI. Caption: p-value, CI.)_
+_(Chart: bar — control vs treatment with CI. Caption: p-value, CI, the class of the results (`measured` or `reported`) · experiment source and period.)_
 
 ## Slide 4. Secondary / guardrails
 

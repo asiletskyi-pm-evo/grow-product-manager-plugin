@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.14.0
+version: 0.14.1
 description: Create Jira tasks from requirements (usually a Confluence page) — FE/BE/Android/iOS/Design/Analytics breakdown inside an Epic. Not writing the requirements (requirements-creator). UA — «створи задачі для фічі», «Jira-задачі з вимог у Confluence», «розбий фічу на задачі», «заведи задачі в Epic». EN — "create tasks from requirements", "create Jira issues from Confluence requirements", "break down a feature into development tasks", or a shared Confluence link with a request for Jira tasks.
 ---
 
@@ -248,7 +248,7 @@ Before drafting descriptions, load the team style preamble (`references/artifact
 
 #### Batch quality gate before creation
 
-After drafting all task descriptions and BEFORE creating issues in Jira, run `references/artifact-style-gate.md` over the batch (maker–checker; tasks are a critical artifact → two lenses: form / groundedness). The checker is the `grow-product-manager:artifact-checker` agent (one call per lens); it receives the drafted descriptions + the requirements page content + the lens. Typical catches: engineering steps in "How" that are absent from the requirements (Gate 1), "What"/"How" written as paragraph prose instead of lists (Gate 2). Apply fixes, surface disputed findings, include the one-line gate report in the pre-creation summary.
+After drafting all task descriptions and BEFORE creating issues in Jira, run `references/artifact-style-gate.md` over the batch (maker–checker; tasks are a critical artifact → two lenses: form / groundedness). The checker is the `grow-product-manager:artifact-checker` agent (one call per lens); it receives the drafted descriptions with `artifact_type: task batch` (Gate 4a and 4b report `n/a`: a task body gets no altitude line and no evidence label — requirement text copied into it keeps any label it carries, verbatim) + the requirements page content + the lens. Typical catches: engineering steps in "How" that are absent from the requirements (Gate 1), "What"/"How" written as paragraph prose instead of lists (Gate 2). Apply fixes, surface disputed findings, include the one-line gate report in the pre-creation summary.
 
 #### Work-type specific fields:
 
@@ -336,7 +336,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.14.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.14.1", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode
@@ -366,6 +366,6 @@ This skill can work together with **Write Concept / PRD** — if a PRD was just 
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy
 - **`references/communication-frameworks.md`** — task-formulation quality gate (why/what/how + DoD + D-level depth)
-- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), maker–checker execution (batch gate before creation + Step 12)
+- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), Gate 4 (`n/a` on task bodies), maker–checker execution (batch gate before creation + Step 12)
 - **`references/people-context-protocol.md`** — read-only D-type of the assignee to tune "How"-depth
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms

@@ -9,25 +9,27 @@ For each anomaly (prioritize by severity: Critical first, then Warning):
 ```
 Name: [short descriptive name]
 
-Data Trigger: [anomaly details — stage, metric, deviation from baseline]
-Feedback Match: [correlated user feedback, support tickets, NPS verbatims — from internal enrichment]
-Heuristic Match: [matching UX best practice or benchmark — from Knowledge Library with trust score]
+Data Trigger: [anomaly details — stage, metric, deviation from baseline, with its annotation and class]
+Feedback Match: [correlated user feedback, support tickets, NPS verbatims — from internal enrichment; real-user `reported` sources only, verbatim, with who and where]
+Heuristic Match: [matching UX best practice or benchmark — from Knowledge Library with trust score and class]
 
 Solution: [proposed change to address the anomaly]
-Expected Impact: [estimated conversion lift % for the affected stage]
+Expected Impact: [estimated conversion lift % for the affected stage — an estimate: no class; an unsourced lift is `assumed`]
 Target Metric: [stage conversion rate, expected change direction and magnitude]
 Validation Method: [A/B test / feature flag / user interviews / analytics deep-dive]
 
 ICE Score: Impact [X] × Confidence [X] × Ease [X] = [Score]
 PRO/ROI: [annual % return per `references/roi-frameworks.md` — or "n/a: <why the $ effect is unknowable>"]
 
-Funnel Stage Impact: current [X]% → projected [Y]% (+Z%)
+Funnel Stage Impact: current [X]% (with its class) → projected [Y]% (+Z%, illustrative)
 
-Benchmarks: [supporting evidence with trust scores — from Knowledge Library and web]
+Benchmarks: [supporting evidence with trust scores and classes — from Knowledge Library and web]
 Risks: [what could go wrong, negative side effects]
 ```
 
 > Use the user's preferred language (`user.language`) for all field labels and content.
+
+> **Evidence classes (since v3.8.0).** The class words are `references/pm-mental-model.md` §4; an item cjm-research passed keeps the class its Step 3.5.g set, never upgraded; on a direct request, figures the user pasted are `reported (user)`. A persona answer or an untraceable Deep Research claim is `simulated`: it may inspire a hypothesis but never fills Feedback Match or Heuristic Match. A PM's or stakeholder's view is `reported (<who>)`, not user feedback. The hypothesis itself is not labelled.
 
 **3C-2. ICE scoring with CJM-specific weighting:**
 
@@ -45,6 +47,7 @@ Enhanced ICE scoring for CJM hypotheses:
 - Baymard/academic evidence supports hypothesis → +1–2 points
 - Internal A/B test confirmed similar approach → +2–3 points
 - Only blog/article evidence → +0 (no boost)
+- Only `simulated` or `assumed` support → +0 (no boost)
 - Contradicting internal evidence → -2–3 points
 
 **Ease** — based on technical complexity, team capacity, dependencies
@@ -85,4 +88,4 @@ When returning to `cjm-research`, include:
 - ICE scores with stage multipliers applied
 - Per-hypothesis funnel stage impact
 - Category assignments
-- Evidence references (Knowledge Library sources, web sources)
+- Evidence references (Knowledge Library sources, web sources), each with its class — the return is a payload: no question and no hand-back line (every item in it is a labelled hypothesis)

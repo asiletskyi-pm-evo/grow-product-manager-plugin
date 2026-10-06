@@ -110,7 +110,7 @@ Describe metrics and forecasts of their changes, usually in %.
 | 1 | [Metric name] | [Expected change, e.g., +5%, -2%, no change] |
 | 2 | ... | ... |
 
-**Instructions:** Include both primary metrics (that the feature aims to improve) and guard-rail metrics (that should not degrade). Be specific about expected direction and magnitude of change.
+**Instructions:** Include both primary metrics (that the feature aims to improve) and guard-rail metrics (that should not degrade). Be specific about expected direction and magnitude of change. Expected changes are targets or forecasts and carry no evidence class (since v3.8.0, `references/pm-mental-model.md` §4); a current baseline, where one is given, carries its class (e.g. `measured · <dashboard>, <period>` from Product Analysis, `reported (<who>)` when the user typed it), and an unsourced input a forecast rests on is labelled `[assumed — …]`.
 
 ---
 

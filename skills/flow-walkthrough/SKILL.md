@@ -1,6 +1,6 @@
 ---
 name: flow-walkthrough
-version: 0.5.0
+version: 0.6.0
 description: Walk a customer flow in the REAL product — web, desktop, iPhone app on a Mac, Android via adb — screenshot per step, friction, evidence pack, report, emulator/adb setup. Not Figma review (design-bridge), not dashboards (product-analysis), not the CJM pipeline (cjm-research calls here). Multi-role legs on test accounts with sandbox-confirm (declaring the accounts is plugin-configurator). UA — «пройди флоу», «пройди шлях покупця в застосунку», «перевір зручність … у застосунку», «порівняй флоу на iOS і web», «налаштуй емулятор/adb для проходу». EN — "walk the flow", "walk through the app as a user", "test this journey in the real app", "compare the flow across platforms", "set up the emulator". Modes setup / walk / compare / audit; chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper.
 ---
 
@@ -78,11 +78,11 @@ Run Step 2–3 once per (product, surface); in parallel per `references/subagent
 
 ## Step 5 — Audit (audit mode, or after walk/compare)
 
-Input: a pack (path or chat). For every friction: confirm severity against the screenshot, add the heuristic if missing, and write one recommendation. Rank by severity, then by how early in the flow it hits. With Lazyweb present: one `lazyweb_search` per major-or-worse friction (2–6 word pattern, platform mobile/desktop) and cite the reference in the recommendation; a reference the user acts on registers that product in the landscape as `inspiration`. Output the findings section of the report.
+Input: a pack (path or chat). For every friction: confirm severity against the screenshot, add the heuristic if missing, and write one recommendation. Rank by severity, then by how early in the flow it hits. With Lazyweb present: one `lazyweb_search` per major-or-worse friction (2–6 word pattern, platform mobile/desktop) and cite the reference in the recommendation as `external` (Lazyweb, date) — a reference about another app, never `observed` evidence of the walked flow; a reference the user acts on registers that product in the landscape as `inspiration`. Output the findings section of the report.
 
 ## Step 6 — Report and flow strip
 
-Render the report through Step T. Multi-leg runs put a **leg summary table** (leg, role, account label, surface, steps, verdict) before the step table, and the step table carries a `Leg / Role` column. **Flow strip**: annotate `steps/NN.png` per `references/visual-annotation-protocol.md` with marker number = step number, legend = the step table; preview with the user (V-4); store per V-5; attach per V-6 when publishing. Publish like product-research (Confluence space from `product.confluence_space`, or local). The Sources section names the pack ids and the account type; screenshots of an `own` account are not attached to shared pages unless the user says so.
+Render the report through Step T. Multi-leg runs put a **leg summary table** (leg, role, account label, surface, steps, verdict) before the step table, and the step table carries a `Leg / Role` column. **Flow strip**: annotate `steps/NN.png` per `references/visual-annotation-protocol.md` with marker number = step number, legend = the step table; preview with the user (V-4); store per V-5; attach per V-6 when publishing. Publish like product-research (Confluence space from `product.confluence_space`, or local). The Sources section names the pack ids with their class — `observed`, also for competitor packs in compare and for the user-driven variant (APP-DRIVE `none`, marked "(user-driven)") — and the account type; screenshots of an `own` account are not attached to shared pages unless the user says so.
 
 ## Step 7 — Save to Vault (optional)
 
@@ -90,7 +90,7 @@ Render the report through Step T. Multi-leg runs put a **leg summary table** (le
 
 IF vault_level > L0 AND sync_mode != "off":
 
-1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.5.0", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
+1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.6.0", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
 2. Display: "Saved to Vault: Research/walkthroughs/{product}/…"
 
 ## Setup mode
@@ -118,6 +118,7 @@ IF vault_level > L0 AND sync_mode != "off":
 ## Quality standards
 
 - One screenshot per step, read back from disk; a step without a verified screenshot is not a step.
+- Evidence classes (since v3.8.0; `references/pm-mental-model.md` §4, confirmed by `references/artifact-style-gate.md` Gate 4b through `references/template-protocol.md` T-5 step 3c): a verified step is `observed` — `(observed · <run_id>, step N)`, or one `Evidence: observed — <run_id>` label over the step table and findings of one pack (one per pack column in compare). What lies past the write boundary, or in a step never reached, is not observed — a statement about it reads `[assumed — …]`. Severity, heuristic and "what the customer expected" are the walker's judgment, not evidence, and never stand as what users said.
 - A blocked step is reported as a finding with its reason, never silently skipped.
 - Severity and heuristic on every friction; no friction without a step number.
 - The write boundary and the account type appear in the report's Sources.

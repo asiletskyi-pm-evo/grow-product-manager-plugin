@@ -10,10 +10,10 @@
 | **Tools** | Functions/MCP/APIs + prose on when to call them | `integration-strategy.md` (MCP → Registry → Browser fallback), `jira-data-protocol.md`, Tableau/Atlassian/Figma/Fireflies/GWorkspace MCPs |
 | **Sandboxes / execution** | Where code runs, what it can reach | Cowork Linux sandbox (bash), `~/.grow-pm/` persistent store, `~/.grow-pm-sandbox/` (dry-run onboarding), Vault mirror |
 | **Orchestration** | Sub-agent spawning, routing, hand-offs | `subagent-delegation.md`, skill-to-skill chaining (focus-advisor → executors; cjm-research → brainstorm-features), description collision groups |
-| **Guardrails / hooks** | Deterministic checks at set points | **Host hooks (`hooks/hooks.json`, v2.6.0):** SessionStart context digest (`scripts/session_start.py`), PreToolUse write gate before Jira/Confluence writes (`scripts/write_gate.py`, `ask`); tool-restricted agents (`agents/`, v2.5.0); `data-integrity-protocol.md` (5-gate), `data-policy.md` (internal data never leaves session), Step 0 config gate, `release-manager` pre-flight gates |
-| **Observability** | Logs, traces, evals, drift detection | `testing/trigger-evals.md` (trajectory/routing), `testing/output-evals.md` (artifact quality — planned), `validate-consistency.sh` (CI), CHANGELOG/release verification |
+| **Guardrails / hooks** | Deterministic checks at set points | **Host hooks (`hooks/hooks.json`, v2.6.0):** SessionStart context digest (`scripts/session_start.py`), PreToolUse write gate before Jira/Confluence writes (`scripts/write_gate.py`, `ask`); tool-restricted agents (`agents/`, v2.5.0); `data-integrity-protocol.md` (6 gate checks; evidence class & frontier since v3.8.0), `data-policy.md` (internal data never leaves session), Step 0 config gate, `release-manager` pre-flight gates |
+| **Observability** | Logs, traces, evals, drift detection | `testing/trigger-evals.md` (trajectory/routing), `testing/output-evals.md` (artifact quality — rubrics judged against gold exemplars and fixtures, with the judgment criteria since v3.7.0 and the evidence-label criteria since v3.8.0), `validate-consistency.sh` (CI), CHANGELOG/release verification |
 
-**Reading:** guardrails and observability are the plugin's strongest layers; **observability's output-eval half and the Examples context type are the current thin spots** (see §2 and `testing/output-evals.md`).
+**Reading:** guardrails and observability are the plugin's strongest layers; **the current thin spots are the Examples context type and the light output-eval rubrics that still lack a fixture and gold** (see §2 and `testing/output-evals.md` → Coverage status).
 
 ## 2. Six context types — coverage map
 
@@ -26,7 +26,7 @@ Context engineering means balancing which of six context types the agent holds u
 | **Memory** | Session + persistent project state | `vault-protocol.md`, `persistent-storage.md`, `~/.grow-pm/`, experiments `registry.yaml`, `focus/` | ✅ strong |
 | **Examples** | Few-shot demonstrations, reference patterns | `templates/built-in/` (structure only); **golden artifacts largely absent** | ⚠️ **thin — fill for heavy skills** |
 | **Tools** | Precise API/MCP definitions + usage prose | `integration-strategy.md`, `jira-data-protocol.md`, `subagent-delegation.md` | ✅ good |
-| **Guardrails** | Hard constraints, validations | `data-integrity-protocol.md`, `data-policy.md`, `test-mode.md`, Step 0 gate | ✅ strong |
+| **Guardrails** | Hard constraints, validations | `data-integrity-protocol.md` (since v3.8.0 with the evidence classes and the Gate Check 6 frontier hand-back), `artifact-style-gate.md` Gate 4b, `data-policy.md`, `test-mode.md`, Step 0 gate | ✅ strong |
 
 ### The Examples gap
 Templates define *structure*; they do not show a *worked, high-quality instance*. The heaviest artifact skills benefit most from on-demand golden examples (loaded only when the task matches → cheap):

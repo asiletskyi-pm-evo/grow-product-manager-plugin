@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.13.0
+version: 0.14.0
 description: Competitive, market, user and UX-benchmark research — interview synthesis, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews", "find market trends", "compare against industry benchmarks". Also UA — «проаналізуй ринок», «конкурентний аналіз», «ринкові тренди». Calls knowledge-library for enrichment during research.
 ---
 
@@ -121,17 +121,19 @@ Summarize the full research brief back to the user and get confirmation before p
 
 ### 1.5 — Source Validation Gate (MANDATORY, v0.8.0+)
 
-**Internal logic (product-research).** Executes before Step 2 (Gather data). Every external source pulled in Step 2 will be validated against 5 universal gate checks per `references/data-integrity-protocol.md`. Apply these checks **as sources are gathered**, before citing in the final report.
+**Internal logic (product-research).** Executes before Step 2 (Gather data). Every external source pulled in Step 2 will be validated against Gate Checks 1–5 of `references/data-integrity-protocol.md`, and since v3.8.0 every cited source — internal and uploaded ones included — gets Gate Check 6 (1.5.g). Apply these checks **as sources are gathered**, before citing in the final report.
 
 **Why this exists:** historic incidents where stale benchmarks, geographically mismatched data (US benchmark cited for UA market), or sensational claims from a single source produced misleading research conclusions. See `data-integrity-protocol.md` for the full incident catalog.
 
 **Sub-checks 1.5.a–1.5.e**, applied to every external source as it is gathered: **1.5.a** recency against per-data-type thresholds; **1.5.b** geographic/cultural fit to `product.primary_market`; **1.5.c** multi-source cross-validation (≥ 2 independent sources, ≥ 3 for sensational claims); **1.5.d** bias screening; **1.5.e** source-type marker + inline annotation. **1.5.f** (since v3.6.0) adds the extra checks of the `triangulation`, `human-validated`, `market-recency` and `source-type` tokens in `role_defaults.gate_emphasis` — caveat lines and flags only: never a question, never a changed source status, never a blocked run.
 
-The full procedure — the recency table, the geography tiers with the worked example, the cross-validation and bias rules, the source-type markers, the inline-annotation convention and the 1.5.f gate-emphasis checks — lives in `references/source-validation-gate.md` (skill-local). Read it at the start of Step 2 — before spawning any fan-out subagents (their prompts need the thresholds) and before validating the first source.
+**1.5.g** (since v3.8.0) — evidence class and frontier, Gate Check 6 of `references/data-integrity-protocol.md`, run after the status: every source, finding and quote gets its class from its marker; persona answers, simulated interviews and model-written "user" answers are `simulated` — never counted in n, never a finding or a quote, kept to Hypotheses or the one `Simulated input — hypotheses only` line (the user-research template's `simulated_input`, derived, never asked); a finding about why users act or what they need with no real-user source (or another 6c frontier claim) keeps only its supportable part plus one hand-back line, whose human step Research Limitations / Next Steps also list. Never a question, never a changed status, never a blocked run; automated and return-payload runs follow 6d.
+
+The full procedure — the recency table, the geography tiers with the worked example, the cross-validation and bias rules, the source-type markers, the inline-annotation convention, the 1.5.f gate-emphasis checks and the 1.5.g class map — lives in `references/source-validation-gate.md` (skill-local). Read it at the start of Step 2 — before spawning any fan-out subagents (their prompts need the thresholds) and before validating the first source.
 
 ### Output of Step 1.5
 
-Every external source receives: ✅ Verified / ⚠️ Caveat / ❌ Blocked.
+Every external source receives: ✅ Verified / ⚠️ Caveat / ❌ Blocked. The evidence class from 1.5.g travels with the status and never changes it.
 
 If Blocked sources > 0 for critical findings:
 - Return to Step 2 to gather additional sources OR
@@ -139,7 +141,7 @@ If Blocked sources > 0 for critical findings:
 
 ### 2. Gather data from all available sources
 
-> **Subagent delegation (large fan-out).** For many competitors / web sources / knowledge-library sources, delegate per `references/subagent-delegation.md`: split into batches (by competitor / source group), spawn subagents in parallel, each returns a compact structured result (per source: key finding, source type, trust/recency marker + source link), and the main agent aggregates (dedupe, rank) and runs Step 1.5 validation. Falls back to inline if subagents are unavailable.
+> **Subagent delegation (large fan-out).** For many competitors / web sources / knowledge-library sources, delegate per `references/subagent-delegation.md`: split into batches (by competitor / source group), spawn subagents in parallel, each returns a compact structured result (per source: key finding, source type, trust/recency marker + source link; a quote as its exact text with who and where), and the main agent aggregates (dedupe, rank) and runs Step 1.5 validation — classes (1.5.g) included; a subagent never assigns a class. Falls back to inline if subagents are unavailable.
 
 
 **Pre-condition (v0.8.0+):** Step 1.5 (Source Validation Gate) applies to each source as it is gathered. Skip ❌ Blocked sources. For ⚠️ Caveat sources — inherit the caveat into the final report (do not silently drop the qualifier).
@@ -152,7 +154,7 @@ Pull information from every source agreed upon in Step 1. For each external prod
 - Product reviews, G2/Capterra ratings, user feedback
 - News, funding announcements, partnership deals
 
-**Uploaded files** — if the user provides files (interview transcripts, survey results, reports), read them with the Read tool and extract key data points.
+**Uploaded files** — if the user provides files (interview transcripts, survey results, reports), read them with the Read tool and extract key data points. An upload of unclear origin is never asked about: it is `simulated` only on an explicit marker (Gate Check 6a), and an interactive run prints one notice line only when it classifies one as `simulated` (1.5.g).
 
 **Knowledge Library** (if user confirmed in Step 1):
 - Call `knowledge-library` in Search mode with research topic keywords
@@ -186,11 +188,11 @@ When the research requires quantitative data — product metrics, dashboard anal
 1. Invoke Product Analysis with context: which product, what metrics are needed, what time period, what comparison baseline
 2. Product Analysis will handle all data acquisition (Tableau, Google Sheets, CSV, screenshots) and computation
 3. Receive structured results: key metrics, trends, anomalies, relevant hypotheses
-4. Incorporate the returned data into the research output, citing "Source: Product Analysis" for data-driven findings
+4. Incorporate the returned data into the research output, citing "Source: Product Analysis" for data-driven findings and keeping each number's annotation and class (`measured` from its data gate; never upgraded)
 
 This delegation ensures accurate computation (via pandas/numpy) and consistent analysis methodology across all skills.
 
-**Deep Research via ChatGPT / Gemini** (if confirmed by user in Step 1): open each enabled LLM in the browser, pick the strongest model, run Deep Research on a prompt built from the Step 1 scope, extract the findings and cross-reference them with each other and with the other sources — LLM output enriches the analysis and is never a primary source. Prompts carry **public information only** (`references/data-policy.md`).
+**Deep Research via ChatGPT / Gemini** (if confirmed by user in Step 1): open each enabled LLM in the browser, pick the strongest model, run Deep Research on a prompt built from the Step 1 scope, extract the findings and cross-reference them with each other and with the other sources — LLM output enriches the analysis and is never a primary source: a claim traced to a resolvable, recency-checked source takes that source's class, an untraceable claim about users or the market is `simulated` (1.5.g). Prompts carry **public information only** (`references/data-policy.md`).
 
 The full procedure — the ChatGPT and Gemini steps, cross-referencing when both run, and the guidelines for LLM-sourced data — lives in `references/deep-research-llm.md` (skill-local). Read it when the user enabled either LLM in Step 1.
 
@@ -202,7 +204,7 @@ Apply the appropriate framework(s) based on research type. See `references/frame
 
 **Important: always include the user's product in competitive comparisons.** When building a feature comparison matrix, benchmark table, positioning map, or any other comparative analysis — always include the user's own product as one of the compared entities alongside competitors. This allows the user to immediately see where their product stands relative to the competition. Clearly mark the user's product in the table (e.g., bold name, highlight row) so it's visually distinct.
 
-**User research** → Themes & patterns, user segments, pain points ranked by frequency/severity, quotes, insights → recommendations
+**User research** → Themes & patterns, user segments, pain points ranked by frequency/severity (n = real users only), quotes (verbatim · `reported`, with participant id), insights → recommendations — `simulated` input stays out of all of them (1.5.g)
 
 **Market research** → Market sizing (TAM/SAM/SOM), trends, PESTEL factors, opportunities & threats, growth drivers
 
@@ -213,9 +215,9 @@ Apply the appropriate framework(s) based on research type. See `references/frame
 - Secondary source: web search for fresh benchmarks
 - Output format: benchmark matrix (practice, industry standard, our current state, gap, priority)
 - This type is commonly used by `cjm-research` during enrichment steps
-- **Hands-on benchmark:** chain to **Flow Walkthrough** (`flow-walkthrough`, `compare` mode — own product vs `product.competitors`, same scenario, same surface) and fold its `compare.yaml` into the benchmark matrix as the "our current state" and "competitor state" columns. Competitor runs are read-only (`references/app-drive-protocol.md` §5).
+- **Hands-on benchmark:** chain to **Flow Walkthrough** (`flow-walkthrough`, `compare` mode — own product vs `product.competitors`, same scenario, same surface) and fold its `compare.yaml` into the benchmark matrix as the "our current state" and "competitor state" columns (`observed`). Competitor runs are read-only (`references/app-drive-protocol.md` §5).
 
-> **Debate hook.** If the user asks for a debate / role discussion / red-team («проведи дебати», "have agents argue from different roles"), or a researched decision is contested and touches ≥ 2 interest groups — run `references/debate-protocol.md` on the structured findings: evidence pack E1…En = findings that passed the Source Validation Gate (Step 1.5), roles chosen with the user (Skeptic mandatory), parallel rounds → facilitator synthesis. The «Debates» section embeds in the published report (Step 4), and the verdict corrects ICE Confidence of any hypotheses derived from this research.
+> **Debate hook.** If the user asks for a debate / role discussion / red-team («проведи дебати», "have agents argue from different roles"), or a researched decision is contested and touches ≥ 2 interest groups — run `references/debate-protocol.md` on the structured findings: evidence pack E1…En = findings that passed the Source Validation Gate (Step 1.5), each with its class (1.5.g), roles chosen with the user (Skeptic mandatory), parallel rounds → facilitator synthesis. The «Debates» section embeds in the published report (Step 4), and the verdict corrects ICE Confidence of any hypotheses derived from this research.
 
 ### 4. Confirm Confluence location and publish
 
@@ -233,7 +235,7 @@ Once confirmed, create the Confluence page using `createConfluencePage` with:
 - Tables for comparison data
 - A summary/TL;DR section at the top
 - **Glossary section** — at the end of the document (before Sources), add a "Glossary" section that explains all terms, professional jargon, abbreviations, and metrics used in the report. For each term provide a concise, clear definition accessible to a reader who may not be deeply familiar with the domain. Examples: "CAC (Customer Acquisition Cost) — cost of acquiring one customer", "Churn rate — percentage of users who stop using the product over a given period", "TAM (Total Addressable Market) — the total market volume theoretically available to the product". Use the user's preferred language (`user.language`) for the glossary content.
-- Sources section at the bottom with links — clearly marking each source type (Web, Confluence, Google Drive, Knowledge Library, ChatGPT Deep Research, Gemini Deep Research, uploaded file, etc.)
+- Sources section at the bottom with links — clearly marking each source type (Web, Confluence, Google Drive, Knowledge Library, ChatGPT Deep Research, Gemini Deep Research, uploaded file, etc.) and its evidence class (1.5.g)
 
 **Confluence formatting requirements — use standard (non-legacy) elements:**
 
@@ -260,8 +262,8 @@ After publishing, provide a structured report of what was done:
 **Report format:**
 - **What was done:** brief description of the research conducted (type, scope, depth)
 - **Artifacts created:** links to all created documents (Confluence page, local files, etc.)
-- **Key findings:** 3-5 key takeaways from the research
-- **Sources used:** list of source types used (Web, Confluence, Google Drive, Knowledge Library, Figma, ChatGPT Deep Research, Gemini Deep Research, uploaded files)
+- **Key findings:** 3-5 key takeaways from the research — from real evidence only, never `simulated` input
+- **Sources used:** list of source types used (Web, Confluence, Google Drive, Knowledge Library, Figma, ChatGPT Deep Research, Gemini Deep Research, uploaded files), each with its evidence class
 - **Recommended next steps:** suggested follow-up actions
 
 **After presenting the report, proactively ask for feedback:**
@@ -287,13 +289,13 @@ After a competitive study, also offer:
 > "Run **Flow Walkthrough** to compare this flow with [competitor] on [surface] hands-on"
 
 If the user agrees to Write Concept:
-- Pass the full research context to the Write Concept / PRD skill: Confluence page link, key findings, identified opportunities, data sources used
+- Pass the full research context to the Write Concept / PRD skill: Confluence page link, key findings with their evidence labels, identified opportunities, data sources used
 - The Write Concept skill will use these research results as primary input (Step 2 of its workflow)
 - No need to re-gather the same data — the research is already done
 
 If the user agrees to CJM Research:
 - Invoke CJM Research skill with the benchmark data and gap analysis
-- Pass the benchmark matrix and current state analysis
+- Pass the benchmark matrix and current state analysis, labels kept
 - CJM Research will use these findings to enrich the journey analysis with evidence-backed insights
 
 If the user declines — end the workflow gracefully.
@@ -305,7 +307,7 @@ If the user declines — end the workflow gracefully.
 Research synthesis naturally converts into a research-highlights deck for distribution among the team and stakeholders. Via `AskUserQuestion`:
 
 > "Research published. Create a design-side deliverable?"
-> 1. **Research highlights deck** — 10-slide summary with key themes, quotes, and numbers — recommended for user research or UX benchmark results
+> 1. **Research highlights deck** — 10-slide summary with key themes, quotes, and numbers (their classes travel in the source captions; `simulated` input is never a slide finding) — recommended for user research or UX benchmark results
 > 2. **Research-enrichment through design:research-synthesis** — pass raw interview notes through Claude Design's research-synthesis for deeper thematic analysis (if user research included raw transcripts)
 > 3. **Skip**
 
@@ -319,7 +321,7 @@ IF user selects 1 → invoke `design-bridge` with:
 IF user selects 2 → invoke `design-bridge` with:
 - `intent: research-enrichment`
 - `source: raw interviews / survey responses`
-- design-bridge will return structured themes — add as appendix to research page
+- design-bridge will return structured themes — add as appendix to research page (the themes keep the class of the notes they synthesise, 1.5.g)
 
 Fallback: if `design-bridge` is not installed — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Do not block the workflow.
 
@@ -329,29 +331,30 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.13.0", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.14.0", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
    (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added; since v3.6.0 a research plan, discussion guide, insight report or insight memo saves the same way, tagged with its subtype.)
 2. Display: "Saved to Vault: Research/{product}/…"
 
 ## Quality standards
 
 - Always cite sources with links
-- Distinguish facts from opinions/interpretations
+- Every cited number, quote, benchmark and "users want X" carries its evidence class (`references/pm-mental-model.md` §4; 1.5.g): a stakeholder's opinion is `reported (<who>)` and never a real-user source, an unsourced interpretation is `[assumed — …]` or a hypothesis
 - Flag data that is older than 12 months
-- If data is insufficient, explicitly state gaps and suggest how to fill them
+- If data is insufficient, explicitly state gaps and suggest how to fill them — the human step of each 1.5.g hand-back line is listed there
 - Use Ukrainian or English based on user's language preference
 - **(v0.8.0+) Inline source annotation MANDATORY** — every cited metric / benchmark / claim from external source carries inline annotation with source name, year, geography per Gate Check 4 of `data-integrity-protocol.md`
 - **(v0.8.0+) Caveat propagation** — Step 1.5 ⚠️ Caveat sources surface their qualifier in the final report (recency caveat, geographic fit caveat, single-source caveat, bias caveat). Do not hide under generic "based on industry research"
 - **(v0.8.0+) Extreme claims disclosure** — any sensational claim (+200%, 10×, #1 in industry) must include "verified across N sources" disclosure
-- **(v0.8.0+) Source type markers** — every cited source in Sources section tagged (`baymard-premium` / `web-search` / `kb-source` / `competitor-website` / `user-research` / `deep-research-llm`); include recency + geography for each
+- **(v0.8.0+) Source type markers** — every cited source in Sources section tagged (`baymard-premium` / `web-search` / `kb-source` / `competitor-website` / `user-research` / `deep-research-llm`); include recency + geography for each, and the evidence class the marker maps to (1.5.g)
 
 ## Additional Resources
 
-- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.8.0+)** — 5 universal gate checks for any cited external source (Step 1.5)
+- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.8.0+)** — Gate Checks 1–6 for every cited source (Step 1.5; Gate Check 6 is 1.5.g, since v3.8.0)
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/frameworks.md`** — detailed templates for each research framework
-- **`references/source-validation-gate.md`** — Step 1.5 sub-checks 1.5.a–1.5.f: recency thresholds, geography tiers, cross-validation, bias screening, source-type markers and inline annotation, role gate emphasis (skill-local)
+- **`references/source-validation-gate.md`** — Step 1.5 sub-checks 1.5.a–1.5.g: recency thresholds, geography tiers, cross-validation, bias screening, source-type markers and inline annotation, role gate emphasis, evidence classes and the frontier (skill-local)
 - **`references/examples/research-plan-example-v1.md`** — golden exemplar for the `research-plan` subtype (since v3.6.0; load on demand when rendering it)
+- **`references/examples/user-research-synthesis-example-v1.md`** — golden exemplar for an interview synthesis on the default `user-research` subtype (since v3.8.0; load on demand when rendering one)
 - **`references/deep-research-llm.md`** — Step 2 Deep Research via ChatGPT / Gemini: per-LLM steps, cross-referencing, guidelines for LLM-sourced data (skill-local)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)

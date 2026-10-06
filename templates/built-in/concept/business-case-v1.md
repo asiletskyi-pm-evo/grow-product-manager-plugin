@@ -9,10 +9,10 @@ products: []
 match: subtype
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.1.0"
 author: "grow-pm"
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-10-06
 tags: [concept, business-case, unit-economics, investment, kill-criteria]
 description: "Business case (since v3.6.0): market, traction, unit economics, projections, money bridge, risks, kill criteria"
 status: active
@@ -35,17 +35,17 @@ variables:
 
 ## Market
 
-<!-- Size, growth, segment and competitors — each number with its source and date; a range rather than a single point where estimates differ. -->
+<!-- Size, growth, segment and competitors — each number with its evidence class, source and date (third-party market data `external`, pm-mental-model.md §4); a range rather than a single point where estimates differ. -->
 - TBD
 
 ## Traction
 
-<!-- Evidence so far — usage, pilots, pipeline, experiments — each with its period and source. -->
+<!-- Evidence so far — usage, pilots, pipeline, experiments — each with its evidence class, period and source: `measured` only when a skill read or counted it itself through its data gate (an upstream readout keeps its label), a figure the user typed `reported (<who>)`. -->
 - TBD
 
 ## Unit economics
 
-<!-- Per unit, current vs target. Inputs without data are labelled `assumed`. -->
+<!-- Per unit, current vs target. Current values carry their evidence class in the Source column (class · source · period); targets carry none. Inputs without data are labelled `[assumed — …]`. -->
 
 | Line | Current | Target | Source |
 |------|---------|--------|--------|
@@ -56,7 +56,7 @@ variables:
 
 ## Projections
 
-<!-- Low / base / high scenarios with the drivers behind each, the investment and the payback. List the assumptions; name the base rate for comparable initiatives, or say none is known. -->
+<!-- Low / base / high scenarios with the drivers behind each, the investment and the payback. Projections carry no evidence class, only their basis; a baseline keeps its own class and an unsourced driver reads `[assumed — …]`. List the assumptions; name the base rate for comparable initiatives with its class and source, or say none is known. -->
 - TBD
 
 {{> money-bridge}}

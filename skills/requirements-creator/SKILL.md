@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.16.0
+version: 0.16.1
 description: Write or review a requirements document with numbered functional requirements, incl. A/B test specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію», «опиши фічу як вимоги». EN — "write requirements", "create feature spec", "write A/B test requirements", "review / analyze / improve requirements", "check my spec". Also UA — «створи специфікацію фічі», «переглянь вимоги», «покращ вимоги». A concept from write-concept is the input; task-creator consumes the output.
 ---
 
@@ -136,7 +136,7 @@ Proactively gather detailed information from the user, asking clarifying questio
 - Which metrics do we expect to change?
 - What is the expected change (in %)?
 - Format as a numbered table: №, Metric, Expected change
-- **If the user needs help identifying relevant metrics or establishing current baselines** — invoke the **Product Analysis** skill: pass the product context, feature area, and hypothesis. Product Analysis will return current metric values, trends, and suggested target metrics. Use these results to populate the Metrics section with data-backed expected changes
+- **If the user needs help identifying relevant metrics or establishing current baselines** — invoke the **Product Analysis** skill: pass the product context, feature area, and hypothesis. Product Analysis will return current metric values, trends, and suggested target metrics. Use these results to populate the Metrics section with data-backed expected changes — since v3.8.0 a baseline keeps the evidence class Product Analysis gives it (`measured`); an expected change is a forecast or target and carries none (`references/pm-mental-model.md` §4)
 
 **Business requirements:**
 - What should change for different user types?
@@ -254,7 +254,7 @@ If the requirements change **existing UI**, offer an annotated screenshot per `r
 
 ### Step 4.5 — Artifact quality gate
 
-Run `references/artifact-style-gate.md` on the draft. Maker–checker: the `grow-product-manager:artifact-checker` agent (one call per lens; fallback chain per the reference) receives the draft + the source list + the lens — never this conversation's reasoning. A requirements document is a critical artifact (published and then materialized in Jira) → use two checker lenses (form / groundedness). Apply fixes, keep disputed findings visible, and include the one-line gate report when presenting the draft in Step 5.
+Run `references/artifact-style-gate.md` on the draft. Maker–checker: the `grow-product-manager:artifact-checker` agent (one call per lens; fallback chain per the reference) receives the draft with `artifact_type: requirements` and `mode: create` + the source list (each source with its Gate Check 5 marker where known, e.g. `user-text`, `confluence-internal`) + the lens — never this conversation's reasoning. A requirements document is a critical artifact (published and then materialized in Jira) → use two checker lenses (form / groundedness; since v3.8.0 the groundedness lens also checks Gate 4b evidence labels). Apply fixes, keep disputed findings visible, and include the one-line gate report (with `докази: E` when above 0) when presenting the draft in Step 5.
 
 **Gate emphasis (since v3.6.0).** For each of `spec-readiness` and `nfr-present` in `role_defaults.gate_emphasis`, run that extra check (`references/data-integrity-protocol.md` → Gate emphasis) alongside this gate; a failed one adds a ⚠️ caveat line naming the gap to the draft and to the gate report — never a question, never a blocked draft. Create mode only.
 
@@ -309,7 +309,7 @@ The full procedure — the offer wording, the exact `design-bridge` parameters p
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.16.0", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.16.1", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 
@@ -329,7 +329,7 @@ The full A1–A9 workflow lives in the skill-local `references/analyze-improve-m
 
 - Write requirements as an experienced Business Analyst — specific, clear, unambiguous
 - Every functional requirement must be actionable by a developer
-- Distinguish facts from assumptions — mark assumptions explicitly
+- Distinguish facts from assumptions — label each assumption `[assumed — …]` and each cited number or quote with its evidence class (Gate 4b, since v3.8.0); targets and expected changes carry none
 - If information is insufficient for a section — state gaps and ask the user to fill them
 - Requirements must be adaptive: contain information for BE, FE, Android, iOS, and Design
 - Use Ukrainian or English based on user's language preference
@@ -343,7 +343,7 @@ The full A1–A9 workflow lives in the skill-local `references/analyze-improve-m
 - **`references/analyze-improve-mode.md`** — skill-local: the full Analyze & Improve workflow (A1–A9); load only in that mode
 - **`references/publishing-destinations.md`** — skill-local: Step 6 publishing (6a–6g) — save prompt, location, title template, Confluence / Notion / Google Docs / other adaptations; load at Step 6 (and A8)
 - **`references/design-bridge-handoff.md`** — skill-local: Step 8 Design Bridge handoff — offer wording and `design-bridge` parameters per option; load at Step 8
-- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), maker–checker execution model (Step 4.5 / A6)
+- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), Gate 4 (altitude line, evidence labels), maker–checker execution model (Step 4.5 / A6)
 - **`references/examples/feature-spec-example-v1.md`** — worked golden feature-spec exemplar with A/B + acceptance criteria (few-shot; load on demand in Step 4)
 - **`references/approach-recommendation.md`** — implementation approach recommendation logic (feature flag, A/B test, etc.)
 - **`references/roi-frameworks.md`** — the ROI (PRO/ROAIP) side of the prioritization gate (Step 3e / A5); ICE scoring is computed by `brainstorm-features`

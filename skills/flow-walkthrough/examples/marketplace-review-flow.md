@@ -15,13 +15,15 @@ Measured 2026-09-10 on Claude Cowork, driver level `foreground`, account `own`, 
 | 7 | Open the review form | tap "Add review" | photo, title, text, pros, cons — no star rating | friction |
 | 8 | Fill title and text | type | text visible | ok |
 | 9 | Reach the submit button | scroll | "Publish review" visible | blocked: write boundary |
-| 10 | Close the form | tap X | modal "Rate the product?" with stars and Publish; typed text would auto-publish on rating | friction |
+| 10 | Close the form | tap X | modal "Rate the product?" with stars and Publish; typed text would auto-publish on rating [assumed — the Publish tap is past the write boundary] | friction |
 | 11 | Cancel and reopen | Cancel → Add review | form empty — draft lost | friction |
 | 12 | Orders filter | Orders → filter "Awaiting review" | empty state "your order history is empty" while the hub lists two items | friction |
 
 ## Expected frictions
 
-- major, N5 error prevention — the rating lives only in the exit modal; a rating there publishes the typed text (step 10)
+Evidence: observed — this pack, steps 1–12; only what lies past the write boundary is `assumed`, labelled on the item.
+
+- major, N5 error prevention — the rating lives only in the exit modal; a rating there would publish the typed text [assumed — past the write boundary, not tapped] (step 10)
 - major, N3 user control — the draft is lost silently on close (step 11)
 - major, N4 consistency — the orders filter and the reviews hub disagree; the empty-state copy is wrong (step 12)
 - minor, N6 recognition — no review entry point on the product page or the reviews list (steps 3–4)

@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.10.0
+version: 0.11.0
 description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».
 ---
 
@@ -17,7 +17,7 @@ This skill does NOT perform analysis itself — it delegates to specialized skil
 Before starting, read and follow these shared references:
 - **`references/local-context-protocol.md`** — Step 0: read `local-context.md`, select active product, load product-specific context
 - **`references/cjm-protocol.md`** — shared CJM standards: anomaly severity levels, funnel impact formulas, health score formula, verification checklist, Data Integrity Gate reference
-- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.4.0+)** — 5 universal gate checks for any cited metric, executed at Step 3.5
+- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.4.0+)** — Gate Checks 1–6 for any cited metric (6, evidence class & frontier, since v3.8.0), executed at Step 3.5
 - **`references/funnel-templates.md`** — standard funnel stage templates (e-commerce, SaaS, marketplace, custom)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain
 - **`references/data-policy.md`** — data confidentiality: internal analytics stay internal, external searches use public info only
@@ -49,7 +49,7 @@ For `health-check` mode (automated), use the top-ranked template silently regard
 
 If no template applies → fall back to `cjm-builtin-funnel`; if that's also missing, use the skill's internal report structure.
 
-**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a); since v3.8.0 its evidence labels are confirmed by T-5 step 3c (Gate 4b), in the automated health-check too.
 
 ## Modes of Operation
 
@@ -222,11 +222,11 @@ Receive from `product-analysis`:
 
 For `comparison` mode: invoke `product-analysis` separately for each platform being compared.
 
-**Walk the stage** (`walkthrough-local`) — when a funnel stage has an anomaly and the user wants to see it as a customer, chain to **Flow Walkthrough** (`flow-walkthrough`, walk mode, scenario = the stage's goal, surface = the platform under study) and cite the pack's `findings.md` as qualitative stage evidence. Screenshots stay local (`references/app-drive-protocol.md` §5); the report cites step numbers.
+**Walk the stage** (`walkthrough-local`) — when a funnel stage has an anomaly and the user wants to see it as a customer, chain to **Flow Walkthrough** (`flow-walkthrough`, walk mode, scenario = the stage's goal, surface = the platform under study) and cite the pack's `findings.md` as `observed` stage evidence — `(observed · walkthrough <date>, step N)`. Screenshots stay local (`references/app-drive-protocol.md` §5); the report cites step numbers.
 
 ### Step 3.5 — Data Integrity Gate (MANDATORY, v0.4.0+)
 
-**Internal logic (cjm-research).** Executes before Step 4 (Anomaly detection). Every metric from Step 3 passes 5 universal gate checks per `references/data-integrity-protocol.md`. Without passing the gate, the metric MUST NOT be used in anomaly detection or reporting.
+**Internal logic (cjm-research).** Executes before Step 4 (Anomaly detection). Every metric from Step 3 goes through Gate Checks 1–6 per `references/data-integrity-protocol.md`. Without passing the gate (Gate Checks 1–5 set the status), the metric MUST NOT be used in anomaly detection or reporting.
 
 **Why this exists:** historic incidents where uncritical citation of raw data points produced cascading errors (incomplete-period extrapolation, Week-1 holiday zriz cited as YoY trend, derived claims propagated without re-verification, missing inline-period annotation). The gate prevents these patterns systematically. See `data-integrity-protocol.md` for the full incident catalog and anti-pattern examples.
 
@@ -239,12 +239,13 @@ For `comparison` mode: invoke `product-analysis` separately for each platform be
 | **3.5.c** — Multi-Source Cross-Validation | Gate Check 3, incl. the extreme-values special case | Every critical CR / GMV / Order / Revenue / Retention metric. Extreme-value methodology change check = DT-* / DATA-* tickets in the analysis period; reference period analysis = the full YoY/PoP table, never a single cell. |
 | **3.5.d** — Period Definition Lock + Inline Annotation | Gate Check 4 | Pre-compute the inline-annotation string for every metric here, before Step 4 — e.g. `Catalog CR 0.99% (12mo rolling, 1.05.2025 → 7.05.2026)`, `Listing GMV +20% YoY (May 2025 → May 2026, weeks 18-19, non-holiday window)`, `Brand pages ~48K sessions/month (normalized to 30 days from 7-day extract, May 2026)`. |
 | **3.5.e** — Source Type Marker | Gate Check 5 | Internal markers: `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `csv-upload`, `screenshot-user`, `walkthrough-local`, `confluence-internal`, `jira-internal` — `walkthrough-local` (a Flow Walkthrough pack cited in Step 3) is this skill's addition to the protocol list. Enables the audit trail in the final Sources section. |
-| **3.5.f** — Gate emphasis (since v3.6.0) | Gate emphasis — role extra checks | Each `role_defaults.gate_emphasis` token whose "Applied by" cell names CJM adds its extra check on top of 3.5.a–e (`period-completeness` and `source-type` are already met by 3.5.a and 3.5.e); a failed one adds a ⚠️ caveat line (not repeated when the Step 3 data already carries it) — never a question, a Blocked status or a halt. The automated health-check applies none, so its output is unchanged. |
+| **3.5.f** — Gate emphasis (since v3.6.0) | Gate emphasis — role extra checks | Each `role_defaults.gate_emphasis` token whose "Applied by" cell names CJM adds its extra check on top of 3.5.a–e (`period-completeness` and `source-type` are already met by 3.5.a and 3.5.e); a failed one adds a ⚠️ caveat line (not repeated when the Step 3 data already carries it) — never a question, a Blocked status or a halt. The automated health-check applies none, so gate emphasis leaves its output unchanged. |
+| **3.5.g** — Evidence Class & Frontier (since v3.8.0) | Gate Check 6 | Runs after the status, on every cited item: Step 3 dashboard metrics `measured` (classes product-analysis returns are kept, never upgraded), configured baselines `reported (local-context.md)`, numbers the user pasted `reported (user)`, the walkthrough pack `observed`, Step 6 feedback and Confluence results `reported`, Step 5 benchmarks `external` (a knowledge-library source per its type); persona or untraceable Deep Research input is `simulated` and stays out of anomalies and findings; Step 8–9 projections take no class (an unsourced lift is `assumed`). A cause of an anomaly stated without an experiment or holdout gets one 6c line naming the human step (an A/B test or holdout, interviews at the stage, the team that owns an unrecorded change) — never a question, a status change or a halt. The automated health-check writes labels only (`[assumed — frontier: <human step>]`). |
 
 **Output of Step 3.5:**
 
 Every metric receives a status:
-- ✅ **Verified** — passed all 5 checks; ready for Step 4 (Anomaly detection)
+- ✅ **Verified** — passed Gate Checks 1–5; ready for Step 4 (Anomaly detection)
 - ⚠️ **Caveat** — passed with limitations (normalized, holiday-affected, single-source pending cross-validation); inherit caveat into downstream steps and report
 - ❌ **Blocked** — failed a critical check; either return to Step 3 to gather additional sources, or inform user that analysis cannot proceed without resolution
 
@@ -259,7 +260,7 @@ Every metric receives a status:
 
 Anomaly detection (Step 4), WORLD enrichment (5), INTERNAL enrichment (6), hypothesis building (7), per-hypothesis impact (8), overall-conversion impact (9), independent verification (10), and risk assessment (11) live in `references/cjm-pipeline.md` (skill-local). Read it after the Step 3.5 gate passes. Mode map (which steps run per mode) — see Modes of Operation above.
 
-> **Debate hook.** If the user asks for a debate / role discussion / red-team, or top hypotheses are contested and touch ≥ 2 interest groups — after hypothesis building (Step 7) run `references/debate-protocol.md` for the top-3 hypotheses: evidence pack = anomalies + enrichment already gathered (post-Step 3.5 gate), roles chosen with the user (Skeptic mandatory), rounds → facilitator synthesis. The verdict corrects ICE Confidence (consensus +1…+2, unresolved skeptic objection −1…−2), new risks feed the Step 11 risk assessment, and the «Debates» section embeds in the Step 12 report.
+> **Debate hook.** If the user asks for a debate / role discussion / red-team, or top hypotheses are contested and touch ≥ 2 interest groups — after hypothesis building (Step 7) run `references/debate-protocol.md` for the top-3 hypotheses: evidence pack = anomalies + enrichment already gathered (post-Step 3.5 gate, each item with its 3.5.g class), roles chosen with the user (Skeptic mandatory), rounds → facilitator synthesis. The verdict corrects ICE Confidence per the protocol's Step D4 (consensus +1…+2 only when the support cites an E#, never on `simulated` or `assumed` input alone; unresolved skeptic objection −1…−2), new risks feed the Step 11 risk assessment, and the «Debates» section embeds in the Step 12 report.
 
 ### Step 12 — Report assembly and publishing
 
@@ -267,7 +268,7 @@ Anomaly detection (Step 4), WORLD enrichment (5), INTERNAL enrichment (6), hypot
 
 Assemble the final report based on the selected mode. Use the user's preferred language (`user.language`).
 
-> For a worked, high-quality reference of the target shape and rigor, load `references/examples/funnel-anomaly-report-example-v1.md` on demand. It is a generic exemplar (few-shot) showing period annotation on every metric, Data Integrity caveats, and funnel-impact math — match its rigor, not its exact wording.
+> For a worked, high-quality reference of the target shape and rigor, load `references/examples/funnel-anomaly-report-example-v1.md` on demand. It is a generic exemplar (few-shot) showing period annotation on every metric, Data Integrity caveats, evidence classes with a hand-back line, and funnel-impact math — match its rigor, not its exact wording.
 
 ---
 
@@ -293,7 +294,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.10.0",
+     skill_version: "0.11.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
@@ -346,7 +347,7 @@ When chaining:
 ## Quality Standards
 
 - Always cite data sources and values — never present estimates as facts
-- Clearly distinguish: data (from dashboards) / insights (from analysis) / hypotheses (generated)
+- Clearly distinguish: data (`measured`, from dashboards) / insights (from analysis, keeping the class of their data) / hypotheses (generated — never a key finding); projections carry no class (`pm-mental-model.md` §4)
 - For every anomaly — specify: which stage, which metric, exact deviation, comparison period
 - For every hypothesis — specify: which anomaly triggered it, which evidence supports it, confidence level
 - Note data quality issues: missing stages, incomplete data, small sample sizes
@@ -357,14 +358,15 @@ When chaining:
 - **(v0.4.0+) Caveat propagation** — Step 3.5 ⚠️ Caveat metrics surface their qualifier in the final report (e.g., "single-source pending cross-validation", "normalized from N-day extract", "holiday-affected period")
 - **(v0.4.0+) Anomaly disclosure** — for any reported anomaly: source count (≥ 2; ≥ 3 for extreme), period definition, holiday-screening status, methodology change check status
 - **(v0.4.0+) Source type markers** — every cited number in Sources section tagged (`tableau-mcp` / `tableau-web` / `internal-live` / `ga-snapshot` / `confluence-internal`)
+- **(v3.8.0+) Evidence classes** — every cited number and quote carries its 3.5.g class first in its annotation (one group label only when every claim it covers shares class and source); `simulated` never in a summary or key findings, `assumed` there only labelled; a hand-back line stays next to its claim
 
 ## Additional Resources
 
 - **`references/cjm-pipeline.md`** (skill-local) — Steps 4–11: anomalies, enrichment, hypotheses, impact, verification, risk
 - **`references/cjm-reports.md`** (skill-local) — per-mode report formats, publishing, automated health-check protocol
-- **`references/examples/funnel-anomaly-report-example-v1.md`** (skill-local) — worked golden anomaly-report exemplar with period annotation + impact math (few-shot; load on demand in Step 8)
+- **`references/examples/funnel-anomaly-report-example-v1.md`** (skill-local) — worked golden anomaly-report exemplar with period annotation, evidence classes + impact math (few-shot; load on demand in Step 8)
 
-- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.4.0+)** — 5 universal gate checks for any cited metric
+- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.4.0+)** — Gate Checks 1–6 for any cited metric (6 since v3.8.0)
 - **`references/cjm-protocol.md`** — anomaly severity, funnel impact formulas, health score, verification checklist, holiday windows, anomaly verification checklist, reference sources catalog
 - **`references/funnel-templates.md`** — standard funnel templates by product type
 - **`references/persistent-storage.md`** — `~/.grow-pm/` storage protocol

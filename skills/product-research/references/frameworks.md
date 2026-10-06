@@ -1,6 +1,6 @@
 # Research Frameworks
 
-Detailed templates for structuring product research output. Use these as the foundation for Confluence pages.
+Detailed templates for structuring product research output. Use these as the foundation for Confluence pages. Since v3.8.0 every cited number, quote and benchmark carries its evidence class (`references/pm-mental-model.md` §4, assigned in Step 1.5.g): the class goes first in the claim's annotation, one `Evidence: <class> — <source>` label may cover a table, column or section whose claims share class and source, and `simulated` / `assumed` are labelled on the item.
 
 ---
 
@@ -22,6 +22,7 @@ Detailed templates for structuring product research output. Use these as the fou
 | [Feature 1]         | ✅ / ❌ / 🟡  | ...         | ...         | ...         |
 
 Legend: ✅ Full support | 🟡 Partial / Beta | ❌ Not available
+Evidence: external — competitor websites, snapshot [date] (a hands-on column from Flow Walkthrough: `observed · walkthrough [date]`; label per column when sources differ)
 
 ## Pricing Comparison
 | Plan / Tier | Our Product | Competitor A | Competitor B |
@@ -33,16 +34,16 @@ Legend: ✅ Full support | 🟡 Partial / Beta | ❌ Not available
 ## SWOT Analysis
 
 ### Strengths
-- [Strength 1]: [evidence/data]
+- [Strength 1]: [evidence/data (class · source)]
 
 ### Weaknesses
-- [Weakness 1]: [evidence/data]
+- [Weakness 1]: [evidence/data (class · source)]
 
 ### Opportunities
-- [Opportunity 1]: [market signal or trend]
+- [Opportunity 1]: [market signal or trend (class · source)]
 
 ### Threats
-- [Threat 1]: [competitive move or external risk]
+- [Threat 1]: [competitive move or external risk (class · source)]
 
 ## Positioning Map
 [Describe 2 axes and where each player sits — e.g., "Price (low→high) vs. Feature depth (basic→advanced)"]
@@ -57,7 +58,7 @@ Legend: ✅ Full support | 🟡 Partial / Beta | ❌ Not available
 - [ ] [Action 2]
 
 ## Sources
-- [Source title](URL) — accessed [date]
+- [Source title](URL) — `source-type marker` · class — accessed [date]
 ```
 
 ### Tips for competitive analysis
@@ -79,18 +80,18 @@ Legend: ✅ Full support | 🟡 Partial / Beta | ❌ Not available
 
 ## Research Overview
 - **Method**: [interviews / surveys / usability tests / support tickets]
-- **Sample size**: [N participants]
+- **Sample size**: [N real participants — `simulated` input is never counted]
 - **Period**: [date range]
 - **Segments**: [user types represented]
 
 ## Key Themes
 ### Theme 1: [Name]
-- **Frequency**: mentioned by X/N participants
+- **Frequency**: mentioned by X/N participants (real users only)
 - **Severity**: [High / Medium / Low]
 - **Description**: [what users experience]
 - **Representative quotes**:
-  > "Quote 1" — [Participant ID / segment]
-  > "Quote 2" — [Participant ID / segment]
+  > "Quote 1" — [Participant ID / segment], [session date] · reported
+  > "Quote 2" — [Participant ID / segment], [session date] · reported
 
 ### Theme 2: [Name]
 ...
@@ -114,17 +115,18 @@ Legend: ✅ Full support | 🟡 Partial / Beta | ❌ Not available
 
 ## Research Gaps
 - [What we still don't know]
-- [Suggested follow-up research]
+- [Suggested follow-up research — including the human step of each hand-back line (Step 1.5.g)]
+- [Simulated input — hypotheses only: what and how many (`simulated`) → the study that would check it; this line only when such input exists, never in themes, counts or quotes]
 
 ## Sources
-- [Research artifacts, links to recordings, raw data]
+- [Research artifacts, links to recordings, raw data — each with its source-type marker and class]
 ```
 
 ### Tips for user research synthesis
 - Group by theme, not by participant
-- Use exact quotes to bring findings to life
+- Use exact quotes to bring findings to life — verbatim only; masking `[name]`, a marked `[…]` and a `(translated)` quote with the original kept still count as verbatim, a paraphrase loses its quote marks
 - Rank pain points by frequency × severity
-- Always separate observations from interpretations
+- Always separate observations (`observed` / `reported`) from interpretations (hypotheses, or `[assumed — …]` when kept as a claim)
 - Note sample limitations honestly
 
 ---
@@ -138,19 +140,19 @@ Legend: ✅ Full support | 🟡 Partial / Beta | ❌ Not available
 [2-3 sentence summary of market opportunity]
 
 ## Market Sizing
-| Metric | Value | Source | Year |
-|--------|-------|--------|------|
-| TAM (Total Addressable Market) | $X | [source] | 20XX |
-| SAM (Serviceable Addressable Market) | $X | [source] | 20XX |
-| SOM (Serviceable Obtainable Market) | $X | [estimate basis] | 20XX |
+| Metric | Value | Source (class) | Year |
+|--------|-------|----------------|------|
+| TAM (Total Addressable Market) | $X | [source] (external) | 20XX |
+| SAM (Serviceable Addressable Market) | $X | [source] (external) | 20XX |
+| SOM (Serviceable Obtainable Market) | $X | [estimate basis — an estimate: no class of its own; each unsourced input `[assumed — …]`] | 20XX |
 
 ### Calculation methodology
-[How TAM/SAM/SOM were derived — top-down, bottom-up, or value-theory]
+[How TAM/SAM/SOM were derived — top-down, bottom-up, or value-theory; each input with its class, an unsourced one `[assumed — …]`]
 
 ## Market Trends
 ### Trend 1: [Name]
 - **Direction**: [growing / declining / shifting]
-- **Evidence**: [data points, reports]
+- **Evidence**: [data points, reports — each with its class and source]
 - **Implication for us**: [what it means]
 
 ## PESTEL Analysis
@@ -180,12 +182,12 @@ Legend: ✅ Full support | 🟡 Partial / Beta | ❌ Not available
 [1-2 paragraphs summarizing recommended market approach]
 
 ## Sources
-- [Source title](URL) — accessed [date]
+- [Source title](URL) — `source-type marker` · class — accessed [date]
 ```
 
 ### Tips for market research
 - Use multiple sources for market sizing — cross-reference analyst reports
-- Clearly state assumptions in calculations
+- Clearly state assumptions in calculations — each unsourced input labelled `[assumed — …]`
 - Distinguish between addressable and obtainable market realistically
 - Look at adjacent markets for emerging threats
 - Include geographic breakdown if relevant

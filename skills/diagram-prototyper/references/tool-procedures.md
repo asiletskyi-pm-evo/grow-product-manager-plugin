@@ -34,7 +34,7 @@ Provide a recommendation based on context:
    - Print-friendly styles (if the infographic is for A4/PDF)
 2. **HTML structure guidelines for infographics:**
    - Use a fixed-width container (e.g., `max-width: 800px; margin: 0 auto`)
-   - Structure with semantic sections: header (title + subtitle), body sections, footer
+   - Structure with semantic sections: header (title + subtitle), body sections, footer — the footer gives each number's source with its evidence class first (since v3.8.0; the class from the upstream label, never upgraded — a figure typed or pasted here is `reported`; internal source names only for an internal audience — `references/prompt-construction.md` 5b *Footer*); placeholder values are marked `illustrative placeholder — not data`
    - Use CSS Grid or Flexbox for layout
    - For charts: use inline SVG with `<rect>`, `<circle>`, `<text>`, `<path>` elements — no external charting libraries required
    - For icons: use simple SVG icons or Unicode symbols (e.g., ✓, ✗, ▲, ▼, ●)

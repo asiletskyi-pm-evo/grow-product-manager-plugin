@@ -73,6 +73,7 @@ If the analysis reveals a **pattern-level issue** (something that could recur), 
 - Be specific — describe the exact change to the skill's algorithm, not vague "improve quality"
 - Be minimal — propose the smallest change that fixes the pattern, don't over-engineer
 - Be honest — if the correction was a one-off (user preference, unique context), say so and don't propose a skill change
+- Evidence labels are never unlearned (since v3.8.0, Principle 5 of `pm-mental-model.md`) — a correction that removes an evidence label (`pm-mental-model.md` §4) or turns a `simulated` / `assumed` item into a finding is never proposed as a skill change, in this protocol or in any skill's own self-improvement check; treat it as a one-off under the rule above. The rest of the Principle 5 guard arrives in v3.9.0
 - Multiple improvements — if several improvements are identified, present them as a numbered list and let the user choose which to apply
 
 ### 4. Implement improvement (if user agrees)

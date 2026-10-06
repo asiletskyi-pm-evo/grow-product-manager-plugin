@@ -33,9 +33,11 @@ App Store search, genre Shopping, market xx, top 50 by ratings count → 12 new 
 
 | Product | Kind | Role | Platforms | Walkable surfaces | Size signals | Key flows | Notable | Last researched |
 |---------|------|------|-----------|-------------------|--------------|-----------|---------|-----------------|
-| Product 1 (ours) | app | — | ios, android, web | iphone-on-mac, web | 4.9 / 480k | search, card, checkout, reviews | rating asked on exit of the review form | 2026-09-11 |
+| Product 1 (ours) | app | — | ios, android, web | iphone-on-mac, web | 4.9 / 480k | search, card, checkout, reviews | rating asked on exit of the review form (observed · walkthrough 2026-09-10) | 2026-09-11 |
 | Competitor A | app | direct-competitor | ios, android, web | iphone-on-mac, web | 4.8 / 1.2M | search, card, checkout, reviews | stars first in the review form | null |
 | Global Marketplace C | app | benchmark | ios, android, web | iphone-on-mac, web | 4.7 / 3.5M | … | photo-first reviews | null |
+
+Column labels: Size signals `Evidence: external — App Store lookup, market xx, 2026-09-11`; Notable `Evidence: external — Mobbin flows, 2026-09-11` — Product 1's cell carries its own label, which overrides the column's. The map's Sources list the App Store lookup, Mobbin and the walkthrough pack — never the machine scan or bookmarks, which only record how the products were found.
 
 ## 4. research proposal (no cap)
 

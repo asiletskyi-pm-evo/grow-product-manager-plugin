@@ -106,8 +106,8 @@ When analyzing visual data (screenshots of dashboards, charts):
 | **Funnel analysis** | When analyzing conversion flows | Step-by-step conversion rates, drop-off points, bottleneck identification |
 | **Segment comparison** | When different user groups may behave differently | Performance differences by platform, country, user type, traffic source |
 | **Metric decomposition** | When a high-level metric needs unpacking | Break metric into components, identify which sub-metrics drive changes |
-| **Correlation analysis** | When looking for relationships between metrics | Correlation coefficients, potential causal relationships (with caveats) |
-| **Benchmarking** | When external context is needed | Compare metrics against industry standards, competitor data (via WebSearch) |
+| **Correlation analysis** | When looking for relationships between metrics | Correlation coefficients; a causal reading stays a labelled hypothesis, or a finding with its hand-back line (SKILL.md 1.5.g) |
+| **Benchmarking** | When external context is needed | Compare metrics against industry standards, competitor data (via WebSearch; `external`, with the Gate Check 1 recency check) |
 
 **2d. Historical comparison:**
 
@@ -119,7 +119,7 @@ If previous Product Analysis reports were found in Confluence (Step 1e):
 
 ### Step 3 — Structure findings
 
-Organize all analysis results into structured categories:
+Organize all analysis results into structured categories. Since v3.8.0 every finding carries its SKILL.md 1.5.g class first in its annotation; `simulated` input never appears among findings, `assumed` only labelled (`references/data-integrity-protocol.md` 6b).
 
 **3a. Key Trends**
 - Direction and magnitude of main metrics
@@ -128,7 +128,7 @@ Organize all analysis results into structured categories:
 
 **3b. Anomalies and Problems**
 - Unexpected metric changes (spikes, drops, pattern breaks)
-- For each anomaly: description, magnitude, when it started, possible root causes
+- For each anomaly: description, magnitude, when it started, possible root causes — as hypotheses; a root cause stated as a finding without an experiment or control gets the 1.5.g hand-back line
 - Severity assessment: critical / significant / minor
 - Recommended investigation steps
 
@@ -143,7 +143,7 @@ Organize all analysis results into structured categories:
 - Dependencies and external factors
 
 **3e. Correlations and Insights**
-- Relationships discovered between metrics
+- Relationships discovered between metrics (a correlation, not a cause, unless an experiment or control shows one)
 - Patterns that connect multiple data points
 - Insights that emerged from cross-referencing sources
 
@@ -165,7 +165,7 @@ Validation method: [A/B test / analysis deep-dive / user interviews / etc.]
 
 ICE Score: Impact [X] × Confidence [X] × Ease [X] = [Score]
 
-Supporting data: [specific data points from the analysis]
+Supporting data: [specific data points from the analysis, each with its annotation and class]
 Risks: [what could go wrong]
 ```
 
@@ -190,6 +190,7 @@ Engage the user in discussing findings and hypotheses:
 In both modes:
 - Proactively suggest areas worth exploring deeper
 - If the user questions a finding — re-examine the data, provide additional evidence or revise the conclusion
+- A "why" answer (since v3.8.0, SKILL.md 1.5.g): a cause the data cannot separate — observational data, no experiment or control — keeps the supportable part ("coincides with …") and gets one hand-back line naming the human step; a cause offered as a hypothesis gets none. A Q&A reply adds no class tokens of its own; a number it quotes from a labelled report keeps its label (Gate 4b §5).
 - Help prioritize: which findings need immediate action vs. monitoring
 - If new data is provided during discussion — incorporate it and update analysis
 
@@ -211,7 +212,7 @@ Generate a comprehensive structured report:
 1. **Executive Summary** — 3-5 bullet points with the most important findings
 2. **Data Sources** — what was analyzed, date ranges, data quality notes
 3. **Key Trends** — with charts/tables where data supports it
-4. **Anomalies and Problems** — severity-sorted, with root cause analysis
+4. **Anomalies and Problems** — severity-sorted, with root cause analysis (a cause the data cannot separate is a hypothesis or carries its 1.5.g hand-back line)
 5. **Growth Opportunities** — ranked by potential impact
 6. **Risks** — with monitoring recommendations
 7. **Correlations and Insights** — cross-metric patterns
@@ -219,7 +220,7 @@ Generate a comprehensive structured report:
 9. **ICE Summary Table** — sorted by score
 10. **Recommended Next Steps** — prioritized action items
 11. **Glossary** — explain all terms, metrics, jargon used in the report (same format as Product Research glossary). Use the user's preferred language (`user.language`).
-12. **Sources** — all data sources with types marked (Tableau, Google Sheets, CSV, Confluence, Web, screenshot, PDF)
+12. **Sources** — all data sources with types marked (Tableau, Google Sheets, CSV, Confluence, Web, screenshot, PDF) and, since v3.8.0, each with its evidence class
 
 **6c. Publishing — ask via AskUserQuestion:**
 

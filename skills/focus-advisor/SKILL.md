@@ -1,6 +1,6 @@
 ---
 name: focus-advisor
-version: 0.9.0
+version: 0.9.1
 description: What to focus on today, this sprint or quarter — scans mail, calendar, Jira, metrics; recommends and chains. Not sprint planning (sprint-planning), not analysis (product-analysis). UA — «на чому сфокусуватись», «ранковий бриф», «розбери мою пошту й календар», «чи все ок з метриками». EN — "what should I focus on", "daily focus", "tactical focus", "strategic focus", "morning brief", "show focus board". Also UA — «що мені робити сьогодні», «фокус дня/тижня/кварталу», «на чому фокусуватись у кварталі», «до яких зустрічей готуватись», «де великі можливості для продукту», «куди фокусувати команду». Also for scheduled/headless briefs. Do NOT use to build roadmaps (quarterly-/project-planning).
 ---
 
@@ -22,7 +22,7 @@ The 4th height of the suite — **the PM's attention** above structure/quarter/s
 ## Step T — Template Resolution
 `artifact_type: focus`, `subtype: daily-brief | tactical-brief | strategy-memo` (by mode), `product_id`, `language`.
 
-**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — the brief's last line, also in headless runs; since v3.7.0 the confidence line for the brief's lead focus sits directly above it (`references/judgment-points.md` §3; Gate 4c).
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — the brief's last line, also in headless runs; since v3.7.0 the confidence line for the brief's lead focus sits directly above it (`references/judgment-points.md` §3, with its v3.8.0 caps; Gate 4c). Since v3.8.0 the brief's cited figures and facts carry evidence labels through T-5 step 3c (Gate 4b), with no question; a headless brief carries labels only, never a hand-back line.
 
 ## Modes
 
@@ -102,7 +102,7 @@ Every artifact this skill produces is persisted to the user's local repository:
 - brief → `~/.grow-pm/focus/briefs/YYYY-MM-DD-{mode}.md`;
 - journal update → `~/.grow-pm/focus/focus-log.md` (proposed → chosen → done/snoozed);
 - cache → `~/.grow-pm/focus/cache/` (packets only, no message bodies);
-- Vault mirror after every write per `vault-protocol.md` (`type: focus-brief`), recovery pattern as in knowledge-library (if `~/.grow-pm/focus/` is empty — restore from Vault);
+- Vault mirror after every write per `vault-protocol.md` (`type: focus-brief`; frontmatter per Vault Save step 5, so `altitude` and `evidence_classes` are derived from the brief's footer and labels — headless too, never asked), recovery pattern as in knowledge-library (if `~/.grow-pm/focus/` is empty — restore from Vault);
 - artifacts produced by chained skills (slices, decks, plans) are saved by those skills' own Step V — focus-advisor links them in the brief and journal.
 
 ## Mode: journal — close the loop on what was already chosen

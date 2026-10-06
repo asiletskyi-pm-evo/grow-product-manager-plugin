@@ -110,7 +110,7 @@ When a feature has no estimate — do not leave a gap, estimate by analogy:
 1. Find similar **closed** features (same type: A/B on the product card / Q&A feature / catalog landing / admin tool; similar requirements; same platforms).
 2. Take their actual volume/touched platforms → produce a **range** (t-shirt or SP spread), not pseudo-precision.
 3. T-shirt → SP rubric (per platform, default; calibrated): `S=3 · M=5 · L=8 · XL=13`.
-4. Mark `AI-estimate (analogy to {keys}), pending TL confirmation` — final by TL/analyst (competence boundary).
+4. Mark `AI-estimate (analogy to {keys}), pending TL confirmation` — final by TL/analyst (competence boundary). Since v3.8.0 this marker is the planning hand-back (`planning-core.md` §6): the estimate is `assumed` until the TL confirms, and the marker reads as its label (no second label).
 5. Collect all auto-estimates into a separate list for quick PM/TL review.
 
 ---

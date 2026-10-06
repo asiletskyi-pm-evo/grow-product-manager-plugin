@@ -44,7 +44,7 @@ Every artifact, regardless of type, includes these base frontmatter fields:
 |-------|------|-------------|
 | `status` | string | Lifecycle status: active \| archived \| superseded \| draft |
 | `superseded_by` | string | Wikilink to superseding artifact (if status = superseded) |
-| `confidence` | float | Confidence score (0.0-1.0) for findings or recommendations |
+| `confidence` | float | Confidence score (0.0-1.0) for findings or recommendations; evidence classes neither set nor cap it |
 | `last_reviewed` | date | Last review date (YYYY-MM-DD) |
 
 #### Context Fields
@@ -55,6 +55,15 @@ Every artifact, regardless of type, includes these base frontmatter fields:
 | `published_to` | string | URL where artifact is published (e.g., Confluence page) |
 | `confluence_page_id` | string | Confluence page ID if synced |
 | `jira_epic` | string | Associated Jira epic key |
+
+#### Judgment Fields (optional, since v3.8.0)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `evidence_classes` | string[] | The evidence classes (`pm-mental-model.md` §4) the body's labels use, deduplicated, in the order observed, measured, reported, external, simulated, assumed; left out when the body carries none — never `[]` |
+| `altitude` | string | `L1`–`L4`: the value the judgment footer shows (`template-protocol.md` T-5 step 3a); left out where step 3a places no footer — never filled from `level_home` |
+
+Both are derived by `vault-protocol.md` Vault Save step 5 — never asked, never a required field, never backfilled into older notes. People-contour notes, knowledge sources, prototypes and handoffs carry neither; `decision` and `debate` notes carry no `altitude`. `altitude` is the artifact's altitude L1–L4, never the vault level L0–L2. A user's own property of another name (for example a free-text `evidence:`) is preserved and not read.
 
 ### Extended Frontmatter by Type
 
@@ -107,7 +116,7 @@ rejected_alternatives: string[] (each option considered and not chosen, with a o
 base_rate: string (outside view with its source — e.g. the experiment registry's win rate)
 revisit_trigger: string (the observable event that reopens the decision; revisit_by stays the date)
 minority_report: string (2-3 sentence strongest dissent, with who held it — from a debate or a named dissenter; omitted when there was none)
-evidence_classes: string[] (evidence classes of the inputs — observed|measured|reported|external|simulated|assumed; filled from v3.8.0)
+evidence_classes: string[] (evidence classes of the inputs — observed|measured|reported|external|simulated|assumed; since v3.8.0 derived per judgment-points.md §4, never asked; the same key as the base Judgment Field)
 ```
 
 > The owner's confidence is a body line under the record's Decision section (`Confidence: known|likely|uncertain|unknown · most sensitive to: … · would change if: <revisit trigger>`), not a frontmatter key — the lifecycle `confidence` float keeps its meaning (`judgment-points.md` §3). A record written before v3.7.0 stays valid without the new keys.

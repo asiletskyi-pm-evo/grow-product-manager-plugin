@@ -94,6 +94,7 @@ Consumers: `sprint-planning` (readiness/violations), `project-planning` (macro d
 - Conventions (names/labels/statuses/flow) are overridden in local-context; do not hardcode in skills.
 - Features in any artifact — as a list of `code — name`, not bare numbers.
 - Mark marking recommendations "pending PM confirmation".
+- **Tacit organisational context (since v3.8.0, `pm-mental-model.md` P10; `data-integrity-protocol.md` 6c).** A planning input that needs context found neither in Jira nor in `local-context.md` — a goal missing from the goal map, an unrecorded dependency, unconfigured capacity, a commitment made outside Jira — keeps its existing "pending PM/TL confirmation" marker, which names whom to ask (the PM, the TL, or the owner of the goal or commitment). That marker is the planning hand-back, and the item it marks is `assumed` (`pm-mental-model.md` §4): the marker reads as its label, so no second label, no new section and no question are added. For `judgment-points.md` §3 the marked item is an `assumed` input — named in `most sensitive to`, never a frontier cap.
 
 ## 7. Altitude views — Now / Next / Later (since v3.6.0)
 

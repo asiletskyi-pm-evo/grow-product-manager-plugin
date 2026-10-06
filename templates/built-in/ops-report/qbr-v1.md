@@ -9,10 +9,10 @@ products: []
 match: subtype
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.1.0"
 author: "grow-pm"
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-10-06
 tags: [ops, qbr, quarter, financials, business]
 description: "Quarterly business review (since v3.6.0): financials, money bridge, initiatives, market, org health, risks, decisions taken, commitments for next quarter"
 status: active
@@ -32,7 +32,7 @@ variables:
 
 ## Financials
 
-<!-- Plan vs actual for the revenue, margin and cost lines the direction owns; full-year forecast at the current trend; each deviation with its cause. Every number carries its period and source marker. -->
+<!-- Plan vs actual for the revenue, margin and cost lines the direction owns; full-year forecast at the current trend; each deviation with its cause. Every number carries its period, source marker and evidence class (pm-mental-model.md §4): an actual is `measured` only when the skill read or counted it itself through its data gate, a pasted or typed figure is `reported (<who>)` — one label per table when every figure shares class and source. Plan and full-year forecast carry no class, only their basis; an unsourced input inside them reads `[assumed — …]`. A cause is `reported (<who>)` as stated; a cause the skill infers itself is `[assumed — …]` (data-integrity-protocol.md Gate Check 6c). -->
 
 | Line | Plan | Actual | Δ | Full-year forecast | Cause of deviation |
 |------|-----:|-------:|--:|-------------------:|--------------------|
@@ -42,7 +42,7 @@ variables:
 
 ## Initiatives
 
-<!-- Per initiative: objective served, status, planned vs delivered, next step. Features as `code — name`. Delivery numbers come from the quarter review when one exists. -->
+<!-- Per initiative: objective served, status, planned vs delivered, next step. Features as `code — name`. Delivery numbers come from the quarter review when one exists; counts computed from Jira are `measured`, one label per table. -->
 
 | Initiative | Objective served | Status | Planned vs delivered | Next |
 |------------|------------------|--------|----------------------|------|
@@ -50,7 +50,7 @@ variables:
 
 ## Market
 
-<!-- Market and competitor moves this quarter that change a bet or a plan — each with its source and date. -->
+<!-- Market and competitor moves this quarter that change a bet or a plan — each `external` with its source and date (a competitor's site, press release or a market report); its effect on our numbers keeps the class of whoever states it. -->
 - TBD
 
 ## Org health

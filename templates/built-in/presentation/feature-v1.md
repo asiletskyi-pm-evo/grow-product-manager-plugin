@@ -8,10 +8,10 @@ scope: built-in
 products: []
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.0.1"
 author: "grow-pm"
 created: 2026-04-17
-updated: 2026-04-17
+updated: 2026-10-06
 tags: [presentation, feature, pitch]
 description: "Feature presentation to stakeholders (10 slides) as a text outline"
 status: active
@@ -54,6 +54,8 @@ variables:
 {{#if presenter}}**Presenter:** {{presenter}}{{/if}}
 {{#if audience}}**Audience:** {{audience}}{{/if}}
 
+<!-- Evidence labels (since v3.8.0; pm-mental-model.md §4, artifact-style-gate.md Gate 4b): every number, quote and benchmark stated as fact carries its class in the slide's source caption or attribution — a quote verbatim, with who and when, ending `· reported`. `simulated` input never fills a quote, metric or evidence slide; `assumed` appears only labelled. Targets and forecasts carry no class. External audience (customer, partner, public): the class stays, internal source names go, and hand-back lines stay in the outline companion — never on a slide. -->
+
 ---
 
 ## Slide 1. Title
@@ -79,6 +81,7 @@ variables:
 
 ## Slide 5. Data / Evidence
 
+<!-- Each number with its class and source in the caption (e.g. measured · funnel dashboard, period); a figure the presenter typed is reported (who). Persona or model-written "user" input never fills this slide. -->
 - Key numbers that confirm the problem
 - Research / feedback
 

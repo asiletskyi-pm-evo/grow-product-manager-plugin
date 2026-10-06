@@ -28,6 +28,8 @@ Profiles are shorthand for a capability set. They are documentation, not a switc
 | `chatgpt` | ❌ | ❌ | ❌ | ✅ | ❌ | ⚠️ web only, assumed | ChatGPT on **web / mobile**: skills and connectors only; the storage, vault and script contours are unavailable. The ChatGPT **desktop app with a Local Project** attaches local folders read/write (vendor doc) — observe FS as present and apply the `codex-cli` row. Not yet run with the plugin: derived, not measured. |
 | `codex-cloud` | ⚠️ | ✅ | ⚠️ | ? | ❌ | ❌ | Its own sandbox filesystem — **not** the user's `~/.grow-pm/`. Treat FS as present but empty: never assume prior state, always write results back through a connector or the repo. |
 
+The **measured / assumed** marks in this file (and **vendor**, §7) say how a host fact is known. They are not the evidence classes of `pm-mental-model.md` §4 (since v3.8.0) and never label a claim in an artifact.
+
 ## 3. Step 0-host — the host check
 
 Any skill that touches storage, subagents or scripts runs this before its first real step. It is three lines of reasoning, not a tool call:

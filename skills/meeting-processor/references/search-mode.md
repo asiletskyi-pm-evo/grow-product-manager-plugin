@@ -2,7 +2,7 @@
 
 > Part of `meeting-processor`. Loaded on demand when Mode Selection picks **Search**. Mode selection, the Input Source Discovery trigger and the Process workflow stay in SKILL.md.
 
-> **Subagent delegation (large fan-out).** When the query spans many meetings, delegate per `references/subagent-delegation.md`: split the meetings into batches, spawn subagents in parallel, each returns a compact structured result (per-meeting decisions / action items / relevant quotes + link), and the main agent aggregates (merge, dedupe, rank). Falls back to inline if subagents are unavailable.
+> **Subagent delegation (large fan-out).** When the query spans many meetings, delegate per `references/subagent-delegation.md`: split the meetings into batches, spawn subagents in parallel, each returns a compact structured result (per-meeting decisions / action items / relevant quotes as `quote_verbatim`, `speaker`, `timestamp` + link), and the main agent aggregates (merge, dedupe, rank). Falls back to inline if subagents are unavailable.
 
 ## S1 — Understand the query
 

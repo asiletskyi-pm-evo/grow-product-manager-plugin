@@ -12,8 +12,8 @@ Depending on **upstream**:
 
 **b. Research output** (`product-research`, `cjm-research`, `meeting-processor`) — parse markdown:
 - themes, insights, recommendations
-- quotes (for research decks)
-- anomalies / funnel drops (for CJM decks)
+- quotes (for research decks) — copied verbatim from the upstream, with its speaker and date
+- anomalies / funnel drops (for CJM decks), with any hand-back line the upstream attached to them
 
 **c. Brainstorm output** (`brainstorm-features`) — json/md:
 - top-3 hypotheses with ICE scores
@@ -23,6 +23,15 @@ Depending on **upstream**:
 - metrics, control vs treatment, CI, lift
 
 **e. User-provided** — raw text / pasted context / uploaded files.
+
+**Evidence labels in the Deck IR (since v3.8.0).** The class words and grammar are `references/pm-mental-model.md` §4; the class of an input comes from `references/data-integrity-protocol.md` Gate Check 6 (6a). This step only carries labels — it runs no data gate and adds no question.
+- **Carry, never upgrade.** Every number, quote and benchmark enters the IR with the label its upstream gives it, into the slot's caption or attribution. An unlabelled claim from an artifact saved before v3.8.0 takes the class of the source it cites, else `reported` (the artifact) — never `measured`, because this skill re-verifies nothing.
+- **Read here, not upstream** (d., e.): this skill runs no data gate, so a figure it takes in itself — typed or pasted, an uploaded export, a dashboard read straight from Tableau — is `reported` (who, or which file or dashboard · not gate-checked). `measured` arrives only labelled by an upstream skill that ran its gate (product-analysis, cjm-research, product-reporter's Jira counts).
+- **Quotes** are verbatim from the upstream's source, with who and when; a paraphrase loses its quote marks. A quote never comes from a synthesis, an AI summary or a persona.
+- **Themes from 4a** (`design:research-synthesis`) keep the class of the material they synthesise (`reported` for real interviews); a theme with no traceable source item is `[assumed — …]`.
+- **Synthetic input** (persona answers, synthetic users, model-written "user" quotes) is `simulated`: it never fills a theme, quote, metric or evidence slot and is never counted in "Method & sample"; it goes to one "Simulated input — hypotheses only" line.
+- **Hand-back lines** the upstream attached travel with their claim: in the caption of the slide that cites it for internal audiences, only in the outline companion for an external one. A before / after change with no control reads "coincides with", never "caused by".
+- **Forward-looking numbers** (targets, forecasts, expected impact) carry no class — only their forecast / illustrative marker.
 
 ## Step 5a — intent=deck → .pptx
 
@@ -86,7 +95,8 @@ design-bridge:
             → 10 slides added via slide_layouts.get_by_name(…)
             → save: Presentations/<product>/2026-04-20-qa-product-page-direction.pptx
   Step 6  → QA pass (contrast, 10 slides, no empty slots, brand font OK,
-            brand.primary used on 3 slides)
+            brand.primary used on 3 slides, Evidence-slide caption
+            carries its upstream class)
   Step 7  → attach to PROJ-1234 Confluence page as attachment
             → comment in Jira PROJ-1234 with computer:// link
             → update Obsidian Vault: Presentations/<product>/2026-04-20/

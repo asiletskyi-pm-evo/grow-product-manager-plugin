@@ -21,3 +21,5 @@ Ask via AskUserQuestion:
   - If Figma MCP is unavailable — follow `references/integration-strategy.md` fallback chain
 - **If no designs exist** — note this and proceed without design context
 - **If relevant designs are confirmed** — use them as the calling skill's *when designs are confirmed* line says.
+
+**Evidence class (since v3.8.0).** A design describes the intended UI — even a frame marked "Production" or "Live". A claim drawn from it is `reported` with the file and frame as its source (`pm-mental-model.md` §4), never `observed` product or user behaviour; for what users actually see or do, cite production data, a `flow-walkthrough` evidence pack or a screenshot of the live product.

@@ -25,11 +25,12 @@
 
 ## If both ChatGPT and Gemini are used
 - Run both Deep Research sessions
-- Cross-reference findings — note where both LLMs agree (higher confidence) and where they diverge (flag for verification)
+- Cross-reference findings — note where both LLMs agree and where they diverge (flag for verification); agreement of two LLMs is not cross-validation (Step 1.5.c) and does not change a claim's class
 - Present a unified view in the research output, citing which LLM provided each insight
 
 ## Important guidelines for LLM-sourced data
 - Always cross-verify claims from LLMs against web search or internal data
-- Mark LLM-sourced insights in the final output (e.g., "Source: ChatGPT Deep Research" or "Source: Gemini Deep Research")
+- Mark LLM-sourced insights in the final output (e.g., "Source: ChatGPT Deep Research" or "Source: Gemini Deep Research") with the `deep-research-llm` marker
 - If LLMs provide conflicting information, present both perspectives with a note
 - Do NOT treat LLM output as primary source — use it to enrich and deepen the analysis
+- **Evidence class (Step 1.5.g, since v3.8.0; `references/data-integrity-protocol.md` Gate Check 6a):** a claim you traced to a resolvable source and recency-checked cites that source and takes its class (a report or benchmark → `external`). An untraceable claim about users or the market is `simulated`: it may go to Hypotheses, never to findings, never into a count, a quote or a debate pack

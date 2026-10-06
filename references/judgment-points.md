@@ -51,8 +51,8 @@ Rules:
 - **Derived, never asked.** One line per artifact, for its lead recommendation or verdict — the one §1 names. The decision record carries its own line (§4).
 - **`most sensitive to`** names the single assumption or input whose change would move the call most, for example "the novelty effect has faded by week 2" or "the Android segment is representative". It is not a list.
 - **`would change if`** names information someone can observe: a metric crossing a value, a segment result, an interview finding, a date passing. "More data" or "further research" does not pass.
-- **No inflation.** The level is at most `uncertain` when the verdict the lead recommendation acts on is inconclusive, when a metric it rests on is ❌ Blocked or was not cross-validated by the Data Integrity Gate (a single source included), or when the estimate is by analogy. A segment the recommendation explicitly leaves out of its action does not cap it.
-- **Weak inputs are named.** A recommendation resting on an assumed or simulated input says so in `most sensitive to`; the evidence labels themselves arrive in v3.8.0.
+- **No inflation.** The level is at most `uncertain` when the verdict the lead recommendation acts on is inconclusive, when a metric it rests on is ❌ Blocked or was not cross-validated by the Data Integrity Gate (a single source included), or when the estimate is by analogy — and, since v3.8.0, when it rests on a claim `data-integrity-protocol.md` Gate Check 6 marked as frontier (however rendered: a hand-back line or `[assumed — frontier: <human step>]`) or on a `simulated` input. An `assumed` working assumption does not cap the level — it is named (next rule); an `assumed` metric is one that was not cross-validated and caps as above. A segment the recommendation explicitly leaves out of its action does not cap it.
+- **Weak inputs are named.** A recommendation resting on an `assumed` or `simulated` input names that input, with its class label, in `most sensitive to` (`pm-mental-model.md` §4); when there are several, the one the call is most sensitive to — the others keep their labels in the body.
 - **Placement.** In a Step T artifact, the judgment footer renders the line directly above the altitude line (`template-protocol.md` T-5 step 3a). A user override of the footer without the confidence placeholders gets the built-in line above its content. Where §1 names no line, none is rendered and Gate 4c is `n/a`.
 
 ## 4. Decision record fields (P9)
@@ -66,7 +66,7 @@ Rules:
 | `base_rate` | an outside view: how often decisions or launches of this kind worked, here (e.g. the experiment registry's win rate) or in a named external source | the evidence, a vault search, the user | `none found` |
 | `revisit_trigger` | the observable event that reopens the decision (`revisit_by` stays the date) | the P2 answer, the context | `not recorded` |
 | `minority_report` | the strongest dissent in 2–3 sentences, with who held it | a debate synthesis, a named dissenter in the notes | the key is left out |
-| `evidence_classes` | the evidence classes of the inputs (`pm-mental-model.md` §4) | — | filled from v3.8.0; left out until then |
+| `evidence_classes` | the evidence classes of the inputs (`pm-mental-model.md` §4) | since v3.8.0: the labels of the evidence linked in the Rationale (the vault `evidence_classes` of artifacts saved since v3.8.0) plus the classes the calling skill's payload states — an experiment readout gives the classes of its labels (`measured` when the skill read the raw data itself, `reported` when the figures were pasted), what was said in a meeting `reported`, a debate its pack's classes with each A# as labelled (`assumed` or `simulated`), a senior opinion `assumed`, an unsourced Rationale input the record labels `assumed`; never asked | the key is left out |
 
 The record's **`Confidence:` line** sits under its Decision section. It records the **owner's** confidence from the P2 answer — when the person answering is not the recorded owner, the level is labelled with their name (`likely (stated by <name>)`); its `would change if` is the revisit trigger. When the owner did not state a level, the line reads `Confidence: unknown (not stated)`. Its `most sensitive to` is the assumption the Rationale rests on, as stated, or `not recorded`.
 
@@ -86,11 +86,11 @@ The three lines go into the new record's Context. They add no question: the owne
 
 `artifact-style-gate.md` Gate 4c checks the confidence line wherever §1 names one:
 - **Artifacts** — the T-5 self-check, which also fixes a missing or malformed line silently.
-- **Decision records** — decision-log's save gate. The level there is the owner's and the gate never changes it: a level above the no-inflation cap is kept, and a "Your estimate vs mine" comparison, when one is shown, names the cap; `unknown (not stated)` and `not recorded` clauses are well-formed in a record (§4).
+- **Decision records** — decision-log's save gate. The level there is the owner's and the gate never changes it; a clause that names nothing observable is shown as `not recorded` (v3.7.0) and never replaced by an invented one, and no v3.8.0 check edits the owner's clauses: a level above the no-inflation cap (the v3.8.0 frontier and `simulated` caps included) is kept, and a "Your estimate vs mine" comparison, when one is shown, names the cap or the unnamed weak input; `unknown (not stated)` and `not recorded` clauses are well-formed in a record (§4).
 
 A line is well-formed when:
 - it uses one of the four levels;
 - both clauses are specific enough to pass §3;
-- the level respects the no-inflation rule.
+- the level respects the no-inflation rule (artifacts only — a decision record keeps the owner's level).
 
-The artifact-checker has no 4c in v3.7.0, because no maker–checker skill renders the line.
+The artifact-checker has no 4c lens, because no maker–checker skill renders the line.

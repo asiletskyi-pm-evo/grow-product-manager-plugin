@@ -9,10 +9,10 @@ products: []
 match: subtype
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.1.0"
 author: "grow-pm"
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-10-06
 tags: [concept, strategy-memo, strategy, bets, kill-criteria]
 description: "Strategy memo (since v3.6.0): strategic intents, bets, proxy metrics, what we stop, kill criteria, base rates / outside view"
 status: active
@@ -35,7 +35,7 @@ variables:
 
 {{problem_statement}}
 
-<!-- Why this question now: the market, product and business facts that force it — each with its source and date. -->
+<!-- Why this question now: the market, product and business facts that force it — each with its evidence class, source and date (pm-mental-model.md §4), e.g. "reported · finance dashboard · H1 2026" for a figure from the brief; a fact with no source reads `[assumed — …]`. -->
 
 ## Strategic intents
 
@@ -44,7 +44,7 @@ variables:
 
 ## Bets
 
-<!-- Per bet: what we invest (people, money, time), the expected return, the stage (explore / expand / extract) and the intent it serves. -->
+<!-- Per bet: what we invest (people, money, time), the expected return, the stage (explore / expand / extract) and the intent it serves. The expected return is forward-looking: no evidence class, only its basis (model, owner, date); an unsourced input inside it reads `[assumed — …]`. -->
 
 | Bet | Investment | Expected return | Stage | Intent served |
 |-----|------------|-----------------|-------|---------------|
@@ -54,7 +54,7 @@ variables:
 
 ## Proxy metrics
 
-<!-- Leading indicators that tell early whether a bet works: metric · baseline · target · review cadence · source. -->
+<!-- Leading indicators that tell early whether a bet works: metric · baseline (with its evidence class and period) · target (no class) · review cadence · source. -->
 - TBD
 
 ## What we stop
@@ -71,7 +71,7 @@ variables:
 
 ## Base rates / outside view
 
-<!-- How often comparable bets succeed: the reference class, its success rate and its source — internal history or external data. Say "none known" rather than invent one. -->
+<!-- How often comparable bets succeed: the reference class, its success rate, its evidence class and its source — internal history or external data (`external`). Say "none known" rather than invent one. -->
 - TBD
 
 ## Related materials

@@ -1,6 +1,6 @@
 ---
 name: product-landscape
-version: 0.4.0
+version: 0.5.0
 description: Registry and map of competitor, adjacent and benchmark products — scan installed apps, discover by category and market, categorise, characterise, start same-flow research across products. Not a single competitive report (product-research), not a source library (knowledge-library), not the walk itself (flow-walkthrough); setup of consent and category is plugin-configurator. UA — «карта конкурентів», «реєстр продуктів», «просканируй мої застосунки», «хто конкуренти й дотичні у сфері …», «додай продукт у реєстр», «досліди однакове флоу на конкурентах». EN — "competitor map", "product registry", "scan my apps", "who are the competitors and adjacent players", "add product to the registry", "research the same flow across products". Modes scan / discover / add / update / characterize / map / research; chains to flow-walkthrough, product-research, brainstorm-features.
 ---
 
@@ -95,11 +95,13 @@ One line: which optional connectors are in the session, whether SHELL is present
 
 ## Step 3 — Run the mode
 
-**scan.** Run `scripts/landscape_scan.sh` (add `--bookmarks` **only** after the user answered "yes" to "May I read your Chrome/Safari bookmarks for this scan?" — skip the question when `landscape.bookmarks_consent: never`). Group by source. For every bundle id call the App Store lookup for the primary market (genre, rating, ratings count, seller, app id); for Mac apps without a store record keep name + a category guess; for bookmark domains keep the domain only. Rank by genre match with `product.category`, then ratings count. Present **batches of 10–15** — name, source, category, proposed role, walkable surfaces — and for each the user confirms, changes the role or category, or drops it. Confirmed → `status: confirmed`; the rest are kept in the scan file as `dropped`, never in `products/`.
+**scan.** Run `scripts/landscape_scan.sh` (add `--bookmarks` **only** after the user answered "yes" to "May I read your Chrome/Safari bookmarks for this scan?" — skip the question when `landscape.bookmarks_consent: never`). Group by source. For every bundle id call the App Store lookup for the primary market (genre, rating, ratings count, seller, app id); for Mac apps without a store record keep name + a category guess (`assumed` wherever it is cited until the user confirms it in the batch); for bookmark domains keep the domain only. Rank by genre match with `product.category`, then ratings count. Present **batches of 10–15** — name, source, category, proposed role, walkable surfaces — and for each the user confirms, changes the role or category, or drops it. Confirmed → `status: confirmed`; the rest are kept in the scan file as `dropped`, never in `products/`.
 
 **discover.** Seed with the user's product category and primary market. Sources in order: App Store search by genre id + country (and the market's top charts through `apify` when present), Google Play category pages through browser tools, similar sites through `similarweb` and `semrush` `competitors_research` by the product's domain, Lazyweb/Mobbin product lists, web search (built-in, or `tavily` on hosts without it). Deduplicate by domain and bundle id against the registry; propose a role; present batches as in `scan`.
 
 **add / update / characterize.** One record. `characterize` fills `characterization` from the store listing, the product page, Lazyweb/Mobbin flows and web — every fact carries a source; a claim without a source is a note, not a field. `mac_available` comes from the App Store page's Compatibility list.
+
+**Evidence classes (since v3.8.0; `references/pm-mental-model.md` §4).** A fact takes the class of the source it cites, derived from `sources[].type` when cited — nothing new is stored, so records need no migration: `appstore-api`, `google-play`, `similarweb`, `semrush`, `apify`, `tavily`, `web`, `lazyweb`, `mobbin` → `external` (source, date); `walkthroughs[]` → `observed`; `user` → `reported (user)`; a note → `assumed`. `scan-mac`, `scan-iphone-on-mac`, `scan-adb` and `bookmarks` record how a product was found on this machine — provenance, not evidence about the product — and are never cited as evidence nor named in a map's Sources. In the map one label may cover a column whose facts share class and source (`Evidence: external — App Store lookup, <market>, <date>`); registry, scan and batch outputs carry no labels.
 
 **map.** Render the template: all confirmed and auto records linked to the chosen product (or category), the user's product highlighted, gaps, and a candidates-for-research list; a record is **stale** when `last_researched` is null or older than 12 months. Publish like product-research or keep in `maps/`.
 
@@ -107,7 +109,7 @@ One line: which optional connectors are in the session, whether SHELL is present
 
 - same flow across products → **flow-walkthrough** `compare` (competitors `read-only`; every walked product is updated with `walkthroughs[]`);
 - desk comparison → **product-research** (competitive / ux-benchmark with the picked products as the competitor list);
-- ideas and hypotheses → **brainstorm-features**, citing `landscape:<slug>` as evidence.
+- ideas and hypotheses → **brainstorm-features**, citing `landscape:<slug>` with the class of the cited fact (usually `external`; `observed` from a walk) — never one class for the whole record.
 
 Write back `last_researched` on every product touched.
 
@@ -119,7 +121,7 @@ Update `registry.yaml` (index) and `products/<slug>.md`; append the run to `scan
 
 > Requires: `references/vault-protocol.md` → Vault Save
 
-IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", product: active_product, skill: "product-landscape", skill_version: "0.4.0", tags: [category, market], content: the map, related: [registry slugs] })`. Display: "Saved to Vault: Research/landscape/{product}/…".
+IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", product: active_product, skill: "product-landscape", skill_version: "0.5.0", tags: [category, market], content: the map, related: [registry slugs] })`. Display: "Saved to Vault: Research/landscape/{product}/…".
 
 ## Skill Chaining
 

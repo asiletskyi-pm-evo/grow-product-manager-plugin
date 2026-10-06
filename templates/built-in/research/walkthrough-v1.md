@@ -8,10 +8,10 @@ scope: built-in
 products: []
 default_language: en
 available_languages: [en]
-version: "1.1.0"
+version: "1.2.0"
 author: "grow-pm"
 created: 2026-09-10
-updated: 2026-09-11
+updated: 2026-10-06
 tags: [research, walkthrough, ux, flow]
 description: "Flow walkthrough report: scenario, surfaces, step table with flow strip, friction by severity, comparison matrix, recommendations"
 status: active
@@ -60,6 +60,8 @@ variables:
 
 ## 2. Step table and flow strip
 
+Evidence: observed — packs {{#each run_ids}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}, for the step table and the friction findings below; what lies past the write boundary, or in a step never reached, reads `[assumed — …]` on the item.
+
 Leg summary (multi-leg runs):
 
 | Leg | Role | Account | Surface | Steps | Verdict |
@@ -97,9 +99,10 @@ Each item: `step N` — what the customer expected — what happened — heurist
 
 ## 6. Sources
 
+<!-- Each other source with its evidence class (pm-mental-model.md §4). -->
 {{#each sources}}
 - {{this}}
 {{/each}}
-- Evidence packs listed in §1 (local, internal data — not attached)
+- Evidence packs listed in §1 — observed (local, internal data — not attached)
 
-<!-- template: research-builtin-walkthrough version: 1.1.0 -->
+<!-- template: research-builtin-walkthrough version: 1.2.0 -->

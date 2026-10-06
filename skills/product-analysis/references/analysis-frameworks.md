@@ -62,6 +62,8 @@ slope = np.polyfit(range(len(df)), df['metric'], 1)[0]
 5. Was there an external event (competitor action, market shift)?
 6. Is the data pipeline healthy? (check for logging changes)
 
+The checklist finds candidate causes; one that only coincides with the anomaly stays a hypothesis until an experiment or control separates it — stated as a finding, it gets the SKILL.md 1.5.g hand-back line (since v3.8.0).
+
 **Python helpers:**
 ```python
 # Z-score based anomaly detection
@@ -214,7 +216,7 @@ for lag in range(1, 8):
 - Context: are we comparing apples to apples? (market size, maturity, model differences)
 
 **Important guidelines:**
-- Always cite benchmark sources with links
+- Always cite benchmark sources with links (class `external`, SKILL.md 1.5.g)
 - Note the date of benchmark data
 - Acknowledge differences between our product and benchmark cohort
 - Use benchmarks as directional guidance, not absolute targets

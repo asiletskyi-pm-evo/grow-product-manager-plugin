@@ -30,10 +30,10 @@ Detailed templates for each standard block. Use these as the foundation for Conf
 [How users cope today — manual processes, competitor tools, hacks]
 
 ### Evidence
-[Data, quotes, support tickets, metrics proving the problem exists]
-- **Metric**: [e.g., "30% of users abandon at step X"]
-- **User feedback**: [quote or summary]
-- **Support volume**: [e.g., "50 tickets/month about this issue"]
+[Data, quotes, support tickets, metrics proving the problem exists — since v3.8.0 each with its evidence class (`references/pm-mental-model.md` §4): a figure the user typed is `reported (<who>)`; `simulated` input never appears here (it goes to Open Questions as a hypothesis); `assumed` only labelled]
+- **Metric**: [e.g., "30% of users abandon at step X (reported · <dashboard>, <period>, not gate-checked)" — `measured` only when it comes through product-analysis's data gate]
+- **User feedback**: [a verbatim quote with who and where (`reported`), or a summary without quote marks — a paraphrase is not a quote]
+- **Support volume**: [e.g., "50 tickets/month about this issue (reported · <helpdesk export>, <period>, not gate-checked)"]
 ```
 
 ---
@@ -238,14 +238,14 @@ Include only if confirmed by the user in Step 1.
 ```
 ### Primary metric (North Star)
 - **Metric**: [name]
-- **Current value**: [baseline]
+- **Current value**: [baseline with its evidence class, e.g. `reported · <dashboard>, <period>, not gate-checked` (`measured` only through product-analysis's data gate); the target carries none]
 - **Target**: [goal]
 - **Measurement method**: [how and where]
 
 ### Secondary metrics
 | Metric | Baseline | Target | Measurement |
 |--------|----------|--------|-------------|
-| [Metric 1] | [current] | [goal] | [method] |
+| [Metric 1] | [current (class · source)] | [goal] | [method] |
 | [Metric 2] | [current] | [goal] | [method] |
 
 ### Measurement timeline

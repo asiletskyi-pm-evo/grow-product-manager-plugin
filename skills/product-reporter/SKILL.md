@@ -1,6 +1,6 @@
 ---
 name: product-reporter
-version: 0.9.0
+version: 0.10.0
 description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a performance review (performance-review). UA — «звіт по спринту», «результати кварталу», «скільки закрив за квартал», «звіт по релізах», «звіт по цілі». EN — "sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points", "goal report", "3T5F", "audit this report against the goal". Also UA — «статус епіка/фічі/місії», «операційний звіт команди», «звіт для стейкхолдерів», «які фічі виїхали в реліз», «QBR за квартал», «звіт для борду»; EN — "QBR", "board update". Do NOT use to analyze A/B or dashboard metrics (product-analysis) or to release the plugin (release-manager).
 ---
 
@@ -92,6 +92,7 @@ Follow `references/jira-data-protocol.md`. Per mode, build the JQL and fetch the
 - **Dedup**: a member can be Assignee+Developer+QA on the same issue — count per role, never double-count totals.
 - **SP nulls** → treat as 0; flag features with missing estimates.
 - **Gate emphasis (since v3.6.0; ops modes)**: for each of `comparability`, `trend-vs-objective`, `hippo-check` in `role_defaults.gate_emphasis` — and `money-bridge` only in the quarter-review, qbr and board-update renders — run its extra check from `references/data-integrity-protocol.md` → Gate emphasis; a failed one adds a ⚠️ caveat line to the metric or section it concerns — never a question, never a blocked report; a run another skill asks for only for its data returns without them (the caller applies its own).
+- **Evidence class & frontier (since v3.8.0; ops modes — the People-contour `report-3t5f` carries none)**: `references/data-integrity-protocol.md` Gate Check 6 on the report's figures, rendered by `references/template-protocol.md` T-5 step 3c in the grammar of `references/pm-mental-model.md` §4 — counts and Story Points that Step 3 computes from Jira after this gate are `measured` (one label for a table whose figures share class and source, e.g. `Evidence: measured — Jira count (jira-data-protocol), <period>`); a figure the user pastes or types — a finance export, a dashboard value — is `reported (<who>)`; a Tableau metric is `measured` only when it comes through product-analysis's Data Integrity Gate, otherwise `reported (<dashboard>, not gate-checked)`; Fireflies retro and standup notes are `reported` (speaker); a competitor's site or press release is `external`; plans, targets and forecasts carry no class, only their forecast marker, and an unsourced input inside them is `assumed`. A cause of deviation stated by a person or a document is `reported (<who>)`; a cause the skill infers itself (a coincidence nobody stated) is `assumed` and handed back per 6c, rendered by run kind per 6d — the hand-back line only in an interactive run, `[assumed — frontier: <human step>]` in a scheduled or headless one. Never a question, never a blocked report; a run another skill asks for only for its data returns the classes as data (6d), and a People-contour caller renders none.
 
 ### Step 3 — Process (Python)
 
@@ -164,7 +165,7 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.9.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.10.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
    - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
 
@@ -176,7 +177,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - "Closed" = status-category `done` with `resolutiondate` in-period; "carried/new" defined via Sprint history.
 - Confluence: `<th>` headers, no "№" column, links to Jira keys/epics/board (adjust to the team's report conventions from `local-context.md`).
 - Language: from `user.language` in `local-context.md`.
-- Mark every report with its template id; mark Jira as the source (`jira-internal`).
+- Mark every report with its template id; mark Jira as the source (`jira-internal`) and, since v3.8.0, every cited figure with its evidence class (Step 2.5).
 
 ## Additional Resources
 

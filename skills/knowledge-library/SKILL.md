@@ -1,6 +1,6 @@
 ---
 name: knowledge-library
-version: 0.8.1
+version: 0.9.0
 description: Curated knowledge library with trust scores, plus the team glossary and writing-style profile. Not artifact templates (template-library), not competitor research (product-research). UA — «додай у бібліотеку», «які джерела маємо», «збери глосарій», «додай термін», «перевір термінологію», «навчись нашого стилю». EN — "add to library", "search knowledge", "what sources do we have on [topic]", "import sources", "build a glossary", "how do we call X", "check terminology", "learn our writing style". Also UA — «пошук у знаннях», «як ми називаємо…», «покажи бібліотеку». Also called by other skills for enrichment search or a terminology lint.
 ---
 
@@ -154,7 +154,7 @@ If the user says "template" or asks about generated artifact structure — deleg
 
 The eight mode workflows — Add (A-1..A-6), Search local (S-1..S-3), Search Confluence (SC-1..SC-5), Search Google Drive (GD-1..GD-3), Search Baymard (B-1..B-4), Manage (M-1..M-3), Import (I-1..I-4), Verify (V-1..V-4) — live in `references/library-workflows.md` (skill-local). Read ONLY the workflow for the active mode.
 
-Trust score calculation (formula, type base scores, freshness, citation bonus, user override, monthly re-evaluation), the default category taxonomy, and the Configurator-invoked onboarding (KL-1..KL-6) live in `references/trust-and-categories.md` (skill-local). Add/Import/Verify workflows require the trust section.
+Trust score calculation (formula, type base scores, freshness, citation bonus, user override, monthly re-evaluation), the evidence class per source type (since v3.8.0), the default category taxonomy, and the Configurator-invoked onboarding (KL-1..KL-6) live in `references/trust-and-categories.md` (skill-local). Add/Import/Verify workflows require the trust section; Add, Import and the Search modes read its Evidence class table.
 
 The **team-language contour** — Glossary Build (GB-1..GB-6), Style Build (SB-1..SB-4), Glossary Manage (GM), Glossary Lint (GL-1..GL-3), storage schemas, and the Terminology & Style config — lives in `references/glossary-workflows.md` (skill-local). Read ONLY for the glossary/style modes. Key rule: read Atlassian MCP **sequentially** when mining.
 
@@ -171,8 +171,9 @@ When another skill calls `knowledge-library`, it passes:
 - **Max results** — maximum number of results to return (default 10)
 
 The skill returns:
-- List of matching sources with: title, URL, trust score, key insight, source type
+- List of matching sources with: title, URL, trust score, key insight, source type, evidence class
 - Search metadata: modes used, total results found, threshold applied
+- **Evidence class (since v3.8.0)** — derived from the source type through `references/trust-and-categories.md` → Evidence class, never computed from the trust score; additive, so a caller that ignores it is unaffected — cjm-research, product-research and brainstorm-features read it as the class of a `kb-source` citation (`references/data-integrity-protocol.md` Gate Check 6)
 
 ### Cross-skill enrichment behavior
 
@@ -256,6 +257,7 @@ At the beginning of Knowledge Library skill execution (after Step 0 context load
 - Never delete sources without user confirmation
 - Always show auto-categorization for user review before saving
 - Preserve user trust overrides during verification/recalculation
+- Trust is reliability within a class: a score, a `trust_override` or a Verify recalculation never changes a source's evidence class (since v3.8.0)
 - Use the user's preferred language for all communications (from `local-context.md`)
 - Follow `data-policy.md` — internal source content (Confluence, GDrive) is confidential and must not be sent to external LLMs
 - When Baymard requires login — always inform the user, never attempt to bypass authentication
@@ -266,7 +268,7 @@ At the beginning of Knowledge Library skill execution (after Step 0 context load
 ## Additional Resources
 
 - **`references/library-workflows.md`** (skill-local) — all eight mode workflows in full
-- **`references/trust-and-categories.md`** (skill-local) — trust formula, category taxonomy, KL onboarding
+- **`references/trust-and-categories.md`** (skill-local) — trust formula, evidence class per type, category taxonomy, KL onboarding
 - **`references/glossary-workflows.md`** (skill-local) — team-language contour: glossary + style profile workflows (GB/SB/GM/GL), schemas, config
 - **`references/vocabulary-sets.md`** (shared) — read-only role vocabulary sets, lowest precedence below the glossary (since v3.6.0)
 
