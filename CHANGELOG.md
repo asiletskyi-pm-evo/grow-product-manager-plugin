@@ -12,6 +12,138 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.9.0 (2026-10-06)
+
+**Build first, a built-in opponent, learning modes — and the Judgment Core + Role Layer programme is complete.** Sixth and last release of the programme (v3.4.0 → v3.9.0).
+
+The plugin now offers the cheapest way to settle a risky assumption before a long document. It gives consequential artifacts a pre-mortem and pre-committed kill criteria, and specs AI features as a behaviour spec, an eval set and an acceptable error rate. It checks a spec is ready before it becomes tasks, lets the PM do the first pass of a synthesis themselves, and never learns to drop a counter-argument.
+
+The only new question in a skill run is opt-in: the PM-first pass under `learning_mode: pm_first` (two configuration exceptions under Backwards compatibility). MINOR: two new built-in templates, new steps in 15 skills, two new `## Judgment` behaviours.
+
+### Added
+
+- **`judgment-points.md` §7 — P4 pre-mortem and kill criteria.**
+  - **What it is:** a new partial, `partial/pre-mortem-v1`, inserted by `template-protocol.md` T-5 step 3b ("Inserted sections"). It lists 2–3 failure causes, each tied to the input or section it rests on and with an early signal, followed by kill criteria (signal, threshold, date, then).
+  - **Where it appears:**
+    - every write-concept concept except the design brief and a release-notes draft — a pre-selected item in the Step 1 block list;
+    - A/B specs, where kill criteria are a pointer to the decision rule;
+    - AI-feature specs;
+    - the quarter plan at scope lock;
+    - new missions and initiatives in roadmap-architect `onboard`, and a new epic whose request carries goal or outcome text.
+  - **How it behaves:** unknown thresholds read `⚠️ TBD` and are never asked for. Refresh keeps an existing pre-mortem verbatim. A user's own template gets it only through `{{> pre-mortem}}`.
+  - **Read-back:** the quarterly-planning retro and the project-planning replan read earlier criteria back as fired, not fired or not measurable, using data they already fetched.
+- **§8 — the P6 build-first offer.** New switch `judgment.build_first`, default `on`.
+  - write-concept Step 1 names the riskiest assumption. When no evidence covers it, one line in the brief summary offers the cheapest path: a lo-fi prototype for 3–5 real users, a walk of the as-is flow, or an eval set.
+  - design-bridge Step 9 offers a build-first prototype, or a standalone mid-fi or hi-fi one, as the spec for requirements-creator (a Prototype IR: screens, states, transitions). diagram-prototyper returns a lo-fi prototype on `return_to: design-bridge`, passed only for the build-first hand-off.
+  - It is a line, not a question; never in automated runs; «вимкни» / "turn off" switches it off.
+- **§9 — P8 learning modes.** `judgment.learning_mode` now acts. `pm_first` asks the PM to tag a few real items first, or to write their own CJM hypotheses, at four steps:
+  - feedback-triage Step 2;
+  - meeting-processor Discovery / Interview (Structured MoM);
+  - product-research interview synthesis;
+  - cjm-research before Step 7.
+
+  It then shows "Your tags vs mine" in the chat. The tags never change the artifact or set `human-validated`. `explain` shows a chat-only "How I got here" block. The default is `off`.
+- **`requirements/ai-feature-v1`.** It holds the behaviour spec, eval set (with origin classes), acceptable error rate, kill criteria and tracking plan, and is reached only by explicit AI words (AI / ШІ, LLM, ML model, GPT, chatbot, generative).
+  - AI-driven specs on other templates get the same sections, with `⚠️ TBD` cells that are never asked for.
+  - A one-line "not solution-shaped" note appears when the problem or outcome prescribes the solution.
+- **Spec readiness** (`artifact-style-gate.md`): six elements — outcomes, out of scope, constraints, prior decisions, breakdown, verification. task-creator reports `Spec readiness: n/6 — missing: …` and never blocks or asks.
+  - Tasks with a Definition of Done cite `AC-N`.
+  - An AI-driven spec gets a pre-selected "QA — Eval set" task option.
+- **Self-improvement guard, in full** (`self-improvement.md`, P5). A correction that only removes or softens one of the following is applied to this artifact only, noted in one chat line, and never proposed as a skill change:
+  - a pre-mortem, kill criteria, a minority report or a Skeptic objection;
+  - a hand-back line, a confidence line or an evidence label;
+  - a score, rank, verdict, theme or hypothesis moved to the PM's without new evidence ("agree more").
+
+  A footer or confidence line the user removed at review is not silently re-added. Not in the People contour; a mixed correction is split (its guarded part one-off, the rest the normal flow); a removed `assumed` / `simulated` label stays or its item is dropped (Gate 4b §6).
+- **Tests:**
+  - lint check 25 `judgment-binds` (Binds coverage plus stale forward markers) with two seeds, and check 23 tightened to a §1 / §2 citation with one more (26/26);
+  - output-evals `counter_argument` for every rubric and a full AI-feature rubric with fixture and gold; 10 rubrics of the changed skills run (11 runs, 0.85–1.00, all pass — Results log);
+  - test cases TC-jdg-390-* (TC-jdg-05 self-improvement included) and trigger-evals Group S;
+  - `host-smoke.sh` runs its Codex leg from a neutral directory, so a project-local `.codex/config.toml` cannot break it.
+
+### Changed
+
+- `pm-mental-model.md`:
+  - P4, P5, P6 and P8 act since v3.9.0.
+  - Their rule sentences now apply at the steps their *Binds* list, so Step 0j no longer reads them as instructions for every skill.
+  - P8 states the opt-in default.
+  - §5 lists the new outputs and the creation-step exceptions.
+- `local-context-protocol.md`: the `build_first` key (default `on`); bracket notes are ignored when switch values are read; Step 0j item 5.
+- `template-protocol.md`: step 3b is "Inserted sections" (role extras plus the pre-mortem, also without a template); step 3a never re-adds a footer the user removed.
+- `artifact-style-gate.md`: the Spec readiness section; Gate 4b exempts pre-mortem causes, kill rows, behaviour rules and eval-set expected outputs (hypothetical by nature).
+- `data-integrity-protocol.md`: the `spec-readiness` token points to the six elements; `human-validated` is never set by a PM-first tag.
+- Other shared references:
+  - `debate-protocol.md` — unresolved objections feed the pre-mortem; the minority report is guarded;
+  - `roadmap-artifacts.md` §1 and §8 — the quarter-plan section and onboard rules;
+  - `planning-core.md` §8 — the read-back and the places that never get a pre-mortem;
+  - `harness-map.md`;
+  - `vault-protocol.md` — SKILL_CONTEXT_MAP rows.
+- Configurator:
+  - `## Judgment` gains `Build first`; `Learning mode` acts.
+  - Basic records four defaults. Extended asks nothing new and shows both in its "Also set" line.
+  - `update config → Judgment` asks all four switches in one call.
+- Descriptions (routing): `requirements-creator` names "A/B test and AI-feature specs"; `quarterly-planning` gains "kill criteria / pre-mortem for the quarter plan" / «kill criteria для плану кварталу»; `product-research` gains "let me tag the first interviews myself, then synthesize". Live trigger evals on Claude Code: 16 of 17 groups ≥ 90 % (165 phrases), Group S 16/16; Group L 8/9 — the known L8 status-command row (explicit invocation only). Codex CLI not re-run this version (as since v3.1.0).
+- Skill versions:
+
+  | Skill | Version |
+  |---|---|
+  | `cjm-research` | 0.11.0 → 0.12.0 |
+  | `design-bridge` | 0.8.0 → 0.9.0 |
+  | `diagram-prototyper` | 0.14.0 → 0.15.0 |
+  | `feedback-triage` | 0.6.0 → 0.7.0 |
+  | `flow-walkthrough` | 0.6.0 → 0.6.1 |
+  | `meeting-processor` | 0.17.0 → 0.18.0 |
+  | `plugin-configurator` | 2.12.0 → 2.13.0 |
+  | `product-research` | 0.14.0 → 0.15.0 |
+  | `project-planning` | 0.5.0 → 0.6.0 |
+  | `quarterly-planning` | 0.7.0 → 0.8.0 |
+  | `release-manager` | 0.3.0 → 0.3.1 (patch: host-smoke wording — the Codex leg installs HEAD) |
+  | `requirements-creator` | 0.16.1 → 0.17.0 |
+  | `roadmap-architect` | 0.5.0 → 0.6.0 |
+  | `task-creator` | 0.14.1 → 0.15.0 |
+  | `template-library` | 0.3.2 → 0.3.3 |
+  | `write-concept` | 0.14.1 → 0.15.0 |
+
+  Templates: `partial/tracking-plan` 1.0.0 → 1.1.0.
+
+### Adaptations to the specification
+
+- `judgment.build_first` is a new switch with default `on`, added under P6. The specification's NFR-2 default set gains it.
+- The pre-mortem is a partial inserted at named steps, not a section of every template. Gate 4 gets no new part: its presence is checked at T-5 step 3b, by the output-eval criterion and by lint check 25.
+- P8 binds four skills. "Strategy framing" in P8's text has no implementing step yet.
+- `learning_mode: explain` is a chat-only block, not a reserved value.
+- Kill criteria are read back in the retro and replan (not in the specification) so they cannot become theatre.
+- No new shared reference. The P4 / P6 / P8 rules live in `judgment-points.md` §7–§9.
+- The specification's "provenance" output-eval criterion is `evidence_labels` plus `sources`.
+- Round-1 verification fixes: Step 0.5's new types (`walkthrough`, `ab-test-results`, `prototype`) never raise the context question on their own; a fired kill criterion never opens a decision-log offer on its own; one pre-mortem placement everywhere (no "before Kill criteria" clause); PRD kill rows render unless the decision rule has a kill branch with a threshold and a date; the build-first suppression cases spelled out; design-bridge Step 9 only after a build-first upstream or a standalone mid-fi / hi-fi prototype, and `return_to` only for the build-first hand-off; the judgment guard's scope (People contour excluded, a mixed correction split, `assumed` / `simulated` labels per Gate 4b); lint check 23 tightened, check 25's legacy-line skip removed, a new seed (26/26).
+
+### Programme complete — open items
+
+These stay outside the programme. Each would be a later MINOR or PATCH on request.
+- P8 for strategy framing.
+- Golds and fixtures for the two light rubrics (product-analysis analysis report, brainstorm-features) and for the quarter-plan pre-mortem.
+- A durable judgment log; today the guard line lives in the chat only.
+- `references/context-budget.md`, still planned.
+- Measured, not derived, ChatGPT and Codex-cloud host profiles.
+- A live Codex CLI trigger run (last run v3.0.0) — the three descriptions this release changed are routed on Claude Code only.
+- Two pre-existing output-eval notes: the built-in task template keeps its fixed Definition-of-Done items on every discipline task ("QA passed" on the QA task too), and write-concept Step 5 re-offers a red-team debate the request already declined.
+
+### Backwards compatibility
+
+- **With `build_first: off` and `learning_mode: off`** (the latter is the default), every skill asks exactly the v3.8.0 questions, except that `update config → Judgment` now asks all four switches in one call, and an AI-feature spec requested by name meets the usual template choice when a user-global requirements template exists. The build-first line is not a question either way. A judgment-guard correction is no longer offered as a skill improvement — one chat line instead (`self-improvement.md` Step 2).
+- **New for everyone:**
+  - a pre-mortem section in concepts (deselectable in the Step 1 block list), A/B and AI specs, quarter plans, and new mission and initiative pages or descriptions;
+  - kill-criteria read-backs in retros and replans;
+  - the spec-readiness line;
+  - `AC-N` ids in Definitions of Done instead of copied criterion text;
+  - a pre-selected eval-set QA task for AI-driven specs (drop it in the answer to skip; a QA row in task-format);
+  - AI-driven specs get the AI sections, AC-eval and the auto-selected `requirements/ai-feature` template; template-free specs get an Out of scope section; every spec gets the not-solution-shaped chat line and the matching Analyze & Improve advisory;
+  - the one-line guard notice on such corrections.
+- **Jira writes:** an `onboard` epic description that carries a pre-mortem is longer, so it may now meet the host write-gate prompt. Epics that task-creator creates get no pre-mortem.
+- **Unchanged:** automated runs never get the build-first line, the PM-first question or `explain`. Older `local-context.md` files without the new keys read the defaults, and any bracket note on a value is ignored.
+
+---
+
 ## v3.8.0 (2026-10-06)
 
 **Evidence classes.** Fifth release of the Judgment Core + Role Layer programme.

@@ -2,13 +2,27 @@
 
 # Grow Product Manager
 
-**Version:** 3.8.0
+**Version:** 3.9.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.9.0** — **Build first, a built-in opponent, learning modes — the Judgment Core + Role Layer programme is complete** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks).
+
+- **Build before you argue.** write-concept names a concept's riskiest assumption. When nothing proves it yet, one line in the brief summary offers the cheapest way to settle it: a lo-fi prototype shown to 3–5 real users, a walk of the current flow, or an eval set. `build_first: on`; it is a line, never a question.
+  - design-bridge offers a build-first prototype, or a standalone mid-fi or hi-fi one, as the spec for requirements-creator. A prototype never counts as validation.
+- **A built-in opponent.** Concepts, A/B and AI-feature specs, the quarter plan and new missions and initiatives carry a pre-mortem and kill criteria: 2–3 likely failure causes, each with an early signal, plus pre-committed conditions to stop.
+  - Unknown thresholds read `⚠️ TBD` and are never asked for.
+  - Retros and replans read earlier kill criteria back as fired, not fired or not measurable.
+- **AI features.** A new `requirements/ai-feature` template covers the behaviour spec, eval set, acceptable error rate, kill criteria and tracking plan. It is reached by explicit AI words, never by a bare "model".
+  - task-creator reports `Spec readiness: n/6` and proposes an eval-set QA task.
+- **Learning modes (opt-in).** `learning_mode: pm_first` asks you to tag a few real items first in feedback triage, interview minutes, interview synthesis and CJM hypotheses. You then see "Your tags vs mine"; your tags never change the artifact. `explain` shows how the skill got there.
+- **Self-improvement guard.** Removing a counter-argument, a confidence line or an evidence label applies to that artifact only. It is never learned as a rule.
+
+Templates 41 → 43. Lint check 25. host-smoke runs Codex from a neutral directory.
 
 **New in v3.8.0** — **Evidence classes: every number and quote says how it is known** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks).
 
@@ -99,7 +113,7 @@ The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed t
 
 ## Principles (since v3.4.0)
 
-The plugin amplifies the Product Manager's judgment instead of replacing it: drafting, searching, clustering and prototyping run without friction, and the plugin slows down only where a judgment is made. The contract is [`references/pm-mental-model.md`](references/pm-mental-model.md); every skill reads it at Step 0j. v3.4.0 publishes the contract; the mechanisms that enforce principles 2–10 arrive in v3.5.0–v3.9.0 — principles 2, 3 and 9 act since v3.7.0 through [`references/judgment-points.md`](references/judgment-points.md), and principles 1, 7 and 10 since v3.8.0 through the evidence classes and Gate Check 6 of [`references/data-integrity-protocol.md`](references/data-integrity-protocol.md).
+The plugin amplifies the Product Manager's judgment instead of replacing it: drafting, searching, clustering and prototyping run without friction, and the plugin slows down only where a judgment is made. The contract is [`references/pm-mental-model.md`](references/pm-mental-model.md); every skill reads it at Step 0j. v3.4.0 published the contract and v3.5.0–v3.9.0 shipped the mechanisms: principles 2, 3 and 9 act since v3.7.0 through [`references/judgment-points.md`](references/judgment-points.md); principles 1, 7 and 10 since v3.8.0 through the evidence classes and Gate Check 6 of [`references/data-integrity-protocol.md`](references/data-integrity-protocol.md); principles 4, 6 and 8 and the rest of 5 since v3.9.0 through the pre-mortem, the build-first offer and the learning modes of `judgment-points.md` §7–§9 and the guard of `references/self-improvement.md`. Three switches in `## Judgment` of `local-context.md` steer these steps: `hypothesis_first` (on), `build_first` (on), `learning_mode` (off).
 
 1. **Provenance by default** — every number, quote or "users want X" carries an evidence class and a source; unsourced means *assumed*.
 2. **Human hypothesis first** — at a scoring, ranking or verdict point the plugin asks for your estimate before showing its own.
@@ -108,7 +122,7 @@ The plugin amplifies the Product Manager's judgment instead of replacing it: dra
 5. **No sycophancy** — opposing evidence gets equal weight, and the plugin never learns to "agree more".
 6. **Build before you argue** — when a prototype, an eval or an experiment can settle a question, that path comes before a longer document.
 7. **Real users are evidence, synthetic users are rehearsal** — simulated personas are always labelled *simulated* and never presented as findings.
-8. **Learning-preserving modes** — for demanding synthesis the plugin offers a PM-first pass; delegating the whole synthesis is your explicit choice.
+8. **Learning-preserving modes** — for demanding synthesis you can switch on a PM-first pass (`learning_mode: pm_first`) or the skill's reasoning (`explain`); with the default `off` the plugin synthesises as before.
 9. **Decision ownership and hygiene** — a decision names its owner, the rejected alternatives, the evidence behind it and a revisit trigger; its quality is judged apart from its outcome.
 10. **Hand back at the frontier** — when a task needs tacit context, a customer conversation or a causal claim the data cannot support, the plugin says so and proposes the human step.
 
@@ -116,7 +130,7 @@ The plugin amplifies the Product Manager's judgment instead of replacing it: dra
 
 ## Roles (since v3.5.0)
 
-The plugin is used by more than IC Product Managers. A **role changes defaults, never capabilities**: every role gets the same 31 skills, the same gates and the same ten principles; the role sets where a run *starts* — its altitude, and from v3.6.0 its template, evidence emphasis and planning view. No role relaxes a gate, and no role becomes a persona prompt. The contract is [`references/role-profiles.md`](references/role-profiles.md); every skill resolves it at Step 0i.
+The plugin is used by more than IC Product Managers. A **role changes defaults, never capabilities**: every role gets the same 31 skills, the same gates and the same ten principles; the role sets where a run *starts* — its altitude, and since v3.6.0 its template, evidence emphasis and planning view. No role relaxes a gate, and no role becomes a persona prompt. The contract is [`references/role-profiles.md`](references/role-profiles.md); every skill resolves it at Step 0i.
 
 | Role | Home altitude | Starts with (quick wins) |
 |------|---------------|--------------------------|
@@ -137,7 +151,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.11.0)
+### 1. CJM Research (v0.12.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -171,7 +185,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 3. Product Research (v0.14.0)
+### 3. Product Research (v0.15.0)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -200,7 +214,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 5. Write Concept (v0.14.1)
+### 5. Write Concept (v0.15.0)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -210,7 +224,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 6. Requirements Creator (v0.16.1)
+### 6. Requirements Creator (v0.17.0)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -224,7 +238,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 7. Task Creator (v0.14.1)
+### 7. Task Creator (v0.15.0)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -238,7 +252,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 8. Diagram & Prototype Creator (v0.14.0)
+### 8. Diagram & Prototype Creator (v0.15.0)
 
 **Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
 
@@ -269,7 +283,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 9. Meeting Processor (v0.17.0)
+### 9. Meeting Processor (v0.18.0)
 
 **Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
 
@@ -303,7 +317,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.12.0)
+### 10. Plugin Configurator (v2.13.0)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -344,7 +358,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 12. Template Library (v0.3.2)
+### 12. Template Library (v0.3.3)
 
 **Description:** Manage a multilingual library of artifact templates (concepts, requirements, research, CJM, epics, tasks, meeting notes, presentations). Templates are stored in your Obsidian vault or custom folder, scoped per-product, and consumed automatically by other skills through the Step T — Template Resolution protocol.
 
@@ -354,13 +368,13 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 - Registry-backed resolution with scoring (scope, subtype, language, usage_count)
 - 11 actions: list, show, add, clone, update, delete, restore, import, export, validate, rebuild-registry
 - Three-tier backup: per-template archive, pack backups, manual backup/restore
-- Ships with 41 built-in templates in Ukrainian + English (9 original + 3 presentation templates (v1.10.0) + 5 ops-report templates (v1.14.0) + 7 People templates (v2.0.0) + 2 research templates (v3.1.0, v3.3.0) + the judgment-footer partial (v3.5.0) + 14 role-default templates and partials (v3.6.0))
+- Ships with 43 built-in templates in Ukrainian + English (9 original + 3 presentation templates (v1.10.0) + 5 ops-report templates (v1.14.0) + 7 People templates (v2.0.0) + 2 research templates (v3.1.0, v3.3.0) + the judgment-footer partial (v3.5.0) + 14 role-default templates and partials (v3.6.0) + the AI-feature template and the pre-mortem partial (v3.9.0))
 
 **Trigger phrases:** "manage templates", "add template", "list templates", "template library", "clone template", "import templates", "restore template"
 
 ---
 
-### 13. Design Bridge (v0.8.0) — brand-agnostic since v1.11.0
+### 13. Design Bridge (v0.9.0) — brand-agnostic since v1.11.0
 
 **Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into brand-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
 
@@ -403,7 +417,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 15. Roadmap Architect (v0.5.0) — Planning Suite
+### 15. Roadmap Architect (v0.6.0) — Planning Suite
 
 **Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree.
 
@@ -413,7 +427,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 16. Project Planning (v0.5.0) — Planning Suite
+### 16. Project Planning (v0.6.0) — Planning Suite
 
 **Description:** Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph with critical path, computes duration under a given team allocation %, and lays out a multi-quarter roadmap with rolling-reforecast.
 
@@ -423,7 +437,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 17. Quarterly Planning (v0.7.0) — Planning Suite
+### 17. Quarterly Planning (v0.8.0) — Planning Suite
 
 **Description:** Builds a quarterly roadmap, reviews the previous quarter's delivery (plan-vs-actual), and stress-tests the plan against team capacity.
 
@@ -445,7 +459,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 19. Release Manager (v0.3.0) — NEW in v1.28.0
+### 19. Release Manager (v0.3.1) — NEW in v1.28.0
 
 **Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
 
@@ -491,7 +505,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 23. Feedback Triage (v0.6.0) — NEW in v1.36.0
+### 23. Feedback Triage (v0.7.0) — NEW in v1.36.0
 
 **Description:** Turns a raw feedback stream (support tickets, complaints, reviews, Q&A, NPS verbatims) into a ranked pain map: semantic theme clustering, `frequency × severity × trend` scoring, new/growing/declining theme detection against the previous run's baseline, and hypothesis seeds for brainstorm-features. Feedback text never leaves the session; PII is masked in verbatims.
 
@@ -547,7 +561,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 ---
 
-### 30. Flow Walkthrough (v0.6.0) — NEW in v3.1.0
+### 30. Flow Walkthrough (v0.6.1) — NEW in v3.1.0
 
 **Description:** Walks a customer flow in the **real product** — web, desktop, an iPhone app on an Apple Silicon Mac (installed from the Mac App Store), Android via adb — step by step with a screenshot per step, friction graded per step, a local evidence pack and a `research/walkthrough` report with a flow strip. Modes: `setup` (readiness table + guided install + smoke test), `walk`, `compare` (surfaces or competitors, read-only there), `audit`. Everything about *how* to drive lives in `references/app-drive-protocol.md` (capability APP-DRIVE, driver table, preflight, step cycle, safety, degradation to a user-driven variant). Chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper; called by cjm-research, product-research and requirements-creator.
 
@@ -569,31 +583,31 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.11.0 | Customer Journey Map analysis and hypothesis validation |
+| CJM Research | v0.12.0 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.17.0 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.14.0 | Competitive analysis, user research, market trends, UX benchmarking |
+| Product Research | v0.15.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.0 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
-| Write Concept | v0.14.1 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.16.1 | Create and analyze feature requirements |
-| Task Creator | v0.14.1 | Create Jira tasks from requirements |
-| Diagram & Prototype Creator | v0.14.0 | Visualize concepts with diagrams, prototypes, infographics |
-| Flow Walkthrough | v0.6.0 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
+| Write Concept | v0.15.0 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.17.0 | Create and analyze feature requirements |
+| Task Creator | v0.15.0 | Create Jira tasks from requirements |
+| Diagram & Prototype Creator | v0.15.0 | Visualize concepts with diagrams, prototypes, infographics |
+| Flow Walkthrough | v0.6.1 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.0 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
-| Meeting Processor | v0.17.0 | Process meetings and extract action items |
-| Plugin Configurator | v2.12.0 | Configure plugin for your organization |
+| Meeting Processor | v0.18.0 | Process meetings and extract action items |
+| Plugin Configurator | v2.13.0 | Configure plugin for your organization |
 | Knowledge Library | v0.9.0 | Manage curated knowledge sources |
-| Template Library | v0.3.2 | Manage multilingual artifact templates with per-product scope |
-| Design Bridge | v0.8.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
+| Template Library | v0.3.3 | Manage multilingual artifact templates with per-product scope |
+| Design Bridge | v0.9.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Product Reporter | v0.10.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
-| Roadmap Architect | v0.5.0 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
-| Project Planning | v0.5.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
-| Quarterly Planning | v0.7.0 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
+| Roadmap Architect | v0.6.0 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
+| Project Planning | v0.6.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
+| Quarterly Planning | v0.8.0 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.0 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
-| Release Manager | v0.3.0 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
+| Release Manager | v0.3.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 | Focus Advisor | v0.9.1 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.0 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.0 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
-| Feedback Triage | v0.6.0 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
+| Feedback Triage | v0.7.0 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
 | Goal Setter | v0.2.0 | Set/audit goals — SMARTCBP (people) / OKR (product), cascade, Tell-and-Sell commitment |
 | One-on-One | v0.2.0 | Prepare & analyze 1-1s — agenda from profile, signals + ARCV follow-up, coverage headless |
 | Performance Review | v0.2.0 | Review a person on goals + GTD-index + D-type, into the employer's review template |
@@ -716,13 +730,14 @@ variables: [feature_name, problem_statement, ...]
 <!-- Add additional languages as needed, e.g. <!-- lang:es --> ... <!-- /lang:es --> -->
 ```
 
-### Built-in templates (shipped in v1.9.0–v3.6.0)
+### Built-in templates (shipped in v1.9.0–v3.9.0)
 
-41 seed templates; localize via additional `<!-- lang:xx -->` blocks:
+43 seed templates; localize via additional `<!-- lang:xx -->` blocks:
 
 - `concept/default-v1` — PRD skeleton
 - `requirements/default-v1` — general feature requirements
 - `requirements/ab-test-v1` — A/B test spec
+- `requirements/ai-feature-v1` — AI-driven feature: behaviour spec, eval set, acceptable error rate, kill criteria, tracking plan (**new in v3.9.0**)
 - `research/competitive-v1` — competitive analysis + SWOT
 - `research/user-research-v1` — user research synthesis
 - `research/walkthrough-v1` — flow walkthrough report: step table, flow strip, friction, comparison (**new in v3.1.0**)
@@ -747,6 +762,7 @@ variables: [feature_name, problem_statement, ...]
 - `performance-review/default-v1` — structured performance review (**new in v2.0.0**)
 - `offboarding-plan/default-v1` — four-meeting offboarding plan (**new in v2.0.0**)
 - `partial/judgment-footer-v1` — the altitude line that closes every Product-contour artifact (**new in v3.5.0**), with the confidence-and-falsifier line above it where `judgment-points.md` §1 names one (**v3.7.0**)
+- `partial/pre-mortem-v1` — pre-mortem and kill criteria, inserted by T-5 step 3b at the steps `judgment-points.md` §7 lists (**new in v3.9.0**)
 - `concept/design-brief-v1` — problem-space brief for designers: JTBD, segments, constraints, success metric, out of scope (**new in v3.6.0**)
 - `concept/strategy-memo-v1` — bets, proxy metrics, what we stop, kill criteria, base rates (**new in v3.6.0**)
 - `concept/decision-memo-v1` — options with rejected alternatives, evidence, the ask, owner, revisit trigger (**new in v3.6.0**)
@@ -932,11 +948,11 @@ Two validators gate every push and PR (`.github/workflows/validate.yml`), and a 
 
 ```bash
 bash testing/validate-consistency.sh   # 15 checks: versions, frontmatter, paths, components, hooks, cross-host packaging (agent ↔ Codex port), thin core
-python3 testing/skill_lint.py          # 24 named checks
-bash testing/host-smoke.sh             # loads the tree on Claude Code AND Codex CLI — release blocker, run locally
+python3 testing/skill_lint.py          # 25 named checks
+bash testing/host-smoke.sh             # loads the tree on Claude Code AND its HEAD on Codex CLI — release blocker, run locally after the commit
 ```
 
-Every check exists because the defect class it catches actually shipped, and each is verified by injecting that defect into a repo copy. `testing/trigger-evals.md` is run on **both** hosts before a description-touching release (`codex exec` and `claude -p --plugin-dir`, single-line prompts, scored on the host's real configuration); `testing/host-matrix.md` is the skill × host result. When you find a new defect class, **add a check — never a manual step** (see `testing/Testing-process.md`).
+Every check exists because the defect class it catches actually shipped, and each is verified by injecting that defect into a repo copy. `testing/trigger-evals.md` is meant to run on **both** hosts before a description-touching release (`codex exec` and `claude -p --plugin-dir`, single-line prompts, scored on the host's real configuration); a host not re-run is named in the CHANGELOG (Codex CLI since v3.1.0); `testing/host-matrix.md` is the skill × host result. When you find a new defect class, **add a check — never a manual step** (see `testing/Testing-process.md`).
 
 ### One-time local setup: `testing/org-tokens.local`
 
@@ -1006,5 +1022,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.8.0  
+**Version:** 3.9.0  
 **Last Updated:** September 2026
