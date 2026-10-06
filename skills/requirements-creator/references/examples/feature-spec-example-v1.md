@@ -2,7 +2,8 @@
      Purpose: a worked, high-quality feature-spec (with an A/B variant) the skill can pattern-match against (few-shot Examples context type).
      Generic/anonymized — NO org-specific data. Also used as a fixture for testing/output-evals.md (requirements-creator rubric).
      Illustrates rigor and shape, not a rigid template — real structure comes from requirements-template.md + the chosen template.
-     Continues the "Save for later" example from skills/write-concept/references/examples/prd-example-v1.md to show concept → requirements flow. -->
+     Continues the "Save for later" example from skills/write-concept/references/examples/prd-example-v1.md to show concept → requirements flow.
+     Since v3.9.0 it also shows the A/B pre-mortem (references/judgment-points.md §7): test-validity causes, each with a pre-launch check, and kill criteria as a pointer to the decision rule. -->
 
 # Feature Requirements: Save-for-later (Phase 1 MVP) — A/B test
 
@@ -61,6 +62,17 @@ Guest persistence, price-drop alerts, seller-side saves signal, wishlist sharing
 ## Open Questions
 - Snapshot vs. live price/availability on the saved list?
 - Cap on saved-list size?
+
+## Pre-mortem
+It is the end of the 30-day return window and this did not work. Most likely why:
+
+| Why it failed | Early signal | What we do now |
+|---------------|--------------|----------------|
+| Save events did not fire on one platform, so the primary metric undercounted savers (rests on: Analytics / Events) | `save_click` count off the backend saved-list count in QA | Event QA of all four events against the backend before launch |
+| Cannibalization hid inside the guardrail: add-to-cart moved into "Saved" and the 0.5% tolerance was too loose to see it at 50/50 (rests on: the guardrail) | add-to-cart rate in B drifting down in week 1 | Confirm before launch that a 0.5% drop is detectable at this traffic in 30 days |
+| Novelty: first-week saves inflated return-to-purchase, then faded (rests on: the 30-day window) | saves per user in week 2 well below week 1 | Read the primary metric by week, not only cumulatively |
+
+Kill criteria: see **Success Metrics & Decision Rule** above.
 
 ## Sources
 - Concept PRD (write-concept exemplar) · Product Analysis (exit/return figures — to be run, none yet)

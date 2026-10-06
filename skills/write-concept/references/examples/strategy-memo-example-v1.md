@@ -11,6 +11,9 @@
      press release is a named third-party source cited in the brief, so it is `external`, via Person1; the industry report is unnamed, so
      `reported`. Targets, kill thresholds, investments and the finance-model returns are forward-looking and carry no class; base rates keep
      the class of their source.
+     Pre-mortem (since v3.9.0, P4): this template has no Risks section, so template-protocol T-5 step 3b places the block last, above the
+     footer; the memo already has Kill criteria, so the block points there instead of a second table. Causes carry no evidence class; the
+     base rates they cite keep theirs.
      A real run appends the template marker after the altitude line (template-protocol T-5 step 5); it is left out here. -->
 
 # Strategy memo: Product 1 beyond the core marketplace
@@ -97,5 +100,17 @@ Fixed in this memo, before the first reading arrives.
 - Ads, logistics and support-desk data — 2026-07-01 – 2026-09-30.
 - Internal portfolio review (2025-12); logistics review (2025-12); logistics finance review (2026-08).
 - Board approval of O1 2027 — 2026-09-15.
+
+## Pre-mortem
+
+It is 2027-12-31 and this did not work. Most likely why:
+
+| Why it failed | Early signal | What we do now |
+|---------------|--------------|----------------|
+| Self-serve ads stalled well short of 15% of active sellers — the outside view (Base rates, bet 1: 2 of 6) was a better forecast than the finance model | The share of active sellers buying ads is still near the 8.8% baseline at the 2027-03 monthly review | Keep the 2027-06-30 kill date; prepare the managed-ads-only fallback now |
+| The pilot's team came out of the four other teams for two quarters (Trade-offs), core work slipped, and no base rate warned us (Base rates, bet 3: none known) | Core roadmap items slip in 2027-Q1 while company buyers with 2 or more orders stay far below 100 | Take the first reading at pilot start, 2027-01, as planned; hold the 2027-03-31 kill date |
+| Integrated delivery reached its order share but not the margin — the benefit was modelled in support contacts, not revenue, against ≈ 0.4 M per year of fees (Trade-offs), on a base rate of n = 3 | The integrated-carrier share rises while "where is my order" contacts per order do not fall | Track contacts per order next to the carrier share in the monthly review |
+
+Kill criteria: see **Kill criteria** above.
 
 Altitude: L4 · ↑ serves: O1 2027 "Reach contribution-margin break-even for Product 1 by the end of 2027" · ↓ next: record the two stops in decision-log, then carry the three bets and their kill dates into the 2027-H1 plan (quarterly-planning)

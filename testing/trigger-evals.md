@@ -257,6 +257,29 @@ Collisions: a hat or a role word must never move routing — the skill is chosen
 | R19 | стратегічний меморандум по продукту на рік: ставки і що зупиняємо | write-concept (subtype strategy-memo, v3.6.0) |
 | R20 | на чому фокусуватись у кварталі | focus-advisor — the attention memo, not write-concept's strategy memo |
 
+### Group S — Build, opponent, learning (added 2026-10-06, v3.9.0)
+
+Collisions: v3.9.0 changes three `description`s (requirements-creator names AI-feature specs; product-research and quarterly-planning gained the S14 / S15 phrases after the first pass), and its judgment steps (`references/judgment-points.md` §7–§9) bring new words into requests — pre-mortem, kill criteria, eval set, build first, `pm_first` — and none of them may move routing; the task does. A pre-mortem is a concept section (write-concept) while a role debate is brainstorm-features Debate mode; an AI-feature spec with its eval set and tracking plan is requirements-creator, not write-concept or product-analysis; the Spec readiness line comes with task breakdown (task-creator), while a spec check stays requirements-creator Analyze & Improve (F4 and N8 hold); a prototype routes by the descriptions — hi-fi or a Design System is design-bridge, a prototype with no DS named is diagram-prototyper (B5); setting `learning_mode` or `build_first` is plugin-configurator, while "let me tag first" goes to the skill that synthesises; kill criteria for a quarter, and reading them back, are quarterly-planning. An "or" row is ambiguous by the descriptions and accepts either skill.
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| S1 | додай у концепт збережених пошуків pre-mortem і kill criteria | write-concept |
+| S2 | run a pre-mortem on the saved-searches concept | write-concept or brainstorm-features (Debate mode) — no description names a pre-mortem; write-concept renders it as a concept section, Debate mode red-teams the concept |
+| S3 | проведи дебати ролей щодо концепту збережених пошуків — нехай Скептик його розіб'є | brainstorm-features (Debate mode) |
+| S4 | напиши вимоги до AI-фічі підказок відповідей для продавців з eval set і допустимим рівнем помилок | requirements-creator |
+| S5 | AI feature spec for the support chatbot: eval set, kill criteria, tracking plan | requirements-creator — NOT write-concept, NOT product-analysis (the tracking plan is a spec section) |
+| S6 | write a concept for an AI shopping assistant — problem, value, success metrics | write-concept — AI words do not move a concept to requirements-creator |
+| S7 | чи готова специфікація до розбивки на задачі? | task-creator or requirements-creator — a readiness question reads as a spec check ("check my spec") and as the start of a breakdown |
+| S8 | break this spec into Jira tasks and flag what it is missing for readiness | task-creator |
+| S9 | перевір мою специфікацію на повноту, перш ніж розбивати на задачі | requirements-creator (Analyze & Improve — F4 and N8 hold) |
+| S10 | спершу прототип для ризикованого припущення концепту | diagram-prototyper or design-bridge — no DS named reads as diagram-prototyper (B5); design-bridge, the next step after write-concept and the build-first path, is also correct |
+| S11 | build first: a hi-fi prototype on our Design System to test the riskiest assumption | design-bridge |
+| S12 | увімкни режим навчання pm_first | plugin-configurator |
+| S13 | вимкни build first у налаштуваннях плагіна | plugin-configurator — NOT write-concept or design-bridge |
+| S14 | let me tag the first interviews myself, then synthesize them | product-research |
+| S15 | set kill criteria for the quarter in our Q4 plan | quarterly-planning — NOT goal-setter |
+| S16 | чи спрацювали kill criteria з плану минулого кварталу | quarterly-planning (retro) — NOT product-reporter |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -275,6 +298,7 @@ Collisions: a hat or a role word must never move routing — the skill is chosen
 | 2026-09-29 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`), pre-release v3.6.0 — all 146 phrases once (misses and rate-limited rows re-run 3×, majority), then Groups B, C, F, G, J, R again after the description fixes | A 8/8 · B 9/9 · C 9/9 · D 4/4 · E 5/5 · F 4/4 · G 10/10 · H 14/14 · I 8/8 · J 9/9 · K 13/13 · L 9/9 · M 8/8 · **N 9/9** · O 8/8 · **R 19/20** | New rows R15 «дизайн-бриф …» → design-bridge, R19 «стратегічний меморандум …» → none, R20 «на чому фокусуватись у кварталі» → quarterly-planning on the first run: write-concept's description gained «дизайн-бриф», «стратегічний меморандум», «мемо рішення», «бізнес-кейс» and the EN forms, focus-advisor's gained «фокус кварталу» / «на чому фокусуватись у кварталі», product-reporter's «QBR», «звіт для борду», "board update" → 3/3 each; neighbours held (quarterly roadmap, decks). **N8** reworded to an unambiguous spec-review phrase (3/3 requirements-creator) and the original wording kept as **N9** accepting either skill — "my test-accounts specification" reads as the configured accounts. R4 is the known weak "wear the … hat" idiom. Seven first-run rows were API rate-limit errors, re-run clean. |
 | 2026-09-29 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`), pre-release v3.7.0 — Groups A, G, H, I once (42 phrases) | A 8/8 · G 10/10 · H 16/16 · I 8/8 | None. v3.7.0 changes no description; the new H15–H16 (revisit / "good call or lucky?") route to decision-log, so the resulting check needs no new mode (D25). |
 | 2026-10-06 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`), pre-release v3.8.0 — Groups A, B, E, G, H, I, M, O once (72 phrases) | A 8/8 · B 9/9 · E 5/5 · G 10/10 · H 16/16 · I 8/8 · M 8/8 · O 8/8 | None. v3.8.0 changes no description; the regression covers the groups whose skills gained evidence-class steps (design-bridge, diagram-prototyper, flow-walkthrough, product-landscape, knowledge-library). Runner note: a phrase with an apostrophe («рев'ю») breaks an `xargs` driver — use a Python driver. |
+| 2026-10-06 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, run from a neutral directory, Python driver), pre-release v3.9.0 — all 165 phrases once, misses re-run 3× (majority), then Groups C, E, G, H, J, S again after two description fixes | A 8/8 · B 9/9 · C 9/9 · D 4/4 · E 5/5 · F 4/4 · G 10/10 · H 16/16 · I 8/8 · J 9/9 · K 13/13 · L 8/9 · M 8/8 · N 9/9 · O 8/8 · R 20/20 · S 16/16 | S14 «tag the first interviews myself, then synthesize» → none 3/3 and S15 "kill criteria for the quarter in our Q4 plan" → goal-setter 3/3 on the first pass: product-research and quarterly-planning descriptions gained those phrases; after the fix S14 3/3, S15 3/3 and C/E/G/H/J/S unchanged. L8 is the known `status` command row (explicit invocation only). N7 2/3 by majority (pre-existing). |
 | (fill after each run) | | | |
 
 ## Maintenance

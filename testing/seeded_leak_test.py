@@ -9,17 +9,20 @@ the expected check tag. The org-leak seeds are real defect classes that shipped 
 see CHANGELOG v2.4.1 and `Testing-process.md` — rewritten with a fictional org
 ("Zorg", "ZORG") so no real identifier enters the repository. The role-layer
 seeds (checks 19-22, JCRL v3.5.0), the judgment-points seeds (check 23,
-v3.7.0) and the evidence-class seeds (check 24, v3.8.0) are preventive: their
-classes have not shipped.
+v3.7.0 and v3.9.0), the evidence-class seeds (check 24, v3.8.0) and the judgment-binds
+seeds (check 25, v3.9.0) are preventive: their classes have not shipped.
 
 Usage: python3 testing/seeded_leak_test.py [PLUGIN_ROOT]   (default: repo root)
 Exit 0 = every seeded defect was caught; exit 1 = at least one slipped through.
 Run it after touching skill_lint.py, and as part of the release DoD.
 """
-import os, re, shutil, subprocess, sys, tempfile
+import json, os, re, shutil, subprocess, sys, tempfile
 
 root = os.path.abspath(sys.argv[1] if len(sys.argv) > 1
                        else os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+# check 25 dates forward markers against plugin.json, so its marker seed names this version
+PLUGIN_VERSION = json.load(open(os.path.join(root, ".claude-plugin", "plugin.json"),
+                                encoding="utf-8"))["version"]
 
 # (name, target file, mode, payload, expected check tag)
 #   mode "append"  — payload is a line added at the end of the file (the original
@@ -97,9 +100,17 @@ SEEDS = [
      (re.escape("`eng_lead` · "), ""),
      "role-enum"),
     # v3.7.0: judgment-points.md §1 is the complete list of P2 / confidence-line steps.
+    # sprint-planning, not roadmap-architect: since v3.9.0 roadmap-architect cites §7
+    # (Step 4b), so swapping it in was caught only by the reverse rule, not this one.
     ("judgment: a §1 row names a skill that never cites judgment-points.md",
      "references/judgment-points.md", "replace",
-     (re.escape("| `quarterly-planning` · "), "| `roadmap-architect` · "),
+     (re.escape("| `quarterly-planning` · "), "| `sprint-planning` · "),
+     "judgment-points"),
+    # v3.9.0: quarterly-planning also cites §7 (the Step 2 read-back, the scope-lock
+    # pre-mortem), so a bare "cites judgment-points.md" test passed without its §1 step.
+    ("judgment: a §1 skill loses its §1/§2 citation but still cites §7",
+     "skills/quarterly-planning/SKILL.md", "remove-all",
+     r"judgment-points\.md`?[^\n]*?§\s*[12](?!\d)",
      "judgment-points"),
     ("judgment: a P2 question outside the §1 list",
      "skills/write-concept/SKILL.md", "append",
@@ -127,6 +138,18 @@ SEEDS = [
      "skills/product-analysis/SKILL.md", "append",
      "- Every loaded source passes the 5 universal gate checks before Step 2.",
      "evidence-classes"),
+    # v3.9.0: judgment-points.md §7–§9 implement P4 / P6 / P8, and pm-mental-model.md
+    # names their steps in the Binds; check 25 guards the binds and the forward markers.
+    ("binds: a §7 skill loses its judgment-points §7 citation",
+     "skills/quarterly-planning/SKILL.md", "remove-all",
+     r"judgment-points.*§\s*7(?!\d)|§\s*7(?!\d).*judgment-points",
+     "judgment-binds"),
+    # The marker names the current plugin version, so the seed proves the rule before and
+    # after the release bump; at v3.9.0 it restores the pre-release P6 text verbatim.
+    ("binds: a stale 'from vX.Y.Z' marker reintroduced at the shipped version",
+     "references/pm-mental-model.md", "replace",
+     (re.escape("Binds (since v3.9.0)"), f"Binds (from v{PLUGIN_VERSION})"),
+     "judgment-binds"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare
