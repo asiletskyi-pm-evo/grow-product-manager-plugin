@@ -13,6 +13,11 @@ FAIL=0; err() { echo "FAIL: $*"; FAIL=1; }; ok() { echo "ok:   $*"; }
 CLAUDE=${CLAUDE_BIN:-$(command -v claude || echo "$HOME/.local/bin/claude")}
 N_SKILLS=$(ls -d skills/*/ | wc -l | tr -d ' '); N_CMDS=$(ls commands/*.md 2>/dev/null | wc -l | tr -d ' ')
 VER=$(python3 -c 'import json;print(json.load(open(".claude-plugin/plugin.json"))["version"])')
+CODEX_DIR=${CODEX_HOME:-$HOME/.codex}
+# temp dirs go on any exit, Ctrl-C included (the per-leg rm -rf below covers only a clean run)
+TMP=""; STAGE=""; NEUTRAL=""
+cleanup() { rm -rf ${TMP:+"$TMP"} ${STAGE:+"$STAGE"} ${NEUTRAL:+"$NEUTRAL"}; }
+trap cleanup EXIT; trap 'exit 130' INT TERM
 
 echo "== static =="
 bash testing/validate-consistency.sh >/dev/null 2>&1 && ok "validate-consistency.sh" || err "validate-consistency.sh is red — run it for details"
@@ -49,14 +54,21 @@ if [ "${SKIP_CODEX:-0}" != "1" ]; then
   echo "== Codex CLI =="
   if command -v codex >/dev/null; then
     STAGE=$(mktemp -d); MKT="grow-pm-smoke-$$"
+    # Every codex call runs from an empty directory, as the Claude leg runs from $TMP:
+    # Codex merges a project-local .codex/config.toml from its cwd into its config, and
+    # a local one in the repo root (untracked, the user's own) can break the config load
+    # — the v3.8.0 release run failed on exactly that, and passed from a neutral dir.
+    # Not a temp CODEX_HOME: it would drop the login (the cache read below follows yours).
+    NEUTRAL=$(mktemp -d); cx() { (cd "$NEUTRAL" && codex "$@"); }
     git archive HEAD | tar -x -C "$STAGE"
     python3 - "$STAGE" "$MKT" <<'PY'
 import json,collections,pathlib,sys
 p=pathlib.Path(sys.argv[1])/".claude-plugin/marketplace.json"; d=json.loads(p.read_text(),object_pairs_hook=collections.OrderedDict); d["name"]=sys.argv[2]; p.write_text(json.dumps(d,indent=2,ensure_ascii=False)+"\n")
 PY
-    codex plugin marketplace add "$STAGE" >/dev/null 2>&1 || err "codex plugin marketplace add failed"
-    codex plugin add "grow-product-manager@$MKT" >/dev/null 2>&1 || err "codex plugin add failed (marketplace source form?)"
-    ENTRIES=$(codex debug prompt-input 2>/dev/null | python3 -c "
+    cx plugin marketplace add "$STAGE" >/dev/null 2>&1 || err "codex plugin marketplace add failed"
+    cx plugin add "grow-product-manager@$MKT" >/dev/null 2>&1 || err "codex plugin add failed (marketplace source form?)"
+    git diff --quiet HEAD -- . || echo "note: the Codex leg installs HEAD — uncommitted changes are not in it"
+    ENTRIES=$(cx debug prompt-input 2>/dev/null | python3 -c "
 import sys,json,re
 d=json.load(sys.stdin); t=''.join(c.get('text','') for m in d for c in m.get('content',[]))
 roots={m.group(1):m.group(2) for m in re.finditer(r'- \`(r\d+)\` = \`([^\`]+)\`', t)}
@@ -67,10 +79,10 @@ for l in t.splitlines():
 print(n)")
     EXP=$((N_SKILLS + N_CMDS))
     [ "${ENTRIES:-0}" = "$EXP" ] && ok "Codex lists $ENTRIES entries ($N_SKILLS skills + $N_CMDS migrated commands)" || err "Codex lists ${ENTRIES:-0} entries, expected $EXP"
-    C=$(ls -d "$HOME/.codex/plugins/cache/$MKT/grow-product-manager/"*/ 2>/dev/null | head -1)
+    C=$(ls -d "$CODEX_DIR/plugins/cache/$MKT/grow-product-manager/"*/ 2>/dev/null | head -1)
     [ -n "$C" ] && [ -d "$C/references" ] && ok "Codex cache carries references/ (shared protocols reachable)" || err "Codex cache lacks references/"
     [ -n "$C" ] && [ -f "$C/.codex-plugin/plugin.json" ] && ok "Codex manifest present in cache" || err ".codex-plugin/plugin.json missing in the Codex cache"
-    codex plugin remove "grow-product-manager@$MKT" >/dev/null 2>&1; codex plugin marketplace remove "$MKT" >/dev/null 2>&1; rm -rf "$HOME/.codex/plugins/cache/$MKT" "$STAGE"
+    cx plugin remove "grow-product-manager@$MKT" >/dev/null 2>&1; cx plugin marketplace remove "$MKT" >/dev/null 2>&1; rm -rf "$CODEX_DIR/plugins/cache/$MKT" "$STAGE" "$NEUTRAL"
   else
     err "codex is not installed here (SKIP_CODEX=1 to skip)"
   fi

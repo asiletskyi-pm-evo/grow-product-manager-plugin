@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.17.0
+version: 0.18.0
 description: Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «action items», «розбери транскрипт зустрічі», «що обговорювали». EN — "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or any pasted/uploaded transcript. Sources — Fireflies, other meeting tools via MCP, files, pasted text. Chains to task-creator, requirements-creator, product-research, brainstorm-features and decision-log.
 ---
 
@@ -208,6 +208,8 @@ Ask the user via AskUserQuestion:
 
 Recommend a format based on the meeting type, but let the user choose.
 
+**PM-first pass (since v3.9.0)** (`references/judgment-points.md` §9): in Process mode, for a meeting M3 confirmed as Discovery / Interview, with a verbatim transcript and Structured MoM chosen here — under `judgment.learning_mode` `pm_first`, one free-text message after this choice shows 5 interviewee excerpts for the PM to tag before M5; under `explain`, nothing is asked. Never for Short summary, the "just a quick summary" escape hatch, Search mode, a 1-1 or a run with no user present. The excerpt rule (never from `fireflies_get_summary`; one notice line when only a summary or notes exist), the tags and the comparison: `references/meeting-type-blocks.md` → PM-first pass — read it here, before M5.
+
 ### M5 — Extract and structure content
 
 Analyze the transcript (or summary + transcript) to extract structured information.
@@ -249,7 +251,7 @@ Analyze the transcript (or summary + transcript) to extract structured informati
 
 Add the blocks specific to each type confirmed at M3: Grooming / Planning (estimates, priorities, assignments, blockers, sprint scope), Discovery / Interview (insights, quotes, pain points, needs / JTBD, opportunities), Demo / Retro (feature feedback, what went well / wrong, improvement proposals), Status / Agreements (progress, agreements, risks, blockers, deadlines), Brainstorm (ideas, evaluation, selected ideas, next steps).
 
-The full per-type block tables — what to extract for each block — live in `references/meeting-type-blocks.md` (skill-local). Read it at M5 for every type the meeting was classified as.
+The full per-type block tables — what to extract for each block — live in `references/meeting-type-blocks.md` (skill-local). Read it at M5 for every type the meeting was classified as. M5b extracts on the transcript's own words: PM-first tags change no block.
 
 ### M6 — Generate output
 
@@ -268,6 +270,7 @@ Generate a concise summary (3-5 sentences) covering:
 
 ### M7 — Review with user
 
+Under `pm_first` (after an answer) or `explain`, the "Your tags vs mine" or "How I got here" chat block (`references/meeting-type-blocks.md` → PM-first pass) comes first — never in the MoM; a correction it prompts goes through this review.
 > "Here are the meeting notes. Please review — are there any corrections or additions?"
 
 - If the user requests changes — apply corrections and re-present
@@ -330,7 +333,7 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.17.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.18.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
 2. Key decisions from the meeting may additionally be recorded as ADR-style records — offer, don't force: "The meeting produced N decisions. Log them in the decision log so the 'why' survives?" → invoke `decision-log` (log mode) once for the chosen decisions — one record per decision, and decision-log's own confidence question once for the whole batch (since v3.7.0) — passing per decision the decision-log row of `references/chaining.md`: what was decided, the context and options discussed, who decided, a link back to these notes, and the v3.7.0 fields only when said in the meeting, plus `evidence_classes` since v3.8.0. decision-log owns the `decision` artifact; do not hand-write `Decisions/` files here.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 

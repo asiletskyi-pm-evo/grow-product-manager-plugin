@@ -119,7 +119,8 @@ Copy all current files to backup. Keep last 3 backups (delete oldest if exceeds)
    - Role missing → ask the group and the role of onboarding Step 4a (no scope question here — `set role` adds it), same single confirmation budget.
    - Entry was `set role` / «змінити роль» → skip both role questions here (Step 4a asks next); only add `Level home` and the `## Judgment` defaults.
    - Role already an enum value → no question; only add a missing `Level home`.
-   - `## Judgment` absent → add it after `## User Profile` with the defaults (`hypothesis_first: on`, `learning_mode: off`, `hats_allowed: all`; format — `references/context-schema.md` → Judgment), no question.
+   - `## Judgment` absent → add it after `## User Profile` with the defaults (`hypothesis_first: on`, `learning_mode: off`, `hats_allowed: all`, `build_first: on`; format — `references/context-schema.md` → Judgment), no question.
+   - `## Judgment` present without `Build first` (since v3.9.0) → add `- **Build first:** on` as its last line, no question; existing values, including a trailing note in brackets, are left as they are (they read without the note).
 5. Update `> Configurator version:` line
 6. Update `.schema-version`
 7. Show migration changelog to user:
@@ -181,7 +182,7 @@ Read the current `local-context.md`. Parse all sections.
 
 Present current sections as options via AskUserQuestion:
 - User Profile (incl. role and scope)
-- Judgment (hats allowed; hypothesis-first and learning-mode switches)
+- Judgment (hats allowed; hypothesis-first, learning-mode and build-first switches)
 - Organization: [Name] (for each org)
 - Product: [Name] (for each product)
 - Add new product
@@ -211,7 +212,7 @@ Follow the same collection flow as Onboarding for the selected section. Pre-fill
 - The role can be changed at any time — run onboarding Step 4a (the two-level picker; an explicit request re-asks even when Role already holds an enum value), recompute `Level home` from `references/role-profiles.md` §2b, keep the user's own wording as `Role label`, and show the changelog row `User Profile → Role | was | became`.
 
 **For Judgment updates:**
-- Run onboarding Step 4b as in Extended; `learning_mode` can also be set here — say in the same line that it acts from v3.9.0 and changes nothing before that.
+- Ask all four switches in one call, each with its current value marked and the default as (Recommended): `hats_allowed` and `hypothesis_first` worded as in onboarding Step 4b Extended; `learning_mode` — `off` · `pm_first` (tag the first few items yourself at four synthesis steps, then compare) · `explain` (a "How I got here" block in the chat, no question); `build_first` — `on` · `off` (one build-first line in write-concept and design-bridge, never a question). Four is exactly the host's limit per call (`references/host-profiles.md` §4) — a fifth switch needs a second call. On a host without structured questions, one numbered list per switch in one message. Write only the changed lines (an absent section is created with the defaults first) and show the changelog (`Judgment → <switch> | was | became`).
 
 **For CJM Configuration updates:**
 - Allow changing funnel template (with remapping prompt)

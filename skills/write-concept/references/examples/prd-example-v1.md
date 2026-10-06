@@ -1,7 +1,9 @@
 <!-- Golden exemplar for the write-concept skill.
      Purpose: a worked, high-quality PRD instance the skill can pattern-match against (few-shot Examples context type).
      Generic/anonymized — NO org-specific data. Also used as a fixture for testing/output-evals.md (write-concept rubric).
-     This is an illustration of quality and shape, not a rigid template — the real structure comes from prd-structure.md + the chosen template. -->
+     This is an illustration of quality and shape, not a rigid template — the real structure comes from prd-structure.md + the chosen template.
+     Pre-mortem (since v3.9.0, P4): inserted right after Risks by template-protocol T-5 step 3b, derived, never asked. Causes and kill rows carry no
+     evidence class — the assumed premise keeps its label; the one threshold the PRD does not state is ⚠️ TBD, counted, not asked. -->
 
 # [PRD] Saved-for-later cart on a marketplace
 
@@ -52,6 +54,26 @@ A "Save for later" control on the product card and product page, plus a "Saved" 
 | Saves cannibalize add-to-cart (buyers save instead of buy) | Guardrail metric + A/B; kill if checkout CR regresses |
 | Low discoverability of the saved list | Nav entry + first-save tooltip; measure adoption |
 | Guest saves lost → frustration | Clear session-only labeling + login upsell (phase 2 persistence) |
+
+## Pre-mortem
+
+It is 30 days after launch and this did not work. Most likely why:
+
+| Why it failed | Early signal | What we do now |
+|---------------|--------------|----------------|
+| Hesitant buyers do not come back for the same item — the Problem Statement's premise [assumed — to validate in discovery] never held | Savers' return sessions stay at the non-saver level in the first two weeks | Check the premise in session data before build (Open Questions) |
+| Saves replace add-to-cart instead of adding to it (Risks: cannibalization) | Add-to-cart rate in the test arm drifts toward the 0.5% guardrail in week 1 | Read the guardrail daily; roll back at the limit |
+| Buyers never find the saved list, so saves never turn into purchases (Risks: discoverability) | Save adoption rises while saved-list opens per saver stay near zero | Ship the nav entry and first-save tooltip with the MVP, not later |
+
+### Kill criteria
+
+| Signal | Threshold | Date | Then |
+|--------|-----------|------|------|
+| Checkout conversion, test vs control | drop beyond 0.5% relative (guardrail) | launch + 30 days, read daily | Roll back |
+| Return-to-purchase rate among savers vs matched non-savers | below +3% (the target's lower bound) | launch + 30 days | Stop — do not promote |
+| Save adoption (% of product-page sessions with ≥1 save) | ⚠️ TBD — the PRD sets no adoption target | launch + 30 days | Pivot to discoverability before more build |
+
+- **Open (⚠️ TBD):** 1 — set them at review or before the first checkpoint.
 
 ## Verification / How we'll know it worked
 - Ship behind an A/B test; **decision rule:** promote only if primary metric hits target AND no guardrail regression at significance.

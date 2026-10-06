@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.11.0
+version: 0.12.0
 description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».
 ---
 
@@ -259,6 +259,7 @@ Every metric receives a status:
 ### Steps 4–11 — Research pipeline
 
 Anomaly detection (Step 4), WORLD enrichment (5), INTERNAL enrichment (6), hypothesis building (7), per-hypothesis impact (8), overall-conversion impact (9), independent verification (10), and risk assessment (11) live in `references/cjm-pipeline.md` (skill-local). Read it after the Step 3.5 gate passes. Mode map (which steps run per mode) — see Modes of Operation above.
+**PM-first hypotheses (since v3.9.0)** (`references/judgment-points.md` §9) — `hypotheses` / `full` modes, interactive runs, `judgment.learning_mode` `pm_first` or `explain`: Step 7.0 of `references/cjm-pipeline.md`; never in `health-check`, `anomalies` or `comparison`.
 
 > **Debate hook.** If the user asks for a debate / role discussion / red-team, or top hypotheses are contested and touch ≥ 2 interest groups — after hypothesis building (Step 7) run `references/debate-protocol.md` for the top-3 hypotheses: evidence pack = anomalies + enrichment already gathered (post-Step 3.5 gate, each item with its 3.5.g class), roles chosen with the user (Skeptic mandatory), rounds → facilitator synthesis. The verdict corrects ICE Confidence per the protocol's Step D4 (consensus +1…+2 only when the support cites an E#, never on `simulated` or `assumed` input alone; unresolved skeptic objection −1…−2), new risks feed the Step 11 risk assessment, and the «Debates» section embeds in the Step 12 report.
 
@@ -294,7 +295,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.11.0",
+     skill_version: "0.12.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],

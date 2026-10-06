@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.14.0
+version: 0.15.0
 description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «додай стрілки на скрін». EN — "create a diagram", "draw a flowchart", "visualize this process", "make a prototype" (no DS mentioned), "mockup", "annotate this screenshot". Also UA — «візуалізуй процес», «зроби прототип», «інфографіка», «познач на скріншоті». Generation via Mermaid/HTML, Gemini, ChatGPT, NotebookLM, Figma, Draw.io; annotation runs locally.
 ---
 
@@ -74,7 +74,7 @@ Run **Steps T-0 → T-5 exactly as `references/template-protocol.md` names them*
 
 **1a. Determine the context source:**
 
-- **Transition from another skill** (write-concept, brainstorm-features, requirements-creator, product-research, product-analysis) → context was passed from the previous skill. Summarize the passed context and confirm with the user what exactly needs to be visualized
+- **Transition from another skill** (write-concept, brainstorm-features, requirements-creator, product-research, product-analysis) → context was passed from the previous skill. Summarize the passed context and confirm with the user what exactly needs to be visualized. Since v3.9.0, a call from design-bridge with `return_to: design-bridge` (passed only for its build-first hand-off) is the exception: the values it passes (type, fidelity, tool, locale, platform, the Prototype IR as the element to draw) answer Steps 1–4 without asking, and Steps 8–10 do not run (Skill Chaining — Inbound)
 - **Standalone launch** → gather context from scratch
 
 **1b. Clarify the visualization goal — ask via AskUserQuestion:**
@@ -281,7 +281,7 @@ After receiving the result from any external tool (Gemini, ChatGPT, NotebookLM, 
 
 ### Step 8 — Publishing
 
-**8a. Ask if the user wants to save/publish:**
+**8a. Ask if the user wants to save/publish** (with `return_to: design-bridge`, Steps 8–10 are skipped — the result goes back to design-bridge):
 
 > "Would you like to publish or save this? You can publish to Confluence, Notion, or Figma, or save as a local file."
 
@@ -321,7 +321,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.14.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.15.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Mode: Annotate (standalone screenshot annotation)
@@ -342,7 +342,7 @@ Since `design-bridge` (v1.10.0) became the routing host for brand-themed decks, 
 | **cjm-research** | After the report is ready | Funnel diagram, journey map, deck of the findings |
 | **quarterly-planning** | After the roadmap is approved | Roadmap/timeline visualization |
 | **project-planning** | After the arc is built | Dependency graph, critical-path diagram |
-| **design-bridge** | Lo-fi/DS-free visual needed inside a design flow | Mermaid flow, plain wireframe |
+| **design-bridge** | Lo-fi/DS-free visual needed inside a design flow | Mermaid flow, plain wireframe. With `return_to: design-bridge` (since v3.9.0, only for design-bridge's build-first hand-off): nothing passed is asked (the platform included, so Step 1c does not ask it), Steps 8–10 do not run (design-bridge publishes and saves), and the result returns with the Prototype IR it passed filled in — screens, shown and missing states, transitions, node ids; without the parameter, unchanged |
 
 **Transition prompt template:**
 > "Would you like to create a visual diagram, prototype, or infographic for [brief description]? This can help communicate the concept more effectively."

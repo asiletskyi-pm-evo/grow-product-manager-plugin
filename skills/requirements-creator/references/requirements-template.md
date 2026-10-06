@@ -74,7 +74,7 @@ Describe hypotheses: preconditions/problem, what we want to change, what we want
 | **Iterate** | Primary metric neutral / inconclusive, no guardrail harm | Refine and re-run, or extend for sample size |
 | **Kill** | Guardrail metric regresses beyond tolerance OR primary metric negative | Roll back, keep control |
 
-**Instructions:** State the ship / iterate / kill rule explicitly **before** launch, so the readout is a lookup, not a debate. Tie thresholds to the Success Criteria above and the significance level.
+**Instructions:** State the ship / iterate / kill rule explicitly **before** launch, so the readout is a lookup, not a debate. Tie thresholds to the Success Criteria above and the significance level. Since v3.9.0 the Pre-mortem below points here for its kill criteria.
 
 #### Expected Duration
 
@@ -146,6 +146,12 @@ Describe what we want to implement/change in the product, how it should work, wh
 - If the feature has multiple user flows — describe each flow separately
 - Reference current Figma designs where applicable (link to specific frames)
 
+#### AI Feature: Behaviour and Evaluation (only if the feature is AI-driven, since v3.9.0)
+
+Added when the feature is AI-driven in explicit AI-qualified words (`references/ai-feature-section.md` §1). The skeleton is section 2 of `templates/built-in/requirements/ai-feature-v1.md` — Behaviour spec, Eval set, Acceptable error rate, Kill criteria, with the same columns; copy it, never restate it.
+
+**Instructions:** Fill each cell from the request and the sources; a cell nothing states reads `⚠️ TBD` and is never asked — except a kill row's date and then, which are derived (`references/ai-feature-section.md` §3). Each eval case carries its origin class (`observed`, `reported` or `simulated`); expected outputs, error rates and kill thresholds carry none. Keep it apart from the optional "Технічні рекомендації (AI)" block — behaviour rules are requirements, and Gate 1 still keeps model, vendor and prompt choices out of them. Rules: `references/ai-feature-section.md` §3.
+
 #### Technical Requirements
 
 **Implementation approach:**
@@ -177,6 +183,8 @@ Product Designers add:
 
 If Figma links to current (pre-change) designs were found during context gathering — include them here as reference with a note: "Current state (before changes):"
 
+With a prototype source (since v3.9.0, `references/ai-feature-section.md` §6b), link its frames as the proposed design — a source, not validation.
+
 #### Analytics Coverage Requirements
 
 **This section is left empty for Product Analysts to fill in.**
@@ -198,7 +206,25 @@ Testable conditions the implementation must satisfy for the feature to be consid
 | AC-1 | GIVEN [context/state], WHEN [action], THEN [observable, checkable result] |
 | AC-2 | ... |
 
-**Instructions:** Cover the main flows AND the key edge cases and error states. Each criterion must be observable and binary (pass/fail) — avoid vague wording like "works well". These criteria are the contract with the developer/AI and the checklist QA verifies against; they also seed the Analytics Coverage and Test tasks. For A/B tests, acceptance criteria verify the mechanics work; the **Decision Rule** (above) decides whether the change ships.
+**Instructions:** Cover the main flows AND the key edge cases and error states. Each criterion must be observable and binary (pass/fail) — avoid vague wording like "works well". These criteria are the contract with the developer/AI and the checklist QA verifies against; they also seed the Analytics Coverage and Test tasks. For A/B tests, acceptance criteria verify the mechanics work; the **Decision Rule** (above) decides whether the change ships. For an AI-driven feature (since v3.9.0), add AC-eval: the eval set passes at or below the acceptable error rate.
+
+---
+
+### Out of scope
+
+What this spec deliberately does not cover (since v3.9.0).
+
+**Format — bulleted list.**
+
+**Instructions:** Fill from the request and the source concept's Non-goals / Scope. When nothing states it, write `⚠️ TBD` — a derived section, never asked. It is one of the six elements of `references/artifact-style-gate.md` → Spec readiness.
+
+---
+
+### Pre-mortem (A/B test or AI-driven feature only, since v3.9.0)
+
+Rendered from `templates/built-in/partial/pre-mortem-v1.md` (`references/judgment-points.md` §7): written as if the change already failed — 2–3 causes, each naming the input or section it rests on, with an early signal and what we do now.
+
+**Instructions:** For an A/B test the causes are test-validity causes (power for the MDE, sample-ratio or exposure faults, novelty, events not firing, a missing guardrail), each with a pre-launch check. Kill criteria are a pointer to the **Decision Rule** (A/B) or to the AI **Kill criteria** — never a second table. Derived, never asked; a `⚠️ TBD` cell is counted, not asked. The PM edits or deletes it at review. Rules: `references/ai-feature-section.md` §4.
 
 ---
 

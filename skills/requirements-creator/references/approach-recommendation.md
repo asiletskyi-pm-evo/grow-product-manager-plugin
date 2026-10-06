@@ -12,6 +12,7 @@ Use this guide to provide a reasoned recommendation for the implementation appro
 | Low risk, infrastructure change, backend optimization | **Feature flag** | Minimal user impact but still want a safety net |
 | Bug fix, critical fix, zero-risk change | **Without feature flag** | Speed of deployment is more important than safety net |
 | Cosmetic change with no metric impact | **Without feature flag** | Overhead of feature flag setup outweighs the risk |
+| AI-driven feature (since v3.9.0; `references/ai-feature-section.md` §1) | **Feature flag** at minimum, the eval set passing before any exposure; **A/B Test** when it targets a key metric | Model behaviour is probabilistic: the eval set gates the launch, the flag or the test limits the exposure. Advisory text in the existing Step 3a question — no new option |
 
 ## Detailed Recommendation Logic
 

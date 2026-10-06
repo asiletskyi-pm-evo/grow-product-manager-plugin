@@ -139,7 +139,7 @@ Defines which artifact types are relevant to each skill. `local-context-protocol
 | Skill | Relevant Types |
 |-------|---|
 | cjm-research | cjm-analysis, cjm-health-check, funnel-anomaly, ab-test-results, hypothesis |
-| write-concept | competitive-analysis, market-research, ux-benchmark, hypothesis, decision, requirements |
+| write-concept | competitive-analysis, market-research, ux-benchmark, hypothesis, decision, requirements; while `judgment.build_first` is `on` also walkthrough, ab-test-results, prototype (note below) |
 | product-analysis | cjm-analysis, ab-test-results, metrics-review, post-release, hypothesis |
 | brainstorm-features | cjm-analysis, competitive-analysis, ab-test-results, ux-benchmark, decision, debate |
 | requirements-creator | concept, hypothesis, competitive-analysis, decision, ab-test-results, walkthrough |
@@ -171,6 +171,8 @@ Defines which artifact types are relevant to each skill. `local-context-protocol
 | release-manager | decision |
 
 > People types are only ever surfaced to People-contour skills. A product skill must not pull `people` / `one-on-one-notes` / `performance-review` into its context (`data-policy.md`).
+
+> Since v3.9.0, while `judgment.build_first` is `on`, the write-concept row also carries `walkthrough`, `ab-test-results` and `prototype` — Step 0.5 hits of these suppress the build-first line (`judgment-points.md` §8), and a resumed run links the prototype it finds. On their own they never raise the "Use as context?" question: they join its list only when other hits already ask it, and otherwise only do those two things, silently. A prototype used as the spec reaches requirements-creator in design-bridge's payload, not through this map. A prototype is context, never validation: it stays `reported (file, frame)`.
 
 ---
 

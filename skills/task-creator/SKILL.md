@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.14.1
+version: 0.15.0
 description: Create Jira tasks from requirements (usually a Confluence page) — FE/BE/Android/iOS/Design/Analytics breakdown inside an Epic. Not writing the requirements (requirements-creator). UA — «створи задачі для фічі», «Jira-задачі з вимог у Confluence», «розбий фічу на задачі», «заведи задачі в Epic». EN — "create tasks from requirements", "create Jira issues from Confluence requirements", "break down a feature into development tasks", or a shared Confluence link with a request for Jira tasks.
 ---
 
@@ -79,6 +79,8 @@ When the user provides a Confluence link:
    - **Technical requirements** — look for mentions of "A/B Test", "feature flag", platform restrictions
    - **Functional requirements** — what needs to be built
    - **Confluence page URL** — for linking in task descriptions
+3. **Spec readiness (since v3.9.0).** For a feature spec, score the six elements of `references/artifact-style-gate.md` → Spec readiness and show one line, `Spec readiness: n/6 — missing: …`, with this extraction (in the message that carries the Step 4 questions — no new turn); the same line is a row of the Step 6b summary and an item of the Step 11 report. It never blocks, is never asked and never edits the spec. A concept or PRD source gets one pointer line to `requirements-creator` instead; action items, rollout or cleanup tasks, hand-offs and feedback quick fixes get nothing.
+4. **AI-driven spec (since v3.9.0)** — the page carries the AI-feature sections or says explicitly that the output is produced by an AI or ML model, never on the bare word "model". It sets up the Step 4 eval-set option. Source scope, where each element is found, non-testable AC: `references/spec-readiness.md` (skill-local).
 
 If Confluence MCP is unavailable — follow integration fallback chain.
 
@@ -110,6 +112,7 @@ Before creating tasks, ask the user using AskUserQuestion:
    - iOS
    - Design
    - Analytics
+   - QA — Eval set *(since v3.9.0; only for an AI-driven spec, Step 1 — offered pre-selected: listed first and marked "(recommended for an AI-driven spec)" in this question, which is a numbered list in chat when its options exceed the host's option picker (2–4 per question, `references/host-profiles.md` §4); the task is created unless the user drops it in the answer; dropped → no eval-set task)*
 
 2. **Task purpose** — are these tasks for development or for grooming?
    - **Development** (default) — standard tasks for implementation
@@ -138,6 +141,7 @@ Before creating tasks, fetch project metadata to ensure correct field values:
 1. **Issue Types** — use `getJiraProjectIssueTypesMetadata` to find:
    - Does the project have a "Design" issue type? If yes, use it for Design tasks
    - Does the project have an "Analytics" issue type? If yes, use it for Analytics tasks
+   - Does the project have a "QA" issue type? If yes, use it for QA tasks (since v3.9.0)
    - Otherwise, use "Task" for everything
 
 2. **Team field** — find the custom field ID for Team (usually `customfield_10001`):
@@ -164,6 +168,7 @@ Before creating tasks, fetch project metadata to ensure correct field values:
 - **Labels** — if uncertain about the feature code format or additional labels, propose and confirm
 - **Reporter** — if multiple possible accounts found, ask user to choose
 - **Sprint** — if the user wants tasks added to a specific sprint, ask which one
+- **Eval-set task (since v3.9.0)** — never asked: its fields come from the QA row of `references/task-format.md` and the common fields; one that would need a question here drops the task, with one notice line in this summary and in Step 11
 
 **Present a pre-creation summary for confirmation:**
 
@@ -176,6 +181,7 @@ Before creating tasks, fetch project metadata to ensure correct field values:
 | Team | Team Name | Inferred from Epic — please confirm |
 | Components | component-1, component-2 | From existing Epic tasks — please confirm |
 | Labels (common) | PROJ-1234.5 | From feature code |
+| Spec readiness | 5/6 — missing: out of scope | Requirements page (Step 1) — shown, not asked |
 | ... | ... | ... |
 
 Wait for user confirmation before proceeding to task creation.
@@ -218,7 +224,7 @@ Apply the **task-formulation quality gate** (`references/communication-framework
 {Depth adapts to the assignee's level — see the note below. For a senior (D4): only non-obvious points + audit checkpoints. For a junior (D1): a step-by-step checklist "how I'd do it".}
 
 ## Definition of Done
-{Acceptance criteria — for critical / important tasks. Omit for routine ones.}
+{Acceptance criteria — for critical / important tasks. Omit for routine ones. Since v3.9.0 each spec AC the task must pass is cited by id (`AC-N`, or `AC 3` by position when unnumbered) — ids only, never the AC text.}
 
 ## Requirements
 
@@ -258,6 +264,10 @@ Issue Type and work-type labels per work type (+ `grooming` for FE/BE/Android/iO
 
 An A/B test gets **2** Analytics tasks (coverage + test results analysis) — titles in `references/task-format.md` (skill-local).
 
+#### QA special case — AI-driven spec (since v3.9.0):
+
+When the QA — Eval set option stays ticked (Step 4), one `[QA] {FeatureName} - Eval set` task cites the spec's eval set, adds a `draft` case for each behaviour-spec rule no case covers, and cites the eval criterion by id in its DoD (`references/pm-mental-model.md` P6) — fields and body in `references/task-format.md` (skill-local).
+
 ### Step 8: Set Additional Fields via Edit
 
 Some fields may not be settable during creation. After creating each task, use `editJiraIssue` to set:
@@ -280,6 +290,7 @@ Use the "Blocks" link type with this dependency chain:
 2. **BE** and **Analytics (coverage)** — come after Design, block FE/Android/iOS
 3. **FE**, **Android**, **iOS** — come after Design, BE, and Analytics (coverage)
 4. **Analytics (analysis)** — comes after ALL other tasks (only for A/B tests)
+5. **QA (eval set)** — comes after BE, FE, Android and iOS (AI-driven spec only)
 
 Specific links to create:
 - Design **blocks** → BE
@@ -293,6 +304,7 @@ Specific links to create:
 - FE **blocks** → Analytics (analysis) *(A/B test only)*
 - Android **blocks** → Analytics (analysis) *(A/B test only)*
 - iOS **blocks** → Analytics (analysis) *(A/B test only)*
+- BE, FE, Android, iOS **block** → QA (eval set) *(AI-driven spec only)*
 
 If a work type wasn't selected, skip its links.
 
@@ -309,6 +321,7 @@ Include:
 - List of created links
 - Dependency chain visualization
 - Any issues encountered (fields that couldn't be set, etc.)
+- The Step 1 spec readiness line, or the concept pointer (since v3.9.0); a dropped eval-set task with its reason
 - A JQL link to view all created tasks: `parent={EpicKey} AND labels={FeatureCode} ORDER BY created DESC`
 
 ### Step 12: Post-creation verification
@@ -336,7 +349,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.14.1", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.15.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode
@@ -360,12 +373,13 @@ This skill can work together with **Write Concept / PRD** — if a PRD was just 
 
 ## Additional Resources
 
-- **`references/task-format.md`** (skill-local) — Step 7 title variants with examples, work-type fields table, A/B-test Analytics pair
+- **`references/spec-readiness.md`** (skill-local) — Step 1 (since v3.9.0): source scope, where each of the six elements is found, the line, non-testable AC, AI-driven detection
+- **`references/task-format.md`** (skill-local) — Step 7 title variants with examples, work-type fields table (QA row since v3.9.0), A/B-test Analytics pair, AI-driven eval-set task
 - **`references/post-creation-verification.md`** (skill-local) — Step 12 (12a–12e): read-back, maker–checker check table, fix report, cross-task propagation
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy
 - **`references/communication-frameworks.md`** — task-formulation quality gate (why/what/how + DoD + D-level depth)
-- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), Gate 4 (`n/a` on task bodies), maker–checker execution (batch gate before creation + Step 12)
+- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), Gate 4 (`n/a` on task bodies), maker–checker execution (batch gate before creation + Step 12), Spec readiness (Step 1)
 - **`references/people-context-protocol.md`** — read-only D-type of the assignee to tune "How"-depth
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms

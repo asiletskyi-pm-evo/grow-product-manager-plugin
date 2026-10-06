@@ -8,7 +8,7 @@
 
 ## 1. Altitude model (levels of abstraction)
 
-A delivered Product-contour artifact ends with an **altitude line** wherever `template-protocol.md` T-5 step 3a places it (from v3.5.0; rendered by `templates/built-in/partial/judgment-footer-v1.md`). Roles map onto a *home altitude* plus a *reach*; the request can move the run to any altitude L1–L4 ("infer altitude from the request, not from the role"); the reach is informational and never clamps it. Altitude L1–L4 is **not** the vault level L0–L2 (`vault_level`, `vault-protocol.md`) — the two scales never mix: since v3.8.0 an artifact saved to the vault carries its altitude in the `altitude:` key (`vault-schema.md` → Judgment Fields), never in `level:`.
+A delivered Product-contour artifact ends with an **altitude line** wherever `template-protocol.md` T-5 step 3a places it (since v3.5.0; rendered by `templates/built-in/partial/judgment-footer-v1.md`). Roles map onto a *home altitude* plus a *reach*; the request can move the run to any altitude L1–L4 ("infer altitude from the request, not from the role"); the reach is informational and never clamps it. Altitude L1–L4 is **not** the vault level L0–L2 (`vault_level`, `vault-protocol.md`) — the two scales never mix: since v3.8.0 an artifact saved to the vault carries its altitude in the `altitude:` key (`vault-schema.md` → Judgment Fields), never in `level:`.
 
 | Altitude | Horizon | Unit of work | Decision type | Evidence that counts most |
 |----------|---------|--------------|---------------|---------------------------|

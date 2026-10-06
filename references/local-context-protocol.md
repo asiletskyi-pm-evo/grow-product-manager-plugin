@@ -24,7 +24,7 @@ Search in the following locations (in priority order):
 
 **If found in a legacy location (2-4) but NOT in `~/.grow-pm/`:** the file is from a pre-v1.4.0 install. Before proceeding, offer to migrate it to `~/.grow-pm/` (see `references/persistent-storage.md` → Legacy Data Discovery). If the user agrees — migrate, then continue. If the user declines — use it in-place but warn that data may be lost on plugin reinstall.
 
-**When saving:** ALWAYS write to `~/.grow-pm/local-context.md`. Never save to legacy locations. (Exception: Step 0i writes the role lines — and `judgment-points.md` §2 the `Hypothesis first: off` line — into the file this step resolved, including a legacy location the user chose to keep.)
+**When saving:** ALWAYS write to `~/.grow-pm/local-context.md`. Never save to legacy locations. (Exception: Step 0i writes the role lines — and `judgment-points.md` the `Hypothesis first: off`, `Build first: off` and `Learning mode: off` lines of its §2, §8 and §9 — into the file this step resolved, including a legacy location the user chose to keep.)
 
 ### 0b. If NOT found (anywhere) → redirect to Plugin Configurator
 
@@ -39,7 +39,7 @@ After the Configurator finishes — return to the original skill and continue it
 ### 0c. If found → read and parse
 
 Read `local-context.md` and extract:
-- Active user profile (name, role, role label, role scope, level home, email, language, jira_account_id) and the `## Judgment` section (`hypothesis_first`, `learning_mode`, `hats_allowed`; defaults `on` / `off` / `all` when the section is absent)
+- Active user profile (name, role, role label, role scope, level home, email, language, jira_account_id) and the `## Judgment` section (`hypothesis_first`, `learning_mode`, `hats_allowed`, and since v3.9.0 `build_first`; defaults `on` / `off` / `all` / `on` when the section or a line is absent; a value is read without a trailing note in brackets, and a value outside its set reads as the default)
 - List of organizations and their products
 - Integration details for the current context
 
@@ -155,6 +155,8 @@ Every skill carries a three-line block that points here; its first line is alway
 
 4. **Evidence labels and the frontier (since v3.8.0)** exist only at their implementing steps: `data-integrity-protocol.md` Gate Check 6 (the skills' data-gate sub-steps, product-reporter Step 2.5), `artifact-style-gate.md` Gate 4b (through `template-protocol.md` T-5 step 3c, the groundedness lens, and the named steps outside Step T — diagram-prototyper 6g, design-bridge Step 6 QA, decision-log step 2a, the knowledge-library confirmations), the debate evidence pack (`debate-protocol.md`), `planning-core.md` §6, `vault-protocol.md` Vault Save step 5, and `judgment-points.md` §4. They add no question. Anywhere else — People contour, Q&A replies, search lists, registry lists and status boards (the experiment-tracker board, the focus board) — no label and no hand-back line is added, except the 6c line of a Gate Check 6 sub-step on a claim in a Q&A reply and a class a skill step returns as a data field (knowledge-library results). Automated runs write the labels and the 6b handling of synthetic input, never a hand-back line (`data-integrity-protocol.md` 6d).
 
+5. **Since v3.9.0** the pre-mortem and kill criteria (`judgment-points.md` §7), the build-first line (§8), the PM-first pass and the `explain` block (§9), the spec-readiness line (`artifact-style-gate.md` → Spec readiness) and task-creator's pre-selected eval-set option, the AI-feature sections (`requirements/ai-feature`) and the full self-improvement guard (`self-improvement.md`) exist only at their implementing steps. Derived sections are never asked. The build-first line is a line, not a question; the PM-first question exists only under `learning_mode: pm_first`. A scheduled, headless or return-payload run never gets the line, the question or the `explain` block.
+
 > Why a sub-step of Step 0 and not "Step 0.5": Step 0.5 is the Vault Context Search below. The specification that introduced the contract called it "Step 0.5-J".
 
 ## Step 0.5 — Vault Context Search (OPTIONAL)
@@ -224,7 +226,7 @@ Once the context is loaded and active product selected, skills should:
 - Use `user.language` for output language preference
 - Use `user.jira_account_id` for setting Reporter on Jira tasks
 - Use `role_defaults` (Step 0i) — never the role name — for defaults: the altitude inferred at Step 0i step 5 for the altitude line (`level_home` only as its fallback) and `quick_wins` in onboarding; `template_defaults` and `extra_sections` in Step T, `gate_emphasis` in the Data Integrity step, `planning_view` and `horizon` in the planning suite, `vocabulary_set` and `question_defaults` in question wording and option order — only in skills whose step implements it (since v3.6.0; `references/role-profiles.md` §5–§6)
-- Use `judgment.hypothesis_first`, `judgment.learning_mode`, `judgment.hats_allowed` only through the steps that implement them (hats from v3.5.0; `hypothesis_first` from v3.7.0 through `references/judgment-points.md` §2; `learning_mode` from v3.9.0)
+- Use `judgment.hypothesis_first`, `judgment.learning_mode`, `judgment.build_first`, `judgment.hats_allowed` only through the steps that implement them (hats since v3.5.0; `hypothesis_first` since v3.7.0 through `references/judgment-points.md` §2; `build_first` and `learning_mode` since v3.9.0 through its §8 and §9)
 - Use `team.jira_team_id` for setting Team field on Jira tasks
 - Use `cjm.stages` for CJM funnel analysis (name + dashboard + `baseline_cr` per stage)
 - Use `cjm.thresholds` for anomaly detection (`warning` / `critical`, % deviation from baseline)

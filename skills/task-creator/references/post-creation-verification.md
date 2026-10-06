@@ -23,11 +23,13 @@ Use `getJiraIssue` to fetch the created task with all fields. This ensures we ve
 | **Team** | Set to the correct team | Compare with the confirmed team value from Step 6b |
 | **Labels** | Contains all required labels: feature code, work type label, `a/b_test` if applicable, `grooming` if applicable | Check labels array against expected values |
 | **Components** | Matches the confirmed components | Compare with the confirmed values from Step 6b |
-| **Description** | Contains "Why", "What", "How", "Definition of Done" and "Requirements" (with Confluence link) sections — the Step 7 format | Parse description content |
-| **Issue Type** | Correct type (Task/Design/Analytics) | Check issue type field |
+| **Description** | Contains "Why", "What", "How" and "Requirements" (with Confluence link) sections, plus "Definition of Done" on a critical / important task — the Step 7 format | Parse description content |
+| **AC ids in DoD** (since v3.9.0) | A Definition of Done cites the spec's acceptance criteria the task must pass by id (`AC-N`, or by position) — ids only, no AC text copied, no criterion rewritten into an invented threshold | Compare with the spec's acceptance criteria |
+| **Issue Type** | Correct type (Task/Design/Analytics/QA) | Check issue type field |
 | **Links** | Correct dependency links created (if linking was confirmed) | Check issue links via `getJiraIssue` |
 | **List formatting** | "What"/"How"/DoD are lists or short structured blocks, not paragraph prose | Gate 2 checklist (`references/artifact-style-gate.md`) |
 | **No ungrounded tech content** | No technical assumptions outside the "Технічні рекомендації (AI)" section; that section (if present) opens with the AI callout | Gate 1 source test against the requirements page |
+| **Eval-set task** (since v3.9.0, AI-driven spec) | When QA — Eval set stayed ticked: `[QA] {FeatureName} - Eval set` exists, its `draft` cases come only from behaviour-spec rules and its DoD cites the eval criterion by id; when it was dropped, the Step 11 report says why | Read it back with `getJiraIssue` too; `n/a` for a spec that is not AI-driven |
 
 **12d. Report verification results:**
 

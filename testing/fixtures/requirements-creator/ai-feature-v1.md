@@ -1,0 +1,46 @@
+<!-- Output-eval fixture (input brief) for requirements-creator, subtype ai-feature — an AI-driven feature spec (since v3.9.0; test case TC-jdg-390-ai-feature). Feed as the user request; score the resulting requirements doc against the "requirements-creator — AI feature spec" rubric in testing/output-evals.md. Gold reference: skills/requirements-creator/references/examples/ai-feature-spec-example-v1.md (it drafts listing descriptions, this fixture product titles: score rigor, not content). Generic, no org data — the product, brands, people and numbers are fictional. For the evaluator only (never part of the input): expected a spec on the built-in `requirements-builtin-ai-feature`, resolved silently — the request names an AI feature explicitly and there are no user-global or product requirements templates, so no T-3 question. "Problem and outcome" is problem-shaped: new sellers' titles are too short (31 % of first-30-day listings have three words or fewer) or are sent back by moderation for title rules (6 %), both `reported (Person1, moderation dashboard, 2026-08)`, never `measured`; the "few search views" premise is `[assumed — …]`; the outcome names metrics (share of short titles, title-rule returns) with a direction — the PM states no target or guardrail value, so no number is invented (a direction or `⚠️ TBD`). The PM's "Goal: add AI title suggestions…" is not the section's goal; if a run keeps it there, the one chat line `⚠️ not solution-shaped: …` with a problem-shaped rewording is shown (requirements-creator ai-feature-section.md §5). No model, vendor, prompt or architecture is named anywhere (Gate 1). Behaviour spec rows: category + at least two attributes → one suggestion of at most 120 characters, in the listing's language, from the given attributes only; fewer than two attributes → no suggestion, the hint; a seller draft carrying capitals, claims ("original", price, discount, delivery) or contact details → none of it carried over; brand not filled → no brand; restricted category → no suggestion; not ready in 3 seconds → nothing shown, the form unaffected; the suggestion goes into the field only on "Use", never replaces what the seller typed, stays editable, and nothing is published without the seller saving. Eval set: the four masked moderation-queue titles become cases with origin `reported` (pasted by the PM; `observed` is an upgrade), `[phone]` stays masked; invented cases (restricted category, too few attributes, a timeout, more adversarial drafts) are `simulated`; all four types present; binary pass rules; planned size and owner `⚠️ TBD`; re-run on every model or prompt change. Error rates: anything the seller did not give (unfilled brand, "original", price, discount, delivery, contact details) at most 0.5 % — Person2's "1 in 200" restated exactly; a suggestion in a restricted category 0; suggestions sellers ignore or discard `⚠️ TBD` (the PM refuses to guess) — any other class the run adds `⚠️ TBD`; each with how it is measured before and after launch. Kill criteria (2.4): the launch gate — eval-set rate above 0.5 % before the flag opens → stop; any suggestion in a restricted category → roll back; title-rule returns on listings that used a suggestion at 6 % or more four weeks after the flag opens → roll back (the PM's own rule, the 6 % baseline `reported`); any other row's threshold `⚠️ TBD`. Tracking plan: suggestion shown, applied, edited or discarded (human override), the hint / timeout / restricted fallbacks, optional feedback — each with owner and verification, tied to 2.3 and 2.4. Acceptance criteria: Given/When/Then for the deterministic parts (visibility by attributes and category, apply only on "Use", no overwrite, the 3-second cut-off, the flag) plus AC-eval. Out of scope: category and attribute suggestions, bulk rewrite of existing titles (Person5's request), descriptions, photo-based suggestions. A pre-mortem after the Out of scope / Open questions area (no Risks section in this template), 2–3 causes from the AI sections or the `assumed` premise, each naming the section it rests on with an early signal, and `Kill criteria: see 2.4` — no second table. No confidence line (requirements-creator is not in references/judgment-points.md §1). One closing altitude line: L1, serves PROJ-2100, next a delivery step (run the eval set, then open the flag to new sellers). Questions: the pre-answered ones below cover Steps 1 and 3; the run asks nothing about the AI sections or the pre-mortem (a `⚠️ TBD` is not filled by a question; Out of scope is in the input, so it needs no question either) — any such question is a no_question_for_derived defect. -->
+
+# Input brief
+
+Write an **AI feature spec** for **LLM-generated title suggestions** on the listing form: when a new seller creates a listing, we suggest a title they can use.
+
+Setup:
+- Role: `user.role: pm` in `local-context.md` (confirmed at onboarding; no hat in the request). No product or user-global templates for `requirements`; `templates.preference: smart`.
+- Product: **Product 1** — a generic marketplace (buyers, sellers, delivery through carriers). Jira project `PROJ`.
+- Linked goal: this feature sits under Epic **PROJ-2100 "Listing quality for new sellers"**. The request links it.
+- Roster: Person1 — Product Manager, seller tools (the user) · Person2 — Trust & Safety Lead · Person3 — Backend Tech Lead · Person5 — Head of Seller Experience.
+- `user.language`: en for this fixture. The judge scores rigor, not wording — a run in another language is scored the same way.
+
+## What the PM gives
+
+Goal: add AI title suggestions to the listing form for new sellers.
+
+Why: from the moderation dashboard, as I read it on 2026-09-29 — of listings created in 2026-08-01 – 2026-08-31 by sellers in their first 30 days, **31%** have a title of three words or fewer, and **6%** were sent back by moderation for breaking the title rules. I'm fairly sure the short titles are why these listings get so few search views.
+
+How it should behave:
+- The suggestion appears under the title field once the seller has chosen a category and filled at least two attributes (the brand can be one of them). With fewer, no suggestion — just the hint "Fill in a few details to get a title suggestion".
+- It is built only from the category and the attributes the seller filled in. If the seller already typed a title, it can use that too.
+- It follows our title rules (listing rules page): at most 120 characters; in the listing's language; no word in capitals except brand abbreviations; no contact details (phone numbers, links, messenger names); no claims about originality, price, discounts or delivery; the brand only when the brand attribute is filled.
+- Restricted categories (medicines, weapons, tobacco) go to manual moderation anyway — no suggestion there at all.
+- Person3: the suggestion must not slow the form down — if it is not ready within 3 seconds, show nothing.
+- The seller decides: the suggestion goes into the title field only when they tap "Use". Whatever the seller typed is never replaced, and after "Use" they can still edit it.
+
+Real titles from the moderation queue (export of 2026-09-29; seller names removed, personal data masked):
+
+| # | Seller's title | Category | Attributes filled | Moderation |
+|---|----------------|----------|-------------------|------------|
+| 1 | Case | Phone cases | brand Brand1 · compatible model Phone X 12 · material silicone · colour black | accepted |
+| 2 | SNEAKERS ORIGINAL 100% BEST PRICE!!! free delivery | Men's sneakers | brand Brand2 · size 43 · colour white | sent back — capitals, claims |
+| 3 | Leather wallet call [phone] | Wallets | material leather · colour brown (no brand) | sent back — contact details |
+| 4 | Saucepan 2l | Cookware | brand Brand3 · material stainless steel · volume 2 l | accepted |
+
+How wrong it may be:
+- Person2 (Trust & Safety): no more than 1 suggestion in 200 may contain anything the seller did not give us — a brand that is not in the attributes, "original", a price, a discount, delivery terms, contact details. And not a single suggestion in a restricted category.
+- How many suggestions sellers will ignore or throw away — no idea yet, and I don't want to guess a number.
+- If, four weeks after the flag opens, listings that used a suggestion get sent back for title rules as often as today's 6% or more, I'd switch it off.
+
+Not in this phase: suggesting the category or the attributes; rewriting the titles of existing listings in bulk (Person5 asked for it — later); descriptions (another team); anything based on photos.
+
+## Pre-answered skill questions (interactive run, answers supplied)
+
+Product — Product 1 · new or existing functionality — new functionality on the existing listing form · context source — standalone · Figma designs — none yet, skip · implementation approach — feature flag, sellers in their first 30 days first · platforms — Web, App Android, App iOS · locales — all locales · Epic and feature number — PROJ-2100, next feature PROJ-2100.4 confirmed · prioritization (ROI & ICE) — not computed, proceed · technical recommendations block — no · annotated screenshot — skip · publishing — keep in chat, no Confluence write · skill chaining — none · design-bridge handoff — skip · vault save — no.

@@ -7,10 +7,11 @@ FAIL = release blocker; WARN = take note.
 Checks 1-18 exist because the defect class each one catches actually shipped.
 The 2026-07-14 audit found 5 critical + 14 major defects that the previous
 linter passed green; each is now a named check (see CHECKS below).
-Checks 19-24 are the exception, and say so: they are preventive guards for the
+Checks 19-25 are the exception, and say so: they are preventive guards for the
 role layer (19-22, JCRL v3.5.0, references/role-profiles.md), the judgment points
-(23, v3.7.0) and the evidence classes (24, v3.8.0), written before any defect of
-their class could ship. Each one still has a seed in seeded_leak_test.py.
+(23, v3.7.0), the evidence classes (24, v3.8.0) and the judgment binds (25, v3.9.0),
+written before any defect of their class could ship. Each one still has a seed in
+seeded_leak_test.py.
 
 Stdlib-only by design (runs in CI without pip install). PyYAML is used for an
 extra strict parse when available, but the hazard scan does not depend on it.
@@ -40,8 +41,9 @@ CHECKS = """
 20. persona-prompt       "You are a <product role>" / «Ти — <роль>» handed to the model as an identity
 21. judgment-footer      a Product-contour Step T skill that never cites partial/judgment-footer
 22. role-enum            role-profiles.md user.role enum == context-schema.md role enum
-23. judgment-points      a judgment-points.md §1 skill that never cites it, or a P2 question / confidence line outside §1
+23. judgment-points      a judgment-points.md §1 skill that never cites its §1/§2, or a P2 question / confidence line outside §1
 24. evidence-classes     the §4 class enum drifts, an invented class in a label, a P7-bound skill that never cites Gate Check 6, or a stale gate-check count
+25. judgment-binds       a P4/P6/P8 bind or §7-§9 row whose skill never cites judgment-points §7/§8/§9, or a live 'from / arrives in vX.Y.Z' at or below the plugin version
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1031,8 +1033,8 @@ if RP_ENUM and CS_ENUM and set(RP_ENUM) != set(CS_ENUM):
 # --------------------------------------------------- 23. judgment points
 # judgment-points.md §1 is the complete list of steps that ask the P2 "your
 # estimate first" question or render the confidence line (pm-mental-model §5).
-# A listed skill that never cites the file improvises the question from memory
-# or drops it; a skill outside the list that talks about "the P2 question" adds
+# A listed skill that never cites the file's §1 / §2 (a §7-§9 citation does not
+# count) improvises the question from memory or drops it; a skill outside the list that talks about "the P2 question" adds
 # a question no switch, skip rule or test covers.
 JP = os.path.join(root, "references", "judgment-points.md")
 if os.path.isfile(JP):
@@ -1048,9 +1050,11 @@ if os.path.isfile(JP):
             continue
         texts = [open(os.path.join(dp, f), encoding="utf-8").read()
                  for dp, _, fs in os.walk(folder) for f in fs if f.endswith(".md")]
-        if not any("judgment-points.md" in t for t in texts):
-            fail("judgment-points", f"skills/{name}: listed in judgment-points.md §1 but never cites it — "
-                                    f"the P2 question / confidence line has no implementing step")
+        # a §7 / §8 / §9 citation alone does not implement the §1 step — the line must cite §1 or §2
+        if not any(re.search(r"judgment-points\.md`?[^\n]*?§\s*[12](?!\d)", t) for t in texts):
+            fail("judgment-points", f"skills/{name}/SKILL.md: listed in judgment-points.md §1, but neither SKILL.md "
+                                    f"nor its references/ cite its §1 / §2 — the P2 question / confidence line "
+                                    f"has no implementing step")
     for sf in skill_files:
         name = os.path.basename(os.path.dirname(sf))
         if name in jp_skills or name == "plugin-configurator":   # the configurator owns the switch
@@ -1296,6 +1300,183 @@ if GC_COUNT:
                 fail("evidence-classes", f"{os.path.relpath(f, root)}:{_line_of(t, m.start())}: '{m.group(0)}' — "
                                          f"data-integrity-protocol.md has {GC_COUNT} '### Gate Check' headings "
                                          f"(say 'Gate Checks 1–5' where only the status checks are meant)")
+
+# ============================================================ judgment binds (25)
+# --------------------------------------------------- 25. judgment binds
+# Since v3.9.0 judgment-points.md §7 (P4 pre-mortem and kill criteria), §8 (P6 the
+# build-first offer) and §9 (P8 learning modes) list their implementing steps, and
+# pm-mental-model.md §2 names the same steps in each principle's Binds. A principle
+# acts only through a step that implements it (pm-mental-model §5), so a bind whose
+# skill never cites its section is a promise the model fills by improvising. Two
+# drifts are guarded:
+#  (a) bind coverage — every skill a §7/§8/§9 table row names, and every skill a
+#      Binds entry marked "since v3.9.0" (or a later version) names next to a §7/§8/§9
+#      step, is a real skill whose SKILL.md or skill-local references/ (golds aside)
+#      cite that section of judgment-points.md; and every table skill is named in the
+#      Binds of the principle its section heading names. Not read (K21): an entry that
+#      names build paths (the skills an offer routes to — their steps are unchanged) or
+#      a step "already in place", an older "since" entry, and a skill bound through
+#      another file only (task-creator's spec readiness, artifact-style-gate.md);
+#  (b) stale forward markers — "from vX.Y.Z", "acts from", "arrives in", "lands in",
+#      "joins in" naming a version at or below plugin.json, in a live file (CHANGELOG.md,
+#      testing/ and docs/ are history). A shipped behaviour is "since vX.Y.Z"; a live
+#      "arrives in v3.9.0" after v3.9.0 tells the model the step does not exist yet.
+#      Not read: "since" (by construction), backticked or fenced text (a quoted legacy
+#      value), README release banners ("**New in v…"), plain-English comparisons
+#      ("unchanged from"), and skill golds (references/examples/ — output, not
+#      instructions). A legacy value written outside backticks is read like any other
+#      line. A range ("v3.5.0–v3.9.0") is stale only once its last version has shipped.
+JB_FROM = (3, 9, 0)          # the release that added §7–§9; an older "since" bind is not theirs
+
+def _ver(s):
+    parts = [int(x) for x in s.split(".")][:3]
+    return tuple(parts + [0] * (3 - len(parts)))
+
+def _vstr(v): return ".".join(map(str, v))
+
+_jpt = open(JP, encoding="utf-8").read() if os.path.isfile(JP) else ""
+_JP_MENTION = re.compile(r"judgment-points(?:\.md)?`?")
+_JP_SEC = re.compile(r"§+\s*(\d+)(?:\s*[–-]\s*§?\s*(\d+))?")
+_JP_SEC_OF = re.compile(r"§+\s*(\d+)(?:\s*[–-]\s*§?\s*(\d+))?\s+of\s+`?(?:references/)?judgment-points")
+
+def _jp_sections(text):
+    """The judgment-points.md sections a text cites: the § numbers after each mention of
+    the file up to the next file reference on that line, plus '§N of judgment-points'."""
+    out = set()
+    def add(a, b):
+        lo, hi = int(a), int(b or a)
+        out.update(range(lo, hi + 1) if 0 <= hi - lo < 10 else (lo, hi))
+    for line in text.split("\n"):
+        for m in _JP_MENTION.finditer(line):
+            tail = line[m.end():]
+            nxt = re.search(r"\.(?:md|yaml)\b", tail)
+            for a, b in _JP_SEC.findall(tail[:nxt.start()] if nxt else tail):
+                add(a, b)
+        for a, b in _JP_SEC_OF.findall(line):
+            add(a, b)
+    return out
+
+_jb_cited = {}
+def _skill_cites(name):
+    if name not in _jb_cited:
+        folder = os.path.join(root, "skills", name)
+        cands = [os.path.join(folder, "SKILL.md")] + [
+            p for p in glob.glob(os.path.join(folder, "references", "**", "*.md"), recursive=True)
+            if os.sep + "examples" + os.sep not in p]          # a gold is output, not a step
+        secs = set()
+        for p in cands:
+            if os.path.isfile(p):
+                secs |= _jp_sections(open(p, encoding="utf-8").read())
+        _jb_cited[name] = secs
+    return _jb_cited[name]
+
+# §7–§9: the principle each section implements and the skills its table lists
+JB_SEC = {}                  # section -> (principle, [table skills], line)
+JB_TABLE = {}                # skill -> {sections whose table lists it}
+for _n in (7, 8, 9):
+    _sec, _spos = _section(_jpt, rf"^## {_n}\.", r"^## \d+\.")
+    if not _sec:
+        fail("judgment-binds", f"references/judgment-points.md: no '## {_n}.' section — "
+                               f"the P4 / P6 / P8 implementing steps cannot be derived")
+        continue
+    _p = re.match(rf"## {_n}\.\s+P(\d+)\b", _sec)
+    _rows = re.findall(r"^\| `([a-z0-9-]+)` ·", _sec, re.M)
+    if not _p or not _rows:
+        fail("judgment-binds", f"references/judgment-points.md:{_line_of(_jpt, _spos)}: §{_n} has no "
+                               f"'## {_n}. P<k> —' heading or no table rows ('| `skill` ·')")
+        continue
+    JB_SEC[_n] = (int(_p.group(1)), _rows, _line_of(_jpt, _spos))
+    for _s in _rows:
+        JB_TABLE.setdefault(_s, set()).add(_n)
+
+# pm-mental-model §2: each principle's Binds text ("— Binds …" ends the rule)
+JB_BINDS = {}                # principle -> (line, binds text)
+for _m in re.finditer(r"^(\d+)\.\s.*$", _s2 or "", re.M):
+    _parts = re.split(r"—\s*Binds\b", _m.group(0), maxsplit=1)
+    if len(_parts) == 2:
+        JB_BINDS[int(_m.group(1))] = (_line_of(_mm, _mm.find(_m.group(0))), _parts[1])
+
+_SINCE_V = re.compile(r"\bsince v(\d+\.\d+(?:\.\d+)?)")
+JB_NEED = {}                 # (skill, section) -> [where it is bound]
+for _n, (_pn, _rows, _ln) in sorted(JB_SEC.items()):
+    for _s in _rows:
+        if _s not in SKILLS:
+            fail("judgment-binds", f"references/judgment-points.md:{_ln}: the §{_n} table names '{_s}', "
+                                   f"which is not a skill")
+            continue
+        JB_NEED.setdefault((_s, _n), []).append(f"judgment-points.md §{_n}")
+        _bl, _bt = JB_BINDS.get(_pn, (None, ""))
+        if _s not in re.findall(r"`([a-z0-9-]+)`", _bt):
+            fail("judgment-binds", f"references/pm-mental-model.md:{_bl or '?'}: P{_pn} Binds never names "
+                                   f"'{_s}', which judgment-points.md §{_n} lists as an implementing step")
+for _pn, (_bl, _bt) in sorted(JB_BINDS.items()):
+    _start = next((m.start() for m in _SINCE_V.finditer(_bt) if _ver(m.group(1)) >= JB_FROM), None)
+    if _start is None:
+        continue
+    for _e in re.split(r";\s+|(?<=\.)\s+(?=[A-Z`])", _bt[_start:]):
+        if re.search(r"already in place|\bbuild paths?\b", _e):
+            continue
+        _vs = [_ver(v) for v in _SINCE_V.findall(_e)]
+        if _vs and max(_vs) < JB_FROM:
+            continue
+        _explicit = _jp_sections(_e) & {7, 8, 9}
+        for _tok in re.findall(r"`([a-z][a-z0-9]*(?:-[a-z0-9]+)+)`", _e):
+            if _tok in SKILLS:
+                for _n in sorted(_explicit or JB_TABLE.get(_tok, set())):
+                    JB_NEED.setdefault((_tok, _n), []).append(f"pm-mental-model.md:{_bl} P{_pn} Binds")
+            elif _explicit and _tok not in KNOWN_NON_SKILL_TOKENS and _tok not in VOCAB \
+                    and f"{_tok}.md" not in REF_BASENAMES:
+                fail("judgment-binds", f"references/pm-mental-model.md:{_bl}: P{_pn} Binds names '{_tok}' next to "
+                                       f"judgment-points.md §{min(_explicit)}, and it is not a skill")
+for (_s, _n), _where in sorted(JB_NEED.items()):
+    if _n not in _skill_cites(_s):
+        fail("judgment-binds", f"skills/{_s}/SKILL.md: bound by {', '.join(sorted(set(_where)))}, but neither "
+                               f"SKILL.md nor its references/ cite judgment-points.md §{_n} — the step has no "
+                               f"implementing text (pm-mental-model.md §5)")
+
+# (b) stale forward markers
+try:
+    PLUGIN_VER = _ver(json.load(open(os.path.join(root, ".claude-plugin", "plugin.json"),
+                                     encoding="utf-8"))["version"])
+except Exception:
+    PLUGIN_VER = None
+    fail("judgment-binds", ".claude-plugin/plugin.json: no readable version — forward markers cannot be dated")
+_FWD = re.compile(r"\b(?:from|arriv(?:es|e|ing)\s+in|land(?:s|ing)?\s+in|join(?:s|ing)?\s+in)\s+"
+                  r"v(\d+\.\d+(?:\.\d+)?)(?:\s*[–-]\s*v?(\d+\.\d+(?:\.\d+)?))?", re.I)
+_FWD_PLAIN = re.compile(r"\b(?:unchanged|upgrad\w*|migrat\w*|renamed|carried(?:\s+over)?|pulled\s+forward|"
+                        r"deferred|moved|changed|different|differs?)\s+$", re.I)
+fwd_targets = sorted(p for p in set(
+    [os.path.join(root, f) for f in ("README.md", "AGENTS.md", "local-context.example.md")] +
+    glob.glob(os.path.join(root, ".claude-plugin", "*.json")) +
+    glob.glob(os.path.join(root, ".codex-plugin", "*.json")) +
+    glob.glob(os.path.join(root, ".codex", "agents", "*.toml")) +
+    glob.glob(os.path.join(root, "hooks", "*.json")) +
+    glob.glob(os.path.join(root, "scripts", "*.py")) + glob.glob(os.path.join(root, "scripts", "*.sh")) +
+    glob.glob(os.path.join(root, "references", "**", "*.md"), recursive=True) +
+    glob.glob(os.path.join(root, "references", "**", "*.yaml"), recursive=True) +
+    glob.glob(os.path.join(root, "skills", "**", "*.md"), recursive=True) +
+    glob.glob(os.path.join(root, "skills", "**", "*.yaml"), recursive=True) +
+    glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True) +
+    glob.glob(os.path.join(root, "agents", "*.md")) + glob.glob(os.path.join(root, "commands", "*.md")))
+    if os.path.isfile(p) and os.sep + "examples" + os.sep not in p)
+if PLUGIN_VER:
+    for f in fwd_targets:
+        rel_name = os.path.relpath(f, root)
+        # fenced blocks become blank lines, so line numbers still point at the source
+        body = re.sub(r"^```.*?^```", lambda m: "\n" * m.group(0).count("\n"),
+                      open(f, encoding="utf-8").read(), flags=re.S | re.M)
+        for i, line in enumerate(body.split("\n"), 1):
+            if rel_name == "README.md" and line.startswith("**New in v"):
+                continue
+            prose = re.sub(r"`[^`]*`", lambda m: " " * len(m.group(0)), line)
+            for m in _FWD.finditer(prose):
+                if _FWD_PLAIN.search(prose[:m.start()]):
+                    continue
+                v = _ver(m.group(2) or m.group(1))
+                if v <= PLUGIN_VER:
+                    fail("judgment-binds", f"{rel_name}:{i}: forward marker '{m.group(0).strip()}' — v{_vstr(v)} "
+                                           f"has shipped (plugin.json v{_vstr(PLUGIN_VER)}); a shipped behaviour "
+                                           f"reads 'since v{_vstr(v)}'")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

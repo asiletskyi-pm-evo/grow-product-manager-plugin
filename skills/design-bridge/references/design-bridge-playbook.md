@@ -1,6 +1,6 @@
-# Design Bridge playbook — source extraction (Step 3), deck rendering (Step 5a), failure modes, worked example, role defaults, history
+# Design Bridge playbook — source extraction (Step 3), Prototype IR, prototype as spec (Step 9), deck rendering (Step 5a), failure modes, worked example, role defaults, history
 
-> Part of `design-bridge`. Loaded on demand: Step 3 before extracting from an upstream artifact, Step 5a when rendering a deck, the failure-mode table when a dependency is missing or fails at runtime, the end-to-end example when checking the call order, Role defaults when Step 1 asks a question under a role default, History for version context. Step headings, triggers, the Deck IR schema, the copy / DS / a11y gates (4b, 4d, 4e), the Step 6 QA gate and the vault save stay in SKILL.md.
+> Part of `design-bridge`. Loaded on demand: Step 3 before extracting from an upstream artifact (and before Step 2 for a build-first hand-off), the Prototype IR when Step 3 builds a prototype and at 5b, Prototype as spec when Step 9 shows its line, Step 5a when rendering a deck, the failure-mode table when a dependency is missing or fails at runtime, the end-to-end example when checking the call order, Role defaults when Step 1 asks a question under a role default, History for version context. Step headings, triggers, the Deck IR schema, the copy / DS / a11y gates (4b, 4d, 4e), the Step 6 QA gate and the vault save stay in SKILL.md.
 
 ## Step 3 — Source extraction by upstream
 
@@ -9,6 +9,7 @@ Depending on **upstream**:
 **a. Confluence page** (`write-concept`, `requirements-creator`) — parse via `getConfluencePage`; extract:
 - `title`, `problem_statement`, `solution_summary`, `key_metrics`, `scope`, `phases`, `risks`, `ask`
 - any embedded diagram URLs → remap in Step 4c
+- `prototype_ref` (write-concept Step 8 after a build-first run, since v3.9.0): the Prototype IR is read from that prototype, and 5b edits it in place — no new prototype is drawn
 
 **b. Research output** (`product-research`, `cjm-research`, `meeting-processor`) — parse markdown:
 - themes, insights, recommendations
@@ -24,6 +25,11 @@ Depending on **upstream**:
 
 **e. User-provided** — raw text / pasted context / uploaded files.
 
+**f. Build-first brief** (`write-concept` Step 1, since v3.9.0; `references/judgment-points.md` §8) — the confirmed brief and its riskiest assumption, handed over with `intent: prototype`, `fidelity: lo-fi`, `source: brief` and `assumption`. Steps 1–2 ask nothing for this upstream: audience `team`, brand mode `minimal`, Figma embeds `no` (a Figma link the brief names becomes the IR's reference, not an embed), language from `user.language`. Extract:
+- the problem, the target user, the proposed solution and the assumption;
+- only the screens and states a real user has to meet to test the assumption (typically 2–5 screens) — the Prototype IR is scoped to the assumption, not the whole feature;
+- the brief's claims keep the labels the brief gives them; the brief is not saved anew here.
+
 **Evidence labels in the Deck IR (since v3.8.0).** The class words and grammar are `references/pm-mental-model.md` §4; the class of an input comes from `references/data-integrity-protocol.md` Gate Check 6 (6a). This step only carries labels — it runs no data gate and adds no question.
 - **Carry, never upgrade.** Every number, quote and benchmark enters the IR with the label its upstream gives it, into the slot's caption or attribution. An unlabelled claim from an artifact saved before v3.8.0 takes the class of the source it cites, else `reported` (the artifact) — never `measured`, because this skill re-verifies nothing.
 - **Read here, not upstream** (d., e.): this skill runs no data gate, so a figure it takes in itself — typed or pasted, an uploaded export, a dashboard read straight from Tableau — is `reported` (who, or which file or dashboard · not gate-checked). `measured` arrives only labelled by an upstream skill that ran its gate (product-analysis, cjm-research, product-reporter's Jira counts).
@@ -32,6 +38,62 @@ Depending on **upstream**:
 - **Synthetic input** (persona answers, synthetic users, model-written "user" quotes) is `simulated`: it never fills a theme, quote, metric or evidence slot and is never counted in "Method & sample"; it goes to one "Simulated input — hypotheses only" line.
 - **Hand-back lines** the upstream attached travel with their claim: in the caption of the slide that cites it for internal audiences, only in the outline companion for an external one. A before / after change with no control reads "coincides with", never "caused by".
 - **Forward-looking numbers** (targets, forecasts, expected impact) carry no class — only their forecast / illustrative marker.
+
+## Prototype IR (since v3.9.0)
+
+The prototype's counterpart of the Deck IR. Built at Step 3 for `intent=prototype` from the source (a–f), refined by 4b (state copy), 4d (DS components; a violation not fixed inline goes to `open_questions`) and 4e (a11y notes), and completed at 5b with each screen's rendered reference:
+- lo-fi — diagram-prototyper fills it when called with `return_to: design-bridge`, which 5b passes only for the build-first hand-off: Mermaid node ids or wireframe block ids; any other lo-fi prototype is drawn without it, its IR keeps no screen references, and Step 9 shows no line;
+- mid-fi — the HTML section id of each screen;
+- hi-fi — the Figma frame node id (`use_figma`), or, for a toolkit's Figma URL, `get_metadata`: frames → screens, prototype connections → transitions. A toolkit return with no readable Figma file (a code branch, files only, a 403) leaves the IR without screen references, and Step 9 shows no line.
+
+```yaml
+prototype:
+  fidelity: <lo-fi | mid-fi | hi-fi>
+  source: <upstream artifact, the build-first brief, or user text>
+  assumption: <the assumption it tests, or none>
+  screens:
+    - id: <S1>
+      purpose: <what the user does here, one sentence>
+      components: [<DS components from 4d>]
+      states:                  # default, plus empty / error / loading wherever the screen loads data or takes input, no-permission / offline wherever access or the connection can fail
+        - name: <default | empty | error | loading | no-permission | offline | other>
+          shown: <yes | no>
+          copy: <microcopy from 4b>
+      a11y: [<4e findings>]
+      ref: <Mermaid node id | wireframe block id | HTML section id | Figma frame node id>
+  transitions:
+    - from: <S1>
+      to: <S2>
+      trigger: <user action or system event>
+  open_questions: [<states not shown, DS violations not fixed>]
+```
+
+Rules:
+- A state the screen needs but the prototype does not show is recorded `shown: no` — never drawn after the fact to complete the IR.
+- The IR describes the prototype; it adds no evidence of its own. The prototype is `reported` (file, frame) — intended UI, never `observed` user behaviour (`references/data-integrity-protocol.md` 6a).
+
+## Prototype as spec — Step 9 (since v3.9.0)
+
+**Payload to requirements-creator** (when the user takes the Step 9 line):
+- `prototype_ref` — the vault path, the Figma URL or the toolkit returns;
+- `prototype_ir` — the IR above;
+- the upstream — the concept, the build-first brief or the user's text — and the assumption, when there is one;
+- `real_user_sessions` — the product-research run on this prototype, or `none`;
+- the class — the prototype is `reported` (file, frame); session results keep the class product-research gave them.
+
+**Mapping** (applied by requirements-creator; nothing is asked to fill a gap):
+
+| Prototype IR | Spec |
+|---|---|
+| a screen | one functional-requirement row — purpose → the requirement; components and a11y → its notes |
+| a state with `shown: yes` | one Given / When / Then acceptance criterion — Given the screen, When the trigger or condition, Then what the state shows |
+| a transition | the flow between the rows it connects |
+| a state with `shown: no`, an item in `open_questions` | an Open Question — never an invented acceptance criterion |
+| `prototype_ref` | the link in the spec's UI & UX section |
+
+A claim about users made on the prototype alone ("users will understand X") stays `assumed` until real-user sessions back it.
+
+**Payload to product-research** (the "show it to 3–5 real users" suggestion, first when the prototype tests an assumption): `prototype_ref`, the assumption, the screens in flow order from the IR, and a request for 3–5 sessions with real users of the target segment. What the sessions show comes back with its own class (`observed` / `reported`, with the session); the prototype itself is never evidence of what users do.
 
 ## Step 5a — intent=deck → .pptx
 

@@ -103,6 +103,13 @@ Combine Confluence and Google Drive findings:
 
 ### Step 7 — Build hypotheses
 
+**7.0 PM-first hypotheses (since v3.9.0).** `references/judgment-points.md` §9 at this step: `hypotheses` / `full` modes, an interactive run, `judgment.learning_mode` `pm_first` or `explain`; never in `health-check`, `anomalies` or `comparison`. Only this run's own switch counts: a `pm_first` value a caller passes (e.g. feedback-triage) is not read, since a chain passes it only on the same material (§9).
+- **The anomalies (`pm_first`).** List the top 3 gated anomalies from Step 4 — fewer when fewer exist; metrics ✅ / ⚠️ from Step 3.5 only; negative ones by severity (Critical, Warning, Info), larger deviation first within a level: stage, metric, deviation with its 3.5.d annotation and 3.5.g class. Inputs only — no cause, hypothesis or score of this skill yet.
+- **The question.** One free-text message in `user.language`: for each anomaly, your likely cause → the change you would try. Partial answers count; a skip word skips; «вимкни» / "turn off" writes `- **Learning mode:** off` (§9). The first such question in a session adds one line on how to skip or switch it off.
+- **Withheld.** The PM's hypotheses stay in the chat. They are not part of the context passed to the CJM Hypotheses delegation below (its 3C return), so the two sets stay independent; they are never a Feedback Match (a PM's view is not user feedback, Step 6c), never in a debate evidence pack, and never scored, verified (Step 10) or added to the backlog.
+- **Your hypotheses vs mine.** Once the report is assembled, in chat before publishing (`references/cjm-reports.md` → Publishing): per anomaly, matched (the same cause and a similar change), differing (with the evidence that separates them — the Feedback / Heuristic Match, enrichment items — or "no evidence decides this — your call") and only yours (listed, not scored). ICE scores and ranks never move toward the PM's.
+- **`explain`.** Nothing is asked here; at the same point before publishing, one chat block "How I got here": the anomalies and enrichment used (with their classes), the rule applied (Data Trigger → Feedback / Heuristic Match → hypothesis, ICE with the CJM weighting) and the two closest hypotheses not kept, with why. It asks nothing and never enters the report.
+
 **Delegate to `brainstorm-features` in CJM Hypotheses mode.**
 
 Pass context:

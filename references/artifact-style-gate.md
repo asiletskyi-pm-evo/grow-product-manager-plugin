@@ -95,7 +95,7 @@ The defect: an artifact that does not say what it serves and what comes next is 
 
 Two tiers of execution:
 
-1. **Self-check at T-5 — every Product-contour skill.** Before presenting, the skill confirms the footer — and, since v3.7.0, the confidence line where `judgment-points.md` §1 names one; since v3.8.0 also Gate 4b through `template-protocol.md` T-5 step 3c — and fixes a missing or malformed line or label silently (labels only toward a weaker class); a line in the P3 format (`Confidence: … · most sensitive to: … · would change if: …`) where §1 names none is removed — a skill's own confidence field or label (a hypothesis's Confidence, a research plan's confidence label) stays. Skills that already print a gate report line count it there (`футер: F`, `докази: E`, each shown only when above 0); skills without one print nothing new. The self-checks run on the delivered artifact whether or not Step T ran, and independently of `review_mode`. This is the whole Gate 4 for skills without a maker–checker step (for example product-analysis, cjm-research, product-research).
+1. **Self-check at T-5 — every Product-contour skill.** Before presenting, the skill confirms the footer (since v3.9.0, never re-adding a footer or confidence line the user removed at this run's review step; the pre-mortem presence of `judgment-points.md` §7 is checked at T-5 step 3b, is not a Gate part and is never restored after a deletion) — and, since v3.7.0, the confidence line where `judgment-points.md` §1 names one; since v3.8.0 also Gate 4b through `template-protocol.md` T-5 step 3c — and fixes a missing or malformed line or label silently (labels only toward a weaker class); a line in the P3 format (`Confidence: … · most sensitive to: … · would change if: …`) where §1 names none is removed — a skill's own confidence field or label (a hypothesis's Confidence, a research plan's confidence label) stays. Skills that already print a gate report line count it there (`футер: F`, `докази: E`, each shown only when above 0); skills without one print nothing new. The self-checks run on the delivered artifact whether or not Step T ran, and independently of `review_mode`. This is the whole Gate 4 for skills without a maker–checker step (for example product-analysis, cjm-research, product-research).
 2. **Checker — where maker–checker already runs** (requirements-creator Step 4.5, write-concept 4.5, task-creator "Batch quality gate before creation", meeting-processor only when its opt-in gate runs). The **form** lens adds Gate 4a — the maker passes `artifact_type` and mode in the checker input, and the checker reports `4a: n/a` wherever step 3a places no line; the **groundedness** lens adds Gate 4b and reports `4b: n/a` per its `n/a` list. There is no third lens. No lens checks 4c: none of these four skills renders a confidence line (`judgment-points.md` §1); decision-log checks its record's line at its own save gate.
 
 People-contour artifacts are out of scope for Gate 4.
@@ -115,7 +115,8 @@ Exempt:
 - hypothesis statements;
 - Gate 1 process parameters;
 - the AI recommendations block;
-- forward-looking numbers (`pm-mental-model.md` §4).
+- forward-looking numbers (`pm-mental-model.md` §4);
+- since v3.9.0, the failure causes and early signals of a pre-mortem, kill-criteria rows, behaviour-spec rules and the expected outputs of an eval set — hypothetical by nature — except a cited baseline or input, which keeps its class.
 
 **2. Classes and grammar.** The label grammar is `pm-mental-model.md` §4: the class goes first inside the claim's existing annotation, and a group label is allowed only when every claim it covers shares class and source. The full assignment table is `data-integrity-protocol.md` Gate Check 6 (6a); its compact form for a checker that reads only this file:
 
@@ -159,6 +160,19 @@ Partial cases (4a's other exclusions — 4b applies in part):
 - it downgrades a label.
 
 It never invents a source and never upgrades a class.
+
+## Spec readiness (since v3.9.0)
+
+A non-blocking checklist for a feature spec about to be broken into work (`task-creator` Step 1). The engineering lead's spec-readiness gate-emphasis token points here too. Six elements, each present or missing:
+
+1. **Outcomes** — the problem and the measurable outcome;
+2. **Out of scope** — a Non-goals, Scope or Out of scope section in the spec or its linked concept;
+3. **Constraints** — technical, legal, platform or time constraints stated;
+4. **Prior decisions** — the approach, an approved design or a linked decision record;
+5. **Breakdown** — functional requirements specific enough to split into tasks;
+6. **Verification** — acceptance criteria or an A/B decision rule; for an AI-driven spec, the eval set with its acceptable error rate is required.
+
+Reported as one line — `Spec readiness: n/6 — missing: …` — in the step's existing summary and report. It never blocks, never asks and never edits the spec (the gate-emphasis token in requirements-creator still adds its ⚠️ caveat line to that skill's own draft). A concept source (not a spec) gets one pointer line to `requirements-creator` instead. Acceptance criteria are referenced by id (`AC-N`, or by position when unnumbered) from the Definition of Done of a task that already has one; their text is not copied.
 
 ## Execution model: maker–checker
 

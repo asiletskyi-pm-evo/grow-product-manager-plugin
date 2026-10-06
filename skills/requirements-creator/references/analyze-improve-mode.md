@@ -50,6 +50,7 @@ Evaluate the document against the standard requirements template (`references/re
 - Are requirements or stages written as paragraph prose instead of lists/tables? (Gate 2 — same reference)
 - Is the scope clear — what IS in scope and what is NOT?
 - Are acceptance criteria or success thresholds defined?
+- Since v3.9.0, advisory (listed in A3 only, never an A4 question): an AI-driven document without a behaviour spec, an eval set, an acceptable error rate or kill criteria; a problem or outcome statement that names the solution instead (`references/ai-feature-section.md` §5, §7). Either may become an A5 proposal; nothing is added to the document unless the user accepts it there, and the completeness score keeps its nine sections.
 
 ### A3 — Present analysis results
 
@@ -82,7 +83,7 @@ Present findings to the user in a structured format:
 
 ### A4 — Clarifying questions
 
-Based on gaps identified in A2 and A3, ask the user targeted clarifying questions to fill in the missing context. Ask in batches — group related questions together to avoid overwhelming the user.
+Based on gaps identified in A2 and A3, ask the user targeted clarifying questions to fill in the missing context. Ask in batches — group related questions together to avoid overwhelming the user. Advisory findings (Gate 4b labels; since v3.9.0 the AI-feature and not-solution-shaped findings) never become A4 questions.
 
 Prioritize questions by impact:
 1. **Critical** — missing information that blocks implementation (e.g., no functional requirements for a key scenario)

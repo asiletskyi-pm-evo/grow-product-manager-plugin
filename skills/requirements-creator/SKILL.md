@@ -1,7 +1,7 @@
 ---
 name: requirements-creator
-version: 0.16.1
-description: Write or review a requirements document with numbered functional requirements, incl. A/B test specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію», «опиши фічу як вимоги». EN — "write requirements", "create feature spec", "write A/B test requirements", "review / analyze / improve requirements", "check my spec". Also UA — «створи специфікацію фічі», «переглянь вимоги», «покращ вимоги». A concept from write-concept is the input; task-creator consumes the output.
+version: 0.17.0
+description: Write or review a requirements document with numbered functional requirements, incl. A/B test and AI-feature specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію», «опиши фічу як вимоги». EN — "write requirements", "create feature spec", "write A/B test requirements", "review / analyze / improve requirements", "check my spec". Also UA — «створи специфікацію фічі», «переглянь вимоги», «покращ вимоги». A concept from write-concept is the input; task-creator consumes the output.
 ---
 
 # Feature and Hypothesis Requirements Creator
@@ -66,7 +66,7 @@ Follow `references/template-protocol.md`.
 
 Declare:
 - `artifact_type: requirements`
-- `subtype`: inferred — `ab-test` when the user mentions an A/B test / experiment, `bugfix` when describing a bugfix spec; none inferred → `role_defaults.template_defaults.requirements` (T-0, since v3.6.0; a hat overlays it; its value `default` keeps the subtype `null`), else `null`
+- `subtype`: inferred — `ab-test` when the user mentions an A/B test / experiment, `ai-feature` when the feature is AI-driven in explicit AI-qualified words, never a bare "model" (since v3.9.0; when only inferred, declared only if no user-global or product requirements template is a candidate; `ab-test` wins when both apply — `references/ai-feature-section.md` §1–§2), `bugfix` when describing a bugfix spec; none inferred → `role_defaults.template_defaults.requirements` (T-0, since v3.6.0; a hat overlays it; its value `default` keeps the subtype `null`), else `null`
 - `product_id: {from local-context.md active product}`
 - `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
 
@@ -74,13 +74,13 @@ Run Steps T-1 → T-5 via the `template-library` helper routines. Render the res
 
 If the user says "do not use a template" → skip Step T and use the skill's internal structure.
 
-If no template applies → fall back to the built-in `requirements-builtin-default` (or `requirements-builtin-ab-test` if subtype matched); if both are missing, use the skill's internal structure below.
+If no template applies → fall back to the built-in `requirements-builtin-default` (or `requirements-builtin-ab-test` / `requirements-builtin-ai-feature` if subtype matched); if both are missing, use the skill's internal structure below.
 
 In **Analyze & Improve** mode, Step T is NOT run — the input document's structure drives the analysis.
 
 **Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — Create mode only; Analyze & Improve never adds it to the user's document.
 
-**Role extra sections (since v3.6.0).** T-5 step 3b inserts each `role_defaults.extra_sections.requirements` partial (`tracking-plan`, `nfr`) above the judgment footer when the document — template or internal structure alike — has no section with that heading; derived, never asked, Create mode only (Analyze & Improve never adds them to the user's document).
+**Role extra sections (since v3.6.0).** T-5 step 3b inserts each `role_defaults.extra_sections.requirements` partial (`tracking-plan`, `nfr`) above the judgment footer when the document — template or internal structure alike — has no section with that heading (`requirements/ai-feature` already has the tracking plan); derived, never asked, Create mode only (Analyze & Improve never adds them to the user's document). Since v3.9.0 the same step inserts the pre-mortem of an A/B or AI-driven spec (Step 4; `references/judgment-points.md` §7).
 
 ---
 
@@ -95,7 +95,10 @@ In **Analyze & Improve** mode, Step T is NOT run — the input document's struct
 
 **1b. Determine context source:**
 
-- **Transition from another skill** (Product Research / Write Concept / Brainstorm Features) → context was passed from the previous skill. Ask the user which specific feature/hypothesis from the results they want to describe requirements for. Use all passed context as the starting point
+- **Transition from another skill** (Product Research / Write Concept / Brainstorm Features / Design Bridge) → context was passed from the previous skill. Ask the user which specific feature/hypothesis from the results they want to describe requirements for. Use all passed context as the starting point
+  - ← `write-concept` (build first, since v3.9.0): an eval set for an AI behaviour — the payload carries the brief, the riskiest assumption and `subtype: ai-feature`
+  - ← `design-bridge` (prototype as spec, since v3.9.0): screens → functional requirements, shown states → acceptance criteria, states not shown → Open questions
+  - Both are build-first paths of `references/judgment-points.md` §8: Step 1 asks nothing their payload answers (no "which feature?"); the later steps are unchanged, except that a prototype source leaves out Step 8 option 2; payloads and mapping in `references/ai-feature-section.md` §6
 - **Standalone launch** → gather context from scratch: what is the feature, what problem does it solve, for whom, what is the expected outcome
 
 In both cases, proactively gather additional information from the user:
@@ -119,7 +122,7 @@ Step T resolved the template through the registry (`references/template-protocol
 
 ### Step 2 — Deep requirements gathering (BA mode)
 
-Proactively gather detailed information from the user, asking clarifying questions like an experienced Business Analyst:
+Proactively gather detailed information from the user, asking clarifying questions like an experienced Business Analyst — never about the derived sections of Step 4 (AI feature, Pre-mortem, and the Out of scope row the internal structure adds; since v3.9.0), which stay `⚠️ TBD` where nothing states them:
 
 **Hypotheses:**
 - What is the precondition/problem?
@@ -201,7 +204,7 @@ Before finalizing, check whether the feature has been **prioritized** — does i
 
 Before writing, load the team style preamble — `references/artifact-style-gate.md` Gate 3a (style profile + reference fragments from `knowledge-library`); skip silently if no profile is configured. Then generate the full requirements document following the confirmed template structure.
 
-> For a worked, high-quality reference of the target shape and rigor, load `references/examples/feature-spec-example-v1.md` on demand. It is a generic exemplar (few-shot) with testable Acceptance Criteria and an explicit A/B decision rule — match its rigor, not its exact wording.
+> For a worked, high-quality reference of the target shape and rigor, load `references/examples/feature-spec-example-v1.md` on demand. It is a generic exemplar (few-shot) with testable Acceptance Criteria and an explicit A/B decision rule — match its rigor, not its exact wording. For an AI-driven spec (since v3.9.0) load `references/examples/ai-feature-spec-example-v1.md` instead.
 
 **Standard template structure** (from `references/requirements-template.md`):
 
@@ -215,9 +218,10 @@ Before writing, load the team style preamble — `references/artifact-style-gate
 | 5.1 | Business requirements | Bulleted list of theses — 1–2 sentences each, key points in bold; no paragraph prose |
 | 5.2 | Functional requirements | Numbered table: №, Block/Module/Theme, Requirements |
 | 5.3 | Technical requirements | Implementation approach, platforms, locales |
-| 5.4 | UI&UX requirements | **Empty section** — to be filled by Product Designer. If Figma links to current designs were found — include them as reference |
+| 5.4 | UI&UX requirements | **Empty section** — to be filled by Product Designer. If Figma links to current designs were found — include them as reference; a prototype source (since v3.9.0) is linked as the proposed design |
 | 5.5 | Analytics coverage requirements | **Empty section** — to be filled by Product Analyst |
 | Acceptance Criteria | Given/When/Then table (AC-N): testable, binary pass/fail conditions covering main flows + edge/error states. The contract QA and analytics verify against |
+| Out of scope | Since v3.9.0: bulleted list of what this spec does not cover — from the request and the source concept's Non-goals / Scope; `⚠️ TBD` when nothing states it; never asked |
 | Tasks | Link to Epic in Jira + Jira work items macro with JQL filter (parent = EPIC-KEY AND labels = FEATURE-CODE) |
 
 > **Note:** Use the user's preferred language (`user.language`) for all section headings and content in the published document.
@@ -233,6 +237,9 @@ If A/B Test or A/B/C Test approach is selected — automatically add these secti
 | Success criteria | What metrics and thresholds determine if the test is successful |
 | Decision rule | Explicit ship / iterate / kill table tied to the success thresholds, stated **before** launch so the readout is a lookup, not a debate |
 | Expected duration | Estimated test duration and minimum sample size considerations |
+| Pre-mortem | Since v3.9.0 (`references/judgment-points.md` §7): 2–3 test-validity causes, each with a pre-launch check; kill criteria = a pointer to the Decision rule, no second table. Placed by T-5 step 3b (internal structure: before Tasks), not after "Hypotheses"; derived, never asked (`references/ai-feature-section.md` §4) |
+
+**Additional sections for AI-driven features (since v3.9.0, P6):** when the feature is AI-driven (`references/ai-feature-section.md` §1) and the document is a built-in or the internal structure without them, add the AI-feature sections — behaviour spec, eval set (each case with its origin class), acceptable error rate, kill criteria — after Functional requirements, plus the acceptance criterion "the eval set passes at or below the acceptable error rate". `requirements/ai-feature` has them already; a user-global or product template never gets them inserted. The pre-mortem's kill criteria point to them (`references/judgment-points.md` §7). Filled from the request and the sources; a cell nothing states stays `⚠️ TBD` (a kill row's date and then are derived instead) — never a Step 2 or Step 3 question. Rules: `references/ai-feature-section.md` §3–§4.
 
 **Optional block — "Технічні рекомендації (AI)" (only on explicit user request):**
 
@@ -250,13 +257,13 @@ If the user asked for technical recommendations, add them as a separate block at
 
 ### Step 4.2 — Requirements visualization (annotated screenshot)
 
-If the requirements change **existing UI**, offer an annotated screenshot per `references/visual-annotation-protocol.md`: obtain the current screen (a `flow-walkthrough` pack's `steps/NN.png` if a run exists for this flow → user upload → Figma frame from Step 1c → live product via browser; no source and the UI is reachable → offer **Flow Walkthrough** in walk mode, 3–5 steps, to capture the as-is screens), place numbered markers where **marker № = functional requirement №**, preview with the user, store in the project repo (`{feature-code}-screen-{N}.png`), and put the image + legend table into the Functional requirements / UI&UX sections. Attach to the published page via the protocol's REST chain in Step 6. Never block on this — skip gracefully if declined or no source exists.
+If the requirements change **existing UI**, offer an annotated screenshot per `references/visual-annotation-protocol.md`: obtain the current screen (a `flow-walkthrough` pack's `steps/NN.png` if a run exists for this flow → user upload → Figma frame from Step 1c → live product via browser; no source and the UI is reachable → offer **Flow Walkthrough** in walk mode, 3–5 steps, to capture the as-is screens), place numbered markers where **marker № = functional requirement №**, preview with the user, store in the project repo (`{feature-code}-screen-{N}.png`), and put the image + legend table into the Functional requirements / UI&UX sections. Attach to the published page via the protocol's REST chain in Step 6. Never block on this — skip gracefully if declined or no source exists. With a prototype source (since v3.9.0) the screens are its frames.
 
 ### Step 4.5 — Artifact quality gate
 
 Run `references/artifact-style-gate.md` on the draft. Maker–checker: the `grow-product-manager:artifact-checker` agent (one call per lens; fallback chain per the reference) receives the draft with `artifact_type: requirements` and `mode: create` + the source list (each source with its Gate Check 5 marker where known, e.g. `user-text`, `confluence-internal`) + the lens — never this conversation's reasoning. A requirements document is a critical artifact (published and then materialized in Jira) → use two checker lenses (form / groundedness; since v3.8.0 the groundedness lens also checks Gate 4b evidence labels). Apply fixes, keep disputed findings visible, and include the one-line gate report (with `докази: E` when above 0) when presenting the draft in Step 5.
 
-**Gate emphasis (since v3.6.0).** For each of `spec-readiness` and `nfr-present` in `role_defaults.gate_emphasis`, run that extra check (`references/data-integrity-protocol.md` → Gate emphasis) alongside this gate; a failed one adds a ⚠️ caveat line naming the gap to the draft and to the gate report — never a question, never a blocked draft. Create mode only.
+**Gate emphasis (since v3.6.0).** For each of `spec-readiness` and `nfr-present` in `role_defaults.gate_emphasis`, run that extra check (`references/data-integrity-protocol.md` → Gate emphasis; since v3.9.0 `spec-readiness` is the six-element checklist of `references/artifact-style-gate.md` → Spec readiness, its gap named as `Spec readiness: n/6 — missing: …`) alongside this gate; a failed one adds a ⚠️ caveat line naming the gap to the draft and to the gate report — never a question, never a blocked draft. Create mode only.
 
 ### Step 5 — Review with the user
 
@@ -269,7 +276,9 @@ Run `references/artifact-style-gate.md` on the draft. Maker–checker: the `grow
 - May require multiple iterations
 - Only proceed to publishing after the user confirms "OK"
 
-**Self-improvement check** (after corrections are applied and confirmed): follow `references/self-improvement.md` — analyze whether the correction is a pattern, and if so propose a SKILL.md improvement (version bump + CHANGELOG).
+**Not solution-shaped (since v3.9.0, P6).** When a problem or outcome statement (a hypothesis's problem or outcome, a goal, an overview) names the solution instead, print one ⚠️ line in the chat beside the gate report, outside the document, with a problem-shaped rewording — never a question; the body changes only if the user takes the rewording here. Scope and form: `references/ai-feature-section.md` §5.
+
+**Self-improvement check** (after corrections are applied and confirmed): follow `references/self-improvement.md` — analyze whether the correction is a pattern, and if so propose a SKILL.md improvement (version bump + CHANGELOG). Since v3.9.0 a judgment-guard correction (e.g. deleting the pre-mortem) applies to this draft only and is never proposed.
 
 ### Step 6 — Publishing
 
@@ -299,7 +308,7 @@ If the user agrees → invoke `experiment-tracker` (register mode) with: hypothe
 
 > Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
 
-Offer a design-side deliverable via `AskUserQuestion` — developer handoff spec (recommended if the requirements included UI changes), low-fi UI prototype, deck for dev-review, or skip — and invoke `design-bridge` with `intent: handoff` / `prototype` / `deck` and `source: requirements_page_url`. Never block the workflow.
+Offer a design-side deliverable via `AskUserQuestion` — developer handoff spec (recommended if the requirements included UI changes), low-fi UI prototype, deck for dev-review, or skip — and invoke `design-bridge` with `intent: handoff` / `prototype` / `deck` and `source: requirements_page_url`. Never block the workflow. With a prototype source (since v3.9.0) the low-fi prototype option is left out — it already exists.
 
 The full procedure — the offer wording, the exact `design-bridge` parameters per option and the not-installed fallback message — lives in `references/design-bridge-handoff.md` (skill-local). Read it when you reach this step after Step 7.
 
@@ -309,7 +318,7 @@ The full procedure — the offer wording, the exact `design-bridge` parameters p
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.16.1", tags: [feature area, platforms, subtype (default/ab-test)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.17.0", tags: [feature area, platforms, subtype (default/ab-test/ai-feature)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 
@@ -330,7 +339,7 @@ The full A1–A9 workflow lives in the skill-local `references/analyze-improve-m
 - Write requirements as an experienced Business Analyst — specific, clear, unambiguous
 - Every functional requirement must be actionable by a developer
 - Distinguish facts from assumptions — label each assumption `[assumed — …]` and each cited number or quote with its evidence class (Gate 4b, since v3.8.0); targets and expected changes carry none
-- If information is insufficient for a section — state gaps and ask the user to fill them
+- If information is insufficient for a section — state gaps and ask the user to fill them, except the derived sections (AI feature, Pre-mortem, and the Out of scope row the internal structure adds; since v3.9.0): `⚠️ TBD`, never asked
 - Requirements must be adaptive: contain information for BE, FE, Android, iOS, and Design
 - Use Ukrainian or English based on user's language preference
 - Maintain consistent formatting: headings, bold highlights, tables, dividers
@@ -345,6 +354,7 @@ The full A1–A9 workflow lives in the skill-local `references/analyze-improve-m
 - **`references/design-bridge-handoff.md`** — skill-local: Step 8 Design Bridge handoff — offer wording and `design-bridge` parameters per option; load at Step 8
 - **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), Gate 4 (altitude line, evidence labels), maker–checker execution model (Step 4.5 / A6)
 - **`references/examples/feature-spec-example-v1.md`** — worked golden feature-spec exemplar with A/B + acceptance criteria (few-shot; load on demand in Step 4)
+- **`references/ai-feature-section.md`** — skill-local (since v3.9.0): AI-driven detection and the `ai-feature` subtype, the AI-feature sections, the A/B and AI pre-mortem, the not-solution-shaped note, the inbound build-first paths; load at Step T, Step 4, Step 5 and on those paths; gold: `references/examples/ai-feature-spec-example-v1.md`
 - **`references/approach-recommendation.md`** — implementation approach recommendation logic (feature flag, A/B test, etc.)
 - **`references/roi-frameworks.md`** — the ROI (PRO/ROAIP) side of the prioritization gate (Step 3e / A5); ICE scoring is computed by `brainstorm-features`
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)

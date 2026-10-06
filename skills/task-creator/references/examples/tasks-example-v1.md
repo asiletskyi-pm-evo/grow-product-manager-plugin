@@ -18,6 +18,7 @@
 | A/B test | No — staged rollout behind flag `buyer_order_cancel` (FR-6) → no `a/b_test` label, one Analytics task | Page "Rollout" + user answer |
 | Work types | BE, Analytics, FE, iOS, Android, QA | User answer |
 | Design task | Not created — mockups already approved and linked in the requirements | User answer |
+| Spec readiness | `Spec readiness: 6/6 — missing: none` — goal with primary and guardrail metrics; out of scope; platforms and the rollout flag; approved mockups; FR-1 to FR-6; AC-1 to AC-7. Not AI-driven, so no eval-set option | Requirements page (Step 1) — shown with the Step 4 questions, not asked |
 
 ## 2. Pre-creation summary (Step 6b) — confirmed by the user before creation
 
@@ -28,11 +29,12 @@
 | Team | Team 1 (`<team-uuid>-NN`) | Certain — `team.jira_team_id` in `local-context.md` |
 | Components | `orders` | Inferred — page label; matches existing tasks in PROJ-1234 → confirmed by the user |
 | Labels (all tasks) | `PROJ-1234.3` (feature code) + the work-type label below | Certain — page title |
-| Work-type labels | BE `backend` · FE `frontend` · iOS `iOS`, `app` · Android `Android`, `app` · Analytics `Analytics` · QA `qa` | Skill table; `qa` is not in the skill's table — taken from the brief, confirmed by the user |
+| Work-type labels | BE `backend` · FE `frontend` · iOS `iOS`, `app` · Android `Android`, `app` · Analytics `Analytics` · QA `qa` | Skill table (the QA row); the brief names `qa` too |
 | Issue type | Task for all six | Certain — the project has no Analytics or QA issue type (`getJiraProjectIssueTypesMetadata`) |
 | Assignee / "How" depth | Not set; moderate checklist in "How" | Assumption — no person profiles for the team, so no D-level tuning |
 | Estimate (story points) | Not set — the team estimates at grooming | The requirements carry no estimates; none invented (Gate 1) |
 | Template | `task-builtin-default` 1.0.0 — no product template for Product 1 | Step T (batch: resolved once) |
+| Spec readiness | 6/6 — missing: none | Requirements page (Step 1) — shown, not asked |
 
 **Batch quality gate** (form + groundedness lenses, independent checker): 3 findings, 3 fixed, 0 disputed — a BE "How" step that named an endpoint path (absent from the requirements, removed); two "What" blocks written as prose (rewritten as lists).
 
@@ -88,11 +90,8 @@ A buyer who wants to cancel an unshipped order has to contact support or the sel
 
 ## Definition of Done
 
-- [ ] AC-4: a prepaid Confirmed order cancelled with a reason ends in "Cancelled by buyer", the seller sees the reason and is notified, the "Refund initiated" state is set.
-- [ ] AC-5: a cancellation for an order already Shipped is rejected with the "already shipped" result; the order status is unchanged.
-- [ ] AC-2 (backend side): cancellation of Shipped, Delivered and Cancelled orders is rejected.
+- [ ] AC-2, AC-4, AC-5 and AC-6 pass on the backend side.
 - [ ] FR-2: a cancellation without a reason is rejected.
-- [ ] AC-6 (backend side): with `buyer_order_cancel` off, no cancellation is accepted.
 - [ ] The contract is posted on this task and acknowledged by FE, iOS and Android.
 
 ## Requirements
@@ -167,12 +166,9 @@ Web buyers get a self-service way to cancel an unshipped order instead of contac
 
 ## Definition of Done
 
-- [ ] AC-1 and AC-2 pass on desktop and mobile web.
-- [ ] AC-3: Confirm is disabled until a reason is chosen.
-- [ ] AC-4 (web side): the buyer sees "Cancelled by buyer" and, for a prepaid order, "Refund initiated".
-- [ ] AC-5: the FR-5 message is shown and the screen shows the current status.
-- [ ] AC-6: no action with the flag off.
-- [ ] AC-7: all three events fire on web with every listed parameter.
+- [ ] AC-1, AC-2, AC-3, AC-5 and AC-6 pass on desktop and mobile web.
+- [ ] AC-4 passes on the web side.
+- [ ] AC-7 passes on web.
 
 ## Requirements
 
@@ -210,12 +206,9 @@ iOS buyers get a self-service way to cancel an unshipped order instead of contac
 
 ## Definition of Done
 
-- [ ] AC-1 and AC-2 pass on iOS.
-- [ ] AC-3: Confirm is disabled until a reason is chosen.
-- [ ] AC-4 (iOS side): the buyer sees "Cancelled by buyer" and, for a prepaid order, "Refund initiated".
-- [ ] AC-5: the FR-5 message is shown and the screen shows the current status.
-- [ ] AC-6: no action with the flag off.
-- [ ] AC-7: all three events fire on iOS with every listed parameter.
+- [ ] AC-1, AC-2, AC-3, AC-5 and AC-6 pass on iOS.
+- [ ] AC-4 passes on the iOS side.
+- [ ] AC-7 passes on iOS.
 
 ## Requirements
 
@@ -253,12 +246,9 @@ Android buyers get a self-service way to cancel an unshipped order instead of co
 
 ## Definition of Done
 
-- [ ] AC-1 and AC-2 pass on Android.
-- [ ] AC-3: Confirm is disabled until a reason is chosen.
-- [ ] AC-4 (Android side): the buyer sees "Cancelled by buyer" and, for a prepaid order, "Refund initiated".
-- [ ] AC-5: the FR-5 message is shown and the screen shows the current status.
-- [ ] AC-6: no action with the flag off.
-- [ ] AC-7: all three events fire on Android with every listed parameter.
+- [ ] AC-1, AC-2, AC-3, AC-5 and AC-6 pass on Android.
+- [ ] AC-4 passes on the Android side.
+- [ ] AC-7 passes on Android.
 
 ## Requirements
 
@@ -337,6 +327,7 @@ Design links skipped (no Design task); no "Test results analysis" task (not an A
 - **Common fields:** Parent PROJ-1234 · Team 1 · Reporter Person1 Surname1.
 - **Links:** 9 "Blocks" links (section 5).
 - **Issues encountered:** the Team field was not accepted on create; set with `editJiraIssue` on all six tasks (Step 8).
+- **Spec readiness:** 6/6 — missing: none (Step 1).
 - **All tasks:** [`parent=PROJ-1234 AND labels=PROJ-1234.3 ORDER BY created DESC`](https://jira.example.com/issues/?jql=parent%3DPROJ-1234%20AND%20labels%3DPROJ-1234.3%20ORDER%20BY%20created%20DESC)
 
 Altitude: L1 · ↑ serves: Epic PROJ-1234 "Buyer self-service for orders" — share of buyer cancellations done in self-service · ↓ next: estimate PROJ-1301…PROJ-1306 at grooming (story points left unset)
@@ -354,10 +345,12 @@ PROJ-1303 [FE] read back with `getJiraIssue` and checked by an independent check
 | Labels | `frontend`, `PROJ-1234.3` | `frontend`, `PROJ-1234.3` | Pass |
 | Components | `orders` | `orders` | Pass |
 | Description | Why, What, How, Definition of Done, Requirements (with page link) | All five present | Pass |
+| AC ids in DoD | AC-1 to AC-7 cited by id, no AC text copied | As expected | Pass |
 | Issue type | Task | Task | Pass |
 | Links | Blocked by PROJ-1301, PROJ-1302; blocks PROJ-1306 | As expected | Pass |
 | List formatting | What / How / DoD as lists | Lists | Pass |
 | No ungrounded tech content | Nothing beyond the requirements; no "AI technical recommendations" section requested | None found | Pass |
+| Eval-set task | None — the spec is not AI-driven | None | n/a |
 
 Result: all checks pass — no cross-task fixes needed.
 
@@ -369,6 +362,6 @@ Result: all checks pass — no cross-task fixes needed.
 |-----------|-----------------|
 | tasks_per_discipline | One task per selected discipline — BE, Analytics, FE, iOS, Android, QA; each "What" is specific to its work type |
 | derived_from_requirements | Every bullet cites its FR / AC; the coverage table maps all of them; "How" holds process steps only, nothing invented |
-| acceptance_in_task | Each task carries a Definition of Done built from the AC that apply to its discipline |
+| acceptance_in_task | Each task carries a Definition of Done that cites by id the AC that apply to its discipline — ids only, the AC text stays in the spec |
 | correct_epic_link | Parent PROJ-1234 on all six tasks, confirmed before creation and on read-back |
 | estimates_or_labels | Work-type label + feature code on every task; story points deliberately left for grooming and said so |
