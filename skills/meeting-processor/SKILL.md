@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.16.0
+version: 0.17.0
 description: Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «action items», «розбери транскрипт зустрічі», «що обговорювали». EN — "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or any pasted/uploaded transcript. Sources — Fireflies, other meeting tools via MCP, files, pasted text. Chains to task-creator, requirements-creator, product-research, brainstorm-features and decision-log.
 ---
 
@@ -155,7 +155,7 @@ Based on the input source, extract as much structured data as possible:
 | **Organizer** | — | — | From event organizer field |
 | **Recurrence** | — | — | From recurring event info |
 
-If the source provides a pre-built summary (like Fireflies) — use it as a starting point but always cross-reference with the full transcript for completeness.
+If the source provides a pre-built summary (like Fireflies) — use it as a starting point but always cross-reference with the full transcript for completeness; since v3.8.0 it is never the source of a quote (Quality standards).
 
 **Data merging priority:** When the same data point is available from multiple sources, use this priority:
 1. **Calendar** — for participants (most complete: names, emails, roles, attendance)
@@ -330,8 +330,8 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.16.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
-2. Key decisions from the meeting may additionally be recorded as ADR-style records — offer, don't force: "The meeting produced N decisions. Log them in the decision log so the 'why' survives?" → invoke `decision-log` (log mode) once for the chosen decisions — one record per decision, and decision-log's own confidence question once for the whole batch (since v3.7.0) — passing per decision the decision-log row of `references/chaining.md`: what was decided, the context and options discussed, who decided, a link back to these notes, and the v3.7.0 fields only when said in the meeting. decision-log owns the `decision` artifact; do not hand-write `Decisions/` files here.
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.17.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+2. Key decisions from the meeting may additionally be recorded as ADR-style records — offer, don't force: "The meeting produced N decisions. Log them in the decision log so the 'why' survives?" → invoke `decision-log` (log mode) once for the chosen decisions — one record per decision, and decision-log's own confidence question once for the whole batch (since v3.7.0) — passing per decision the decision-log row of `references/chaining.md`: what was decided, the context and options discussed, who decided, a link back to these notes, and the v3.7.0 fields only when said in the meeting, plus `evidence_classes` since v3.8.0. decision-log owns the `decision` artifact; do not hand-write `Decisions/` files here.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 
 ---
@@ -356,13 +356,14 @@ The full procedure — the discovery steps and the prompts to show — lives in 
 
 - Always confirm the selected meeting with the user before processing
 - Match speaker names against `team.members` from `local-context.md` when possible
-- Distinguish facts (what was explicitly said) from inferences (what the skill interpreted)
+- Distinguish facts (what was explicitly said) from inferences (what the skill interpreted). Since v3.8.0 (`references/pm-mental-model.md` §4) what was said — a figure too, even a dashboard number read out — is `reported` with its speaker: one artifact-level line `Evidence: reported — meeting <transcript | notes | recording> <date>` covers the MoM (`references/mom-format.md`; none on a 1-1), an item of another class (a linked artifact's label) keeps its own, and an inference is never presented as said — one that claims something nobody stated reads `[assumed — …]`
+- Quotes are verbatim from the transcript (`fireflies_get_transcript`, the file or the pasted text), with speaker and timestamp where the source has them — never from an AI summary (`fireflies_get_summary`); a paraphrase loses its quote marks (`references/artifact-style-gate.md` Gate 4b)
 - Mark uncertain extractions: if unsure whether something is a decision vs. a suggestion — mark as "Possible decision (needs confirmation)" and ask the user
 - Respect `user.language` for all output content
 - Treat all meeting content as confidential — do not pass to external LLMs or third parties per `references/data-policy.md`
 - For Confluence content rules: respect `local-context.md` content rules (e.g., ignore pages with `noindex` label when searching for context)
 - Cross-reference Fireflies summary with actual transcript — Fireflies AI summaries may miss items or misattribute actions
-- **Lists over prose (opt-in gate):** topics, decisions, action items, and next steps are always lists/tables, never paragraph prose; for a MoM headed to Confluence you MAY run the full `references/artifact-style-gate.md` (Gate 2, maker–checker) before publishing
+- **Lists over prose (opt-in gate):** topics, decisions, action items, and next steps are always lists/tables, never paragraph prose; for a MoM headed to Confluence you MAY run the full `references/artifact-style-gate.md` (maker–checker) before publishing — since v3.8.0 with both lenses, as its escalation rule requires for a publication: form (Gate 2) and groundedness (Gate 4b — verbatim quotes, `reported` labels)
 
 ## Additional Resources
 

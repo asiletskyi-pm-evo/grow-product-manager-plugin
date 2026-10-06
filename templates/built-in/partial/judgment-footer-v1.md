@@ -8,10 +8,10 @@ scope: built-in
 products: []
 default_language: en
 available_languages: [en]
-version: "1.1.0"
+version: "1.2.0"
 author: "grow-pm"
 created: 2026-09-28
-updated: 2026-09-29
+updated: 2026-10-06
 tags: [partial, footer, altitude, confidence, judgment]
 description: "Closing lines of every Product-contour artifact: the altitude line (v3.5.0) and, where references/judgment-points.md §1 names one, the confidence-and-falsifier line above it (v3.7.0)."
 status: active
@@ -43,7 +43,7 @@ variables:
     type: string
     required: false
     label: "most sensitive to"
-    hint: "The one assumption or input whose change would move the call most — not a list; an assumed or simulated input is named as such"
+    hint: "The one assumption or input whose change would move the call most — not a list; an assumed or simulated input is named with its class label (judgment-points.md §3)"
   - name: would_change_if
     type: string
     required: false

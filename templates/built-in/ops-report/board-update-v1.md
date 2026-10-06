@@ -9,10 +9,10 @@ products: []
 match: subtype
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.1.0"
 author: "grow-pm"
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-10-06
 tags: [ops, board, quarter, readout, business]
 description: "Quarterly board update (since v3.6.0): the board-prep checklist of references/session-board.md rendered as a document, plus the money bridge"
 status: active
@@ -39,7 +39,7 @@ GTD coefficient: TBD
 
 ## Planned vs actual, previous period
 
-<!-- Plan vs fact for the period, full-year forecast at the current trend, deviations with causes. If the revenue or goal plan is missed — the catch-up options already worked out. -->
+<!-- Plan vs fact for the period, full-year forecast at the current trend, deviations with causes. Every actual carries its period, source marker and evidence class (pm-mental-model.md §4): `measured` only when the skill read or counted it itself through its data gate, a pasted or typed figure `reported (<who>)` — one label per table when every figure shares class and source. Plan and forecast carry no class, only their basis; an unsourced input inside them reads `[assumed — …]`. If the revenue or goal plan is missed — the catch-up options already worked out. -->
 
 | Line | Plan | Actual | Δ | Full-year forecast | Cause |
 |------|-----:|-------:|--:|-------------------:|-------|
@@ -62,12 +62,12 @@ GTD coefficient: TBD
 
 ## Product and health metrics
 
-<!-- B2B: the LAC table — CSAT or analogue, adoption rate, LTV, ideally expansion / downgrade / churn. A product direction: its funnel and NPS themes. -->
+<!-- B2B: the LAC table — CSAT or analogue, adoption rate, LTV, ideally expansion / downgrade / churn. A product direction: its funnel and NPS themes. Each metric with its period and evidence class. -->
 - TBD
 
 ## Acquisition-channel hypotheses
 
-<!-- A channel counts as found when the ICP, the reach, the interest (AIDA) and the path to payment are known; show statistics, required investment and forecast. Un-costed organic is not a channel. -->
+<!-- A channel counts as found when the ICP, the reach, the interest (AIDA) and the path to payment are known; show statistics (each with its evidence class and source), required investment and forecast (no class — its basis named; an unsourced input reads `[assumed — …]`). Un-costed organic is not a channel. -->
 
 | Channel | ICP | Reach | Interest (AIDA) | Path to payment | Investment | Forecast |
 |---------|-----|-------|-----------------|-----------------|-----------:|---------:|

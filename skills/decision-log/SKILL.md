@@ -1,6 +1,6 @@
 ---
 name: decision-log
-version: 0.4.0
+version: 0.5.0
 description: Log and retrieve product decisions as ADR records — context, options, rationale, consequences. Not meeting notes (meeting-processor), not experiment state (experiment-tracker). UA — «зафіксуй рішення», «чому ми вирішили…», «покажи рішення по…», «журнал рішень». EN — "log this decision", "why did we decide X", "show decisions about Y", "supersede that decision", "decision log". Also UA — «перегляньмо це рішення», «зафіксуй рішення після дебатів». Also invoked by meeting-processor, experiment-tracker and planning skills when their outcome contains a decision worth recording.
 ---
 
@@ -46,7 +46,7 @@ The chosen option, stated plainly.
 Confidence: {known | likely | uncertain | unknown} · most sensitive to: {…} · would change if: {revisit trigger}
 
 ## Rationale
-Why this one — evidence links (readout, research, metrics with inline periods). **Base rate / outside view:** {how often this kind of decision worked, with source} or "none found".
+Why this one — evidence links (readout, research, metrics with inline periods), each with its class first in its annotation since v3.8.0 (`measured · …`, `reported · …`); an input with no source reads `[assumed — …]`. **Base rate / outside view:** {how often this kind of decision worked, with source} or "none found".
 
 ## Minority report (when a debate or a named dissenter disagreed)
 {2–3 sentences: the strongest dissent and who held it}
@@ -62,17 +62,18 @@ What this commits us to; what we monitor; revisit by {date} (optional) or when {
 [[related artifacts]] — MoM, experiment, requirements, roadmap items, Jira epics.
 ```
 
-Frontmatter per `vault-schema.md`: `type: decision`, `product`, `tags` (topic, area), `related`, plus `supersedes` / `superseded_by` when applicable, and optional `decision_cost` / `decision_roi` / `commitment` fields; since v3.7.0 also `owner`, `rejected_alternatives`, `base_rate`, `revisit_trigger` and `minority_report` (`evidence_classes` from v3.8.0) — meanings and the "not recorded" rule in `references/judgment-points.md` §4. A record written before v3.7.0 stays valid without them. **When the record names a revisit-by date, write it to the `revisit_by` frontmatter field as well** — that field is what `focus-advisor` filters to surface overdue revisits; a date left only in the body is invisible to it.
+Frontmatter per `vault-schema.md`: `type: decision`, `product`, `tags` (topic, area), `related`, plus `supersedes` / `superseded_by` when applicable, and optional `decision_cost` / `decision_roi` / `commitment` fields; since v3.7.0 also `owner`, `rejected_alternatives`, `base_rate`, `revisit_trigger` and `minority_report`, and since v3.8.0 `evidence_classes` (derived at the step-2 gate, never asked, left out when nothing states a class) — meanings and the "not recorded" rule in `references/judgment-points.md` §4. A record stays valid without the keys and labels its version predates (the v3.7.0 fields, the v3.8.0 `evidence_classes` and Rationale labels). **When the record names a revisit-by date, write it to the `revisit_by` frontmatter field as well** — that field is what `focus-advisor` filters to surface overdue revisits; a date left only in the body is invisible to it.
 
 ## Modes
 
 ### Mode: log (default)
-1. Collect the record fields — from the invoking skill's context when chained (meeting decision block, experiment decide payload, planning outcome, debate verdict), or via short dialogue when standalone. Do not interrogate: infer what's already in context, ask only for gaps (especially **options considered** — the field people skip and later regret). The v3.7.0 fields (owner, rejected reasons, base rate, revisit trigger, minority report) are never asked here: they come from the context or the step-1a answer, else stay `not recorded` / `none found`.
+1. Collect the record fields — from the invoking skill's context when chained (meeting decision block, experiment decide payload, planning outcome, debate verdict), or via short dialogue when standalone. Do not interrogate: infer what's already in context, ask only for gaps (especially **options considered** — the field people skip and later regret). The v3.7.0 fields (owner, rejected reasons, base rate, revisit trigger, minority report) and, since v3.8.0, `evidence_classes` are never asked here: they come from the context or the step-1a answer, else stay `not recorded` / `none found` in the body (an unstated `evidence_classes` key is left out).
 1a. **Owner's confidence first (P2, since v3.7.0).** Ask the P2 question of `references/judgment-points.md` §1–§2 — how sure the owner is and what would make them revisit — one question for a batch of decisions; all its §2 rules apply (switch, known estimate, automated run, skip). The answer fills the record's `Confidence:` line and `revisit_trigger`; a skip or a switched-off question leaves them as the owner stated them in the context (a debate's facilitator confidence is not the owner's), else `unknown (not stated)` / `not recorded` — never a separate question. When the linked evidence or base rate points to a different level, show that as the "Your estimate vs mine" comparison; the owner's level is what the record keeps. When the Debate hook below runs, ask 1a after the verdict, so the level and trigger belong to the option finally chosen.
 2. Show the draft record — its confidence line checked first against Gate 4c (`references/judgment-points.md` §6): a clause that names nothing observable is shown as `not recorded`, never replaced by an invented one. **Gate: confirm/correct before saving.**
+2a. **Evidence labels (since v3.8.0)** — the same gate is this record's Gate 4b step (`references/artifact-style-gate.md`; no Step T here): each Rationale input carries its class (the linked evidence's labels, the classes the invoking skill's payload states; an unsourced one `[assumed — …]`, accepted by confirming the record), fixed only toward a weaker class; `evidence_classes` lists the classes of the Rationale's inputs and of the invoking payload (`references/judgment-points.md` §4); a senior opinion the decision leans on reads `[assumed — senior opinion: <who>]`, and a `simulated` A# the decision rests on stays on one `Simulated input — hypotheses only` line placed after the Rationale section (outside it) and still counts in the key. These checks never edit the owner's level or clauses: a v3.8.0 cap, or an `assumed` / `simulated` input the owner's `most sensitive to` does not name, appears only in a "Your estimate vs mine" comparison when one is shown (§6).
 3. Save (vault or fallback), display the link. If the decision implies work → offer `task-creator`.
 
-> **Debate hook.** For a contested decision (real trade-offs, ≥ 2 interest groups) — before the gate in step 2, offer a debate per `references/debate-protocol.md`, using the evidence already linked to the record as the pack. The verdict feeds the Decision and Rationale sections, the minority report goes into the Minority report section and the `minority_report` field (since v3.7.0; before that it sat in Consequences & risks), and the debate artifact links via `related`.
+> **Debate hook.** For a contested decision (real trade-offs, ≥ 2 interest groups) — before the gate in step 2, offer a debate per `references/debate-protocol.md`, using the evidence already linked to the record as the pack. The verdict feeds the Decision and Rationale sections (since v3.8.0 the pack's classes come with it: E# keep theirs, A# keep their label — `assumed` or `simulated`), the minority report goes into the Minority report section and the `minority_report` field (since v3.7.0; before that it sat in Consequences & risks), and the debate artifact links via `related`.
 
 ### Mode: search ("чому ми вирішили X")
 1. Search Decisions/ by topic/tags/product (vault search per `vault-protocol.md`; L0 → grep the fallback folder).
@@ -86,7 +87,7 @@ Frontmatter per `vault-schema.md`: `type: decision`, `product`, `tags` (topic, a
 3. Save the new record with `supersedes: [[old]]`; update the old one: `status: superseded`, `superseded_by: [[new]]`. **Both writes gated.**
 
 ## Quality Standards
-- Never invent options, rationale, owner, base rate or revisit trigger — only what the user/invoking skill actually provides; gaps stay visibly empty ("options not recorded", "not recorded", "none found").
+- Never invent options, rationale, owner, base rate, revisit trigger or evidence classes — only what the user/invoking skill actually provides; gaps stay visibly empty ("options not recorded", "not recorded", "none found").
 - One decision = one record; bundles get split.
 - Superseding never edits history — old records are marked, not rewritten.
 - Every record carries at least one evidence link when evidence exists.

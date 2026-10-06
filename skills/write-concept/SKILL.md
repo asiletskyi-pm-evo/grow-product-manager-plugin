@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.14.0
+version: 0.14.1
 description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ», «дизайн-бриф», «стратегічний меморандум», «мемо рішення», «бізнес-кейс»; EN — "design brief", "strategy memo", "decision memo", "business case". A concept is the input to requirements-creator.
 ---
 
@@ -168,8 +168,8 @@ Search Confluence for pages that match the concept topic (previous research, com
 - **Uploaded files** — read with the Read tool, extract key data points
 - **Web search** — use WebSearch for external context: best practices, competitor approaches, industry standards
 - **Figma** — pull design context via Figma MCP when the concept involves UI/UX. If unavailable — use browser
-- **Product Analysis skill** — when the concept needs product metrics, data analysis, or quantitative evidence, invoke the **Product Analysis** skill. Pass context: which product, what metrics are relevant to the concept, what time period. Receive structured results (key metrics, trends, anomalies) and incorporate into the PRD — especially in Success Metrics, Problem Statement, and Goals sections. Cite as "Source: Product Analysis"
-- **Deep Research via ChatGPT / Gemini** — when confirmed by the user, open the LLM web interface via browser, select the strongest available model, activate Deep Research mode, submit a detailed prompt based on the concept scope, extract findings and use as additional context
+- **Product Analysis skill** — when the concept needs product metrics, data analysis, or quantitative evidence, invoke the **Product Analysis** skill. Pass context: which product, what metrics are relevant to the concept, what time period. Receive structured results (key metrics, trends, anomalies) and incorporate into the PRD — especially in Success Metrics, Problem Statement, and Goals sections. Cite as "Source: Product Analysis" and keep the evidence class each figure arrives with (`measured`, since v3.8.0)
+- **Deep Research via ChatGPT / Gemini** — when confirmed by the user, open the LLM web interface via browser, select the strongest available model, activate Deep Research mode, submit a detailed prompt based on the concept scope, extract findings and use as additional context — since v3.8.0 a finding keeps the class of the source it traces to (usually `external`); an untraceable one is `simulated`: at most an open question, never evidence (`references/artifact-style-gate.md` Gate 4b)
 
 For each tool: MCP → registry → browser (per `references/integration-strategy.md`).
 
@@ -189,7 +189,7 @@ If the concept changes **existing UI**, offer an annotated screenshot of the cur
 
 Before writing, load the team style preamble — `references/artifact-style-gate.md` Gate 3a; skip silently if no profile is configured. Build the concept document following the confirmed structure from Step 1:
 
-> For a worked, high-quality reference of the target shape and depth, load `references/examples/prd-example-v1.md` on demand. It is a generic exemplar (few-shot), not a rigid template — match its rigor (measurable Success Metrics, a Verification/decision-rule block, explicit assumptions), not its exact wording.
+> For a worked, high-quality reference of the target shape and depth, load `references/examples/prd-example-v1.md` on demand. It is a generic exemplar (few-shot), not a rigid template — match its rigor (measurable Success Metrics, a Verification/decision-rule block, explicit `[assumed — …]` labels and evidence classes on cited figures), not its exact wording.
 
 **Adaptive sections** — adjust depth based on feature type:
 - **Frontend/product feature** → expand Design & UX, minimize Technical Considerations
@@ -205,11 +205,11 @@ Before writing, load the team style preamble — `references/artifact-style-gate
 - Add Alternative Solutions block if confirmed
 - Include any custom blocks the user requested
 - Cross-reference data from multiple sources
-- Mark data sources throughout the document
+- Mark data sources throughout the document — since v3.8.0 each cited number, quote or benchmark with its evidence class (`references/pm-mental-model.md` §4, checked by Gate 4b): a figure the user typed is `reported (<who>)`; targets and forecasts carry none; `simulated` never stands as evidence and `assumed` is always labelled
 
 ### 4.5. Artifact quality gate
 
-Run `references/artifact-style-gate.md` on the draft PRD. Maker–checker: the `grow-product-manager:artifact-checker` agent (one call per lens; fallback chain per the reference) gets the draft + the source list + the lens — never this conversation's reasoning. A PRD headed for Confluence is a critical artifact → two checker lenses (form / groundedness). Apply fixes, keep disputed findings visible, include the one-line gate report when presenting the draft in Step 5.
+Run `references/artifact-style-gate.md` on the draft PRD. Maker–checker: the `grow-product-manager:artifact-checker` agent (one call per lens; fallback chain per the reference) gets the draft with `artifact_type: concept` and `mode: create` + the source list (each source with its Gate Check 5 marker where known, e.g. `user-text`, `confluence-internal`) + the lens — never this conversation's reasoning. A PRD headed for Confluence is a critical artifact → two checker lenses (form / groundedness; since v3.8.0 the groundedness lens also checks Gate 4b evidence labels). Apply fixes, keep disputed findings visible, include the one-line gate report (with `докази: E` when above 0) when presenting the draft in Step 5.
 
 ### 5. Review with the user
 
@@ -237,7 +237,7 @@ Page title format: `[PRD] Feature Name` — for a design brief, strategy memo, d
 3. **Headings** — use proper H1/H2/H3 hierarchy for all sections and subsections
 4. **Bold text** — highlight key theses, important conclusions, and critical data points in bold
 5. **Tables** — use tables wherever structured data needs to be communicated: comparisons of alternatives, metrics, feature matrices, user impact summaries, risk/mitigation pairs
-6. **Sources** section at the bottom with links, marking each source type (Confluence, Google Drive, Web, ChatGPT Deep Research, Gemini Deep Research, uploaded file, Product Research)
+6. **Sources** section at the bottom with links, marking each source type (Confluence, Google Drive, Web, ChatGPT Deep Research, Gemini Deep Research, uploaded file, Product Research) and, since v3.8.0, its evidence class (`measured`, `reported`, `external`, …)
 
 Publish via Confluence MCP (`createConfluencePage`). If unavailable — follow integration fallback chain. As a last resort, generate a local document for manual publishing.
 
@@ -296,7 +296,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.14.0",
+     skill_version: "0.14.1",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],
@@ -348,7 +348,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 - **`references/vault-protocol.md`** — vault context search and save protocols
 - **`references/vault-schema.md`** — vault artifact schema and metadata structure
 - **`references/prd-structure.md`** — detailed templates for each PRD block
-- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), maker–checker execution (Step 4.5)
+- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), Gate 4 (altitude line, evidence labels), maker–checker execution (Step 4.5)
 - **`references/examples/prd-example-v1.md`** — worked golden PRD exemplar (few-shot; load on demand in Step 4)
 - **`references/examples/design-brief-example-v1.md`**, **`strategy-memo-example-v1.md`** — golden exemplars for the `design-brief` and `strategy-memo` subtypes (since v3.6.0; load on demand when rendering that subtype)
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
@@ -362,7 +362,7 @@ Detailed templates for each standard block are in `references/prd-structure.md`.
 ## Quality standards
 
 - Always cite data sources
-- Distinguish facts from assumptions — mark assumptions explicitly
+- Distinguish facts from assumptions — label each assumption `[assumed — …]` (Gate 4b, since v3.8.0)
 - Flag data older than 12 months
 - If information is insufficient for a block, state gaps and suggest how to fill them
 - Use Ukrainian or English based on user's language preference

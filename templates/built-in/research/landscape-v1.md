@@ -8,10 +8,10 @@ scope: built-in
 products: []
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.1.0"
 author: "grow-pm"
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-10-06
 tags: [research, landscape, competitors, category]
 description: "Category map of competitor and adjacent products: product table, us vs them, gaps, candidates for research"
 status: active
@@ -50,12 +50,14 @@ variables:
 
 ## 2. Product table
 
+<!-- Each fact takes the evidence class of the source it cites (pm-mental-model.md §4): a store, web, traffic or design-library source `external` (source, date), a walkthrough `observed`, the user `reported (user)`, a note `[assumed — …]`. One label may cover a column whose cells share class and source; a cell's own label overrides it. -->
+
 | Product | Kind | Role | Platforms | Walkable surfaces | Size signals | Key flows | Notable | Last researched |
 |---------|------|------|-----------|-------------------|--------------|-----------|---------|-----------------|
 | {{our_product}} (ours) | | — | | | | | | |
 | | | | | | | | | |
 
-Roles: direct-competitor · adjacent · benchmark · inspiration. Size signals: store rating and ratings count, traffic rank when a connector answered.
+Roles: direct-competitor · adjacent · benchmark · inspiration. Size signals: store rating and ratings count, traffic rank when a connector answered — `external`, with source and date (`Evidence: external — <store lookup>, <market>, <date>` when the whole column shares them).
 
 ## 3. Us vs them
 
@@ -77,9 +79,10 @@ Ranked by role, category match, size, walkable surfaces and staleness (not resea
 
 ## 6. Sources
 
+<!-- Each source with its evidence class — a store, web, traffic or design-library source `external` (source, date), a walkthrough pack `observed`, the user `reported (user)`. Machine scans and bookmarks record how a product was found and are never listed here. -->
 {{#each sources}}
 - {{this}}
 {{/each}}
-- Registry records cited as `landscape:<slug>`
+- Registry records cited as `landscape:<slug>` — each fact takes the class of the source the record cites
 
-<!-- template: research-builtin-landscape version: 1.0.0 -->
+<!-- template: research-builtin-landscape version: 1.1.0 -->

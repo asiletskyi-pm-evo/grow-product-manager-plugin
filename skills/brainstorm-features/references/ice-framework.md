@@ -40,6 +40,8 @@ How confident are we that this will work?
 | 7-8 | Strong evidence | Research data, A/B test from similar product, multiple benchmarks |
 | 9-10 | Near certain | Own A/B test data, proven in same product, strong quantitative evidence |
 
+Since v3.8.0, `simulated` input (persona or synthetic-user answers, simulated sessions, an untraceable model claim — `references/pm-mental-model.md` §4) counts as no evidence: on its own it keeps Confidence in the 1-2 band. Interviews count only when real users took part.
+
 **How to assess:**
 - Do we have data supporting this hypothesis?
 - Have competitors validated this approach?
@@ -87,6 +89,6 @@ Sort by ICE Score descending. This gives the user a clear priority ranking.
 ## Common Pitfalls
 
 - **Overscoring Impact** — be realistic, most ideas won't move metrics by >10%
-- **Underscoring Confidence** — if there are benchmarks, it's at least 5-6
+- **Underscoring Confidence** — if there are benchmarks, it's at least 5-6 (real ones: `external` or stronger, never `simulated`)
 - **Ignoring hidden effort** — design, QA, data migration, documentation all count toward Ease
 - **Not re-scoring** — after discussion, ICE scores may change. Always offer to re-score after new information surfaces

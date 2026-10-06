@@ -127,6 +127,7 @@ Anomalies:
 
 Data Quality Notes:
 - [Any gaps, limitations, or data freshness issues]
+- [Evidence class per metric (SKILL.md 1.5.g, since v3.8.0) and any frontier flag with its human step — data only; cjm-research renders them]
 ```
 
 **If invoked directly by user (standalone):**
@@ -139,7 +140,7 @@ Present a formatted report:
 4. **Cross-Stage Impact** — cascading effects analysis
 5. **Recommendations** — brief next steps for each critical/warning anomaly
 6. **Glossary** — explain terms and metrics
-7. **Sources** — dashboards and data sources used
+7. **Sources** — dashboards and data sources used, each with its source-type marker and evidence class (SKILL.md 1.5.g)
 
 Then proceed to Step 6 (Report, save, and feedback) for publishing and feedback.
 
@@ -153,7 +154,7 @@ Then proceed to Step 6 (Report, save, and feedback) for publishing and feedback.
 
 ## Post-Release Analysis Mode
 
-Specialized mode for analyzing how a released feature affected product metrics. The goal is to determine whether the release caused significant or minor changes in product metrics, funnels, and feature-specific metrics.
+Specialized mode for analyzing how a released feature affected product metrics. The goal is to determine whether product metrics, funnels, and feature-specific metrics changed significantly or slightly after the release, and whether the data can attribute that change to the release (PR-3 *Attribution*).
 
 ### PR-1. Gather release context
 
@@ -222,26 +223,28 @@ Compare before vs. after periods for all identified metrics:
 
 | Classification | Criteria |
 |---------------|----------|
-| **Significant positive** | Metric improved beyond expected range, likely caused by the release |
-| **Minor positive** | Small improvement, possibly related to the release |
+| **Significant positive** | Metric improved beyond expected range — coincides with the release (caused by it only under *Attribution* below) |
+| **Minor positive** | Small improvement that coincides with the release |
 | **No change** | Metric stayed within normal variance |
 | **Minor negative** | Small degradation, needs monitoring |
 | **Significant negative** | Metric degraded notably — requires attention |
 | **Inconclusive** | Not enough data or too much noise to determine |
 
+**Attribution (Gate Check 6c, since v3.8.0).** A change is attributed to the release only when a control separates it from seasonality, marketing and mix: platforms with the feature still OFF over the same window, or a holdout — name the control next to the claim. Without one, the metric reads "coincides with the release" and carries one hand-back line in `user.language` proposing the human step, e.g. `⚠️ The data cannot settle this — the lift coincides with the release; no holdout ran. Human step: a 2-week holdout on Android.` (`references/data-integrity-protocol.md` Pattern 6). A scheduled or headless run writes `[assumed — frontier: <human step>]` instead of the line. The classification and the PR-4 recommendation follow the same rules either way; nothing is asked.
+
 ### PR-4. Generate post-release report
 
 **Report structure for post-release analysis:**
-1. **Executive Summary** — overall verdict: was the release successful, neutral, or problematic?
+1. **Executive Summary** — overall verdict: was the release successful, neutral, or problematic? Without a PR-3 control the verdict says what coincides with the release, and the hand-back line stays with it
 2. **Release Context** — what was released, when, on which platforms, links to requirements and Epic
 3. **Release Timeline** — table: task, platform, release date, flag activation date
-4. **Metrics Impact** — for each metric: before value, after value, change %, classification, interpretation
+4. **Metrics Impact** — for each metric: before value, after value (each annotated, class first — SKILL.md 1.5.d / 1.5.g), change %, classification, interpretation; when every uncontrolled metric lacks the same control, one shared PR-3 hand-back line under the table instead of one per metric
 5. **Funnel Impact** — if relevant: funnel step-by-step comparison before vs. after
 6. **Platform Comparison** — if applicable: platform-by-platform analysis
 7. **Side Effects** — unexpected metric changes (positive or negative)
 8. **Conclusions and Recommendations** — keep flag on / roll back / needs more time / need investigation
 9. **Glossary** — explain terms and metrics. Use the user's preferred language (`user.language`).
-10. **Sources** — Jira tasks, Confluence requirements, Tableau dashboards used
+10. **Sources** — Jira tasks, Confluence requirements, Tableau dashboards used, each with its source-type marker and evidence class
 
 Then proceed to Step 6 (Report, save, and feedback) for publishing and feedback.
 
@@ -278,6 +281,7 @@ When chained from `experiment-tracker` (readout), the payload already carries th
 **Option 1: User-provided reports**
 - Read uploaded files (CSV, XLSX, PDF, screenshots) with test results
 - Extract: group metrics, sample sizes, confidence intervals, significance levels
+- Class (SKILL.md 1.5.g): raw rows this skill computes on are `measured`; a prepared report or screenshot the user hands over, and results typed or pasted into the chat (`user-text`), are `reported (<who>, <date>)`
 
 **Option 2: Tableau A/B test dashboards**
 
@@ -349,7 +353,7 @@ Before AB-4 shows the verdict, ask the P2 question of `references/judgment-point
 **Report structure for A/B test analysis:**
 1. **Executive Summary** — verdict: test won / lost / inconclusive, recommended action
 2. **Test Setup** — hypothesis, groups, traffic split, duration, platforms, start date
-3. **Primary Metrics Results** — table: metric, control value, test value, Δ%, significance, verdict
+3. **Primary Metrics Results** — table: metric, control value, test value, Δ%, significance, verdict; the table carries its class (one group label when every value shares class and source — SKILL.md 1.5.g). A randomised result is a supported causal claim: no hand-back line here or in the verdict
 4. **Secondary Metrics Results** — same format, flagging any significant side effects
 5. **Segment Breakdown** — results by key segments (platform, country, user type)
 6. **Time Dynamics** — how results evolved over the test duration
@@ -362,9 +366,9 @@ Before AB-4 shows the verdict, ask the P2 question of `references/judgment-point
    - **Stop and iterate** — test did not meet success criteria, suggest what to change and re-test
    - **Stop and roll back** — test negatively impacted key metrics
 
-   The Recommendation's confidence line (since v3.7.0) is rendered in the judgment footer, not here: level, the one assumption it is most sensitive to, and what observable result would change it (`references/judgment-points.md` §3). Its level follows the no-inflation cap of `references/judgment-points.md` §3.
+   The Recommendation's confidence line (since v3.7.0) is rendered in the judgment footer, not here: level, the one assumption it is most sensitive to, and what observable result would change it (`references/judgment-points.md` §3). Its level follows the no-inflation cap of `references/judgment-points.md` §3; since v3.8.0 an `assumed` or `simulated` input it rests on is named there with its label.
 10. **Hypotheses for follow-up** — based on test results, what new hypotheses emerge? (e.g., "Test won on Web but not Mobile — hypothesis: mobile UX needs adjustment")
 11. **Glossary** — explain terms and metrics. Use the user's preferred language (`user.language`).
-12. **Sources** — Tableau dashboards used, Jira tasks, Confluence requirements, uploaded reports
+12. **Sources** — Tableau dashboards used, Jira tasks, Confluence requirements, uploaded reports, each with its source-type marker and evidence class
 
 Then proceed to Step 6 (Report, save, and feedback) for publishing and feedback.

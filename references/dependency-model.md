@@ -75,4 +75,4 @@ How many features/slices of an initiative the team runs simultaneously is limite
 - Do not invent dependencies — only from Jira links, Development Flow, or explicit PM input; everything else = "gap, formalize it".
 - Recompute the critical path on every `replan` — carrying over one of its elements shifts the whole arc.
 - The readiness threshold and the flow itself — from the team's Development Flow, not hardcoded.
-- Mark sequencing recommendations "pending PM/TL confirmation".
+- Mark sequencing recommendations "pending PM/TL confirmation". Since v3.8.0 this marker is the planning hand-back (`planning-core.md` §6): a recommendation that rests on a graph gap is `assumed` until the PM/TL confirms, and the marker reads as its label (no second label).

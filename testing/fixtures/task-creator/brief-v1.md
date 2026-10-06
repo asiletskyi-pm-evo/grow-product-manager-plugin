@@ -1,4 +1,4 @@
-<!-- Output-eval fixture (input brief) for task-creator. Feed as the user request (run it as a dry run — nothing is created in Jira); score the resulting task set against the task-creator rubric in testing/output-evals.md. Gold reference: skills/task-creator/references/examples/tasks-example-v1.md. Generic, no org data. -->
+<!-- Output-eval fixture (input brief) for task-creator. Feed as the user request (run it as a dry run — nothing is created in Jira); score the resulting task set against the task-creator rubric in testing/output-evals.md. Gold reference: skills/task-creator/references/examples/tasks-example-v1.md. Generic, no org data. For the evaluator only (never part of the input; moved out of the brief in v3.8.0): Expected: one task per selected discipline (BE, FE, iOS, Android, QA, Analytics), each parented to PROJ-1234, carrying the work-type label + feature code `PROJ-1234.3`, a Why / What / How / Definition of Done / Requirements body traced to the FR and AC numbers above, no engineering detail invented beyond the requirements, the dependency links, and the post-creation verification. -->
 
 # Input brief
 
@@ -44,5 +44,3 @@ Context the PM gives:
 | AC-7 | GIVEN a cancellation attempt, WHEN the buyer taps, confirms or is rejected, THEN the matching event fires with all listed parameters on every platform. |
 
 **Out of scope:** cancellation after shipment (returns flow), partial cancellation of multi-item orders, changes to the refund process itself.
-
-Expected: one task per selected discipline (BE, FE, iOS, Android, QA, Analytics), each parented to PROJ-1234, carrying the work-type label + feature code `PROJ-1234.3`, a Why / What / How / Definition of Done / Requirements body traced to the FR and AC numbers above, no engineering detail invented beyond the requirements, the dependency links, and the post-creation verification.

@@ -1,6 +1,6 @@
 ---
 name: design-bridge
-version: 0.7.0
+version: 0.8.0
 description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку/презентацію», «hi-fi прототип/екран», «design handoff», «дизайн-рев'ю», «через мій дизайн-тулкіт». EN — "create a deck", "make a presentation", "build a prototype on our DS", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review". Also UA — «передати дизайн у розробку». Orchestrates research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff and Figma MCP; the next step after write-concept, requirements-creator, brainstorm-features or product-research when a deck or prototype is needed.
 ---
 
@@ -154,7 +154,7 @@ Via `AskUserQuestion`:
 
 Depending on **upstream**, pull the fields the deliverable needs from a Confluence page (`write-concept`, `requirements-creator`), research output (`product-research`, `cjm-research`, `meeting-processor`), brainstorm output (`brainstorm-features`), A/B test data (`product-analysis`, Tableau) or user-provided text / files. The per-source field list (a–e) — what to parse and extract from each — lives in `references/design-bridge-playbook.md` (skill-local). Read it before extracting from an upstream artifact.
 
-Normalize into **Deck IR** (intermediate representation).
+Normalize into **Deck IR** (intermediate representation). **Evidence labels (since v3.8.0):** the Deck IR keeps the evidence class every upstream number, quote and benchmark carries (`references/pm-mental-model.md` §4) — never stripped, never upgraded (the playbook's Step 3 lists the rules per source). A prototype or mockup is `reported` (file, frame) — it shows intended UI; a claim about users made on it alone ("users will understand X") is `assumed` (Prototype-as-validation); only real-user sessions on it are `observed` / `reported`, and those come from `product-research` (Gate Check 6a).
 
 **Read `references/deck-subtypes.yaml` first** and look the subtype up by its key — it gives the slide-by-slide outline (index, layout, role, required slots, media hint) for the chosen subtype, plus `target_length` / `max_length`. Build the IR's `slides` list from that outline and fill the slots from the sources extracted above; a slot with no source becomes an Open Question, not an invented fact. If the subtype has no entry, fall back to the generic structure below.
 
@@ -282,6 +282,7 @@ Required for `intent ∈ {deck, prototype, handoff}`:
 - **Empty slots**: no `{{…}}`, `TODO`, placeholder titles, or "Lorem ipsum"
 - **Font check**: `product.brand.font_primary` + display font available (if not — warning in the outline footer)
 - **A11y**: Step 4e always ran for deck/prototype/handoff — blocker-severity findings (per the intent's row in `references/a11y-checklist.md`) block the deliverable; warnings go into the footer notice
+- **Evidence labels** (deck, since v3.8.0; `references/artifact-style-gate.md` Gate 4b on the rendered slides, after T-5 step 3c on the outline): each data-bearing slide's source caption and each quote's attribution carry the upstream class (a quote verbatim · `reported`, with who and when); `simulated` / `assumed` stay visible on the item and `simulated` never fills a finding, evidence, metric or quote slide; for an external audience the caption keeps the class and drops internal source names, and hand-back lines go only to the outline companion. Fixed silently, only toward a weaker class — never a question. Prototypes and handoffs are `n/a`
 
 If any check fails → fix + rerun QA; escalate to the user if the blocker is not auto-fixable.
 
@@ -311,7 +312,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.7.0",
+  skill_version: "0.8.0",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],
@@ -350,7 +351,7 @@ vault_save({
 - WCAG 2.1 AA — non-negotiable for handoff and dev-facing deliverables
 - Brand tokens are sourced from `product.brand.*` — hardcoded brand values are forbidden in generated artifacts
 - Every deck must have cover + ask/next-steps slides, even if shorter than 6 slides
-- Every data-bearing slide must include a source line (`caption: "Source: …"`) when numbers come from upstream
+- Every data-bearing slide must include a source line (`caption: "Source: … · <class>"`) when numbers come from upstream — the upstream evidence class, for every audience; internal source names only for internal audiences (`references/data-policy.md`)
 - Multilingual support (see `product.available_languages` in local-context) across all outputs
 
 ## Failure modes & fallbacks

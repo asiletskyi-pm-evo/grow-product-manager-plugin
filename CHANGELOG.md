@@ -12,7 +12,172 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
-## v3.7.0 (2026-09-30)
+## v3.8.0 (2026-10-06)
+
+**Evidence classes.** Fifth release of the Judgment Core + Role Layer programme.
+
+Every number, quote, benchmark or "users want X" in a product artifact now says how it is known: `observed`, `measured`, `reported`, `external`, `simulated` or `assumed`. Synthetic users stay rehearsal, for every role. A claim the data cannot support is handed back with the human step that would settle it.
+
+The release adds no question, no switch and no role-dependent behaviour. MINOR: a new gate check, a new gate part, new steps in 18 skills and 16 templates.
+
+### Added
+
+- **Gate Check 6 — Evidence Class & Frontier** (`data-integrity-protocol.md`, implementing P1, P7 and P10).
+  - **6a: class assignment.** The Gate Check 5 marker decides the class.
+    - `measured` covers only data the skill read itself after its gate, or counted itself from a system of record.
+    - Figures the user pastes are `reported (<who>)`.
+    - A synthesis keeps the class of what it summarises: an AI summary of a real ticket stays `reported`.
+    - A prepared report the user hands over (a PDF, a dashboard or report screenshot) is `reported (<who>)` like pasted text; a figure given from memory is `[assumed — <who>, from memory]`; a design file or prototype is `reported` — a claim about users made on it alone is `assumed`.
+    - An upload or pasted input is `simulated` only on an explicit marker, never after a question; the notice line appears only when it is.
+  - **6b: synthetic input.** `simulated` content is never a finding, a count or a quote.
+  - **6c: frontier hand-back.** One line in `user.language`, placed at the claim, naming the human step. It covers:
+    - a causal claim on observational data;
+    - a "why users…" claim with no real-user source;
+    - a claim that needs tacit organisational context.
+
+    A randomised A/B readout is exempt. The line never changes a status, never blocks and never asks.
+  - **6d: output by run kind.** Interactive runs get labels and hand-back lines. Return payloads carry classes and flags in their data-quality notes. Scheduled and headless runs get labels and the 6b handling of synthetic input, with a frontier claim marked `[assumed — frontier: <human step>]` and no new line.
+  - **Gate Check 3 and examples.** Gate Check 3 no longer accepts synthetic input as a second source. Anti-patterns 5–6 and correct patterns 5–6 are added.
+  - **Sub-steps:** cjm-research 3.5.g, product-analysis 1.5.g, product-research 1.5.g, feedback-triage Step 4. product-reporter Step 2.5 applies the causal rule to a cause of deviation.
+- **Gate 4b — Evidence labels** (`artifact-style-gate.md`):
+  - scope and exemptions (targets, forecasts, plan totals, hypothesis statements…);
+  - a compact marker → class table for the checker;
+  - rules: quotes verbatim (masking, `[…]` and `(translated)` allowed), no upgrades, labels from upstream kept;
+  - severity, the `n/a` list (with Analyze & Improve advisory and external decks as partial cases), and fixes only toward a weaker class.
+
+  The gate report line gains `докази: E`. The checker output gains `gate: 4a | 4b` and a `not_applicable` line. Sources may carry their Gate Check 5 markers.
+- **`template-protocol.md` T-5 step 3c** gives P1 to every Product-contour artifact without growing `SKILL.md` files.
+  - It runs whether or not a template applied, independently of `review_mode`, and in automated runs (labels and the 6b handling, no hand-back line).
+  - It keeps step 3a's exclusions.
+- **Label grammar** (`pm-mental-model.md` §4):
+  - the class goes first inside the claim's existing annotation;
+  - one group label is allowed when every claim it covers shares class and source;
+  - `simulated` / `assumed` are always labelled on the item;
+  - forward-looking numbers carry no class.
+
+  The §4 definitions of `measured`, `simulated` and `assumed` are patched accordingly.
+- **Vault Judgment Fields** (`vault-schema.md`, `vault-protocol.md` Vault Save step 5): optional `evidence_classes` and `altitude`, derived for every caller and never asked or backfilled. The `## Summary` keeps `simulated` / `assumed` labels, so synthetic input cannot re-enter later runs through Step 0.5.
+- **Skills:**
+
+  | Skill | Change |
+  |---|---|
+  | product-research | 1.5.g; `simulated_input` for the user-research template |
+  | feedback-triage | Step 4 Gate Check 6; `origin` of items; generated items excluded from counts |
+  | cjm-research | 3.5.g; walkthrough evidence `observed`; accurate group labels on the health-check (one class per label) |
+  | brainstorm-features | claims inside idea cards labelled; Deep Research claims per 6a |
+  | product-analysis | 1.5.g; post-release "coincides with the release" plus a hand-back without a control; Q&A causal claims |
+  | experiment-tracker, decision-log | readout and record classes; `evidence_classes` filled from evidence, never asked |
+  | flow-walkthrough | steps `observed` |
+  | knowledge-library | class derived from the source type, trust score never changes it; shown inside the existing confirmation, never a picker |
+  | product-landscape | facts carry their source's class; scan provenance never cited |
+  | design-bridge | source captions carry the class; internal source names only for internal audiences; no hand-back line on external slides |
+  | diagram-prototyper | infographic footers carry the class |
+  | meeting-processor | one `Evidence: reported` line; verbatim quotes only |
+  | product-reporter | actuals `measured` when computed from Jira; an inferred cause `assumed` plus a hand-back |
+  | write-concept, requirements-creator, task-creator | in place: source markers and `artifact_type` passed to the checker; write-concept's examples teach `reported · … · not gate-checked`; requirements-creator Analyze & Improve shows 4b findings as advisory, accepted in the existing final review (never a new question or round) |
+  | focus-advisor | in place: brief labels through T-5 step 3c (headless: labels and the 6b handling) |
+- **Templates:**
+  - `user-research`: conditional `Simulated input` line, n = real users;
+  - `insight-report`: conditional `Simulated input` line;
+  - `decision-memo`, `business-case`, `strategy-memo`, `qbr`, `board-update`: class per claim, forecasts unlabelled;
+  - `walkthrough`, `landscape`: source classes;
+  - `competitive`, `funnel` and four presentation templates: hints;
+  - `judgment-footer` 1.2.0.
+- **Shared protocols:**
+  - `debate-protocol.md`: E# keep their class; A# keep their label (`assumed` or `simulated`); a role card's claim outside the pack is `simulated`; the consensus ICE boost needs a cited E#.
+  - `planning-core.md` §6: the "pending TL / PM confirmation" marker is the planning hand-back and reads as `assumed`.
+  - `subagent-delegation.md`: fan-out rows carry `origin` and verbatim-quote fields; the main agent classifies.
+  - `self-improvement.md` (pulled forward from v3.9.0): a correction that removes an evidence label is never proposed as a skill change.
+  - `cjm-protocol.md`: 6 mandatory checks.
+  - `figma-designs-check.md`: a design is `reported`, never `observed`.
+- **Tests:**
+  - lint check 24 `evidence-classes` with four seeds (23/23);
+  - validate check 14 now compares each agent with its Codex port;
+  - output-evals criteria `evidence_labels` and `simulated_visible` for every rubric;
+  - a product-research synthesis fixture and gold for spec TC-jdg-02;
+  - relabelled golds;
+  - test cases TC-jdg-380-*.
+
+### Changed
+
+- `pm-mental-model.md`: P1, P7, P9 (`evidence_classes`) and P10 act since v3.8.0. P10 now reads "instead of presenting a plausible guess as a finding — a guess it keeps is labelled `assumed`". P5's evidence-label clause is active.
+- `judgment-points.md` §3: a lead recommendation resting on a frontier claim or a `simulated` input is at most `uncertain`; a decision record keeps the owner's level. §4: how `evidence_classes` is taken.
+- `local-context-protocol.md`:
+  - Step 0i step 3: automated runs keep the evidence labels, with no hand-back line;
+  - Step 0i step 5: the altitude is also the vault `altitude:` key;
+  - Step 0j step 4 lists the implementing steps; no label anywhere else.
+- `artifact-checker` agent and its Codex port: the groundedness lens adds Gate 4b.
+- Skill versions:
+
+  | Skill | Version |
+  |---|---|
+  | `brainstorm-features` | 0.14.0 → 0.15.0 |
+  | `cjm-research` | 0.10.0 → 0.11.0 |
+  | `decision-log` | 0.4.0 → 0.5.0 |
+  | `design-bridge` | 0.7.0 → 0.8.0 |
+  | `diagram-prototyper` | 0.13.0 → 0.14.0 |
+  | `experiment-tracker` | 0.5.0 → 0.6.0 |
+  | `feedback-triage` | 0.5.0 → 0.6.0 |
+  | `flow-walkthrough` | 0.5.0 → 0.6.0 |
+  | `focus-advisor` | 0.9.0 → 0.9.1 |
+  | `knowledge-library` | 0.8.1 → 0.9.0 |
+  | `meeting-processor` | 0.16.0 → 0.17.0 |
+  | `product-analysis` | 0.16.0 → 0.17.0 |
+  | `product-landscape` | 0.4.0 → 0.5.0 |
+  | `product-reporter` | 0.9.0 → 0.10.0 |
+  | `product-research` | 0.13.0 → 0.14.0 |
+  | `requirements-creator` | 0.16.0 → 0.16.1 |
+  | `task-creator` | 0.14.0 → 0.14.1 |
+  | `write-concept` | 0.14.0 → 0.14.1 |
+- **ICE Confidence:** `simulated` support counts as no evidence. On its own it keeps Confidence in the 1–2 band, a debate consensus resting only on `simulated` / `assumed` support adds +0, and "underscoring" by benchmarks needs a real (`external` or stronger) one.
+- The `data-integrity-protocol.md` cross-skill row "brainstorm-features (optional) ICE Confidence adjustment from status" — never implemented in the skill — now describes what brainstorm-features actually does (the debate pack's classes).
+- meeting-processor's opt-in quality gate runs both lenses for a MoM bound for Confluence, so verbatim quotes and the `reported` label are checked; task-creator passes `artifact_type: task batch` in both of its checker calls (the batch gate and Step 12), so the checker reports Gate 4a / 4b `n/a`.
+- Gate 3's terminology lint never touches text inside quote marks.
+- `template-protocol.md` T-5 step 3d: authoring hint comments of a template and its partials are dropped from the rendered artifact after the language blocks are resolved (one leaked into a delivered report in the eval run).
+- Output-eval fixture `cjm-research/brief-v1.md`: the integrity trap is now a period-completeness check on a complete month, matching its gold (it described a mid-month extract the gold contradicted). In all nine older fixtures the "Expected:" line moved out of the input brief into the evaluator-only comment, so makers no longer see the rubric's bar.
+- v3.7.0's date corrected to 2026-10-01, the day its tag was created.
+
+### Adaptations to the specification
+
+- **Vault key.** The specification names it `evidence:`. It is `evidence_classes` on every type, the key decision records already had: one Obsidian property, no migration, and no confusion with a field for evidence links. The altitude key is `altitude:`, never `level:` (the vault level).
+- **Naming.** "Gate 6" is `Gate Check 6`; `artifact-style-gate.md` has its own Gate 1–4.
+- **Roles.** Gate Check 6 is baseline for every role, not a `gate_emphasis` token. `triangulation` no longer repeats the synthetic-input rule.
+- **No persona simulation.** P7 is labelling at intake plus exclusion from findings, counts and quotes.
+- **brainstorm-features.** The claims inside an idea card carry classes; the idea itself does not.
+- **Wider P1 coverage.** The specification lists four skills for P7. P1 reaches every Product-contour artifact through T-5 step 3c, and 14 more skills received named steps.
+- **Forward-looking numbers carry no class** (otherwise every forecast would read `simulated`). An unsourced input inside them is `assumed`.
+
+### Not in this version (next)
+
+v3.9.0:
+- the prototype path and "build before you argue";
+- the pre-mortem and kill criteria in concepts, roadmaps and A/B specs;
+- the AI-feature section and spec-readiness gate;
+- `learning_mode: pm_first`;
+- the rest of the self-improvement guard;
+- consolidation of the observability work.
+
+### Backwards compatibility
+
+- **No new question, switch or role branch.** `local-context.md` and onboarding are unchanged.
+- **Visible for everyone:**
+  - evidence labels on product artifacts;
+  - hand-back lines in interactive runs;
+  - a `Simulated input` line where such input exists;
+  - "coincides with" instead of "caused by" on post-release reports without a control;
+  - `докази: E` in the gate report;
+  - the vault keys on new notes;
+  - a lower confidence level where a lead recommendation rests on a handed-back or `simulated` input.
+- **Automated runs:**
+  - labels and the 6b handling of synthetic input (set aside, one `Simulated input` line where it exists);
+  - the confidence cap and the "coincides with" wording, as in any run;
+  - the vault keys;
+  - never a question, a hand-back line or another new line. A scheduled feedback-triage adds no comparability line; its Intake shows how many `generated` items were set aside (the usable share changes accordingly); and it publishes where its schedule prompt names a destination, else locally, without asking — a Confluence write still meets the host write gate.
+- **Older material stays valid:** vault notes and decision records written before v3.8.0 are valid as they are, and no note is backfilled.
+
+---
+
+## v3.7.0 (2026-10-01)
 
 **Judgment points.** Fourth release of the Judgment Core + Role Layer programme. The plugin now slows down exactly where a judgment is made: at six scoring, readout, verdict, prioritisation and decision points it asks for **your estimate before showing its own** and then compares the two; the lead recommendation or verdict states its **confidence, the assumption it is most sensitive to and what would change it**; and a decision record names its owner, rejected alternatives, base rate, revisit trigger and minority report, with decision quality judged apart from its outcome at review. It is the first release that adds a question at a judgment point — one, switchable, skippable with one word, never asked in an automated run. MINOR: new shared reference, new steps in 8 skills, a new onboarding question in Extended mode.
 

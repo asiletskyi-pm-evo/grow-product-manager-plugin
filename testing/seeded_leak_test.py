@@ -8,8 +8,9 @@ appended, removed or replaced — see SEEDS), and asserts the linter goes RED wi
 the expected check tag. The org-leak seeds are real defect classes that shipped —
 see CHANGELOG v2.4.1 and `Testing-process.md` — rewritten with a fictional org
 ("Zorg", "ZORG") so no real identifier enters the repository. The role-layer
-seeds (checks 19-22, JCRL v3.5.0) and the judgment-points seeds (check 23,
-v3.7.0) are preventive: their classes have not shipped.
+seeds (checks 19-22, JCRL v3.5.0), the judgment-points seeds (check 23,
+v3.7.0) and the evidence-class seeds (check 24, v3.8.0) are preventive: their
+classes have not shipped.
 
 Usage: python3 testing/seeded_leak_test.py [PLUGIN_ROOT]   (default: repo root)
 Exit 0 = every seeded defect was caught; exit 1 = at least one slipped through.
@@ -25,6 +26,8 @@ root = os.path.abspath(sys.argv[1] if len(sys.argv) > 1
 #                    behaviour: a leak is something that gets written in);
 #   mode "remove"  — payload is a regex; the first line matching it is deleted
 #                    (a required citation that goes missing);
+#   mode "remove-all" — payload is a regex; every line matching it is deleted
+#                    (a citation the file states more than once);
 #   mode "replace" — payload is (regex, replacement), applied once (two sources
 #                    of truth drifting apart).
 # Text seeds keep the fictional-org rule: nothing real enters the repository.
@@ -106,6 +109,24 @@ SEEDS = [
      "skills/cjm-research/SKILL.md", "append",
      "Close the report with `Confidence: likely · most sensitive to: … · would change if: …`.",
      "judgment-points"),
+    # v3.8.0: pm-mental-model.md §4 owns the evidence classes; check 24 guards the
+    # restated enum, the label vocabulary, the P7 binds and the gate-check count.
+    ("evidence: the vault-schema class enum drifts from §4",
+     "references/vault-schema.md", "replace",
+     (re.escape("|external|"), "|"),
+     "evidence-classes"),
+    ("evidence: an invented class in a gold's label",
+     "skills/cjm-research/references/examples/funnel-anomaly-report-example-v1.md", "append",
+     "- Add-to-cart 8.1 % [verified: funnel dashboard, May 2026]",
+     "evidence-classes"),
+    ("evidence: a P7-bound skill loses its Gate Check 6 citation",
+     "skills/brainstorm-features/SKILL.md", "remove-all",
+     r"Gate Checks? (?:1[–-])?6(?!\d)|data-integrity-protocol\.md.*\b6b\b|\b6b\b.*data-integrity-protocol\.md",
+     "evidence-classes"),
+    ("evidence: '5 universal gate checks' reintroduced",
+     "skills/product-analysis/SKILL.md", "append",
+     "- Every loaded source passes the 5 universal gate checks before Step 2.",
+     "evidence-classes"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare
@@ -128,6 +149,10 @@ def apply_seed(original, mode, payload):
             if re.search(payload, line):
                 return "\n".join(lines[:k] + lines[k + 1:])
         return None
+    if mode == "remove-all":
+        lines = original.split("\n")
+        kept = [line for line in lines if not re.search(payload, line)]
+        return "\n".join(kept) if len(kept) < len(lines) else None
     if mode == "replace":
         pattern, repl = payload
         seeded, n = re.subn(pattern, repl, original, count=1)

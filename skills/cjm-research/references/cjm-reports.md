@@ -2,6 +2,8 @@
 
 > Part of `cjm-research`. Loaded on demand at Step 12 (report assembly). Pick ONLY the format for the active mode.
 
+**Evidence labels (since v3.8.0, every format).** Each cited number and quote carries its SKILL.md 3.5.g class first in its existing annotation (`references/data-integrity-protocol.md` Gate Check 6; grammar `references/pm-mental-model.md` §4); a table or section takes one group label only when every claim it covers shares class and source. A summary, key findings or enrichment findings never hold `simulated` content — it goes to the hypotheses or to one `Simulated input — hypotheses only` line, shown only when such input exists — and hold `assumed` content only labelled. In an interactive run a cause stated without an experiment or holdout keeps its Gate Check 6c line, in `user.language`, next to the claim; the automated health-check prints no such line. Impact-model projections carry no class; an unsourced lift inside them is `assumed`.
+
 ### Report Format — Anomalies (modes: `anomalies`)
 
 ```
@@ -11,18 +13,18 @@
    | Stage | Metric | Baseline | Actual | Deviation | Severity | Trend |
 4. Recommendations (brief next steps for each critical/warning anomaly)
 5. Glossary (explain all terms, metrics, jargon)
-6. Sources (data sources used, grouped by type. Tableau-sourced data marked as `tableau-mcp` or `tableau-web` so the user can audit the retrieval method)
+6. Sources (data sources used, grouped by type, each with its class. Tableau-sourced data marked as `tableau-mcp` or `tableau-web` so the user can audit the retrieval method)
 ```
 
 ### Report Format — Health-Check Summary (mode: `health-check`)
 
 ```
-1. Period (date range analyzed)
+1. Period (date range analyzed) + one evidence line: `Evidence: measured — <dashboard(s)>, <period>`, followed when the configured baselines are used by a second group label `Evidence: reported — baselines, local-context.md` (one class per group label) (no gate jargon in the published body)
 2. Funnel Health Score (0–100, calculated per cjm-protocol.md)
-3. Delta vs Previous Check (score change, direction)
+3. Delta vs Previous Check (score change, direction — values only; a previous snapshot without labels, saved before v3.8.0, is not a change)
 4. New Anomalies (detected since last check)
 5. Resolved Anomalies (present last time but no longer anomalous)
-6. Top 3 Attention Items (highest severity, actionable)
+6. Top 3 Attention Items (highest severity, actionable; a suspected cause carries the 6c hand-back line in an interactive run and reads `[assumed — frontier: <human step>]` in the scheduled health-check)
 7. Link to Full Report (offer to run full mode if critical anomalies found)
 ```
 
@@ -53,7 +55,7 @@
    - Cumulative end-to-end impact
 7. Next Steps (recommended actions for top hypotheses)
 8. Glossary
-9. Sources (library, web, Baymard, Confluence, GDrive — marked by type)
+9. Sources (library, web, Baymard, Confluence, GDrive — marked by type and class)
 ```
 
 ### Report Format — Full CJM Report (mode: `full`)
@@ -65,7 +67,7 @@
    For each stage:
    - Current metrics and trends
    - Detected anomalies
-   - Enrichment findings (world + internal sources)
+   - Enrichment findings (world + internal sources, each with its class)
    - Related hypotheses
 4. Hypotheses with Verification Status
    | # | Name | Data Trigger | Solution | ICE | Verification | Stage Impact |
@@ -79,7 +81,7 @@
    - Phase 3 (strategic): business logic changes with stakeholder requirements
 8. Recommended Roadmap (phases with timelines)
 9. Glossary
-10. Sources (all sources used, grouped by type)
+10. Sources (all sources used, grouped by type, each with its class)
 ```
 
 ### Report Format — Cross-Platform Comparison (mode: `comparison`)
@@ -128,7 +130,7 @@ After publishing, provide a structured summary:
 
 - **What was done:** mode used, stages analyzed, time period, platforms
 - **Artifacts created:** links to published reports
-- **Key findings:** top 3-5 findings
+- **Key findings:** top 3-5 findings as the report words them (annotations and labels kept; never `simulated`)
 - **Hypotheses generated:** count, top 3 by ICE score (if applicable)
 - **Health score:** current score and delta vs previous (if applicable)
 - **Sources used:** list by type (Tableau [`tableau-mcp` / `tableau-web`], Knowledge Library, Web, Baymard, Confluence, GDrive)
@@ -170,7 +172,7 @@ When `health-check` mode is configured for automation:
    - Skip Step 2 (use saved parameters)
    - Run Steps 1, 3, 4 with default settings from CJM config
    - Load previous health-check for delta comparison
-   - Assemble Health-Check Summary
+   - Assemble Health-Check Summary (labels only — no question, no hand-back line)
    - Save snapshot to `~/.grow-pm/knowledge-library/health-checks/[date].md`
    - Publish to configured destination
 

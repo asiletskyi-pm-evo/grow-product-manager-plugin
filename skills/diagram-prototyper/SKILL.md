@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.13.0
+version: 0.14.0
 description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «додай стрілки на скрін». EN — "create a diagram", "draw a flowchart", "visualize this process", "make a prototype" (no DS mentioned), "mockup", "annotate this screenshot". Also UA — «візуалізуй процес», «зроби прототип», «інфографіка», «познач на скріншоті». Generation via Mermaid/HTML, Gemini, ChatGPT, NotebookLM, Figma, Draw.io; annotation runs locally.
 ---
 
@@ -148,7 +148,7 @@ If the user chose "Diagram" in Step 1, ask for the notation type via AskUserQues
 
 Provide a recommendation based on context:
 - User flow or decision logic → recommend Flowchart
-- A `flow-walkthrough` evidence pack (`steps.yaml`) is a valid input → Flowchart: one node per step intent, edges in step order, each friction as a red note on its node, blocked steps as a terminal node with the reason
+- A `flow-walkthrough` evidence pack (`steps.yaml`) is a valid input → Flowchart: one node per step intent, edges in step order, each friction as a red note on its node, blocked steps as a terminal node with the reason; since v3.8.0 the legend marks the walked steps `observed` (walkthrough, date)
 - Cross-team or cross-system process → recommend BPMN 2.0
 - Architecture or data overview → recommend Simple schema
 
@@ -229,7 +229,7 @@ Execute the generation based on the selected tool:
 
 For BPMN 2.0 in Mermaid — use `flowchart` with subgraphs for lanes and styled nodes for events/gateways.
 
-**6a2. HTML/CSS (built-in) — for infographics:** one self-contained HTML file (inline CSS, inline SVG charts, a CSS-variable palette, print styles), validated and saved as `.html`; skip to Step 7.
+**6a2. HTML/CSS (built-in) — for infographics:** one self-contained HTML file (inline CSS, inline SVG charts, a CSS-variable palette, print styles, a footer that gives each number's source and evidence class as 6g's *Data integrity* row requires), validated and saved as `.html`; skip to Step 7.
 
 **6b–6f. External tools:** Google Gemini (6b), ChatGPT (6c), NotebookLM (6d), Figma via MCP or browser (6e), Draw.io — local `.drawio` XML first, browser as fallback (6f). Every browser-driven result proceeds to Step 6g (Quality check).
 
@@ -248,7 +248,7 @@ After receiving the result from any external tool (Gemini, ChatGPT, NotebookLM, 
 | **Text correctness** | All labels in the correct locale? No truncated or garbled text? |
 | **Visual quality** | Clean layout? No overlapping elements? Readable text? Consistent styling? |
 | **Notation compliance** | (For BPMN/flowcharts) Correct symbols used? Proper flow direction? |
-| **Data integrity** | (For infographics) Numbers match source data? Charts proportional? Units labeled? |
+| **Data integrity** | (For infographics) Numbers match source data? Charts proportional? Units labeled? Since v3.8.0 (`references/artifact-style-gate.md` Gate 4b): each number keeps its source's evidence class in the footer attribution — never upgraded, `simulated` / `assumed` visible; internal source names only for an internal audience, the class for every audience; when an external tool cannot render the class, it goes in the Step 7 caption and does not count as a failed iteration |
 | **Completeness** | No missing branches, screens, nodes, or data sections? Start/end conditions present? |
 
 3. **If issues found — auto-correct:**
@@ -321,7 +321,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.13.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.14.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Mode: Annotate (standalone screenshot annotation)
@@ -365,6 +365,7 @@ When invoking this skill from another skill, pass:
 - BPMN 2.0 diagrams must use correct notation (events, gateways, lanes)
 - Prototype fidelity must match the selected level (lo-fi or mid-fi)
 - Infographic data visualizations must be accurately proportioned and labeled
+- Placeholder values (5d) are marked `illustrative placeholder — not data` and carry no evidence class; a prototype, mockup or wireframe is never cited as evidence of user behaviour — where a claim about users rests on it alone, the claim is `assumed` (`references/pm-mental-model.md` §3, Prototype-as-validation; `references/data-integrity-protocol.md` 6a)
 - Maximum 3 auto-correction iterations before asking the user
 - Always present the result to the user before publishing
 

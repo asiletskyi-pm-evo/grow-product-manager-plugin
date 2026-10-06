@@ -10,7 +10,7 @@ Pick one of the created tasks (preferably a development task — FE or BE — as
 
 Use `getJiraIssue` to fetch the created task with all fields. This ensures we verify what was actually saved, not what we intended to send.
 
-**Maker–checker separation (v0.11.0):** the agent that created the tasks does not evaluate them. The maker fetches the raw task data (this step), then passes it — together with the requirements content and the check table below — to the **`grow-product-manager:artifact-checker`** agent (`references/artifact-style-gate.md` → Execution model) that has no access to this conversation's reasoning. The checker returns findings; the maker applies fixes (12d). If subagents are unavailable — run inline and mark the report "незалежність перевірки знижена (inline)".
+**Maker–checker separation (v0.11.0):** the agent that created the tasks does not evaluate them. The maker fetches the raw task data (this step), then passes it — with `artifact_type: task batch` (Gate 4a and 4b `n/a`), the requirements content and the check table below, one call per `lens` (`form`, then `groundedness`; since v3.8.0 named explicitly — without a lens the checker returns only an input-incomplete finding) — to the **`grow-product-manager:artifact-checker`** agent (`references/artifact-style-gate.md` → Execution model) that has no access to this conversation's reasoning. The checker returns findings; the maker applies fixes (12d). If subagents are unavailable — run inline and mark the report "незалежність перевірки знижена (inline)".
 
 **12c. Run verification checks:**
 

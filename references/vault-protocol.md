@@ -337,12 +337,27 @@ vault_save(artifact, product, options):
         (e.g. hypothesis: hypothesis_status, ice_*; ab-test-results:
          tested_hypothesis, result — NOT `linked_hypothesis`/`winner_id`)
    }
+   Judgment Fields (since v3.8.0; vault-schema.md → Judgment Fields), derived here
+   for every caller — the call sites pass nothing new (except decision-log, below):
+     evidence_classes = the classes the body's labels use (§4 order, deduplicated);
+                        left out when none, and on People-contour notes, knowledge
+                        sources, prototypes and handoffs. decision-log sets its own per
+                        judgment-points.md §4; any other `decision` writer
+                        (release-manager) takes it only from body labels.
+     altitude         = the value of the body's judgment footer (T-5 step 3a);
+                        left out when the body has none (People contour, decision,
+                        debate, knowledge source, prototype, handoff).
 
 6. Build content:
    REQUIRE: ## Summary section at start
      - 2-5 sentences
      - Captures key findings/output
      - Written for someone discovering vault artifact cold
+     - Any item it mentions keeps its `simulated` / `assumed` label, a 6c claim
+       keeps its "coincides with" wording, and `simulated` content is never stated
+       as a finding (since v3.8.0) — Step 0.5
+       reads only frontmatter + Summary, so a label lost here re-enters later
+       runs as evidence
    
    content = "## Summary\n\n{summary_text}\n\n{full_artifact_content}"
 
@@ -360,7 +375,8 @@ vault_save(artifact, product, options):
        - Add result.path to frontmatter.related[]
        - Read result file
        - Add [[{current_artifact_path}]] to result.related[]
-       - Write result file back
+       - Write result file back (every other key kept as it was — a rewrite never
+         adds or derives `evidence_classes` / `altitude` on an older note)
 
 8. Write artifact file:
    write_file(file_path, frontmatter + content)
@@ -577,7 +593,8 @@ FOR each target_path in target_artifact_paths:
   2. Parse frontmatter
   3. Check if source_path already in related[] → if yes, skip
   4. Add source_path to related[] in frontmatter
-  5. Rewrite target file with updated frontmatter
+  5. Rewrite target file with updated frontmatter (every other key kept as it was;
+     no Judgment Field is added to an older note)
   6. Store relative wikilink path (from plugin folder)
      Format: [[CJM/health-checks/my-app/cjm-health-check-2026-04-14]]
      (no .md extension, relative from vault plugin folder root)

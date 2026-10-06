@@ -9,10 +9,10 @@ products: []
 match: subtype
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.1.0"
 author: "grow-pm"
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-10-06
 tags: [concept, decision-memo, decision, options, evidence]
 description: "Decision memo (since v3.6.0): problem, options with rejected alternatives, evidence with its source, the ask, risks, owner, revisit trigger — the ask before a decision; the record after it is a decision-log ADR"
 status: active
@@ -37,7 +37,7 @@ variables:
 
 ## Options
 
-<!-- Two to four real options, "do nothing" included. Mark the recommended one; every rejected one keeps its reason, so the choice can be audited later. -->
+<!-- Two to four real options, "do nothing" included. Mark the recommended one; every rejected one keeps its reason, so the choice can be audited later. Costs and expected effects are forward-looking: no evidence class, only their basis; an unsourced input inside them reads `[assumed — …]`. -->
 
 | Option | Pros | Cons | Cost | Recommended / rejected — why |
 |--------|------|------|------|------------------------------|
@@ -47,7 +47,7 @@ variables:
 
 ## Evidence
 
-<!-- Each item: claim — source — source-type marker (data-integrity Gate Check 5). An input that rests on an opinion rather than evidence is labelled `assumed`. -->
+<!-- Each item: claim — evidence class — source (data-integrity Gate Check 5 marker), e.g. "checkout CR 0.99% (measured · Product Analysis — funnel workbook, 12mo rolling)". The class follows pm-mental-model.md §4: `measured` only through product-analysis's data gate, a figure this skill read itself is `reported (<source> · not gate-checked)`, a figure the user typed is `reported (<who>)`; an input that rests on an opinion rather than evidence is `[assumed — <whose opinion>]`; `simulated` input never stands here. -->
 - TBD
 
 ## The ask

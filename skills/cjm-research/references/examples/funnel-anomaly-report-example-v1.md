@@ -1,12 +1,16 @@
 <!-- Golden exemplar for the cjm-research skill (mode: anomalies + one hypothesis).
      Purpose: a worked, high-quality funnel-anomaly report the skill can pattern-match against (few-shot Examples context type).
      Generic/anonymized marketplace funnel — NO org-specific data. Also a fixture for testing/output-evals.md (cjm-research rubric).
-     Demonstrates the plugin's signature rigor: period annotation on EVERY metric, Data Integrity caveats, funnel-impact math.
+     Demonstrates the plugin's signature rigor: period annotation on EVERY metric, Data Integrity caveats, funnel-impact math,
+     and (since v3.8.0) evidence classes: one group label covers the dashboard data the skill read (`measured`), the illustrative
+     impact math carries no class, and the candidate driver the data cannot show is labelled `assumed` with a hand-back line.
      Numbers are illustrative. -->
 
 # CJM Anomaly Report — Marketplace funnel (illustrative)
 
 **Template:** marketplace (6 stages) · **Period:** full calendar month, 1–31 May 2026 (complete) · **Baseline:** prior month (Apr 2026) · **Extract date:** 2 Jun 2026 (period complete — no normalization needed) · **Thresholds:** warning 10% / critical 25% of baseline.
+
+Evidence: measured — funnel dashboard (marketplace workbook), May 2026 vs Apr 2026, cross-validated against the events pipeline.
 
 ## Funnel snapshot (period-annotated)
 | Stage | Conv. (May 2026, full month) | Baseline (Apr 2026, full month) | Δ vs. baseline | Flag |
@@ -22,7 +26,8 @@
 **A1 — Product-view → Add-to-cart dropped 25.7% MoM (critical).**
 - **Data Integrity Gate:** ✅ passed. Both periods are complete calendar months (extract 2 Jun, last point 31 May). Cross-validated against a second source (events pipeline vs. dashboard) — figures agree within 1.4% (< 15% variance threshold). Not a holiday-affected window.
 - **⚠️ Caveat:** none material. Single methodology change checked — none in the period.
-- **Scope:** concentrated on product pages without recent price/availability updates (secondary segment cut), suggesting a stale-listing or trust driver rather than a platform-wide regression.
+- **Scope:** concentrated on product pages without recent price/availability updates (secondary segment cut), suggesting a stale-listing or trust driver [assumed — a candidate driver, not a finding] rather than a platform-wide regression.
+- ⚠️ The data cannot settle this — the drop coincides with stale listings; it cannot show that staleness or trust caused it. Human step: five interviews with buyers who left stale product pages in May.
 
 ## Hypothesis (with funnel impact)
 **H1 — Weak-intent buyers leave the product page because there is no lightweight "save" action; some who would return-and-buy are lost at the add-to-cart step.**
@@ -37,6 +42,6 @@
 - [x] Impact math shown and marked illustrative.
 
 ## Sources
-- Funnel dashboard (marketplace workbook), period 1–31 May 2026 · Events pipeline (cross-validation) · both internal, period-annotated.
+- `measured` — Funnel dashboard (marketplace workbook), period 1–31 May 2026 · Events pipeline (cross-validation) · both internal, period-annotated.
 
 Altitude: L2 · ↑ serves: — (no linked goal) · ↓ next: disambiguate the A1 driver by segment analysis, then feed H1 to brainstorm-features (ICE)

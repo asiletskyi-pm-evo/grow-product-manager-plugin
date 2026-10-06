@@ -1,6 +1,6 @@
 ---
 name: experiment-tracker
-version: 0.5.0
+version: 0.6.0
 description: Experiment registry — proposed → specced → running → readout → decided, with stale-test reminders. Not analyzing results (product-analysis), not the A/B spec (requirements-creator). UA — «які тести зараз біжать», «заведи експеримент», «зафіксуй запуск тесту», «завислі тести». EN — "what experiments are running", "experiment status", "register an experiment", "log the test launch", "which tests await a decision", "remind me about stale tests". Also UA — «статус експериментів», «які тести чекають рішення». Tracks state and chains to product-analysis, requirements-creator and brainstorm-features.
 ---
 
@@ -45,7 +45,7 @@ experiments:
     planned_end: null
     readout_ref: ""           # vault link / Confluence URL of the product-analysis readout
     readout_signoff: null     # optional {by, date}: who signed off the readout (since v3.6.0)
-    prediction: null          # optional {by, date, text}: the PM's prediction (since v3.7.0) — written by readout step 1a or when the user states one; never asked at register or start
+    prediction: null          # optional {by, date, text}: the PM's prediction (since v3.7.0) — written by readout step 1a or when the user states one; never asked at register or start; an estimate, never an evidence input
     verdict: null             # winner | loser | inconclusive (from readout only)
     decision: null            # rollout | rollout-with-caveats | iterate | extend | rollback
     decision_ref: ""          # decision-log record link
@@ -117,6 +117,7 @@ Per `local-context-protocol.md`. Then **Step R** — load/create the registry.
 2b. **Economics & commitment (optional):** capture the test **cost** and the decision's **ROI / annual return** (`references/roi-frameworks.md`), and the **commitment** status (`references/goal-frameworks.md` → Tell and Sell: who committed and how). These flow into the decision-log record.
 3. **Gate**, then write `decision`, `status: decided`, `cost`/`roi`/`commitment` if provided, history.
 4. **Chain to `decision-log`** with full context (experiment, verdict, options considered, decision, rationale; since v3.7.0 also `owner` — the PM deciding — the options the PM named and did not choose with the reason given (left out when not given), the `prediction` for the record's Context, and as `base_rate` the registry's win rate: winners / other experiments with a verdict (this one excluded), with n, when n ≥ 5 — `references/judgment-points.md` §4) — the ADR record link comes back into `decision_ref`.
+4a. **Evidence classes (since v3.8.0).** The payload also carries `evidence_classes` (`references/judgment-points.md` §4): the classes the product-analysis readout's labels carry (its vault `evidence_classes` when saved since v3.8.0) — `measured` when it read the dashboard or the raw rows of an uploaded CSV itself, `reported` for results the PM pasted or a prepared report or screenshot the PM handed over — plus `measured` when step 4 passes a `base_rate` (a count from the registry), and `assumed` / `simulated` when the PM's stated rationale rests on such an input; never inferred, never asked, left out when none is stated. The board, the stale list and the registry entry carry no labels.
 5. Follow-ups: rollout → offer `task-creator` (cleanup/rollout tasks, «Випилити прапор …» convention); iterate → offer `brainstorm-features`/`requirements-creator`; extend → update planned_end.
 
 ### Step V — Vault Save

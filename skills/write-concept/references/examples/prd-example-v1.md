@@ -9,7 +9,7 @@
 Buyers who aren't ready to purchase have no lightweight way to keep items in view, so they lose the item and the session. This concept adds a "Save for later" action on the product card and a dedicated saved list, letting buyers park items without committing to a cart. Target outcome: **+3–5% return-to-purchase rate** among savers within 30 days, with no regression to add-to-cart rate.
 
 ## Problem Statement
-Analytics show a large share of product-page sessions end without an add-to-cart, yet a meaningful fraction of those buyers return within two weeks searching for the same item. The current cart conflates "intent to buy now" with "interested later," so hesitant buyers either overload the cart (inflating abandonment) or leave with nothing saved. This raises re-discovery cost and depresses repeat visits. *(Assumption — to validate in discovery: the "return searching for same item" pattern is material; confirm against session data before build.)*
+Analytics show a large share of product-page sessions end without an add-to-cart, yet a meaningful fraction of those buyers return within two weeks [assumed — Product Analysis to confirm product-page exits and return sessions] searching for the same item [assumed — to validate in discovery: the "return searching for same item" pattern is material; confirm against session data before build]. The current cart conflates "intent to buy now" with "interested later," so hesitant buyers either overload the cart (inflating abandonment) or leave with nothing saved [assumed — from the PM brief; no session data yet]. This raises re-discovery cost and depresses repeat visits.
 
 ## Goals & Non-Goals
 **Goals**
@@ -62,7 +62,7 @@ A "Save for later" control on the product card and product page, plus a "Saved" 
 - Should saved items show live price/availability, or a snapshot?
 
 ## Sources
-- Product Analysis: product-page exit & return-session figures *(period-annotated)*
-- Web: marketplace wishlist/save-for-later UX benchmarks
+- Product Analysis: product-page exit & return-session figures — to be run; no figures yet, so the body marks them `[assumed — …]`
+- Web: marketplace wishlist/save-for-later UX benchmarks *(external)*
 
 Altitude: L2 · ↑ serves: — (no linked goal) · ↓ next: check the "return for same item" pattern in session data — it blocks build-vs-defer

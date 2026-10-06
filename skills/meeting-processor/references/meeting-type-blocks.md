@@ -16,8 +16,8 @@
 
 | Block | What to extract |
 |-------|----------------|
-| **User insights** | Key findings about user behavior, needs, or pain points |
-| **Quotes** | Direct user quotes that support insights (with speaker attribution) |
+| **User insights** | Key findings about user behavior, needs, or pain points — candidate insights from this one meeting, each traced to what a participant said (`reported`); what a teammate says about users is `reported (<teammate>)`, not a user's own words |
+| **Quotes** | Direct user quotes that support insights — verbatim from the transcript, never from an AI summary: `«…» — <speaker>, <hh:mm> · reported` (timestamp where the source has one); a paraphrase loses its quote marks |
 | **Pain points** | Specific problems the user described |
 | **Needs / Jobs-to-be-done** | What the user is trying to accomplish |
 | **Opportunities** | Product opportunities identified from the discussion |

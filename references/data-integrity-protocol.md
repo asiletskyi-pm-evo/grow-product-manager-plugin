@@ -1,6 +1,6 @@
 # Data Integrity Protocol
 
-Universal gate for analytical skills in the Grow PM plugin. Referenced by `cjm-research` (Step 3.5), `product-analysis` (Step 1.5), `product-research` (Step 1.5), and `feedback-triage`.
+Universal gate for analytical skills in the Grow PM plugin. Referenced by `cjm-research` (Step 3.5), `product-analysis` (Step 1.5), `product-research` (Step 1.5), and `feedback-triage` (Steps 2 and 4). Since v3.8.0 its Gate Check 6 implements three principles of `pm-mental-model.md` — P1 provenance, P7 synthetic users are rehearsal, P10 hand back at the frontier — with the evidence classes of its §4 (sub-steps: cjm-research 3.5.g, product-analysis 1.5.g, product-research 1.5.g, feedback-triage Step 4); `brainstorm-features` consumes the classes through the debate evidence pack.
 
 > **Dependencies**: Also read `data-policy.md` (confidentiality), `integration-strategy.md` (MCP fallback chain), and skill-specific protocols before any data operation.
 
@@ -23,7 +23,7 @@ A single CJM research project produced four progressive errors, each propagated 
 | 3 | Derived claims propagate uncritically | "3.4× faster degradation" propagated to 5+ artifacts before verification | Stakeholders receive false project framing |
 | 4 | Missing inline period annotation | "CR 0.99%" cited without period context | Numbers lose meaning when copied (Slack, slides) |
 
-## The 5 Universal Gate Checks
+## The 6 Universal Gate Checks
 
 This protocol is implemented as a gate step in each analytical skill. The gate is **MANDATORY** before any output that cites data.
 
@@ -109,7 +109,7 @@ For product-research:
 - Baymard + Confluence internal experiment
 - 2 different competitor sources (their PR + 3rd-party analysis)
 - Web search across ≥2 different domains (avoid 2 articles from the same site)
-- User research: ≥2 user types / personas with same finding
+- User research: ≥2 real-user segments with the same finding (the number of real users stated); `simulated` input (Gate Check 6) is never a cross-validation source
 
 **Special case — extreme values:**
 
@@ -171,14 +171,61 @@ Every cited number / claim in the Sources section is marked with type:
 - `competitor-website` — Direct from competitor's site
 - `user-research` — User research synthesis (interviews, surveys)
 - `deep-research-llm` — ChatGPT/Gemini Deep Research (cross-checked)
+- `landscape:<slug>` — a fact from the product-landscape registry record `<slug>`
 
-This audit trail enables users to verify which retrieval method produced each datapoint.
+**Skill-declared markers** (already used by the skills that read these inputs): `walkthrough-local` (a flow-walkthrough evidence pack), `pdf-upload` (a user-uploaded PDF report), `user-text` (numbers or statements the user typed or pasted into the chat).
+
+This audit trail enables users to verify which retrieval method produced each datapoint. The marker is also the input of Gate Check 6: Gate Check 5 records **how a datum was retrieved**, Gate Check 6 **how the claim is known**.
+
+### Gate Check 6: Evidence Class & Frontier (since v3.8.0)
+
+Runs after the status is computed (Implementation order step 8), on every cited number, quote and claim. It assigns a class, keeps synthetic input out of findings, and hands a claim back when the data cannot support it. It **never changes a status, never blocks, never halts and never asks a question**. The classes and the label grammar are `pm-mental-model.md` §4.
+
+**6a — Class from the marker.** The Gate Check 5 marker decides the class, read together with what the input is (a dashboard vs a product screen, raw rows vs a prepared report); a skill's wish or a reader's trust never does.
+
+| Marker / input | Class |
+|---|---|
+| `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot` — data the skill fetched itself; `csv-upload` of raw rows the skill computes on — status ✅ or ⚠️ (❌ is not cited) | `measured` |
+| A count the skill computed itself from a system of record for a stated period (Jira through `jira-data-protocol.md`, the experiment registry, feedback items after their intake step) | `measured` |
+| `walkthrough-local`, a session recording, a usability observation, a `screenshot-user` of the product's own UI | `observed` |
+| `user-text` (figures or statements the user typed or pasted — even after Gate Checks 1–5), a prepared report the user hands over (`pdf-upload`, a `screenshot-user` of a dashboard or report), `confluence-internal`, `jira-internal` ticket content, verbatim `user-research` | `reported` (with who) |
+| A figure the user gives as recalled or unchecked ("from memory", «здається», «приблизно») with no source to check | `[assumed — <who>, from memory]` |
+| `baymard-premium`, `web-search`, `competitor-website` | `external` |
+| `kb-source` | the class the knowledge-library source type (and its `model-generated` tag) maps to (knowledge-library) |
+| `landscape:<slug>` | the class of the record's cited source (a store or web page → `external`); scan and bookmark provenance is never cited as evidence |
+| `deep-research-llm` | the class of the source the claim traces to; untraceable → `simulated` |
+| Persona, synthetic-user or scenario output; model-written "user" answers | `simulated` |
+| A figure a skill read itself without its data gate (no Gate Checks 1–5 in that skill) | `reported (<source> · not gate-checked)` |
+| A Figma or other design file, or a prototype | `reported` (file, frame) — it describes intended UI, never `observed` user behaviour; a claim that users want or validate it on the design alone is `assumed`; real users' reactions in a prototype session are `observed` / `reported` with the session |
+| User text that cites a named third-party source | that source's class, with "via <who>"; unnamed → `reported (<who>)` |
+| A claim from an earlier plugin artifact | the label it carries; an unlabelled one (saved before v3.8.0) → the class of the source it cites, else `reported` (the artifact); `measured` only after re-verification through the current gate |
+| No resolvable source | `assumed` |
+
+- **Synthesis keeps the class of what it synthesises.** A cluster, theme or summary of real items keeps their class; an AI summary of an identifiable real ticket is `reported` (and never quoted as verbatim).
+- **Real-user source.** Only a `reported` statement of an end user or customer with its source, or `observed` user behaviour, counts as a real-user source (6b, 6c). A PM's or stakeholder's statement is `reported (<who>)` and does not count; an opinion used as the basis of a decision is `assumed` (the `hippo-check` token adds the senior-opinion check).
+- **Uploads and pasted input of unclear origin** are never asked about. They are `simulated` only on an explicit marker — a "generated by" line, a synthetic-user tool export, the user saying so, or persona answers written as interview output; otherwise they take the class of what they contain (a persona document is `reported (document)`, its unsourced claims are `assumed`, and a quote it gives its persona is the document's wording — `reported (document)`, never quoted as a user). An interactive run prints one notice line only when it classifies input as `simulated`.
+
+**6b — Visibility (P7).** `simulated` content never appears in a findings or evidence section, even labelled — a section is one by its role (summary, key findings, themes, insights, takeaways, evidence, results, friction findings), not by its heading. It is never counted in n, frequencies or clusters and never quoted; it goes to Hypotheses or to one `Simulated input — hypotheses only` line, shown only when such input exists. A Sources row or an index field (a repository entry) may name it with its label, never counting it. `assumed` may appear in those sections only with its label.
+
+**6c — Frontier (P10).** On a claim presented as a finding, verdict, root cause or recommendation — not on a labelled hypothesis — any of:
+- a **causal claim on observational data** (before/after, correlation, co-occurrence with a release or anomaly) without a randomised test, holdout or flag-off control — a randomised A/B readout is exempt;
+- a **claim about user motivation or needs** with no real-user source (6a);
+- a **claim that needs tacit organisational context** found in no accessible source.
+
+The skill keeps the supportable part, keeps the guess only as an `assumed` hypothesis, and adds one line next to the claim, worded in `user.language`, e.g. `⚠️ The data cannot settle this — the drop coincides with release 4.12; it cannot show the release caused it. Human step: a 2-week holdout on Android.` ("Hand back" is the protocol's name, not output wording.)
+
+**6d — Output by run kind.**
+- **Interactive:** labels plus the 6c lines.
+- **Return payload:** classes and frontier flags in the payload's existing data-quality notes; the interactive caller renders them.
+- **Scheduled or headless:** labels and the 6b handling (synthetic input set aside, one `Simulated input` line where such input exists); a frontier claim carries its human step inside its label, `[assumed — frontier: <human step>]`, and no 6c line or other new line is added.
+
+Labels follow `pm-mental-model.md` §4 (class words in English, details in `user.language`); forward-looking numbers — targets, plans, forecasts, projections — carry no class, only their existing forecast / illustrative marker, while an unsourced input inside them is `assumed`.
 
 ---
 
 ## Gate emphasis — role extra checks (since v3.6.0)
 
-`role_defaults.gate_emphasis` (`references/role-profiles.md` §2) names extra checks run **on top of** Gate Checks 1–5 — never instead of them, and never relaxing one. A skill applies a token only where it has a step for it (the "Applied by" column lists those skills); other tokens are ignored in that run. Automated runs apply none of their own; a skill invoked only for a return payload applies exactly the tokens its interactive caller passes, never the role's own. A failed extra check adds a ⚠️ caveat line to the metric or section (the statuses below stay the same) — never a new question and never a blocked run.
+`role_defaults.gate_emphasis` (`references/role-profiles.md` §2) names extra checks run **on top of** Gate Checks 1–6 — never instead of them, and never relaxing one. Gate Check 6 is baseline for every role and every kind of run, not a token; the token list below is unchanged. A skill applies a token only where it has a step for it (the "Applied by" column lists those skills); other tokens are ignored in that run. Automated runs apply none of their own; a skill invoked only for a return payload applies exactly the tokens its interactive caller passes, never the role's own. A failed extra check adds a ⚠️ caveat line to the metric or section (the statuses below stay the same) — never a new question and never a blocked run.
 
 | Token | Extra check | Applied by |
 |-------|-------------|-----------|
@@ -188,7 +235,7 @@ This audit trail enables users to verify which retrieval method produced each da
 | `trend-vs-objective` | Every trend is shown against its objective or target, not only period-over-period | product-analysis, product-reporter |
 | `market-recency` | External market data older than 12 months is flagged as stale | product-research, write-concept |
 | `base-rates` | A forecast, bet or estimate states a base rate / outside view, or says that none is known | product-analysis, write-concept |
-| `triangulation` | A qualitative finding is called conclusive only when two independent source types agree; the number of real users and the method are stated; synthetic input counts as hypothesis only | product-research, feedback-triage |
+| `triangulation` | A qualitative finding is called conclusive only when two independent source types agree; the number of real users and the method are stated (keeping synthetic input out of findings is baseline Gate Check 6b since v3.8.0 — the `simulated` label is not repeated as a second ⚠️ line) | product-research, feedback-triage |
 | `human-validated` | Themes synthesised by a model carry a `human-validated: yes/no` flag | product-research, feedback-triage |
 | `instrumentation` | The events behind a metric change are confirmed to fire as specified (tracking plan / event dictionary) before the change is trusted | product-analysis, cjm-research |
 | `srm-exposure-peeking` | An A/B readout checks sample-ratio mismatch, exposure logging and early peeking before the verdict | product-analysis (A/B readout, also when experiment-tracker chains it) |
@@ -196,17 +243,17 @@ This audit trail enables users to verify which retrieval method produced each da
 | `spec-readiness` | A spec names problem, outcome, scope, constraints and verification; missing ones are flagged (the full readiness gate lands in v3.9.0) | requirements-creator |
 | `nfr-present` | The NFR section exists and is not TBD | requirements-creator |
 | `money-bridge` | A metric claim is linked to revenue / margin / CAC / LTV through `product.key_metrics` → `Revenue driver`; without a mapping the section's single line "No revenue mapping configured" is the whole result — no per-claim caveats | product-reporter, write-concept (business case) |
-| `hippo-check` | A decision that leans on a senior opinion names the evidence behind it, or labels the input `assumed` | write-concept, product-reporter |
+| `hippo-check` | A decision that leans on a senior opinion names the evidence behind it, or labels the input `[assumed — senior opinion: <who>]` | write-concept, product-reporter |
 
 ---
 
 ## Output statuses
 
-After running all 5 gate checks, each metric/source gets a status:
+After Gate Checks 1–5, each metric/source gets a status; Gate Check 6 then adds its class and any hand-back line and never changes the status:
 
-- ✅ **Verified** — passed all 5 checks; ready for use in any output
+- ✅ **Verified** — passed Gate Checks 1–5; ready for use in any output
 - ⚠️ **Caveat** — passed with limitations (incomplete-period normalized, holiday-affected, single-source pending cross-validation, aging external source, cultural-fit caveat); inherit caveat into report
-- ❌ **Blocked** — failed a critical check; do not use in final report without resolution; either gather additional source, exclude metric, or inform user
+- ❌ **Blocked** — failed a critical check; do not use in final report without resolution; either gather additional source, exclude metric, or inform user. Gate Check 6 never blocks.
 
 **If Blocked metrics > 0:**
 - Return to data acquisition step to gather missing sources
@@ -224,6 +271,7 @@ For any metric / claim cited in the final report:
 3. **Caveat inheritance** — if metric was ⚠️ Caveat, the caveat must be visible in the section that cites it
 4. **Holiday/period flag** for any metric where Gate Check 2 raised a flag
 5. **Methodology change disclosure** for any metric where Gate Check 3 deep verification was triggered
+6. **Evidence class** (Gate Check 6, since v3.8.0) with each cited number or quote; `simulated` / `assumed` visible on the item; each hand-back line stays in the section that cites its claim
 
 ---
 
@@ -253,11 +301,23 @@ A single unverified "-29% / -8.6% / 3.4×" propagated into 5+ artifacts: CJM dia
 
 **Reality:** the reader cannot tell whether this is 12-month rolling, one quarter, a snapshot, or an all-time average. The number loses its meaning the moment it is copied out of the document it was born in.
 
+### Anti-pattern 5: Synthetic persona quoted as a finding
+
+> "Key finding: sellers abandon onboarding because it feels bureaucratic — «I just want to list my first product» (Seller, 34)"
+
+**Reality:** the quote came from a model playing a persona. Nobody said it; it cannot be a finding, a count or a quote (Gate Check 6b).
+
+### Anti-pattern 6: Causal claim on observational data
+
+> "Release 4.12 caused the +3.1% checkout lift"
+
+**Reality:** the lift coincides with the release; with no holdout or flag-off control the data cannot separate the release from seasonality, marketing or mix (Gate Check 6c).
+
 ---
 
 ## Correct patterns
 
-The same four claims, written so they survive being copied out of context (same fictional product).
+The same claims, written so they survive being copied out of context (same fictional product).
 
 ### Pattern 1: Verified period
 > "Sessions June 2026 normalized: 1.10M × 30/7 = 4.71M (full-month equivalent from a 7-day extract on 8.06.2026, `<sessions workbook>`)"
@@ -271,6 +331,12 @@ The same four claims, written so they survive being copied out of context (same 
 ### Pattern 4: Inline-period annotation
 > "Checkout CR 0.99% (12mo rolling, 1.06.2025 → 7.06.2026, `<funnel workbook>` Overview view, cross-validation pending on `<CJM master dashboard>`)"
 
+### Pattern 5: Synthetic input kept out of findings
+> Key findings cite only the six real interviews (n = 6, `reported`). "Simulated input — hypotheses only: three persona answers suggest onboarding feels bureaucratic (`simulated`) → interview 5 new sellers to check."
+
+### Pattern 6: Coincidence plus hand-back
+> "Checkout CR +3.1% (measured · 2 weeks after vs 2 weeks before release 4.12, `<funnel workbook>`) — coincides with the release. ⚠️ The data cannot settle this — no holdout ran. Human step: a 2-week holdout on Android."
+
 ---
 
 ## Cross-skill applicability
@@ -280,7 +346,10 @@ The same four claims, written so they survive being copied out of context (same 
 | `cjm-research` | Step 3.5 — Data Integrity Gate | Between Step 3 (Load CJM data) and Step 4 (Anomaly detection) |
 | `product-analysis` | Step 1.5 — Data Integrity Gate | Between Step 1 (Initialization and data acquisition) and Step 2 (Analysis engine) |
 | `product-research` | Step 1.5 — Source Validation Gate | Between Step 1 (Deep discovery) and Step 2 (Research execution) |
-| `brainstorm-features` (optional) | ICE Confidence adjustment | Apply trigger-data status to Confidence score (Verified = no adjustment, Caveat = -1 to -2, Blocked = -3 + warning) |
+| `feedback-triage` | Step 2 (Gate Check 1) and Step 4 (Gate Check 6) | Period completeness at intake; classes and `simulated` exclusion before themes are reported |
+| `brainstorm-features` | Debate evidence pack | Facts E# carry their Gate Check 6 class; A# keep their label — `assumed`, or `simulated` for synthetic input (`debate-protocol.md`) — no ICE adjustment from status |
+
+Gate Check 6 sub-steps: cjm-research **3.5.g**, product-analysis **1.5.g**, product-research **1.5.g**, feedback-triage **Step 4**; product-reporter applies 6a and the 6c causal rule to a cause of deviation in its Step 2.5.
 
 ---
 
@@ -295,9 +364,10 @@ When a skill invokes this protocol:
 5. Apply Gate Check 4 (Inline Annotation) format → prepare annotated strings
 6. Apply Gate Check 5 (Source Type Marker) → tag each source
 7. Compute status per metric: ✅ Verified / ⚠️ Caveat / ❌ Blocked
-8. If any Blocked → halt or inform user before proceeding
-9. Pass Verified/Caveat metrics to the next analysis step
-10. Carry caveats through to the final report
+8. Apply Gate Check 6 (Evidence Class & Frontier) to every cited item → class; collect hand-back lines (never a status change)
+9. If any Blocked → halt or inform user before proceeding
+10. Pass Verified/Caveat metrics to the next analysis step
+11. Carry caveats, classes and hand-back lines through to the final report
 
 ---
 

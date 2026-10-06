@@ -46,7 +46,7 @@ Evaluate the document against the standard requirements template (`references/re
 - Are edge cases and error states described?
 - Are all user types (buyer, seller, admin, etc.) covered where relevant?
 - Are there internal contradictions or ambiguities?
-- Are there technical claims with no identifiable source — user / document / ticket? (Gate 1 — `references/artifact-style-gate.md`)
+- Are there technical claims with no identifiable source — user / document / ticket? (Gate 1 — `references/artifact-style-gate.md`) Are cited numbers and quotes given with their source and evidence class? (Gate 4b, since v3.8.0 — advisory: listed in A3 only, never an A4 question; see A6)
 - Are requirements or stages written as paragraph prose instead of lists/tables? (Gate 2 — same reference)
 - Is the scope clear — what IS in scope and what is NOT?
 - Are acceptance criteria or success thresholds defined?
@@ -140,7 +140,7 @@ For each approved improvement:
 
 After all improvements are applied — present the full updated document for final review.
 
-Before that final review, run `references/artifact-style-gate.md` on the improved document (maker–checker; two lenses if it will be re-published). Pass `mode: analyze-improve` to the checker: Gate 4a is `n/a` here — the user's own document never gets the altitude line. Include the one-line gate report.
+Before that final review, run `references/artifact-style-gate.md` on the improved document (maker–checker; two lenses if it will be re-published). Pass `artifact_type: requirements`, `mode: analyze-improve` and the source list (each source with its Gate Check 5 marker where known) to the checker: Gate 4a is `n/a` here — the user's own document never gets the altitude line. Gate 4b (since v3.8.0) is advisory here: its findings are shown with the gate report like disputed findings, and a label is added to the user's document only when the user accepts it in that same final review — never as a silent fix and never as a separate confirmation round. Include the one-line gate report.
 
 ### A7 — Feasibility research (optional)
 

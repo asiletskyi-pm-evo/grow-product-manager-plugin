@@ -39,6 +39,8 @@ Do NOT debate: factual questions (research them), routine backlog ranking (ICE/P
 
 **Evidence pack.** Numbered facts `E1…En` taken ONLY from research/analysis already performed in this session or loaded from the vault — and, where the source skill applies it, only data that passed the Data Integrity Gate (`references/data-integrity-protocol.md`). Everything else enters as explicitly marked assumptions `A1…An`. The pack is the debaters' ONLY source of facts. Show the pack to the user before Round 1 and let them add or strike items.
 
+**Evidence classes in the pack (since v3.8.0).** Each E# carries its class (`pm-mental-model.md` §4) — from `data-integrity-protocol.md` Gate Check 6 where the source skill ran it, else from its source marker; a vault item keeps the label it carries — e.g. `E3 — checkout CR 0.99% (measured · 12mo rolling, …)`. A `simulated` or `assumed` input never becomes an E#: it enters as an A# with its label, and an A# without a source is `assumed`; an item the user adds is classed the same way (`user-text` → `reported (<who>)`; a user's report of persona or synthetic-user output stays `simulated` and enters as an A#). Showing the pack is the review at which the A# are accepted — no extra question. Role arguments are reasoning over the pack, not evidence: a claim about users that a user-representative card (Buyer, Seller or a custom one) voices beyond the pack is `simulated` — in the synthesis it is an open question, never a finding and never a new E#.
+
 **Hats vs debate (since v3.5.0).** A role card is a stakeholder argued *inside* the debate: the `You are {role}` line in the subagent template below addresses the debater agent, never the user; `{role}` is filled only from the chosen card, never from `user.role` or a hat, and every preset card (the PM card included) stays available whatever the user's role — the default roles are unchanged, and `hats_allowed` never limits debate cards — D1 role presets are not hats (`references/role-profiles.md` §4). A **hat** («подивись як CPO») changes the defaults of one run for the user's own output; a debate is its multi-role form. `testing/skill_lint.py` check 20 exempts the `{role}` placeholder for this reason.
 
 ## Step D2 — Round 1: parallel opening positions
@@ -85,7 +87,7 @@ The main agent — the one that spawned the debaters — synthesizes:
 - **Verdict** — recommendation + facilitator confidence (high / medium / low).
 - **Minority report** — the dissenting role ALWAYS gets 2–3 sentences in the final artifact, even (especially) when overruled.
 - **ICE Confidence correction** for the affected hypotheses:
-  - all roles converge in support → Confidence **+1…+2**;
+  - all roles converge in support → Confidence **+1…+2** — since v3.8.0 only when the supporting arguments cite at least one E#; a consensus that rests only on A# items (`assumed` or `simulated`) or on role reasoning gives **+0**;
   - the Skeptic's objection stays unresolved → Confidence **−1…−2**;
   - new risks surfaced by the debate → append to the hypothesis's Risks field.
 
@@ -118,7 +120,7 @@ vault_save({
 Saved under `Debates/{product}/` per `references/vault-schema.md`.
 
 **Chains — always offer:**
-- "Record the verdict as a decision?" → `decision-log` (the ADR inherits the verdict; since v3.7.0 the minority report goes into the record's `minority_report` field and its own Minority report section — `judgment-points.md` §4 — instead of Consequences & risks).
+- "Record the verdict as a decision?" → `decision-log` (the ADR inherits the verdict and, since v3.8.0, the pack's classes — E# theirs, A# their label; since v3.7.0 the minority report goes into the record's `minority_report` field and its own Minority report section — `judgment-points.md` §4 — instead of Consequences & risks).
 - "Register the winning hypotheses?" → `experiment-tracker` (register mode, state `proposed`).
 
 ## Guardrails
@@ -128,4 +130,4 @@ Saved under `Debates/{product}/` per `references/vault-schema.md`.
 - **Data policy:** debaters are local subagents without web access — internal data never leaves the session (`references/data-policy.md`).
 - **Cost cap:** default 4 roles × 2 rounds = 8 subagent calls; hard cap **12** total (covers 4×3 rounds, or 5 roles × 2 + re-runs). Responses are compact structured payloads per `subagent-delegation.md`, never free-form essays.
 - **Mid-debate role addition:** if an affected interest group turns out uncovered, the facilitator MAY add exactly **one** role mid-debate — with the user's confirmation and within the cost cap. The new role receives the evidence pack + all prior rounds' outputs and joins the current round.
-- **Fallback chain:** `grow-product-manager:debater` → `general-purpose` with the same prompt (report notes the unenforced restriction) → inline simulation. **Fallback without the Agent tool:** inline simulation — the main agent plays the roles sequentially in one context, same prompts, same response formats, same caps. The report MUST carry the visible note **"inline simulation: role independence reduced"** and the vault frontmatter MUST set `inline_simulation: true`.
+- **Fallback chain:** `grow-product-manager:debater` → `general-purpose` with the same prompt (report notes the unenforced restriction) → inline simulation. **Fallback without the Agent tool:** inline simulation — the main agent plays the roles sequentially in one context, same prompts, same response formats, same caps. The report MUST carry the visible note **"inline simulation: role independence reduced"** and the vault frontmatter MUST set `inline_simulation: true`. This marker concerns role independence, not the `simulated` evidence class (`pm-mental-model.md` §4): an inline debate's E# keep their classes.

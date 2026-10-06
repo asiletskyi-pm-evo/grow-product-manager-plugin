@@ -14,7 +14,7 @@ The sixth observed capability (`host-profiles.md` §1): *a tool in this session 
 | `device` | a shell (`SHELL`) plus `adb` (Android) or `simctl` / a simulator tool (iOS builds — v1.1) | phones and emulators | none, after setup |
 | `none` | no tool above | — | the **user-driven variant** (§6) |
 
-Every level carries a **measured / assumed** mark per host. Measured rows come from a run on that host with the date; assumed rows say so, and the run's `run.yaml` copies the mark (`driver_evidence: measured | assumed`).
+Every level carries a **measured / assumed** mark per host. Measured rows come from a run on that host with the date; assumed rows say so, and the run's `run.yaml` copies the mark (`driver_evidence: measured | assumed`). The mark records whether the host's driver capability was measured — a host fact, not an evidence class (`pm-mental-model.md` §4): a walk's verified steps are `observed` (`data-integrity-protocol.md` Gate Check 6) at every level and under either mark, the user-driven variant (§6) included. The field keeps its name because packs already exist on disk.
 
 | Host (profile) | web | desktop-background | foreground | device | Source |
 |---|---|---|---|---|---|
@@ -92,7 +92,7 @@ product: Product 1
 product_role: own            # own | competitor
 surface: iphone-on-mac       # web | desktop | iphone-on-mac | android-adb | ios-simulator
 driver_level: foreground     # web | desktop-background | foreground | device | none
-driver_evidence: measured    # measured | assumed
+driver_evidence: measured    # measured | assumed — host capability mark, not an evidence class (§1)
 host_profile: claude-cowork
 scenario: "Leave a review for a delivered order"
 account: test                # own | test | anonymous

@@ -29,7 +29,7 @@
    For each anomaly:
    - Stage name and position in funnel
    - Metric affected (conversion rate, drop-off, absolute value)
-   - Baseline value vs actual value
+   - Baseline value vs actual value (each with its Step 3.5.d annotation and 3.5.g class)
    - Deviation percentage
    - Severity classification
    - Trend direction (worsening / improving / stable)
@@ -43,7 +43,7 @@
 
 ### Step 5 — Enrich with WORLD sources
 
-> **Subagent delegation (large fan-out).** For many world enrichment sources (library + internet + Baymard across all detected anomalies), delegate per `references/subagent-delegation.md`: split into batches (by anomaly / funnel stage / search mode), spawn subagents in parallel, each returns a compact structured result (per source: key insight, source type, trust score + source link), and the main agent aggregates (group by stage, dedupe, rank). The same pattern applies to Step 6 INTERNAL enrichment (Confluence + GDrive). Falls back to inline if subagents are unavailable.
+> **Subagent delegation (large fan-out).** For many world enrichment sources (library + internet + Baymard across all detected anomalies), delegate per `references/subagent-delegation.md`: split into batches (by anomaly / funnel stage / search mode), spawn subagents in parallel, each returns a compact structured result (per source: key insight, source type, trust score + source link), and the main agent aggregates (group by stage, dedupe, rank) and derives each source's class from its type (SKILL.md 3.5.g) — a subagent never assigns it. The same pattern applies to Step 6 INTERNAL enrichment (Confluence + GDrive). Falls back to inline if subagents are unavailable.
 
 
 **Delegate to `knowledge-library` (search modes: library + internet + baymard) and `product-research`.**
@@ -76,7 +76,7 @@ If Baymard access is configured in Knowledge Library settings:
 Merge all results into a structured enrichment dataset:
 - Group sources by funnel stage
 - Rank by trust score within each stage
-- Note source type (library / web / baymard) for the final report's Sources section
+- Note source type (library / web / baymard) and class for the final report's Sources section — `external` for web and Baymard, a library source per its type; a Deep Research claim takes the class of the source it traces to, and an untraceable one is `simulated` (a hypothesis input, never a benchmark)
 
 ### Step 6 — Enrich with INTERNAL sources
 
@@ -92,13 +92,13 @@ Call `knowledge-library` in Search Confluence mode:
 
 Call `knowledge-library` in Search Google Drive mode:
 - Search configured folders for: NPS reports, user feedback exports, research presentations, strategy documents
-- Extract: relevant findings, quotes, data points
+- Extract: relevant findings, quotes (verbatim, `reported` with who and where), data points (`reported` with the document; `measured` only when re-verified through Step 3.5 in this run)
 
 **6c. Merge internal enrichment:**
 
 Combine Confluence and Google Drive findings:
 - Match to specific anomalies where possible
-- Note: user feedback that correlates with a detected anomaly is strong evidence for hypothesis building
+- Note: user feedback that correlates with a detected anomaly is strong evidence for hypothesis building — real-user feedback only (a `reported` end-user or customer statement with its source); a PM's or stakeholder's view, or a persona answer, is not user feedback
 - All internal data stays internal per `data-policy.md`
 
 ### Step 7 — Build hypotheses
@@ -114,10 +114,10 @@ Pass context:
 Receive from `brainstorm-features`:
 - Hypothesis list with:
   - **Data Trigger** — the detected anomaly (stage, metric, deviation)
-  - **Feedback Match** — correlated user feedback or support tickets
+  - **Feedback Match** — correlated user feedback or support tickets (real-user `reported` sources only; never `simulated`)
   - **Heuristic Match** — matching UX best practice from Knowledge Library
   - **Solution** — proposed change
-  - **Expected Impact** — estimated conversion lift for the affected stage
+  - **Expected Impact** — estimated conversion lift for the affected stage (a projection: no class; an unsourced lift is `assumed`)
   - **ICE Score** — Impact × Confidence × Ease (with CJM-specific weighting)
   - **Category** — Low-hanging fruit / Structural changes / Business logic changes
 
@@ -155,6 +155,8 @@ absolute_impact = new_overall_conversion - current_overall_conversion
 relative_impact = (absolute_impact / current_overall_conversion) × 100
 ```
 
+Current conversions keep their `measured` class; new and projected ones are projections, marked illustrative and given no class (`references/pm-mental-model.md` §4).
+
 **Rank hypotheses by:**
 1. Overall conversion impact (primary)
 2. ICE score (secondary)
@@ -190,6 +192,7 @@ For each hypothesis from Step 7, run verification checks per `references/cjm-pro
 - If Baymard/industry benchmark supports the hypothesis → Confidence +1–2 points
 - If internal experiment supports → Confidence +2–3 points
 - If contradicting evidence found → Confidence -2–3 points, flag for discussion
+- If the only support is `simulated` or `assumed` → +0 (no boost)
 
 **10d. Dependency and cannibalization analysis:**
 - Would implementing hypothesis A invalidate the conditions for hypothesis B?
@@ -200,8 +203,8 @@ For each hypothesis from Step 7, run verification checks per `references/cjm-pro
 
 | Status | Meaning |
 |--------|---------|
-| **Confirmed** | Multiple evidence sources support, no contradictions |
-| **Needs more data** | Promising but insufficient evidence — suggest specific data to gather |
+| **Confirmed** | Multiple evidence sources support (`simulated` and `assumed` items never count), no contradictions — supported, not a proven cause: stated as the anomaly's cause, it keeps the 3.5.g hand-back line until an A/B test or holdout settles it |
+| **Needs more data** | Promising but insufficient evidence — suggest specific data to gather, or the human step (interviews, an experiment) when data cannot settle it |
 | **Contradicted** | Evidence found against the hypothesis — recommend not pursuing or re-framing |
 
 ### Step 11 — Risk assessment

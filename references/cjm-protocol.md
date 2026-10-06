@@ -217,15 +217,16 @@ All CJM reports (regardless of mode) should include these sections where applica
 
 All CJM-related skills MUST execute the Data Integrity Gate before reporting any metric. See `references/data-integrity-protocol.md` for the full protocol.
 
-**Quick reference — 5 mandatory checks:**
+**Quick reference — 6 mandatory checks:**
 
 1. **Period/Context Completeness** — detect incomplete-period extracts; normalize or exclude
 2. **Seasonal/Cultural Screening** — flag anomaly windows that overlap with holiday periods (Ukraine: Week 1 Jan, Mar 7-8, Easter, May 1-3, BF, Dec 22-31); verify geographic relevance of external benchmarks
 3. **Multi-Source Cross-Validation** — ≥ 2 independent sources for critical metrics; ≥ 3 sources for extreme values (drop > 25% / lift > 50% / sensational claims)
 4. **Period Definition Lock + Inline Annotation** — every cited metric carries inline period annotation (12mo rolling, YoY, snapshot, normalized, etc.)
 5. **Source Type Marker** — mark every source with type (`tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `baymard-premium`, `web-search`, `kb-source`, `competitor-website`, `user-research`)
+6. **Evidence Class & Frontier** (since v3.8.0) — a class on every cited metric and claim (funnel data the skill read `measured`, walkthrough packs `observed`, feedback `reported`, benchmarks `external`); `simulated` / `assumed` visible on the item and never a finding; a root cause the data cannot support (a causal claim without an experiment, holdout or flag-off control, or a "why users…" claim without a real-user source) gets one hand-back line naming the human step instead of a finding — labels only in the automated health-check
 
-**Output statuses:** ✅ Verified / ⚠️ Caveat / ❌ Blocked.
+**Output statuses:** ✅ Verified / ⚠️ Caveat / ❌ Blocked — set by checks 1–5; check 6 never changes a status, never blocks and never asks.
 
 **Blocked metrics** must not appear in final reports without resolution.
 
@@ -258,6 +259,7 @@ For global products, also screen: Chinese New Year, Diwali, Ramadan, US Thanksgi
 - [ ] Methodology change check (data-platform / attribution-change tickets in the period — the tracker project your org uses for them)
 - [ ] Reference period analysis (full YoY table, not single cell)
 - [ ] Inline-period annotation (Gate Check 4)
+- [ ] Evidence class on the deviation; a cause the data cannot show is handed back, not reported as a finding (Gate Check 6)
 
 If any check fails → mark as ⚠️ Caveat or ❌ Blocked, do not report as fact.
 
@@ -275,4 +277,4 @@ Each product/organization should build a metric → sources mapping in `local-co
 
 This catalog enables Gate Check 3 (Multi-Source Cross-Validation) to operate automatically — the skill knows which secondary source to query for each metric.
 
-Qualitative stage evidence has its own marker: `walkthrough-local` — a `flow-walkthrough` evidence pack (`steps.yaml`, `findings.md`) for the stage's scenario, step-numbered, local only (`app-drive-protocol.md`). It never substitutes for a metric source; it explains one.
+Qualitative stage evidence has its own marker: `walkthrough-local` — a `flow-walkthrough` evidence pack (`steps.yaml`, `findings.md`) for the stage's scenario, step-numbered, local only (`app-drive-protocol.md`). It never substitutes for a metric source; it explains one. Its steps are `observed` (Gate Check 6, since v3.8.0).

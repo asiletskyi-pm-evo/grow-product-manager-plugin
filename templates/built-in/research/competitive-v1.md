@@ -8,10 +8,10 @@ scope: built-in
 products: []
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.0.1"
 author: "grow-pm"
 created: 2026-04-17
-updated: 2026-04-17
+updated: 2026-10-06
 tags: [research, competitive, market]
 description: "Competitive analysis template: players, SWOT, positioning, takeaways"
 status: active
@@ -97,6 +97,7 @@ Positioning map description (X / Y axes) with each competitor placed.
 
 ## 7. Key Takeaways
 
+<!-- Evidence labels (since v3.8.0; pm-mental-model.md §4): each takeaway, table cell and SWOT fact takes the class of its source, first in its annotation — a competitor's site, store page or third-party report `external` (source, date); our own data `measured` only when the skill read it itself, else `reported (<who>)`; an untraceable Deep Research claim is `simulated` and never a takeaway; a judgment with no source reads `[assumed — …]`. -->
 - TBD
 
 ## 8. Recommendations

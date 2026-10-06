@@ -8,10 +8,10 @@ scope: built-in
 products: []
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.0.1"
 author: "grow-pm"
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-10-06
 tags: [presentation, research, user-research, insights]
 description: "User research / UX benchmark / market research dump (10 slides): themes → quotes → quantitative findings → recommendations"
 status: active
@@ -82,6 +82,8 @@ variables:
 
 **Type:** {{research_type}} · **Period:** {{research_period}}
 
+<!-- Evidence labels (since v3.8.0; pm-mental-model.md §4, artifact-style-gate.md Gate 4b): every number, quote and benchmark stated as fact carries its class in the slide's source caption or attribution — a quote verbatim, with who and when, ending `· reported`. `simulated` input never fills a quote, metric or evidence slide; `assumed` appears only labelled. Targets and forecasts carry no class. External audience (customer, partner, public): the class stays, internal source names go, and hand-back lines stay in the outline companion — never on a slide. A theme keeps the class of what it synthesises. -->
+
 ---
 
 ## Slide 1. Title
@@ -96,6 +98,7 @@ variables:
 
 ## Slide 3. Method & sample
 
+<!-- The sample counts real users only. Simulated input, when there is any, is named here on one "Simulated input — hypotheses only" line and never counted in N, a theme, a quote or a number. -->
 - **Method:** {{method}}
 - **Sample:** {{sample}}
 - **Period:** {{research_period}}
@@ -126,7 +129,7 @@ variables:
 {{else}}
 > "Direct quote from interview / survey"
 >
-> — Segment, role
+> — Segment, role, date · reported
 {{/if}}
 
 ## Slide 6. Theme 2
@@ -149,7 +152,7 @@ variables:
 {{else}}
 > "Direct quote from interview / survey"
 >
-> — Segment, role
+> — Segment, role, date · reported
 {{/if}}
 
 ## Slide 8. Theme 3 (if applicable)
@@ -169,8 +172,8 @@ _(optional — skip if only 2 themes)_
 - {{this}}
 {{/each}}
 {{else}}
-- Metric 1: value + context
-- Metric 2: value + context
+- Metric 1: value + context (class · source, period)
+- Metric 2: value + context (class · source, period)
 - Metric 3 (optional)
 {{/if}}
 

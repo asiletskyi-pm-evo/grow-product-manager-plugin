@@ -32,7 +32,7 @@ Methods for validating hypotheses, ranked by cost (from cheapest to most expensi
 
 **When to use**: When you need to understand user needs, validate problem existence, or get qualitative feedback on a solution direction.
 
-**Limitations**: What users say ≠ what users do. Small sample, potential bias.
+**Limitations**: What users say ≠ what users do. Small sample, potential bias. Simulated interviews (a persona or synthetic-user run) are not this method: they rehearse the interview guide and earn no Confidence (`simulated`, `references/pm-mental-model.md` §4).
 
 ---
 

@@ -1,4 +1,4 @@
-<!-- Output-eval fixture (input brief) for meeting-processor. Feed as the user request; score the resulting MoM against the meeting-processor rubric in testing/output-evals.md. Gold reference: skills/meeting-processor/references/examples/mom-example-v1.md. Generic, no org data — the transcript is fictional. -->
+<!-- Output-eval fixture (input brief) for meeting-processor. Feed as the user request; score the resulting MoM against the meeting-processor rubric in testing/output-evals.md. Gold reference: skills/meeting-processor/references/examples/mom-example-v1.md. Generic, no org data — the transcript is fictional. For the evaluator only (never part of the input; moved out of the brief in v3.8.0): Expected: a Structured MoM in which every decision carries its rationale and any alternative that was rejected (with the reason); ARCV action items — numbered, exactly one owner each, an active verb and a date; open questions kept open, with no invented owner; ideas that were parked and dates that are only tentative kept out of Decisions; nothing the transcript does not say; the type-specific section for the meeting type; and a chain offer for the follow-up work. -->
 
 # Input brief
 
@@ -65,5 +65,3 @@ Pre-answered skill questions (automated run): calendar enrichment — no · meet
 [00:29] Person5: Nothing from me.
 [00:29] Person1: Thanks, everyone.
 ```
-
-Expected: a Structured MoM in which every decision carries its rationale and any alternative that was rejected (with the reason); ARCV action items — numbered, exactly one owner each, an active verb and a date; open questions kept open, with no invented owner; ideas that were parked and dates that are only tentative kept out of Decisions; nothing the transcript does not say; the type-specific section for the meeting type; and a chain offer for the follow-up work.

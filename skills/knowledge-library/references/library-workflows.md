@@ -30,9 +30,9 @@ Match the source to existing categories based on:
 3. Content analysis (if available)
 
 Present the auto-categorization to the user for confirmation:
-> "I categorized this source as: **[category]**, type: **[type]**, tags: **[tags]**. Is this correct?"
+> "I categorized this source as: **[category]**, type: **[type] → [class]**, tags: **[tags]**. Is this correct?"
 
-Allow the user to adjust before saving.
+Allow the user to adjust before saving. Since v3.8.0 the evidence class sits inside this confirmation, derived from the type (and the `model-generated` tag, added only on an explicit marker) per `references/trust-and-categories.md` → Evidence class — e.g. "type: baymard → external". It is never a separate choice: correcting the type or the tag re-derives it.
 
 ### A-4. Calculate trust score
 
@@ -56,7 +56,7 @@ Show the calculated score to the user:
 
 ## Workflow — Search Mode
 
-> **Subagent delegation (large fan-out).** For many sources or several independent search modes, delegate per `references/subagent-delegation.md`: split by source group / mode into batches, spawn subagents in parallel, each returns a compact structured result (per-source title, key insight, trust score, link), and the main agent aggregates (merge, dedupe, rank). Falls back to inline if subagents are unavailable.
+> **Subagent delegation (large fan-out).** For many sources or several independent search modes, delegate per `references/subagent-delegation.md`: split by source group / mode into batches, spawn subagents in parallel, each returns a compact structured result (per-source title, key insight, trust score, source type, link), and the main agent aggregates (merge, dedupe, rank) and derives each evidence class from the type — a subagent never assigns one. Falls back to inline if subagents are unavailable.
 
 Search is the primary mode used by other skills. It can be invoked directly or via delegation.
 
@@ -91,14 +91,16 @@ Return to calling skill or user:
 
 Found **[N]** matching sources (trust threshold: [min]):
 
-| # | Title | Trust | Category | Key Insight |
-|---|-------|-------|----------|-------------|
-| 1 | [Title] | 0.85 | cart-checkout | [Top insight from source] |
-| 2 | [Title] | 0.78 | cart-checkout | [Top insight from source] |
-| ... | ... | ... | ... | ... |
+| # | Title | Trust | Type → class | Category | Key Insight |
+|---|-------|-------|--------------|----------|-------------|
+| 1 | [Title] | 0.85 | baymard → external | cart-checkout | [Top insight from source] |
+| 2 | [Title] | 0.78 | user-feedback → reported | cart-checkout | [Top insight from source] |
+| ... | ... | ... | ... | ... | ... |
 
 Sources: Knowledge Library (local)
 ```
+
+The `Type → class` column (since v3.8.0) is a field of each source, derived per `references/trust-and-categories.md` → Evidence class and returned to the calling skill, whose Gate Check 6 reads it as the `kb-source` class; the list itself carries no other label. A key insight keeps its source's class and is never quoted as the source's words.
 
 If no results found:
 > "No matching sources found in the Knowledge Library for '[query]'. Consider: adding relevant sources, or expanding search to internet/Confluence."
@@ -152,8 +154,10 @@ Found **[N]** relevant pages:
 | 1 | [Page title] | [Space] | [Date] | [Relevant excerpt] |
 | ... | ... | ... | ... | ... |
 
-Sources: Confluence (internal)
+Sources: Confluence (internal) — every result `reported` (the page)
 ```
+
+A metric or experiment result read from a page stays `reported` (the page) — it becomes `measured` only when the calling skill re-reads the data itself through its own data gate.
 
 ---
 
@@ -192,7 +196,7 @@ Found **[N]** relevant files:
 | 1 | [File name] | Presentation | [Folder] | [Date] | [Relevant excerpt] |
 | ... | ... | ... | ... | ... | ... |
 
-Sources: Google Drive (internal)
+Sources: Google Drive (internal) — every result `reported` (the file)
 ```
 
 ---
@@ -235,7 +239,7 @@ Found **[N]** relevant articles:
 | 1 | [Article title] | 0.90 | [Key finding] |
 | ... | ... | ... | ... |
 
-Sources: Baymard Premium
+Sources: Baymard Premium — every result `external` (with its publication date)
 ```
 
 ---
@@ -290,12 +294,13 @@ For each URL in the import:
 2. Auto-categorize
 3. Calculate trust score
 4. Check for duplicates (URL match against existing library)
+5. Derive the evidence class as in A-3 (since v3.8.0)
 
 ### I-3. Present summary for review
 
 > "Import preview: **[N]** new sources found ([M] duplicates skipped):"
 
-Show a table with: Title, URL, Category, Type, Trust Score (auto-calculated).
+Show a table with: Title, URL, Category, Type → class, Trust Score (auto-calculated). The class is shown and re-derived as in A-3, never a separate choice.
 
 Allow the user to:
 - Confirm all
@@ -329,6 +334,7 @@ Read `library.md` and `trust-scores.yaml`.
 
 Update `trust-scores.yaml` with recalculated values.
 Update `library.md` trust column.
+The evidence class is never recalculated — it follows the type and the `model-generated` tag (`references/trust-and-categories.md` → Evidence class).
 
 ### V-4. Report
 

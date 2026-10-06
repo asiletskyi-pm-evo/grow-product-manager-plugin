@@ -1,6 +1,6 @@
 ---
 name: product-analysis
-version: 0.16.0
+version: 0.17.0
 description: Analyze product data — dashboards, metrics, A/B results, funnel vs baseline; data only. Not the CJM funnel pipeline (cjm-research), not a quick «чи все ок» health glance (focus-advisor). UA — «проаналізуй метрики/дашборд», «результати A/B-тесту», «чому впала конверсія», «воронка проти baseline». EN — "analyze metrics", "review a dashboard", "find anomalies", "explain this data", "post-release analysis", "analyze A/B test results", "CJM funnel analysis (data only)". Also UA — «знайди аномалії», «поясни ці дані», «аналіз після релізу». Generates data-backed hypotheses; for anomalies → enrichment → backlog use cjm-research.
 ---
 
@@ -158,7 +158,7 @@ IF vault_level > L0 (detected during Step 0h):
 
 ### Step 1.5 — Data Integrity Gate (MANDATORY, v0.9.0+)
 
-**Internal logic (product-analysis).** Executes before Step 2 (Analysis engine). Every data source loaded in Step 1 (Tableau, Google Sheets, CSV, screenshots, PDF, A/B reports) passes 5 universal gate checks per `references/data-integrity-protocol.md`. Without passing the gate, the metric MUST NOT be used in the analysis engine or final report.
+**Internal logic (product-analysis).** Executes before Step 2 (Analysis engine). Every data source loaded in Step 1 (Tableau, Google Sheets, CSV, screenshots, PDF, A/B reports) passes the 6 universal gate checks per `references/data-integrity-protocol.md` (Gate Check 6 — 1.5.g — since v3.8.0). Without passing the gate, the metric MUST NOT be used in the analysis engine or final report.
 
 **Why this exists:** historic incidents where uncritical citation of raw data points produced cascading errors. Specific to this skill: A/B test verdicts and post-release classifications are particularly high-stakes — a "winner" label on insufficient data leads to wrong rollout decisions. See `data-integrity-protocol.md` for the full incident catalog.
 
@@ -211,11 +211,11 @@ For critical CR / GMV / Order / Revenue / Retention metrics:
 
 **1.5.d — Period Definition Lock + Inline Annotation:**
 
-Pre-compute inline-annotation for every metric. Examples:
+Pre-compute inline-annotation for every metric; since v3.8.0 its 1.5.g class goes first in a report. Examples:
 
-- `Conversion +12% YoY (May 2025 → May 2026, weeks 18-19, non-holiday window)`
-- `A/B test +8.5% primary metric (pilot Q1 2026, 50/50 split, 21-day duration, p=0.03)`
-- `Post-release: ATC rate 12.4% → 13.8% (before: 1.04-15.04; after: 22.04-12.05, both holiday-free)`
+- `Conversion +12% YoY (measured · May 2025 → May 2026, weeks 18-19, non-holiday window)`
+- `A/B test +8.5% primary metric (measured · pilot Q1 2026, 50/50 split, 21-day duration, p=0.03)`
+- `Post-release: ATC rate 12.4% → 13.8% (measured · before: 1.04-15.04; after: 22.04-12.05, both holiday-free)`
 
 Methodology section at the top is **not sufficient** — readers copy individual numbers into Slack and slides.
 
@@ -225,9 +225,11 @@ Tag every source: `tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, 
 
 **1.5.f — Gate emphasis (since v3.6.0):** each token in `role_defaults.gate_emphasis` (Step 0i; a hat overlays it) that this gate has a step for adds its extra check from `references/data-integrity-protocol.md` → Gate emphasis, on top of 1.5.a–e: `instrumentation`, `comparability`, `trend-vs-objective` (against `product.current_okrs` or the stated target) and `base-rates` (Step 4 estimates) in every mode; `srm-exposure-peeking` and `ci-vs-point` in A/B mode; `period-completeness` and `source-type` add nothing here — 1.5.a and 1.5.e already run on every source. A failed extra check adds one ⚠️ caveat line to the metric or section, carried into the report like any caveat — never a question, a Blocked status, a changed verdict or a halted run; other tokens are ignored. A run chained from another skill (CJM Research, Experiment Tracker) applies only the tokens passed in its payload; a scheduled or headless run applies none.
 
+**1.5.g — Evidence class & frontier (Gate Check 6, since v3.8.0):** after the status, every cited metric and claim takes its class from its 1.5.e marker (`references/data-integrity-protocol.md` 6a): data this skill fetched or computed itself — Tableau, `internal-live`, `ga-snapshot`, raw rows of an uploaded CSV — is `measured`; figures the user typed or pasted (`user-text`) and prepared reports the user hands over (a PDF, a dashboard or report screenshot) are `reported (<who>, <date>)` even after 1.5.a–e; a WebSearch benchmark is `external`. A randomised A/B readout may be read causally: its effects and verdict get no frontier line, while a "why" about user motivation or a cause outside the randomised comparison (a segment explanation included) still does. A cause the data cannot separate — a post-release before/after change without a platform-OFF or holdout control (PR-3), or a "why" / root cause presented as a finding in Q&A or a report — keeps its supportable part ("coincides with …") and gets one 6c line in `user.language` proposing the human step (a holdout, an A/B, an interview); a cause worded as a hypothesis gets none, and a Q&A reply carries the line and adds no class tokens of its own — a number it quotes from a labelled report keeps that label (Gate 4b §5). Never a question, a status change, a changed verdict or a Blocked metric; a return-payload run for cjm-research puts classes and frontier flags in its data-quality notes, and a scheduled or headless run writes labels only (`[assumed — frontier: <human step>]`, 6d).
+
 ### Output of Step 1.5
 
-Every metric receives status: ✅ Verified / ⚠️ Caveat / ❌ Blocked.
+Every metric receives status: ✅ Verified / ⚠️ Caveat / ❌ Blocked (Gate Checks 1–5); 1.5.g then adds its class and any frontier line and never changes the status.
 
 If Blocked metrics > 0:
 - Return to Step 1 to gather additional sources OR
@@ -255,7 +257,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "product-analysis",
-     skill_version: "0.16.0",
+     skill_version: "0.17.0",
      tags: [metric names analyzed, platforms, analysis_mode],
      content: full_analysis_markdown,
      related: [source hypothesis, source requirements, previous analyses from Step 0.5],
@@ -280,7 +282,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
        feature_name: feature_name,
        release_date: release_date,
        metrics_impacted: [metric_names],
-       overall_impact: "positive" | "negative" | "neutral",
+       overall_impact: "positive" | "negative" | "neutral",  // direction of the change; with no control it is not a causal claim (1.5.g)
        
        // Common:
        published_to: url_if_published,
@@ -340,7 +342,7 @@ When Product Analysis is invoked by another skill (Product Research, Write Conce
 - **Trends summary** — direction and magnitude of relevant metrics
 - **Anomalies** — any unexpected findings relevant to the calling skill's context
 - **Relevant hypotheses** — data-backed hypotheses that fit the calling skill's scope
-- **Data quality notes** — caveats, limitations, data freshness (incl. the 1.5.f gate-emphasis ⚠️ lines, since v3.6.0)
+- **Data quality notes** — caveats, limitations, data freshness (incl. the 1.5.f gate-emphasis ⚠️ lines, since v3.6.0; since v3.8.0 also each returned metric's 1.5.g class and its frontier flags — data only: the caller renders them and asks nothing)
 - **CJM-specific data** (when returning to `cjm-research`) — structured per-stage anomaly list with severity, deviation, and trend
 
 The calling skill should incorporate these results into its workflow without re-analyzing the same data.
@@ -348,17 +350,17 @@ The calling skill should incorporate these results into its workflow without re-
 ## Quality standards
 
 - Always show computation results — never estimate what can be computed precisely
-- Clearly distinguish facts (data) from interpretations (analysis) from assumptions (hypotheses)
+- Clearly distinguish facts (data) from interpretations (analysis) from assumptions (hypotheses); in a report, since v3.8.0, facts carry their 1.5.g class and an unsourced input reads `[assumed — …]`
 - For every finding — cite the specific data source and values
 - Note data quality issues: missing data, small sample sizes, potential biases
 - Flag data older than the relevant analysis period
 - Use Ukrainian or English based on user's language preference
 - When comparing periods — always state which periods are being compared
 - Statistical claims must be backed by actual computation, not intuition
-- **(v0.9.0+) Inline period annotation MANDATORY** — every cited metric in TL;DR, Executive Summary, A/B verdict, post-release classification, tables, bullets carries inline annotation per Gate Check 4 of `data-integrity-protocol.md`. Methodology section at the top is not sufficient — readers copy individual numbers into Slack and slides.
+- **(v0.9.0+) Inline period annotation MANDATORY** — every cited metric in TL;DR, Executive Summary, A/B verdict, post-release classification, tables, bullets carries inline annotation per Gate Check 4 of `data-integrity-protocol.md`, its class first since v3.8.0 (`CR 0.99% (measured · 12mo rolling, …)`; one group label for a table that shares class and source). Methodology section at the top is not sufficient — readers copy individual numbers into Slack and slides.
 - **(v0.9.0+) Caveat propagation** — Step 1.5 ⚠️ Caveat metrics surface their qualifier in the final report
 - **(v0.9.0+) Anomaly/A-B disclosure** — for any reported anomaly or A/B verdict: source count (≥ 2; ≥ 3 for extreme), period definition, holiday-screening status, methodology change check status, sample-size and power adequacy
-- **(v0.9.0+) Source type markers** — every cited number in Sources section tagged (`tableau-mcp` / `tableau-web` / `internal-live` / `ga-snapshot` / `csv-upload` / `screenshot-user` / `pdf-upload` / `confluence-internal` / `jira-internal`)
+- **(v0.9.0+) Source type markers** — every cited number in Sources section tagged (`tableau-mcp` / `tableau-web` / `internal-live` / `ga-snapshot` / `csv-upload` / `screenshot-user` / `pdf-upload` / `confluence-internal` / `jira-internal` / `user-text`), each with its 1.5.g class since v3.8.0
 - **(v0.9.0+) Never declare A/B winner/loser without:** sample-size power check, p-value or confidence interval, holiday-screening pass, segment-level review (Mobile vs Web, country, user-type)
 
 ## Additional Resources
@@ -366,7 +368,7 @@ The calling skill should incorporate these results into its workflow without re-
 - **`references/analysis-engine.md`** (skill-local) — data acquisition (1e) + Steps 2–6: frameworks, hypotheses, report, publishing
 - **`references/specialized-modes.md`** (skill-local) — CJM Funnel / Post-Release / A/B Test modes in full
 
-- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.9.0+)** — 5 universal gate checks for any cited metric (Step 1.5)
+- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.9.0+)** — 6 universal gate checks for any cited metric (Step 1.5; Gate Check 6 — 1.5.g — since v3.8.0)
 - **`references/analysis-frameworks.md`** — detailed description of each analysis framework with examples
 - **`references/hypothesis-template.md`** — ICE scoring guidelines adapted for data-driven hypotheses
 - **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, health score formula, holiday windows, reference sources catalog

@@ -1,6 +1,6 @@
 ---
 name: brainstorm-features
-version: 0.14.0
+version: 0.15.0
 description: Brainstorm features and hypotheses with ICE, or run a role debate (Debate mode). Not the CJM pipeline (cjm-research), not meeting transcripts (meeting-processor). UA — «брейншторм фіч», «згенеруй гіпотези», «проведи дебати», «red team цю ідею». EN — "brainstorm features", "generate hypotheses", "find growth opportunities", "run a debate", "have agents argue from different roles", "stress-test via debate". Also UA — «знайти точки росту», «гіпотези для CJM-воронки», «нехай агенти подискутують», «круглий стіл ролей», «розглянь з різних ролей». The ideation engine — cjm-research delegates here. Do NOT use to record a decision already made (decision-log).
 ---
 
@@ -70,7 +70,7 @@ Run Steps T-1 → T-5. Append `<!-- template: {template_id} version: {version} -
 
 If the user says "do not use a template" → skip Step T and use the skill's internal structure.
 
-**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — on the brainstorm result wherever it is kept, with the confidence line for the ranked result's top pick above it since v3.7.0 (`references/judgment-points.md` §3; Gate 4c); not on a return to a calling skill (a Debate-mode return, or the CJM Hypotheses result for cjm-research — the caller's report carries the altitude line, and a confidence line only where `references/judgment-points.md` §1 names one for the caller).
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a) — on the brainstorm result wherever it is kept, with the confidence line for the ranked result's top pick above it since v3.7.0 (`references/judgment-points.md` §3; Gate 4c), and its evidence labels confirmed by T-5 step 3c since v3.8.0 (Gate 4b); not on a return to a calling skill (a Debate-mode return, or the CJM Hypotheses result for cjm-research — the caller's report carries the altitude line, and a confidence line only where `references/judgment-points.md` §1 names one for the caller).
 
 ## Workflow
 
@@ -121,7 +121,7 @@ Deeply analyze all gathered context: concept/PRD, research, metrics, strategy, c
 Proactively search for additional context if gaps are detected:
 - Search Confluence and Google Drive for related internal documents
 - Run WebSearch for market benchmarks, competitor features, industry best practices
-- If Deep Research through ChatGPT/Gemini was approved — use it for deeper analysis (only with publicly available information per data-policy.md)
+- If Deep Research through ChatGPT/Gemini was approved — use it for deeper analysis (only with publicly available information per data-policy.md); since v3.8.0 a claim from it takes the class of the source it traces to, and an untraceable one is `simulated` — an idea input, never evidence (`references/pm-mental-model.md` §4)
 - **If product metrics or data analysis is needed** — invoke the **Product Analysis** skill: pass the product context, target metrics, and time period. Product Analysis will return key trends, anomalies, and data-backed hypotheses that can directly feed into the brainstorm. This is especially valuable for generating "Growth Hypotheses" and improving ICE Confidence scores with real data
 
 After analysis, ask the user via AskUserQuestion:
@@ -145,9 +145,9 @@ If the user has ideas and wants evaluation:
 
 | Element | Description |
 |---------|------------|
-| **Rationale** | Why it could work — benchmarks, research, market examples |
+| **Rationale** | Why it could work — benchmarks, research, market examples, each with its evidence class; a persona panel's "validation" is not a rationale — it goes under Validation method as `[simulated: …]` with the real-user test that replaces it |
 | **Risks** | What could go wrong, potential negative effects |
-| **Impact on metrics** | Which metrics will change and in which direction |
+| **Impact on metrics** | Which metrics will change and in which direction (an estimate: no class; an unsourced expected lift is `assumed`) |
 | **ICE Score** | Impact (1-10) × Confidence (1-10) × Ease (1-10) = Score |
 | **PRO / ROI** | Money-based score (`references/roi-frameworks.md`): cost-in-hours × rate → effect → **% annual return** + the task-as-credit verdict (return vs cost of capital) + Confidence % |
 | **Validation method** | Recommended safest way to validate (see `references/validation-methods.md`) |
@@ -177,16 +177,16 @@ If the user wants brainstorming of new ideas:
 ```
 Name: [short name]
 
-Problem: [what problem this solves]
+Problem: [what problem this solves — with its class: its source's, `assumed` with no source, `simulated` from a persona or simulated session]
 Solution: [what we propose to do]
 Expected outcome: [what changes for users and business]
-Target metric: [which metric is impacted and by how much]
+Target metric: [which metric is impacted and by how much — an estimate; an unsourced expected lift is `assumed`]
 Validation method: [A/B test / user interviews / feature flag / fake door / etc.]
 
 ICE Score: Impact [X] × Confidence [X] × Ease [X] = [Score]
 PRO / ROI: cost [hours × rate] → effect [$/yr] → [% annual return], Confidence [%] — verdict vs cost of capital
 
-Benchmarks: [links to research, competitor cases, market data]
+Benchmarks: [links to research, competitor cases, market data — each with its class, e.g. `(external · Baymard 2025)`]
 Risks: [what could go wrong]
 ```
 
@@ -220,7 +220,7 @@ This step runs when invoked by `cjm-research` (Situation D) or when the user exp
 - World enrichment from `knowledge-library` / `product-research`: benchmarks, best practices, competitor approaches
 - Internal enrichment: Confluence experiment results, user feedback, previous research
 
-The full mode workflow lives in `references/cjm-hypotheses-mode.md` (skill-local) — read it when this step activates. It covers: **3C-1** the hypothesis format generated from anomalies (Data Trigger / Feedback Match / Heuristic Match), **3C-2** ICE scoring with CJM stage-position multipliers and evidence-quality Confidence boosts, **3C-3** per-stage and combined funnel-impact formulas, **3C-4** categorization (low-hanging fruit / structural / business-logic), **3C-5** result presentation, and **3C-6** the return contract to `cjm-research` (full hypothesis list, weighted ICE, per-stage impact, categories, evidence references).
+The full mode workflow lives in `references/cjm-hypotheses-mode.md` (skill-local) — read it when this step activates. It covers: **3C-1** the hypothesis format generated from anomalies (Data Trigger / Feedback Match / Heuristic Match), **3C-2** ICE scoring with CJM stage-position multipliers and evidence-quality Confidence boosts, **3C-3** per-stage and combined funnel-impact formulas, **3C-4** categorization (low-hanging fruit / structural / business-logic), **3C-5** result presentation, and **3C-6** the return contract to `cjm-research` (full hypothesis list, weighted ICE, per-stage impact, categories, evidence references with their classes — a return payload: no question, no hand-back line).
 
 ### Step 3D — Debate mode (role-based adversarial discussion)
 
@@ -232,10 +232,10 @@ Executes `references/debate-protocol.md` — the shared engine: D0 applicability
 
 Execution in this skill's terms:
 
-- **Evidence pack** = what is already on the table: Step 2 analysis, `product-analysis` results, Knowledge Library sources, CJM anomalies (Situation D). Facts E1…En only from material that passed integrity checks; everything else enters as a marked assumption A1…An.
+- **Evidence pack** = what is already on the table: Step 2 analysis, `product-analysis` results, Knowledge Library sources, CJM anomalies (Situation D). Facts E1…En only from material that passed integrity checks, each with its evidence class; everything else — `simulated` and `assumed` inputs included — enters as a marked assumption A1…An with its label.
 - **Debate question** = one contested hypothesis or an X-vs-Y choice between two hypotheses — never the whole backlog at once.
 - **Roles** via AskUserQuestion from the protocol's presets; the Skeptic / Risk-officer is always in.
-- **Results return to the standard flow:** the verdict's ICE Confidence corrections (consensus +1…+2, unresolved skeptic objection −1…−2) update the scores in the Step 3A/3B/3C tables; new risks append to the hypotheses' Risks fields; the «Debates» section embeds in the saved artifact (Step 5) and the debate is saved to the vault (Step 9).
+- **Results return to the standard flow:** the verdict's ICE Confidence corrections (consensus +1…+2 only when the support cites an E#, never on A# alone — the protocol's Step D4; unresolved skeptic objection −1…−2) update the scores in the Step 3A/3B/3C tables; new risks append to the hypotheses' Risks fields; the «Debates» section embeds in the saved artifact (Step 5) and the debate is saved to the vault (Step 9).
 
 Cost: default 4 roles × 2 rounds = 8 subagent calls, hard cap 12. Without the Agent tool — inline simulation with the mandatory "inline simulation: role independence reduced" marker (protocol → Guardrails).
 
@@ -269,12 +269,12 @@ When the user confirms the final list of ideas/hypotheses, ask via AskUserQuesti
   - Dividers between sections
   - **Context**: links to concept/PRD/research that informed the brainstorm
   - **User's ideas** (with evaluations if conducted)
-  - **Generated ideas/hypotheses** (full description, ICE, benchmarks, risks)
+  - **Generated ideas/hypotheses** (full description, ICE, benchmarks with their classes, risks)
   - **ICE Summary Table** — sorted by score, with validation methods
   - **Phase Roadmap** (if MVP approach) — which ideas go into which phase
   - **Debates** (if Step 3D ran) — verdict table open, round transcripts in collapsed expand-blocks
   - **Recommended next steps**
-  - **Sources** section with links, marking each source type (Confluence, Google Drive, Web, ChatGPT Deep Research, Gemini Deep Research)
+  - **Sources** section with links, marking each source type (Confluence, Google Drive, Web, ChatGPT Deep Research, Gemini Deep Research) and its evidence class
 - Formatting: headings H1/H2/H3, bold key theses, tables for structured data
 - Publish via Confluence MCP. If unavailable — follow integration fallback chain
 
@@ -356,16 +356,16 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 IF vault_level > L0 AND vault sync_mode != "off":
 
 1. For **each finalized hypothesis** (Step 5), save a separate artifact:
-   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.14.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.15.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
 2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
 3. For **debate sessions** (Step 3D), additionally save the debate itself:
-   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.14.0", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
+   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.15.0", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
    Display: "Saved to Vault: Debates/{product}/…"
 
 ## Quality standards
 
 - Always back ideas with evidence: benchmarks, research, competitor examples
-- Clearly distinguish validated insights from assumptions
+- Label the evidence inside each idea, not the idea (`references/pm-mental-model.md` §4, since v3.8.0): a problem drawn from a persona is a hypothesis to test, never "users want X"
 - For each hypothesis — always include a validation method and risk assessment
 - Use Ukrainian or English based on user's language preference
 - Be result-oriented: prioritize approaches that deliver maximum impact with minimum effort
@@ -382,5 +382,6 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
 - **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, stage position multipliers
 - **`references/debate-protocol.md`** — Debate mode engine (Step 3D): applicability check, role presets, rounds, facilitator synthesis, ICE Confidence correction, guardrails
+- **`references/data-integrity-protocol.md`** — Gate Check 6 only: the class each evidence item and E# carries (6a) and where `simulated` may stand (6b); this skill runs no data gate of its own
 - **`references/cjm-hypotheses-mode.md`** — skill-local: full Step 3C workflow (hypothesis format, CJM-weighted ICE, funnel impact, categorization, return contract)
 - **`references/funnel-templates.md`** — standard funnel stage templates by product type

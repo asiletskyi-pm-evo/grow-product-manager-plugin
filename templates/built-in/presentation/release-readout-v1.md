@@ -8,10 +8,10 @@ scope: built-in
 products: []
 default_language: en
 available_languages: [en]
-version: "1.0.0"
+version: "1.0.1"
 author: "grow-pm"
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-10-06
 tags: [presentation, release, sprint, readout]
 description: "Release or sprint readout (7 slides): scope → metrics → wins/learnings → incidents → what's next → ask"
 status: active
@@ -75,6 +75,8 @@ variables:
 
 **Period:** {{date_range}}
 
+<!-- Evidence labels (since v3.8.0; pm-mental-model.md §4, artifact-style-gate.md Gate 4b): every number, quote and benchmark stated as fact carries its class in the slide's source caption or attribution — a quote verbatim, with who and when, ending `· reported`. `simulated` input never fills a quote, metric or evidence slide; `assumed` appears only labelled. Targets and forecasts carry no class. External audience (customer, partner, public): the class stays, internal source names go, and hand-back lines stay in the outline companion — never on a slide. A before / after delta with no control group reads "coincides with", never "caused by" (data-integrity-protocol.md Gate Check 6c). -->
+
 ---
 
 ## Slide 1. Title
@@ -97,7 +99,7 @@ _(Optional media: thumbs grid with screenshots of shipped features.)_
 - {{this}}
 {{/each}}
 
-_(3 tile cards: baseline → current → delta. Caption: source dashboard.)_
+_(3 tile cards: baseline → current → delta. Caption: evidence class and source dashboard — for an external audience the class without the internal dashboard name.)_
 
 ## Slide 4. Wins & Learnings
 
@@ -144,6 +146,6 @@ _No incidents this period._
 
 ## Appendix: speaker notes
 
-For each slide — 3-5 sentences. For Slide 3 — always show source dashboard. For Slide 5 — be honest (don't hide incidents).
+For each slide — 3-5 sentences. For Slide 3 — always show the evidence class and source dashboard. For Slide 5 — be honest (don't hide incidents).
 
 <!-- /lang:en -->
