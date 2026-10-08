@@ -194,6 +194,7 @@ Present current sections as options via AskUserQuestion:
 - Knowledge Library Settings
 - Template Library Settings
 - Obsidian Vault Management
+- Shared context providers (since v3.10.0 — connect, refresh or pause a provider; handed to `context-connect`, which owns the bundle, the blocks and the registration)
 - Repositories
 - Planning (capacity, sprints, goal map, development flow)
 - Focus (sources, zones, VIP senders, PM goals, cadence, scheduled briefs)
@@ -349,7 +350,7 @@ For each configured vault:
 3. Check folder structure completeness → ✅ or "Missing: [list]"
 4. Count artifacts by type → display summary table
 5. Check .vault-schema-version → compatible or needs migration
-6. Check MCP availability (if not disabled) → ✅ L2 available or ℹ️ L1 only
+6. Check the search providers (`references/context-provider-protocol.md` §4) → one row per provider: reachable (3-second probe), `last_index` or `synced_at`, stale or fresh (§6), local paths present → ✅ L2 available or ℹ️ L1 only
 7. Verify last save timestamp → "Last artifact saved: [date]"
 
 Add to the validation report output.

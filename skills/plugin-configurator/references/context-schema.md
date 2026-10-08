@@ -270,6 +270,8 @@ Users can add any additional sections with free-form markdown content. The confi
 | **Release Manager** | — | plugin_release.* (repo path, remotes, protected branches) |
 | **Product Landscape** | — | product.name, landscape (category, bookmarks consent), product.competitors (registry seed) |
 | **Flow Walkthrough** | — | product.name, test_accounts (multi-role legs), product.platforms |
+| **Context Connect** | user.email (or the host account) | Team, Obsidian Vaults (registration folder), Vault Search MCP, the provider blocks already merged |
+| **Context Navigator** | — | Vault Search MCP + provider registrations (`session.providers`), the provider's team block (Jira write scope) |
 
 > Every skill sent to Step 0e must have a row here — the step tells a skill to check "its required fields" against this table, so a missing row silently means "nothing required". 12 skills had no row until v2.1.1.
 
@@ -503,6 +505,16 @@ Written by the Focus setup step; read by `focus-advisor`. Full field semantics: 
 - MOC created: [yes/no]
 - Knowledge library migrated: [yes/no]
 - Schema version: [X.Y.Z]
+```
+
+### Vault Search MCP subsection format (since v3.10.0)
+
+A subsection of `## Obsidian Vaults` that declares the providers answering the contract `vault/v1` — the user's own local index and any shared-context provider (`references/context-provider-protocol.md` §3c). One bullet per provider; items separated by `,` or `;` outside parentheses; `key = value` items (`scope`, `tools`, `index`, `mode`, `access`) or flags (`read-only`, `VPN only`, `live`, `snapshot`). Written by `context-connect` (and by hand); read by the session digest, Step 0h and Validate V-5. A provider registration file with the same id (`{vault}/{plugin_folder}/_System/providers/<id>.yaml`) wins over its bullet.
+
+```markdown
+### Vault Search MCP
+- my-brain: scope = own vault (Notes/, TeamCore/), tools = vault_* + brain_*, index = ~/.my-brain/brain.sqlite
+- team-core: scope = shared core snapshot, mode = snapshot, VPN only, read-only
 ```
 
 ### Design Toolkits section format

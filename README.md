@@ -633,7 +633,7 @@ The plugin can optionally integrate with [Obsidian](https://obsidian.md/) to cre
 |-------|-----------|-------------|
 | L0 | No vault configured | Plugin works as before, no vault features |
 | L1 | Vault path configured | Read/write artifacts, file-based search |
-| L2 | Vault + Obsidian MCP | L1 + full-text search, graph traversal, backlinks |
+| L2 | Vault + a search provider speaking `vault/v1` (a local index or a shared-context provider, since v3.10.0) | L1 + full-text search, graph traversal, backlinks |
 
 ### Multi-vault support
 Configure one default vault for all products or separate vaults per product.
