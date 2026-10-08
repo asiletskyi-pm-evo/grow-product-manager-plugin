@@ -63,7 +63,7 @@ Run the builder for real (`references/connect-steps.md` §3): it copies the bund
 
 ## Step 6 — register and finish
 1. Write the registration from the proposed file to `{vault}/{plugin_folder}/_System/providers/<id>.yaml` (no vault: `~/.grow-pm/providers/`), with the provider root as the user's machine sees it (and the mounted path too in a hosted session).
-2. Three entry points in three lines: the provider's dashboard → its rules (`playbook`) → the focus note. One test question answered from the graph through the context-navigator skill.
+2. Three entry points in three lines: the provider's dashboard → its rules (`playbook`) → the focus note. One test question answered from the graph through `context-navigator`.
 3. E-mail missing from the provider's registry, or team members missing → one line per person for the provider's owner (`owner_label`): e-mail · name · team · role. Only the owner writes into the core.
 4. The provider's `people_resolver`, when declared: check that the user's e-mail resolves to a registry card.
 
@@ -81,4 +81,4 @@ Run the builder for real (`references/connect-steps.md` §3): it copies the bund
 - Refresh never re-asks a discrepancy the user already answered with "keep mine" unless the core changed that field again.
 
 ## Skill Chaining
-→ `plugin-configurator` (Validate / Update after a new context; the provider row in Validate) · → the context-navigator skill (answers from the provider's graph) · → `task-creator` (writes only into the project the Jira write scope names).
+→ `plugin-configurator` (Validate / Update after a new context; the provider row in Validate) · → `context-navigator` (answers from the provider's graph) · → `task-creator` (writes only into the project the Jira write scope names).

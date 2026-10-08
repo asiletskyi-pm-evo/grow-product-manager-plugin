@@ -294,6 +294,12 @@ Collisions: v3.10.0 adds two skills. Connecting to a team's shared core, refresh
 | T6 | add a context provider for our shared core MCP | context-connect |
 | T7 | збагати мій контекст блоками спільного ядра | context-connect |
 | T8 | підключи Obsidian-вейлт | plugin-configurator — NOT context-connect |
+| T9 | хто відповідає за модуль відгуків | context-navigator |
+| T10 | чому ми вирішили відкласти фічу порівняння | decision-log — NOT context-navigator |
+| T11 | подивись дашборд конверсії за вересень | product-analysis — NOT context-navigator |
+| T12 | what does team Alpha own | context-navigator |
+| T13 | які джерела маємо по чекауту | knowledge-library — NOT context-navigator |
+| T14 | де описане правило модерації відгуків | context-navigator |
 
 ## Results log
 

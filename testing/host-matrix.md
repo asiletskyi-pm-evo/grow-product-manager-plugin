@@ -1,10 +1,10 @@
 # host-matrix.md — skill × host
 
-> What each of the 32 skills can do on each host profile from `references/host-profiles.md`. **Derived, not hand-typed:** the mode follows from the capabilities the skill's `SKILL.md` actually invokes (quality gate, fan-out reads, debate, Jira/Confluence writes, local storage) crossed with the profile's capability set. Regenerate when a skill gains or drops one of those; validator check 14 requires every skill to appear exactly once.
+> What each of the 33 skills can do on each host profile from `references/host-profiles.md`. **Derived, not hand-typed:** the mode follows from the capabilities the skill's `SKILL.md` actually invokes (quality gate, fan-out reads, debate, Jira/Confluence writes, local storage) crossed with the profile's capability set. Regenerate when a skill gains or drops one of those; validator check 14 requires every skill to appear exactly once.
 
 Legend: **full** — as designed on the reference host · **degraded** — same result through the degraded mode named in the last column (`host-profiles.md` §4) · **n/a** — the skill says so in one line and stops (`host-profiles.md` §5); read-only use still works when the user pastes the data.
 
-**claude-cowork** 32 full / 0 degraded / 0 n/a · **codex-cli** 16 full / 16 degraded / 0 n/a · **chatgpt** 0 full / 21 degraded / 11 n/a · **codex-cloud** 0 full / 22 degraded / 10 n/a
+**claude-cowork** 33 full / 0 degraded / 0 n/a · **codex-cli** 17 full / 16 degraded / 0 n/a · **chatgpt** 0 full / 22 degraded / 11 n/a · **codex-cloud** 0 full / 23 degraded / 10 n/a
 
 Profiles: `claude-cowork` = Claude Code / Cowork (reference). `codex-cli` = Codex CLI and the Codex desktop app (the app additionally matches connectors by name). `chatgpt` = ChatGPT on web / mobile — skills and connectors only, no filesystem, no shell, no subagents (derived, not measured); the ChatGPT desktop app with a *Local Project* attaches folders read/write — treat it as `codex-cli`. `codex-cloud` = sandbox filesystem that is not the user's `~/.grow-pm/`.
 
@@ -13,6 +13,7 @@ Profiles: `claude-cowork` = Claude Code / Cowork (reference). `codex-cli` = Code
 | `brainstorm-features` | full | degraded | degraded | degraded | debate: inline role simulation; storage: session mode, export at the end; debate: inline role simulation; config/storage: via connector or the repo, never assume prior state; subagents: as codex-cli |
 | `cjm-research` | full | degraded | degraded | degraded | debate: inline role simulation; storage: session mode, export at the end; debate: inline role simulation; config/storage: via connector or the repo, never assume prior state; subagents: as codex-cli |
 | `context-connect` | full | full | n/a | n/a | needs the user's ~/.grow-pm/ and the core folder, not a sandbox FS; needs FS and a shell — without a shell the connect flow is followed by hand from the provider manifest |
+| `context-navigator` | full | full | degraded | degraded | no local core folder: the provider is reached through its MCP server only (`vault/v1`), snapshot dates stated; without MCP either — answers only from what the user pastes |
 | `decision-log` | full | degraded | degraded | degraded | debate: inline role simulation; storage: session mode, export at the end; debate: inline role simulation; config/storage: via connector or the repo, never assume prior state; subagents: as codex-cli |
 | `delegation-coach` | full | full | n/a | n/a | needs the user's ~/.grow-pm/, not a sandbox FS; needs FS — read-only when the user pastes the data |
 | `design-bridge` | full | full | degraded | degraded | storage: session mode, export at the end; config/storage: via connector or the repo, never assume prior state |

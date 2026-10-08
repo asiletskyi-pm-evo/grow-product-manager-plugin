@@ -68,7 +68,7 @@ What the builder does:
 ## §6 Register and finish
 
 1. Copy `provider-registration.proposed.yaml` to `{vault}/{plugin_folder}/_System/providers/<id>.yaml` (no vault: `~/.grow-pm/providers/<id>.yaml`). `paths` lists the provider root as the user's machine sees it; in a hosted session add the mounted spelling too — both are checked by the write boundary. `writable` comes from the manifest's `personal_overlay`.
-2. Entry points, a test question through the context-navigator skill, lines for the owner, the `people_resolver` check — as in the skill's Step 6.
+2. Entry points, a test question through `context-navigator`, lines for the owner, the `people_resolver` check — as in the skill's Step 6.
 3. Project memory, when the host has one: team, role, provider id, target path, core version, date, whether a context existed and what was done with it.
 
 ## §7 MCP-only providers
