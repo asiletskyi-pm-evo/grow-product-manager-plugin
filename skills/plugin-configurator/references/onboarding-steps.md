@@ -545,7 +545,7 @@ This step is fully delegated to the **Obsidian Setup Guide** (`references/obsidi
 6. **S-3**: Write/read permission test (creates `.write-test`, reads back, deletes)
 7. **S-4**: Products binding (single product auto-binds; multi-product asks)
 8. **S-5**: Sync mode (auto / manual / read-only)
-9. **S-6**: Optional Obsidian MCP detection (L1 vs L2)
+9. **S-6**: Optional search provider detection — a server speaking `vault/v1` (L1 vs L2)
 10. **S-7**: Folder initialization (per `vault-protocol.md`)
 11. **S-8**: Smoke test (read-back validation)
 12. **S-9**: Save `## Obsidian Vaults` section to `local-context.md` and run Vault Mirror Protocol

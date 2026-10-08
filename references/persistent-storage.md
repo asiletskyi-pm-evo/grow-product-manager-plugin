@@ -6,6 +6,8 @@ This document defines how the Grow Product Manager plugin stores user data persi
 
 User configuration, templates, and knowledge are **the user's data**, not plugin data. They MUST survive plugin lifecycle events (uninstall, reinstall, update). The plugin stores all user-generated data in a dedicated directory in the user's home folder, separate from the plugin installation directory.
 
+
+> **One storage story (since v3.10.0).** `~/.grow-pm/` holds `local-context.md`, service data (registries, caches, journals, evidence packs, shared-context provider registrations when no vault is configured) and the backups. When a vault is configured it is `storage_root`: templates and every artifact are saved there, and the context file and the knowledge library are mirrored into it after every change, so the vault can restore `~/.grow-pm/` (Vault Recovery below). There is no pointer file and no separate "custom" storage mode — an early design that release notes before v2.0 describe was never implemented.
 ## Storage Location
 
 All persistent user data is stored under:
@@ -269,7 +271,7 @@ Backups are created automatically:
 
 ### Backup cleanup
 
-Keep the last 3 backups. When creating a new backup and there are already 3 — delete the oldest one.
+Keep the last 5 backups — the one rotation rule for every backup in this document (PU-2 below uses the same). When creating a new backup and there are already 5 — delete the oldest one.
 
 ---
 
@@ -347,7 +349,7 @@ A pre-update backup is triggered:
    - Template Library templates: [count]
    ```
 
-4. **Keep last 5 backups** (increased from 3 to provide more safety net). Delete oldest when exceeding limit.
+4. **Keep last 5 backups** — the same rotation as every other backup here. Delete the oldest when exceeding the limit.
 
 ### PU-3. Backup verification
 
@@ -387,6 +389,10 @@ When Obsidian Vault is configured, `~/.grow-pm/` data MUST be mirrored to the va
 | `~/.grow-pm/knowledge-library/categories.md` | `{vault}/{plugin_folder}/Knowledge/categories.md` |
 | `~/.grow-pm/knowledge-library/trust-scores.yaml` | `{vault}/{plugin_folder}/Knowledge/trust-scores.yaml` |
 | `~/.grow-pm/knowledge-library/sources/*` | `{vault}/{plugin_folder}/Knowledge/sources/*` |
+| `~/.grow-pm/knowledge-library/glossary/*`, `style/*` | `{vault}/{plugin_folder}/Knowledge/glossary/*`, `Knowledge/style/*` |
+| `~/.grow-pm/experiments/registry.yaml` | `{vault}/{plugin_folder}/_System/experiments-registry.yaml` |
+
+`people/` and `decisions/` under `~/.grow-pm/` are fallbacks used only without a vault (with one, those records live in the vault's `People/` and `Decisions/`). `landscape/` and `walkthroughs/` stay local by design — the vault receives their map and report notes, not the registry or the screenshots.
 
 ### VM-2. When to sync
 
@@ -446,7 +452,7 @@ Options:
 4. Copy `Knowledge/library.md` → `~/.grow-pm/knowledge-library/library.md`
 5. Copy `Knowledge/categories.md` → `~/.grow-pm/knowledge-library/categories.md`
 6. Copy `Knowledge/trust-scores.yaml` → `~/.grow-pm/knowledge-library/trust-scores.yaml`
-7. Copy `Knowledge/sources/*` → `~/.grow-pm/knowledge-library/sources/`
+7. Copy `Knowledge/sources/*` → `~/.grow-pm/knowledge-library/sources/`; `Knowledge/glossary/*` and `Knowledge/style/*` → `~/.grow-pm/knowledge-library/glossary/`, `style/`; `_System/experiments-registry.yaml` → `~/.grow-pm/experiments/registry.yaml`
 8. Run schema compatibility check (Step M-3 from Migration Protocol)
 9. Validate restored data
 10. Inform user: "Data restored successfully from Obsidian Vault."

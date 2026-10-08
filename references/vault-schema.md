@@ -65,6 +65,18 @@ Every artifact, regardless of type, includes these base frontmatter fields:
 
 Both are derived by `vault-protocol.md` Vault Save step 5 — never asked, never a required field, never backfilled into older notes. People-contour notes, knowledge sources, prototypes and handoffs carry neither; `decision` and `debate` notes carry no `altitude`. `altitude` is the artifact's altitude L1–L4, never the vault level L0–L2. A user's own property of another name (for example a free-text `evidence:`) is preserved and not read.
 
+#### Identity and freshness fields (optional, since v3.10.0)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Stable identifier that survives a rename (`<type>.<slug>`); when present, dedup and links to the note use it before the path |
+| `aliases` | string[] | Other names of the same note (Obsidian resolves links through them); prefer an alias over a second note for a new spelling |
+| `modified` | date-time | Last content change by a skill or a script (ISO 8601) |
+| `last_verified` | date | Last time a person or a connector confirmed the content still holds |
+| `archived_at` | date | Set together with `status: archived` |
+
+All five are optional, never asked and never backfilled; a note without them stays valid. One property name keeps one type across the whole vault (Obsidian Properties coerce mixed types).
+
 ### Extended Frontmatter by Type
 
 Each artifact type includes additional type-specific fields beyond the base schema.
@@ -297,7 +309,7 @@ target_date: date (project completion target, YYYY-MM-DD)
 
 ## Type Taxonomy
 
-The Grow Product Manager Plugin defines 36 artifact types, each with a specific purpose, source skill, and folder location.
+The Grow Product Manager Plugin defines 37 artifact types, each with a specific purpose, source skill, and folder location.
 
 > **This table is the single source of truth for vault layout.** `vault-protocol.md` (save/init) and `obsidian-setup-guide.md` (setup smoke tests) conform to it, not the other way round. A type that is not listed here cannot be saved — `vault_save` resolves its folder from TYPE_FOLDER_MAP below, so an unlisted type has no destination. When a skill starts producing a new artifact type, add the row **and** the map entry in the same change; `testing/skill_lint.py` → `vault-types` enforces this.
 
@@ -343,6 +355,7 @@ People artifacts key by person because that is the access pattern the contour is
 | debate | brainstorm-features Step 3D + Debate hooks (product-research, cjm-research, write-concept, decision-log) | Debates/ | Role-based adversarial debate: question, evidence pack, verdict, minority report |
 | walkthrough | flow-walkthrough | Research/walkthroughs/ | Flow walkthrough report (steps, friction, comparison) — the evidence pack stays local in `~/.grow-pm/walkthroughs/` |
 | landscape | product-landscape | Research/landscape/ | Category map of competitors and adjacent products (the registry stays local in `~/.grow-pm/landscape/`) |
+| moc | (vault initialization, MOC updates) | _MOC/ | Map of content — Dashboard, product MOC, timeline; generated, never an artifact of a skill run |
 
 #### People-contour types (highest-sensitivity tier)
 
@@ -375,6 +388,7 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
   "ux-benchmark": "Research/",
   "walkthrough": "Research/walkthroughs/",
   "landscape": "Research/landscape/",
+  "moc": "_MOC/",
   "cjm-analysis": "CJM/full-reports/",
   "cjm-health-check": "CJM/health-checks/",
   "funnel-anomaly": "CJM/anomalies/",
@@ -411,6 +425,25 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
 ```
 
 > The `people` profile itself is the one artifact addressed by name rather than by date: `People/<slug>.md` (plus the roster index `People/_roster.md`), because Step P looks it up per person. Every other People type follows `{folder}/{person_slug}/{filename}` — see "Path composition" above for why the People key is the person, not the product.
+
+---
+
+## Generated regions and layers (since v3.10.0)
+
+**Regions.** Text a script or generator owns sits between two markers and is never edited by hand or by a skill:
+
+```
+<!-- <namespace>:begin id=<id> [v=<version>] [mode=reference|derived] -->
+…generated content…
+<!-- <namespace>:end id=<id> -->
+```
+
+- `namespace` is lowercase kebab-case: `generated`, `related`, `audit`, or the id of a shared-context provider whose blocks are merged into the user's `local-context.md` (`context-provider-protocol.md`). A section wrapper may use `<namespace>:section:begin` / `:section:end` without an id.
+- Every region has a unique `id` within its file, and a region is found by its id, never by a heading inside it. A heading that appears both inside and outside a region is a defect to resolve, not a reason to insert again.
+- Readers that count headings (the session digest, the bundle builder) ignore region contents.
+- A skill that needs to change generated content changes its source and re-runs the generator; the user's own notes about it go outside the markers.
+
+**Layers.** TYPE_FOLDER_MAP folders are the user's layer — the only place skills write. A folder registered as a shared-context provider's local copy is read-only except for the paths the provider declares as the user's overlay (`context-provider-protocol.md` §7).
 
 ---
 
@@ -1111,7 +1144,7 @@ Planned work for {ProductName}:
 The Vault Schema defines a consistent, extensible structure for storing and organizing product artifacts in an Obsidian Vault. It includes:
 
 - **Frontmatter Standard** — Base and type-specific fields for classification, relations, and lifecycle management
-- **Type Taxonomy** — 36 artifact types mapped to skills, folders, and purposes
+- **Type Taxonomy** — 37 artifact types mapped to skills, folders, and purposes
 - **Tag Taxonomy** — Hierarchical tags for funnel, platform, metric, status, impact, research, and phase classification
 - **Folder Structure** — Complete directory organization for {Vault}/{PluginFolder}/
 - **Naming Convention** — Consistent {type}-{topic-slug}-{YYYY-MM-DD}.md pattern

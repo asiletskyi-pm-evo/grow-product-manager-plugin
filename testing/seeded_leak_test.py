@@ -10,7 +10,8 @@ see CHANGELOG v2.4.1 and `Testing-process.md` — rewritten with a fictional org
 ("Zorg", "ZORG") so no real identifier enters the repository. The role-layer
 seeds (checks 19-22, JCRL v3.5.0), the judgment-points seeds (check 23,
 v3.7.0 and v3.9.0), the evidence-class seeds (check 24, v3.8.0) and the judgment-binds
-seeds (check 25, v3.9.0) are preventive: their classes have not shipped.
+seeds (check 25, v3.9.0) are preventive: their classes have not shipped. The provider-contract
+seed (check 26, v3.10.0) reproduces a class that did ship: invented tool names at vault level L2.
 
 Usage: python3 testing/seeded_leak_test.py [PLUGIN_ROOT]   (default: repo root)
 Exit 0 = every seeded defect was caught; exit 1 = at least one slipped through.
@@ -150,6 +151,12 @@ SEEDS = [
      "references/pm-mental-model.md", "replace",
      (re.escape("Binds (since v3.9.0)"), f"Binds (from v{PLUGIN_VERSION})"),
      "judgment-binds"),
+    # v3.10.0: check 26 guards the provider contract. The L2 level cited invented tool names
+    # (test_mcp_connection, mcp_get_backlinks) from v1.6.0 to v3.9.0 — no server had them.
+    ("contract: a provider tool that is not in the vault/v1 table",
+     "references/vault-protocol.md", "append",
+     "- Backlinks for a provider note: vault_get_backlinks(path).",
+     "provider-contract"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare

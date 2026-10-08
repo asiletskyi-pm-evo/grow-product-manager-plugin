@@ -113,19 +113,21 @@ Wait for the user to confirm "done" via AskUserQuestion:
 
 **Save in session:** `session.vault.sync_mode = {auto|manual|read-only}`.
 
-### S-6. Optional: Obsidian MCP detection
+### S-6. Optional: search provider detection (L2)
 
-**Goal:** Detect whether the user has the Obsidian MCP installed in Claude Desktop. If yes, the vault upgrades from L1 (filesystem-only) to L2 (filesystem + MCP) and search performance improves significantly.
+**Goal:** Detect a server that indexes the vault and speaks the contract `vault/v1` (`references/context-provider-protocol.md` §2) — the user's own local index, or a shared-context provider. One that answers upgrades the vault from L1 (filesystem only) to L2 (full-text search, backlinks, graph traversal).
 
 **Steps:**
 
-1. Try a tiny ping against any tool whose name matches `mcp__*__*obsidian*` or known Obsidian MCP tool patterns.
-2. If the call returns successfully:
+1. Look for tools named `vault_search` and `vault_get_note` on any server in the session (detected by the contract, never by a server name).
+2. Probe each such server with `brain_status`, else `vault_list_by_folder("")` — 3-second budget.
+3. If one answers:
    - Mark `vault_level = L2`.
-   - Inform: "✅ Obsidian MCP detected. The plugin will use it for cross-vault search."
-3. If no MCP responds:
+   - Inform: "✅ Search provider `<id>` answers — the plugin will use it for full-text and graph search."
+   - Inform only, no question in this step: "To keep it for every session, add it later through Update → Shared context providers." (Declaration format: `references/context-schema.md` → Vault Search MCP subsection; a team's shared core goes through `context-connect`.)
+4. If none answers:
    - Mark `vault_level = L1`.
-   - Inform: "ℹ️ Obsidian MCP isn't installed — that's fine. The plugin will use the filesystem for search. You can add Obsidian MCP later via `search_mcp_registry` and reconnect with no setup loss."
+   - Inform: "ℹ️ No search provider answers — that's fine. The plugin will use the filesystem for search. A local index or a team's provider can be added later with no setup loss."
 
 **This step never blocks.** L1 is fully functional.
 
@@ -182,7 +184,7 @@ Wait for the user to confirm "done" via AskUserQuestion:
 | Path doesn't exist | "Folder not found at `[path]`. Either fix the path or create a new vault in Obsidian (File → New vault)." |
 | No `.obsidian/` subfolder | "Doesn't look like an Obsidian vault. If you just created the folder, open it in Obsidian once so `.obsidian/` is initialized. Or continue anyway if you're sure." |
 | Permission denied on write | "macOS may be blocking access. Open System Settings → Privacy & Security → Files and Folders and grant your terminal / Claude app access to this folder. Then retry." |
-| MCP ping failed | "Obsidian MCP didn't respond — that's fine, the vault works at L1 (filesystem). You can add Obsidian MCP later for faster cross-vault search." |
+| Provider probe failed | "The search provider didn't respond — that's fine, the vault works at L1 (filesystem). It can be added later for full-text and graph search." |
 | Folder structure incomplete after init | "Created `{X}/{N}` expected folders. You can retry initialization, or accept the partial state — missing pieces will be created on first save. The plugin will not lose data either way." |
 | Smoke test fails after retry | "Initialization keeps failing. The most common cause is permissions. Skip vault setup for now (`obsidian-vault` will be deferred) and try again later via `configure plugin → connect Obsidian`. No data has been written outside the vault folder." |
 

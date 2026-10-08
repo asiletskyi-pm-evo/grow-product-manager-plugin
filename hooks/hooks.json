@@ -1,5 +1,5 @@
 {
-  "description": "Grow PM host hooks (since v2.6.0). SessionStart: a context digest so every skill knows where local-context.md is (or that it is not visible from this environment). PreToolUse: a human-in-the-loop confirmation before creating/updating Jira issues and Confluence pages — the artifact quality gate report must be in the chat before this prompt appears. Both fail open: any script error allows the action.",
+  "description": "Grow PM host hooks (since v2.6.0). SessionStart: a context digest so every skill knows where local-context.md is (or that it is not visible from this environment). PreToolUse: a human-in-the-loop confirmation before creating/updating Jira issues and Confluence pages — the artifact quality gate report must be in the chat before this prompt appears; since v3.10.0 also before a file write under a shared-context provider's read-only folder (references/context-provider-protocol.md §7). Both fail open: any script error allows the action.",
   "hooks": {
     "SessionStart": [
       {
@@ -17,6 +17,16 @@
     "PreToolUse": [
       {
         "matcher": "mcp__.*__(createJiraIssue|editJiraIssue|createConfluencePage|updateConfluencePage)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/write-gate.sh\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "^(Write|Edit|MultiEdit|NotebookEdit)$",
         "hooks": [
           {
             "type": "command",

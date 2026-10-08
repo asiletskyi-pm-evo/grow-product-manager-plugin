@@ -96,13 +96,13 @@ Tokens are matched **case-insensitively with word boundaries**, not as bare subs
 
 ## Stage 1b — the seeded-leak test
 
-A check nobody has watched fail is a promise, not a test: a regex that matches nothing reads exactly like a clean repo. `testing/seeded_leak_test.py` copies the tree to a temp dir, applies one known-bad edit at a time, and asserts the linter goes RED with the expected check tag. Twenty-six seeds: twelve org-leak seeds, one per defect class that actually shipped, written with a fictional org (`Zorg`, `ZORG`) so no real identifier enters the repository; four preventive role-layer seeds for checks 19–22 (JCRL v3.5.0) — a role-name branch appended to a `SKILL.md`, a persona prompt appended to a reference, the `partial/judgment-footer` citation removed from `write-concept`, `eng_lead` dropped from one of the two role enums; four judgment-point seeds for check 23 (three in v3.7.0, and since v3.9.0 `quarterly-planning` losing its §1 / §2 citation while it still cites §7); four evidence-class seeds for check 24 (v3.8.0); and two judgment-binds seeds for check 25 (v3.9.0) — `quarterly-planning` losing every citation of `judgment-points.md` §7, and a `from v<plugin version>` marker put back into the P6 *Binds* (the seed reads the version from `plugin.json`, so it proves the rule before and after the release bump). A seed appends a line, removes the first line matching a regex (or, since v3.8.0, every matching line — `remove-all`, for a citation repeated in one file), or replaces a regex once; a seed that changes nothing is reported as missed, never as caught. It runs in both CI workflows and after any edit to `skill_lint.py`.
+A check nobody has watched fail is a promise, not a test: a regex that matches nothing reads exactly like a clean repo. `testing/seeded_leak_test.py` copies the tree to a temp dir, applies one known-bad edit at a time, and asserts the linter goes RED with the expected check tag. Twenty-seven seeds: twelve org-leak seeds, one per defect class that actually shipped, written with a fictional org (`Zorg`, `ZORG`) so no real identifier enters the repository; four preventive role-layer seeds for checks 19–22 (JCRL v3.5.0) — a role-name branch appended to a `SKILL.md`, a persona prompt appended to a reference, the `partial/judgment-footer` citation removed from `write-concept`, `eng_lead` dropped from one of the two role enums; four judgment-point seeds for check 23 (three in v3.7.0, and since v3.9.0 `quarterly-planning` losing its §1 / §2 citation while it still cites §7); four evidence-class seeds for check 24 (v3.8.0); and two judgment-binds seeds for check 25 (v3.9.0) — `quarterly-planning` losing every citation of `judgment-points.md` §7, and a `from v<plugin version>` marker put back into the P6 *Binds* (the seed reads the version from `plugin.json`, so it proves the rule before and after the release bump); and one provider-contract seed for check 26 (v3.10.0) — a `vault_get_backlinks` call appended to `vault-protocol.md`, the class of invented tool names the L2 level carried until then. A seed appends a line, removes the first line matching a regex (or, since v3.8.0, every matching line — `remove-all`, for a citation repeated in one file), or replaces a regex once; a seed that changes nothing is reported as missed, never as caught. It runs in both CI workflows and after any edit to `skill_lint.py`.
 
 ```
-baseline: GREEN ✅   seeds: 26
+baseline: GREEN ✅   seeds: 27
   ✅ authority: per <Org> convention  → expected [org-signature]
   …
-caught 26/26 seeded defects
+caught 27/27 seeded defects
 ```
 
 **Rule:** a new check lands with its seed in the same commit. If you cannot write a line that the check must reject, the check does not describe anything.
@@ -170,9 +170,12 @@ Static checks prove the tree is consistent; they cannot prove a host still loads
 
 - `bash testing/host-smoke.sh` green on the release machine — both legs, the Codex leg after the release commit — summary line in the release PR (since v3.0.2).
 - `bash testing/validate-consistency.sh`: every check group green.
-- Lint: 0 FAIL (25 checks as of v3.9.0).
-- Seeded-leak test: 26/26 caught (and a new seed for every new check).
-- `python3 testing/session_start_test.py`: every digest case passes (4/4 as of v3.9.0) — it is not in CI, so it runs here.
+- Lint: 0 FAIL (26 checks as of v3.10.0).
+- Seeded-leak test: 27/27 caught (and a new seed for every new check).
+- `python3 testing/session_start_test.py`: every digest case passes (12/12 as of v3.10.0) — it is not in CI, so it runs here.
+- `python3 testing/ctx_common_test.py` (8/8) and `python3 testing/provider_bundle_test.py` (since v3.10.0): the provider helpers and the bundle builder on the fictional fixture core — not in CI, so they run here.
+- `python3 testing/branch_leak_scan.py --base main` (since v3.10.0): clean — no organisation identifier in any line the branch adds or in its commit messages; `python3 testing/branch_leak_scan_test.py` proves the scan fires.
+- `python3 testing/write_gate_test.py` (since v3.10.0): every gate case passes — the provider boundary and the Jira/Confluence branch; not in CI, so it runs here.
 - Every example added or touched this version is universal — placeholders, no team signature, language-neutral code blocks, no domain-specific detail.
 - Trigger: ≥ 90 % per group — positive and neighbour rows alike — on each supported host (Claude Code and Codex CLI, live, from a neutral directory; a host not re-run must be named in the release notes).
 - Output eval (3b): every artifact-producing skill changed in the release scores ≥ its rubric's pass_threshold, with host and model recorded.

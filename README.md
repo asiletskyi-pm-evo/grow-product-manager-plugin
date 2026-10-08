@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.9.0
+**Version:** 3.10.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.10.0** — **Shared-context providers: connect your context to a team's core** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). A team or an organisation can now share its core knowledge — team cards, people registry, missions, metrics, rules — with every colleague's plugin, and the plugin treats it as a *provider*: one contract, `vault/v1` (`vault_search`, `vault_get_note`, `vault_get_links`, `vault_graph_context`, `vault_list_by_tag`, `vault_list_by_folder`, plus optional `brain_*` status and entity tools), declared by a provider manifest and registered per user (`references/context-provider-protocol.md`). New skill **`context-connect`** resolves your team and role from your e-mail, copies the bundle relevant to you, proposes the core's context blocks for your `local-context.md` — never overwriting it, every discrepancy a question, a backup before and a changelog after — and registers the provider; the bundle builder `scripts/provider_bundle.py` reads every folder name, label and note template from the manifest. New skill **`context-navigator`** answers from the shared core — who owns what, where a rule lives, which missions a team has, who someone is — through the provider's own rules and graph, always with the note path and the snapshot date. The vault level L2 now means "a provider answers `vault/v1`" (it named tool calls no server had); Step 0.5 searches every reachable provider, merges results and says once when a provider is stale or unreachable. A third hook asks before a file write inside a provider's read-only folder. The session digest no longer double-counts teams or products that a provider block or the Landscape section repeats, recognises a vault declared as a table, and lists providers and your bundle. One storage story replaces the old pointer-file description; backups keep the last 5 everywhere. Lint check 26 `provider-contract` and a branch scan for organisation identifiers (release pre-flight) guard the new surface.
 
 **New in v3.9.0** — **Build first, a built-in opponent, learning modes — the Judgment Core + Role Layer programme is complete** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks).
 
@@ -459,7 +461,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 19. Release Manager (v0.3.1) — NEW in v1.28.0
+### 19. Release Manager (v0.4.0) — NEW in v1.28.0
 
 **Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
 
@@ -577,6 +579,18 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
 
+
+### 32. Context Connect (v0.1.0) — NEW in v3.10.0
+
+**Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
+
+**Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
+
+### 33. Context Navigator (v0.1.0) — NEW in v3.10.0
+
+**Description:** Answers from a connected shared core instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
+
+**Trigger phrases:** "who owns this", "what does team X do", "where is the rule for", "which missions does the team have", «хто за що відповідає», «що робить команда X», «де описане правило», «які місії у команди»
 ---
 
 ## Skills Summary
@@ -603,7 +617,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Project Planning | v0.6.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.8.0 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.0 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
-| Release Manager | v0.3.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
+| Release Manager | v0.4.0 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 | Focus Advisor | v0.9.1 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.0 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.0 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
@@ -614,6 +628,8 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Hiring Designer | v0.2.0 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
 | Offboarding Guide | v0.2.0 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.0 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
+| Context Connect | v0.1.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
+| Context Navigator | v0.1.0 | Answer from the shared core through the provider's rules and graph, with note paths and snapshot dates |
 
 ---
 
@@ -633,7 +649,7 @@ The plugin can optionally integrate with [Obsidian](https://obsidian.md/) to cre
 |-------|-----------|-------------|
 | L0 | No vault configured | Plugin works as before, no vault features |
 | L1 | Vault path configured | Read/write artifacts, file-based search |
-| L2 | Vault + Obsidian MCP | L1 + full-text search, graph traversal, backlinks |
+| L2 | Vault + a search provider speaking `vault/v1` (a local index or a shared-context provider, since v3.10.0) | L1 + full-text search, graph traversal, backlinks |
 
 ### Multi-vault support
 Configure one default vault for all products or separate vaults per product.
@@ -645,42 +661,26 @@ Run Plugin Configurator → Obsidian Vault step, or say "connect Obsidian Vault"
 
 ## Persistent Data Storage
 
-All user data is stored in a **user-controlled location** — either your Obsidian Vault (recommended) or a custom folder you choose during setup.
+Your data lives outside the plugin, so it survives uninstalls, reinstalls and updates.
 
-**How it works:**
-- `~/.grow-pm/` contains only a pointer file (`.storage-pointer.yaml`) that tells the plugin where your actual data lives
-- Two storage modes: **Vault** (Obsidian vault = primary storage) or **Custom** (user-chosen folder)
-- When Obsidian is configured, the vault IS the primary storage — no separate copy needed
-- Data persists across plugin uninstalls, reinstalls, and updates
+- **`~/.grow-pm/`** — `local-context.md` (your configuration), service data (experiment registry, focus journal, landscape registry, walkthrough evidence packs, shared-context provider registrations when no vault is set) and `backups/` (the last 5 of each kind are kept).
+- **Your Obsidian vault (optional, recommended)** — when connected it is the plugin's `storage_root`: templates and every artifact are saved there, and `local-context.md` and the knowledge library are mirrored into the plugin folder after every change (`_System/`, `Knowledge/`), so the vault can restore `~/.grow-pm/` if it is lost.
+- **Without a vault** — everything stays under `~/.grow-pm/` (`Templates/`, `knowledge-library/`, `people/`, `decisions/`, …).
 
-**Storage structure (at your chosen location):**
+**Storage structure (`~/.grow-pm/`, abridged):**
 
 ```
-<your-storage-location>/
+~/.grow-pm/
 ├── local-context.md           # Plugin configuration
-├── knowledge-library/         # Curated knowledge sources
-│   ├── sources.md             # Source registry with trust scores
-│   ├── articles/              # Imported articles
-│   ├── benchmarks/            # Industry benchmarks
-│   └── competitive/           # Competitor intelligence
-└── Templates/                 # Multilingual artifact templates
-    ├── _registry.json         # Template index with scoring metadata
-    ├── _backups/              # Pack backups (last 5 before bulk ops)
-    ├── _archive/              # Per-template version history (last 10)
-    ├── built-in/              # Templates shipped with plugin
-    ├── user/                  # User-global templates (all products)
-    └── product/<product_id>/  # Product-scoped overrides
+├── .schema-version            # Schema version marker
+├── knowledge-library/         # Curated sources, trust scores, glossary, style profile
+├── Templates/                 # Only without a vault — otherwise in the vault
+├── experiments/  focus/  landscape/  walkthroughs/
+├── providers/                 # Shared-context provider registrations (no vault)
+└── backups/                   # Before migrations and updates — last 5 kept
 ```
 
-**Key Features:**
-- User chooses storage location during onboarding (Step 0)
-- Per-product Knowledge Library support
-- Pointer-based resolution with recovery flow
-- Change storage location at any time via Plugin Configurator
-- Automatic backups before migrations
-- Schema versioning for data compatibility
-
----
+**Key features:** automatic backups before migrations and updates, schema versioning (`.schema-version` for `~/.grow-pm/`, `.vault-schema-version` for the vault), and recovery from the vault mirror; the paths above are the real ones. Full protocol: `references/persistent-storage.md`.
 
 ## Multilingual Artifact Templates
 
@@ -855,12 +855,13 @@ Every protocol keeps a fallback chain (named agent → `general-purpose` with th
 | `/grow-product-manager:glossary-lint` | `[file]` | Gate 3 team-language lint over a file or pasted text, standalone |
 | `/grow-product-manager:setup` | `--show \| --write-gate on\|off` | Host-level toggles (the write gate) and whether the hooks environment is wired in this session |
 
-**Hooks — `hooks/hooks.json` (2).** Both run in the session's own environment and **fail open** — a script error can never block a session.
+**Hooks — `hooks/hooks.json` (3 hooks).** All three run in the session's own environment and **fail open** — a script error can never block a session.
 
 | Hook | Event | Does |
 |---|---|---|
 | Context digest | `SessionStart` (startup, resume, clear, compact) | `scripts/session_start.py` looks for `local-context.md` where this session can see it (`~/.grow-pm/`, connected folders under `$HOME/mnt/*/`, the working directory) and hands the model a short `GROW_PM_SESSION` digest: path, configurator version, `user.language`, product names, onboarding mode and deferred steps, whether vault / CJM / team language are configured. Step 0a of every skill becomes a lookup. Re-runs after context compaction, so the location survives long sessions. In a hosted session where the shell cannot see your files it says so — skills then read the file through device tools as before. |
 | Write gate | `PreToolUse` on `createJiraIssue`, `editJiraIssue`, `createConfluencePage`, `updateConfluencePage` | `scripts/write_gate.py` asks you to confirm before a content-bearing write, with the checklist the artifact quality gate expects to be done by then (gate report in chat, your go-ahead, not a sandbox). Metadata-only edits pass silently. A hook sees only the tool call, never the conversation — so this is a human-in-the-loop step, not an automatic judge. Opt-out: `/grow-product-manager:setup --write-gate off`. |
+| Provider boundary (since v3.10.0) | `PreToolUse` on `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | The same `scripts/write_gate.py` asks you to confirm before a file is written inside a shared-context provider's local folder — a team core you registered as read-only (`references/context-provider-protocol.md` §7). Paths the provider leaves to you (your focus note, your overlay folder) and every folder outside the provider's are never asked about. Same opt-out as the write gate. |
 
 
 ---
@@ -904,7 +905,8 @@ codex plugin add grow-product-manager@grow-product-manager-plugins
 
 The plugin includes reference materials for product management best practices and frameworks:
 
-**Key reference files in `references/` (40 total — see the folder for the full list):**
+**Key reference files in `references/` (41 total — see the folder for the full list):**
+- `context-provider-protocol.md` — shared-context providers (since v3.10.0): the `vault/v1` contract, provider manifest and registration, routing across providers, freshness, the write boundary, the provider kit and the index schema
 - `judgment-points.md` — the judgment points (since v3.7.0): where the "your estimate first" question is asked and how it is switched off, the confidence-and-falsifier line and its scale, the decision-record fields, the resulting check
 - `vocabulary-sets.md` — read-only role vocabulary sets for headings and option labels, lowest precedence below the team glossary (since v3.6.0)
 - `role-profiles.md` — the role layer (since v3.5.0): altitude L1–L4, eight role profiles as defaults, hats, Step 0i resolution
@@ -921,7 +923,7 @@ The plugin includes reference materials for product management best practices an
 - `visual-annotation-protocol.md` — annotated screenshots: marker № = requirement №, local Pillow rendering, preview cycle, REST attachment chain
 - `self-improvement.md` — learning from user corrections (versioning, changelog)
 - `test-mode.md` — sandbox mode for dry-run onboarding and skill testing
-- `persistent-storage.md` — Pointer + User-Controlled Storage protocol
+- `persistent-storage.md` — where user data lives (`~/.grow-pm/`, the vault as `storage_root`), backups (last 5), migrations, recovery from the vault mirror
 - `vault-protocol.md` — Obsidian Vault integration protocol (detection, search, save, MOC updates)
 - `vault-schema.md` — Vault artifact schema (frontmatter, types, tags, folder structure, templates; optional `evidence_classes` / `altitude` keys since v3.8.0)
 - `cjm-protocol.md` — CJM shared standards (anomaly severity, funnel impact, health score)
@@ -1022,5 +1024,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.9.0  
-**Last Updated:** September 2026
+**Version:** 3.10.0  
+**Last Updated:** October 2026

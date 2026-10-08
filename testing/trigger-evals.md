@@ -280,6 +280,27 @@ Collisions: v3.9.0 changes three `description`s (requirements-creator names AI-f
 | S15 | set kill criteria for the quarter in our Q4 plan | quarterly-planning — NOT goal-setter |
 | S16 | чи спрацювали kill criteria з плану минулого кварталу | quarterly-planning (retro) — NOT product-reporter |
 
+### Group T — Shared-context providers (added 2026-10-08, v3.10.0)
+
+Collisions: v3.10.0 adds two skills. Connecting to a team's shared core, refreshing its bundle or enriching the context with its blocks is context-connect — the plugin's own setup (products, connectors, Obsidian, roles) stays plugin-configurator, and adding a source to the curated library stays knowledge-library. Answering *from* the shared core — who owns what, what a team does, where a rule lives, which missions a team has — is context-navigator; "why did we decide" stays decision-log, a dashboard read stays product-analysis, and "which sources do we have" stays knowledge-library.
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| T1 | підключи мене до спільного вейлта команди | context-connect |
+| T2 | connect me to the team vault | context-connect |
+| T3 | налаштуй плагін під мій продукт | plugin-configurator — NOT context-connect |
+| T4 | онови мій пакет з ядра | context-connect |
+| T5 | додай у бібліотеку цю статтю про чекаут | knowledge-library — NOT context-connect |
+| T6 | add a context provider for our shared core MCP | context-connect |
+| T7 | збагати мій контекст блоками спільного ядра | context-connect |
+| T8 | підключи Obsidian-вейлт | plugin-configurator — NOT context-connect |
+| T9 | хто відповідає за модуль відгуків | context-navigator |
+| T10 | чому ми вирішили відкласти фічу порівняння | decision-log — NOT context-navigator |
+| T11 | подивись дашборд конверсії за вересень | product-analysis — NOT context-navigator |
+| T12 | what does team Alpha own | context-navigator |
+| T13 | які джерела маємо по чекауту | knowledge-library — NOT context-navigator |
+| T14 | де описане правило модерації відгуків | context-navigator |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -299,6 +320,8 @@ Collisions: v3.9.0 changes three `description`s (requirements-creator names AI-f
 | 2026-09-29 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`), pre-release v3.7.0 — Groups A, G, H, I once (42 phrases) | A 8/8 · G 10/10 · H 16/16 · I 8/8 | None. v3.7.0 changes no description; the new H15–H16 (revisit / "good call or lucky?") route to decision-log, so the resulting check needs no new mode (D25). |
 | 2026-10-06 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`), pre-release v3.8.0 — Groups A, B, E, G, H, I, M, O once (72 phrases) | A 8/8 · B 9/9 · E 5/5 · G 10/10 · H 16/16 · I 8/8 · M 8/8 · O 8/8 | None. v3.8.0 changes no description; the regression covers the groups whose skills gained evidence-class steps (design-bridge, diagram-prototyper, flow-walkthrough, product-landscape, knowledge-library). Runner note: a phrase with an apostrophe («рев'ю») breaks an `xargs` driver — use a Python driver. |
 | 2026-10-06 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, run from a neutral directory, Python driver), pre-release v3.9.0 — all 165 phrases once, misses re-run 3× (majority), then Groups C, E, G, H, J, S again after two description fixes | A 8/8 · B 9/9 · C 9/9 · D 4/4 · E 5/5 · F 4/4 · G 10/10 · H 16/16 · I 8/8 · J 9/9 · K 13/13 · L 8/9 · M 8/8 · N 9/9 · O 8/8 · R 20/20 · S 16/16 | S14 «tag the first interviews myself, then synthesize» → none 3/3 and S15 "kill criteria for the quarter in our Q4 plan" → goal-setter 3/3 on the first pass: product-research and quarterly-planning descriptions gained those phrases; after the fix S14 3/3, S15 3/3 and C/E/G/H/J/S unchanged. L8 is the known `status` command row (explicit invocation only). N7 2/3 by majority (pre-existing). |
+| 2026-10-08 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, neutral directory, Python driver, model claude-opus-5-5), pre-release v3.10.0 — all 179 phrases once; the 12 misses re-run 3× on v3.10.0 and 3× on v3.9.0 `main` in the same environment; Group T twice after one description fix. **Codex CLI 0.153.2, live** — Group T only | A 8/8 · B 9/9 · C 8/9 · D 4/4 · E 4/5 · F 4/4 · G 10/10 · H 16/16 · I 8/8 · J 8/9 · K 13/13 · L 8/9 · M 8/8 · N 9/9 (N7 2/3) · O 6/8 · R 16/20 · S 16/16 · **T 13/14 → 28/28** after the fix. Codex: T 12/14 on the first run, 22/28 after the fix | **T8** «підключи Obsidian-вейлт» was the one regression: plugin-configurator 3/3 on v3.9.0, another plugin's Obsidian skill 3/3 on v3.10.0 — context-connect's "team vault" wording pulled it away. Fix: the context-connect lead names "Not your Obsidian vault (plugin-configurator)" and carries «онови пакет з ядра» inside the visible cut → T 28/28 on Claude. Ten misses predate this release — they fail the same way on v3.9.0 `main` today: C6, J6, L8, O4, O8, R19 route to a neighbour inside the plugin (the default model changed since 2026-10-06); E2, R13, R15, R16 go to other plugins installed on the test machine (a UI-reference plugin the global instructions prefer, a design plugin, a design toolkit) → retune in v3.10.1. **Codex:** the author's configuration now lists 118 skills and shows about 55 characters per description (v3.0.0: 80 skills, about 190); T8 → context-connect there and in a lean run (43 skills, about 167 characters), which stopped at 15 of 28 answers on the account's usage limit. T4 went to a companion plugin for the same core while it was installed (uninstall it, CHANGELOG backwards compatibility); T11 → another installed plugin's metrics skill in the crowded configuration. |
+| 2026-10-08 (2) | **Claude Code, live**, same driver and model, after a retune of six descriptions — all 179 phrases once, the disputed rows 3×, then one revert experiment | all 179: 168/179 (T 14/14, L 9/9, N 9/9, O 6/8, C 7/9, J 7/9, R 16/20, E 4/5). Disputed rows 3×: O4 3/3, C8 2/3, O5 2/3, J6 1/3, C6 0/3, J9 0/3, O8 0/3, R19 0/3, L8 0/3 | Kept: the configurator's description starts with «Configure the plugin and your Obsidian vault» and lists «підключи Obsidian-вейлт» — for Codex, where about 55 characters show; on Claude no group regressed (K 13/13, L, N, O as before, T 14/14). Reverted: guards in product-reporter (C6), roadmap-architect (R19), flow-walkthrough (O4), product-landscape (O8) and the requirements-creator keyword (J6) — the flow-walkthrough guard fixed O4 (0/3 → 3/3) but moved J9 to product-landscape (0/3), and the others changed nothing. With the revert, J9 1/3 (two answers to a UI-reference plugin), O5 3/3. The ten pre-existing misses stay open for the next PATCH. |
 | (fill after each run) | | | |
 
 ## Maintenance

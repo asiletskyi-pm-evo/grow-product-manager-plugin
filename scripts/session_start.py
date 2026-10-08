@@ -13,11 +13,20 @@ Design rules (see references/harness-map.md → hooks):
 - Environment-agnostic. The user's home is a sandbox in hosted sessions; the
   context arrives through a connected folder mounted under $HOME/mnt/<name>/.
 """
+import datetime
 import glob
 import json
 import os
 import re
+import shlex
+import sqlite3
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:  # since v3.10.0 — shared helpers; absent → the v3.9.0 digest, still fail-open
+    import ctx_common as cc
+except Exception:
+    cc = None
 
 MAX_LINES = 25
 ROLE_ENUM = {"pm", "head_of_product", "cpo", "product_designer", "product_analyst",
@@ -70,10 +79,98 @@ def plugin_version():
         return "?"
 
 
-def parse(path):
+def _org_scope(text):
+    """Text of the `## Organization` sections (products are declared there); without
+    one, everything except `## Landscape`, whose per-product headings are settings."""
+    parts = re.split(r"(?m)^(?=## (?!#))", text)
+    org = [p for p in parts if p.startswith("## Organization")]
+    return "".join(org) if org else "".join(p for p in parts if not p.startswith("## Landscape"))
+
+
+def _uniq(xs):
+    out = []
+    for x in xs:
+        if x not in out:
+            out.append(x)
+    return out
+
+
+def _index_date(index_path):
+    """meta.last_index of a vault/v1 index (context-provider-protocol.md §10), or None."""
+    p = os.path.expanduser(index_path or "")
+    if not p or not os.path.isfile(p):
+        return None
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % p, uri=True, timeout=1)
+        row = con.execute("SELECT value FROM meta WHERE key='last_index'").fetchone()
+        con.close()
+        return datetime.datetime.fromisoformat(str(row[0]).replace("Z", "+00:00")) if row else None
+    except Exception:
+        return None
+
+
+def providers_info(text, extra_dirs=None):
+    """[(id, label)], provider roots and the bundle facts — header-level only."""
+    if cc is None:
+        return [], [], None
+    entries = cc.vault_entries(text)
+    regs = cc.find_registrations(entries, extra_dirs=extra_dirs)
+    by_id, order = {}, []
+    for b in cc.vault_search_bullets(text):
+        by_id[b["id"]] = {"mode": b["mode"], "access": b["access"], "index": b["index"]}; order.append(b["id"])
+    today = datetime.date.today()
+    for r in regs:
+        e = by_id.setdefault(r["id"], {}); order += [] if r["id"] in order else [r["id"]]
+        for k in ("mode", "access", "index"):
+            if r.get(k):
+                e[k] = str(r[k])
+        e["synced"] = str(r.get("synced_at") or "")
+        e["stale_after"] = int(r.get("stale_after_days") or 30) if str(r.get("stale_after_days") or "30").isdigit() else 30
+    labels = []
+    for pid in order:
+        e = by_id[pid]
+        mode = e.get("mode") or "live"
+        access = e.get("access") or ("local" if e.get("index") else "open")
+        bits, stale = [mode, access], False
+        if e.get("synced"):
+            bits.append("synced %s" % e["synced"])
+            try:
+                stale = (today - datetime.date.fromisoformat(e["synced"][:10])).days > e.get("stale_after", 30)
+            except ValueError:
+                pass
+        idx = _index_date(e.get("index"))
+        if idx:
+            bits.append("index %s" % idx.date().isoformat())
+            now = datetime.datetime.now(idx.tzinfo) if idx.tzinfo else datetime.datetime.now()
+            stale = stale or (now - idx).total_seconds() > 36 * 3600
+        if stale:
+            bits.append("stale")
+        labels.append("%s (%s)" % (pid, ", ".join(bits)))
+    roots = cc.provider_roots(regs)
+    bundle = None
+    for root in roots:
+        for m in sorted(glob.glob(os.path.join(root, "*", "_System", "bundle-manifest.md"))) + \
+                 sorted(glob.glob(os.path.join(root, "_System", "bundle-manifest.md"))):
+            try:
+                head = open(m, encoding="utf-8", errors="replace").read(2000)
+            except OSError:
+                continue
+            f = {k: (re.search(r'^%s:\s*"?([^"\n]*?)"?\s*$' % k, head, re.M) or [None, ""])[1]
+                 for k in ("team", "role_profile", "core_version")}
+            bundle = f
+            break
+        if bundle:
+            break
+    return labels, roots, bundle
+
+
+def parse(path, extra_dirs=None):
     """Header-level facts only."""
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
+    # since v3.10.0: provider blocks (managed regions) repeat `### Team:` / `### Product:`
+    # headings — count the user's own sections only
+    plain = cc.strip_managed_regions(text) if cc else text
     facts = {}
     m = re.search(r"^> Configurator version:\s*(\S+)", text, re.M)
     facts["configurator_version"] = m.group(1) if m else "unknown"
@@ -91,8 +188,8 @@ def parse(path):
     facts["role"] = raw if raw in ROLE_ENUM else ("legacy" if raw else "absent")
     m = re.search(r"^- \*\*Level home:\*\*\s*(L[1-4])\b", text, re.M)
     facts["level_home"] = m.group(1) if m else "derived at Step 0i"
-    facts["products"] = re.findall(r"^### Product:\s*(.+?)\s*$", text, re.M)
-    facts["teams"] = re.findall(r"^### Team:\s*(.+?)\s*$", text, re.M)
+    facts["products"] = _uniq(re.findall(r"^### Product:\s*(.+?)\s*$", _org_scope(plain), re.M))
+    facts["teams"] = _uniq(re.findall(r"^### Team:\s*(.+?)\s*$", plain, re.M))
     # deferred steps: indented bullets right after the marker line
     deferred = []
     m = re.search(r"^- \*\*Deferred steps:\*\*\s*\n((?:\s+- .+\n?)*)", text, re.M)
@@ -104,7 +201,11 @@ def parse(path):
             deferred = [s.strip() for s in m.group(1).split(",") if s.strip()]
     facts["deferred_steps"] = deferred
     vault = re.search(r"^## Obsidian Vaults", text, re.M) and re.search(r"^\s*-\s*path:\s*\S+", text, re.M)
-    facts["vault_section"] = bool(vault)
+    facts["vault_section"] = bool(vault) or bool(cc and cc.vault_entries(text))  # table format too (v3.10.0)
+    try:
+        facts["providers"], facts["provider_roots"], facts["bundle"] = providers_info(text, extra_dirs)
+    except Exception:
+        facts["providers"], facts["provider_roots"], facts["bundle"] = [], [], None
     facts["cjm_section"] = bool(re.search(r"^## CJM Configuration\s*\n(?:.*\n){1,6}?.*(?:stages|funnel|template)", text, re.M | re.I))
     facts["terminology_section"] = bool(re.search(r"^### Terminology & Style", text, re.M))
     return facts
@@ -131,6 +232,12 @@ def digest(path, facts, searched, version):
     lines.append("  " + " | ".join(flags))
     if facts["deferred_steps"]:
         lines.append("  deferred onboarding steps: %s" % ", ".join(facts["deferred_steps"][:10]))
+    if cc is not None:
+        prov = facts.get("providers") or []
+        lines.append("  providers: %s" % (", ".join(prov[:6]) if prov else "none declared"))
+        b = facts.get("bundle")
+        if b:
+            lines.append("  bundle: team=%s role=%s core=%s" % (b.get("team") or "?", b.get("role_profile") or "?", b.get("core_version") or "?"))
     lines.append(
         "Skills: take this path for Step 0a of references/local-context-protocol.md and skip the "
         "location search; still parse the file for 0c–0j (product selection, required fields, vault "
@@ -150,13 +257,15 @@ def not_found(searched, version):
     ])
 
 
-def export_env(path):
+def export_env(path, provider_paths=()):
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if not env_file:
         return
     try:
         with open(env_file, "a", encoding="utf-8") as f:
-            f.write("export GROW_PM_CONTEXT_PATH=%s\n" % json.dumps(path))
+            # shlex, not JSON: bash keeps \uXXXX escapes literally, and folder names may be non-ASCII
+            f.write("export GROW_PM_CONTEXT_PATH=%s\n" % shlex.quote(path))
+            f.write("export GROW_PM_PROVIDER_PATHS=%s\n" % shlex.quote(os.pathsep.join(provider_paths)))
     except Exception:
         pass
 
@@ -178,6 +287,7 @@ def main():
     existing.sort(key=rank)
     found = existing[0] if existing else None
     if found:
+        facts = {}
         try:
             facts = parse(found)
             text = digest(found, facts, searched, version)
@@ -185,7 +295,7 @@ def main():
                 text += "\nOther copies seen (not used; check they are not stale): " + "; ".join(existing[1:4])
         except Exception:
             text = "GROW_PM_SESSION (plugin v%s)\nlocal-context.md: FOUND at %s (digest unavailable — parse error; skills read it themselves)." % (version, found)
-        export_env(found)
+        export_env(found, facts.get("provider_roots") or [])
     else:
         text = not_found(searched, version)
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}))

@@ -123,9 +123,11 @@ Follow the detection algorithm from `references/vault-protocol.md` → "Vault Le
 1. Check if `local-context.md` contains an **Obsidian Vaults** section
 2. If section is missing or no vault paths configured → `vault_level = L0` (disabled, skip silently)
 3. If vault path(s) configured → validate directories exist → `vault_level = L1` (file system)
-4. If MCP detection is enabled → try Obsidian MCP ping → if responds `vault_level = L2` (file + MCP)
+4. Probe the providers (`context-provider-protocol.md` §4) → if one answers the contract `vault/v1`, `vault_level = L2` (file + provider search)
 
 Store `vault_level` and `vault_configs` in session context for use by Step 0.5 and vault_save.
+
+**Providers (since v3.10.0).** Build `session.providers` per `context-provider-protocol.md` §4: the registrations under every configured vault (`{vault}/{plugin_folder}/_System/providers/*.yaml`) and `~/.grow-pm/providers/`, the bullets of `## Obsidian Vaults` → `### Vault Search MCP`, and any server in the session that exposes `vault_search` and `vault_get_note`. When the `GROW_PM_SESSION` digest carries a `providers:` line, start from it. A provider's local folders are read-only for every skill (§7 there).
 
 **If vault_level is L0** — no further vault-related actions in this session. All vault operations will be silently skipped.
 
@@ -172,6 +174,7 @@ Follow the full protocol from `references/vault-protocol.md` → "Step 0.5 — V
    > "Found {N} related artifacts in your knowledge base: [brief list]. Use as context? [Yes / Select specific / Skip]"
 5. If user accepts — read full content of selected artifacts and include as additional context
 6. If user skips or no results — continue normally
+7. If `session.providers` is non-empty — search them as well (`vault-protocol.md` → MCP Search (L2)); each result names its provider and, for a snapshot, its date; a stale or unreachable provider gets one line, once per session (`context-provider-protocol.md` §6)
 
 **Important:** This step should be brief. Read only frontmatter + Summary section for preview. Full content is loaded only for artifacts the user selects.
 
