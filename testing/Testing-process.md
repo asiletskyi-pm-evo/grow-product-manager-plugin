@@ -173,6 +173,7 @@ Static checks prove the tree is consistent; they cannot prove a host still loads
 - Lint: 0 FAIL (25 checks as of v3.9.0).
 - Seeded-leak test: 26/26 caught (and a new seed for every new check).
 - `python3 testing/session_start_test.py`: every digest case passes (4/4 as of v3.9.0) — it is not in CI, so it runs here.
+- `python3 testing/write_gate_test.py` (since v3.10.0): every gate case passes — the provider boundary and the Jira/Confluence branch; not in CI, so it runs here.
 - Every example added or touched this version is universal — placeholders, no team signature, language-neutral code blocks, no domain-specific detail.
 - Trigger: ≥ 90 % per group — positive and neighbour rows alike — on each supported host (Claude Code and Codex CLI, live, from a neutral directory; a host not re-run must be named in the release notes).
 - Output eval (3b): every artifact-producing skill changed in the release scores ≥ its rubric's pass_threshold, with host and model recorded.
