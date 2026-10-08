@@ -1,7 +1,7 @@
 ---
 name: design-bridge
 version: 0.9.1
-description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку», «hi-fi прототип/екран», «дизайн-рев'ю макета у Figma». EN — "create a deck", "design review".
+description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку», «hi-fi прототип/екран», «через мій дизайн-тулкіт», «дизайн-рев'ю макета у Figma». EN — "create a deck", "design review".
 ---
 
 # Design Bridge
