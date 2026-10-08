@@ -101,6 +101,26 @@ sec, ons, cus = t4.find("zorg-core:section:begin"), t4.find("## Onboarding Statu
 check("reference section goes before Custom Sections, not before Onboarding Status", rc == 0 and -1 < ons < sec < cus, (rc, ons, sec, cus))
 shutil.rmtree(d)
 
+# 2d — idempotent refresh, changelog with block versions, the "others" label
+d, core, out = fresh()
+open(os.path.join(core, "Core", "_System", "provider-manifest.yaml"), "a").write('jira_other_label: "also:"\n')
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run",
+            "--existing-context", os.path.join(FIX, "existing-context.md"))
+p1 = os.path.join(out, "Core", "_System", "local-context.proposed.md")
+P1 = open(p1, encoding="utf-8").read() if os.path.isfile(p1) else ""
+check("changelog rows carry each block's own version", "| zorg-core `scope` | — | added (v0.4) |" in P1
+      and "| zorg-core `team` | previous version | updated (v0.2) |" in P1, P1[-900:])
+check("the 'others' label comes from the manifest", "(also: LEGACY)" in P1, "")
+again = os.path.join(d, "again.md"); shutil.copy(p1, again)
+out2 = os.path.join(d, "out2")
+rc2, o2 = run("--core", core, "--out", out2, "--email", "a.one@zorg.example", "--dry-run", "--existing-context", again)
+rep2 = report(o2, "CONTEXT_REPORT") or {}
+p2 = os.path.join(out2, "Core", "_System", "local-context.proposed.md")
+P2 = open(p2, encoding="utf-8").read() if os.path.isfile(p2) else "missing"
+check("refresh twice is a no-op", rc2 == 0 and P2 == P1 and rep2.get("updated") == [] and rep2.get("added") == []
+      and {"team", "scope", "teams"} <= set(rep2.get("unchanged", [])) and rep2.get("provider_entry") == "unchanged", (rc2, rep2))
+shutil.rmtree(d)
+
 # 3
 d, core, out = fresh()
 rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run",

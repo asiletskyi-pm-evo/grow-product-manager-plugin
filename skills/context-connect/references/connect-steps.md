@@ -46,6 +46,7 @@ What the builder does:
 - writes `_System/team-context.md`, copies the context blocks, and prepares `local-context.proposed.md`, `context-merge-report.md` and `provider-registration.proposed.yaml`;
 - places blocks: `team` right after the user's own `### Team:` section (or updates it where it is); every other block in one reference section before `## Custom Sections`; Product / Competitors / OKR / CJM / Key Metrics blocks never replace the user's sections (`reference_only` in the report); a block the user moved keeps its place and is updated there;
 - adds the provider to `## Obsidian Vaults` → `### Vault Search MCP`;
+- reports every block as added, updated, unchanged or reference only, and lists blocks the core no longer offers (left where they are); a refresh with nothing new returns your file byte for byte — no changelog, no new date;
 - is **not** a discrepancy: `Work Email` = the work e-mail; a transliterated name; any alias on the team card;
 - refuses (exit 4, nothing written) when a deny pattern or nested markers would reach the proposal.
 

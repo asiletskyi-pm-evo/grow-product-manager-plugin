@@ -124,7 +124,7 @@ ttl_days:
 | `delink_targets`, `delink_note`, `delink_labels` | — | Link targets (regular expressions) that point into the owner's personal layer: in the bundle such links become plain text, and the note is added once per changed file; a line made only of `delink_labels` words is dropped. |
 | `people_private_fields`, `people_card_note` | — | Registry cards are copied with registry fields only: these frontmatter keys and everything after the first `##` section are dropped, and the note is added. |
 | `card_fields` | — | Frontmatter keys of a team card that hold the team head and the directory node (`head`, `node` by default). |
-| `head_label`, `head_role_label` | — | How the team block names the head (`head:` by default) and a member whose only registry role is being the head (`head`). |
+| `head_label`, `head_role_label`, `jira_other_label` | — | How the team block names the head (`head:` by default), a member whose only registry role is being the head (`head`), and the team's other Jira keys (`others:`). |
 | `dashboard_rewrites` | — | `"old => new"` phrases rewritten in the entry note (the owner's wording → the reader's). |
 | `personal_notes` | — | Where the user's focus and to-do notes go (`now`, `todo`; `{{NAME}}` allowed); defaults `<plugin_folder>/Now.md` and `<plugin_folder>/TODO — {{NAME}}.md`. |
 | `role_enum_map`, `jira_write_labels` | — | Role profile → the plugin's role enum for a new context; the wording of the three write scopes. |

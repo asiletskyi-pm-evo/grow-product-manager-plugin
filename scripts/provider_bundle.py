@@ -260,7 +260,17 @@ def replace_block(text, ns, bid, block):
     e = re.escape(ns)
     # the id ends at a space or at "-->": `id=team` must never match `id=teams …` (a prefix of another block id)
     pat = re.compile(r"<!-- %s:begin id=%s(?:\s[^>]*)?-->.*?<!-- %s:end id=%s -->\n?" % (e, re.escape(bid), e, re.escape(bid)), re.S)
-    return (pat.sub(lambda mo: block, text, count=1), True) if pat.search(text) else (text, False)
+    mo = pat.search(text)
+    if not mo:
+        return text, False, False
+    if mo.group(0).rstrip("\n") == block.rstrip("\n"):
+        return text, True, False              # same content: leave the text byte-identical
+    return text[:mo.start()] + block + text[mo.end():], True, True
+
+
+def block_version(block):
+    mo = re.search(r"\sv=([^\s>]+)", block.split("-->", 1)[0])
+    return mo.group(1) if mo else "?"
 
 
 def find_anchor(text, R, patterns):
@@ -311,7 +321,7 @@ def team_context(core, m, team, tb, J, jira_write):
         "TEAM_CARD_PATH": os.path.join(m.s("team_card_dir"), "team-%s.md" % team), "NODE": node or "—",
         "HEAD_SUFFIX": (" — %s %s" % (m.s("head_label", "head:"), head)) if head else "", "HEAD": head or "—", "JIRA": jira or "—",
         "JIRA_KEY": keys[0] if keys else "_ask the team_",
-        "JIRA_OTHER": (" (others: %s)" % ", ".join(keys[1:])) if len(keys) > 1 else "",
+        "JIRA_OTHER": (" (%s %s)" % (m.s("jira_other_label", "others:"), ", ".join(keys[1:]))) if len(keys) > 1 else "",
         "JIRA_TEAM_FIELD": tf.group(1).strip() if tf else "_not set_",
         "JIRA_WRITE_SCOPE": labels.get(jira_write, labels["ask"]).replace("{KEY}", key0),
         "MISSIONS": wikilist(tb.get("missions", [])), "MODULES": wikilist(tb.get("modules", [])),
@@ -333,8 +343,11 @@ def put_bullet(t, R, bullet, pid):
         rest = t[vs.end():]
         stop = re.search(r"^#{1,3} ", rest, re.M)
         seg = rest[:stop.start()] if stop else rest
-        if line_rx.search(seg):
-            seg2 = line_rx.sub(bullet, seg, count=1); state = "updated"
+        cur = line_rx.search(seg)
+        if cur and cur.group(0) == bullet:
+            return t, "unchanged"
+        if cur:
+            seg2 = line_rx.sub(lambda mo: bullet, seg, count=1); state = "updated"
         else:
             seg2 = seg.rstrip("\n") + "\n" + bullet + "\n\n"; state = "added"
         return t[:vs.end()] + seg2 + (rest[stop.start():] if stop else ""), state
@@ -359,7 +372,7 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
     skip = [s for s in skip if s and s != "team"]
     blocks = [(blk if blk.endswith("\n") else blk + "\n", bid) for blk, bid in R["block"].findall(corectx) if bid not in skip]
     tblock, keys, members, title, canonical = team_context(core, m, ident["team"], ident["tb"], J, jira_write)
-    report = dict(mode="merge" if existing_path else "new", added=[], updated=[], reference_only=[], discrepancies=[],
+    report = dict(mode="merge" if existing_path else "new", added=[], updated=[], unchanged=[], reference_only=[], retired=[], discrepancies=[],
                   provider_entry=None, jira_keys=keys, members=len(members), jira_write=jira_write,
                   existing_context=existing_path, skipped=sorted(skip))
     bullet = vsm_bullet(m, ident["team"])
@@ -394,10 +407,10 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
             if nt and nt not in known and not any(k and (k in nt or nt in k) for k in known):
                 report["discrepancies"].append(dict(field="team", existing=et.group(1).strip(), core=title,
                                                     ask="Your context has a team under another name. Same team (add an alias) or another one?"))
-        # team block: update in place, else right after the user's own Team section, else before Analytics
-        t, done = replace_block(t, ns, "team", tblock)
+        # team block: in place when present, else right after the user's own Team section, else before Analytics
+        t, done, changed = replace_block(t, ns, "team", tblock)
         if done:
-            report["updated"].append("team")
+            report["updated" if changed else "unchanged"].append("team")
         else:
             mt = re.search(r"^###\s+Team:.*$", masked(t, R), re.M)
             pos = None
@@ -408,43 +421,50 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
                 pos = find_anchor(t, R, [r"^## Analytics", r"^## Knowledge Library", r"^## Custom Sections"])
             t = (t[:pos].rstrip("\n") + "\n\n" + tblock + "\n" + t[pos:]) if pos is not None else t.rstrip("\n") + "\n\n" + tblock
             report["added"].append("team")
-        # other blocks: the old reference section is rebuilt at the same place; a block the user moved is updated there
-        sec_pos, old_ids = None, set()
-        ms = R["section"].search(t)
-        if ms:
-            old_ids = set(re.findall(r"<!-- %s:begin id=([a-z0-9-]+)" % re.escape(ns), ms.group(0)))
-            sec_pos = ms.start(); t = t[:ms.start()] + t[ms.end():]
+        # every other block: in place wherever it already is (the user's own spot or the reference section);
+        # new blocks join the reference section, which is created once at the anchor
         rest = []
         for blk, bid in blocks:
             if bid == "team":
                 continue
-            t, done = replace_block(t, ns, bid, blk)
+            t, done, changed = replace_block(t, ns, bid, blk)
             if done:
-                report["updated"].append(bid); continue
+                report["updated" if changed else "unchanged"].append(bid); continue
             rest.append(blk)
-            if bid in old_ids:
-                report["updated"].append(bid)
-            elif bid in REFERENCE_BLOCKS and re.search(REFERENCE_BLOCKS[bid], masked(t, R), re.M):
+            if bid in REFERENCE_BLOCKS and re.search(REFERENCE_BLOCKS[bid], masked(t, R), re.M):
                 report["reference_only"].append(bid)
             else:
                 report["added"].append(bid)
         if rest:
-            sec = template(m, core, "context-section.md", {"NAMESPACE": ns, "PROVIDER_TITLE": m.s("title", m["id"]),
-                                                          "CORE_VERSION": cv, "BLOCKS": "\n".join(b.rstrip("\n") + "\n" for b in rest).rstrip("\n")})
-            pos = sec_pos if sec_pos is not None else find_anchor(t, R, [r"^## Custom Sections", r"^## Onboarding Status"])
-            t = (t[:pos].rstrip("\n") + "\n\n" + sec.rstrip("\n") + "\n\n" + t[pos:].lstrip("\n")) if pos is not None \
-                else t.rstrip("\n") + "\n\n" + sec
+            body = "\n".join(b.rstrip("\n") + "\n" for b in rest).rstrip("\n")
+            ms = R["section"].search(t)
+            if ms:
+                end = t.rfind("<!-- %s:section:end -->" % ns, ms.start(), ms.end())
+                t = t[:end].rstrip("\n") + "\n\n" + body + "\n" + t[end:]
+            else:
+                sec = template(m, core, "context-section.md", {"NAMESPACE": ns, "PROVIDER_TITLE": m.s("title", m["id"]),
+                                                              "CORE_VERSION": cv, "BLOCKS": body})
+                pos = find_anchor(t, R, [r"^## Custom Sections", r"^## Onboarding Status"])
+                t = (t[:pos].rstrip("\n") + "\n\n" + sec.rstrip("\n") + "\n\n" + t[pos:].lstrip("\n")) if pos is not None \
+                    else t.rstrip("\n") + "\n\n" + sec
+        offered = {bid for _, bid in blocks} | {"team"} | set(skip)
+        report["retired"] = sorted(set(re.findall(r"<!-- %s:begin id=([a-z0-9-]+)" % re.escape(ns), t)) - offered)
         t, state = put_bullet(t, R, bullet, m["id"])
         report["provider_entry"] = state
-        rows = "".join("| %s `%s` | — | added from core v%s |\n" % (ns, b, cv) for b in report["added"]) + \
-            "".join("| %s `%s` | previous version | updated to v%s |\n" % (ns, b, cv) for b in report["updated"]) + \
-            "".join("| %s `%s` | your section | added for reference; yours stays primary |\n" % (ns, b) for b in report["reference_only"]) + \
-            "| Obsidian Vaults → Vault Search MCP | — | provider `%s` %s |\n" % (m["id"], state)
-        t = re.sub(r"^(> Generated:[^\n]*?Updated:\s*)[0-9-]+[^\n]*$", lambda mo: "%s%s (%s refresh)." % (mo.group(1), today, ns), t, count=1, flags=re.M)
-        proposed = t.rstrip("\n") + "\n\n### Changelog — %s %s\n\n| Section | Was | Became |\n|---|---|---|\n%s" % (ns, today, rows)
-        logs = re.findall(r"\n\n### Changelog — %s .*?(?=\n\n### Changelog — %s |\Z)" % (re.escape(ns), re.escape(ns)), proposed, re.S)
-        for old in logs[:-3]:
-            proposed = proposed.replace(old, "", 1)
+        ver = {bid: block_version(blk) for blk, bid in blocks}
+        ver["team"] = block_version(tblock)
+        rows = "".join("| %s `%s` | — | added (v%s) |\n" % (ns, b, ver.get(b, "?")) for b in report["added"]) + \
+            "".join("| %s `%s` | previous version | updated (v%s) |\n" % (ns, b, ver.get(b, "?")) for b in report["updated"]) + \
+            "".join("| %s `%s` | your section | added for reference (v%s); yours stays primary |\n" % (ns, b, ver.get(b, "?")) for b in report["reference_only"]) + \
+            ("| Obsidian Vaults → Vault Search MCP | — | provider `%s` %s |\n" % (m["id"], state) if state != "unchanged" else "")
+        if not rows:
+            proposed = t                          # nothing changed: the proposal is the user's file, byte for byte
+        else:
+            t = re.sub(r"^(> Generated:[^\n]*?Updated:\s*)[0-9-]+[^\n]*$", lambda mo: "%s%s (%s refresh)." % (mo.group(1), today, ns), t, count=1, flags=re.M)
+            proposed = t.rstrip("\n") + "\n\n### Changelog — %s %s\n\n| Section | Was | Became |\n|---|---|---|\n%s" % (ns, today, rows)
+            logs = re.findall(r"\n\n### Changelog — %s .*?(?=\n\n### Changelog — %s |\Z)" % (re.escape(ns), re.escape(ns)), proposed, re.S)
+            for old in logs[:-3]:
+                proposed = proposed.replace(old, "", 1)
     else:
         sec = template(m, core, "context-section.md", {"NAMESPACE": ns, "PROVIDER_TITLE": m.s("title", m["id"]), "CORE_VERSION": cv,
                                                       "BLOCKS": "\n".join(b.rstrip("\n") + "\n" for b, bid in blocks if bid != "team").rstrip("\n")}) if blocks else ""
@@ -481,8 +501,10 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
     rep = ["# Context merge report — %s" % today, "",
            "- Mode: **%s** · core v%s · provider_bundle %s" % ("merge with your context" if existing_path else "new minimal context", cv, __version__),
            "- Proposal: `%s/_System/local-context.proposed.md` → after you confirm it is copied to `~/.grow-pm/local-context.md` (old one backed up)" % pf,
-           "- Added: %s · updated: %s · reference only (you have your own section): %s · provider entry: %s" % (
-               ", ".join(report["added"]) or "—", ", ".join(report["updated"]) or "—", ", ".join(report["reference_only"]) or "—", report["provider_entry"]),
+           "- Added: %s · updated: %s · unchanged: %s · reference only (you have your own section): %s · provider entry: %s" % (
+               ", ".join(report["added"]) or "—", ", ".join(report["updated"]) or "—", ", ".join(report["unchanged"]) or "—",
+               ", ".join(report["reference_only"]) or "—", report["provider_entry"]),
+           "- No longer offered by the core (left where they are, yours to remove): %s" % (", ".join(report["retired"]) or "—"),
            "- Team: jira_project_key %s, jira_write_scope `%s`, members in the registry %d" % (keys or "—", jira_write, len(members)),
            "- Skipped on your request (never proposed): %s" % (", ".join(skip) or "—"), ""]
     if report["discrepancies"]:
