@@ -10,7 +10,7 @@ isolated HOME, so the user's real configuration is never read.
 
 Stdlib only; run from the repo root.
 """
-import json, os, subprocess, sys, tempfile
+import json, os, shutil, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GATE = os.path.join(ROOT, "scripts", "write_gate.py")
@@ -67,6 +67,22 @@ with tempfile.TemporaryDirectory() as d:
     check("paused registration allows", out == "", out)
     out = run({"HOME": home, "PATH": os.environ.get("PATH", "")}, {"tool_name": "Write", "tool_input": {"file_path": "/tmp/x.md"}})
     check("no context file allows", out == "", out)
+    # since the final review: symlinks, the hook's cwd, a hosted session's connected folder
+    open(reg, "w").write(src)                          # back to active
+    link = os.path.join(d, "core-link"); os.symlink(core, link)
+    out = run(env, {"tool_name": "Write", "tool_input": {"file_path": os.path.join(link, "Core", "Teams", "y.md")}})
+    check("write through a symlink to the root asks", '"permissionDecision": "ask"' in out, out)
+    open(reg, "w").write(src.replace(core, link))       # root registered through the symlink
+    out = run(env, {"tool_name": "Write", "tool_input": {"file_path": os.path.join(core, "Core", "Teams", "y.md")}})
+    check("root registered via a symlink, write via the real path asks", '"permissionDecision": "ask"' in out, out)
+    open(reg, "w").write(src)
+    out = run(env, {"cwd": os.path.join(core, "Core"), "tool_name": "Edit", "tool_input": {"file_path": "Teams/z.md"}})
+    check("relative path resolved against the hook cwd asks", '"permissionDecision": "ask"' in out, out)
+    mnt = os.path.join(home, "mnt", "Vault", ".grow-pm"); os.makedirs(mnt)
+    shutil.copy(ctx, os.path.join(mnt, "local-context.md"))
+    out = run({"HOME": home, "PATH": os.environ.get("PATH", ""), "CLAUDE_PLUGIN_DATA": pdata},
+              {"tool_name": "Write", "tool_input": {"file_path": os.path.join(core, "Core", "Teams", "w.md")}})
+    check("hosted session: context in a connected folder still guards", '"permissionDecision": "ask"' in out, out)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

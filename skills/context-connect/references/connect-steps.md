@@ -14,7 +14,7 @@ Talk about teams, roles, bundles and context — not about paths, regular expres
 4. **Declined blocks.** A user who already merged only some of the core's blocks (others duplicate their own sections) keeps that choice: ask once which block ids to skip, or read `skip_blocks` from the registration.
 5. **Target.** The core unpacked as the user's own copy (no `_System/bundle-manifest.md` yet) → in-place (`--in-place`, `--out` = the same folder). A separate core and a separate target → a selective copy into `--out`. A target that already has `_System/bundle-manifest.md` → **refresh**: read team, role and core version from it.
 
-When `~/.grow-pm/` is not visible from the shell (hosted sessions see the user's files through connected folders), ask the user to place a copy of their context as `<target>/<plugin_folder>/_System/local-context.existing.md` — the builder picks it up without a flag — or read it through device tools.
+When `~/.grow-pm/` is not visible from the shell (hosted sessions see the user's files through connected folders), ask the user to place a copy of their context as `local-context.existing.md` in the proposal folder (`--proposal-dir`, §3), or in `<target>/<plugin_folder>/_System/` when the target is the user's own — the builder picks it up without a flag — or read it through device tools.
 
 ## §1 Identity — dry run
 
@@ -25,6 +25,8 @@ python3 "<plugin root>/scripts/provider_bundle.py" --core "<core>" --out "<targe
 - The first line, `email … → team … · role …`, becomes one sentence for the user; the role is inferred from the registry card's role title (`role_hints`) — the user may correct it.
 - `UNKNOWN_TEAM {json}` (exit 2) — the e-mail is not in the role model: (1) look it up in the provider's directory (`directory_label`) if the user has access, and map the unit to a team card; (2) otherwise one question with the team titles and the role profiles from the JSON; (3) repeat with `--team <slug> --role <profile>`; (4) at the end, a line for the owner to add the person to the registry.
 - An umbrella team (a department lead) means the union of its teams: warn that the bundle is large.
+- The first line ends with `inferred '<role>' is not in the role model, using '<profile>'` — say which profile was used in the same sentence and offer to pick another (`--role`).
+- Exit 3 prints one line naming the file, the line or the key: the core or its manifest is missing or does not parse, a pattern does not compile, the role model does not load, or an explicit `--role` is not in it. Show the line, nothing was written; a defect in the core goes to its owner.
 
 ## §2 Jira write scope
 
@@ -35,20 +37,23 @@ One question with three answers: "yes — <key from the team card>" · "yes — 
 ```
 python3 "<plugin root>/scripts/provider_bundle.py" --core "<core>" --out "<target>" --email <e-mail> \
         [--in-place] [--team <slug>] [--role <profile>] [--name "Name Surname"] \
-        [--existing-context "<copy of local-context.md>"] --jira-write own|none [--no-personal-overlay]
+        [--existing-context "<copy of local-context.md>"] --jira-write own|none [--no-personal-overlay] \
+        [--skip-blocks <id,id>] [--proposal-dir "<private folder>"]
 ```
 
 Pass `--skip-blocks <id,id>` with the blocks the user declined (a refresh reads them from the registration's `skip_blocks`): they are never proposed, the report lists them, and the proposed registration keeps the list. Run `--dry-run` first when the user has a context: it already writes the merge report and the proposal, so duplicates and discrepancies show before anything is copied. Use `--no-personal-overlay` when building an archive for others (focus and to-do notes are created on the user's machine instead). `--force` rewrites the user's notes in the bundle — only on request.
 
+**Where the proposal goes.** The proposal and the report hold the user's whole context. By default they land in `<target>/<plugin_folder>/_System/`, which is right for a target the user owns. When the target is the core itself (in-place) and the core folder syncs back to others — a shared drive, a team repository, a sync job — pass `--proposal-dir` with a folder only the user sees: `{vault}/{plugin_folder}/_System/` in their own vault, else `~/.grow-pm/proposals/<provider id>/`.
+
 What the builder does:
 - copies the role-filtered part of the core (shared files, the team's files by the role's layers, the manifest), never the owner's personal layer (`exclude`, `personal_overlay`), registry cards with registry fields only;
 - turns links into the owner's personal layer into plain text, adds one note per changed file, prunes the entry note's links to files outside the bundle;
-- writes `_System/team-context.md`, copies the context blocks, and prepares `local-context.proposed.md`, `context-merge-report.md` and `provider-registration.proposed.yaml`;
+- writes `team-context.md` and prepares `local-context.proposed.md`, `context-merge-report.md` and `provider-registration.proposed.yaml` in the proposal folder;
 - places blocks: `team` right after the user's own `### Team:` section (or updates it where it is); every other block in one reference section before `## Custom Sections`; Product / Competitors / OKR / CJM / Key Metrics blocks never replace the user's sections (`reference_only` in the report); a block the user moved keeps its place and is updated there;
 - adds the provider to `## Obsidian Vaults` → `### Vault Search MCP`;
 - reports every block as added, updated, unchanged or reference only, and lists blocks the core no longer offers (left where they are); a refresh with nothing new returns your file byte for byte — no changelog, no new date;
 - is **not** a discrepancy: `Work Email` = the work e-mail; a transliterated name; any alias on the team card;
-- refuses (exit 4, nothing written) when a deny pattern or nested markers would reach the proposal.
+- refuses (exit 4, nothing written) when a block the provider contributes matches a deny pattern — the line names the block and the core's owner fixes it; the user's own text is never checked — or when nested markers would reach the proposal.
 
 ## §4 Apply
 

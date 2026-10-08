@@ -82,6 +82,12 @@ with tempfile.TemporaryDirectory() as d:
     ss.export_env("/tmp/ctx.md", [core])
     got = open(envf).read()
     check("env export", "GROW_PM_CONTEXT_PATH" in got and "GROW_PM_PROVIDER_PATHS" in got and core in got, got)
+    uni = os.path.join(d, "Ядро спільне")
+    open(envf, "w").close()
+    ss.export_env("/tmp/ctx.md", [uni])
+    import subprocess
+    got = subprocess.run(["bash", "-c", '. "$1"; printf %s "$GROW_PM_PROVIDER_PATHS"', "x", envf], capture_output=True, text=True).stdout
+    check("env export keeps non-ASCII paths readable by bash", got == uni, got)
     del os.environ["CLAUDE_ENV_FILE"]
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")

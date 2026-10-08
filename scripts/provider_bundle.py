@@ -5,6 +5,7 @@ core and propose its context blocks for the user's local-context.md (since v3.10
   python3 provider_bundle.py --core <core root> --out <target> --email <e-mail>
           [--manifest <path>] [--team <slug>] [--role <profile>] [--name "Name"]
           [--existing-context <copy of local-context.md>] [--jira-write own|none|ask]
+          [--skip-blocks <id,id>] [--proposal-dir <private folder>]
           [--dry-run] [--force] [--in-place] [--no-personal-overlay]
   python3 provider_bundle.py --core <core root> --out <target> --core-export
 
@@ -13,13 +14,19 @@ personal, what must never be copied — comes from the provider manifest
 (`_System/provider-manifest.yaml`, references/context-provider-protocol.md §3a, §9).
 
 The user's context is never written: the script writes a PROPOSAL into
-<out>/<plugin_folder>/_System/ (local-context.proposed.md, context-merge-report.md,
-team-context.md, provider-registration.proposed.yaml) and the connect skill applies
-it after the user confirms. Last stdout lines: `CONTEXT_REPORT {json}` and
-`BUNDLE_RESULT {json}`.
+<out>/<plugin_folder>/_System/, or into --proposal-dir (local-context.proposed.md,
+context-merge-report.md, team-context.md, provider-registration.proposed.yaml), and
+the connect skill applies it after the user confirms. The proposal holds the user's
+whole context: when <out> is a core that syncs back to others, pass --proposal-dir.
+A copy of the context named local-context.existing.md in the proposal folder (else in
+<out>/<plugin_folder>/_System/) is used when --existing-context is not given.
+Last stdout lines: `CONTEXT_REPORT {json}` and `BUNDLE_RESULT {json}`.
 
-Exit codes: 0 ok · 2 UNKNOWN_TEAM (one JSON line) · 3 core, manifest or role model
-missing · 4 a deny pattern or nested markers in the proposal (nothing written).
+Exit codes: 0 ok · 2 UNKNOWN_TEAM (one JSON line) · 3 the core, the manifest or the
+role model is missing or unreadable, a manifest pattern does not compile, or an
+explicit --role is not in the role model (one line naming the file, line or key) ·
+4 a block the provider contributes matches a deny pattern (the line names the block),
+or the proposal would have nested markers — nothing written.
 Stdlib only. Idempotent: existing files are kept unless --force.
 """
 import argparse
@@ -101,7 +108,10 @@ def load_manifest(core, path=None):
         sorted(glob.glob(os.path.join(core, "*", "_System", "provider-manifest.yaml")))
     for p in cands:
         if p and os.path.isfile(p):
-            m = Manifest(cc.read_yaml_subset(rd(p)))
+            try:
+                m = Manifest(cc.read_yaml_subset(rd(p)))
+            except (ValueError, UnicodeDecodeError) as e:
+                sys.stdout.write("provider manifest %s: %s\n" % (p, e)); sys.exit(3)
             m["_path"] = os.path.relpath(os.path.abspath(p), os.path.abspath(core))
             pf = m.s("plugin_folder", ".")
             m.setdefault("namespace", m.get("id"))
@@ -111,6 +121,18 @@ def load_manifest(core, path=None):
             return m
     sys.stdout.write("no provider manifest under %s (expected _System/provider-manifest.yaml)\n" % core)
     sys.exit(3)
+
+
+def check_patterns(m):
+    """Every regular expression the manifest carries compiles, or exit 3 naming the key."""
+    keys = [("exclude", m.get("exclude") or []), ("deny_patterns", m.get("deny_patterns") or []),
+            ("delink_targets", m.get("delink_targets") or []), ("role_hints", list((m.get("role_hints") or {}).values()))]
+    for key, pats in keys:
+        for pat in pats if isinstance(pats, list) else [pats]:
+            try:
+                re.compile(str(pat))
+            except re.error as e:
+                sys.stdout.write("provider manifest key %s: bad regular expression %r (%s)\n" % (key, pat, e)); sys.exit(3)
 
 
 def template(m, core, name, values):
@@ -304,7 +326,7 @@ def team_context(core, m, team, tb, J, jira_write):
         if not p.endswith(".md") or p.startswith("_"):
             continue
         pf, _ = split_fm(rd(os.path.join(pdir, p)))
-        if "team-%s" % team in fget(pf, "team") and fget(pf, "status") != "former":
+        if re.search(r"(?<![\w-])team-%s(?![\w-])" % re.escape(team), fget(pf, "team")) and fget(pf, "status") != "former":
             members.append(dict(name=fget(pf, "name"), email=fget(pf, "email"), role=fget(pf, "role"),
                                 pos=fget(pf, "position"), head=fget(pf, "is_head") == "true", slug=p[:-3],
                                 stub=fget(pf, "registry_stub") == "true"))
@@ -367,10 +389,10 @@ def put_bullet(t, R, bullet, pid):
     return ((t[:pos] + sec + t[pos:]) if pos is not None else t.rstrip("\n") + "\n\n" + sec), "added"
 
 
-def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip=()):
+def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip=(), proposal_dir=None):
     ns, pf = m["namespace"], m.s("plugin_folder", ".")
     R = ns_rx(ns)
-    sysd = os.path.join(out, pf, "_System")
+    sysd = os.path.abspath(proposal_dir) if proposal_dir else os.path.join(out, pf, "_System")
     cv = J.get("version", "?")
     bpath = os.path.join(core, m.s("blocks_file")) if m.s("blocks_file") else ""
     corectx = rd(bpath) if bpath and os.path.isfile(bpath) else ""
@@ -381,6 +403,12 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
                   provider_entry=None, jira_keys=keys, members=len(members), jira_write=jira_write,
                   existing_context=existing_path, skipped=sorted(skip))
     bullet = vsm_bullet(m, ident["team"])
+    deny = [p for p in (m.get("deny_patterns") or []) if p]
+    for name, text in [("team", tblock)] + [(bid, blk) for blk, bid in blocks] + [("provider entry", bullet)]:
+        hits = [p for p in deny if re.search(p, text)]
+        if hits:
+            sys.stdout.write("DENY pattern in the provider's `%s` block — nothing written: %s (the core's owner must fix the core)\n"
+                             % (name, ", ".join(hits))); sys.exit(4)
     if existing_path:
         ex = rd(existing_path); t = ex
         mex = masked(ex, R)
@@ -480,9 +508,6 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
                                                              "EMAIL": ident["email"], "TEAM_BLOCK": tblock.rstrip("\n"),
                                                              "SECTION": sec.rstrip("\n"), "VSM_BULLET": bullet})
         report["added"] = [b for _, b in blocks if b != "team"] + ["team"]; report["provider_entry"] = "added"
-    deny = [p for p in (m.get("deny_patterns") or []) if p and re.search(p, proposed)]
-    if deny:
-        sys.stdout.write("DENY pattern in the proposed context — nothing written: %s\n" % ", ".join(deny)); sys.exit(4)
     depth = 0
     for kind in R["depth"].findall(proposed):
         depth += 1 if kind == "begin" else -1
@@ -557,6 +582,7 @@ def main():
     ap.add_argument("--in-place", action="store_true"); ap.add_argument("--no-personal-overlay", action="store_true")
     ap.add_argument("--core-export", action="store_true"); ap.add_argument("--version", action="version", version=__version__)
     ap.add_argument("--skip-blocks", default="", help="comma-separated block ids the user declined; never proposed (kept in the registration)")
+    ap.add_argument("--proposal-dir", help="where the proposal (it holds your whole context) and the report go; default <out>/<plugin_folder>/_System — use a private folder when the core syncs back to others")
     a = ap.parse_args()
     core, out = os.path.abspath(a.core), os.path.abspath(a.out)
     if not os.path.isdir(core):
@@ -564,10 +590,14 @@ def main():
     m = load_manifest(core, a.manifest)
     if not m.get("id"):
         sys.stdout.write("provider manifest has no id\n"); sys.exit(3)
+    check_patterns(m)
     jp = os.path.join(core, m.s("bundles_file") or os.path.join(m.s("plugin_folder", "."), "_System", "access-bundles.json"))
     if not os.path.isfile(jp):
         sys.stdout.write("role model not found: %s\n" % jp); sys.exit(3)
-    J = json.load(open(jp, encoding="utf-8"))
+    try:
+        J = json.load(open(jp, encoding="utf-8"))
+    except (ValueError, OSError) as e:
+        sys.stdout.write("role model %s: %s\n" % (jp, e)); sys.exit(3)
     exc = re.compile("|".join(BUILTIN_EXCLUDE + [x for x in (m.get("exclude") or []) if x]))
     overlay = m.get("personal_overlay") or []
     excluded = lambda f: bool(exc.search(f)) or cc._writable(f, overlay)
@@ -622,21 +652,28 @@ def main():
     local = email.split("@")[0].replace(".", "-")
     pslug = next((os.path.basename(f)[:-3] for f in tb.get("files", []) if f.startswith(people_pre) and os.path.basename(f)[:-3] == local), None)
     role_title = J.get("people_role", {}).get(pslug or "", "")
-    role = a.role or infer_role(role_title, m)
-    if role not in J.get("roles", {}):
-        sys.stdout.write("role profile '%s' is not in the role model (%s)\n" % (role, ", ".join(sorted(J.get("roles", {}))))); sys.exit(3)
+    roles = J.get("roles", {})
+    role, role_note = a.role or infer_role(role_title, m), ""
+    if role not in roles:
+        if a.role or not roles:
+            sys.stdout.write("role profile '%s' is not in the role model (%s)\n" % (role, ", ".join(sorted(roles)))); sys.exit(3)
+        fallback = "pm" if "pm" in roles else sorted(roles)[0]
+        role_note = " — inferred '%s' is not in the role model, using '%s'; pass --role to choose" % (role, fallback)
+        role = fallback
     layers = J["roles"][role]
     files = select_files(core, J, m, tb, layers, excluded)
     conf = sum(1 for f in files if pages and f.startswith(pages))
-    print("email %s → team %s (%s) · role %s (%s) · layers %d · files %d (pages %d, umbrella %s) · provider_bundle %s" % (
-        email, team, tb.get("title", team), role, role_title or "default", len(layers), len(files), conf,
+    print("email %s → team %s (%s) · role %s (%s%s) · layers %d · files %d (pages %d, umbrella %s) · provider_bundle %s" % (
+        email, team, tb.get("title", team), role, role_title or "default", role_note, len(layers), len(files), conf,
         "yes" if tb.get("umbrella") else "no", __version__))
     name = a.name
     if not name and pslug and os.path.isfile(os.path.join(core, people_pre, pslug + ".md")):
         name = fget(split_fm(rd(os.path.join(core, people_pre, pslug + ".md")))[0], "name")
     name = name or email
     ident = dict(email=email, name=name, team=team, tb=tb, role=role, role_title=role_title)
-    existing = a.existing_context or next((c for c in (os.path.join(out, pf, "_System", "local-context.existing.md"),) if os.path.isfile(c)), None)
+    copies = ([os.path.join(os.path.abspath(a.proposal_dir), "local-context.existing.md")] if a.proposal_dir else []) + \
+             [os.path.join(out, pf, "_System", "local-context.existing.md")]
+    existing = a.existing_context or next((c for c in copies if os.path.isfile(c)), None)
     in_place = a.in_place or out == core
     skip = [s.strip() for s in a.skip_blocks.split(",") if s.strip()]
     if a.dry_run:
@@ -644,7 +681,7 @@ def main():
                               modules=tb.get("modules", []), missions=tb.get("missions", []), metrics=tb.get("metrics", []),
                               dashboards=tb.get("dashboards", []), union_of=tb.get("union_of", [])), ensure_ascii=False, indent=1))
         if existing or in_place:
-            build_context(core, out, m, J, ident, existing, today, a.jira_write, skip)
+            build_context(core, out, m, J, ident, existing, today, a.jira_write, skip, a.proposal_dir)
         return
     n_new = n_skip = 0
     if not in_place:
@@ -673,7 +710,7 @@ def main():
         for f in (".obsidian/app.json", ".obsidian/appearance.json", ".obsidian/backlink.json", ".obsidian/core-plugins.json", ".obsidian/graph.json"):
             if os.path.isfile(os.path.join(core, f)) and not os.path.exists(os.path.join(out, f)):
                 os.makedirs(os.path.join(out, ".obsidian"), exist_ok=True); shutil.copy2(os.path.join(core, f), os.path.join(out, f))
-    report = build_context(core, out, m, J, ident, existing, today, a.jira_write, skip)
+    report = build_context(core, out, m, J, ident, existing, today, a.jira_write, skip, a.proposal_dir)
     pbase = os.path.basename(m.s("people_dir").rstrip("/"))
     own = []
     mdir = os.path.join(core, m.s("missions_dir")) if m.s("missions_dir") else ""

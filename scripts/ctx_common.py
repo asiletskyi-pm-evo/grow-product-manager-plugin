@@ -239,7 +239,8 @@ def provider_roots(regs):
 
 
 def _norm(p):
-    return os.path.normpath(os.path.abspath(os.path.expanduser(N(p))))
+    """Absolute, symlinks resolved (vaults in iCloud/Dropbox are often symlinked; /tmp is /private/tmp on macOS), NFC."""
+    return N(os.path.realpath(os.path.abspath(os.path.expanduser(N(p)))))
 
 
 def is_under(path, roots):

@@ -124,7 +124,7 @@ Wait for the user to confirm "done" via AskUserQuestion:
 3. If one answers:
    - Mark `vault_level = L2`.
    - Inform: "✅ Search provider `<id>` answers — the plugin will use it for full-text and graph search."
-   - Offer to declare it in `## Obsidian Vaults` → `### Vault Search MCP` (`references/context-schema.md` → Vault Search MCP subsection format); a shared team core goes through `context-connect` instead.
+   - Inform only, no question in this step: "To keep it for every session, add it later through Update → Shared context providers." (Declaration format: `references/context-schema.md` → Vault Search MCP subsection; a team's shared core goes through `context-connect`.)
 4. If none answers:
    - Mark `vault_level = L1`.
    - Inform: "ℹ️ No search provider answers — that's fine. The plugin will use the filesystem for search. A local index or a team's provider can be added later with no setup loss."

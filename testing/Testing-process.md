@@ -172,7 +172,7 @@ Static checks prove the tree is consistent; they cannot prove a host still loads
 - `bash testing/validate-consistency.sh`: every check group green.
 - Lint: 0 FAIL (26 checks as of v3.10.0).
 - Seeded-leak test: 27/27 caught (and a new seed for every new check).
-- `python3 testing/session_start_test.py`: every digest case passes (11/11 as of v3.10.0) — it is not in CI, so it runs here.
+- `python3 testing/session_start_test.py`: every digest case passes (12/12 as of v3.10.0) — it is not in CI, so it runs here.
 - `python3 testing/ctx_common_test.py` (8/8) and `python3 testing/provider_bundle_test.py` (since v3.10.0): the provider helpers and the bundle builder on the fictional fixture core — not in CI, so they run here.
 - `python3 testing/branch_leak_scan.py --base main` (since v3.10.0): clean — no organisation identifier in any line the branch adds or in its commit messages; `python3 testing/branch_leak_scan_test.py` proves the scan fires.
 - `python3 testing/write_gate_test.py` (since v3.10.0): every gate case passes — the provider boundary and the Jira/Confluence branch; not in CI, so it runs here.

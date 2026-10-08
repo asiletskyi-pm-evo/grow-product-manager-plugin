@@ -18,6 +18,7 @@ import glob
 import json
 import os
 import re
+import shlex
 import sqlite3
 import sys
 
@@ -262,8 +263,9 @@ def export_env(path, provider_paths=()):
         return
     try:
         with open(env_file, "a", encoding="utf-8") as f:
-            f.write("export GROW_PM_CONTEXT_PATH=%s\n" % json.dumps(path))
-            f.write("export GROW_PM_PROVIDER_PATHS=%s\n" % json.dumps(os.pathsep.join(provider_paths)))
+            # shlex, not JSON: bash keeps \uXXXX escapes literally, and folder names may be non-ASCII
+            f.write("export GROW_PM_CONTEXT_PATH=%s\n" % shlex.quote(path))
+            f.write("export GROW_PM_PROVIDER_PATHS=%s\n" % shlex.quote(os.pathsep.join(provider_paths)))
     except Exception:
         pass
 

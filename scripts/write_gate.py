@@ -70,23 +70,31 @@ def content_size(obj):
     return best
 
 
-def context_text():
-    """The user's local-context.md as the digest found it, else the canonical path."""
-    for p in (os.environ.get("GROW_PM_CONTEXT_PATH"),
-              os.path.join(os.path.expanduser("~"), ".grow-pm", "local-context.md")):
+def context_text(cwd=None):
+    """The user's local-context.md: the digest's path, the canonical store, then every place the
+    SessionStart digest searches (connected folders in hosted sessions, the working directory)."""
+    cands = [os.environ.get("GROW_PM_CONTEXT_PATH"), os.path.join(os.path.expanduser("~"), ".grow-pm", "local-context.md")]
+    try:
+        import session_start
+        cands += session_start.candidates(cwd or os.getcwd())
+    except Exception:
+        pass
+    for p in cands:
         if p and os.path.isfile(p):
             with open(p, encoding="utf-8", errors="replace") as f:
                 return f.read()
     return ""
 
 
-def provider_hit(tool_input):
+def provider_hit(tool_input, cwd=None):
     """The provider registration whose read-only folder holds the target, or None."""
     path = str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
     if not path:
         return None, ""
+    if not os.path.isabs(os.path.expanduser(path)) and cwd:
+        path = os.path.join(cwd, path)           # the hook input's cwd, not this process's
     import ctx_common as cc
-    text = context_text()
+    text = context_text(cwd)
     regs = cc.find_registrations(cc.vault_entries(text) if text else [])
     return cc.boundary_hit(path, regs), path
 
@@ -107,7 +115,7 @@ def main():
     if not tool or not write_gate_enabled():
         return
     if tool in FILE_TOOLS:
-        hit, path = provider_hit(tool_input)
+        hit, path = provider_hit(tool_input, data.get("cwd"))
         if hit:
             ask("Grow PM provider boundary: %s is inside the local folder of the shared-context provider "
                 "'%s', which is read-only for this plugin (references/context-provider-protocol.md §7). "
