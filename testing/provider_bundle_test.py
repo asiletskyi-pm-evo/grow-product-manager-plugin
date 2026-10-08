@@ -80,6 +80,27 @@ _tc = os.path.join(out, "Core", "_System", "team-context.md")
 check("head label from manifest", os.path.isfile(_tc) and "— lead: Alex One" in open(_tc, encoding="utf-8").read(), "")
 shutil.rmtree(d)
 
+# 2c — a block id that is a prefix of another (team / teams) and the reference-section anchor
+d, core, out = fresh()
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run", "--skip-blocks", "scope,product",
+            "--existing-context", os.path.join(FIX, "existing-context-teams.md"))
+rep = report(o, "CONTEXT_REPORT") or {}
+pp = os.path.join(out, "Core", "_System", "local-context.proposed.md")
+t3 = open(pp, encoding="utf-8").read() if os.path.isfile(pp) else ""
+check("a 'team' block never swallows 'teams'", rc == 0 and {"team", "teams"} <= set(rep.get("updated", []))
+      and "teams" not in rep.get("added", []) and t3.count("<!-- zorg-core:begin id=teams ") == 1
+      and t3.find("id=teams ") < t3.find("id=team ") and "zorg-core:section:begin" not in t3
+      and "Teams map (old copy)" not in t3 and "### Teams map" in t3, (rc, rep))
+shutil.rmtree(d)
+d, core, out = fresh()
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run",
+            "--existing-context", os.path.join(FIX, "existing-context-teams.md"))
+pp = os.path.join(out, "Core", "_System", "local-context.proposed.md")
+t4 = open(pp, encoding="utf-8").read() if os.path.isfile(pp) else ""
+sec, ons, cus = t4.find("zorg-core:section:begin"), t4.find("## Onboarding Status"), t4.find("## Custom Sections")
+check("reference section goes before Custom Sections, not before Onboarding Status", rc == 0 and -1 < ons < sec < cus, (rc, ons, sec, cus))
+shutil.rmtree(d)
+
 # 3
 d, core, out = fresh()
 rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run",

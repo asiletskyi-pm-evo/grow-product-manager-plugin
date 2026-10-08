@@ -258,13 +258,19 @@ def masked(text, R):
 
 def replace_block(text, ns, bid, block):
     e = re.escape(ns)
-    pat = re.compile(r"<!-- %s:begin id=%s[^>]*-->.*?<!-- %s:end id=%s -->\n?" % (e, re.escape(bid), e, re.escape(bid)), re.S)
+    # the id ends at a space or at "-->": `id=team` must never match `id=teams …` (a prefix of another block id)
+    pat = re.compile(r"<!-- %s:begin id=%s(?:\s[^>]*)?-->.*?<!-- %s:end id=%s -->\n?" % (e, re.escape(bid), e, re.escape(bid)), re.S)
     return (pat.sub(lambda mo: block, text, count=1), True) if pat.search(text) else (text, False)
 
 
-def find_anchor(text, R, pattern):
-    mo = re.search(pattern, masked(text, R), re.M)
-    return mo.start() if mo else None
+def find_anchor(text, R, patterns):
+    """Position of the first pattern, in PRIORITY order, that matches outside managed regions."""
+    mt = masked(text, R)
+    for pattern in patterns:
+        mo = re.search(pattern, mt, re.M)
+        if mo:
+            return mo.start()
+    return None
 
 
 # ------------------------------------------------------------- team block
@@ -338,7 +344,7 @@ def put_bullet(t, R, bullet, pid):
         stop = re.search(r"^## ", rest, re.M)
         pos = ov.end() + (stop.start() if stop else len(rest))
         return t[:pos].rstrip("\n") + "\n\n### Vault Search MCP\n" + bullet + "\n\n" + t[pos:], "added"
-    pos = find_anchor(t, R, r"^## Custom Sections")
+    pos = find_anchor(t, R, [r"^## Custom Sections"])
     sec = "## Obsidian Vaults (Optional)\n\n### Vault Search MCP\n" + bullet + "\n\n"
     return ((t[:pos] + sec + t[pos:]) if pos is not None else t.rstrip("\n") + "\n\n" + sec), "added"
 
@@ -399,7 +405,7 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
                 nxt = re.search(r"^#{1,3} (?!#)", masked(t, R)[mt.end():], re.M)
                 pos = mt.end() + (nxt.start() if nxt else len(t) - mt.end())
             if pos is None:
-                pos = find_anchor(t, R, r"^## Analytics|^## Knowledge Library|^## Custom Sections")
+                pos = find_anchor(t, R, [r"^## Analytics", r"^## Knowledge Library", r"^## Custom Sections"])
             t = (t[:pos].rstrip("\n") + "\n\n" + tblock + "\n" + t[pos:]) if pos is not None else t.rstrip("\n") + "\n\n" + tblock
             report["added"].append("team")
         # other blocks: the old reference section is rebuilt at the same place; a block the user moved is updated there
@@ -425,7 +431,7 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
         if rest:
             sec = template(m, core, "context-section.md", {"NAMESPACE": ns, "PROVIDER_TITLE": m.s("title", m["id"]),
                                                           "CORE_VERSION": cv, "BLOCKS": "\n".join(b.rstrip("\n") + "\n" for b in rest).rstrip("\n")})
-            pos = sec_pos if sec_pos is not None else find_anchor(t, R, r"^## Custom Sections|^## Onboarding Status")
+            pos = sec_pos if sec_pos is not None else find_anchor(t, R, [r"^## Custom Sections", r"^## Onboarding Status"])
             t = (t[:pos].rstrip("\n") + "\n\n" + sec.rstrip("\n") + "\n\n" + t[pos:].lstrip("\n")) if pos is not None \
                 else t.rstrip("\n") + "\n\n" + sec
         t, state = put_bullet(t, R, bullet, m["id"])
