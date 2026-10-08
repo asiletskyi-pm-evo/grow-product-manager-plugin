@@ -172,6 +172,7 @@ Defines which artifact types are relevant to each skill. `local-context-protocol
 | delegation-coach | people, delegation-audit, goal-letter |
 | template-library | (none — operates on Templates/, not artifacts) |
 | plugin-configurator | (none — configures, does not consume artifacts) |
+| context-connect | (none — operates on provider folders and `local-context.md`) |
 | release-manager | decision |
 
 > People types are only ever surfaced to People-contour skills. A product skill must not pull `people` / `one-on-one-notes` / `performance-review` into its context (`data-policy.md`).

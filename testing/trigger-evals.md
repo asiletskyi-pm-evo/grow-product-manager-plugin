@@ -280,6 +280,21 @@ Collisions: v3.9.0 changes three `description`s (requirements-creator names AI-f
 | S15 | set kill criteria for the quarter in our Q4 plan | quarterly-planning — NOT goal-setter |
 | S16 | чи спрацювали kill criteria з плану минулого кварталу | quarterly-planning (retro) — NOT product-reporter |
 
+### Group T — Shared-context providers (added 2026-10-08, v3.10.0)
+
+Collisions: v3.10.0 adds two skills. Connecting to a team's shared core, refreshing its bundle or enriching the context with its blocks is context-connect — the plugin's own setup (products, connectors, Obsidian, roles) stays plugin-configurator, and adding a source to the curated library stays knowledge-library. Answering *from* the shared core — who owns what, what a team does, where a rule lives, which missions a team has — is context-navigator; "why did we decide" stays decision-log, a dashboard read stays product-analysis, and "which sources do we have" stays knowledge-library.
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| T1 | підключи мене до спільного вейлта команди | context-connect |
+| T2 | connect me to the team vault | context-connect |
+| T3 | налаштуй плагін під мій продукт | plugin-configurator — NOT context-connect |
+| T4 | онови мій пакет з ядра | context-connect |
+| T5 | додай у бібліотеку цю статтю про чекаут | knowledge-library — NOT context-connect |
+| T6 | add a context provider for our shared core MCP | context-connect |
+| T7 | збагати мій контекст блоками спільного ядра | context-connect |
+| T8 | підключи Obsidian-вейлт | plugin-configurator — NOT context-connect |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
