@@ -10,7 +10,8 @@ linter passed green; each is now a named check (see CHECKS below).
 Checks 19-25 are the exception, and say so: they are preventive guards for the
 role layer (19-22, JCRL v3.5.0, references/role-profiles.md), the judgment points
 (23, v3.7.0), the evidence classes (24, v3.8.0) and the judgment binds (25, v3.9.0),
-written before any defect of their class could ship. Each one still has a seed in
+written before any defect of their class could ship. Check 26 (v3.10.0) is back to
+the rule: the vault level L2 cited tool names no server had from v1.6.0 to v3.9.0. Each one still has a seed in
 seeded_leak_test.py.
 
 Stdlib-only by design (runs in CI without pip install). PyYAML is used for an
@@ -44,6 +45,7 @@ CHECKS = """
 23. judgment-points      a judgment-points.md §1 skill that never cites its §1/§2, or a P2 question / confidence line outside §1
 24. evidence-classes     the §4 class enum drifts, an invented class in a label, a P7-bound skill that never cites Gate Check 6, or a stale gate-check count
 25. judgment-binds       a P4/P6/P8 bind or §7-§9 row whose skill never cites judgment-points §7/§8/§9, or a live 'from / arrives in vX.Y.Z' at or below the plugin version
+26. provider-contract    a vault_*/brain_* tool cited in shipped docs that is not a row of the vault/v1 table in context-provider-protocol.md
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1477,6 +1479,35 @@ if PLUGIN_VER:
                     fail("judgment-binds", f"{rel_name}:{i}: forward marker '{m.group(0).strip()}' — v{_vstr(v)} "
                                            f"has shipped (plugin.json v{_vstr(PLUGIN_VER)}); a shipped behaviour "
                                            f"reads 'since v{_vstr(v)}'")
+
+# ============================================================ provider contract (26)
+# --------------------------------------------------- 26. provider contract
+# Skills reach a vault index and every shared-context provider through one tool
+# surface, `vault/v1`, defined by the table in references/context-provider-protocol.md
+# §2. A tool name cited anywhere else that the table does not define is a call no
+# server answers — exactly the defect the L2 level carried for 30 releases
+# (`test_mcp_connection`, `mcp_full_text_search`, `mcp_get_backlinks`). The plugin's
+# own functions and variables that share the prefix are listed below.
+CONTRACT_INTERNAL = {"vault_level", "vault_save", "vault_path", "vault_root", "vault_init", "vault_configs",
+                     "vault_config", "vault_structure_check", "vault_mirror_sync", "vault_area"}
+_cpp = os.path.join(root, "references", "context-provider-protocol.md")
+if os.path.isfile(_cpp):
+    _ct = open(_cpp, encoding="utf-8").read()
+    _sec = _ct.split("## 2. Contract", 1)[1].split("\n## 3.", 1)[0] if "## 2. Contract" in _ct else ""
+    CONTRACT_TOOLS = set(re.findall(r"^\| `((?:vault|brain)_[a-z_]+)`", _sec, re.M))
+    if not CONTRACT_TOOLS:
+        fail("provider-contract", "context-provider-protocol.md: no `vault_*` rows found in §2 — the contract table moved or broke")
+    for f in sorted(skill_files + [p for p in ref_files if p.endswith(".md")] +
+                    glob.glob(os.path.join(root, "commands", "*.md")) + glob.glob(os.path.join(root, "agents", "*.md"))):
+        rel_name = os.path.relpath(f, root)
+        for i, line in enumerate(open(f, encoding="utf-8").read().split("\n"), 1):
+            for tok in re.findall(r"\b((?:vault|brain)_[a-z_]+)\b", line):
+                if tok in CONTRACT_TOOLS or tok in CONTRACT_INTERNAL:
+                    continue
+                fail("provider-contract", f"{rel_name}:{i}: '{tok}' is not a vault/v1 tool "
+                                          f"(context-provider-protocol.md §2) nor a plugin-internal name")
+else:
+    fail("provider-contract", "references/context-provider-protocol.md is missing — the provider contract has no source")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

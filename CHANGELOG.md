@@ -12,6 +12,48 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.10.0 (2026-10-08)
+
+**Shared-context providers: connect your context to a team's core.** First phase of the Context Core programme. A team or an organisation can share its core knowledge — team cards, a people registry, missions, metrics, rules, exported pages — with every colleague's plugin, and the plugin now treats such a core as a *provider*: one tool contract, one manifest, one registration per user, one write boundary. What a separate companion plugin used to do for one organisation — e-mail → team → role, a role-filtered bundle, context blocks merged into the user's context, rules for the agent, a session digest — is now part of this plugin and works for any provider that ships a manifest.
+
+MINOR: two new skills (33), a new shared reference, a new script and its templates, a third hook, lint check 26, a branch scan in the release pre-flight.
+
+### Added
+
+- **`references/context-provider-protocol.md`** — the contract `vault/v1` (`vault_search`, `vault_get_note`, `vault_get_links`, `vault_graph_context`, `vault_list_by_tag`, `vault_list_by_folder`; optional `brain_status`, `brain_find_entity`, `brain_recent_changes`; recommended `search` / `fetch` aliases), the provider manifest (`_System/provider-manifest.yaml`, every path relative to the core root), the user-side registration (`_System/providers/<id>.yaml`: read-only `paths`, `writable` overlay globs, freshness), the interim `### Vault Search MCP` declaration in `local-context.md`, detection and the L2 binding, routing across providers (own vault → local index → snapshot → live; dedupe by provider + path; reciprocal-rank fusion), freshness and offline behaviour (index older than 36 hours, snapshot older than `stale_after_days`, one line per session), the write boundary, generated regions, the provider kit a team ships, and the index schema v1 for any local index.
+- **`context-connect` (v0.1.0)** — connect, refresh or enrich: dry run with "I see you as <role> in team <title>", the Jira write-scope question, the bundle, the proposal (`local-context.proposed.md`, `context-merge-report.md`, `team-context.md`, `provider-registration.proposed.yaml`), one question per discrepancy, backup and apply, a five-question focus interview, the registration. MCP-only providers are registered without a bundle; the host configuration entry is shown, never written.
+- **`context-navigator` (v0.1.0)** — answers from the shared core through the provider's `playbook` and `routing_hints` and the graph, with the note path, the period and source of a number and the snapshot date; a reference value is never the current one; meeting participants resolve through the provider's `people_resolver`; never writes into the provider's folders.
+- **`scripts/provider_bundle.py`** (with `scripts/provider_templates/`) — the bundle builder: role-filtered copy, registry cards with registry fields only, personal-layer links turned into text, the entry note pruned, the team block and the context blocks proposed, the provider entry and the registration proposed. Every folder, label, marker namespace, exclusion, deny pattern and note template comes from the manifest; the plugin ships English defaults. Exit codes 0 / 2 `UNKNOWN_TEAM` / 3 missing core or manifest / 4 deny pattern or nested markers (nothing written).
+- **`scripts/ctx_common.py`** — a YAML-subset reader (no third-party parser, so a manifest parses the same on every host), managed-region stripping, the `## Obsidian Vaults` and `### Vault Search MCP` parsers, registrations and the component-wise boundary test.
+- **Third hook — provider boundary.** `PreToolUse` on `Write`, `Edit`, `MultiEdit`, `NotebookEdit`: a file inside a registered provider's folder and outside its `writable` paths asks for confirmation with the reason and the alternative. Same opt-out as the write gate.
+- **Tests:** `testing/ctx_common_test.py` (8), `testing/write_gate_test.py` (10), `testing/provider_bundle_test.py` (21 checks on the fictional fixture core `testing/fixtures/context-connect/zorg-core/`), `testing/session_start_test.py` (4 → 11), lint check 26 `provider-contract` with a seed (27/27), `testing/branch_leak_scan.py` with its test (4), trigger-evals Group T (14 phrases), test-case section v3.10.0.
+
+### Changed
+
+- **Vault level L2** (`vault-protocol.md`, `local-context-protocol.md` Step 0h / 0.5): L2 is "a provider answers `vault/v1`". The algorithm named `test_mcp_connection`, `mcp_full_text_search` and `mcp_get_backlinks` — tools no server had — since v1.6.0. Step 0.5 searches every reachable provider, labels each result with its source and snapshot date, and says once when a provider is stale or unreachable. `vault_save` honours `sync_mode: read-only` (it was offered by setup but written to as `auto`) and never saves into a provider's folder.
+- **Session digest** (`scripts/session_start.py`): products are counted in `## Organization` sections only and deduplicated (the Landscape section's per-product headings were counted as products); teams outside managed regions; a vault declared as a table now counts as configured; new `providers:` and `bundle:` lines; `GROW_PM_PROVIDER_PATHS` exported for Bash.
+- **`vault-schema.md`:** optional `id`, `aliases`, `modified`, `last_verified`, `archived_at`; a "Generated regions and layers" section (one marker grammar, written only by scripts; the user's layer vs a provider's read-only folders); the `moc` type (37 types).
+- **`persistent-storage.md` and README:** one storage story — `~/.grow-pm/` for the context file, service data and backups; the vault as `storage_root` with a write-through mirror — replacing the pointer-file description of an early design that never shipped; one backup rotation (last 5) instead of 3 in one place and 5 in another; the mirror map lists the glossary, style profile and experiment registry, which skills already mirrored but recovery did not restore.
+- **Configurator** (v2.13.0, text only): the shared-context entry point hands off to `context-connect`; S-6 detects a search provider by the contract, not by an `obsidian` tool name; the Update menu has "Shared context providers"; Validate V-5 shows one row per provider (reachable, index or snapshot date, stale); `context-schema.md` defines the `### Vault Search MCP` subsection.
+- **`release-manager` (v0.4.0):** Step 1 runs the branch scan for organisation identifiers before anything is pushed; a hit in an unpushed commit is rewritten, not fixed by a later commit.
+- `integration-strategy.md` (providers are detected by the contract and declared by their manifests, never in `.mcp.json`), `harness-map.md` (Guardrails and Memory rows), `commands/status.md` (vault level by contract).
+
+### Not in this version
+
+- Context records instead of the single `local-context.md`, the `ctx` command line and a generated context card (v3.11.0).
+- Three-way merge of provider blocks with stored bases, declared overlays for corrections to a provider, precedence rules and remembered resolutions (v3.13.0).
+- The configurator as a loop: bootstrap from connectors and providers, proposals from skill runs, validation and consolidation (v3.15.0).
+- A local index and graph built by the plugin itself (v4.0.0); until then any index that follows the schema v1 answers `vault/v1`.
+
+### Backwards compatibility
+
+- A `local-context.md` without `### Vault Search MCP` and without registrations works exactly as in v3.9.0: no provider, Step 0.5 at L1 (or L2 through a server that speaks the contract), no new question in any existing skill.
+- Provider blocks already merged into a context (between `<!-- <namespace>:begin id=… -->` markers) keep working: the bundle builder updates them in place; the digest stops counting their headings.
+- The new hook asks only for paths under a registered provider root outside its `writable` globs; with no registration it never fires. `/grow-product-manager:setup --write-gate off` disables both gates.
+- Users of a separate companion plugin for a team's core: keep the core folder, uninstall the companion, ask the provider's owner for the manifest (or add one, protocol §3a), and say "connect me to the team vault" — the existing bundle is refreshed in place and the registration replaces the companion's session digest.
+
+---
+
 ## v3.9.0 (2026-10-06)
 
 **Build first, a built-in opponent, learning modes — and the Judgment Core + Role Layer programme is complete.** Sixth and last release of the programme (v3.4.0 → v3.9.0).
