@@ -11,7 +11,8 @@ Talk about teams, roles, bundles and context — not about paths, regular expres
 3. **Placement.** Two layouts are supported:
    - **Separate folder** (recommended): the core is its own Obsidian vault next to the user's; no link collisions.
    - **Nested** in the user's vault (`<vault>/<core folder>/`): one graph, but Obsidian resolves `[[basename]]` across the whole vault, so notes with the same name outside the core (`_index`, `README`, `Dashboard`) can capture the core's links. Say so once when you see this layout.
-4. **Target.** The core unpacked as the user's own copy (no `_System/bundle-manifest.md` yet) → in-place (`--in-place`, `--out` = the same folder). A separate core and a separate target → a selective copy into `--out`. A target that already has `_System/bundle-manifest.md` → **refresh**: read team, role and core version from it.
+4. **Declined blocks.** A user who already merged only some of the core's blocks (others duplicate their own sections) keeps that choice: ask once which block ids to skip, or read `skip_blocks` from the registration.
+5. **Target.** The core unpacked as the user's own copy (no `_System/bundle-manifest.md` yet) → in-place (`--in-place`, `--out` = the same folder). A separate core and a separate target → a selective copy into `--out`. A target that already has `_System/bundle-manifest.md` → **refresh**: read team, role and core version from it.
 
 When `~/.grow-pm/` is not visible from the shell (hosted sessions see the user's files through connected folders), ask the user to place a copy of their context as `<target>/<plugin_folder>/_System/local-context.existing.md` — the builder picks it up without a flag — or read it through device tools.
 
@@ -37,7 +38,7 @@ python3 "<plugin root>/scripts/provider_bundle.py" --core "<core>" --out "<targe
         [--existing-context "<copy of local-context.md>"] --jira-write own|none [--no-personal-overlay]
 ```
 
-Run `--dry-run` first when the user has a context: it already writes the merge report and the proposal, so duplicates and discrepancies show before anything is copied. Use `--no-personal-overlay` when building an archive for others (focus and to-do notes are created on the user's machine instead). `--force` rewrites the user's notes in the bundle — only on request.
+Pass `--skip-blocks <id,id>` with the blocks the user declined (a refresh reads them from the registration's `skip_blocks`): they are never proposed, the report lists them, and the proposed registration keeps the list. Run `--dry-run` first when the user has a context: it already writes the merge report and the proposal, so duplicates and discrepancies show before anything is copied. Use `--no-personal-overlay` when building an archive for others (focus and to-do notes are created on the user's machine instead). `--force` rewrites the user's notes in the bundle — only on request.
 
 What the builder does:
 - copies the role-filtered part of the core (shared files, the team's files by the role's layers, the manifest), never the owner's personal layer (`exclude`, `personal_overlay`), registry cards with registry fields only;

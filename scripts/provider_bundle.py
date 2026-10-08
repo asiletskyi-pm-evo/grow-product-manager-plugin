@@ -293,7 +293,7 @@ def team_context(core, m, team, tb, J, jira_write):
     pbase = os.path.basename(m.s("people_dir").rstrip("/"))
     rows = []
     for x in sorted(members, key=lambda x: (not x["head"], x["stub"], x["name"])):
-        role = x["role"] if x["role"] and x["role"] != x["pos"] else ("head" if x["head"] else "—")
+        role = x["role"] if x["role"] and x["role"] != x["pos"] else (m.s("head_role_label", "head") if x["head"] else "—")
         rows.append("| %s%s%s | %s | %s | %s | [[%s/%s]] |" % (x["name"], " ⭐" if x["head"] else "", " ◌" if x["stub"] else "",
                                                              role, x["pos"] or "—", x["email"] or "—", pbase, x["slug"]))
     if not rows:
@@ -303,7 +303,7 @@ def team_context(core, m, team, tb, J, jira_write):
     block = template(m, core, "team-block.md", {
         "NAMESPACE": m["namespace"], "BLOCK_VERSION": J.get("version", "?"), "TEAM_CANONICAL": canonical,
         "TEAM_CARD_PATH": os.path.join(m.s("team_card_dir"), "team-%s.md" % team), "NODE": node or "—",
-        "HEAD_SUFFIX": (" — head: %s" % head) if head else "", "JIRA": jira or "—",
+        "HEAD_SUFFIX": (" — %s %s" % (m.s("head_label", "head:"), head)) if head else "", "HEAD": head or "—", "JIRA": jira or "—",
         "JIRA_KEY": keys[0] if keys else "_ask the team_",
         "JIRA_OTHER": (" (others: %s)" % ", ".join(keys[1:])) if len(keys) > 1 else "",
         "JIRA_TEAM_FIELD": tf.group(1).strip() if tf else "_not set_",
@@ -343,18 +343,19 @@ def put_bullet(t, R, bullet, pid):
     return ((t[:pos] + sec + t[pos:]) if pos is not None else t.rstrip("\n") + "\n\n" + sec), "added"
 
 
-def build_context(core, out, m, J, ident, existing_path, today, jira_write):
+def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip=()):
     ns, pf = m["namespace"], m.s("plugin_folder", ".")
     R = ns_rx(ns)
     sysd = os.path.join(out, pf, "_System")
     cv = J.get("version", "?")
     bpath = os.path.join(core, m.s("blocks_file")) if m.s("blocks_file") else ""
     corectx = rd(bpath) if bpath and os.path.isfile(bpath) else ""
-    blocks = [(blk if blk.endswith("\n") else blk + "\n", bid) for blk, bid in R["block"].findall(corectx)]
+    skip = [s for s in skip if s and s != "team"]
+    blocks = [(blk if blk.endswith("\n") else blk + "\n", bid) for blk, bid in R["block"].findall(corectx) if bid not in skip]
     tblock, keys, members, title, canonical = team_context(core, m, ident["team"], ident["tb"], J, jira_write)
     report = dict(mode="merge" if existing_path else "new", added=[], updated=[], reference_only=[], discrepancies=[],
                   provider_entry=None, jira_keys=keys, members=len(members), jira_write=jira_write,
-                  existing_context=existing_path)
+                  existing_context=existing_path, skipped=sorted(skip))
     bullet = vsm_bullet(m, ident["team"])
     if existing_path:
         ex = rd(existing_path); t = ex
@@ -433,7 +434,7 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write):
             "".join("| %s `%s` | previous version | updated to v%s |\n" % (ns, b, cv) for b in report["updated"]) + \
             "".join("| %s `%s` | your section | added for reference; yours stays primary |\n" % (ns, b) for b in report["reference_only"]) + \
             "| Obsidian Vaults → Vault Search MCP | — | provider `%s` %s |\n" % (m["id"], state)
-        t = re.sub(r"^(> Generated:[^\n]*?Updated:\s*)[0-9-]+", r"\g<1>%s" % today, t, count=1, flags=re.M)
+        t = re.sub(r"^(> Generated:[^\n]*?Updated:\s*)[0-9-]+[^\n]*$", lambda mo: "%s%s (%s refresh)." % (mo.group(1), today, ns), t, count=1, flags=re.M)
         proposed = t.rstrip("\n") + "\n\n### Changelog — %s %s\n\n| Section | Was | Became |\n|---|---|---|\n%s" % (ns, today, rows)
         logs = re.findall(r"\n\n### Changelog — %s .*?(?=\n\n### Changelog — %s |\Z)" % (re.escape(ns), re.escape(ns)), proposed, re.S)
         for old in logs[:-3]:
@@ -465,6 +466,7 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write):
            "kind: bundle", "contract: %s" % m.s("contract", "vault/v1"), "authority: %s" % m.s("authority", "org"),
            "mode: %s" % m.s("mode", "snapshot"), "access: %s" % ((m.get("mcp") or {}).get("access") or "local"),
            "paths:", "  - %s" % os.path.abspath(out), "writable:"] + ["  - %s" % g for g in (m.get("personal_overlay") or [])] + \
+          (["skip_blocks:"] + ["  - %s" % s for s in skip] if skip else ["skip_blocks: []"]) + \
           ["index: \"\"", "synced_at: %s" % today, "source_version: %s" % json.dumps("core %s, provider_bundle %s" % (cv, __version__)),
            "stale_after_days: 30", "team: team-%s" % ident["team"], "role: %s" % ident["role"], "jira_write: %s" % jira_write, "status: active"]
     if (m.get("personal_overlay") or []) == []:
@@ -475,7 +477,8 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write):
            "- Proposal: `%s/_System/local-context.proposed.md` → after you confirm it is copied to `~/.grow-pm/local-context.md` (old one backed up)" % pf,
            "- Added: %s · updated: %s · reference only (you have your own section): %s · provider entry: %s" % (
                ", ".join(report["added"]) or "—", ", ".join(report["updated"]) or "—", ", ".join(report["reference_only"]) or "—", report["provider_entry"]),
-           "- Team: jira_project_key %s, jira_write_scope `%s`, members in the registry %d" % (keys or "—", jira_write, len(members)), ""]
+           "- Team: jira_project_key %s, jira_write_scope `%s`, members in the registry %d" % (keys or "—", jira_write, len(members)),
+           "- Skipped on your request (never proposed): %s" % (", ".join(skip) or "—"), ""]
     if report["discrepancies"]:
         rep += ["## Discrepancies to confirm (nothing overwritten)", "", "| Field | Your context | Core | Question |", "|---|---|---|---|"]
         rep += ["| %s | %s | %s | %s |" % (d["field"], d["existing"], d["core"], d["ask"]) for d in report["discrepancies"]]
@@ -519,6 +522,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true"); ap.add_argument("--force", action="store_true")
     ap.add_argument("--in-place", action="store_true"); ap.add_argument("--no-personal-overlay", action="store_true")
     ap.add_argument("--core-export", action="store_true"); ap.add_argument("--version", action="version", version=__version__)
+    ap.add_argument("--skip-blocks", default="", help="comma-separated block ids the user declined; never proposed (kept in the registration)")
     a = ap.parse_args()
     core, out = os.path.abspath(a.core), os.path.abspath(a.out)
     if not os.path.isdir(core):
@@ -600,12 +604,13 @@ def main():
     ident = dict(email=email, name=name, team=team, tb=tb, role=role, role_title=role_title)
     existing = a.existing_context or next((c for c in (os.path.join(out, pf, "_System", "local-context.existing.md"),) if os.path.isfile(c)), None)
     in_place = a.in_place or out == core
+    skip = [s.strip() for s in a.skip_blocks.split(",") if s.strip()]
     if a.dry_run:
         print(json.dumps(dict(team=team, role=role, role_title=role_title, files=len(files), pages=conf,
                               modules=tb.get("modules", []), missions=tb.get("missions", []), metrics=tb.get("metrics", []),
                               dashboards=tb.get("dashboards", []), union_of=tb.get("union_of", [])), ensure_ascii=False, indent=1))
         if existing or in_place:
-            build_context(core, out, m, J, ident, existing, today, a.jira_write)
+            build_context(core, out, m, J, ident, existing, today, a.jira_write, skip)
         return
     n_new = n_skip = 0
     if not in_place:
@@ -634,7 +639,7 @@ def main():
         for f in (".obsidian/app.json", ".obsidian/appearance.json", ".obsidian/backlink.json", ".obsidian/core-plugins.json", ".obsidian/graph.json"):
             if os.path.isfile(os.path.join(core, f)) and not os.path.exists(os.path.join(out, f)):
                 os.makedirs(os.path.join(out, ".obsidian"), exist_ok=True); shutil.copy2(os.path.join(core, f), os.path.join(out, f))
-    report = build_context(core, out, m, J, ident, existing, today, a.jira_write)
+    report = build_context(core, out, m, J, ident, existing, today, a.jira_write, skip)
     pbase = os.path.basename(m.s("people_dir").rstrip("/"))
     own = []
     mdir = os.path.join(core, m.s("missions_dir")) if m.s("missions_dir") else ""

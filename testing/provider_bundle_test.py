@@ -63,6 +63,23 @@ else:
     check("merge keeps own team heading once", False, (rc, o))
 shutil.rmtree(d)
 
+# 2b — skip blocks the user declined, the Updated line, the head label
+d, core, out = fresh()
+open(os.path.join(core, "Core", "_System", "provider-manifest.yaml"), "a").write('head_label: "lead:"\n')
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run", "--skip-blocks", "product,teams",
+            "--existing-context", os.path.join(FIX, "existing-context.md"))
+rep = report(o, "CONTEXT_REPORT") or {}
+t2 = open(prop.replace(os.path.dirname(os.path.dirname(os.path.dirname(prop))), out), encoding="utf-8").read() if rc == 0 else ""
+regp2 = open(os.path.join(out, "Core", "_System", "provider-registration.proposed.yaml"), encoding="utf-8").read() if rc == 0 else ""
+check("skip blocks keeps declined blocks out", rc == 0 and "id=product" not in t2 and "id=teams" not in t2
+      and "scope" in rep.get("added", []) and sorted(rep.get("skipped", [])) == ["product", "teams"]
+      and "skip_blocks:" in regp2 and "  - product" in regp2, (rc, rep))
+import datetime as _dt
+check("updated line rewritten whole", ("Updated: %s (zorg-core refresh)." % _dt.date.today().isoformat()) in t2, t2[:300])
+_tc = os.path.join(out, "Core", "_System", "team-context.md")
+check("head label from manifest", os.path.isfile(_tc) and "— lead: Alex One" in open(_tc, encoding="utf-8").read(), "")
+shutil.rmtree(d)
+
 # 3
 d, core, out = fresh()
 rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run",
