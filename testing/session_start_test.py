@@ -90,5 +90,37 @@ with tempfile.TemporaryDirectory() as d:
     check("env export keeps non-ASCII paths readable by bash", got == uni, got)
     del os.environ["CLAUDE_ENV_FILE"]
 
+# --- v3.10.1: short meta columns, an index path that needs URI escapes, placeholder steps, unreadable registration
+import sqlite3
+def brain(dirpath, cols=("key", "value")):
+    os.makedirs(dirpath, exist_ok=True)
+    p = os.path.join(dirpath, "brain.sqlite")
+    con = sqlite3.connect(p)
+    con.execute("CREATE TABLE meta(%s TEXT PRIMARY KEY, %s TEXT)" % cols)
+    con.execute("INSERT INTO meta VALUES ('last_index', '2026-10-01T08:00:00')")
+    con.commit(); con.close()
+    return p
+
+def with_index(p):
+    b = "### Vault Search MCP\n- zorg-brain: scope = own vault (Notes/), tools = vault_* + brain_*, index = %s\n" % p
+    return example.replace("## People (Optional)", b + "\n## People (Optional)", 1)
+
+with tempfile.TemporaryDirectory() as d:
+    out = run(with_index(brain(os.path.join(d, "kv"), cols=("k", "v"))))
+    check("index date read from a meta table with k/v columns", "zorg-brain (live, local, index 2026-10-01" in out, out)
+    out = run(with_index(brain(os.path.join(d, "odd ?dir %41"))))
+    check("index path with ? and % still read", "zorg-brain (live, local, index 2026-10-01" in out, out)
+
+t5 = re.sub(r"^- \*\*Deferred steps:\*\*\n(?:  - .+\n)+", "- **Deferred steps:** _none_\n", example, count=1, flags=re.M)
+out = run(t5)
+check("a _none_ placeholder is not a deferred step", "- **Deferred steps:** _none_" in t5 and "deferred onboarding steps" not in out, out)
+
+with tempfile.TemporaryDirectory() as d:
+    regdir = os.path.join(d, "Notes", "_System", "providers"); os.makedirs(regdir)
+    open(os.path.join(regdir, "broken.yaml"), "w").write("schema: provider-registration/1\nid: broken\npaths: [one, two]\n")
+    t6 = re.sub(r"## Obsidian Vaults \(Optional\).*?(?=\n---\n)", table.replace("/tmp/zorg-vault", d), example, count=1, flags=re.S)
+    out = run(t6)
+    check("an unreadable registration is named in the digest", "broken.yaml" in out and "line 3" in out, out)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

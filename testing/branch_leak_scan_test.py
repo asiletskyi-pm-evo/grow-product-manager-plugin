@@ -46,6 +46,9 @@ with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as aside:
     rc2 = subprocess.run([sys.executable, SCAN, "--base", "main", "--tokens", os.path.join(d, "absent")], cwd=d,
                          capture_output=True, text=True).returncode
     check("absent denylist is a notice, not a failure", rc2 == 0)
+    p = subprocess.run([sys.executable, SCAN, "--base", "no-such-base", "--tokens", toks], cwd=d, capture_output=True, text=True)
+    check("a missing base is one line and exit 2, not a traceback", p.returncode == 2 and "Traceback" not in p.stderr
+          and "no-such-base" in p.stdout, (p.returncode, p.stdout, p.stderr[-200:]))
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

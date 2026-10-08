@@ -21,6 +21,7 @@ import re
 import shlex
 import sqlite3
 import sys
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:  # since v3.10.0 — shared helpers; absent → the v3.9.0 digest, still fail-open
@@ -96,25 +97,35 @@ def _uniq(xs):
 
 
 def _index_date(index_path):
-    """meta.last_index of a vault/v1 index (context-provider-protocol.md §10), or None."""
-    p = os.path.expanduser(index_path or "")
-    if not p or not os.path.isfile(p):
+    """meta.last_index of a vault/v1 index (context-provider-protocol.md §10), or None.
+    The columns are key/value; k/v is read as a legacy spelling (v3.10.1)."""
+    p = os.path.abspath(os.path.expanduser(index_path or ""))
+    if not index_path or not os.path.isfile(p):
         return None
     try:
-        con = sqlite3.connect("file:%s?mode=ro" % p, uri=True, timeout=1)
-        row = con.execute("SELECT value FROM meta WHERE key='last_index'").fetchone()
-        con.close()
+        con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(p), uri=True, timeout=1)
+        try:
+            row = None
+            for key, value in (("key", "value"), ("k", "v")):
+                try:
+                    row = con.execute("SELECT %s FROM meta WHERE %s='last_index'" % (value, key)).fetchone()
+                    break
+                except sqlite3.OperationalError:
+                    continue
+        finally:
+            con.close()
         return datetime.datetime.fromisoformat(str(row[0]).replace("Z", "+00:00")) if row else None
     except Exception:
         return None
 
 
-def providers_info(text, extra_dirs=None):
-    """[(id, label)], provider roots and the bundle facts — header-level only."""
+def providers_info(text, extra_dirs=None, skipped=None):
+    """[(id, label)], provider roots and the bundle facts — header-level only.
+    Registrations that cannot be read land in `skipped` as (path, reason)."""
     if cc is None:
         return [], [], None
     entries = cc.vault_entries(text)
-    regs = cc.find_registrations(entries, extra_dirs=extra_dirs)
+    regs = cc.find_registrations(entries, extra_dirs=extra_dirs, skipped=skipped)
     by_id, order = {}, []
     for b in cc.vault_search_bullets(text):
         by_id[b["id"]] = {"mode": b["mode"], "access": b["access"], "index": b["index"]}; order.append(b["id"])
@@ -199,11 +210,12 @@ def parse(path, extra_dirs=None):
         m = re.search(r"^- \*\*Deferred steps:\*\*[ \t]*([^\n\[]+)$", text, re.M)
         if m:
             deferred = [s.strip() for s in m.group(1).split(",") if s.strip()]
-    facts["deferred_steps"] = deferred
+    facts["deferred_steps"] = [s for s in deferred if not re.fullmatch(r"_?none_?|n/a|—|-", s, re.I)]
     vault = re.search(r"^## Obsidian Vaults", text, re.M) and re.search(r"^\s*-\s*path:\s*\S+", text, re.M)
     facts["vault_section"] = bool(vault) or bool(cc and cc.vault_entries(text))  # table format too (v3.10.0)
+    facts["unreadable_registrations"] = []
     try:
-        facts["providers"], facts["provider_roots"], facts["bundle"] = providers_info(text, extra_dirs)
+        facts["providers"], facts["provider_roots"], facts["bundle"] = providers_info(text, extra_dirs, facts["unreadable_registrations"])
     except Exception:
         facts["providers"], facts["provider_roots"], facts["bundle"] = [], [], None
     facts["cjm_section"] = bool(re.search(r"^## CJM Configuration\s*\n(?:.*\n){1,6}?.*(?:stages|funnel|template)", text, re.M | re.I))
@@ -235,6 +247,10 @@ def digest(path, facts, searched, version):
     if cc is not None:
         prov = facts.get("providers") or []
         lines.append("  providers: %s" % (", ".join(prov[:6]) if prov else "none declared"))
+        bad = facts.get("unreadable_registrations") or []
+        if bad:
+            lines.append("  provider registration unreadable: %s" % "; ".join(
+                "%s (%s)" % (os.path.basename(f), why) for f, why in bad[:3]))
         b = facts.get("bundle")
         if b:
             lines.append("  bundle: team=%s role=%s core=%s" % (b.get("team") or "?", b.get("role_profile") or "?", b.get("core_version") or "?"))

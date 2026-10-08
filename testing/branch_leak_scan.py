@@ -11,8 +11,9 @@ branch, and fails on any token of the gitignored denylist `testing/org-tokens.lo
   python3 testing/branch_leak_scan.py [--base main] [--tokens testing/org-tokens.local]
 
 Exit 0 — clean, or no denylist on this machine (a notice is printed: the scan cannot
-run without it). Exit 1 — hits, one line each. Run it before every push of a branch
-(release-manager Step 1). Stdlib + git only.
+run without it). Exit 1 — hits, one line each. Exit 2 — the base ref is not in this
+clone (a shallow clone, or the branch was never fetched); one line, never a pass.
+Run it before every push of a branch (release-manager Step 1). Stdlib + git only.
 """
 import argparse, os, re, subprocess, sys
 
@@ -40,6 +41,10 @@ def main():
     if rx is None:
         print("branch-leak-scan: no denylist at %s — scan skipped (copy org-tokens.local.example)" % a.tokens)
         return 0
+    if subprocess.run(["git", "rev-parse", "--verify", "--quiet", a.base + "^{commit}"], capture_output=True).returncode:
+        print("branch-leak-scan: base '%s' is not in this clone — fetch it (git fetch origin %s) or pass --base <ref>; "
+              "nothing was scanned" % (a.base, a.base))
+        return 2
     hits = []
     cur = None
     for line in git("diff", "--unified=0", "--no-color", "%s...HEAD" % a.base).split("\n"):
