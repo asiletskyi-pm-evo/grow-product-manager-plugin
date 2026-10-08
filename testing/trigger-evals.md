@@ -6,7 +6,9 @@ Purpose: verify that user phrases trigger the **intended** skill, especially in 
 
 **Manual protocol (baseline):** in a fresh Cowork session with the plugin installed, paste each phrase as a user message. Record which skill triggers (or none). Pass = expected skill; borderline pass = Claude asks a clarifying question naming the expected skill among options.
 
-**Codex CLI (since v3.0.0):** install the branch as a local marketplace, then for each phrase run `codex exec -s read-only` with a **single-line** prompt asking for the bare skill name only (a multi-line prompt argument hangs `codex exec` 0.153 before the session starts). Score on the host's *real* configuration — Codex shares one ~15k-character budget across every listed skill, so a machine with 80 skills shows ~190 characters per description; that is the configuration the descriptions must route on. Runner and scorer: see the v3.0.0 pilot notes in the design workspace.
+**Codex CLI (since v3.0.0):** install the branch as a local marketplace, then for each phrase run `codex exec -s read-only` with a **single-line** prompt asking for the bare skill name only (a multi-line prompt argument hangs `codex exec` 0.153 before the session starts). Score on the host's *real* configuration — Codex shares one ~15k-character budget across every listed skill, so a machine with 80 skills shows ~190 characters per description; that is the configuration the descriptions must route on. Runner: `python3 testing/trigger_codex.py <out.json> [--groups T] [--repeat 2]` — the working tree as a temporary marketplace, the installed copies disabled for these processes only (since v3.10.1).
+
+**Claude Code (since v3.10.1):** `python3 testing/trigger_claude.py <out.json> --mode real|visible [--groups …] [--repeat 3]` — one headless `claude -p` per phrase against a staged copy whose digest reads a fictional context (never the user's `~/.grow-pm`), with no MCP servers and no write tools. Run **both modes**: `real` is the listing as this machine builds it — over 1% of the context window Claude Code shows the least-used skills by name only (`references/host-profiles.md` §7); `visible` raises that budget for the test processes only. A miss only in `real` is a visibility problem (check the listing before touching descriptions — a guard the model cannot see changes nothing); a miss in both is a description problem. Misses are re-run 3× and scored by majority.
 
 **Automated (preferred when available):** the `skill-creator` skill ships an eval harness — feed it this table as scenarios (`phrase` → `expected_skill`) and let it benchmark triggering accuracy across N runs. Record the accuracy per group below.
 
@@ -69,7 +71,7 @@ Scoring: each row ✓/✗; group accuracy = ✓ / total. Target: ≥ 90 % per gr
 | # | Phrase | Expected |
 |---|--------|----------|
 | E1 | дослідi як головний конкурент зробив Q&A на картці товару | product-research |
-| E2 | порівняй наш фільтр з галузевими UX-бенчмарками | product-research |
+| E2 | порівняй наш фільтр з галузевими UX-бенчмарками | product-research; accepted alternative: lazyweb* (the user's own global rule sends UI work to a Lazyweb skill) |
 | E3 | збережи цю статтю Baymard у бібліотеку | knowledge-library |
 | E4 | які джерела маємо по темі відгуків | knowledge-library |
 
@@ -181,7 +183,7 @@ Commands in `commands/` carry `disable-model-invocation: true`; the model must n
 | L5 | випусти фічу Q&A в реліз наступного спринта | sprint-planning / product-reporter — NOT release-manager, NOT `release` command |
 | L6 | перевір термінологію в цьому тексті | knowledge-library — NOT `glossary-lint` command |
 | L7 | what is the plugin status | plugin-configurator (Validate) — NOT `status` command |
-| L8 | /grow-product-manager:status | `status` command (explicit invocation — the only way in) |
+| L8 | /grow-product-manager:status | `status` command (explicit invocation — the only way in); Claude: n/a — the host runs a typed command before any routing, so the row is scored on Codex only |
 | L9 | вимкни підтвердження перед записом у Confluence | plugin-configurator or none (conversation) → point to `/grow-product-manager:setup --write-gate off` — NOT the `setup` command itself (added v2.6.0; plugin-configurator accepted since v3.5.0, when it learned to explain the command) |
 
 ### Group M — Flow walkthrough vs neighbours (added 2026-09-10, v3.1.0)
@@ -248,7 +250,7 @@ Collisions: a hat or a role word must never move routing — the skill is chosen
 | R10 | I'm a CPO — what should I focus on this quarter | focus-advisor |
 | R11 | як head of product, постав OKR команді на квартал | goal-setter (hat: head_of_product) |
 | R12 | as a designer, write the concept for saved searches | write-concept (hat: product_designer) |
-| R13 | подивись на цей макет у Figma очима дизайнера | design-bridge |
+| R13 | подивись на цей макет у Figma очима дизайнера | design-bridge; accepted alternative: lazyweb* (the user's own global rule sends UI work to a Lazyweb skill) |
 | R14 | як аналітик, знайди аномалії у воронці CJM | cjm-research (hat: product_analyst) |
 | R15 | дизайн-бриф для фічі збережених пошуків | write-concept (subtype design-brief, v3.6.0) |
 | R16 | research plan for onboarding interviews | product-research (subtype research-plan, v3.6.0) |

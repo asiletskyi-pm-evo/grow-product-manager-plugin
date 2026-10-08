@@ -1,7 +1,7 @@
 ---
 name: product-landscape
-version: 0.5.0
-description: Registry and map of competitor, adjacent and benchmark products — scan installed apps, discover by category and market, categorise, characterise, start same-flow research across products. Not a single competitive report (product-research), not a source library (knowledge-library), not the walk itself (flow-walkthrough); setup of consent and category is plugin-configurator. UA — «карта конкурентів», «реєстр продуктів», «просканируй мої застосунки», «хто конкуренти й дотичні у сфері …», «додай продукт у реєстр», «досліди однакове флоу на конкурентах». EN — "competitor map", "product registry", "scan my apps", "who are the competitors and adjacent players", "add product to the registry", "research the same flow across products". Modes scan / discover / add / update / characterize / map / research; chains to flow-walkthrough, product-research, brainstorm-features.
+version: 0.5.1
+description: Registry and map of competitor, adjacent and benchmark products — scan installed apps, discover, characterise, research the same flow across products. Not a single competitive report (product-research), not its setup (plugin-configurator). UA — «карта конкурентів», «просканируй мої застосунки», «досліди однакове флоу на конкурентах».
 ---
 
 # Product Landscape
@@ -121,7 +121,7 @@ Update `registry.yaml` (index) and `products/<slug>.md`; append the run to `scan
 
 > Requires: `references/vault-protocol.md` → Vault Save
 
-IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", product: active_product, skill: "product-landscape", skill_version: "0.5.0", tags: [category, market], content: the map, related: [registry slugs] })`. Display: "Saved to Vault: Research/landscape/{product}/…".
+IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", product: active_product, skill: "product-landscape", skill_version: "0.5.1", tags: [category, market], content: the map, related: [registry slugs] })`. Display: "Saved to Vault: Research/landscape/{product}/…".
 
 ## Skill Chaining
 
@@ -147,3 +147,9 @@ IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", pro
 ## Example
 
 `examples/shopping-category-scan.md` — a scan of a Mac with ~50 shopping apps from the App Store, one confirmation batch, a discover pass, a map excerpt and a research proposal list.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Registry and map of competitor, adjacent and benchmark products — scan installed apps, discover by category and market, categorise, characterise, start same-flow research across products. Not a single competitive report (product-research), not a source library (knowledge-library), not the walk itself (flow-walkthrough); setup of consent and category is plugin-configurator. UA — «карта конкурентів», «реєстр продуктів», «просканируй мої застосунки», «хто конкуренти й дотичні у сфері …», «додай продукт у реєстр», «досліди однакове флоу на конкурентах». EN — "competitor map", "product registry", "scan my apps", "who are the competitors and adjacent players", "add product to the registry", "research the same flow across products". Modes scan / discover / add / update / characterize / map / research; chains to flow-walkthrough, product-research, brainstorm-features.

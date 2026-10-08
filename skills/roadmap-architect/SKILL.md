@@ -1,7 +1,7 @@
 ---
 name: roadmap-architect
-version: 0.6.0
-description: Own the work structure — missions → initiatives → epics → features, labeling, roadmap tree — no dates, no capacity. Not quarter plans (quarterly-planning), not forecasts (project-planning). UA — «наведи лад у структурі», «розміть епіки/фічі», «дерево roadmap», «звʼяжи епік з ціллю». EN — "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal", "direction structure". Also UA — «знайди розриви розмітки», «структура напрямків».
+version: 0.6.1
+description: Own the work structure — missions → initiatives → epics → features, labeling, roadmap tree — no dates, no capacity. Not quarter plans (quarterly-planning), not forecasts (project-planning), not a strategy memo (write-concept). UA — «наведи лад у структурі», «розміть епіки/фічі», «дерево roadmap».
 ---
 
 # Roadmap Architect
@@ -70,7 +70,7 @@ Generate the Goal→Initiative→Epic→Feature tree (features as `code—name`)
 **Tree depth (since v3.6.0, `references/planning-core.md` §7).** When `role_defaults.planning_view` is `rollup`, the tree is presented goals → initiatives first (epic and feature counts, gaps per initiative) and expands epics and features on request; `slice` presents the full tree down to epics and features, as before. The saved tree, the gap report, the labeling checks and the write gate are the same for every profile; an automated run keeps the pre-v3.6.0 presentation.
 
 ### Step 6 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.6.0", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.6.1", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Don't invent links — only Jira links / goal map / explicit PM input; the rest = "break, please formalize".
@@ -83,3 +83,9 @@ Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_
 
 ## Additional Resources
 `references/planning-core.md`, `dependency-model.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`, `jira-data-protocol.md`.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Own the work structure — missions → initiatives → epics → features, labeling, roadmap tree — no dates, no capacity. Not quarter plans (quarterly-planning), not forecasts (project-planning). UA — «наведи лад у структурі», «розміть епіки/фічі», «дерево roadmap», «звʼяжи епік з ціллю». EN — "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal", "direction structure". Also UA — «знайди розриви розмітки», «структура напрямків».

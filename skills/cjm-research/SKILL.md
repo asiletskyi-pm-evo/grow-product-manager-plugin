@@ -1,7 +1,7 @@
 ---
 name: cjm-research
-version: 0.12.0
-description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».
+version: 0.12.1
+description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами».
 ---
 
 # CJM Research
@@ -295,7 +295,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.12.0",
+     skill_version: "0.12.1",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
@@ -377,3 +377,9 @@ When chaining:
 - **`references/self-improvement.md`** — self-improvement protocol
 - **`references/vault-protocol.md`** — vault context search, artifact storage, and lifecycle management
 - **`references/vault-schema.md`** — vault artifact schema, metadata structure, and query syntax
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».

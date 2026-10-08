@@ -1,7 +1,7 @@
 ---
 name: goal-setter
-version: 0.2.0
-description: Set and audit goals — SMARTCBP for a person, OKR for a product or direction; goal letters, cascades. Not progress reports (product-reporter), not a performance review (performance-review). UA — «постав ціль», «сформулюй цілі для…», «OKR на квартал», «аудит цілі». EN — "set a goal", "write goals for <person>", "audit this goal", "is this goal SMART", "goal letter", "cascade goals", "objectives and key results". Also UA — «ціль за SMARTCBP», «лист цілей», «каскад цілей», «цілі напрямку». Formulates and commits goals; other skills track and report them. Do NOT use for delivery roadmaps (quarterly-/project-planning).
+version: 0.2.1
+description: Set and audit goals — SMARTCBP for a person, OKR for a product or direction; goal letters, cascades. Not progress reports (product-reporter), not a performance review (performance-review). UA — «постав ціль», «OKR на квартал», «аудит цілі», «лист цілей». EN — "set a goal", "cascade goals".
 ---
 
 # Goal Setter
@@ -102,3 +102,9 @@ Per `self-improvement.md`.
 - *"Постав ціль аналітику <ім’я> на друге півріччя"* → Step P loads the person (D3, weekly reporting) → SMARTCBP → pulls their H1 fact via product-reporter for Comparable → 2–3 variants → Tell-and-Sell → writes `active_goal_letter`, offers to set up their 3T5F cadence.
 - *"Це нормальна ціль: 'покращити конверсію'?"* → `audit` mode → 8-check table shows S/M/C/T failures → returns "increase checkout conversion from 2.1% to 3.0% (+0.9 p.p. vs H1) by 2026-12-31".
 - *"Зроби OKR для напрямку Q&A на квартал"* → OKR path: 1 Objective + 3 Key Results, public, stretch → offers to cascade personal SMARTCBP goals for the owners underneath.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Set and audit goals — SMARTCBP for a person, OKR for a product or direction; goal letters, cascades. Not progress reports (product-reporter), not a performance review (performance-review). UA — «постав ціль», «сформулюй цілі для…», «OKR на квартал», «аудит цілі». EN — "set a goal", "write goals for <person>", "audit this goal", "is this goal SMART", "goal letter", "cascade goals", "objectives and key results". Also UA — «ціль за SMARTCBP», «лист цілей», «каскад цілей», «цілі напрямку». Formulates and commits goals; other skills track and report them. Do NOT use for delivery roadmaps (quarterly-/project-planning).

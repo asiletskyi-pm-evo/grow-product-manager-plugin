@@ -1,7 +1,7 @@
 ---
 name: plugin-configurator
-version: 2.13.0
-description: Configure the plugin and your Obsidian vault — organization, products, teams, data sources — validate or view the config; also when local-context.md is missing. Not the typed /status or /config commands. UA — «налаштуй плагін», «підключи Obsidian-вейлт», «додай продукт», «додай/налаштуй тестові акаунти», «налаштуй карту конкурентів», «перевір налаштування», «покажи мій конфіг», «статус плагіна, чи все підключено», «змінити роль», «яка моя роль у плагіні». EN — "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", "what is the plugin status", "set role", "change my role". Also UA — «сетап плагіна», «налаштувати контекст», «оновити конфігурацію».
+version: 2.13.1
+description: Configure the plugin and your Obsidian vault — organization, products, teams, data sources — validate or view the config. Not the typed /status or /config commands. UA — «налаштуй плагін», «підключи Obsidian-вейлт», «покажи мій конфіг», «статус плагіна», «змінити роль», «налаштуй тестові акаунти», «налаштуй карту конкурентів». EN — "set my role".
 ---
 
 # Plugin Configurator
@@ -198,3 +198,9 @@ Full protocol (skill/plugin version rules, required steps when modifying a skill
 
 **Other skills:**
 - **`skills/template-library/SKILL.md`** — CRUD actions and wizards for the Template Library
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Configure the plugin and your Obsidian vault — organization, products, teams, data sources — validate or view the config; also when local-context.md is missing. Not the typed /status or /config commands. UA — «налаштуй плагін», «підключи Obsidian-вейлт», «додай продукт», «додай/налаштуй тестові акаунти», «налаштуй карту конкурентів», «перевір налаштування», «покажи мій конфіг», «статус плагіна, чи все підключено», «змінити роль», «яка моя роль у плагіні». EN — "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", "what is the plugin status", "set role", "change my role". Also UA — «сетап плагіна», «налаштувати контекст», «оновити конфігурацію».

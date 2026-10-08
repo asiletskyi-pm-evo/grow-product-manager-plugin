@@ -1,7 +1,7 @@
 ---
 name: hiring-designer
-version: 0.2.0
-description: Design a role and vacancy — goal letter first, then profile, killer questions, screening criteria, candidate evaluation, offer draft. Not feature requirements (requirements-creator). UA — «відкрити вакансію», «профіль вакансії», «оцінити кандидатів», «чернетка оферу». EN — "open a vacancy", "design a role", "write a job profile", "hiring", "killer questions", "screening criteria", "evaluate candidates", "draft an offer". Also UA — «спроєктувати посаду», «найм», «критерії скринінгу». Chains to goal-setter for the role goals; do NOT use for an existing employee's goals outside a hire.
+version: 0.2.1
+description: Design a role and vacancy — goal letter first, then profile, killer questions, screening criteria, candidate evaluation, offer draft. Not feature requirements (requirements-creator). UA — «відкрити вакансію», «профіль вакансії», «оцінити кандидатів». EN — "open a vacancy", "hiring".
 ---
 
 # Hiring Designer
@@ -88,3 +88,9 @@ Per `self-improvement.md`.
 ## Example dialogues
 - *"Відкриваємо вакансію продуктового аналітика"* → Step 1 chains to goal-setter for the 3/6/12-month goal letter → builds the 5-section vacancy profile mapped to the employer HR-form → 3 killer questions with numeric thresholds + If/Then → candidate-documents checklist.
 - *"Оціни трьох кандидатів на цю роль"* → builds the goal × experience table from their artifacts/answers → flags Candidate B at 22% fit (decline) → drafts the offer for Candidate A with probation goals.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Design a role and vacancy — goal letter first, then profile, killer questions, screening criteria, candidate evaluation, offer draft. Not feature requirements (requirements-creator). UA — «відкрити вакансію», «профіль вакансії», «оцінити кандидатів», «чернетка оферу». EN — "open a vacancy", "design a role", "write a job profile", "hiring", "killer questions", "screening criteria", "evaluate candidates", "draft an offer". Also UA — «спроєктувати посаду», «найм», «критерії скринінгу». Chains to goal-setter for the role goals; do NOT use for an existing employee's goals outside a hire.

@@ -1,7 +1,7 @@
 ---
 name: brainstorm-features
-version: 0.15.0
-description: Brainstorm features and hypotheses with ICE, or run a role debate (Debate mode). Not the CJM pipeline (cjm-research), not meeting transcripts (meeting-processor). UA — «брейншторм фіч», «згенеруй гіпотези», «проведи дебати», «red team цю ідею». EN — "brainstorm features", "generate hypotheses", "find growth opportunities", "run a debate", "have agents argue from different roles", "stress-test via debate". Also UA — «знайти точки росту», «гіпотези для CJM-воронки», «нехай агенти подискутують», «круглий стіл ролей», «розглянь з різних ролей». The ideation engine — cjm-research delegates here. Do NOT use to record a decision already made (decision-log).
+version: 0.15.1
+description: Brainstorm features and hypotheses with ICE, or run a role debate (Debate mode). Not the CJM pipeline (cjm-research), not meeting transcripts (meeting-processor). UA — «брейншторм фіч», «згенеруй гіпотези», «проведи дебати», «red team цю ідею», «круглий стіл ролей». EN — "brainstorm features".
 ---
 
 # Brainstorm Features and Hypotheses
@@ -356,10 +356,10 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 IF vault_level > L0 AND vault sync_mode != "off":
 
 1. For **each finalized hypothesis** (Step 5), save a separate artifact:
-   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.15.0", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
+   `vault_save({ type: "hypothesis", product: active_product, skill: "brainstorm-features", skill_version: "0.15.1", tags: [funnel stage, platform, topic keywords], content: hypothesis with ICE + PRO/ROI scores and rationale, related: [source CJM analysis, source research, sibling hypotheses], extra_frontmatter: { ice_score, pro_roi, hypothesis_status: "proposed" } })`
 2. Display: "Saved to Vault: Hypotheses/{product}/… (N hypotheses)"
 3. For **debate sessions** (Step 3D), additionally save the debate itself:
-   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.15.0", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
+   `vault_save({ type: "debate", product: active_product, skill: "brainstorm-features", skill_version: "0.15.1", tags: [debate topic, role names], content: «Debates» section (rounds + verdict + minority report), related: [affected hypotheses], extra_frontmatter: { debate_question, roles, verdict, confidence, minority_report, rounds, inline_simulation } })`
    Display: "Saved to Vault: Debates/{product}/…"
 
 ## Quality standards
@@ -385,3 +385,9 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - **`references/data-integrity-protocol.md`** — Gate Check 6 only: the class each evidence item and E# carries (6a) and where `simulated` may stand (6b); this skill runs no data gate of its own
 - **`references/cjm-hypotheses-mode.md`** — skill-local: full Step 3C workflow (hypothesis format, CJM-weighted ICE, funnel impact, categorization, return contract)
 - **`references/funnel-templates.md`** — standard funnel stage templates by product type
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Brainstorm features and hypotheses with ICE, or run a role debate (Debate mode). Not the CJM pipeline (cjm-research), not meeting transcripts (meeting-processor). UA — «брейншторм фіч», «згенеруй гіпотези», «проведи дебати», «red team цю ідею». EN — "brainstorm features", "generate hypotheses", "find growth opportunities", "run a debate", "have agents argue from different roles", "stress-test via debate". Also UA — «знайти точки росту», «гіпотези для CJM-воронки», «нехай агенти подискутують», «круглий стіл ролей», «розглянь з різних ролей». The ideation engine — cjm-research delegates here. Do NOT use to record a decision already made (decision-log).

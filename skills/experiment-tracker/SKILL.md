@@ -1,7 +1,7 @@
 ---
 name: experiment-tracker
-version: 0.6.0
-description: Experiment registry — proposed → specced → running → readout → decided, with stale-test reminders. Not analyzing results (product-analysis), not the A/B spec (requirements-creator). UA — «які тести зараз біжать», «заведи експеримент», «зафіксуй запуск тесту», «завислі тести». EN — "what experiments are running", "experiment status", "register an experiment", "log the test launch", "which tests await a decision", "remind me about stale tests". Also UA — «статус експериментів», «які тести чекають рішення». Tracks state and chains to product-analysis, requirements-creator and brainstorm-features.
+version: 0.6.1
+description: Experiment registry — proposed → specced → running → readout → decided, with stale-test reminders. Not analyzing results (product-analysis), not the A/B spec (requirements-creator). UA — «які тести зараз біжать», «зафіксуй запуск тесту», «завислі тести». EN — "what experiments are running".
 ---
 
 # Experiment Tracker
@@ -135,3 +135,9 @@ Contract for scheduled runs (analogous to focus-advisor): `mode=stale headless=t
 
 ## Skill Chaining
 ← `brainstorm-features` (Step 7: top hypotheses → `proposed`) · ← `requirements-creator` (Step 7: A/B spec → `specced`) · ← `focus-advisor` ("A/B test waiting for a decision" routes here, not straight to product-analysis) · → `product-analysis` A/B mode (readout) · → `decision-log` (decide) · → `task-creator` (rollout/cleanup tasks) · → `product-reporter` (flags report cross-check) · → `schedule` (weekly stale-check).
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Experiment registry — proposed → specced → running → readout → decided, with stale-test reminders. Not analyzing results (product-analysis), not the A/B spec (requirements-creator). UA — «які тести зараз біжать», «заведи експеримент», «зафіксуй запуск тесту», «завислі тести». EN — "what experiments are running", "experiment status", "register an experiment", "log the test launch", "which tests await a decision", "remind me about stale tests". Also UA — «статус експериментів», «які тести чекають рішення». Tracks state and chains to product-analysis, requirements-creator and brainstorm-features.

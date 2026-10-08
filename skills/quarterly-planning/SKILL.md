@@ -1,7 +1,7 @@
 ---
 name: quarterly-planning
-version: 0.8.0
-description: One-quarter roadmap, capacity stress-test and plan-vs-actual retro. Not multi-quarter (project-planning), not structure/labels (roadmap-architect), not a sprint (sprint-planning). UA — «зібери roadmap на квартал», «plan-vs-actual», «чи реалістичний план на Q3», «що команда встигне». EN — "build a quarterly roadmap", "quarterly planning", "plan-vs-actual for the quarter", "quarter retro", "plan capacity", "what the team can deliver", "kill criteria / pre-mortem for the quarter plan". Also UA — «retro кварталу», «capacity плану», «kill criteria для плану кварталу». Scope = exactly one quarter.
+version: 0.8.1
+description: One-quarter roadmap, capacity stress-test and plan-vs-actual retro. Not multi-quarter (project-planning), not structure/labels (roadmap-architect), not a sprint (sprint-planning). UA — «зібери roadmap на квартал», «plan-vs-actual», «kill criteria для плану кварталу». EN — "quarter retro".
 ---
 
 # Quarterly Planning
@@ -87,7 +87,7 @@ Per `roadmap-artifacts.md`: (1) **Confluence roadmap** (focuses + Gantt + tree, 
 **Optional — quarterly board / stakeholder readout (since v3.6.0: one template, one owner).** When the quarter is being reported up (not just planned), offer the readout as a hand-off to **product-reporter**, which renders it as `ops-report/board-update` from this run's retro (Step 2) and approved plan — no new fetch. This skill passes the data with `destination: chat draft` and `visuals: none` (product-reporter then asks nothing and publishes nothing until the user says so) and renders no readout of its own; the board-prep checklist behind the template is `references/session-board.md`.
 
 ### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.8.0", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.8.1", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Integration with product-reporter
 - Quarter actuals ← `quarter-review` (don't rewrite the fetch).
@@ -110,3 +110,9 @@ Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_
 
 ## Additional Resources
 `references/planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`, `jira-data-protocol.md`.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> One-quarter roadmap, capacity stress-test and plan-vs-actual retro. Not multi-quarter (project-planning), not structure/labels (roadmap-architect), not a sprint (sprint-planning). UA — «зібери roadmap на квартал», «plan-vs-actual», «чи реалістичний план на Q3», «що команда встигне». EN — "build a quarterly roadmap", "quarterly planning", "plan-vs-actual for the quarter", "quarter retro", "plan capacity", "what the team can deliver", "kill criteria / pre-mortem for the quarter plan". Also UA — «retro кварталу», «capacity плану», «kill criteria для плану кварталу». Scope = exactly one quarter.

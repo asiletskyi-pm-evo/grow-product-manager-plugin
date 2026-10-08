@@ -1,7 +1,7 @@
 ---
 name: delegation-coach
-version: 0.2.0
-description: Audit a manager's operational load on the 7 delegation levels and plan the hand-off (S1→S4). Not daily focus (focus-advisor), not task creation (task-creator). UA — «аудит делегування», «що можна делегувати», «перевантажений операційкою», «вийти з операційки». EN — "audit my delegation", "what can I delegate", "I'm overloaded with ops", "delegation levels", "hand-off plan", "who can I give this to". Also UA — «рівні делегування», «план передачі», «кому це віддати». Picks candidates from team profiles (D-type, GTD-index); diagnoses and plans the transfer, goal-setter and task-creator execute it.
+version: 0.2.1
+description: Audit a manager's operational load on the 7 delegation levels and plan the hand-off (S1→S4). Not daily focus (focus-advisor), not task creation (task-creator). UA — «аудит делегування», «що можна делегувати», «перевантажений операційкою». EN — "what can I delegate".
 ---
 
 # Delegation Coach
@@ -82,3 +82,9 @@ Per `self-improvement.md`.
 ## Example dialogues
 - *"Я потонув в операційці, що делегувати?"* → mines calendar+Jira → audit table of 14 activities, 9 at levels 1–4 → flags "A/B readout prep" and "stakeholder status prep" as top push-downs → proposes Firstname (D3, GTD 0.81) at target level 6 with an S1→S4 plan.
 - *"Немає кому делегувати розбір багрепортів"* → computes ROI of a junior analyst hire vs the PM's hours → positive payback → drafts the argument for the manager + a role hand-off plan (chains to hiring-designer).
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Audit a manager's operational load on the 7 delegation levels and plan the hand-off (S1→S4). Not daily focus (focus-advisor), not task creation (task-creator). UA — «аудит делегування», «що можна делегувати», «перевантажений операційкою», «вийти з операційки». EN — "audit my delegation", "what can I delegate", "I'm overloaded with ops", "delegation levels", "hand-off plan", "who can I give this to". Also UA — «рівні делегування», «план передачі», «кому це віддати». Picks candidates from team profiles (D-type, GTD-index); diagnoses and plans the transfer, goal-setter and task-creator execute it.

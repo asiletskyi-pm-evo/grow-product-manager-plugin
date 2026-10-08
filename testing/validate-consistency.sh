@@ -192,13 +192,21 @@ fi
 # survive that cut: the guard against the nearest neighbour ("Not …") has to end
 # inside the first 192 characters, and a parenthesised neighbour must be a real
 # skill. Ukrainian keywords («…») must be present somewhere in the description.
+# v3.10.1: Claude Code caps the whole skill listing (1% of the context window) and,
+# over that cap, shows names only for the skills used least — 16 of 33 here, which
+# explained 8 of 10 routing misses. Each description stays within 400 characters
+# and all of them together within 10,000, so the plugin fits the room it had.
 SKILL_NAMES=$(ls -d skills/*/ | xargs -n1 basename)
 DESC_ISSUES=$(python3 - <<'PY_CHECK'
 import re,glob,os
 names={os.path.basename(os.path.dirname(f)) for f in glob.glob("skills/*/SKILL.md")}
+total=0
 for f in sorted(glob.glob("skills/*/SKILL.md")):
     m=re.search(r"^description: (.+)$", open(f,encoding="utf-8").read(), re.M)
     d=m.group(1) if m else ""
+    total+=len(d)
+    if len(d)>400:
+        print(f"{f}: description is {len(d)} characters; keep it within 400 (crowded hosts show a skill without its description)")
     lead=d[:192]                       # characters, not bytes — the Codex cut is character-based
     if not re.search(r"\b(Not|Never|never)\b", lead):
         print(f"{f}: no routing guard ('Not …' / 'Never …') inside the first 192 characters of the description")
@@ -207,10 +215,12 @@ for f in sorted(glob.glob("skills/*/SKILL.md")):
     for n in set(re.findall(r"\(([a-z][a-z-]+)\)", lead)):
         if n not in names:
             print(f"{f}: guard names '({n})' inside the lead but no such skill exists")
+if total>10000:
+    print(f"skills/*/SKILL.md: descriptions total {total} characters; keep them within 10000 — move triggers to the skill's Routing section")
 PY_CHECK
 )
 [ -z "$DESC_ISSUES" ] || { echo "$DESC_ISSUES" | while IFS= read -r line; do err "$line"; done; FAIL=1; }
-ok "description routing order: $(ls skills/*/SKILL.md | wc -l | tr -d ' ') leads carry a guard within 192 chars + Ukrainian keywords"
+ok "description routing order: $(ls skills/*/SKILL.md | wc -l | tr -d ' ') leads carry a guard within 192 chars + Ukrainian keywords; each ≤ 400 chars, all ≤ 10000"
 
 # --- 13. Commands stay typed-only on every host -----------------------------
 # Claude honours disable-model-invocation (check 8); Codex migrates commands

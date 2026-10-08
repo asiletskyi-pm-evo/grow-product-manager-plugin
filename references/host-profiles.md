@@ -89,6 +89,10 @@ Measured on Claude Cowork (2026-09-10, this plugin's flow-walkthrough spike):
 - **Transparent overlay windows of utilities block clicks** (a grammar checker's floating window did); quit them for the run.
 - **An App Store build can never run in the iOS Simulator** — it is a device binary; a simulator build from the mobile team is needed.
 
+Measured on Claude Code (2.1.292, v3.10.1):
+
+- **Claude Code caps the skill listing at 1% of the context window** (4 characters per token; setting `skillListingBudgetFraction`, env `SLASH_COMMAND_TOOL_CHAR_BUDGET`). Over the cap it keeps the host's bundled skills whole, ranks every other skill by use (a count with a one-week half-life) and gives descriptions in that order while they fit; the rest are listed **by name only**, and the model routes on the name. On a machine with about 150 skills, 16 of the plugin's 33 skills showed names only, and they explained 8 of 10 trigger misses. Hence, since v3.10.1: each description within 400 characters and all of them within 10,000 (validator check 12), the full trigger list in each skill's `## Routing` section, and trigger evals run twice — as the host lists skills, and with every description visible. A user who sees misrouting can raise `skillListingBudgetFraction` in `~/.claude/settings.json` or disable unused plugins with `/skills`.
+
 Measured on Codex CLI:
 
 - **Codex shares one ~15,000-character budget across every listed skill's `description`** (measured: 80 skills → ~190 characters each; this plugin alone → ~530). The warning is literal: *"Skill descriptions were shortened to fit the skills context budget"*. Hence the description order enforced since v3.0.0: essence with the discriminating nouns and the guard against the nearest neighbour inside the first 190 characters, then Ukrainian keywords, then EN triggers, then chains. Migrated commands count against the same budget.

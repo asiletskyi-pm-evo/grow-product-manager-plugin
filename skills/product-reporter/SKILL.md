@@ -1,7 +1,7 @@
 ---
 name: product-reporter
-version: 0.10.0
-description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a performance review (performance-review). UA — «звіт по спринту», «результати кварталу», «скільки закрив за квартал», «звіт по релізах», «звіт по цілі». EN — "sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points", "goal report", "3T5F", "audit this report against the goal". Also UA — «статус епіка/фічі/місії», «операційний звіт команди», «звіт для стейкхолдерів», «які фічі виїхали в реліз», «QBR за квартал», «звіт для борду»; EN — "QBR", "board update". Do NOT use to analyze A/B or dashboard metrics (product-analysis) or to release the plugin (release-manager).
+version: 0.10.1
+description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a plan-vs-actual retro (quarterly-planning). UA — «звіт по спринту», «результати кварталу», «звіт по релізах», «які фічі виїхали в реліз», «QBR». EN — "board update".
 ---
 
 # Product Reporter
@@ -165,7 +165,7 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.10.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.10.1", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
    - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
 
@@ -206,3 +206,9 @@ IF vault_level > L0 AND vault sync_mode != "off":
 
 ## Skill Chaining
 ← `quarterly-planning` (`quarter-review` actuals for its retro; since v3.6.0 also its board readout, rendered here as the board-update `ops-report` from the retro and plan data it passes — no new fetch; scope and destination come from the caller when it passes them; a board readout from quarterly-planning arrives with `destination: chat draft` and `visuals: none`, so Steps 5–6 are skipped and nothing is published until the user asks) · ← `sprint-planning` (`sprint-review` + `member-review`) · ← `project-planning` (`initiative-status`) · ← `goal-setter` (3T5F reporting) · ← `performance-review` (goal report and member-review data) · ← `focus-advisor` (rituals, unread goal reports) · → `goal-setter` (a goal report with no known Target)
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a performance review (performance-review). UA — «звіт по спринту», «результати кварталу», «скільки закрив за квартал», «звіт по релізах», «звіт по цілі». EN — "sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points", "goal report", "3T5F", "audit this report against the goal". Also UA — «статус епіка/фічі/місії», «операційний звіт команди», «звіт для стейкхолдерів», «які фічі виїхали в реліз», «QBR за квартал», «звіт для борду»; EN — "QBR", "board update". Do NOT use to analyze A/B or dashboard metrics (product-analysis) or to release the plugin (release-manager).

@@ -1,7 +1,7 @@
 ---
 name: template-library
-version: 0.3.3
-description: Manage artifact templates — concepts, requirements, research, tasks, decks — create, clone, edit, import, export, validate, backup. Not the glossary or knowledge sources (knowledge-library). UA — «додай шаблон», «керуй шаблонами», «покажи шаблони», «імпортуй шаблони з папки». EN — "manage templates", "add a template", "create a template", "edit a template", "import templates from a folder", "show templates", "backup templates". Also called by other skills to render an artifact via Step T of references/template-protocol.md.
+version: 0.3.4
+description: Manage artifact templates — concepts, requirements, research, tasks, decks — create, clone, edit, import, export, validate, backup. Not the glossary or knowledge sources (knowledge-library). UA — «додай шаблон», «покажи шаблони». EN — "manage templates".
 ---
 
 # Template Library
@@ -251,3 +251,9 @@ Write operations update `onboarding.templates_setup_completed` when `add` first 
 - `skills/plugin-configurator/SKILL.md` — Step O-T onboarding flow invites this skill
 - `skills/knowledge-library/SKILL.md` — sibling skill; routing rules documented there
 - `references/persistent-storage.md` — where templates physically live
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Manage artifact templates — concepts, requirements, research, tasks, decks — create, clone, edit, import, export, validate, backup. Not the glossary or knowledge sources (knowledge-library). UA — «додай шаблон», «керуй шаблонами», «покажи шаблони», «імпортуй шаблони з папки». EN — "manage templates", "add a template", "create a template", "edit a template", "import templates from a folder", "show templates", "backup templates". Also called by other skills to render an artifact via Step T of references/template-protocol.md.
