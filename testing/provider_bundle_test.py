@@ -58,6 +58,8 @@ if rc == 0 and os.path.isfile(prop):
     check("reference-only and added blocks", "product" in rep.get("reference_only", []) and
           {"scope", "teams"} <= set(rep.get("added", [])) and rep.get("discrepancies") == [], rep)
     check("provider bullet proposed", re.search(r"^### Vault Search MCP\n(?:.*\n)*?- zorg-core: ", t, re.M) is not None, t[-800:])
+    ex0 = open(os.path.join(FIX, "existing-context.md"), encoding="utf-8").read()
+    check("no extra blank lines introduced", t.count("\n\n\n") <= ex0.count("\n\n\n"), t.count("\n\n\n"))
     check("files only under _System in dry run", all(f.startswith(os.path.join("Core", "_System")) for f in files_under(out)), files_under(out))
 else:
     check("merge keeps own team heading once", False, (rc, o))
@@ -119,6 +121,18 @@ p2 = os.path.join(out2, "Core", "_System", "local-context.proposed.md")
 P2 = open(p2, encoding="utf-8").read() if os.path.isfile(p2) else "missing"
 check("refresh twice is a no-op", rc2 == 0 and P2 == P1 and rep2.get("updated") == [] and rep2.get("added") == []
       and {"team", "scope", "teams"} <= set(rep2.get("unchanged", [])) and rep2.get("provider_entry") == "unchanged", (rc2, rep2))
+shutil.rmtree(d)
+
+# 2e — a vaults section closed by a horizontal rule: the provider entry goes inside it, before the rule
+d, core, out = fresh()
+src = open(os.path.join(FIX, "existing-context.md"), encoding="utf-8").read().replace("\n## Custom Sections", "\n---\n\n## Custom Sections")
+hr = os.path.join(d, "hr-context.md"); open(hr, "w", encoding="utf-8").write(src)
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run", "--existing-context", hr)
+pp = os.path.join(out, "Core", "_System", "local-context.proposed.md")
+t5 = open(pp, encoding="utf-8").read() if os.path.isfile(pp) else ""
+check("provider entry sits inside the vaults section, before its rule", rc == 0
+      and "| all | auto | never |\n\n### Vault Search MCP\n- zorg-core:" in t5 and "read-only\n\n---\n\n" in t5 and t5.find("### Vault Search MCP") < t5.find("zorg-core:section:begin")
+      and t5.count("\n\n\n") <= src.count("\n\n\n"), t5[t5.find("## Obsidian"):t5.find("## Custom")+20])
 shutil.rmtree(d)
 
 # 3

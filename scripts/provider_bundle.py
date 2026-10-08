@@ -253,6 +253,8 @@ def ns_rx(ns):
 
 
 def masked(text, R):
+    """Blank out managed blocks and reference sections, keeping offsets, so headings inside them never anchor anything."""
+    text = R["section"].sub(lambda mo: "\x01" * len(mo.group(0)), text)
     return R["any"].sub(lambda mo: "\x01" * len(mo.group(0)), text)
 
 
@@ -356,7 +358,10 @@ def put_bullet(t, R, bullet, pid):
         rest = t[ov.end():]
         stop = re.search(r"^## ", rest, re.M)
         pos = ov.end() + (stop.start() if stop else len(rest))
-        return t[:pos].rstrip("\n") + "\n\n### Vault Search MCP\n" + bullet + "\n\n" + t[pos:], "added"
+        rule = re.search(r"\n-{3,}[ \t]*\n\s*$", t[ov.end():pos])     # the section closes with a horizontal rule
+        if rule:
+            pos = ov.end() + rule.start() + 1
+        return t[:pos].rstrip("\n") + "\n\n### Vault Search MCP\n" + bullet + "\n\n" + t[pos:].lstrip("\n"), "added"
     pos = find_anchor(t, R, [r"^## Custom Sections"])
     sec = "## Obsidian Vaults (Optional)\n\n### Vault Search MCP\n" + bullet + "\n\n"
     return ((t[:pos] + sec + t[pos:]) if pos is not None else t.rstrip("\n") + "\n\n" + sec), "added"
@@ -435,6 +440,9 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
                 report["reference_only"].append(bid)
             else:
                 report["added"].append(bid)
+        # the provider entry first, so a reference section created next can never end up around it
+        t, state = put_bullet(t, R, bullet, m["id"])
+        report["provider_entry"] = state
         if rest:
             body = "\n".join(b.rstrip("\n") + "\n" for b in rest).rstrip("\n")
             ms = R["section"].search(t)
@@ -449,8 +457,6 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
                     else t.rstrip("\n") + "\n\n" + sec
         offered = {bid for _, bid in blocks} | {"team"} | set(skip)
         report["retired"] = sorted(set(re.findall(r"<!-- %s:begin id=([a-z0-9-]+)" % re.escape(ns), t)) - offered)
-        t, state = put_bullet(t, R, bullet, m["id"])
-        report["provider_entry"] = state
         ver = {bid: block_version(blk) for blk, bid in blocks}
         ver["team"] = block_version(tblock)
         rows = "".join("| %s `%s` | — | added (v%s) |\n" % (ns, b, ver.get(b, "?")) for b in report["added"]) + \
