@@ -18,7 +18,7 @@ Vault detection is executed during **Step 0** (after reading `local-context.md`)
 
 - **L0: No vault configured** → Skip all vault operations silently
 - **L1: Vault path configured, file system access only** → Read/write `.md` files, search via glob + grep
-- **L2: Vault path + Obsidian MCP available** → L1 + full-text search, Dataview, graph traversal
+- **L2: Vault path + at least one provider answering `vault/v1`** — the user's own index or a shared-context provider (`context-provider-protocol.md` §4) → L1 + full-text search, backlinks, graph traversal
 
 ### Detection Algorithm
 
@@ -31,16 +31,17 @@ Vault detection is executed during **Step 0** (after reading `local-context.md`)
    b. Check plugin folder exists: stat(path/{plugin_folder}/)
    c. If either fails → skip this vault
 4. If valid vault(s) found AND MCP detection != "disabled"
-   → try Obsidian MCP call (test_mcp_connection)
-   → if responds successfully → L2
-   → if no response or error → L1
+   → probe every provider per context-provider-protocol.md §4
+     (brain_status, else vault_list_by_folder(""); 3 s budget each)
+   → at least one answers → L2
+   → none answers → L1 (one line naming the unreachable provider, once per session)
 5. Store vault_level and vault_configs in session context
 6. If no valid vaults found → downgrade to L0
 ```
 
 ### Session Context Storage
 
-After detection, store in session:
+After detection, store in session (since v3.10.0 also `session.providers`, built by Step 0h per `context-provider-protocol.md` §4 — id, mode, access, local paths, reachable, stale):
 ```
 session.vault = {
   level: L0 | L1 | L2,
@@ -115,10 +116,13 @@ If `vault_level == L0` → **skip silently**, continue to Step 1 normally.
    IF vault_level == L1:
      → file_search(criteria)
    ELSE IF vault_level == L2:
-     → mcp_search(criteria)
+     → mcp_search(criteria)          # own vault + every reachable provider
 
 4. Display results (if found):
-   - Show max 5 in summary
+   - Show max 5 in summary; each names its source (own vault or provider id)
+     and, for a snapshot provider, the snapshot date
+   - A stale or unreachable provider gets one line, once per session
+     (context-provider-protocol.md §6)
    - Ask user: "Use as context? [Yes / Select specific / Skip]"
 
 5. Handle user response:
@@ -237,46 +241,43 @@ file_search(criteria: SearchCriteria) → [ArtifactSummary]:
 
 ## MCP Search (L2)
 
-Enhancement over L1 using Obsidian MCP for richer search capabilities:
+Enhancement over L1 through the providers that speak `vault/v1` — the user's own local index and any shared-context provider (`context-provider-protocol.md` §2, §4–§6). Tool names are the contract's; a provider without one of them is skipped for that call.
 
 ```
 mcp_search(criteria: SearchCriteria) → [ArtifactSummary]:
 
 1. Execute L1 file_search as baseline
-   baseline_results = file_search(criteria)
+   baseline_results = file_search(criteria)          # source = "own vault"
 
-2. Build MCP full-text search query:
-   mcp_query = {
-     text: criteria.tags + product keyword,
-     path_filter: "{vault_path}/{plugin_folder}/",
-     scope: "content + frontmatter"
-   }
+2. Build the query:
+   query  = FTS5 terms from criteria.tags + product keyword
+            (phrases and words with & - : / . in double quotes)
+   folder = "{plugin_folder}/" for the own index; the provider's routing folder otherwise
 
-3. Execute MCP search (with timeout):
-   TRY:
-     mcp_results = mcp_full_text_search(mcp_query) TIMEOUT 3s
-   CATCH timeout:
-     → log info "MCP search timed out"
-     → return baseline_results (graceful degradation)
-   CATCH error:
-     → log info "MCP unavailable"
-     → return baseline_results
+3. For each reachable provider in routing order (§5: own index → snapshot → live):
+   TRY (3 s budget):
+     hits = vault_search(query, folder=folder, limit=10)
+   CATCH timeout / error:
+     → mark provider unreachable for the session, one line (§6), continue
+   tag every hit with provider id and, for a snapshot, synced_at
 
-4. Merge results:
-   merged = deduplicate(baseline_results + mcp_results)
-   → by artifact file_path (canonical path)
-   → keep highest relevance score if duplicated
+4. Merge:
+   merged = deduplicate(baseline_results + all hits) by provider + path
+   when two ranked lists merge → reciprocal-rank fusion, k = 60
+   the own vault wins over a provider copy of the same note
 
-5. Get backlinks for top-5:
+5. Backlinks for the top 5:
    FOR each artifact in merged[0:5]:
-     backlinks = mcp_get_backlinks(artifact.path)
-     artifact.related_count = len(backlinks)
+     links = vault_get_links(artifact.path, direction="in")   # on the artifact's provider
+     artifact.related_count = len(links.in)
 
 6. Re-sort by relevance + related_count
    Sort by: (relevance_score * 0.7) + (related_count * 0.3)
 
-7. Return merged results
+7. Return merged results (each with provider and, for a snapshot, its date)
 ```
+
+A relational question (who owns what, what depends on what) may follow up with `vault_graph_context(entity, depth=1|2)` on the provider that holds the entity.
 
 ---
 
@@ -291,7 +292,11 @@ vault_save(artifact, product, options):
 
 1. Precondition checks:
    IF vault_level == L0 → return (skip silently)
-   IF sync_mode == "off" → return (read-only, skip silently)
+   IF sync_mode == "off" → return (skip silently)
+   IF sync_mode == "read-only" → return (the vault is searched, never written)
+   IF the target vault lies under a registered provider root
+      (context-provider-protocol.md §7) → return, one line: the folder is a
+      provider's and read-only — connect your own vault for saves
    IF sync_mode == "manual":
      → ask user: "Save to vault? [Yes / No]"
      → if No → return

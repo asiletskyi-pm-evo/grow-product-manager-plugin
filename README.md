@@ -645,42 +645,26 @@ Run Plugin Configurator → Obsidian Vault step, or say "connect Obsidian Vault"
 
 ## Persistent Data Storage
 
-All user data is stored in a **user-controlled location** — either your Obsidian Vault (recommended) or a custom folder you choose during setup.
+Your data lives outside the plugin, so it survives uninstalls, reinstalls and updates.
 
-**How it works:**
-- `~/.grow-pm/` contains only a pointer file (`.storage-pointer.yaml`) that tells the plugin where your actual data lives
-- Two storage modes: **Vault** (Obsidian vault = primary storage) or **Custom** (user-chosen folder)
-- When Obsidian is configured, the vault IS the primary storage — no separate copy needed
-- Data persists across plugin uninstalls, reinstalls, and updates
+- **`~/.grow-pm/`** — `local-context.md` (your configuration), service data (experiment registry, focus journal, landscape registry, walkthrough evidence packs, shared-context provider registrations when no vault is set) and `backups/` (the last 5 of each kind are kept).
+- **Your Obsidian vault (optional, recommended)** — when connected it is the plugin's `storage_root`: templates and every artifact are saved there, and `local-context.md` and the knowledge library are mirrored into the plugin folder after every change (`_System/`, `Knowledge/`), so the vault can restore `~/.grow-pm/` if it is lost.
+- **Without a vault** — everything stays under `~/.grow-pm/` (`Templates/`, `knowledge-library/`, `people/`, `decisions/`, …).
 
-**Storage structure (at your chosen location):**
+**Storage structure (`~/.grow-pm/`, abridged):**
 
 ```
-<your-storage-location>/
+~/.grow-pm/
 ├── local-context.md           # Plugin configuration
-├── knowledge-library/         # Curated knowledge sources
-│   ├── sources.md             # Source registry with trust scores
-│   ├── articles/              # Imported articles
-│   ├── benchmarks/            # Industry benchmarks
-│   └── competitive/           # Competitor intelligence
-└── Templates/                 # Multilingual artifact templates
-    ├── _registry.json         # Template index with scoring metadata
-    ├── _backups/              # Pack backups (last 5 before bulk ops)
-    ├── _archive/              # Per-template version history (last 10)
-    ├── built-in/              # Templates shipped with plugin
-    ├── user/                  # User-global templates (all products)
-    └── product/<product_id>/  # Product-scoped overrides
+├── .schema-version            # Schema version marker
+├── knowledge-library/         # Curated sources, trust scores, glossary, style profile
+├── Templates/                 # Only without a vault — otherwise in the vault
+├── experiments/  focus/  landscape/  walkthroughs/
+├── providers/                 # Shared-context provider registrations (no vault)
+└── backups/                   # Before migrations and updates — last 5 kept
 ```
 
-**Key Features:**
-- User chooses storage location during onboarding (Step 0)
-- Per-product Knowledge Library support
-- Pointer-based resolution with recovery flow
-- Change storage location at any time via Plugin Configurator
-- Automatic backups before migrations
-- Schema versioning for data compatibility
-
----
+**Key features:** automatic backups before migrations and updates, schema versioning (`.schema-version` for `~/.grow-pm/`, `.vault-schema-version` for the vault), and recovery from the vault mirror; the paths above are the real ones. Full protocol: `references/persistent-storage.md`.
 
 ## Multilingual Artifact Templates
 
