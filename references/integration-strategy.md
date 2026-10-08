@@ -39,6 +39,8 @@ Namespaces are what the host showed in real sessions; a differently-named connec
 
 **Not declared on purpose:** Tableau (a local MCP server the user runs; in hosted sessions it appears as `mcp__remote-devices__Tableau__*`), Notion, Slack, Obsidian — detected by pattern only.
 
+**Shared-context providers (since v3.10.0).** A team's or an organisation's core knowledge served by an MCP server — often reachable only over a VPN and bridged locally — is not declared here either: each provider is described by its own manifest and registered per user (`context-provider-protocol.md` §3). Detect it by the contract, not by a name: a server exposing `vault_search` and `vault_get_note` speaks `vault/v1`. Its local folders are behind the plugin's write boundary (§7 there).
+
 **Optional research connectors (v3.3.0).** `lazyweb`, `similarweb`, `mobbin`, `semrush`, `tavily`, `apify` are declared so the Connectors tab shows them, but no skill requires them: `product-landscape` and `flow-walkthrough` say in one line which optional sources are present and continue without the rest. Each is a paid or account service the user registers for; keys live in the host's connector configuration, never in the plugin. `tavily` matters on hosts without a built-in web search (Codex, ChatGPT); `apify` is the only route to Google Play charts and reviews.
 
 **1b. Pattern detection.** For anything not covered by 1a — or when the declared namespace is absent but the product might still be connected under another name — look at the available tools. MCP tools follow the pattern `mcp__<id>__<tool_name>`. Common connectors:
