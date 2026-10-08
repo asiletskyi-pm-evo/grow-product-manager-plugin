@@ -12,6 +12,39 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.10.1 (2026-10-08)
+
+**Routing that survives a crowded host, and the phase-1 fixes.** Claude Code caps the skill listing at 1% of the context window and, over the cap, lists the least-used skills by name alone (measured in Claude Code 2.1.292, `references/host-profiles.md` §7). On a machine with about 150 skills, 16 of the plugin's 33 skills showed no description, and the model routed on names: that explained 8 of the 10 trigger misses left open in v3.10.0, and why the guards tried then changed nothing — they sat in descriptions the model never saw. Every description now keeps its lead and nearest-neighbour guard and drops the long trigger tail (21,217 → 9,787 characters for all 33), so the plugin fits the room it already had; the full trigger lists move into each skill's `## Routing` section. Trigger evals on the same machine and harness: 169/178 → 178/178 as the host lists skills (a row that missed was re-run three times and scored by majority; the nine rows that also fail on v3.9.0 now pass), 177/178 → 178/178 with every description visible.
+
+PATCH: the 33 descriptions (each skill +0.0.1), fixes in the bundle builder, the session digest and the branch scan, a validator cap, the eval method and its runners.
+
+### Changed
+
+- **All 33 skill descriptions** (each skill +0.0.1) — within 400 characters each and 9,787 together (were 21,217): the lead and the nearest-neighbour guard as before — what Codex shows — and the strongest Ukrainian and English triggers. Where a miss showed a gap: product-research names research plans and «як конкурент зробив…»; product-reporter is "not a plan-vs-actual retro (quarterly-planning)"; roadmap-architect is "not a strategy memo (write-concept)"; product-landscape is "not its setup (plugin-configurator)"; design-bridge keeps «через мій дизайн-тулкіт», since with the listing freed a design toolkit's own skill competes for that phrase. The v3.10.0 description of each skill is kept word for word in its new `## Routing` section, so no trigger or boundary is lost.
+- **`context-connect`** opens with "Shared team core — connect, refresh bundle, add MCP provider", so a refresh request reaches it on a host that shows about 53 characters of each description (Codex with 118 skills sent «онови мій пакет з ядра» to the configurator). «підключи Obsidian-вейлт» stays with the configurator. Group T on that Codex configuration: 25/28 → 28/28 over two runs.
+- **Validator check 12** — each description within 400 characters and all of them within 10,000, so the listing does not grow back.
+- **Trigger evals** run twice — as the host lists skills, and with every description visible (`SLASH_COMMAND_TOOL_CHAR_BUDGET` raised for the test processes only). A miss in the first mode only is a visibility problem, in both a description problem. Two runners now live in the repository: `testing/trigger_claude.py` (a staged copy whose digest reads a fictional context, never the user's `~/.grow-pm`; no MCP servers; no write tools) and `testing/trigger_codex.py` (the working tree as a temporary marketplace; the installed copies disabled for these processes only; usage-limit replies counted as errors, not misses). L8 (a typed command) is scored on Codex only, since Claude Code runs a typed command before any routing; E2 and R13 accept a Lazyweb skill when the user's own global instructions send UI work there.
+- `references/host-profiles.md` §7 records the measured listing budget and what a user can do about it; the README hosts table and AGENTS.md known gap 1 follow.
+
+### Fixed
+
+- **Bundle builder** (`scripts/provider_bundle.py`): a refresh keeps the user's own note on the `Updated:` line (the line was rewritten whole); registration paths and `writable` globs are written in quotes (a folder with ` #` in its name was cut on read-back); a begin marker without its end in the proposal stops with exit 4 (only nesting was checked); a provider title with `,` or `;` is quoted in the `### Vault Search MCP` bullet, and the bullet parser respects quotes; `--dry-run` is now `--propose-only`, since it writes the proposal files — the old name still works and says so.
+- **Session digest**: the index date is read from a `meta` table with `k`/`v` columns too — a legacy spelling met in a real index; `key`/`value` stays the contract (protocol §10); the index path is URI-escaped (a path with `?` or `%` read as "no index"); a `_none_` placeholder is not a deferred onboarding step; a registration that does not parse is named in one digest line instead of disappearing.
+- **Branch scan**: a base branch missing from the clone (a shallow clone) is one line and exit 2, never a traceback or a pass.
+- Tests: `provider_bundle_test.py` 41 → 49 checks, `session_start_test.py` 12 → 16, `branch_leak_scan_test.py` 4 → 5 — each new check failed before its fix.
+
+### Backwards compatibility
+
+- No skill renamed, no step added or removed: only descriptions, two builder flags, digest lines and the scan's exit code. Registrations written by v3.10.0 read as before; `--dry-run` keeps working.
+- On Claude Code with many plugins, a user who still sees misrouting can raise `skillListingBudgetFraction` in `~/.claude/settings.json` or disable unused plugins with `/skills` (`references/host-profiles.md` §7).
+
+### Not in this version
+
+- K8 («налаштуй секцію глосарія і стилю в конфігурації плагіна») passes 2 of 3 on Claude Code, 3 of 3 on v3.9.0 — to watch, not tuned: a change for one row moved others in v3.10.0.
+- Context records instead of the single `local-context.md`, the `ctx` command line and a generated context card (v3.11.0).
+
+---
+
 ## v3.10.0 (2026-10-08)
 
 **Shared-context providers: connect your context to a team's core.** First phase of the Context Core programme. A team or an organisation can share its core knowledge — team cards, a people registry, missions, metrics, rules, exported pages — with every colleague's plugin, and the plugin now treats such a core as a *provider*: one tool contract, one manifest, one registration per user, one write boundary. What a separate companion plugin used to do for one organisation — e-mail → team → role, a role-filtered bundle, context blocks merged into the user's context, rules for the agent, a session digest — is now part of this plugin and works for any provider that ships a manifest.

@@ -4,6 +4,17 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v3.10.1 — routing on a crowded host, phase-1 fixes (added 2026-10-08)
+
+Descriptions cut to fit Claude Code's skill-listing budget (`references/host-profiles.md` §7); the bundle builder, digest and branch-scan fixes from the phase-1 review.
+
+- **TC-route-3101-listing** | `python3 testing/trigger_claude.py <out.json> --mode real`, then `--mode visible`; all 178 rows (L8 is Codex-only); a miss re-run 3× | expected: no row fails by majority in either mode | **pass** (2026-10-08) — before (v3.10.0, same harness): real 169/178, visible 177/178; after: real 177/178 (B7) → group B 27/27 ×3 in both modes after one fix, J9 2/3, K8 2/3; visible 178/178. v3.9.0 in the same harness: C6, J6, O4, O5, O8, R15, R16, R19, S10 fail by majority
+- **TC-route-3101-codex-T** | `python3 testing/trigger_codex.py <out.json> --groups T --repeat 2` | expected: Group T on the crowded Codex configuration (118 skills, ~53 characters of each description); T4 reaches context-connect, T8 stays with the configurator | **pass** (2026-10-08) — 28/28 over two runs; v3.10.0 in the same configuration 25/28 (T4 0/2, T8 1/2)
+- **TC-lint-3101-desc-budget** | `bash testing/validate-consistency.sh` (check 12) | expected: each description within 400 characters, all within 10,000; a longer description fails | **pass** (2026-10-08) — 9,787 characters, longest 352; a 491-character description in a temp copy fails the check
+- **TC-ctx-3101-bundle** | `python3 testing/provider_bundle_test.py` | expected: the `Updated:` line keeps the user's note (own refresh item first, another provider's item only from the same day); registration paths survive a ` #`; an orphan begin marker → exit 4 and nothing written; a provider title with `,` and `;` reads back whole; `--propose-only` works and `--dry-run` names its new spelling | **pass** (2026-10-08) — 49/49, the 8 new checks red before the fixes
+- **TC-hook-3101-digest** | `python3 testing/session_start_test.py` | expected: an index date from a `meta(k, v)` table; an index path with `?` and `%`; a `_none_` placeholder is no deferred step; an unreadable registration named with its file and line | **pass** (2026-10-08) — 16/16, the 4 new checks red before the fixes
+- **TC-lint-3101-branch-scan** | `python3 testing/branch_leak_scan_test.py` | expected: a base missing from the clone → exit 2 and one line, no traceback | **pass** (2026-10-08) — 5/5
+
 ## Release v3.10.0 — shared-context providers (added 2026-10-08)
 
 Context Core phase 1: the provider contract `vault/v1` and manifest (`references/context-provider-protocol.md`), the L2 binding, the digest without double counts, the provider write boundary, the bundle builder and two skills. Fixture: the fictional core `testing/fixtures/context-connect/zorg-core/`.

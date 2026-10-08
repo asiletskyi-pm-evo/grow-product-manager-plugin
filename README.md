@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.10.0
+**Version:** 3.10.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.10.1** — **Routing that survives a crowded host** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Claude Code caps the skill listing at 1% of the context window and, past the cap, lists the least-used skills by name alone; on a machine with about 150 skills, 16 of this plugin's 33 showed no description and the model routed on names — the cause of most trigger misses left open in v3.10.0. Every description now keeps its lead and nearest-neighbour guard within 400 characters (9,787 for all 33, were 21,217), the full trigger list of each skill lives in its `## Routing` section, and validator check 12 keeps the budget. Trigger evals run twice — as the host lists skills and with every description visible — through two runners now in `testing/`; on the test machine the misses went from 9 to 0 by majority of three. `context-connect` opens with "Shared team core — connect, refresh bundle, add MCP provider" for hosts that show about 53 characters of a description. Fixes from the phase-1 review: the bundle builder keeps your own note on the `Updated:` line, quotes registration paths, stops on an unclosed marker and takes `--propose-only` (`--dry-run` still works); the session digest reads an index date from a `meta` table spelled `k`/`v`, escapes the index path and names a registration it cannot read; the branch scan exits 2 when its base is missing.
 
 **New in v3.10.0** — **Shared-context providers: connect your context to a team's core** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). A team or an organisation can now share its core knowledge — team cards, people registry, missions, metrics, rules — with every colleague's plugin, and the plugin treats it as a *provider*: one contract, `vault/v1` (`vault_search`, `vault_get_note`, `vault_get_links`, `vault_graph_context`, `vault_list_by_tag`, `vault_list_by_folder`, plus optional `brain_*` status and entity tools), declared by a provider manifest and registered per user (`references/context-provider-protocol.md`). New skill **`context-connect`** resolves your team and role from your e-mail, copies the bundle relevant to you, proposes the core's context blocks for your `local-context.md` — never overwriting it, every discrepancy a question, a backup before and a changelog after — and registers the provider; the bundle builder `scripts/provider_bundle.py` reads every folder name, label and note template from the manifest. New skill **`context-navigator`** answers from the shared core — who owns what, where a rule lives, which missions a team has, who someone is — through the provider's own rules and graph, always with the note path and the snapshot date. The vault level L2 now means "a provider answers `vault/v1`" (it named tool calls no server had); Step 0.5 searches every reachable provider, merges results and says once when a provider is stale or unreachable. A third hook asks before a file write inside a provider's read-only folder. The session digest no longer double-counts teams or products that a provider block or the Landscape section repeats, recognises a vault declared as a table, and lists providers and your bundle. One storage story replaces the old pointer-file description; backups keep the last 5 everywhere. Lint check 26 `provider-contract` and a branch scan for organisation identifiers (release pre-flight) guard the new surface.
 
@@ -1024,5 +1026,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.10.0  
+**Version:** 3.10.1  
 **Last Updated:** October 2026
