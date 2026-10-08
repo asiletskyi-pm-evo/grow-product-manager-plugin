@@ -119,6 +119,16 @@ ttl_days:
 | `directory_label`, `owner_label` | — | Words the plugin uses in its questions ("not found in the company directory", "ask the core owner"). |
 | `write_scope` | — | What the provider allows the user to write outside the core (`own-project` = only the user's own project, through the plugin's write gate). |
 | `ttl_days` | — | Freshness per folder class, used when a note from that class is cited (§6). |
+| `product_name` | — | The product the core describes; a user context naming only other products raises one question. |
+| `dashboard_file` | — | The core's entry note; the bundle builder prunes its links to files outside the bundle. |
+| `delink_targets`, `delink_note`, `delink_labels` | — | Link targets (regular expressions) that point into the owner's personal layer: in the bundle such links become plain text, and the note is added once per changed file; a line made only of `delink_labels` words is dropped. |
+| `people_private_fields`, `people_card_note` | — | Registry cards are copied with registry fields only: these frontmatter keys and everything after the first `##` section are dropped, and the note is added. |
+| `card_fields` | — | Frontmatter keys of a team card that hold the team head and the directory node (`head`, `node` by default). |
+| `dashboard_rewrites` | — | `"old => new"` phrases rewritten in the entry note (the owner's wording → the reader's). |
+| `personal_notes` | — | Where the user's focus and to-do notes go (`now`, `todo`; `{{NAME}}` allowed); defaults `<plugin_folder>/Now.md` and `<plugin_folder>/TODO — {{NAME}}.md`. |
+| `role_enum_map`, `jira_write_labels` | — | Role profile → the plugin's role enum for a new context; the wording of the three write scopes. |
+
+Templates in `templates_dir` (all optional, the plugin ships English defaults): `now.md`, `todo.md`, `person-card.md` (whole notes), `bundle-manifest.md` (the body; the frontmatter the digest reads is always written by the builder), `team-block.md`, `context-section.md`, `context-skeleton.md`. Placeholders are `{{UPPER_CASE}}` names; the defaults show every one.
 
 ### 3b. Registration (kept by the user)
 

@@ -1,0 +1,87 @@
+{
+ "version": "0.2",
+ "updated": "2026-09-11",
+ "emails": {
+  "a.one@zorg.example": "alpha",
+  "b.two@zorg.example": "alpha",
+  "c.three@zorg.example": "beta"
+ },
+ "teams": {
+  "alpha": {
+   "title": "Alpha — reviews and catalog",
+   "department": "dev",
+   "umbrella": false,
+   "union_of": [],
+   "files": [
+    "Core/Teams/team-alpha.md",
+    "Core/People/a-one.md",
+    "Core/People/b-two.md",
+    "Core/Products/Zorg App/Missions/Mission One.md",
+    "Core/Products/Zorg App/Missions/_index.md",
+    "Wiki/SPACE/Pages/Alpha page.md",
+    "Core/_drafts/draft.md"
+   ],
+   "modules": [
+    "mod-reviews"
+   ],
+   "missions": [
+    "Mission One"
+   ],
+   "metrics": [
+    "metric-cr"
+   ],
+   "dashboards": [
+    "Reviews dashboard"
+   ]
+  },
+  "beta": {
+   "title": "Beta — payments",
+   "department": "dev",
+   "umbrella": false,
+   "union_of": [],
+   "files": [
+    "Core/Teams/team-beta.md",
+    "Core/People/c-three.md"
+   ],
+   "modules": [],
+   "missions": [],
+   "metrics": [],
+   "dashboards": []
+  }
+ },
+ "roles": {
+  "pm": [
+   "shared",
+   "team",
+   "pages"
+  ],
+  "analyst": [
+   "shared",
+   "team"
+  ]
+ },
+ "layer_prefixes": {
+  "shared": [],
+  "team": [
+   "Core/People/",
+   "Core/Products/",
+   "Core/_drafts/"
+  ],
+  "pages": [
+   "Wiki/SPACE/Pages/"
+  ]
+ },
+ "shared": [
+  "Core/Dashboard.md",
+  "Core/Teams/_index.md"
+ ],
+ "always": [
+  "Core/Playbook",
+  "Core/_System/context-blocks.md"
+ ],
+ "people_role": {
+  "a-one": "Product Manager, Alpha (lead)",
+  "b-two": "Data analyst",
+  "c-three": "Engineer"
+ }
+}

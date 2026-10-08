@@ -1,0 +1,43 @@
+schema: provider-manifest/1
+id: zorg-core
+title: Zorg shared product core
+namespace: zorg-core
+plugin_folder: Core
+contract: vault/v1
+authority: org
+mode: snapshot
+product_name: Zorg App
+bundles_file: Core/_System/access-bundles.json
+blocks_file: Core/_System/context-blocks.md
+team_card_dir: Core/Teams
+people_dir: Core/People
+missions_dir: Core/Products/Zorg App/Missions
+pages_dir: Wiki/SPACE/Pages
+dashboard_file: Core/Dashboard.md
+playbook:
+  - Core/Playbook/01 Rules.md
+  - Core/Playbook/03 Routes.md
+routing_hints: Core/Playbook/03 Routes.md
+personal_overlay:
+  - Core/Now.md
+  - Core/TODO*
+  - Core/_personal/
+exclude:
+  - "(^|/)_drafts/"
+deny_patterns:
+  - OWNER-PRIVATE
+delink_targets:
+  - "Core/Meetings/[^\\]|]+"
+delink_note: "> _Meeting notes on this topic stay in the core owner's personal layer._"
+people_private_fields:
+  - meetings_count
+card_fields:
+  head: head
+  node: node
+dashboard_rewrites:
+  - "the owner's focus => my focus"
+directory_label: company directory
+owner_label: core owner
+write_scope:
+  jira: own-project
+  confluence: read
