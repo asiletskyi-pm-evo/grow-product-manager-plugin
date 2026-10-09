@@ -158,3 +158,203 @@ def parse_record(text):
 def compile_records(records):
     """The compiled local-context.md: record bodies in ascending `order`."""
     return "".join(r["body"] for r in sorted(records, key=lambda r: r["order"]))
+
+
+# ------------------------------------------------------------------ store I/O
+class StoreError(Exception):
+    """A record or the store cannot be read (exit 3)."""
+
+
+class RegionError(Exception):
+    """An edit would land inside a provider's managed region (exit 4)."""
+
+
+def atomic_write(path, text):
+    """Write `text` byte for byte through a hidden temp file in the same folder, then replace."""
+    folder = os.path.dirname(path) or "."
+    os.makedirs(folder, exist_ok=True)
+    tmp = os.path.join(folder, ".%s.tmp" % os.path.basename(path))
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+
+
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
+
+
+class Store:
+    """`{root}/records/<id>.md`, `{root}/INDEX.md`, `{root}/.state/{compiled.json, journal.jsonl}`."""
+
+    def __init__(self, root):
+        self.root = root
+        self.records_dir = os.path.join(root, "records")
+        self.state_dir = os.path.join(root, ".state")
+        self.card_path = os.path.join(root, "INDEX.md")
+
+    def exists(self):
+        return os.path.isdir(self.state_dir)
+
+    def _record_files(self):
+        if not os.path.isdir(self.records_dir):
+            return [], []
+        valid, stray = [], []
+        for name in sorted(os.listdir(self.records_dir)):
+            if name.startswith(".") or not name.endswith(".md"):
+                continue
+            (valid if ID_RE.match(name[:-3]) else stray).append(name)
+        return valid, stray
+
+    def load(self):
+        """Records sorted by `order`. A record that cannot be read or parsed → StoreError naming its file."""
+        out = []
+        valid, _ = self._record_files()
+        for name in valid:
+            path = os.path.join(self.records_dir, name)
+            try:
+                with open(path, encoding="utf-8", newline="") as f:
+                    text = f.read()
+            except (OSError, UnicodeDecodeError) as e:
+                raise StoreError("record not readable: %s (%s)" % (name, e))
+            try:
+                rec = parse_record(text)
+            except ValueError as e:
+                raise StoreError("record not valid: %s (%s)" % (name, e))
+            if rec["id"] != name[:-3]:
+                continue                       # a copy under another name (a sync conflict) — stray
+            out.append(rec)
+        return sorted(out, key=lambda r: r["order"])
+
+    def stray_files(self):
+        """Files in records/ that compile ignores: other names, or a record's copy under another name."""
+        valid, stray = self._record_files()
+        for name in valid:
+            try:
+                with open(os.path.join(self.records_dir, name), encoding="utf-8", newline="") as f:
+                    if parse_record(f.read())["id"] != name[:-3]:
+                        stray.append(name)
+            except (OSError, UnicodeDecodeError, ValueError):
+                pass
+        return sorted(stray)
+
+    def write(self, rec):
+        rec = dict(rec, sha=sha_text(rec.get("body") or ""))
+        atomic_write(os.path.join(self.records_dir, rec["id"] + ".md"), render_record(rec))
+        return rec
+
+    def remove(self, rec_id):
+        path = os.path.join(self.records_dir, rec_id + ".md")
+        if os.path.exists(path):
+            os.remove(path)
+
+    def state(self):
+        path = os.path.join(self.state_dir, "compiled.json")
+        if not os.path.isfile(path):
+            return {}
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+
+    def save_state(self, state):
+        atomic_write(os.path.join(self.state_dir, "compiled.json"),
+                     json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n")
+
+    def journal(self, entry):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "journal.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+
+    def journal_entries(self):
+        path = os.path.join(self.state_dir, "journal.jsonl")
+        if not os.path.isfile(path):
+            return []
+        with open(path, encoding="utf-8") as f:
+            return [json.loads(l) for l in f if l.strip()]
+
+
+# --------------------------------------------------------------- field edits
+FIELD_RE = re.compile(r"^- \*\*(?P<name>[^*\n]+?):\*\*[ \t]*(?P<value>[^\r\n]*)")
+
+
+def _lines(body):
+    """[(offset, line_without_ending, ending)] for every line of the body."""
+    out, pos = [], 0
+    for ln in body.splitlines(keepends=True):
+        core = ln.rstrip("\r\n")
+        out.append((pos, core, ln[len(core):]))
+        pos += len(ln)
+    return out
+
+
+def _in_region(off, spans):
+    return any(a <= off < b for a, b in spans)
+
+
+def field_get(body, name):
+    """Value of the first `- **<name>:** value` line outside managed regions, or None."""
+    spans = cc.managed_spans(body)
+    for off, core, _ in _lines(body):
+        m = FIELD_RE.match(core)
+        if m and m.group("name").strip() == name and not _in_region(off, spans):
+            return m.group("value").strip()
+    return None
+
+
+def field_set(body, name, value):
+    """Replace the field's line; an absent field goes after the last line of the first bullet list.
+    A field present only inside a managed region → RegionError."""
+    spans, lines = cc.managed_spans(body), _lines(body)
+    new = "- **%s:** %s" % (name, value)
+    inside = False
+    for off, core, end in lines:
+        m = FIELD_RE.match(core)
+        if m and m.group("name").strip() == name:
+            if _in_region(off, spans):
+                inside = True
+                continue
+            return body[:off] + new + body[off + len(core):]
+    if inside:
+        raise RegionError("field %r is inside a provider's managed region" % name)
+    first = next((k for k, (off, core, _) in enumerate(lines)
+                  if core.startswith("- ") and not _in_region(off, spans)), None)
+    if first is None:
+        off, core, end = lines[0]
+        at, end = off + len(core) + len(end), end or "\n"
+    else:
+        last = first
+        while last + 1 < len(lines) and lines[last + 1][1].startswith("- "):
+            last += 1
+        off, core, end = lines[last]
+        at, end = off + len(core) + len(end), end or "\n"
+        if not lines[last][2]:
+            return body + "\n" + new
+    return body[:at] + new + end + body[at:]
+
+
+def _level(core):
+    m = re.match(r"^(#{1,6}) ", core)
+    return len(m.group(1)) if m else 0
+
+
+def append_line(body, text, under=None):
+    """Add `text` after the last non-empty line of the body, or of the subsection whose heading line is
+    `under` (up to the next heading of the same or a higher level). An identical line there → unchanged."""
+    lines = _lines(body)
+    lo, hi = 0, len(lines)
+    if under is not None:
+        lo = next((k for k, (_, core, _) in enumerate(lines) if core.strip() == under.strip()), None)
+        if lo is None:
+            raise ValueError("subsection not found: %s" % under)
+        lvl = _level(lines[lo][1])
+        hi = next((k for k in range(lo + 1, len(lines)) if 0 < _level(lines[k][1]) <= lvl), len(lines))
+    if any(core.rstrip() == text.rstrip() for _, core, _ in lines[lo:hi]):
+        return body
+    last = max((k for k in range(lo, hi) if lines[k][1].strip()), default=lo)
+    off, core, end = lines[last]
+    if not end:
+        return body[:off + len(core)] + "\n" + text + body[off + len(core):]
+    at = off + len(core) + len(end)
+    return body[:at] + text + end + body[at:]

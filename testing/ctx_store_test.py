@@ -65,5 +65,70 @@ check("record round trip", back["body"] == rec["body"] and back["id"] == "produc
 check("compile = original", cs.compile_records(list(reversed([dict(r, body=r["text"]) for r in recs])))
       == read(FIX, "typical.md"))
 
+# --- Task 3: store I/O, atomic writes, field edits
+import tempfile  # noqa: E402
+
+def records_of(name, now="2026-10-20T10:00:00+03:00"):
+    return [dict(r, ctx=1, owner="user", source="migrated", modified=now, body=r["text"])
+            for r in cs.assign_ids(cs.split_sections(read(FIX, name + ".md")))]
+
+with tempfile.TemporaryDirectory() as d:
+    st = cs.Store(os.path.join(d, "store"))
+    check("a new store does not exist", not st.exists())
+    for r in records_of("typical"):
+        st.write(r)
+    st.save_state({"compiled_at": "x"})
+    loaded = st.load()
+    check("write/load round trip", st.exists() and [r["id"] for r in loaded] == [r["id"] for r in records_of("typical")]
+          and cs.compile_records(loaded) == read(FIX, "typical.md")
+          and all(r["sha"] == cs.sha_text(r["body"]) for r in loaded), [r["id"] for r in loaded])
+    p = os.path.join(st.records_dir, "product.zorg-app.md")
+    before = read(p)
+    real_replace = cs.os.replace
+    def boom(*a, **k):
+        raise OSError("disk full")
+    cs.os.replace = boom
+    try:
+        cs.atomic_write(p, "garbage")
+    except OSError:
+        pass
+    finally:
+        cs.os.replace = real_replace
+    check("an interrupted atomic write leaves the old file", read(p) == before
+          and not [f for f in os.listdir(st.records_dir) if f.startswith(".")], os.listdir(st.records_dir))
+    open(os.path.join(st.records_dir, "product.zorg-app 2.md"), "w", encoding="utf-8").write(before)
+    check("stray files are ignored and listed", [r["id"] for r in st.load()].count("product.zorg-app") == 1
+          and st.stray_files() == ["product.zorg-app 2.md"], st.stray_files())
+    st.journal({"op": "test", "ids": ["profile"]})
+    check("journal appends JSON lines", st.journal_entries()[-1]["op"] == "test")
+    open(os.path.join(st.records_dir, "profile.md"), "w", encoding="utf-8").write("---\nid: profile\n")
+    try:
+        st.load(); err = ""
+    except cs.StoreError as e:
+        err = str(e)
+    check("broken frontmatter names the file", "profile.md" in err, err)
+
+body = records_of("typical")[4]["body"]
+check("field_get", cs.field_get(body, "Jira Project Key") == "PROJ" and cs.field_get(body, "Nope") is None)
+check("field_set changes exactly that line", cs.field_set(body, "Jira Project Key", "NEW")
+      == body.replace("- **Jira Project Key:** PROJ", "- **Jira Project Key:** NEW"))
+check("field_set of an absent field lands after the first list", cs.field_set(body, "Locales", "uk, en")
+      == body.replace("- **Confluence Space:** ZAPP\n", "- **Confluence Space:** ZAPP\n- **Locales:** uk, en\n"))
+crlf_body = body.replace("\n", "\r\n")
+check("field_set keeps CRLF", cs.field_set(crlf_body, "Locales", "uk") ==
+      crlf_body.replace("- **Confluence Space:** ZAPP\r\n", "- **Confluence Space:** ZAPP\r\n- **Locales:** uk\r\n"))
+team = records_of("rich")[4]["body"]
+try:
+    cs.field_set(team, "Lead", "X"); raised = False
+except cs.RegionError:
+    raised = True
+check("field_set inside a managed region is refused", raised and cs.field_get(team, "Lead") is None)
+once = cs.append_line(body, "- note")
+check("append_line once, at the last non-empty line", once == body.replace("- iOS\n", "- iOS\n- note\n")
+      and cs.append_line(once, "- note") == once, once)
+org = records_of("typical")[3]["body"]
+check("append_line under a subsection", cs.append_line(org, "- **Site:** zorg", under="#### Tableau") ==
+      org.replace("- **Server:** https://tableau.zorg.example\n", "- **Server:** https://tableau.zorg.example\n- **Site:** zorg\n"))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
