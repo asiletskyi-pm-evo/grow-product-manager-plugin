@@ -188,7 +188,7 @@ During execution, skills may discover new information that should be saved to `l
    - Add the new information to the appropriate section
    - Update the "Updated:" timestamp
    - Save the file back to `~/.grow-pm/local-context.md`
-   - **Context store (since v3.11.0, `references/context-protocol.md`):** When the session digest shows a `context: records …` line and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source <skill> --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more.
+   - **Context store (since v3.11.0, `references/context-protocol.md`):** When the session digest shows a `context: records …` line — on a host without the digest (Codex CLI): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source <skill> --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more.
 
 Examples of discoverable context:
 - **Product Research** → new competitors found during research

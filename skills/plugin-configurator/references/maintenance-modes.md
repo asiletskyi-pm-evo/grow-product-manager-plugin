@@ -255,7 +255,7 @@ When user wants to manage Vault settings, offer these options via AskUserQuestio
 - Preserve all custom sections
 - Save to `~/.grow-pm/local-context.md` (always use persistent storage)
 - **Mirror to Obsidian Vault** (if configured): execute Vault Mirror Protocol (VM-1 through VM-3 from `references/persistent-storage.md`) — sync changed files to `{vault}/{plugin_folder}/_System/`
-- **Context store (since v3.11.0):** When the session digest shows a `context: records …` line and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` has written the vault mirror — skip the manual copy.
+- **Context store (since v3.11.0):** When the session digest shows a `context: records …` line — on a host without the digest (Codex CLI): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` has written the vault mirror — skip the manual copy.
 
 **Mandatory changelog — always present after ANY update:**
 

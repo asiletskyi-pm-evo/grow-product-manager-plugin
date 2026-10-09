@@ -61,20 +61,20 @@ sha: "<sha256 of the body>"
 | `status` | where the store is, records, card lines, edits waiting to be imported per kind, conflicts, stray files, the last journal lines; no store → exit 3 |
 | `migrate [--apply]` | cuts `local-context.md` into records and proves the compile gives it back byte for byte; lists the records and the `custom` ones. `--apply`: a `pre-migrate` snapshot, then records, state, card and a journal line; the compiled copies are not touched. An existing store → refused |
 | `compile` | imports direct edits, then writes both copies (only the ones that differ; a missing vault copy is created), the card and the state; nothing changed → nothing written |
-| `sync [--source S] [--reason R] [--resolve ID=file\|record …] [--accept-removals]` | imports direct edits (§4); no store → exit 0 and "nothing to sync" |
+| `sync [--source S] [--reason R] [--resolve ID=file\|record …] [--accept-removals]` | imports direct edits (§4); no store → exit 0 and "nothing to sync"; a record file missing on disk → exit 3, nothing compiled (`--accept-removals` drops it) |
 | `get ID [FIELD] [--json]` | a record's body, or the value of its first `- **Field:** value` line outside managed regions |
 | `list [--type T] [--json]` | id, type, title |
 | `set ID FIELD VALUE` | changes the field's line; an absent field goes after the last line of the record's first bullet list; a field that lives only inside a managed region → refused |
 | `append ID --text T [--under "#### Heading"]` | adds a line after the last non-empty line of the record or of the named subsection; an identical line is not repeated |
 | `add TYPE TITLE [--parent ID] [--after ID] [--body-file F]` | a new `product`, `team`, `org`, `setting` or `custom` record with the right heading, after its last sibling |
 | `snapshot [--label L]` | a snapshot of the store and both copies |
-| `undo [--steps N]` | back to the state before the N-th last change (a `pre-undo` snapshot first; the journal is kept); right after a migration it removes the store |
+| `undo [--steps N]` | back to the state before the N-th last change, N from 1 (a `pre-undo` snapshot first; the journal is kept); refused while edits wait to be imported — `ctx sync` first; right after a migration it removes the store |
 | `validate` | records parse, ids match their file names, parents exist, orders are unique, the card fits, required fields (warnings), edits waiting, stray files |
 | `card` | regenerates `INDEX.md` only |
 
-**Rules every writing command follows:** take the lock (a live lock younger than 120 s → refused; an older one, or a dead process's, is taken over); refuse a store that lies inside a registered provider's folder (`context-provider-protocol.md` §7); import direct edits first; snapshot; write each file atomically (a temp file, then rename); add a journal line; compile.
+**Rules every writing command follows:** take the lock (a live lock younger than 120 s → refused; an older one, or a dead process's, is taken over); refuse a store that lies inside a registered provider's folder (`context-provider-protocol.md` §7); import direct edits first; snapshot; write each file atomically (a temp file, then rename); add a journal line; compile. A compiled copy is never replaced or created without a snapshot and a journal line — a compile with nothing to import that still rewrites a copy (a mirror without a baseline, a missing mirror) takes its own. Files are read within a time budget (30 s in all, `GROW_PM_CTX_READ_TIMEOUT`): a record that does not arrive — an iCloud-evicted file still downloading — stops the run with exit 3, naming it, before anything is written.
 
-**Output contract.** The last stdout line is `CTX_RESULT {json}`; a conflict prints `CTX_CONFLICT {json}` (each conflicting record with the versions) right before it. **Exit codes:** 0 ok · 2 a decision is needed · 3 bad input, no store or an unreadable record (usage errors too) · 4 refused (managed region, provider boundary, busy lock, existing store).
+**Output contract.** The last stdout line is `CTX_RESULT {json}`; a conflict prints `CTX_CONFLICT {json}` (each conflicting record with the versions) right before it. **Exit codes:** 0 ok · 2 a decision is needed · 3 bad input, no store, an unreadable or missing record (usage errors too) · 4 refused (managed region, provider boundary, busy lock, existing store, `undo` while edits wait).
 
 ## 4. Direct edits — `sync`
 
@@ -83,16 +83,18 @@ Each compiled copy is cut with the same rules and compared, section by section, 
 - **Changed section**, record unchanged since the last compile → the record takes the section's text.
 - **New section** → a new record, placed after the record that precedes it in the file.
 - **Renamed section** — a heading disappeared and, after the same preceding record, a new one appeared whose text holds at least half of the old record's non-empty lines → the same record, new `title`, same `id`. Otherwise: a removal plus a new section.
+- **Reordered sections** → the records take the file's order (the canonical copy's, when both copies moved sections).
 - **Removed section** → the record goes into the snapshot and leaves the store (`ctx undo` brings it back); it is always reported. **Three or more removals in one run** are a conflict until `--accept-removals`.
-- **Conflict** — the only case that asks: the same section changed in a copy and in the record (edited in Obsidian), or differently in the two copies. `ctx` exits 2 with both versions; the caller shows them, asks which to keep and re-runs with `--resolve <id>=file` or `--resolve <id>=record`.
+- **A record file missing on disk** (not downloaded yet, not synced yet, or deleted in Obsidian) → nothing is compiled and both copies stay as they are; `ctx` exits 3 naming the files and the way back (let them download; restore them from Obsidian's trash or a snapshot). `--accept-removals` drops them for good.
+- **Conflict** — the only case that asks: the same section changed in a copy and in the record (edited in Obsidian), or differently in the two copies. `ctx` exits 2 with both versions; the caller shows them, asks which to keep and re-runs with `--resolve <id>=file` or `--resolve <id>=record`. `file` is the canonical copy, `~/.grow-pm/local-context.md`: to keep the vault mirror's version, or a merge of the two, put that text into the canonical copy first.
 - A record edited directly in Obsidian, with no change in the copies, is simply compiled out.
-- A copy with no baseline in the state (a mirror that differed at migration) is never a source of edits; the next compile rewrites it, after a snapshot.
+- A copy with no baseline in the state (a mirror that differed at migration) is never a source of edits; the next compile rewrites it, after a snapshot and with a journal line.
 
 ## 5. Who writes
 
 `local-context.md` stays the surface for edits; no skill has to learn record files.
 
-- **Context Enrichment** (`local-context-protocol.md`), the **configurator** and **context-connect**: after saving `local-context.md`, when the session digest shows a `context: records …` line and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source <writer> --reason "<what was saved>"`; exit 2 → show the two versions, ask, re-run with `--resolve`; no store or no shell → nothing more.
+- **Context Enrichment** (`local-context-protocol.md`), the **configurator** and **context-connect**: after saving `local-context.md`, when the session digest shows a `context: records …` line — on a host without the digest (Codex CLI): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source <writer> --reason "<what was saved>"`; exit 2 → show the two versions, ask, re-run with `--resolve`; no store or no shell → nothing more.
 - **Other plugins** that write their own section — unchanged; the next `ctx` run imports their edits.
 - **Hosts without SHELL** edit `local-context.md` as before; the next `ctx` run on a host with a shell imports the edits.
 - **Moving in** is offered by the configurator — the Update item "Move my context to records" and one question at the end of onboarding — with one confirmation; `ctx undo` right after it moves back.
@@ -103,7 +105,7 @@ Each compiled copy is cut with the same rules and compared, section by section, 
 
 ## 7. The session digest
 
-With a store, the SessionStart digest adds one read-only line: `context: records N · card M lines · in sync` — or `· K edits to import`, or `· C conflicts (ctx sync)`. It is read within a two-second budget so an iCloud download never holds the session start; no store, or any failure → no line.
+With a store, the SessionStart digest adds one read-only line: `context: records N · card M lines · in sync` — or `· K edits to import`, or `· C conflicts (ctx sync)` (a record missing on disk counts as one). It is read within a two-second budget so an iCloud download never holds the session start; no store, or any failure → no line.
 
 ## 8. Snapshots and the journal
 

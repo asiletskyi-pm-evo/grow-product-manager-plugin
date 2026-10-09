@@ -125,7 +125,7 @@ This applies equally to:
 - Plugin Configurator modes (Onboarding, Update, View)
 - Context Enrichment by other skills (Product Research adding competitors, etc.)
 
-**Context store (since v3.11.0, `references/context-protocol.md`).** After every save of `local-context.md` in any mode: When the session digest shows a `context: records …` line and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` writes the vault mirror itself — skip the manual mirror copy. Moving a single-file context into records is the Update item "Move my context to records" and the one-time offer at the end of onboarding (Step 16).
+**Context store (since v3.11.0, `references/context-protocol.md`).** After every save of `local-context.md` in any mode: When the session digest shows a `context: records …` line — on a host without the digest (Codex CLI): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` writes the vault mirror itself — skip the manual mirror copy. Moving a single-file context into records is the Update item "Move my context to records" and the one-time offer at the end of onboarding (Step 16).
 
 ---
 
