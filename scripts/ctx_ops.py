@@ -443,3 +443,22 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
                    "reason": reason, "snapshot": snap})
     return {"changed": changed, "removed": removed, "added": added, "snapshot": snap,
             "compiled": compile_store(store, copies, now)}
+
+
+# ------------------------------------------------------- digest (read-only)
+def status_summary(context_path, home=None):
+    """{records, card_lines, pending, conflicts} for the SessionStart digest; None without a store or on any
+    error. Reads only."""
+    try:
+        text = _read(context_path)
+        store = cs.Store(store_root_for(text, home))
+        if not store.exists():
+            return None
+        recs = store.load()
+        plan = plan_sync(store, copies_for(context_path, text, home))
+        card = _read(store.card_path).count("\n") if os.path.isfile(store.card_path) else 0
+        return {"records": len(recs), "card_lines": card,
+                "pending": sum(len(plan[k]) for k in ("edits", "adds", "removes", "renames", "record_changes")),
+                "conflicts": len(plan["conflicts"]) + (1 if plan["suspicious_removal"] else 0)}
+    except Exception:
+        return None
