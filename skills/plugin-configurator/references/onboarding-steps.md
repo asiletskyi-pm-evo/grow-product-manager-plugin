@@ -757,6 +757,8 @@ After saving to `~/.grow-pm/`, if Obsidian Vault is configured (Step 14 was comp
 
 This ensures the vault always has an up-to-date copy of all user context, serving as a secondary backup.
 
+**16e-ctx. Context store offer (since v3.11.0, once, not in test mode):** when SHELL is available, ask one question — "Keep your context as records in the vault (one note per section, every change snapshotted and undoable)? local-context.md stays where it is." Yes → `python3 "<plugin root>/scripts/ctx.py" migrate`, show the record list and `round trip: identical`, then `ctx migrate --apply`. No → nothing; the Update item "Move my context to records" offers it later.
+
 **16f. Automatic validation:**
 
 After saving, automatically run a quick validation (see Validate Mode) to confirm everything works. Present the readiness report.

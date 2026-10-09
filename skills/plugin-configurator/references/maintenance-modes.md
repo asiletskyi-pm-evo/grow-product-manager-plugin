@@ -202,6 +202,7 @@ Present current sections as options via AskUserQuestion:
 - Design Toolkits (external hi-fi/screen-generation providers)
 - Custom Sections
 - Add new custom section
+- Move my context to records (since v3.11.0; shown when SHELL is available and the digest has no `context:` line) — run `python3 "<plugin root>/scripts/ctx.py" migrate`, show its record list and the line `round trip: identical`, then on "yes" `ctx migrate --apply` (a snapshot comes first; `ctx undo` reverses it)
 
 > The last four are the sections the Planning / Focus / People / Design Toolkit setup steps write and then hand off here ("offer review/update via `update config`"). They were missing from this menu until v2.1.0, so that handoff was a dead end.
 
@@ -254,6 +255,7 @@ When user wants to manage Vault settings, offer these options via AskUserQuestio
 - Preserve all custom sections
 - Save to `~/.grow-pm/local-context.md` (always use persistent storage)
 - **Mirror to Obsidian Vault** (if configured): execute Vault Mirror Protocol (VM-1 through VM-3 from `references/persistent-storage.md`) — sync changed files to `{vault}/{plugin_folder}/_System/`
+- **Context store (since v3.11.0):** When the session digest shows a `context: records …` line and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` has written the vault mirror — skip the manual copy.
 
 **Mandatory changelog — always present after ANY update:**
 
@@ -352,6 +354,7 @@ For each configured vault:
 5. Check .vault-schema-version → compatible or needs migration
 6. Check the search providers (`references/context-provider-protocol.md` §4) → one row per provider: reachable (3-second probe), `last_index` or `synced_at`, stale or fresh (§6), local paths present → ✅ L2 available or ℹ️ L1 only
 7. Verify last save timestamp → "Last artifact saved: [date]"
+8. Context store (since v3.11.0) — when the digest shows a `context:` line, run `ctx status` and `ctx validate` (`references/context-protocol.md`) and add their lines to the report: records, edits waiting, conflicts, stray files
 
 Add to the validation report output.
 
