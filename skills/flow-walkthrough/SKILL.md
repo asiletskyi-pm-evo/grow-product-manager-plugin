@@ -1,7 +1,7 @@
 ---
 name: flow-walkthrough
-version: 0.6.1
-description: Walk a customer flow in the REAL product — web, desktop, iPhone app on a Mac, Android via adb — screenshot per step, friction, evidence pack, report, emulator/adb setup. Not Figma review (design-bridge), not dashboards (product-analysis), not the CJM pipeline (cjm-research calls here). Multi-role legs on test accounts with sandbox-confirm (declaring the accounts is plugin-configurator). UA — «пройди флоу», «пройди шлях покупця в застосунку», «перевір зручність … у застосунку», «порівняй флоу на iOS і web», «налаштуй емулятор/adb для проходу». EN — "walk the flow", "walk through the app as a user", "test this journey in the real app", "compare the flow across platforms", "set up the emulator". Modes setup / walk / compare / audit; chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper.
+version: 0.6.2
+description: Walk a customer flow in the REAL product — web, desktop, iPhone app on a Mac, Android via adb — screenshot per step, friction, report, emulator/adb setup. Not Figma review (design-bridge), not dashboards (product-analysis). UA — «пройди флоу», «пройди шлях покупця в застосунку», «порівняй флоу на iOS і web».
 ---
 
 # Flow Walkthrough
@@ -90,7 +90,7 @@ Render the report through Step T. Multi-leg runs put a **leg summary table** (le
 
 IF vault_level > L0 AND sync_mode != "off":
 
-1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.6.1", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
+1. `vault_save({ type: "walkthrough", product: active_product, skill: "flow-walkthrough", skill_version: "0.6.2", tags: [scenario slug, surfaces], content: final report, related: [pack run ids], extra_frontmatter: { confluence_url (if published), account_type } })`
 2. Display: "Saved to Vault: Research/walkthroughs/{product}/…"
 
 ## Setup mode
@@ -128,3 +128,9 @@ IF vault_level > L0 AND sync_mode != "off":
 ## Example
 
 `examples/marketplace-review-flow.md` — the single-leg reference walk (leave a review in a marketplace buyer app, iPhone app on a Mac): expected step list, expected frictions, and the driver facts it taught. `examples/marketplace-order-to-review-flow.md` — the three-leg reference (test buyer orders → test seller confirms and ships → buyer reviews) with hand-offs and sandbox confirmations. Use them to dry-run `audit` and to sanity-check a new driver.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Walk a customer flow in the REAL product — web, desktop, iPhone app on a Mac, Android via adb — screenshot per step, friction, evidence pack, report, emulator/adb setup. Not Figma review (design-bridge), not dashboards (product-analysis), not the CJM pipeline (cjm-research calls here). Multi-role legs on test accounts with sandbox-confirm (declaring the accounts is plugin-configurator). UA — «пройди флоу», «пройди шлях покупця в застосунку», «перевір зручність … у застосунку», «порівняй флоу на iOS і web», «налаштуй емулятор/adb для проходу». EN — "walk the flow", "walk through the app as a user", "test this journey in the real app", "compare the flow across platforms", "set up the emulator". Modes setup / walk / compare / audit; chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper.

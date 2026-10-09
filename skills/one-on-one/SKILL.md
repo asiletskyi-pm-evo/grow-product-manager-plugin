@@ -1,7 +1,7 @@
 ---
 name: one-on-one
-version: 0.2.0
-description: Prepare and analyze 1-1s — a meeting for and about the person — agenda, NVC feedback, burnout signals. Not status meetings (meeting-processor), not a formal review (performance-review). UA — «підготуй мене до 1-1», «розбери 1-1», «з ким давно не було 1-1». EN — "prepare for a 1-1", "1-1 with <person>", "analyze this 1-1", "who haven't I had a 1-1 with", "questions for a 1-1". Also UA — «нотатки 1-1», «питання для 1-1», «сигнали по вигоранню». Returns an ARCV follow-up and a profile update. Do NOT use to set goals (goal-setter). meeting-processor detects a 1-1 and redirects here.
+version: 0.2.1
+description: Prepare and analyze 1-1s — a meeting for and about the person — agenda, NVC feedback, burnout signals. Not status meetings (meeting-processor), not a formal review (performance-review). UA — «підготуй мене до 1-1», «розбери 1-1», «з ким давно не було 1-1». EN — "prepare for a 1-1".
 ---
 
 # One-on-One
@@ -87,3 +87,9 @@ Contract (analogous to experiment-tracker stale-check): `mode=coverage headless=
 - *"Підготуй мене до 1-1 з Олексієм"* → Step P (D2, GTD dipped last sprint, overload signal) → agenda with the seven "how" questions, a burnout-check block, and an NVC draft about two missed deadlines → reminder to book post-meeting processing time.
 - *"Ось транскрипт 1-1, розбери"* → signals (wants mentoring role; friction with a QA colleague) → applies "Did you tell them yourself?" on the QA friction → ARCV follow-up (manager-owned) → updates profile signals, offers to chain to goal-setter.
 - *"З ким я давно не бачився один-на-один?"* → coverage list: "Maria — 6 weeks (overdue), Ivan — 3 weeks" → offers Friday slots.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Prepare and analyze 1-1s — a meeting for and about the person — agenda, NVC feedback, burnout signals. Not status meetings (meeting-processor), not a formal review (performance-review). UA — «підготуй мене до 1-1», «розбери 1-1», «з ким давно не було 1-1». EN — "prepare for a 1-1", "1-1 with <person>", "analyze this 1-1", "who haven't I had a 1-1 with", "questions for a 1-1". Also UA — «нотатки 1-1», «питання для 1-1», «сигнали по вигоранню». Returns an ARCV follow-up and a profile update. Do NOT use to set goals (goal-setter). meeting-processor detects a 1-1 and redirects here.

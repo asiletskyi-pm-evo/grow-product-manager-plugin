@@ -173,13 +173,13 @@ Until context records arrive (v3.11.0), providers are also declared in one subse
 - zorg-core: scope = shared core snapshot, mode = snapshot, VPN only, read-only
 ```
 
-Grammar: `- <id>: <items>`. Items are separated by `,` or `;` outside parentheses. An item is `key = value` (keys `scope`, `tools`, `index`, `mode`, `access`) or a flag (`read-only`, `VPN only` → `access = vpn`, `live`, `snapshot`). Defaults: `mode = live`; `access = local` when `index` names a path, else `open`. A registration file with the same `id` wins over the bullet. The bullet carries no local paths: the write boundary reads registrations only.
+Grammar: `- <id>: <items>`. Items are separated by `,` or `;` outside parentheses and double quotes — a value that holds either separator is written in double quotes (`scope = "Core, shared; v2" (bundle team-alpha)`, since v3.10.1). An item is `key = value` (keys `scope`, `tools`, `index`, `mode`, `access`) or a flag (`read-only`, `VPN only` → `access = vpn`, `live`, `snapshot`). Defaults: `mode = live`; `access = local` when `index` names a path, else `open`. A registration file with the same `id` wins over the bullet. The bullet carries no local paths: the write boundary reads registrations only.
 
 ---
 
 ## 4. Detection and the L2 binding
 
-Step 0h (`local-context-protocol.md`) builds `session.providers` once per session: registrations found under every configured vault (and `~/.grow-pm/providers/`), plus the bullets of §3c, plus any MCP server in the session that exposes `vault_search` and `vault_get_note`. Each entry: `{id, kind, mode, access, paths, index, synced_at, last_index, stale, reachable}`.
+Step 0h (`local-context-protocol.md`) builds `session.providers` once per session: registrations found under every configured vault (and `~/.grow-pm/providers/`), plus the bullets of §3c, plus any MCP server in the session that exposes `vault_search` and `vault_get_note`. Each entry: `{id, kind, mode, access, paths, index, synced_at, last_index, stale, reachable}`. A registration file that does not parse is left out and named once in the digest — `provider registration unreadable: <file> (<reason>)` (since v3.10.1); say so when the user asks about that provider.
 
 The vault level L2 of `vault-protocol.md` is reached when at least one provider answers the contract:
 
@@ -257,7 +257,7 @@ A local index that answers `vault/v1` (built by the user, a provider or a later 
 | `aliases` | `entity_id`, `alias`, `alias_norm`, `source` |
 | `unresolved` | `src_id`, `target_text` |
 | `tags` | `note_id`, `tag` |
-| `meta` | `key`, `value` — keys `schema` (`1`), `last_index` (ISO 8601), `vault_root`, `snapshot_date` |
+| `meta` | `key`, `value` — keys `schema` (`1`), `last_index` (ISO 8601), `vault_root`, `snapshot_date`. Readers also accept `k`, `v` (a legacy spelling seen in the wild, v3.10.1); new indexes write `key`, `value` |
 
 Rebuild incrementally by content hash; a deleted file leaves a row with `hash = ''` until the next full rebuild, so broken links stay reportable. The index is always rebuildable from the files and never the only copy of anything.
 

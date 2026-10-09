@@ -1,7 +1,7 @@
 ---
 name: diagram-prototyper
-version: 0.15.0
-description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «додай стрілки на скрін». EN — "create a diagram", "draw a flowchart", "visualize this process", "make a prototype" (no DS mentioned), "mockup", "annotate this screenshot". Also UA — «візуалізуй процес», «зроби прототип», «інфографіка», «познач на скріншоті». Generation via Mermaid/HTML, Gemini, ChatGPT, NotebookLM, Figma, Draw.io; annotation runs locally.
+version: 0.15.1
+description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «зроби прототип». EN — "annotate this screenshot".
 ---
 
 # Diagram & Prototype Creator
@@ -321,7 +321,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.15.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.15.1", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Mode: Annotate (standalone screenshot annotation)
@@ -379,3 +379,9 @@ When invoking this skill from another skill, pass:
 - **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «додай стрілки на скрін». EN — "create a diagram", "draw a flowchart", "visualize this process", "make a prototype" (no DS mentioned), "mockup", "annotate this screenshot". Also UA — «візуалізуй процес», «зроби прототип», «інфографіка», «познач на скріншоті». Generation via Mermaid/HTML, Gemini, ChatGPT, NotebookLM, Figma, Draw.io; annotation runs locally.

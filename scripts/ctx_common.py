@@ -161,13 +161,16 @@ def vault_entries(context_text):
 
 
 def _split_items(s):
-    items, depth, cur = [], 0, []
-    for ch in s:
-        if ch == "(":
+    """Split on , and ; outside parentheses and double quotes (a quoted title keeps its commas)."""
+    items, depth, cur, inq = [], 0, [], False
+    for i, ch in enumerate(s):
+        if ch == '"' and (i == 0 or s[i - 1] != "\\"):
+            inq = not inq
+        elif not inq and ch == "(":
             depth += 1
-        elif ch == ")":
+        elif not inq and ch == ")":
             depth = max(0, depth - 1)
-        if ch in ",;" and depth == 0:
+        if ch in ",;" and depth == 0 and not inq:
             items.append("".join(cur).strip()); cur = []
         else:
             cur.append(ch)
@@ -201,21 +204,35 @@ def vault_search_bullets(context_text):
 
 
 # ----------------------------------------------------------- registrations
-def find_registrations(entries, extra_dirs=None):
+def find_registrations(entries, extra_dirs=None, skipped=None):
     """Read `{vault}/{plugin_folder}/_System/providers/*.yaml` for every vault entry,
     plus `~/.grow-pm/providers/*.yaml` (or `extra_dirs` when given). Unreadable or
-    invalid files are skipped. Returns dicts with normalised `paths`, `writable`."""
+    invalid files are skipped — and listed as (path, reason) in `skipped` when a list
+    is given. Returns dicts with normalised `paths`, `writable`."""
     dirs = [os.path.join(v, f, "_System", "providers") for v, f in entries]
     dirs += [os.path.expanduser("~/.grow-pm/providers")] if extra_dirs is None else list(extra_dirs)
     regs, seen = [], set()
     for d in dirs:
         for p in sorted(glob.glob(os.path.join(d, "*.yaml"))):
+            why = None
             try:
                 r = read_yaml_subset(open(p, encoding="utf-8").read())
-            except (OSError, ValueError, UnicodeDecodeError):
+            except UnicodeDecodeError:
+                why = "not UTF-8 text"
+            except ValueError as e:
+                why = str(e)
+            except OSError as e:
+                why = e.strerror or "cannot be opened"
+            if why:
+                if skipped is not None:
+                    skipped.append((p, why))
                 continue
             rid = r.get("id")
-            if not rid or rid in seen:
+            if not rid:
+                if skipped is not None:
+                    skipped.append((p, "no id"))
+                continue
+            if rid in seen:
                 continue
             seen.add(rid)
             paths = r.get("paths") or ([r["path"]] if r.get("path") else [])

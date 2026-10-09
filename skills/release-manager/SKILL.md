@@ -1,7 +1,7 @@
 ---
 name: release-manager
-version: 0.4.0
-description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…», «bump версії плагіна». EN — "release the plugin", "prepare a release", "bump plugin version", "ship vX.Y.Z", "cut a release", "publish plugin release". Also UA — «випусти vX.Y.Z», «опублікуй реліз плагіна». Conversational "release the plugin" routes here; the user-typed /release command is a shortcut into the same skill.
+version: 0.4.1
+description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…». EN — "release the plugin", "ship vX.Y.Z".
 ---
 
 # Release Manager
@@ -35,7 +35,7 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 3. `git status` — working tree must contain only the expected release changes; anything unexpected → show and gate.
 4. `git fetch <canonical>`; local main behind → offer `git pull --ff-only`.
 5. Read current version from `plugin.json` `"version"` field (structured — never parse description text).
-6. **Organisation-data scan of the branch** (since v3.10.0): `python3 testing/branch_leak_scan.py --base main` — every added line (CHANGELOG, docs and fixtures included) and every commit message against the gitignored denylist `testing/org-tokens.local`. A hit is rewritten before anything is pushed: an unpushed commit is rewritten, never "fixed by the next commit" (the leak would stay in history). No denylist on the machine → the scan says so; create it before releasing.
+6. **Organisation-data scan of the branch** (since v3.10.0): `python3 testing/branch_leak_scan.py --base main` — every added line (CHANGELOG, docs and fixtures included) and every commit message against the gitignored denylist `testing/org-tokens.local`. A hit is rewritten before anything is pushed: an unpushed commit is rewritten, never "fixed by the next commit" (the leak would stay in history). No denylist on the machine → the scan says so; create it before releasing. Exit 2 → the base branch is not in this clone (a shallow clone or an unfetched base): fetch it and re-run — never release on an unscanned branch.
 
 ### Step 2 — Scope & version decision
 1. Collect changes since the last tag (`git log <last-tag>..HEAD --oneline` + working tree diff summary) or from the user's description.
@@ -103,3 +103,9 @@ Mirror push rejected non-fast-forward → mirror diverged: never force into a pr
 
 ## Skill Chaining
 ← any skill-changing work (feature PRs) · → `write-concept` (release notes draft for major releases) · → Confluence changelog page · → vault release record.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…», «bump версії плагіна». EN — "release the plugin", "prepare a release", "bump plugin version", "ship vX.Y.Z", "cut a release", "publish plugin release". Also UA — «випусти vX.Y.Z», «опублікуй реліз плагіна». Conversational "release the plugin" routes here; the user-typed /release command is a shortcut into the same skill.

@@ -1,7 +1,7 @@
 ---
 name: decision-log
-version: 0.5.0
-description: Log and retrieve product decisions as ADR records — context, options, rationale, consequences. Not meeting notes (meeting-processor), not experiment state (experiment-tracker). UA — «зафіксуй рішення», «чому ми вирішили…», «покажи рішення по…», «журнал рішень». EN — "log this decision", "why did we decide X", "show decisions about Y", "supersede that decision", "decision log". Also UA — «перегляньмо це рішення», «зафіксуй рішення після дебатів». Also invoked by meeting-processor, experiment-tracker and planning skills when their outcome contains a decision worth recording.
+version: 0.5.1
+description: Log and retrieve product decisions as ADR records — context, options, rationale, consequences. Not meeting notes (meeting-processor), not experiment state (experiment-tracker). UA — «зафіксуй рішення», «чому ми вирішили…», «перегляньмо це рішення». EN — "log this decision", "revisit a decision".
 ---
 
 # Decision Log
@@ -95,3 +95,9 @@ Frontmatter per `vault-schema.md`: `type: decision`, `product`, `tags` (topic, a
 
 ## Skill Chaining
 ← `meeting-processor` (M10: key decisions from MoM) · ← `experiment-tracker` (decide mode) · ← `quarterly-planning` retro / `project-planning` replan (scope decisions) · ← `feedback-triage`, `goal-setter`, `one-on-one` (decision outcomes) · ← any skill with a decision outcome · → `task-creator` (when the decision spawns work) · → `focus-advisor` (overdue `revisit_by` dates surface as tactical signals — `focus-signals.md` §6).
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Log and retrieve product decisions as ADR records — context, options, rationale, consequences. Not meeting notes (meeting-processor), not experiment state (experiment-tracker). UA — «зафіксуй рішення», «чому ми вирішили…», «покажи рішення по…», «журнал рішень». EN — "log this decision", "why did we decide X", "show decisions about Y", "supersede that decision", "decision log". Also UA — «перегляньмо це рішення», «зафіксуй рішення після дебатів». Also invoked by meeting-processor, experiment-tracker and planning skills when their outcome contains a decision worth recording.

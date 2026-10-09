@@ -1,7 +1,7 @@
 ---
 name: meeting-processor
-version: 0.18.0
-description: Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «action items», «розбери транскрипт зустрічі», «що обговорювали». EN — "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or any pasted/uploaded transcript. Sources — Fireflies, other meeting tools via MCP, files, pasted text. Chains to task-creator, requirements-creator, product-research, brainstorm-features and decision-log.
+version: 0.18.1
+description: Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «розбери транскрипт зустрічі», «action items». EN — "summarize meeting".
 ---
 
 # Meeting Processor
@@ -333,7 +333,7 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.18.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.18.1", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
 2. Key decisions from the meeting may additionally be recorded as ADR-style records — offer, don't force: "The meeting produced N decisions. Log them in the decision log so the 'why' survives?" → invoke `decision-log` (log mode) once for the chosen decisions — one record per decision, and decision-log's own confidence question once for the whole batch (since v3.7.0) — passing per decision the decision-log row of `references/chaining.md`: what was decided, the context and options discussed, who decided, a link back to these notes, and the v3.7.0 fields only when said in the meeting, plus `evidence_classes` since v3.8.0. decision-log owns the `decision` artifact; do not hand-write `Decisions/` files here.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 
@@ -381,3 +381,9 @@ The full procedure — the discovery steps and the prompts to show — lives in 
 - **`references/chaining.md`** — M9 context to pass per target skill + Input Source Discovery Protocol (skill-local)
 - **`references/search-mode.md`** — Search mode workflow S1–S4 with the fan-out delegation rule (skill-local)
 - **`skills/one-on-one/SKILL.md`** — dedicated handler for 1-1 meetings (redirect target)
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «action items», «розбери транскрипт зустрічі», «що обговорювали». EN — "summarize meeting", "meeting notes", "what was discussed", "action items", "MoM", or any pasted/uploaded transcript. Sources — Fireflies, other meeting tools via MCP, files, pasted text. Chains to task-creator, requirements-creator, product-research, brainstorm-features and decision-log.

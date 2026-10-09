@@ -1,7 +1,7 @@
 ---
 name: write-concept
-version: 0.15.0
-description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ», «дизайн-бриф», «стратегічний меморандум», «мемо рішення», «бізнес-кейс»; EN — "design brief", "strategy memo", "decision memo", "business case". A concept is the input to requirements-creator.
+version: 0.15.1
+description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «опиши фічу», «дизайн-бриф», «стратегічний меморандум», «бізнес-кейс». EN — "design brief", "strategy memo".
 ---
 
 # Write Concept (PRD)
@@ -301,7 +301,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.15.0",
+     skill_version: "0.15.1",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],
@@ -376,3 +376,9 @@ Detailed templates for each standard block are in `references/prd-structure.md`.
 - If information is insufficient for a block, state gaps and suggest how to fill them
 - Use Ukrainian or English based on user's language preference
 - Maintain consistent formatting: headings, bold highlights, tables, dividers
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ», «дизайн-бриф», «стратегічний меморандум», «мемо рішення», «бізнес-кейс»; EN — "design brief", "strategy memo", "decision memo", "business case". A concept is the input to requirements-creator.

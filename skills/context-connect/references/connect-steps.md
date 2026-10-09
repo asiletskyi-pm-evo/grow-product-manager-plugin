@@ -19,7 +19,7 @@ When `~/.grow-pm/` is not visible from the shell (hosted sessions see the user's
 ## §1 Identity — dry run
 
 ```
-python3 "<plugin root>/scripts/provider_bundle.py" --core "<core>" --out "<target>" --email <e-mail> --dry-run
+python3 "<plugin root>/scripts/provider_bundle.py" --core "<core>" --out "<target>" --email <e-mail> --propose-only
 ```
 
 - The first line, `email … → team … · role …`, becomes one sentence for the user; the role is inferred from the registry card's role title (`role_hints`) — the user may correct it.

@@ -1,7 +1,7 @@
 ---
 name: sprint-planning
-version: 0.6.0
-description: Sprint pre-planning — focuses from the roadmap, what is READY to pull, dependencies, capacity per member, assignees. Not daily focus (focus-advisor), not a quarter plan (quarterly-planning). UA — «сплануй спринт», «що можна взяти у спринт», «розподіли задачі спринта», «фокуси спринта». EN — "plan the sprint", "sprint pre-planning", "what can we pull into the next sprint", "what's ready from the backlog", "check sprint dependencies", "who takes the tasks". Also UA — «передпланування спринта», «що готове з беклогу», «хто візьме задачі», «випусти фічу в реліз наступного спринта».
+version: 0.6.1
+description: Sprint pre-planning — focuses from the roadmap, what is READY to pull, dependencies, capacity per member, assignees. Not daily focus (focus-advisor), not a quarter plan (quarterly-planning). UA — «сплануй спринт», «що можна взяти у спринт», «розподіли задачі спринта», «фокуси спринта».
 ---
 
 # Sprint Planning
@@ -80,7 +80,7 @@ Show what doesn't fit / is blocked → choice. Live recompute.
 Sprint plan (Confluence / assignment into the Jira sprint) — **gate before writing to Jira**. Approved plan → can be rendered as a `sprint-plan` report via product-reporter.
 
 ### Step 9 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.6.0", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.6.1", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Only Ready candidates go into the fill; Blocked — with an explanation, not silently.
@@ -92,3 +92,9 @@ Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_
 
 ## Additional Resources
 `references/capacity-model.md`, `dependency-model.md`, `planning-core.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`, `jira-data-protocol.md`.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Sprint pre-planning — focuses from the roadmap, what is READY to pull, dependencies, capacity per member, assignees. Not daily focus (focus-advisor), not a quarter plan (quarterly-planning). UA — «сплануй спринт», «що можна взяти у спринт», «розподіли задачі спринта», «фокуси спринта». EN — "plan the sprint", "sprint pre-planning", "what can we pull into the next sprint", "what's ready from the backlog", "check sprint dependencies", "who takes the tasks". Also UA — «передпланування спринта», «що готове з беклогу», «хто візьме задачі», «випусти фічу в реліз наступного спринта».

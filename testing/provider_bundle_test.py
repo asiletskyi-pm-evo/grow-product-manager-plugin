@@ -39,14 +39,14 @@ def fresh():
 
 # 1
 d, core, out = fresh()
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run")
-check("dry run resolves team and role", rc == 0 and "team alpha" in o and "role pm" in o, (rc, o))
-check("dry run writes nothing without a context", not os.path.exists(out) or files_under(out) == [], files_under(out) if os.path.exists(out) else "")
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only")
+check("propose-only resolves team and role", rc == 0 and "team alpha" in o and "role pm" in o, (rc, o))
+check("propose-only writes nothing without a context", not os.path.exists(out) or files_under(out) == [], files_under(out) if os.path.exists(out) else "")
 shutil.rmtree(d)
 
 # 2
 d, core, out = fresh()
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run",
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only",
             "--existing-context", os.path.join(FIX, "existing-context.md"))
 prop = os.path.join(out, "Core", "_System", "local-context.proposed.md")
 rep = report(o, "CONTEXT_REPORT") or {}
@@ -60,7 +60,7 @@ if rc == 0 and os.path.isfile(prop):
     check("provider bullet proposed", re.search(r"^### Vault Search MCP\n(?:.*\n)*?- zorg-core: ", t, re.M) is not None, t[-800:])
     ex0 = open(os.path.join(FIX, "existing-context.md"), encoding="utf-8").read()
     check("no extra blank lines introduced", t.count("\n\n\n") <= ex0.count("\n\n\n"), t.count("\n\n\n"))
-    check("files only under _System in dry run", all(f.startswith(os.path.join("Core", "_System")) for f in files_under(out)), files_under(out))
+    check("files only under _System when proposing", all(f.startswith(os.path.join("Core", "_System")) for f in files_under(out)), files_under(out))
 else:
     check("merge keeps own team heading once", False, (rc, o))
 shutil.rmtree(d)
@@ -68,7 +68,7 @@ shutil.rmtree(d)
 # 2b — skip blocks the user declined, the Updated line, the head label
 d, core, out = fresh()
 open(os.path.join(core, "Core", "_System", "provider-manifest.yaml"), "a").write('head_label: "lead:"\n')
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run", "--skip-blocks", "product,teams",
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only", "--skip-blocks", "product,teams",
             "--existing-context", os.path.join(FIX, "existing-context.md"))
 rep = report(o, "CONTEXT_REPORT") or {}
 t2 = open(prop.replace(os.path.dirname(os.path.dirname(os.path.dirname(prop))), out), encoding="utf-8").read() if rc == 0 else ""
@@ -77,14 +77,14 @@ check("skip blocks keeps declined blocks out", rc == 0 and "id=product" not in t
       and "scope" in rep.get("added", []) and sorted(rep.get("skipped", [])) == ["product", "teams"]
       and "skip_blocks:" in regp2 and "  - product" in regp2, (rc, rep))
 import datetime as _dt
-check("updated line rewritten whole", ("Updated: %s (zorg-core refresh)." % _dt.date.today().isoformat()) in t2, t2[:300])
+check("updated line without a note gets the date and the refresh item", ("Updated: %s (zorg-core refresh)." % _dt.date.today().isoformat()) in t2, t2[:300])
 _tc = os.path.join(out, "Core", "_System", "team-context.md")
 check("head label from manifest", os.path.isfile(_tc) and "— lead: Alex One" in open(_tc, encoding="utf-8").read(), "")
 shutil.rmtree(d)
 
 # 2c — a block id that is a prefix of another (team / teams) and the reference-section anchor
 d, core, out = fresh()
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run", "--skip-blocks", "scope,product",
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only", "--skip-blocks", "scope,product",
             "--existing-context", os.path.join(FIX, "existing-context-teams.md"))
 rep = report(o, "CONTEXT_REPORT") or {}
 pp = os.path.join(out, "Core", "_System", "local-context.proposed.md")
@@ -95,7 +95,7 @@ check("a 'team' block never swallows 'teams'", rc == 0 and {"team", "teams"} <= 
       and "Teams map (old copy)" not in t3 and "### Teams map" in t3, (rc, rep))
 shutil.rmtree(d)
 d, core, out = fresh()
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run",
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only",
             "--existing-context", os.path.join(FIX, "existing-context-teams.md"))
 pp = os.path.join(out, "Core", "_System", "local-context.proposed.md")
 t4 = open(pp, encoding="utf-8").read() if os.path.isfile(pp) else ""
@@ -106,7 +106,7 @@ shutil.rmtree(d)
 # 2d — idempotent refresh, changelog with block versions, the "others" label
 d, core, out = fresh()
 open(os.path.join(core, "Core", "_System", "provider-manifest.yaml"), "a").write('jira_other_label: "also:"\n')
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run",
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only",
             "--existing-context", os.path.join(FIX, "existing-context.md"))
 p1 = os.path.join(out, "Core", "_System", "local-context.proposed.md")
 P1 = open(p1, encoding="utf-8").read() if os.path.isfile(p1) else ""
@@ -115,7 +115,7 @@ check("changelog rows carry each block's own version", "| zorg-core `scope` | �
 check("the 'others' label comes from the manifest", "(also: LEGACY)" in P1, "")
 again = os.path.join(d, "again.md"); shutil.copy(p1, again)
 out2 = os.path.join(d, "out2")
-rc2, o2 = run("--core", core, "--out", out2, "--email", "a.one@zorg.example", "--dry-run", "--existing-context", again)
+rc2, o2 = run("--core", core, "--out", out2, "--email", "a.one@zorg.example", "--propose-only", "--existing-context", again)
 rep2 = report(o2, "CONTEXT_REPORT") or {}
 p2 = os.path.join(out2, "Core", "_System", "local-context.proposed.md")
 P2 = open(p2, encoding="utf-8").read() if os.path.isfile(p2) else "missing"
@@ -127,7 +127,7 @@ shutil.rmtree(d)
 d, core, out = fresh()
 src = open(os.path.join(FIX, "existing-context.md"), encoding="utf-8").read().replace("\n## Custom Sections", "\n---\n\n## Custom Sections")
 hr = os.path.join(d, "hr-context.md"); open(hr, "w", encoding="utf-8").write(src)
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run", "--existing-context", hr)
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only", "--existing-context", hr)
 pp = os.path.join(out, "Core", "_System", "local-context.proposed.md")
 t5 = open(pp, encoding="utf-8").read() if os.path.isfile(pp) else ""
 check("provider entry sits inside the vaults section, before its rule", rc == 0
@@ -140,37 +140,37 @@ d, core, out = fresh()
 mf = os.path.join(core, "Core", "_System", "provider-manifest.yaml")
 good = open(mf, encoding="utf-8").read()
 open(mf, "w", encoding="utf-8").write(good + "mcp2:\n  deep:\n    more: x\n")
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run")
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only")
 check("malformed manifest → exit 3 with file and line", rc == 3 and "provider-manifest.yaml" in o and "line" in o and "Traceback" not in o, (rc, o[-300:]))
 open(mf, "w", encoding="utf-8").write(good.replace('  - "(^|/)_drafts/"', '  - "(unclosed"'))
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run")
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only")
 check("bad exclude regex → exit 3 naming the key", rc == 3 and "exclude" in o and "Traceback" not in o, (rc, o[-300:]))
 open(mf, "w", encoding="utf-8").write(good)
 bj = os.path.join(core, "Core", "_System", "access-bundles.json"); bgood = open(bj, encoding="utf-8").read()
 open(bj, "w", encoding="utf-8").write(bgood[:-10])
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run")
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only")
 check("broken role model → exit 3 naming the file", rc == 3 and "access-bundles.json" in o and "Traceback" not in o, (rc, o[-300:]))
 open(bj, "w", encoding="utf-8").write(bgood)
-rc, o = run("--core", core, "--out", out, "--email", "c.three@zorg.example", "--dry-run")
+rc, o = run("--core", core, "--out", out, "--email", "c.three@zorg.example", "--propose-only")
 check("an inferred role missing from the model falls back with a notice", rc == 0 and "role pm" in o and "engineer" in o, (rc, o[:300]))
-rc, o = run("--core", core, "--out", out, "--email", "c.three@zorg.example", "--role", "marketer", "--dry-run")
+rc, o = run("--core", core, "--out", out, "--email", "c.three@zorg.example", "--role", "marketer", "--propose-only")
 check("an explicit role missing from the model still stops", rc == 3 and "marketer" in o, (rc, o[-200:]))
 own = os.path.join(d, "own-deny.md")
 open(own, "w", encoding="utf-8").write(open(os.path.join(FIX, "existing-context.md"), encoding="utf-8").read().replace("_none_", "my note OWNER-PRIVATE"))
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run", "--existing-context", own)
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only", "--existing-context", own)
 check("deny patterns never block on the user's own text", rc == 0, (rc, o[-200:]))
 tc = os.path.join(out, "Core", "_System", "team-context.md")
 check("team membership is an exact match (team-alpha-two is not alpha)", os.path.isfile(tc) and "Dee Four" not in open(tc, encoding="utf-8").read() and "Bea Two" in open(tc, encoding="utf-8").read(), "")
 shutil.rmtree(d)
 d, core, out = fresh()
 priv = os.path.join(d, "private-proposals")
-rc, o = run("--core", core, "--out", core, "--email", "a.one@zorg.example", "--in-place", "--dry-run",
+rc, o = run("--core", core, "--out", core, "--email", "a.one@zorg.example", "--in-place", "--propose-only",
             "--existing-context", os.path.join(FIX, "existing-context.md"), "--proposal-dir", priv)
 check("--proposal-dir keeps the proposal out of the core", rc == 0 and os.path.isfile(os.path.join(priv, "local-context.proposed.md"))
       and not os.path.exists(os.path.join(core, "Core", "_System", "local-context.proposed.md"))
       and not os.path.exists(os.path.join(core, "Core", "_System", "context-merge-report.md")), (rc, o[-200:]))
 shutil.copy(os.path.join(FIX, "existing-context.md"), os.path.join(priv, "local-context.existing.md"))
-rc, o = run("--core", core, "--out", core, "--email", "a.one@zorg.example", "--in-place", "--dry-run", "--proposal-dir", priv)
+rc, o = run("--core", core, "--out", core, "--email", "a.one@zorg.example", "--in-place", "--propose-only", "--proposal-dir", priv)
 r = report(o, "CONTEXT_REPORT") or {}
 check("a context copy in the proposal folder is picked up without a flag", rc == 0 and r.get("mode") == "merge"
       and str(r.get("existing_context", "")).startswith(priv), (rc, r.get("mode"), r.get("existing_context")))
@@ -179,13 +179,13 @@ d, core, out = fresh()
 bf = os.path.join(core, "Core", "_System", "context-blocks.md")
 src = open(bf, encoding="utf-8").read()
 open(bf, "w", encoding="utf-8").write(src.replace("Zorg App only.", "Zorg App only. OWNER-PRIVATE"))
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run", "--existing-context", os.path.join(FIX, "existing-context.md"))
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only", "--existing-context", os.path.join(FIX, "existing-context.md"))
 check("a deny hit names the provider block", rc == 4 and "scope" in o, (rc, o[-200:]))
 shutil.rmtree(d)
 
 # 3
 d, core, out = fresh()
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run",
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only",
             "--existing-context", os.path.join(FIX, "nested-context.md"))
 check("nested markers abort", rc == 4 and not os.path.exists(os.path.join(out, "Core", "_System", "local-context.proposed.md")), (rc, o))
 shutil.rmtree(d)
@@ -195,14 +195,14 @@ d, core, out = fresh()
 bf = os.path.join(core, "Core", "_System", "context-blocks.md")
 src = open(bf, encoding="utf-8").read()
 open(bf, "w", encoding="utf-8").write(src.replace("Zorg App only.", "Zorg App only. OWNER-PRIVATE"))
-rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run",
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only",
             "--existing-context", os.path.join(FIX, "existing-context.md"))
 check("deny pattern aborts", rc == 4 and "deny" in o.lower(), (rc, o))
 shutil.rmtree(d)
 
 # 5
 d, core, out = fresh()
-rc, o = run("--core", core, "--out", out, "--email", "nobody@zorg.example", "--dry-run")
+rc, o = run("--core", core, "--out", out, "--email", "nobody@zorg.example", "--propose-only")
 check("unknown email", rc == 2 and "UNKNOWN_TEAM" in o, (rc, o))
 shutil.rmtree(d)
 
@@ -251,6 +251,68 @@ rc, o = run("--core", core, "--out", core, "--email", "b.two@zorg.example", "--i
 check("in-place analyst run copies nothing and writes no overlay", rc == 0 and "role analyst" in o
       and not os.path.exists(os.path.join(core, "Core", "Now.md"))
       and os.path.isfile(os.path.join(core, "Core", "_System", "bundle-manifest.md")), (rc, o))
+shutil.rmtree(d)
+
+# 2g — v3.10.1: a refresh keeps the user's own note on the Updated line
+_today = _dt.date.today().isoformat()
+def updated_after(line):
+    d, core, out = fresh()
+    src = open(os.path.join(FIX, "existing-context.md"), encoding="utf-8").read().replace(
+        "> Generated: 2026-04-15. Updated: 2026-09-29.", line)
+    ex = os.path.join(d, "note-context.md"); open(ex, "w", encoding="utf-8").write(src)
+    rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only", "--existing-context", ex)
+    pp = os.path.join(out, "Core", "_System", "local-context.proposed.md")
+    t = open(pp, encoding="utf-8").read() if os.path.isfile(pp) else ""
+    shutil.rmtree(d)
+    m = re.search(r"^> Generated:.*$", t, re.M)
+    return rc, (m.group(0) if m else (rc, o[-300:]))
+rc, got = updated_after("> Generated: 2026-04-15. Updated: 2026-09-29 (zorg-core refresh; brain: daily sync (local)).")
+check("refresh keeps the user's note on the Updated line",
+      got == "> Generated: 2026-04-15. Updated: %s (zorg-core refresh; brain: daily sync (local))." % _today, got)
+rc, got = updated_after("> Generated: 2026-04-15. Updated: 2026-09-29 (other-core refresh; my note).")
+check("an older refresh of another provider leaves the Updated line",
+      got == "> Generated: 2026-04-15. Updated: %s (zorg-core refresh; my note)." % _today, got)
+rc, got = updated_after("> Generated: 2026-04-15. Updated: %s (other-core refresh; my note)." % _today)
+check("a same-day refresh of another provider stays on the Updated line",
+      got == "> Generated: 2026-04-15. Updated: %s (zorg-core refresh; other-core refresh; my note)." % _today, got)
+
+# 2h — v3.10.1: registration paths, an orphan marker, a title with separators, the --propose-only name
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import ctx_common as cc
+d, core, _ = fresh()
+out = os.path.join(d, "out #1")
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only",
+            "--existing-context", os.path.join(FIX, "existing-context.md"))
+regp = os.path.join(out, "Core", "_System", "provider-registration.proposed.yaml")
+reg = cc.read_yaml_subset(open(regp, encoding="utf-8").read()) if os.path.isfile(regp) else {}
+check("registration paths survive a ' #' in a folder name", reg.get("paths") == [os.path.abspath(out)], (rc, reg.get("paths")))
+shutil.rmtree(d)
+
+d, core, out = fresh()
+orphan = os.path.join(d, "orphan-context.md")
+open(orphan, "w", encoding="utf-8").write(open(os.path.join(FIX, "existing-context.md"), encoding="utf-8").read().rstrip("\n")
+                                         + "\n\n<!-- zorg-core:begin id=orphan v=0.1 -->\nleft open\n")
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only", "--existing-context", orphan)
+check("an orphan begin marker stops the proposal", rc == 4
+      and not os.path.exists(os.path.join(out, "Core", "_System", "local-context.proposed.md")), (rc, o[-300:]))
+shutil.rmtree(d)
+
+d, core, out = fresh()
+open(os.path.join(core, "Core", "_System", "provider-manifest.yaml"), "a").write('title: "Zorg core, shared; v2"\n')
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only",
+            "--existing-context", os.path.join(FIX, "existing-context.md"))
+pp = os.path.join(out, "Core", "_System", "local-context.proposed.md")
+bl = [x for x in cc.vault_search_bullets(open(pp, encoding="utf-8").read()) if x["id"] == "zorg-core"] if os.path.isfile(pp) else []
+check("a provider title with ',' and ';' reads back whole", bl != [] and "Zorg core, shared; v2" in bl[0]["scope"]
+      and bl[0]["mode"] == "snapshot" and bl[0]["read_only"], (rc, bl))
+shutil.rmtree(d)
+
+d, core, out = fresh()
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only")
+check("--propose-only resolves team and role and writes nothing without a context", rc == 0 and "team alpha" in o
+      and (not os.path.exists(out) or files_under(out) == []), (rc, o[-300:]))
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run")
+check("--dry-run still works and names its new spelling", rc == 0 and "--propose-only" in o, (rc, o[-300:]))
 shutil.rmtree(d)
 
 # 9

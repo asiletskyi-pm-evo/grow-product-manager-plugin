@@ -1,7 +1,7 @@
 ---
 name: offboarding-guide
-version: 0.2.0
-description: Guide a manager through parting with an underperformer — evidence check, "can't" vs "won't", four-meeting algorithm, ARCV follow-ups. Not a routine review (performance-review). UA — «допоможи звільнити», «офбординг», «випробувальний термін», «чи час прощатися». EN — "help me let someone go", "offboarding", "PIP / probation for underperformance", "termination conversation", "how do I fire <person> fairly", "is it time to part ways". Also UA — «розмова про звільнення», «як коректно розлучитися зі співробітником». Drafts a neutral team message. Do NOT use for corrective goals alone (goal-setter) or hiring a replacement (hiring-designer — chain there after). Data strictly local; the tone is deliberate.
+version: 0.2.1
+description: Guide a manager through parting with an underperformer — evidence check, "can't" vs "won't", four-meeting algorithm, ARCV follow-ups. Not a routine review (performance-review). UA — «допоможи звільнити», «офбординг», «чи час прощатися». EN — "help me let someone go", "offboarding".
 ---
 
 # Offboarding Guide
@@ -87,3 +87,9 @@ Per `self-improvement.md`.
 - *"Думаю звільнити аналітика, він не тягне"* → Step P shows no formal goals set → **Gate G fails** → "There's no goal/report evidence — let's set goals via goal-setter and stand up 3T5F reporting first, otherwise this is by-feel." → returns after evidence exists.
 - *"Евіденс є, він 'не хоче'. Що далі?"* → runs the motivation-tools pre-screen (career ladder + sabbatical untried) → if PM still proceeds → guides Meeting 1 with an ARCV follow-up draft and a 1-month check reminder.
 - *"Провалив випробувальний, готую розмову"* → Meeting-3 dismissal script (facts, no personal blame) + agreed team message with the three required elements + reassignment task list → chains to hiring-designer for the role re-design.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Guide a manager through parting with an underperformer — evidence check, "can't" vs "won't", four-meeting algorithm, ARCV follow-ups. Not a routine review (performance-review). UA — «допоможи звільнити», «офбординг», «випробувальний термін», «чи час прощатися». EN — "help me let someone go", "offboarding", "PIP / probation for underperformance", "termination conversation", "how do I fire <person> fairly", "is it time to part ways". Also UA — «розмова про звільнення», «як коректно розлучитися зі співробітником». Drafts a neutral team message. Do NOT use for corrective goals alone (goal-setter) or hiring a replacement (hiring-designer — chain there after). Data strictly local; the tone is deliberate.

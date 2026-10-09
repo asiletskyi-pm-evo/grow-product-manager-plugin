@@ -1,7 +1,7 @@
 ---
 name: context-connect
-version: 0.1.0
-description: Connect to a team's shared context (core folder or MCP), refresh your bundle from the core («онови пакет з ядра»), enrich your context. Not your Obsidian vault (plugin-configurator). Not curated sources (knowledge-library); the plugin's own setup is plugin-configurator too. UA — «підключи мене до спільного контексту», «підключи мене до вейлта команди», «онови мій пакет з ядра», «збагати мій контекст блоками ядра», «додай провайдер контексту». EN — "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", "register a context MCP". Resolves your team and role from your e-mail, copies the bundle that is relevant to you, proposes the core's context blocks for your local-context.md (never overwrites it; every discrepancy is a question), and registers the provider so every skill can search it.
+version: 0.1.1
+description: Shared team core — connect, refresh bundle, add MCP provider, enrich your context. Not your Obsidian vault or plugin setup (plugin-configurator), not curated sources (knowledge-library). UA — «онови мій пакет з ядра», «підключи мене до спільного контексту», «збагати мій контекст блоками ядра». EN — "refresh my bundle", "connect me to the team vault".
 ---
 
 # Context Connect
@@ -37,7 +37,7 @@ The connect run has no judgment points: it copies, proposes and records what the
 |---|---|---|
 | **Connect** | first connection to a provider | Steps 0–6 |
 | **Refresh** | «онови мій пакет з ядра» / "refresh my bundle"; a newer core version; the digest marks the provider stale | Steps 0, 3, 4, 6 — the same run without `--force`: new files added, the user's notes kept, the blocks proposed again (usually one confirmation) |
-| **Enrich** | only the context blocks, no bundle | Steps 0, 3 (`--dry-run` with the user's context), 4 |
+| **Enrich** | only the context blocks, no bundle | Steps 0, 3 (`--propose-only` with the user's context), 4 |
 | **Register an MCP provider** | a provider reachable only as an MCP server (no folder) | Step 0, then `references/connect-steps.md` §7 |
 
 ## Step 0 — where things are
@@ -82,3 +82,9 @@ Run the builder for real (`references/connect-steps.md` §3): it copies the bund
 
 ## Skill Chaining
 → `plugin-configurator` (Validate / Update after a new context; the provider row in Validate) · → `context-navigator` (answers from the provider's graph) · → `task-creator` (writes only into the project the Jira write scope names).
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Connect to a team's shared context (core folder or MCP), refresh your bundle from the core («онови пакет з ядра»), enrich your context. Not your Obsidian vault (plugin-configurator). Not curated sources (knowledge-library); the plugin's own setup is plugin-configurator too. UA — «підключи мене до спільного контексту», «підключи мене до вейлта команди», «онови мій пакет з ядра», «збагати мій контекст блоками ядра», «додай провайдер контексту». EN — "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", "register a context MCP". Resolves your team and role from your e-mail, copies the bundle that is relevant to you, proposes the core's context blocks for your local-context.md (never overwrites it; every discrepancy is a question), and registers the provider so every skill can search it.

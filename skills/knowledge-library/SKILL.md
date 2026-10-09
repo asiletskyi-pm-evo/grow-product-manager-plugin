@@ -1,7 +1,7 @@
 ---
 name: knowledge-library
-version: 0.9.0
-description: Curated knowledge library with trust scores, plus the team glossary and writing-style profile. Not artifact templates (template-library), not competitor research (product-research). UA — «додай у бібліотеку», «які джерела маємо», «збери глосарій», «додай термін», «перевір термінологію», «навчись нашого стилю». EN — "add to library", "search knowledge", "what sources do we have on [topic]", "import sources", "build a glossary", "how do we call X", "check terminology", "learn our writing style". Also UA — «пошук у знаннях», «як ми називаємо…», «покажи бібліотеку». Also called by other skills for enrichment search or a terminology lint.
+version: 0.9.1
+description: Curated knowledge library with trust scores, plus the team glossary and writing-style profile. Not artifact templates (template-library), not competitor research (product-research). UA — «додай у бібліотеку», «які джерела маємо», «збери глосарій», «як ми називаємо…», «перевір термінологію».
 ---
 
 # Knowledge Library
@@ -280,3 +280,9 @@ At the beginning of Knowledge Library skill execution (after Step 0 context load
 - **`references/data-policy.md`** — data confidentiality rules
 - **`references/self-improvement.md`** — self-improvement protocol
 - **`references/template-protocol.md`** — artifact template protocol (sibling skill `template-library`)
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Curated knowledge library with trust scores, plus the team glossary and writing-style profile. Not artifact templates (template-library), not competitor research (product-research). UA — «додай у бібліотеку», «які джерела маємо», «збери глосарій», «додай термін», «перевір термінологію», «навчись нашого стилю». EN — "add to library", "search knowledge", "what sources do we have on [topic]", "import sources", "build a glossary", "how do we call X", "check terminology", "learn our writing style". Also UA — «пошук у знаннях», «як ми називаємо…», «покажи бібліотеку». Also called by other skills for enrichment search or a terminology lint.
