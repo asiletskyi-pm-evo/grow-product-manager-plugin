@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.10.1
+**Version:** 3.11.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.11.0** — **The context store: your context as records, `local-context.md` as their compiled view** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Your context can now live as records — one note per section of `local-context.md` — in your vault, next to a context card (`INDEX.md`). `local-context.md` becomes the compiled view: every skill reads it exactly as before, and whatever a skill, another plugin or you in Obsidian write into it directly is imported back into the records. A deterministic engine, `ctx`, moves a single-file context in losslessly — it proves the compile gives your file back byte for byte before it writes anything — snapshots before every change, keeps a journal and undoes; a record that is missing or still downloading stops a run before anything is written. The sixth contour, **Context**, groups `context-connect`, `context-navigator` and the store. The configurator offers the move once; without it nothing changes. See [Context store](#context-store-since-v3110).
 
 **New in v3.10.1** — **Routing that survives a crowded host** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Claude Code caps the skill listing at 1% of the context window and, past the cap, lists the least-used skills by name alone; on a machine with about 150 skills, 16 of this plugin's 33 showed no description and the model routed on names — the cause of most trigger misses left open in v3.10.0. Every description now keeps its lead and nearest-neighbour guard within 400 characters (9,787 for all 33, were 21,217), the full trigger list of each skill lives in its `## Routing` section, and validator check 12 keeps the budget. Trigger evals run twice — as the host lists skills and with every description visible — through two runners now in `testing/`; on the test machine the misses went from 9 to 0 by majority of three. `context-connect` opens with "Shared team core — connect, refresh bundle, add MCP provider" for hosts that show about 53 characters of a description. Fixes from the phase-1 review: the bundle builder keeps your own note on the `Updated:` line, quotes registration paths, stops on an unclosed marker and takes `--propose-only` (`--dry-run` still works); the session digest reads an index date from a `meta` table spelled `k`/`v`, escapes the index path and names a registration it cannot read; the branch scan exits 2 when its base is missing.
 
@@ -690,7 +692,7 @@ Your data lives outside the plugin, so it survives uninstalls, reinstalls and up
 The sixth contour, **Context**, groups `context-connect`, `context-navigator` and the context store. Your context can live as **records** — one note per section of `local-context.md` — in your vault (`{storage_root}/_System/context/`), next to a **context card** (`INDEX.md`, at most 200 lines: who you are, products, teams, vaults, providers, one line per record). `local-context.md` becomes the compiled view of the records: every skill reads it exactly as before, and anything written into it directly — by a skill, another plugin or you in Obsidian — is imported back into the records. Only a real conflict (the same section changed in the file and in its record) is a question.
 
 - **Moving in** — the configurator offers it once at the end of onboarding and as the Update item "Move my context to records": `ctx migrate` shows the records and proves the compile gives your file back byte for byte, `--apply` moves it. `ctx undo` right after it moves back.
-- **Safety** — a snapshot before every change (`~/.grow-pm/snapshots/`), a journal of every change, atomic writes, one writer at a time, never a write into a provider's folder or block.
+- **Safety** — a snapshot before every change (`~/.grow-pm/snapshots/`), a journal of every change, atomic writes, one writer at a time, never a write into a provider's folder or block; a record that is missing on disk or still downloading (iCloud) stops a run before anything is written.
 - **The digest** shows `context: records N · card M lines · in sync` (or the edits waiting) at every session start.
 - **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
 
@@ -1038,5 +1040,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.10.1  
+**Version:** 3.11.0  
 **Last Updated:** October 2026

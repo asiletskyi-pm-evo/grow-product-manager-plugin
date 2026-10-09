@@ -12,6 +12,44 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.11.0 (2026-10-09)
+
+**The context store: your context as records, `local-context.md` as their compiled view** (Context Core, phase 2). The context can now live as records — one markdown note per section of `local-context.md` — in the vault (`{storage_root}/_System/context/records/`). `local-context.md` becomes the compiled view: every skill reads it exactly as before, and anything written into it directly — by a skill, another plugin or the user in Obsidian — is imported back into the records. A deterministic engine, `ctx`, moves a single-file context in losslessly (it proves the compile gives the file back byte for byte before it writes anything), snapshots before every change, keeps a journal, undoes and generates a context card (`INDEX.md`). The sixth contour, **Context** — `context-connect`, `context-navigator` and the store — is declared in the README, the three manifests and `AGENTS.md`. Without the move nothing changes.
+
+MINOR: a new engine (`scripts/ctx.py`, `ctx_store.py`, `ctx_ops.py`), a new shared protocol (`references/context-protocol.md`), a digest line, and the sync step in the three writers (plugin-configurator 2.14.0, context-connect 0.2.0).
+
+### Added
+
+- **`ctx`** (`scripts/ctx.py` over `ctx_store.py` — split rules, record format, compile, card — and `ctx_ops.py` — lock, snapshots, migrate, sync): `status`, `migrate [--apply]`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`. The last stdout line is `CTX_RESULT {json}`, a conflict prints `CTX_CONFLICT {json}` before it; exit 0 ok · 2 a decision is needed · 3 bad input, no store, an unreadable or missing record · 4 refused (managed region, provider boundary, busy lock, existing store, `undo` while edits wait). Standard library only.
+- **Split rules** — every `##` section is a record; inside `## Organization:`, so is every `### Product:` and `### Team:`; fenced code and managed regions never split (a region that wraps a `##` section starts its own record). The records cover every byte once, so the compile is byte-identical by construction. Ids are `type.slug` and survive a renamed heading.
+- **Direct edits** (`ctx sync`) — both compiled copies (`~/.grow-pm/local-context.md` and the vault mirror) are cut by the same rules and compared with the last compile: changed, new, renamed, removed and reordered sections reach the records; a record edited in Obsidian is compiled out. Three or more removals at once, the same section changed in the file and in its record, or changed differently in the two copies, are a question: exit 2 with both versions, then `--resolve <id>=file|record` or `--accept-removals`.
+- **Safety** — a snapshot before every change (`~/.grow-pm/snapshots/`: the last 20 and one a day for 14 days, identical ones reused) and a journal line after it, atomic writes, one writer at a time (`~/.grow-pm/.ctx.lock`, stale after 120 s), direct edits imported before every write, never a write into a provider's folder or managed region. Records are read within a time budget (30 s, `GROW_PM_CTX_READ_TIMEOUT`): a record that is missing on disk or still downloading from iCloud stops the run before anything is written, with the way back.
+- **Context card** `INDEX.md` — at most 200 lines: who you are, onboarding, products, teams (member counts, never names), vaults and providers, one line per record.
+- **Session digest** — with a store, one read-only line, `context: records N · card M lines · in sync` (or the edits waiting, or the conflicts), read within a two-second budget.
+- `references/context-protocol.md` — the store, the split rules, the record format, the commands and their output contract, the sync, snapshots and the journal, hosts.
+- Tests: `ctx_store_test.py` (34 checks), `ctx_ops_test.py` (35), `ctx_cli_test.py` (33), `ctx_common_test.py` 8 → 12, `session_start_test.py` +3 (the context line); fictional fixtures in `testing/fixtures/ctx/` (minimal; typical; rich — provider regions, a fenced block with `## ` lines, Cyrillic headings, another plugin's section) and a golden card. A whole-branch review before the release found a compile that could rewrite a copy without a snapshot; it was fixed with 16 more checks, each of which failed first.
+
+### Changed
+
+- **Context Enrichment** (`references/local-context-protocol.md`), **plugin-configurator** 2.14.0 and **context-connect** 0.2.0 run `ctx sync --source <writer>` after saving `local-context.md` when a store exists — the digest shows its line, or, on a host without the digest (Codex CLI), the store's `.state/` folder exists; a conflict is shown and asked.
+- **plugin-configurator** offers the move once at the end of onboarding and as the Update item "Move my context to records"; Validate reports `ctx status`.
+- **Six contours** in the README, the three manifests and `AGENTS.md`; `context-schema.md`, `persistent-storage.md`, `host-profiles.md` and `testing/host-matrix.md` describe the store and what `ctx` needs (FS and SHELL).
+- README and `host-profiles.md` §7: after a release, `codex plugin marketplace upgrade` refreshes the marketplace (`marketplace add` does not), and `codex` commands run from a folder without a project-local `.codex/config.toml` (measured, codex-cli 0.153.2).
+
+### Not in this version
+
+- Skills reading the card and only their own records, archive and trash, freshness (TTL) and typed fields (v3.12.0). Until then, a property added to a record note in Obsidian is not kept by the next `ctx` write of that record (the snapshot keeps it).
+- Provider blocks as records with a three-way merge (v3.13.0); the configurator as a loop and a `/context` command (v3.15.0); an index and a graph (v4.0.0).
+
+### Backwards compatibility
+
+- Without the move nothing changes: no store → no digest line, `ctx sync` is a no-op, every skill reads `local-context.md` as before.
+- The move is lossless and reversible: `ctx migrate` shows the records and the round-trip proof first, `--apply` does not touch the compiled copies, and `ctx undo` right after it removes the store.
+- Hosts without a shell edit `local-context.md` as before; the next `ctx` run on a host with a shell imports the edits.
+- No skill renamed and no description changed: routing is as in v3.10.1.
+
+---
+
 ## v3.10.1 (2026-10-09)
 
 **Routing that survives a crowded host, and the phase-1 fixes.** Claude Code caps the skill listing at 1% of the context window and, over the cap, lists the least-used skills by name alone (measured in Claude Code 2.1.292, `references/host-profiles.md` §7). On a machine with about 150 skills, 16 of the plugin's 33 skills showed no description, and the model routed on names: that explained 8 of the 10 trigger misses left open in v3.10.0, and why the guards tried then changed nothing — they sat in descriptions the model never saw. Every description now keeps its lead and nearest-neighbour guard and drops the long trigger tail (21,217 → 9,787 characters for all 33), so the plugin fits the room it already had; the full trigger lists move into each skill's `## Routing` section. Trigger evals on the same machine and harness: 169/178 → 178/178 as the host lists skills (a row that missed was re-run three times and scored by majority; the nine rows that also fail on v3.9.0 now pass), 177/178 → 178/178 with every description visible.
