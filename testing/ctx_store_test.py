@@ -147,5 +147,35 @@ check("a long card stops at 200 lines", len(big_card) <= 200
 rich_card = cs.build_card(records_of("rich"), read(FIX, "rich.md"), now="2026-10-20")
 check("no people or member names on the card", "Bea Two" not in rich_card and "Alex One" in rich_card, rich_card)
 
+# --- Final review: append never lands inside a managed region; reads have a time budget
+import tempfile, time  # noqa: E402
+
+core = ("### Team: Beta (B)\n\n<!-- zorg-core:begin id=team v=0.4 -->\n#### Members (core)\n| Alex | PM |\n"
+        "#### Rituals (core)\n- daily\n<!-- zorg-core:end id=team -->\n- **Lead:** Alex\n")
+try:
+    cs.append_line(core, "- mine", under="#### Members (core)"); raised = False
+except cs.RegionError:
+    raised = True
+check("append_line under a heading inside a managed region is refused", raised)
+check("append_line after a region's end is allowed", cs.append_line(core, "- mine") == core + "- mine\n")
+tail_region = "### Team: Gamma (G)\n<!-- zorg-core:begin id=g -->\n- core\n<!-- zorg-core:end id=g -->\n"
+check("append_line after a closing end marker is allowed", cs.append_line(tail_region, "- mine") == tail_region + "- mine\n")
+
+with tempfile.TemporaryDirectory() as d:
+    fifo = os.path.join(d, "product.zorg-slow.md")
+    os.mkfifo(fifo)                    # open() blocks like an iCloud-evicted file that never downloads
+    t0 = time.time()
+    try:
+        cs.read_text(fifo, timeout=0.5); err = ""
+    except cs.StoreError as e:
+        err = str(e)
+    took = time.time() - t0
+    try:
+        os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))   # release the blocked reader
+    except OSError:
+        pass
+    check("a file that does not arrive in time is a StoreError naming it", "product.zorg-slow.md" in err
+          and "not available locally" in err and took < 3, (err, took))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

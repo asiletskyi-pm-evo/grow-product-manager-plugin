@@ -169,6 +169,83 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "X")
     check("store under a provider root is refused", rc == 4 and "PROJ" in read(e.ctx), (rc, out[-300:]))
 
+# --- Final review: undo bounds, explicit paths, a file without a final newline, a record that never loads
+def raw(env, args, cwd=None, extra_env=None, timeout=120):
+    e2 = dict(os.environ); e2.pop("GROW_PM_CONTEXT_PATH", None); e2.update(extra_env or {})
+    try:
+        p = subprocess.run([sys.executable, CTX] + args, capture_output=True, text=True, env=e2, cwd=cwd, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None, "still running after %d s" % timeout
+    return p.returncode, p.stdout + p.stderr
+
+
+def migrated_with_set(d):
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "set", "product.zorg-app", "Jira Project Key", "ONE")
+    return e
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = migrated_with_set(d)
+    after_set = read(e.ctx)
+    rc, out, res = run_ok(e, "undo", "--steps", "0")
+    check("undo --steps 0 is a usage error and changes nothing", rc == 3 and read(e.ctx) == after_set
+          and os.path.isdir(os.path.join(e.store, ".state")), (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = migrated_with_set(d)
+    e.edit(e.ctx, "- **Cadence:** daily", "- **Cadence:** weekly")
+    rc, out, res = run_ok(e, "undo")
+    check("undo with a direct edit not imported yet is refused and keeps the edit", rc == 4
+          and "weekly" in read(e.ctx) and "ONE" in read(e.ctx), (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = migrated_with_set(d)
+    rc, out = raw(e, ["set", "product.zorg-app", "Jira Project Key", "TYPO", "--home", e.home,
+                      "--context", os.path.join(d, "no-such-context.md")])
+    check("an explicit --context that does not exist is exit 3, never another file", rc == 3
+          and "TYPO" not in read(e.ctx) and "no-such-context.md" in out, (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = migrated_with_set(d)
+    e.edit(e.ctx, "- **Cadence:** daily", "- **Cadence:** weekly")
+    rc, out = raw(e, ["sync", "--home", e.home, "--context", "local-context.md"], cwd=os.path.dirname(e.ctx))
+    check("a relative --context imports the edit instead of overwriting it", rc == 0 and "weekly" in read(e.ctx)
+          and "weekly" in e.record("setting.focus-focus-advisor"), (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    for p in (e.ctx, e.mirror):
+        open(p, "w", encoding="utf-8", newline="").write(e.text.rstrip("\n"))
+    run_ok(e, "migrate", "--apply")
+    rc, out, res = run_ok(e, "add", "custom", "Zorg Notes")
+    check("add after a last line without a newline starts its own line", rc == 0
+          and "_none_\n## Zorg Notes\n" in read(e.ctx), (rc, read(e.ctx)[-80:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    fifo = os.path.join(e.store, "records", "custom.zorg-slow.md")
+    os.mkfifo(fifo)                         # open() blocks like an iCloud-evicted record
+    before = read(e.ctx), read(e.mirror)
+    t0 = time.time()
+    rc, out = raw(e, ["compile", "--home", e.home, "--context", e.ctx], extra_env={"GROW_PM_CTX_READ_TIMEOUT": "1"},
+                  timeout=30)
+    took = time.time() - t0
+    os.remove(fifo)
+    check("a record that never loads is exit 3 within the read budget, copies untouched", rc == 3
+          and "custom.zorg-slow.md" in out and took < 20 and (read(e.ctx), read(e.mirror)) == before, (rc, took, out[-300:]))
+
+writers = ["references/context-protocol.md", "references/local-context-protocol.md", "skills/plugin-configurator/SKILL.md",
+           "skills/plugin-configurator/references/maintenance-modes.md", "skills/context-connect/references/connect-steps.md"]
+lacking = [w for w in writers if not any("context: records" in l and "without the digest" in l
+                                         for l in read(ROOT, w).splitlines())]
+check("every writer's sync step also covers a host without the session digest", lacking == [], lacking)
+matrix = read(ROOT, "testing", "host-matrix.md")
+check("the host matrix says what the ctx engine needs (spec §10)", "`ctx`" in matrix and "SHELL" in matrix
+      and "ctx_cli_test" not in matrix, "no ctx note")
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

@@ -8,6 +8,7 @@ references/context-protocol.md. Used by ctx_ops.py and the `ctx` command line.
 - split_sections / assign_ids   the split rules and stable record ids
 - render_record / parse_record  the record file: frontmatter + the section text as is
 - compile_records               the compiled local-context.md
+- read_text                     a read with a time budget (an iCloud-evicted file blocks until it downloads)
 
 Stdlib only.
 """
@@ -16,6 +17,8 @@ import json
 import os
 import re
 import sys
+import threading
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
@@ -169,6 +172,43 @@ class RegionError(Exception):
     """An edit would land inside a provider's managed region (exit 4)."""
 
 
+READ_TIMEOUT_S = 30.0
+
+
+def read_timeout():
+    """Seconds a ctx run waits for its files in all; GROW_PM_CTX_READ_TIMEOUT overrides."""
+    try:
+        return float(os.environ.get("GROW_PM_CTX_READ_TIMEOUT") or READ_TIMEOUT_S)
+    except ValueError:
+        return READ_TIMEOUT_S
+
+
+def read_text(path, timeout=None):
+    """The file's text byte for byte, read in a helper thread: an iCloud-evicted file blocks in open()
+    until it downloads. Not there within `timeout` seconds → StoreError naming it; OSError and
+    UnicodeDecodeError come back as they are."""
+    timeout = read_timeout() if timeout is None else timeout
+    box = {}
+
+    def work():
+        try:
+            with open(path, encoding="utf-8", newline="") as f:
+                box["text"] = f.read()
+        except BaseException as e:  # handed back to the caller below
+            box["error"] = e
+
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    t.join(max(timeout, 0.05))
+    if t.is_alive():
+        raise StoreError("not available locally: %s did not load within %g s — still downloading (iCloud) or "
+                         "syncing; open the vault so it downloads, then run again; nothing was written"
+                         % (os.path.basename(path), timeout))
+    if "error" in box:
+        raise box["error"]
+    return box["text"]
+
+
 def atomic_write(path, text):
     """Write `text` byte for byte through a hidden temp file in the same folder, then replace."""
     folder = os.path.dirname(path) or "."
@@ -209,17 +249,23 @@ class Store:
             (valid if ID_RE.match(name[:-3]) else stray).append(name)
         return valid, stray
 
-    def load(self):
-        """Records sorted by `order`. A record that cannot be read or parsed → StoreError naming its file."""
-        out = []
-        valid, _ = self._record_files()
-        for name in valid:
-            path = os.path.join(self.records_dir, name)
+    def _texts(self, names):
+        """{name: text} of record files, all read within one time budget (read_timeout)."""
+        out, deadline = {}, time.time() + read_timeout()
+        for name in names:
             try:
-                with open(path, encoding="utf-8", newline="") as f:
-                    text = f.read()
+                out[name] = read_text(os.path.join(self.records_dir, name), max(deadline - time.time(), 0.05))
             except (OSError, UnicodeDecodeError) as e:
                 raise StoreError("record not readable: %s (%s)" % (name, e))
+        return out
+
+    def load(self):
+        """Records sorted by `order`. A record that cannot be read in time or parsed → StoreError naming its file."""
+        out = []
+        valid, _ = self._record_files()
+        texts = self._texts(valid)
+        for name in valid:
+            text = texts[name]
             try:
                 rec = parse_record(text)
             except ValueError as e:
@@ -234,10 +280,9 @@ class Store:
         valid, stray = self._record_files()
         for name in valid:
             try:
-                with open(os.path.join(self.records_dir, name), encoding="utf-8", newline="") as f:
-                    if parse_record(f.read())["id"] != name[:-3]:
-                        stray.append(name)
-            except (OSError, UnicodeDecodeError, ValueError):
+                if parse_record(read_text(os.path.join(self.records_dir, name)))["id"] != name[:-3]:
+                    stray.append(name)
+            except (OSError, UnicodeDecodeError, ValueError, StoreError):
                 pass
         return sorted(stray)
 
@@ -341,8 +386,9 @@ def _level(core):
 
 def append_line(body, text, under=None):
     """Add `text` after the last non-empty line of the body, or of the subsection whose heading line is
-    `under` (up to the next heading of the same or a higher level). An identical line there → unchanged."""
-    lines = _lines(body)
+    `under` (up to the next heading of the same or a higher level). An identical line there → unchanged;
+    a place inside a provider's managed region → RegionError."""
+    lines, spans = _lines(body), cc.managed_spans(body)
     lo, hi = 0, len(lines)
     if under is not None:
         lo = next((k for k, (_, core, _) in enumerate(lines) if core.strip() == under.strip()), None)
@@ -354,9 +400,12 @@ def append_line(body, text, under=None):
         return body
     last = max((k for k in range(lo, hi) if lines[k][1].strip()), default=lo)
     off, core, end = lines[last]
+    at = off + len(core) + len(end)
+    if _in_region(at if end else off + len(core), spans):
+        raise RegionError("the line would land inside a provider's managed region%s"
+                          % (" (under %s)" % under.strip() if under else ""))
     if not end:
         return body[:off + len(core)] + "\n" + text + body[off + len(core):]
-    at = off + len(core) + len(end)
     return body[:at] + text + end + body[at:]
 
 

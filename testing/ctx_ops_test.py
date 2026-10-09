@@ -149,7 +149,8 @@ def body_of(env, rid):
 
 with tempfile.TemporaryDirectory() as d:
     e = Env(d)
-    check("copies are the home file and the vault mirror", e.copies == [e.ctx, e.mirror]
+    check("copies are the home file and the vault mirror, as real paths",
+          e.copies == [os.path.realpath(e.ctx), os.path.realpath(e.mirror)]
           and e.store.root == os.path.join(e.vault, "Notes", "_System", "context"), (e.copies, e.store.root))
     rep = e.migrate(apply=False)
     check("migrate dry run reports identical", rep["identical"] is True and len(rep["records"]) == 14
@@ -266,6 +267,80 @@ with tempfile.TemporaryDirectory() as d:
     res = e.sync()
     check("a sync with nothing to do writes nothing", res["snapshot"] is None
           and (tree(e.store.root), read(e.ctx), read(e.mirror)) == before)
+
+# --- Final review: a compile never drops, reverts or overwrites without a snapshot and a journal line
+def attempt(env, **kw):
+    try:
+        return env.sync(**kw), None
+    except (cs.StoreError, co.Conflict) as x:
+        return None, x
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    os.remove(os.path.join(e.store.records_dir, "setting.templates.md"))
+    before = read(e.ctx), read(e.mirror)
+    digest = co.status_summary(e.ctx, home=e.home)
+    res, err = attempt(e)
+    check("a record file missing on disk stops the sync, copies untouched", isinstance(err, cs.StoreError)
+          and "setting.templates" in str(err) and (read(e.ctx), read(e.mirror)) == before, err)
+    check("the digest flags a missing record", digest is not None and digest["conflicts"] >= 1, digest)
+    res, err = attempt(e, accept_removals=True)
+    check("--accept-removals drops a missing record after a snapshot that holds its section",
+          err is None and res["removed"] == ["setting.templates"] and "## Templates" not in read(e.ctx)
+          and "## Templates" in read(res["snapshot"], "copies", "0.md"), err or res)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    shutil.rmtree(e.store.records_dir); os.makedirs(e.store.records_dir)
+    before = read(e.ctx), read(e.mirror)
+    res, err = attempt(e)
+    check("an emptied records folder never empties the copies", isinstance(err, cs.StoreError)
+          and (read(e.ctx), read(e.mirror)) == before and len(before[0]) > 0, err)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    moved = e.text.replace(TEMPLATES, "").replace(FOCUS, FOCUS + TEMPLATES)
+    open(e.ctx, "w", encoding="utf-8", newline="").write(moved)
+    digest = co.status_summary(e.ctx, home=e.home)
+    res, err = attempt(e)
+    ids = [r["id"] for r in e.store.load()]
+    check("a reorder in the copy is imported, not reverted", err is None and read(e.ctx) == moved
+          and read(e.mirror) == moved and ids.index("setting.templates") > ids.index("setting.focus-focus-advisor")
+          and res["snapshot"] and e.store.journal_entries()[-1]["op"] == "sync", (err, ids))
+    check("the digest counts a reorder as an edit to import", digest is not None and digest["pending"] >= 1, digest)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    e.edit(e.mirror, "- **Cadence:** daily", "- **Cadence:** hourly")      # the mirror drifted before the move
+    e.migrate()
+    e.edit(e.mirror, "- **Cadence:** hourly", "- **Cadence:** minutely")   # and was edited again in Obsidian
+    res, err = attempt(e)
+    j = e.store.journal_entries()[-1]
+    held = j.get("snapshot") and "minutely" in read(j["snapshot"], "copies", "1.md")
+    check("a copy without a baseline is rewritten only after a snapshot that holds it, with a journal line",
+          err is None and read(e.mirror) == read(e.ctx) and j["op"] == "compile" and held, (err, j))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    os.remove(e.ctx); os.symlink(e.mirror, e.ctx)                         # one file, reached from both places
+    copies = co.copies_for(e.ctx, e.text, home=e.home)
+    co.migrate(e.ctx, e.store.root, copies, e.home, apply=True, now=NOW)
+    e.edit(e.mirror, "- **Cadence:** daily", "- **Cadence:** weekly")
+    res = co.apply_sync(e.store, co.plan_sync(e.store, copies), copies, e.home, "test", "", NOW)
+    check("a home copy linked to the mirror is one copy and stays a link", len(copies) == 1
+          and os.path.islink(e.ctx) and "weekly" in body_of(e, "setting.focus-focus-advisor"), copies)
+
+with tempfile.TemporaryDirectory() as d:
+    st, copy = seeded_store(d)
+    home = os.path.join(d, "home")
+    root = os.path.join(home, ".grow-pm", "snapshots"); os.makedirs(root)
+    for day in range(30):
+        t = datetime.datetime.now() - datetime.timedelta(days=day + 20)
+        os.makedirs(os.path.join(root, t.strftime("%Y%m%dT%H%M%S") + "-op"))
+    snap = co.snapshot(st, [copy], home, "new")
+    check("every new snapshot rotates the folder", os.path.isdir(snap) and len(os.listdir(root)) == 20,
+          len(os.listdir(root)))
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

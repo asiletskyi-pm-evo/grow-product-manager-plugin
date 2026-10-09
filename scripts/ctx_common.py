@@ -205,9 +205,12 @@ def storage_root(context_text, home=None):
 
 
 def find_context(explicit=None, home=None):
-    """The user's local-context.md: an explicit path, else $GROW_PM_CONTEXT_PATH, else
-    ~/.grow-pm/local-context.md — the first that exists, or None."""
-    for p in (explicit, os.environ.get("GROW_PM_CONTEXT_PATH"),
+    """The user's local-context.md: an explicit path — that one only, None when it does not exist —
+    else $GROW_PM_CONTEXT_PATH, else ~/.grow-pm/local-context.md — the first that exists, or None."""
+    if explicit:
+        p = os.path.expanduser(explicit)
+        return p if os.path.isfile(p) else None
+    for p in (os.environ.get("GROW_PM_CONTEXT_PATH"),
               os.path.join(home or os.path.expanduser("~"), ".grow-pm", "local-context.md")):
         if p and os.path.isfile(os.path.expanduser(p)):
             return os.path.expanduser(p)

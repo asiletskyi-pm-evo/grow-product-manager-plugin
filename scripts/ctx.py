@@ -14,12 +14,15 @@
   append ID --text T [--under "#### Heading"]   add a line (an identical line is not repeated)
   add TYPE TITLE [--parent ID] [--after ID] [--body-file F]   a new product, team, org, setting or custom record
   snapshot [--label L]          a snapshot of the store and both copies
-  undo [--steps N]              back to the state before the N-th last change
+  undo [--steps N]              back to the state before the N-th last change (N from 1); refused while
+                                edits wait to be imported
   validate                      records, ids, parents, card size, edits waiting
   card                          regenerate INDEX.md only
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
-edits first, snapshots, writes, journals and compiles. The last stdout line is `CTX_RESULT {json}`;
+edits first, snapshots, writes, journals and compiles. Files are read within a time budget
+(GROW_PM_CTX_READ_TIMEOUT, default 30 s): a record that does not arrive (iCloud) or is missing
+on disk stops the run before anything is written. The last stdout line is `CTX_RESULT {json}`;
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
 unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists).
 Semantics: references/context-protocol.md. Stdlib only.
@@ -55,9 +58,11 @@ def now():
 class Ctx:
     def __init__(self, a):
         self.home = a.home or os.path.expanduser("~")
-        self.context = cc.find_context(a.context, home=self.home)
-        if not self.context:
-            raise cs.StoreError("no local-context.md found (--context, GROW_PM_CONTEXT_PATH, ~/.grow-pm)")
+        found = cc.find_context(a.context, home=self.home)
+        if not found:
+            raise cs.StoreError("no such file: %s (--context)" % a.context if a.context else
+                                "no local-context.md found (GROW_PM_CONTEXT_PATH, ~/.grow-pm)")
+        self.context = os.path.realpath(found)
         self.text = co._read(self.context)
         self.store = cs.Store(a.store or co.store_root_for(self.text, self.home))
         self.copies = co.copies_for(self.context, self.text, self.home)
@@ -84,19 +89,22 @@ def cmd_status(a, c):
         return 3, {"command": "status", "store": None}
     recs = c.store.load()
     plan = co.plan_sync(c.store, c.copies)
-    pending = {k: len(plan[k]) for k in ("edits", "adds", "removes", "renames", "record_changes")}
+    pending = co.pending(plan)
     card = co._read(c.store.card_path).count("\n") if os.path.isfile(c.store.card_path) else 0
     tail = c.store.journal_entries()[-3:]
     print("store: %s · records %d · card %d lines" % (c.store.root, len(recs), card))
     print("to import: " + (", ".join("%s %d" % kv for kv in pending.items() if kv[1]) or "nothing — in sync"))
     for x in plan["conflicts"]:
         print("conflict: %s (%s)" % (x["id"], "; ".join(x["reasons"])))
+    if plan["missing"]:
+        print("missing on disk (not downloaded, not synced or deleted): %s — `ctx sync` says what to do"
+              % ", ".join(i + ".md" for i in plan["missing"]))
     for s in c.store.stray_files():
         print("stray file (ignored): %s" % s)
     for j in tail:
         print("journal: %s %s %s" % (j.get("ts", ""), j.get("op"), j.get("source", "")))
     return 0, {"command": "status", "store": c.store.root, "records": len(recs), "card_lines": card,
-               "pending": pending, "conflicts": [x["id"] for x in plan["conflicts"]],
+               "pending": pending, "conflicts": [x["id"] for x in plan["conflicts"]], "missing": plan["missing"],
                "stray": c.store.stray_files(), "journal": tail}
 
 
@@ -144,6 +152,8 @@ def cmd_sync(a, c, source=None):
     comp = res.get("compiled") or {}
     print("imported: %d changed, %d new, %d removed%s" % (len(res["changed"]), len(res["added"]), len(res["removed"]),
           " (recoverable: ctx undo)" if res["removed"] else ""))
+    if res.get("moved"):
+        print("order: the records follow the file (%d moved)" % len(res["moved"]))
     print("wrote: " + (", ".join(comp.get("written") or []) or "no copy needed a change"))
     return 0, dict(res, command=a.cmd)
 
@@ -191,7 +201,7 @@ def _write_one(c, op, rid, mutate, source, reason):
         snap = co.snapshot(c.store, c.copies, c.home, op)
         c.store.write(dict(rec, body=body, source=source, modified=t))
         c.store.journal({"ts": t, "op": op, "ids": [rid], "source": source, "reason": reason or "", "snapshot": snap})
-        comp = co.compile_store(c.store, c.copies, t)
+        comp = co.compile_store(c.store, c.copies, t, c.home, snap)
     print("%s: %s · wrote %s" % (op, rid, ", ".join(comp["written"]) or "no copy"))
     return {"command": op, "id": rid, "changed": True, "snapshot": snap, "imported": pre["changed"] + pre["added"],
             "written": comp["written"]}
@@ -239,7 +249,7 @@ def cmd_add(a, c):
                          a.source or "ctx-add", t)
         c.store.journal({"ts": t, "op": "add", "ids": new, "source": a.source or "ctx-add", "reason": a.reason or "",
                          "snapshot": snap})
-        comp = co.compile_store(c.store, c.copies, t)
+        comp = co.compile_store(c.store, c.copies, t, c.home, snap)
     print("added %s after %s" % (new[0], after))
     return 0, {"command": "add", "id": new[0], "after": after, "snapshot": snap, "written": comp["written"]}
 
@@ -252,8 +262,15 @@ def cmd_snapshot(a, c):
 
 
 def cmd_undo(a, c):
+    if a.steps < 1:
+        raise Usage("--steps takes a whole number from 1")
     c.need_store()
     with co.lock(c.home):
+        plan = co.plan_sync(c.store, c.copies)
+        waiting = sum(co.pending(plan).values()) + len(plan["conflicts"]) + len(plan["missing"])
+        if waiting:
+            raise co.Refused("%d change(s) to local-context.md or the records are not imported yet and undo would "
+                             "discard them — `ctx sync` first, then `ctx undo`" % waiting)
         marks = [e for e in c.store.journal_entries() if e.get("snapshot")]
         if len(marks) < a.steps:
             raise cs.StoreError("nothing to undo — the journal has %d change(s)" % len(marks))
@@ -306,9 +323,11 @@ def cmd_validate(a, c):
         warnings.append("no User Profile record")
     if os.path.isfile(c.store.card_path) and co._read(c.store.card_path).count("\n") > cs.CARD_MAX:
         errors.append("INDEX.md is longer than %d lines" % cs.CARD_MAX)
-    if recs:
+    if recs or c.store.state().get("order"):
         plan = co.plan_sync(c.store, c.copies)
-        waiting = sum(len(plan[k]) for k in ("edits", "adds", "removes", "renames", "record_changes"))
+        for rid in plan["missing"]:
+            errors.append("%s.md is missing on disk (not downloaded, not synced or deleted) — `ctx sync` says what to do" % rid)
+        waiting = sum(co.pending(plan).values())
         if waiting:
             warnings.append("%d change(s) waiting — `ctx sync`" % waiting)
         for x in plan["conflicts"]:
