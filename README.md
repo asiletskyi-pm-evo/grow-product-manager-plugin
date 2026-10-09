@@ -679,10 +679,20 @@ Your data lives outside the plugin, so it survives uninstalls, reinstalls and up
 ├── Templates/                 # Only without a vault — otherwise in the vault
 ├── experiments/  focus/  landscape/  walkthroughs/
 ├── providers/                 # Shared-context provider registrations (no vault)
+├── snapshots/                 # Context store: one before every change, ctx undo restores (since v3.11.0)
 └── backups/                   # Before migrations and updates — last 5 kept
 ```
 
 **Key features:** automatic backups before migrations and updates, schema versioning (`.schema-version` for `~/.grow-pm/`, `.vault-schema-version` for the vault), and recovery from the vault mirror; the paths above are the real ones. Full protocol: `references/persistent-storage.md`.
+
+## Context store (since v3.11.0)
+
+The sixth contour, **Context**, groups `context-connect`, `context-navigator` and the context store. Your context can live as **records** — one note per section of `local-context.md` — in your vault (`{storage_root}/_System/context/`), next to a **context card** (`INDEX.md`, at most 200 lines: who you are, products, teams, vaults, providers, one line per record). `local-context.md` becomes the compiled view of the records: every skill reads it exactly as before, and anything written into it directly — by a skill, another plugin or you in Obsidian — is imported back into the records. Only a real conflict (the same section changed in the file and in its record) is a question.
+
+- **Moving in** — the configurator offers it once at the end of onboarding and as the Update item "Move my context to records": `ctx migrate` shows the records and proves the compile gives your file back byte for byte, `--apply` moves it. `ctx undo` right after it moves back.
+- **Safety** — a snapshot before every change (`~/.grow-pm/snapshots/`), a journal of every change, atomic writes, one writer at a time, never a write into a provider's folder or block.
+- **The digest** shows `context: records N · card M lines · in sync` (or the edits waiting) at every session start.
+- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
 
 ## Multilingual Artifact Templates
 
@@ -885,7 +895,7 @@ The plugin is defined against Claude Code / Cowork and degrades by **observed ca
 
 **Codex card.** `.codex-plugin/plugin.json` carries the `interface` block Codex and ChatGPT render — display name, category, brand color and the logo in `assets/` (`logo.png` 512, `composer-icon.png` 128). Claude Code has no logo field, so it reads `.claude-plugin/` only; validator check 1 keeps the two manifests' version and description identical.
 
-**Codex — install and update.** Codex refreshes configured Git marketplaces **when it starts** (plugin startup and `codex plugin list`) and then refreshes the installed plugin cache — [openai/codex#17425](https://github.com/openai/codex/pull/17425); it does **not** check periodically while the app stays open — [openai/codex#38401](https://github.com/openai/codex/issues/38401). So a release reaches a running Codex only after a restart, or after the two commands below.
+**Codex — install and update.** Codex refreshes configured Git marketplaces **when it starts** (plugin startup and `codex plugin list`) and then refreshes the installed plugin cache — [openai/codex#17425](https://github.com/openai/codex/pull/17425); it does **not** check periodically while the app stays open — [openai/codex#38401](https://github.com/openai/codex/issues/38401). So a release reaches a running Codex only after a restart, or after the update commands further below. First install:
 
 ```
 codex plugin marketplace add asiletskyi-pm-evo/grow-product-manager-plugin
@@ -898,6 +908,8 @@ After every release, if Codex stayed open (otherwise the next start does this it
 codex plugin marketplace upgrade grow-product-manager-plugins
 codex plugin add grow-product-manager@grow-product-manager-plugins
 ```
+
+`marketplace add` on a marketplace that is already configured does not refresh it — use `upgrade`. Run `codex` commands from a folder without a project-local `.codex/config.toml` (for example `cd ~` first): Codex merges that file into its config, and a copy that declares a server by `url` where your global config runs it as a command stops every command with "url is not supported for stdio" (measured, codex-cli 0.153.2).
 
 **ChatGPT on web / mobile** gets roughly half of the plugin — the artifact and research skills on connectors, with the artifact delivered in the chat and exported at the end; the storage-bound contours (Focus Board, experiment registry, the whole People contour, template and knowledge libraries) say so in one line and stop. **The ChatGPT desktop app with a *Local Project*** attaches local folders read/write ([Projects docs](https://www.codex-docs.com/en/docs/projects)) — Step 0-host then observes FS as present and the Codex column applies. Neither ChatGPT surface has been run with the plugin yet; the column is derived, not measured. **Codex Cloud** runs in its own sandbox: never assume prior state, always write results back through a connector or the repository.
 

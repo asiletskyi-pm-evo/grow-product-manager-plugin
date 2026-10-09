@@ -6,7 +6,7 @@ This is not a second README. `README.md` explains the product to a person; this 
 
 ## What this repository is
 
-The **Grow Product Manager** plugin — a set of skills for a product manager's daily work, grouped in five contours: Product (research, concepts, requirements, tasks, CJM, analysis, experiments), Delivery (roadmap, quarter, sprint, reports, releases), Knowledge (library, decisions, feedback, meetings, templates), People (goals, 1-1s, reviews, hiring, delegation) and Design (diagrams, prototypes, handoff). There is no application code to build or run: the plugin is markdown protocols plus a few deterministic Python scripts.
+The **Grow Product Manager** plugin — a set of skills for a product manager's daily work, grouped in six contours: Product (research, concepts, requirements, tasks, CJM, analysis, experiments), Delivery (roadmap, quarter, sprint, reports, releases), Knowledge (library, decisions, feedback, meetings, templates), People (goals, 1-1s, reviews, hiring, delegation), Design (diagrams, prototypes, handoff) and Context (a team's shared core, answers from it, and the context store with its `ctx` engine). There is no application code to build or run: the plugin is markdown protocols plus a few deterministic Python scripts.
 
 ## Where things live
 
@@ -20,6 +20,7 @@ The **Grow Product Manager** plugin — a set of skills for a product manager's 
 | `hooks/`, `scripts/` | host hooks and the deterministic scripts they call |
 | `references/app-drive-protocol.md`, `scripts/walkthrough_preflight.sh` | driving the real product (capability APP-DRIVE) and the per-surface readiness table behind `flow-walkthrough` setup |
 | `skills/product-landscape`, `scripts/landscape_scan.sh` | the registry of competitor / adjacent / benchmark products (`~/.grow-pm/landscape/`) and the machine scan behind it |
+| `scripts/ctx.py`, `references/context-protocol.md` | the context store: records of the user's context, `local-context.md` compiled from them, `ctx sync` after any write to it |
 | `testing/` | `validate-consistency.sh`, `skill_lint.py` and the eval sets |
 
 A bare `references/<file>.md` in a skill means the **shared** folder at the plugin root, not the skill's own. When a relative read of it fails, resolve the plugin root through `${PLUGIN_ROOT}` → `${CLAUDE_PLUGIN_ROOT}` → the directory that contains `skills/` (`references/host-profiles.md` §6) and read it from there. Do not silently continue without a protocol the skill named.

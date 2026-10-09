@@ -372,6 +372,13 @@ If user data is lost or corrupted, recovery follows this priority:
 
 ---
 
+## Context store (since v3.11.0)
+
+- **Records** of the user's context: `{storage_root}/_System/context/` (`records/`, `INDEX.md` — the context card, `.state/`) — in the vault when one is configured, else under `~/.grow-pm/_System/context/`. `local-context.md` is compiled from them (`references/context-protocol.md`).
+- **Snapshots** before every change: `~/.grow-pm/snapshots/` — the last 20 plus one per day for 14 days; `ctx undo` restores one. They are separate from `backups/` (pre-migration and pre-apply, last 5).
+- **Lock**: `~/.grow-pm/.ctx.lock` — one `ctx` writer at a time.
+- With a store, `ctx compile` writes the vault copy of `local-context.md` (VM-1's first row); the manual mirror copy is skipped.
+
 ## Vault Mirror Protocol (Obsidian as secondary storage)
 
 When Obsidian Vault is configured, `~/.grow-pm/` data MUST be mirrored to the vault. This provides a secondary backup that is:
