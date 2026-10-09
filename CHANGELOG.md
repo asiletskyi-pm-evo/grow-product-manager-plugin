@@ -12,7 +12,7 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
-## v3.10.1 (2026-10-08)
+## v3.10.1 (2026-10-09)
 
 **Routing that survives a crowded host, and the phase-1 fixes.** Claude Code caps the skill listing at 1% of the context window and, over the cap, lists the least-used skills by name alone (measured in Claude Code 2.1.292, `references/host-profiles.md` §7). On a machine with about 150 skills, 16 of the plugin's 33 skills showed no description, and the model routed on names: that explained 8 of the 10 trigger misses left open in v3.10.0, and why the guards tried then changed nothing — they sat in descriptions the model never saw. Every description now keeps its lead and nearest-neighbour guard and drops the long trigger tail (21,217 → 9,787 characters for all 33), so the plugin fits the room it already had; the full trigger lists move into each skill's `## Routing` section. Trigger evals on the same machine and harness: 169/178 → 178/178 as the host lists skills (a row that missed was re-run three times and scored by majority; the nine rows that also fail on v3.9.0 now pass), 177/178 → 178/178 with every description visible.
 
