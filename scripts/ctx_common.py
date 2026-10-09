@@ -11,6 +11,8 @@ provider_bundle.py (bundle builder). Semantics: references/context-provider-prot
                       keeping line numbers, so headings inside them are never counted.
 - vault_entries / vault_search_bullets  the two local-context.md sections providers use.
 - find_registrations / provider_roots / boundary_hit / is_under  the write boundary.
+- slugify / vault_modes / storage_root / find_context / managed_spans  the context store
+                      (since v3.11.0, references/context-protocol.md).
 
 Stdlib only. Callers that run as hooks must fail open; these helpers raise only
 ValueError (bad YAML) and never touch the network.
@@ -23,6 +25,12 @@ import re
 import unicodedata
 
 N = lambda s: unicodedata.normalize("NFC", s or "")
+
+# Ukrainian → Latin, shared by slugify() and the bundle builder's name matching.
+TRANSLIT = {"а": "a", "б": "b", "в": "v", "г": "h", "ґ": "g", "д": "d", "е": "e", "є": "ie", "ж": "zh", "з": "z",
+            "и": "y", "і": "i", "ї": "i", "й": "i", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p",
+            "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh",
+            "щ": "shch", "ю": "iu", "я": "ia", "ь": "", "ʼ": "", "'": "", "’": ""}
 
 
 # ---------------------------------------------------------------- YAML subset
@@ -129,6 +137,11 @@ def strip_managed_regions(text):
     return REGION_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text or "")
 
 
+def managed_spans(text):
+    """[start, end) character offsets of every managed region, begin marker to end marker."""
+    return [(m.start(), m.end()) for m in REGION_RE.finditer(text or "")]
+
+
 # ------------------------------------------------ local-context.md sections
 def _section(text, heading_re, level):
     m = re.search(heading_re, text, re.M)
@@ -158,6 +171,54 @@ def vault_entries(context_text):
         if key not in seen:
             seen.add(key); uniq.append(key)
     return uniq
+
+
+def vault_modes(context_text):
+    """[(vault_path, plugin_folder, sync_mode)] from `## Obsidian Vaults`, table rows first, then
+    `- path:` items; paths expanded and normalised, sync_mode lowercased (YAML default `auto`)."""
+    sec = _section(context_text or "", r"^## Obsidian Vaults.*$", 2)
+    out = []
+    for row in re.findall(r"^\|\s*\d+\s*\|([^\n]*)$", sec, re.M):
+        cells = [c.strip() for c in row.split("|")]
+        if len(cells) >= 2 and cells[0] and cells[1]:
+            out.append((cells[0], cells[1], cells[3].lower() if len(cells) > 3 else ""))
+    for m in re.finditer(r"^\s*-\s*path:\s*(.+?)\s*$((?:\n\s+\w+:.*)*)", sec, re.M):
+        p = m.group(1).strip().strip('"').strip("'")
+        f = re.search(r"plugin_folder:\s*\"?([^\"\n#]+?)\"?\s*(?:#.*)?$", m.group(2), re.M)
+        s = re.search(r"sync_mode:\s*\"?([A-Za-z-]+)", m.group(2))
+        out.append((p, f.group(1).strip() if f else "", s.group(1).lower() if s else "auto"))
+    seen, uniq = set(), []
+    for p, f, s in out:
+        key = (os.path.normpath(os.path.expanduser(N(p))), N(f))
+        if key not in seen:
+            seen.add(key); uniq.append(key + (s,))
+    return uniq
+
+
+def storage_root(context_text, home=None):
+    """`storage_root` of persistent-storage.md: the first vault whose sync mode is not `off`
+    → {vault_path}/{plugin_folder}; otherwise ~/.grow-pm."""
+    for p, f, s in vault_modes(context_text):
+        if s != "off":
+            return os.path.join(p, f) if f else p
+    return os.path.join(home or os.path.expanduser("~"), ".grow-pm")
+
+
+def find_context(explicit=None, home=None):
+    """The user's local-context.md: an explicit path, else $GROW_PM_CONTEXT_PATH, else
+    ~/.grow-pm/local-context.md — the first that exists, or None."""
+    for p in (explicit, os.environ.get("GROW_PM_CONTEXT_PATH"),
+              os.path.join(home or os.path.expanduser("~"), ".grow-pm", "local-context.md")):
+        if p and os.path.isfile(os.path.expanduser(p)):
+            return os.path.expanduser(p)
+    return None
+
+
+def slugify(text):
+    """Lower-case ASCII slug: Cyrillic through TRANSLIT, any other run of characters → '-'."""
+    s = "".join(TRANSLIT.get(ch, ch) for ch in N(text).lower())
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s or "section"
 
 
 def _split_items(s):
