@@ -439,7 +439,7 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
         store.remove(rid)
         removed.append(rid)
     added = _insert(store, plan["adds"], source, now) if plan["adds"] else []
-    store.journal({"ts": now, "op": "sync", "ids": changed + removed + added, "source": source, "reason": reason,
-                   "snapshot": snap})
+    store.journal({"ts": now, "op": "sync", "ids": changed + removed + added, "source": source or "import",
+                   "reason": reason, "snapshot": snap})
     return {"changed": changed, "removed": removed, "added": added, "snapshot": snap,
             "compiled": compile_store(store, copies, now)}
