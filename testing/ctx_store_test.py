@@ -130,5 +130,22 @@ org = records_of("typical")[3]["body"]
 check("append_line under a subsection", cs.append_line(org, "- **Site:** zorg", under="#### Tableau") ==
       org.replace("- **Server:** https://tableau.zorg.example\n", "- **Server:** https://tableau.zorg.example\n- **Site:** zorg\n"))
 
+# --- Task 4: the context card (INDEX.md)
+import re  # noqa: E402
+
+typ = records_of("typical")
+card = cs.build_card(typ, read(FIX, "typical.md"), now="2026-10-20")
+golden = read(FIX, "typical.card.md")
+check("card matches the golden", card == golden,
+      "\n".join(l for l in card.splitlines() if l not in golden.splitlines())[:600])
+many = "# Local Context\n\n" + "".join("## Section %d\n\n- line %d\n\n" % (k, k) for k in range(249))
+big = [dict(r, ctx=1, owner="user", source="migrated", modified="2026-10-20T10:00:00+03:00", body=r["text"])
+       for r in cs.assign_ids(cs.split_sections(many))]
+big_card = cs.build_card(big, many, now="2026-10-20").splitlines()
+check("a long card stops at 200 lines", len(big_card) <= 200
+      and re.match(r"^\| … \| \+\d+ more — ctx list \| \| \|$", big_card[-1]) is not None, (len(big_card), big_card[-1:]))
+rich_card = cs.build_card(records_of("rich"), read(FIX, "rich.md"), now="2026-10-20")
+check("no people or member names on the card", "Bea Two" not in rich_card and "Alex One" in rich_card, rich_card)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
