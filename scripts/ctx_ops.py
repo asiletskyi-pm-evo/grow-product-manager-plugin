@@ -193,3 +193,253 @@ def restore(snap_dir, store, copies):
                 cs.atomic_write(c["path"], f.read())
         elif os.path.exists(c["path"]):
             os.remove(c["path"])
+
+
+# ------------------------------------------------------- store and copies
+def _read(path):
+    with open(path, encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def store_root_for(context_text, home=None):
+    """{storage_root}/_System/context."""
+    return os.path.join(cc.storage_root(context_text, home), "_System", "context")
+
+
+def copies_for(context_path, context_text, home=None):
+    """The compiled copies: the context file, plus {storage_root}/_System/local-context.md when a vault holds it."""
+    out = [context_path]
+    root = cc.storage_root(context_text, home)
+    if os.path.normpath(root) != os.path.normpath(_grow(home)):
+        mirror = os.path.join(root, "_System", "local-context.md")
+        if os.path.normpath(os.path.abspath(mirror)) != os.path.normpath(os.path.abspath(context_path)):
+            out.append(mirror)
+    return out
+
+
+def _state_for(recs, text, copies):
+    sections = {r["id"]: cs.sha_text(r["body"]) for r in recs}
+    return {"records": sections, "order": [r["id"] for r in recs],
+            "copies": {p: {"sha": cs.sha_text(text), "sections": dict(sections)} for p in copies}}
+
+
+def compile_store(store, copies, now):
+    """Write each copy that differs from the compiled records, then the card and the state.
+    Nothing changed (records, copies, card present) → nothing is written."""
+    recs = store.load()
+    text = cs.compile_records(recs)
+    written = [p for p in copies if not os.path.isfile(p) or _read(p) != text]
+    new = _state_for(recs, text, copies)
+    old = store.state()
+    if not written and os.path.isfile(store.card_path) and {k: old.get(k) for k in new} == new:
+        return {"written": [], "card_lines": _read(store.card_path).count("\n"), "changed": False}
+    for p in written:
+        cs.atomic_write(p, text)
+    card = cs.build_card(recs, text, now[:10])
+    if not os.path.isfile(store.card_path) or _read(store.card_path) != card:
+        cs.atomic_write(store.card_path, card)
+    new["compiled_at"] = now
+    store.save_state(new)
+    return {"written": written, "card_lines": card.count("\n"), "changed": True}
+
+
+# ------------------------------------------------------------------ migrate
+def migrate(context_path, store_root, copies, home, apply, now):
+    """Split the context into records and prove the compile gives it back byte for byte; with `apply`,
+    snapshot, then write records, state, card and a journal line. The copies are not touched."""
+    store = cs.Store(store_root)
+    text = _read(context_path)
+    frags = cs.split_sections(text)
+    recs = cs.assign_ids(frags)
+    identical = "".join(f["text"] for f in frags) == text and \
+        cs.compile_records([dict(r, body=r["text"]) for r in recs]) == text
+    others = [p for p in copies if p != context_path]
+    report = {"store": store_root, "identical": identical, "applied": False,
+              "records": [{"id": r["id"], "type": r["type"], "lines": r["text"].count("\n")} for r in recs],
+              "custom": [r["id"] for r in recs if r["type"] == "custom"],
+              "mirror_differs": any(os.path.isfile(p) and _read(p) != text for p in others)}
+    if not apply:
+        return report
+    if store.exists() or os.path.isdir(store.records_dir):
+        raise Refused("a context store already exists at %s — see `ctx status`" % store_root)
+    if not identical:
+        raise Refused("the split does not give the file back byte for byte — nothing migrated")
+    snap = snapshot(store, copies, home, "pre-migrate")
+    written = []
+    for r in recs:
+        rec = {k: r[k] for k in ("id", "type", "title", "parent", "order")}
+        written.append(store.write(dict(rec, ctx=1, owner="user", source="migrated", modified=now, body=r["text"])))
+    same = [context_path] + [p for p in others if os.path.isfile(p) and _read(p) == text]
+    state = _state_for(written, text, same)
+    state["compiled_at"] = now
+    store.save_state(state)
+    cs.atomic_write(store.card_path, cs.build_card(written, text, now[:10]))
+    store.journal({"ts": now, "op": "migrate", "ids": [r["id"] for r in written], "source": "migrate",
+                   "reason": "", "snapshot": snap})
+    report.update(applied=True, snapshot=snap)
+    return report
+
+
+# --------------------------------------------------------------------- sync
+def _key(x):
+    return (x["type"], x["title"])
+
+
+def _similar(old_body, new_text):
+    old = [l.strip() for l in old_body.splitlines() if l.strip()]
+    new = {l.strip() for l in new_text.splitlines() if l.strip()}
+    return bool(old) and sum(l in new for l in old) * 2 >= len(old)
+
+
+def _copy_changes(text, rec_by, base, order):
+    """One copy against its last compile: edits {id: text}, removes [id], renames {id: (text, title)},
+    adds [(fragment, preceding id)]."""
+    frags = cs.split_sections(text)
+    sections = base.get("sections", {})
+    by_key = {}
+    for rid in sections:
+        if rid in rec_by:
+            by_key.setdefault(_key(rec_by[rid]), []).append(rid)
+    taken, matched = set(), []
+    for f in frags:
+        rid = next((i for i in by_key.get(_key(f), []) if i not in taken), None)
+        if rid:
+            taken.add(rid)
+        matched.append(rid)
+    loose = [rid for rid in sections if rid in rec_by and rid not in taken]
+    prev_old = {rid: (order[k - 1] if k else None) for k, rid in enumerate(order)}
+    renames, edits, adds = {}, {}, []
+    for k, f in enumerate(frags):
+        if matched[k] is not None:
+            continue
+        prev_new = next((matched[j] for j in range(k - 1, -1, -1) if matched[j] is not None), None)
+        for rid in loose:
+            if rid not in renames and prev_old.get(rid) == prev_new and _similar(rec_by[rid]["body"], f["text"]):
+                renames[rid] = (f["text"], f["title"])
+                matched[k] = rid
+                break
+    for k, f in enumerate(frags):
+        rid = matched[k]
+        if rid is None:
+            prev = next((matched[j] for j in range(k - 1, -1, -1) if matched[j] is not None), None)
+            adds.append((f, prev))
+        elif rid not in renames and cs.sha_text(f["text"]) != sections.get(rid):
+            edits[rid] = f["text"]
+    removes = [rid for rid in loose if rid not in renames]
+    return edits, removes, renames, adds
+
+
+def plan_sync(store, copies):
+    """What the copies changed since the last compile, merged across copies and against direct record edits."""
+    recs = store.load()
+    state = store.state()
+    rec_by = {r["id"]: r for r in recs}
+    base_records = state.get("records", {})
+    record_changes = sorted(rid for rid, r in rec_by.items() if base_records.get(rid) != cs.sha_text(r["body"]))
+    changes, adds = {}, []
+    for p in copies:
+        base = state.get("copies", {}).get(p)
+        if not base or not os.path.isfile(p):
+            continue
+        text = _read(p)
+        if cs.sha_text(text) == base.get("sha"):
+            continue
+        ed, rm, rn, ad = _copy_changes(text, rec_by, base, state.get("order", []))
+        for rid, t in ed.items():
+            changes.setdefault(rid, {})[p] = ("edit", t)
+        for rid in rm:
+            changes.setdefault(rid, {})[p] = ("remove", None)
+        for rid, v in rn.items():
+            changes.setdefault(rid, {})[p] = ("rename", v)
+        for f, prev in ad:
+            if not any(a["text"] == f["text"] for a in adds):
+                adds.append({"text": f["text"], "type": f["type"], "title": f["title"], "after": prev, "copy": p})
+    plan = {"edits": [], "removes": [], "renames": [], "adds": adds, "record_changes": record_changes,
+            "conflicts": [], "suspicious_removal": False}
+    for rid, per in changes.items():
+        versions = {p: (v[1] if v[0] == "edit" else v[1][0] if v[0] == "rename" else None) for p, v in per.items()}
+        kinds = set(per.values())
+        if len(kinds) > 1:
+            plan["conflicts"].append({"id": rid, "reasons": ["the copies disagree"],
+                                      "versions": dict(versions, record=rec_by[rid]["body"])})
+            continue
+        kind, val = next(iter(kinds))
+        if rid in record_changes:
+            if versions[next(iter(per))] != rec_by[rid]["body"]:
+                plan["conflicts"].append({"id": rid, "reasons": ["changed in the record and in a copy"],
+                                          "versions": dict(versions, record=rec_by[rid]["body"])})
+            continue
+        copy = next(iter(per))
+        if kind == "edit":
+            plan["edits"].append({"id": rid, "text": val, "copy": copy})
+        elif kind == "remove":
+            plan["removes"].append(rid)
+        else:
+            plan["renames"].append({"id": rid, "text": val[0], "title": val[1], "copy": copy})
+    plan["conflicts"].sort(key=lambda c: c["id"])
+    plan["suspicious_removal"] = len(plan["removes"]) >= 3
+    return plan
+
+
+def _insert(store, adds, source, now):
+    """New records for added sections, placed after their preceding record; orders renumbered 10, 20, …"""
+    recs = {r["id"]: r for r in store.load()}
+    ids = [rid for rid in sorted(recs, key=lambda i: recs[i]["order"])]
+    chain, new_ids = {}, []
+    for a in adds:
+        frag = {"type": a["type"], "title": a["title"], "heading": None, "parent_index": None, "text": a["text"]}
+        rec = cs.assign_ids([frag], set(recs))[0]
+        anchor = chain.get(a["after"], a["after"])
+        pos = ids.index(anchor) + 1 if anchor in ids else 0
+        ids.insert(pos, rec["id"])
+        chain[a["after"]] = rec["id"]
+        parent = None
+        if rec["type"] in ("product", "team"):
+            parent = next((i for i in reversed(ids[:pos]) if recs[i]["type"] == "org"), None)
+        recs[rec["id"]] = {"id": rec["id"], "type": rec["type"], "title": rec["title"], "parent": parent, "order": 0,
+                           "ctx": 1, "owner": "user", "source": source or "import", "modified": now, "body": a["text"]}
+        new_ids.append(rec["id"])
+    for k, rid in enumerate(ids):
+        if recs[rid]["order"] != (k + 1) * 10 or rid in new_ids:
+            store.write(dict(recs[rid], order=(k + 1) * 10))
+    return new_ids
+
+
+def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, accept_removals=False):
+    """Apply a plan from plan_sync: snapshot, records, journal, compile. Unresolved conflicts, or three and
+    more removals without `accept_removals`, raise Conflict and change nothing."""
+    resolve = resolve or {}
+    open_conflicts = [c for c in plan["conflicts"] if c["id"] not in resolve]
+    removal_gate = plan["suspicious_removal"] and not accept_removals
+    if open_conflicts or removal_gate:
+        raise Conflict("a decision is needed before the sync",
+                       {"conflicts": open_conflicts, "suspicious_removal": removal_gate, "removes": plan["removes"]})
+    if not any(plan[k] for k in ("edits", "removes", "renames", "adds", "record_changes", "conflicts")):
+        return {"changed": [], "removed": [], "added": [], "snapshot": None, "compiled": compile_store(store, copies, now)}
+    snap = snapshot(store, copies, home, "sync")
+    recs = {r["id"]: r for r in store.load()}
+    src = lambda p: source or ("import:home" if p == copies[0] else "import:mirror")
+    changed, removed = [], []
+    for e in plan["edits"]:
+        store.write(dict(recs[e["id"]], body=e["text"], source=src(e["copy"]), modified=now))
+        changed.append(e["id"])
+    for r in plan["renames"]:
+        store.write(dict(recs[r["id"]], body=r["text"], title=r["title"], source=src(r["copy"]), modified=now))
+        changed.append(r["id"])
+    for c in plan["conflicts"]:
+        if resolve[c["id"]] == "file":
+            ver = next((c["versions"][p] for p in copies if p in c["versions"]), None)
+            if ver is None:
+                store.remove(c["id"])
+                removed.append(c["id"])
+            else:
+                store.write(dict(recs[c["id"]], body=ver, source=source or "import:resolve", modified=now))
+                changed.append(c["id"])
+    for rid in plan["removes"]:
+        store.remove(rid)
+        removed.append(rid)
+    added = _insert(store, plan["adds"], source, now) if plan["adds"] else []
+    store.journal({"ts": now, "op": "sync", "ids": changed + removed + added, "source": source, "reason": reason,
+                   "snapshot": snap})
+    return {"changed": changed, "removed": removed, "added": added, "snapshot": snap,
+            "compiled": compile_store(store, copies, now)}

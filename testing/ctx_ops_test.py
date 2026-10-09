@@ -110,5 +110,162 @@ with tempfile.TemporaryDirectory() as home:
         pass
     check("a dead process's lock is taken over", not os.path.exists(lockf))
 
+# --- Task 6: migrate, compile, sync
+NOW = "2026-10-20T10:00:00+03:00"
+
+
+class Env:
+    """A temp HOME with the typical context, a temp vault with its mirror, and the store paths."""
+
+    def __init__(self, d, fixture="typical"):
+        self.home = os.path.join(d, "home")
+        self.vault = os.path.join(d, "vault")
+        os.makedirs(os.path.join(self.home, ".grow-pm"))
+        os.makedirs(os.path.join(self.vault, "Notes", "_System"))
+        self.text = read(FIX, fixture + ".md").replace("{{VAULT}}", self.vault)
+        self.ctx = os.path.join(self.home, ".grow-pm", "local-context.md")
+        self.mirror = os.path.join(self.vault, "Notes", "_System", "local-context.md")
+        for p in (self.ctx, self.mirror):
+            open(p, "w", encoding="utf-8", newline="").write(self.text)
+        self.copies = co.copies_for(self.ctx, self.text, home=self.home)
+        self.store = cs.Store(co.store_root_for(self.text, home=self.home))
+
+    def migrate(self, apply=True):
+        return co.migrate(self.ctx, self.store.root, self.copies, self.home, apply=apply, now=NOW)
+
+    def sync(self, **kw):
+        return co.apply_sync(self.store, co.plan_sync(self.store, self.copies), self.copies, self.home,
+                             kw.pop("source", "test"), kw.pop("reason", ""), NOW, **kw)
+
+    def edit(self, path, old, new):
+        t = read(path)
+        assert old in t, old
+        open(path, "w", encoding="utf-8", newline="").write(t.replace(old, new, 1))
+
+
+def body_of(env, rid):
+    return {r["id"]: r for r in env.store.load()}[rid]["body"]
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    check("copies are the home file and the vault mirror", e.copies == [e.ctx, e.mirror]
+          and e.store.root == os.path.join(e.vault, "Notes", "_System", "context"), (e.copies, e.store.root))
+    rep = e.migrate(apply=False)
+    check("migrate dry run reports identical", rep["identical"] is True and len(rep["records"]) == 14
+          and rep["custom"] == [] and not os.path.exists(e.store.root), rep)
+    rep = e.migrate()
+    check("migrate apply leaves copies byte-identical", read(e.ctx) == e.text and read(e.mirror) == e.text
+          and len(os.listdir(e.store.records_dir)) == 14 and os.path.isfile(e.store.card_path)
+          and e.store.journal_entries()[-1]["op"] == "migrate", rep)
+    try:
+        e.migrate(); refused = False
+    except co.Refused:
+        refused = True
+    check("a second migrate is refused", refused)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** PRJ")
+    e.sync()
+    check("edit in the home copy imports", "PRJ" in body_of(e, "product.zorg-app")
+          and e.store.journal_entries()[-1]["source"] == "test" and read(e.mirror) == read(e.ctx))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    open(e.ctx, "a", encoding="utf-8").write("\n## Zorg notes\n- x\n")
+    e.sync()
+    recs = e.store.load()
+    check("new section becomes a record", recs[-1]["id"] == "custom.zorg-notes" and read(e.ctx).endswith("## Zorg notes\n- x\n")
+          and read(e.mirror) == read(e.ctx), [r["id"] for r in recs][-3:])
+
+TEMPLATES = "## Templates\n\n- **Preference:** builtin\n- **Default language:** en\n\n"
+PLANNING = "## Planning (planning-suite)\n\n- **Sprint length:** 2 weeks\n- **Quarter start:** 2026-10-01\n\n"
+FOCUS = "## Focus (focus-advisor)\n\n- **Cadence:** daily\n\n"
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(e.ctx, TEMPLATES, "")
+    res = e.sync()
+    snap = res["snapshot"]
+    check("one removal goes to the snapshot", "setting.templates" not in [r["id"] for r in e.store.load()]
+          and res["removed"] == ["setting.templates"]
+          and os.path.isfile(os.path.join(snap, "records", "setting.templates.md")), res)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    for s in (TEMPLATES, PLANNING, FOCUS):
+        e.edit(e.ctx, s, "")
+    before = tree(e.store.root)
+    try:
+        e.sync(); conflict = None
+    except co.Conflict as x:
+        conflict = x.payload
+    check("three removals are a conflict", conflict is not None and conflict.get("suspicious_removal")
+          and tree(e.store.root) == before, conflict)
+    e.sync(accept_removals=True)
+    check("accepted removals apply", len(e.store.load()) == 11)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(e.ctx, "### Team: Alpha (A)", "### Team: Alpha Squad (A)")
+    e.sync()
+    team = {r["id"]: r for r in e.store.load()}.get("team.alpha-a")
+    check("rename keeps the id", team is not None and team["title"] == "Team: Alpha Squad (A)"
+          and "team.alpha-squad-a" not in [r["id"] for r in e.store.load()], [r["id"] for r in e.store.load()])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    try:
+        e.sync(); conflict = None
+    except co.Conflict as x:
+        conflict = x.payload
+    ids = [c["id"] for c in (conflict or {}).get("conflicts", [])]
+    check("record and copy both changed is a conflict", ids == ["product.zorg-app"], conflict)
+    e.sync(resolve={"product.zorg-app": "file"})
+    check("resolve=file takes the file", "FILE" in body_of(e, "product.zorg-app") and "FILE" in read(e.mirror))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** H")
+    e.edit(e.mirror, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** M")
+    try:
+        e.sync(); conflict = None
+    except co.Conflict as x:
+        conflict = x.payload
+    check("two copies changed differently is a conflict",
+          [c["id"] for c in (conflict or {}).get("conflicts", [])] == ["product.zorg-app"], conflict)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(os.path.join(e.store.records_dir, "product.zorg-app.md"), "- **Jira Project Key:** PROJ", "- **Jira Project Key:** R")
+    plan = co.plan_sync(e.store, e.copies)
+    e.sync()
+    check("record edited directly compiles out", plan["record_changes"] == ["product.zorg-app"]
+          and "- **Jira Project Key:** R" in read(e.ctx) and read(e.mirror) == read(e.ctx), plan)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    os.remove(e.mirror)
+    e.sync()
+    check("compile creates a missing mirror", os.path.isfile(e.mirror) and read(e.mirror) == read(e.ctx))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    open(e.ctx, "w", encoding="utf-8", newline="").write(e.text.replace("\n", "\r\n"))
+    plan = co.plan_sync(e.store, e.copies)
+    e.sync()
+    check("CRLF rewrite imports as edits", plan["removes"] == [] and plan["adds"] == [] and plan["conflicts"] == []
+          and len(plan["edits"]) == 14 and read(e.mirror) == read(e.ctx), {k: plan[k] for k in ("removes", "adds")})
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    before = tree(e.store.root), read(e.ctx), read(e.mirror)
+    res = e.sync()
+    check("a sync with nothing to do writes nothing", res["snapshot"] is None
+          and (tree(e.store.root), read(e.ctx), read(e.mirror)) == before)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
