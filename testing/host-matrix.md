@@ -44,6 +44,10 @@ Profiles: `claude-cowork` = Claude Code / Cowork (reference). `codex-cli` = Code
 | `template-library` | full | full | n/a | n/a | needs the user's ~/.grow-pm/, not a sandbox FS; needs FS — read-only when the user pastes the data |
 | `write-concept` | full | degraded | degraded | degraded | gate: sequential in-session lenses; debate: inline role simulation; write gate: in-skill confirmation; config/storage: via connector or the repo, never assume prior state; subagents: as codex-cli; write gate: in-skill confirmation; storage: session mode, export at the end; gate: sequential in-session lenses; debate: inline role simulation; write gate: in-skill confirmation |
 
+## The `ctx` engine (since v3.11.0)
+
+Not a skill, so not a row. The context store's command line (`scripts/ctx.py`, `references/context-protocol.md`) needs FS and SHELL. `claude-cowork`: full — measured in v3.11.0 (the CLI suites and a scenario walk of the configurator). `codex-cli`: full — derived, not run in v3.11.0: the same `python3` and filesystem; with no session digest, the writers find the store by its `.state/` folder. `chatgpt`, `codex-cloud`: no `ctx` — `local-context.md` is edited as before and the next `ctx` run on a host with a shell imports the edits.
+
 ## Measured in the v3.0.0 pilot (Codex CLI 0.153.2)
 
 - Shared `references/` resolution from a skill with its own `references/` (write-concept), without (task-creator, which had no skill-local `references/` until v3.4.0 — decision-log is the current example), a migrated command (status), a different cwd, and a natural activation — 7/7, `Codex-Compat-Findings.md` → Етап 3b.

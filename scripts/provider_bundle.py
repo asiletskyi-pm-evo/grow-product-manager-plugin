@@ -222,14 +222,10 @@ def copy_one(src, dst, rel, m):
 
 
 # --------------------------------------------------------- identity helpers
-TRANSLIT = {"а": "a", "б": "b", "в": "v", "г": "h", "ґ": "g", "д": "d", "е": "e", "є": "ie", "ж": "zh", "з": "z",
-            "и": "y", "і": "i", "ї": "i", "й": "i", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p",
-            "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh",
-            "щ": "shch", "ю": "iu", "я": "ia", "ь": "", "ʼ": "", "'": "", "’": ""}
 
 
 def norm_name(s):
-    s = "".join(TRANSLIT.get(c, c) for c in N(s).lower().strip())
+    s = "".join(cc.TRANSLIT.get(c, c) for c in N(s).lower().strip())
     s = re.sub(r"^(ye|ie|y)(?=[aeiou]|v)", "i", s)
     s = re.sub(r"[^a-z ]", "", s)
     return " ".join(sorted(t for t in s.split() if len(t) > 1))

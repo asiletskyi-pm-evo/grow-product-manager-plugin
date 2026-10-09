@@ -29,6 +29,10 @@ local-context.md
 └── Custom Sections (0+)
 ```
 
+## Context store (since v3.11.0)
+
+A context can live as records — one note per section — in `{storage_root}/_System/context/` (`references/context-protocol.md`). Then this file is the **compiled view** of the records: skills read it as before, and edits made to it are imported back by `ctx sync`. Every `##` section is one record, and so is every `### Product:` / `### Team:` inside `## Organization:`; types: `User Profile` → profile, `Onboarding Status` → onboarding, `Organization:` → org, `Product:` / `Team:` → product / team, the section names of this schema (Judgment, CJM Configuration, Knowledge Library, Templates, Obsidian Vaults, People, Planning, Focus, Release, Terminology & Style, Landscape, Experiments, Feedback, Custom Sections) → setting, any other `##` → custom, kept as is. The formats below are unchanged — a record's body is exactly the section as written here.
+
 ## Section Definitions
 
 ### User Profile (required)

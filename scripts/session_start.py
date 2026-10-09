@@ -21,6 +21,7 @@ import re
 import shlex
 import sqlite3
 import sys
+import threading
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -175,6 +176,20 @@ def providers_info(text, extra_dirs=None, skipped=None):
     return labels, roots, bundle
 
 
+def _store_summary(path, budget_s=2.0):
+    """The context store's summary (since v3.11.0), read in a thread with a time budget so an
+    iCloud download can never hold the session start; any failure → None (no line)."""
+    try:
+        import ctx_ops
+    except Exception:
+        return None
+    box = {}
+    t = threading.Thread(target=lambda: box.update(s=ctx_ops.status_summary(path)), daemon=True)
+    t.start()
+    t.join(budget_s)
+    return box.get("s")
+
+
 def parse(path, extra_dirs=None):
     """Header-level facts only."""
     with open(path, encoding="utf-8", errors="replace") as f:
@@ -218,6 +233,7 @@ def parse(path, extra_dirs=None):
         facts["providers"], facts["provider_roots"], facts["bundle"] = providers_info(text, extra_dirs, facts["unreadable_registrations"])
     except Exception:
         facts["providers"], facts["provider_roots"], facts["bundle"] = [], [], None
+    facts["context_store"] = _store_summary(path)
     facts["cjm_section"] = bool(re.search(r"^## CJM Configuration\s*\n(?:.*\n){1,6}?.*(?:stages|funnel|template)", text, re.M | re.I))
     facts["terminology_section"] = bool(re.search(r"^### Terminology & Style", text, re.M))
     return facts
@@ -254,6 +270,15 @@ def digest(path, facts, searched, version):
         b = facts.get("bundle")
         if b:
             lines.append("  bundle: team=%s role=%s core=%s" % (b.get("team") or "?", b.get("role_profile") or "?", b.get("core_version") or "?"))
+    s = facts.get("context_store")
+    if s:
+        if s["conflicts"]:
+            tail = "%d conflict%s (ctx sync)" % (s["conflicts"], "" if s["conflicts"] == 1 else "s")
+        elif s["pending"]:
+            tail = "%d edit%s to import" % (s["pending"], "" if s["pending"] == 1 else "s")
+        else:
+            tail = "in sync"
+        lines.append("  context: records %d · card %d lines · %s" % (s["records"], s["card_lines"], tail))
     lines.append(
         "Skills: take this path for Step 0a of references/local-context-protocol.md and skip the "
         "location search; still parse the file for 0c–0j (product selection, required fields, vault "

@@ -336,7 +336,7 @@ done
 [ "$THIN_BAD" -eq 0 ] && ok "thin core: every SKILL.md <= $THIN_MAX lines (longest: $(wc -l skills/*/SKILL.md | grep -v ' total$' | sort -n | tail -1 | awk '{print $1" "$2}'))"
 
 # --- 10. Component counts in the three public descriptions -------------------
-# "29 skills across five contours" lives in plugin.json, marketplace.json and
+# "33 skills across six contours" lives in plugin.json, marketplace.json and
 # README. With agents/commands/connectors the counts multiply; grep them all.
 N_SKILLS=$(ls -d skills/*/ | wc -l | tr -d ' ')
 N_AGENTS=$([ -d agents ] && ls agents/*.md 2>/dev/null | wc -l | tr -d ' ' || echo 0)

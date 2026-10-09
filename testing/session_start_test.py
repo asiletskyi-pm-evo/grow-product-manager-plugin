@@ -122,5 +122,27 @@ with tempfile.TemporaryDirectory() as d:
     out = run(t6)
     check("an unreadable registration is named in the digest", "broken.yaml" in out and "line 3" in out, out)
 
+# --- v3.11.0: the context store line (read-only)
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import ctx_ops as co  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:
+    home, vault = os.path.join(d, "home"), os.path.join(d, "vault")
+    os.makedirs(os.path.join(home, ".grow-pm")); os.makedirs(os.path.join(vault, "Notes", "_System"))
+    text = open(os.path.join(ROOT, "testing", "fixtures", "ctx", "typical.md"), encoding="utf-8").read().replace("{{VAULT}}", vault)
+    ctxp = os.path.join(home, ".grow-pm", "local-context.md")
+    mirror = os.path.join(vault, "Notes", "_System", "local-context.md")
+    for p in (ctxp, mirror):
+        open(p, "w", encoding="utf-8").write(text)
+    out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    check("no context line without a store", "context:" not in out, out)
+    copies = co.copies_for(ctxp, text, home=home)
+    co.migrate(ctxp, co.store_root_for(text, home=home), copies, home, apply=True, now="2026-10-20T10:00:00+03:00")
+    out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    check("context line with a store", "  context: records 14 · card " in out and " lines · in sync" in out, out)
+    open(ctxp, "w", encoding="utf-8").write(text.replace("- **Cadence:** daily", "- **Cadence:** weekly"))
+    out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    check("one direct edit waits to be imported", " · 1 edit to import" in out, out)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

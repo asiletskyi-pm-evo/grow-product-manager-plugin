@@ -175,6 +175,7 @@ Static checks prove the tree is consistent; they cannot prove a host still loads
 - `python3 testing/session_start_test.py`: every digest case passes (12/12 as of v3.10.0) — it is not in CI, so it runs here.
 - `python3 testing/ctx_common_test.py` (8/8) and `python3 testing/provider_bundle_test.py` (since v3.10.0): the provider helpers and the bundle builder on the fictional fixture core — not in CI, so they run here.
 - `python3 testing/branch_leak_scan.py --base main` (since v3.10.0): clean — no organisation identifier in any line the branch adds or in its commit messages; `python3 testing/branch_leak_scan_test.py` proves the scan fires.
+- `python3 testing/ctx_store_test.py`, `python3 testing/ctx_ops_test.py` and `python3 testing/ctx_cli_test.py` (since v3.11.0): the context store's model, operations and command line on the fictional fixtures in `testing/fixtures/ctx/` — not in CI, so they run here.
 - `python3 testing/write_gate_test.py` (since v3.10.0): every gate case passes — the provider boundary and the Jira/Confluence branch; not in CI, so it runs here.
 - Every example added or touched this version is universal — placeholders, no team signature, language-neutral code blocks, no domain-specific detail.
 - Trigger: ≥ 90 % per group — positive and neighbour rows alike — on each supported host (Claude Code and Codex CLI, live, from a neutral directory; a host not re-run must be named in the release notes).

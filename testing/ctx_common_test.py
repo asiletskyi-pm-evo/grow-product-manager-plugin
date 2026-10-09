@@ -125,6 +125,49 @@ def _():
     assert cc.is_under("/v/Zorg_X/a/b.md", ["/v/Zorg_X"])
     assert cc.is_under("/v/Zorg_X", ["/v/Zorg_X"])
 
+# --- v3.11.0: helpers for the context store (references/context-protocol.md)
+@case("slugify transliterates and dashes")
+def _():
+    assert cc.slugify("Структура команди") == "struktura-komandy", cc.slugify("Структура команди")
+    assert cc.slugify("Team: Alpha (A)") == "team-alpha-a", cc.slugify("Team: Alpha (A)")
+    assert cc.slugify("!!!") == "section"
+
+@case("vault modes and storage root")
+def _():
+    t = ("## Obsidian Vaults (Optional)\n\n| # | Vault Path | Folder Name | Products | Sync Mode | Last Artifact |\n"
+         "|---|---|---|---|---|---|\n| 1 | /v/one | Notes | all | off | never |\n| 2 | /v/two | Work | all | auto | never |\n")
+    assert cc.vault_modes(t) == [("/v/one", "Notes", "off"), ("/v/two", "Work", "auto")], cc.vault_modes(t)
+    assert cc.storage_root(t, home="/h") == "/v/two/Work", cc.storage_root(t, home="/h")
+    assert cc.storage_root("## User Profile\n", home="/h") == "/h/.grow-pm"
+    y = "## Obsidian Vaults (Optional)\n\n- path: /v/three\n  plugin_folder: \"GrowPM\"\n  sync_mode: off\n"
+    assert cc.vault_modes(y) == [("/v/three", "GrowPM", "off")], cc.vault_modes(y)
+    assert cc.storage_root(y, home="/h") == "/h/.grow-pm"
+
+@case("managed spans cover begin..end")
+def _():
+    s = "a\n<!-- zorg-core:begin id=team v=1 -->\nx\n<!-- zorg-core:end id=team -->\nb\n"
+    assert [s[a:b] for a, b in cc.managed_spans(s)] == [
+        "<!-- zorg-core:begin id=team v=1 -->\nx\n<!-- zorg-core:end id=team -->"], cc.managed_spans(s)
+
+@case("find_context: explicit, then env, then home")
+def _():
+    with tempfile.TemporaryDirectory() as d:
+        home = os.path.join(d, "home"); os.makedirs(os.path.join(home, ".grow-pm"))
+        hp = os.path.join(home, ".grow-pm", "local-context.md"); open(hp, "w").write("x")
+        other = os.path.join(d, "other.md"); open(other, "w").write("y")
+        old = os.environ.get("GROW_PM_CONTEXT_PATH")
+        try:
+            os.environ["GROW_PM_CONTEXT_PATH"] = other
+            assert cc.find_context(home=home) == other
+            assert cc.find_context(explicit=hp, home=home) == hp
+            os.environ["GROW_PM_CONTEXT_PATH"] = os.path.join(d, "missing.md")
+            assert cc.find_context(home=home) == hp
+        finally:
+            if old is None:
+                os.environ.pop("GROW_PM_CONTEXT_PATH", None)
+            else:
+                os.environ["GROW_PM_CONTEXT_PATH"] = old
+
 fails = 0
 for name, fn in cases:
     try:
