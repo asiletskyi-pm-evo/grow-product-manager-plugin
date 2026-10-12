@@ -48,6 +48,20 @@ def manifest_for(manifest, skill):
     return out
 
 
+BUDGET_TOKENS = 8000
+
+
+def readers(rec):
+    """The skills a custom or setting record is assigned to (`read_by`): a frozenset of lower-case names,
+    where "all" means every skill; None when the key is unset or empty. Accepts "a, b", "[a, b]" and a list."""
+    v = rec.get("read_by")
+    if v is None:
+        return None
+    items = v if isinstance(v, list) else str(v).strip().strip("[]").split(",")
+    names = frozenset(re.sub(r"\s+", "", str(x)).strip("\"'").lower() for x in items) - {""}
+    return names or None
+
+
 def tokens_est(text):
     return int(math.ceil(len(text) / 3.2))
 
@@ -165,12 +179,14 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None):
     state = store.state()
     card = co._read(store.card_path) if os.path.isfile(store.card_path) else ""
     recs, notes, pending = _live_view(store, copies, today + "T00:00:00")
-    blocks, used, missing = [], [], []
-    res = {"records": used, "missing": missing, "pending": pending, "needs_product": False}
+    blocks, used, missing, sizes, unassigned = [], [], [], {}, []
+    res = {"records": used, "missing": missing, "pending": pending, "needs_product": False,
+           "unassigned": unassigned, "over_budget": False, "largest": None}
 
     def add(rec, text):
         blocks.append(_head(rec, state, today, notes.get(rec["id"], "")) + "\n" + text.rstrip("\n") + "\n")
         used.append(rec["id"])
+        sizes[rec["id"]] = tokens_est(blocks[-1])
 
     absent = []
 
@@ -222,11 +238,25 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None):
                     add(rec, _without_heading(rec["body"]))
                 else:
                     miss("налаштування %s" % name, name in req)
+            for rec in recs:
+                who = readers(rec) if rec["type"] in ("custom", "setting") else None
+                if who and rec["id"] not in used and ("all" in who or skill.lower() in who):
+                    add(rec, _without_heading(rec["body"]))
+            unassigned.extend(r["id"] for r in recs if r["type"] == "custom" and readers(r) is None)
+            if unassigned:
+                byid = {r["id"]: r for r in recs}
+                blocks.append("Власні секції без призначення: %s — ctx get <id>, якщо запит їх стосується"
+                              % ", ".join("%s (%s)" % (byid[i]["title"], i) for i in unassigned))
     if absent:
         blocks.append("Відсутнє: %s — для решти діють типові значення" % ", ".join(absent))
     head = "# Контекст для %s · записів %d · %s" % (skill, len(used), "%d правок не підхоплено — ctx sync" % pending if pending else "in sync")
     tail = "Більше з запису: ctx get <id> --section \"…\""
     text = "\n".join([head, "", card.rstrip("\n"), ""] + blocks + ["", tail]) + "\n"
+    if tokens_est(text) > BUDGET_TOKENS and sizes:
+        big = max(sizes, key=sizes.get)
+        res.update(over_budget=True, largest=big)
+        warn = "⚠ ≈%d токенів — більше за %d; найбільший запис: %s (≈%d)" % (tokens_est(text), BUDGET_TOKENS, big, sizes[big])
+        text = "\n".join([head, "", card.rstrip("\n"), ""] + blocks + ["", warn, tail]) + "\n"
     res.update(chars=len(text), tokens_est=tokens_est(text))
     return text, res
 
