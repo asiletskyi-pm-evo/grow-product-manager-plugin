@@ -10,3 +10,6 @@ testing/org-tokens.local
 # python bytecode from validator check 11 (py_compile)
 __pycache__/
 *.pyc
+
+# A project-local Codex config (personal; Codex merges it from the current folder) — never ship.
+.codex/config.toml

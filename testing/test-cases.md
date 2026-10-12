@@ -4,6 +4,14 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v3.12.0 — lean reading, lifecycle, freshness, typed fields (added 2026-10-12)
+
+Context Core phase 2, second half: `ctx read` and the context manifest, invalidate / archive / trash / restore, freshness, the field schema, the write allow-list (`references/context-protocol.md` §3, §5a–§5d).
+
+- **TC-ctx-3120-read** | `python3 testing/ctx_read_test.py` | expected: every one of the 33 skills reads within 6 000 tokens on the typical and rich fixtures; product choice (one, two, ambiguous, by id); settings by title prefix; edits not imported and records missing on disk read from the copy with a note; archived records hidden; stale and invalid marks; the missing line; check_manifest clean and catching a skill without an entry | **pass** (2026-10-12)
+- **TC-ctx-3120-lifecycle** | `python3 testing/ctx_ops_test.py` | expected: write allow-list; freshness (TTL, `ttl_days 0`, garbage fallbacks, `verify --stale`, stale card marks); invalidate / archive / trash / restore byte for byte, reserved archive ids, a 30-day purge, refusal on a taken id, a removed status region reactivating; the v3.11 minors (rename typing, re-parenting, journal ids, compile sources, an unavailable store) | **pass** (2026-10-12)
+- **TC-ctx-3120-cli** | `python3 testing/ctx_cli_test.py` | expected: `read`, `invalidate`, `archive`, `restore`, `verify`, `list --archived/--trash`, typed `set`/`get --json`, `status` with the last snapshot, a DIFFERENT dry run → 3, a half-migrated store, the allow-list refusals (exit 4) and safe `undo`, the doc checks | **pass** (2026-10-12)
+
 ## Release v3.11.0 — the context store (added 2026-10-09)
 
 Context Core phase 2: section records in `{storage_root}/_System/context/`, `local-context.md` compiled from them, the `ctx` command line, the context card and the digest line (`references/context-protocol.md`). Fixtures: `testing/fixtures/ctx/` (fictional "Zorg": minimal, typical, rich, and the card golden).

@@ -323,7 +323,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.14.0)
+### 10. Plugin Configurator (v2.15.0)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -612,7 +612,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.18.1 | Process meetings and extract action items |
-| Plugin Configurator | v2.14.0 | Configure plugin for your organization |
+| Plugin Configurator | v2.15.0 | Configure plugin for your organization |
 | Knowledge Library | v0.9.1 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
@@ -694,7 +694,9 @@ The sixth contour, **Context**, groups `context-connect`, `context-navigator` an
 - **Moving in** — the configurator offers it once at the end of onboarding and as the Update item "Move my context to records": `ctx migrate` shows the records and proves the compile gives your file back byte for byte, `--apply` moves it. `ctx undo` right after it moves back.
 - **Safety** — a snapshot before every change (`~/.grow-pm/snapshots/`), a journal of every change, atomic writes, one writer at a time, never a write into a provider's folder or block; a record that is missing on disk or still downloading (iCloud) stops a run before anything is written.
 - **The digest** shows `context: records N · card M lines · in sync` (or the edits waiting) at every session start.
-- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
+- **Lean reading** (since v3.12.0) — with a store, a skill's Step 0 runs `ctx read --skill <name>`: the card plus only the fields and subsections its entry in `references/context-manifest.yaml` names, instead of the whole file.
+- **Lifecycle and freshness** (since v3.12.0) — `ctx invalidate` marks a record no longer current, `ctx archive` moves it out of the file, removed records wait 30 days in a trash, `ctx restore` brings any of them back; every record knows when it was last verified, the digest counts stale ones and skills state their facts "as of" that date; `ctx verify` or the configurator's "Review stale records" confirms them.
+- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, and since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
 
 ## Multilingual Artifact Templates
 

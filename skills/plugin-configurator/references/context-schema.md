@@ -240,6 +240,8 @@ Users can add any additional sections with free-form markdown content. The confi
 
 ## Which Skills Read What
 
+> Since v3.12.0 `references/context-manifest.yaml` is the machine form of this table: with a context store, `ctx read --skill <name>` gives a skill exactly what its entry names (`references/context-protocol.md` §5a). Validator check 16 keeps the two in step — a new row here needs its manifest entry. The types of the fields the card and the skills read are in `references/context-fields.yaml` (§5c).
+
 | Skill | Required context | Optional context |
 |-------|-----------------|-----------------|
 | **Every skill (Step 0i)** | — | user.role, role_label, role_scope, level_home → `role_defaults` (`role-profiles.md` §5; absent or non-enum → asked once in an interactive run, `pm` otherwise); judgment.hats_allowed (v3.5.0), judgment.hypothesis_first (v3.7.0 — at the `judgment-points.md` §1 points only), judgment.learning_mode (v3.9.0 — at the §9 steps only: feedback-triage, meeting-processor, product-research, cjm-research), judgment.build_first (v3.9.0 — at the §8 sites only: write-concept, design-bridge) |

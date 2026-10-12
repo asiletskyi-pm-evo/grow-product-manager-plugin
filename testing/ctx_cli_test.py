@@ -379,6 +379,17 @@ with tempfile.TemporaryDirectory() as d:
     check("a half-migrated store says what to remove", rc1 == 3 and "half-migrated store" in out1
           and "records" in out1 and rc2 == 4 and "half-migrated store" in out2, (out1[-300:], out2[-300:]))
 
+# --- v3.12 Task 10: docs
+lcp = read(ROOT, "references", "local-context-protocol.md")
+check("Step 0c names ctx read and the fallback", 'ctx.py" read --skill' in lcp and "exit 3" in lcp
+      and "whole" in lcp and "станом на" in lcp, "Step 0c")
+check("configurator lists the stale review item",
+      "Review stale records" in read(ROOT, "skills", "plugin-configurator", "references", "maintenance-modes.md"))
+cp = read(ROOT, "references", "context-protocol.md")
+check("context-protocol documents every new command", all(("`%s" % c) in cp for c in
+      ("read --skill", "invalidate", "archive", "restore", "verify")) and "--trash" in cp, "commands")
+check(".gitignore ignores .codex/config.toml", ".codex/config.toml" in read(ROOT, ".gitignore").splitlines())
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

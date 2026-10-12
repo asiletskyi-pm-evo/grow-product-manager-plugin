@@ -54,27 +54,32 @@ sha: "<sha256 of the body>"
 
 ## 3. The `ctx` command line
 
-`python3 "<plugin root>/scripts/ctx.py" <command> [options] [--context PATH] [--store DIR] [--home DIR]` (the three path options go after the command).
+`python3 "<plugin root>/scripts/ctx.py" <command> [options] [--context PATH] [--store DIR] [--home DIR]` (the three path options go after the command; `--store` only for reading commands).
 
 | Command | What it does |
 |---|---|
-| `status` | where the store is, records, card lines, edits waiting to be imported per kind, conflicts, stray files, the last journal lines; no store → exit 3 |
+| `status` | where the store is, records, card lines, freshness (stale · invalid · archived), the last snapshot, edits waiting to be imported per kind, conflicts, stray files, the last journal lines; no store → exit 3 (a half-migrated one says which folder to remove) |
+| `read --skill S [--product P] [--json]` | what skill S reads at Step 0c (§5a): the card plus the records, fields and subsections its entry in `references/context-manifest.yaml` names; reads only — no lock, no writes; an unknown skill → exit 3 |
 | `migrate [--apply]` | cuts `local-context.md` into records and proves the compile gives it back byte for byte; lists the records and the `custom` ones. `--apply`: a `pre-migrate` snapshot, then records, state, card and a journal line; the compiled copies are not touched. An existing store → refused |
 | `compile` | imports direct edits, then writes both copies (only the ones that differ; a missing vault copy is created), the card and the state; nothing changed → nothing written |
 | `sync [--source S] [--reason R] [--resolve ID=file\|record …] [--accept-removals]` | imports direct edits (§4); no store → exit 0 and "nothing to sync"; a record file missing on disk → exit 3, nothing compiled (`--accept-removals` drops it) |
-| `get ID [FIELD] [--json]` | a record's body, or the value of its first `- **Field:** value` line outside managed regions |
-| `list [--type T] [--json]` | id, type, title |
-| `set ID FIELD VALUE` | changes the field's line; an absent field goes after the last line of the record's first bullet list; a field that lives only inside a managed region → refused |
+| `get ID [FIELD] [--json]` | a record's body, or the value of its first `- **Field:** value` line outside managed regions; a typed field (§5c) — the parsed value in `CTX_RESULT` (a list for `Platforms`) |
+| `list [--type T] [--archived \| --trash] [--json]` | id, type, modified date, title; `--archived` the archive, `--trash` the trash |
+| `set ID FIELD VALUE` | changes the field's line; an absent field goes after the last line of the record's first bullet list; a field that lives only inside a managed region → refused; a value outside its type (§5c) → exit 3 with the allowed values |
 | `append ID --text T [--under "#### Heading"]` | adds a line after the last non-empty line of the record or of the named subsection; an identical line is not repeated |
 | `add TYPE TITLE [--parent ID] [--after ID] [--body-file F]` | a new `product`, `team`, `org`, `setting` or `custom` record with the right heading, after its last sibling |
 | `snapshot [--label L]` | a snapshot of the store and both copies |
 | `undo [--steps N]` | back to the state before the N-th last change, N from 1 (a `pre-undo` snapshot first; the journal is kept); refused while edits wait to be imported — `ctx sync` first; right after a migration it removes the store |
 | `validate` | records parse, ids match their file names, parents exist, orders are unique, the card fits, required fields (warnings), edits waiting, stray files |
 | `card` | regenerates `INDEX.md` only |
+| `invalidate ID --reason R` | marks a record no longer current (§5b): it stays in the copies with a status region after its heading |
+| `archive ID [--reason R]` | moves a record to `{store}/archive/<year>/` (§5b); it leaves the copies, its id stays reserved |
+| `restore ID` | brings a record back: an invalid one becomes current; else from the archive, else the newest in the trash, at its former place; an id a current record holds → refused |
+| `verify [ID …] [--stale]` | marks records verified today (§5d); `--stale` — every stale record |
 
-**Rules every writing command follows:** take the lock (a live lock younger than 120 s → refused; an older one, or a dead process's, is taken over); refuse a store that lies inside a registered provider's folder (`context-provider-protocol.md` §7); import direct edits first; snapshot; write each file atomically (a temp file, then rename); add a journal line; compile. A compiled copy is never replaced or created without a snapshot and a journal line — a compile with nothing to import that still rewrites a copy (a mirror without a baseline, a missing mirror) takes its own. Files are read within a time budget (30 s in all, `GROW_PM_CTX_READ_TIMEOUT`): a record that does not arrive — an iCloud-evicted file still downloading — stops the run with exit 3, naming it, before anything is written.
+**Rules every writing command follows:** take the lock (a live lock younger than 120 s → refused; an older one, or a dead process's, is taken over); refuse a store that lies inside a registered provider's folder (`context-provider-protocol.md` §7); import direct edits first; snapshot; write each file atomically (a temp file, then rename); add a journal line; compile; drop trash entries older than 30 days. **Write allow-list:** every write or delete target, after its links are resolved, lies under `~/.grow-pm/` or the storage root; anything else → exit 4 and nothing written. `undo` writes only the current copies and store — never a path from a snapshot's manifest. A compiled copy is never replaced or created without a snapshot and a journal line — a compile with nothing to import that still rewrites a copy (a mirror without a baseline, a missing mirror) takes its own. Files are read within a time budget (30 s in all, `GROW_PM_CTX_READ_TIMEOUT`): a record that does not arrive — an iCloud-evicted file still downloading — stops the run with exit 3, naming it, before anything is written.
 
-**Output contract.** The last stdout line is `CTX_RESULT {json}`; a conflict prints `CTX_CONFLICT {json}` (each conflicting record with the versions) right before it. **Exit codes:** 0 ok · 2 a decision is needed · 3 bad input, no store, an unreadable or missing record (usage errors too) · 4 refused (managed region, provider boundary, busy lock, existing store, `undo` while edits wait).
+**Output contract.** The last stdout line is `CTX_RESULT {json}`; a conflict prints `CTX_CONFLICT {json}` (each conflicting record with the versions) right before it. **Exit codes:** 0 ok · 2 a decision is needed · 3 bad input, no store, an unreadable or missing record, a value outside its type, an unknown skill for `read` (usage errors too) · 4 refused (managed region, provider boundary, busy lock, existing store, `undo` while edits wait, a target outside the allow-list, a `restore` onto a current id).
 
 ## 4. Direct edits — `sync`
 
@@ -99,13 +104,34 @@ Each compiled copy is cut with the same rules and compared, section by section, 
 - **Hosts without SHELL** edit `local-context.md` as before; the next `ctx` run on a host with a shell imports the edits.
 - **Moving in** is offered by the configurator — the Update item "Move my context to records" and one question at the end of onboarding — with one confirmation; `ctx undo` right after it moves back.
 
+## 5a. What a skill reads — `ctx read` (since v3.12.0)
+
+`references/context-manifest.yaml` says, for each skill, what Step 0c needs: from the active product and its teams, fields (a `- **Field:**` line, or the `#### Field` subsection when there is no such line) and `####` subsections; settings by the start of their title, read whole; `required` and `required_settings` mark the obligatory ones. Every skill also gets the User Profile and `Judgment`. The configurator and context-connect are `full: true` — they edit `local-context.md` and read it whole. Validator check 16 keeps the manifest in step with the skills and with "Which Skills Read What".
+
+`ctx read --skill S [--product P]` prints the card, then one block per record headed `## <title> · <id> · перевірено <date>`, with `⚠ застаріле (TTL N д)` or `⚠ неактуально: <reason>` when that applies, and one closing line `Відсутнє: …` — `(обов'язкове)` marks the obligatory ones; defaults apply to the rest. Edits not imported yet, and a record missing on disk, are read from the canonical copy with a note (`ctx sync`). Archived records never appear. With several products and no `--product` (or an ambiguous one) the output is the card and the product list — the skill asks (Step 0d) and runs again. Step 0c of `local-context-protocol.md` says when a skill uses it.
+
+## 5b. Lifecycle — invalidate, archive, trash, restore (since v3.12.0)
+
+- **Invalidate** writes a `ctx` managed region right after the record's heading: `<!-- ctx:begin id=status -->`, `> ⚠ Неактуально з <date>: <reason>`, `<!-- ctx:end id=status -->`. The record stays in the copies, so even a skill that reads the file whole sees it; `status` in the frontmatter follows the region — remove the region and the record is current again.
+- **Archive** moves the record file to `{store}/archive/<year>/<id>.md` with `status: archived`, the date, the reason and `former_after` (its predecessor). It leaves both copies; `assign_ids` treats its id as taken. The card counts the archive.
+- **Trash** — `~/.grow-pm/trash/<time>-<id>.md`, outside any vault, 30 days: every record a sync removes (a section deleted from the file; a record missing on disk dropped with `--accept-removals`, its text taken from the canonical copy).
+- **Restore** — an invalid record becomes current; else the archived record, else the newest trashed one comes back after `former_after`, else after its last sibling, else at the end. The body and both copies come back byte for byte.
+
+## 5c. Typed fields (since v3.12.0)
+
+`references/context-fields.yaml` declares the types of the fields the card and the skills read — `Role`, `Role scope`, `Level home`, `Email` in the profile; `Jira Project Key`, `Confluence Space`, `Platforms`, `Locales`, `URL` in a product; `Mode`, `Deferred steps` in onboarding; the `Judgment` switches. Types: text, enum, list, key, url, date, email, int. The text line stays the source of truth (a `list` may be the bullets under `#### Field`); `validate` warns about a mismatch, `set` refuses one, `get --json` returns the parsed value. An active record carries no `status` key; Obsidian properties a user adds to a record's frontmatter are kept.
+
+## 5d. Freshness (since v3.12.0)
+
+Each record has a `verified` date — set by every write of it through `ctx` (an import, `set`, `append`, `add`, `restore`), by an Obsidian edit of it being picked up, and by `ctx verify`; until then the store's first v3.12 run (`freshness_since`). Default TTL: product and team 90 days; organisation, profile and settings 180; the header, onboarding and custom sections none — `ttl_days` in the frontmatter overrides (`0` = never stale). A stale record: the digest counts it (`· K stale`), the card marks its row (`⚠ <date>`), `ctx read` marks its block, `status` and `validate` list it. A skill states a fact from a stale record as "станом на <date>" and never asks about it mid-run; `ctx verify --stale` or the configurator's "Review stale records" confirms.
+
 ## 6. The context card
 
-`INDEX.md`, at most 200 lines, regenerated by every compile that changed something: who the user is (name, role, language), onboarding (mode, deferred steps), products (Jira key, Confluence space, platforms), teams (member counts), vaults and providers, then one row per record — id, title, a one-line summary, the date of the last change. A longer table ends with `+N more — ctx list`. People and team-member names never appear (`people-context-protocol.md`): only counts. In v3.11.0 the card is the user's overview; skills start reading it in v3.12.
+`INDEX.md`, at most 200 lines, regenerated by every compile that changed something: who the user is (name, role, language), onboarding (mode, deferred steps), products (Jira key, Confluence space, platforms), teams (member counts), vaults and providers, then one row per record — id, title, a one-line summary, the date of the last change. A longer table ends with `+N more — ctx list`. People and team-member names never appear (`people-context-protocol.md`): only counts. Since v3.12.0 stale rows end with `⚠ <date>`, with a line counting them and one counting the archive; `ctx read` opens with the card.
 
 ## 7. The session digest
 
-With a store, the SessionStart digest adds one read-only line: `context: records N · card M lines · in sync` — or `· K edits to import`, or `· C conflicts (ctx sync)` (a record missing on disk counts as one). It is read within a two-second budget so an iCloud download never holds the session start; no store, or any failure → no line.
+With a store, the SessionStart digest adds one read-only line: `context: records N · card M lines · in sync` — or `· K edits to import`, or `· C conflicts (ctx sync)` (a record missing on disk counts as one) — plus `· K stale` when records are stale, and tells skills to run `ctx read --skill <name>` at Step 0c. A store used before that cannot be reached (a vault not mounted, moved or switched off) → `context: store at <path> unavailable — vault not mounted?`. It is read within a two-second budget so an iCloud download never holds the session start; no store, or any failure → no line.
 
 ## 8. Snapshots and the journal
 
@@ -116,10 +142,10 @@ With a store, the SessionStart digest adds one read-only line: `context: records
 
 | Capability | Behaviour |
 |---|---|
-| FS + SHELL (Claude Code, Codex CLI, a Cowork sandbox with the folder mounted) | full: `ctx`, the digest line, the card |
-| FS without SHELL | edit `local-context.md` as before; a later `ctx` run on a host with a shell imports the edits |
+| FS + SHELL (Claude Code, Codex CLI, a Cowork sandbox with the folder mounted) | full: `ctx`, `ctx read` at Step 0c, the lifecycle, freshness, the digest line, the card |
+| FS without SHELL | Step 0c reads `INDEX.md` and the records the manifest names, whole; edits go to `local-context.md` as before and a later `ctx` run on a host with a shell imports them |
 | No FS (`storage_mode: session`) | no store; the session protocol of `local-context-protocol.md` applies |
 
 ## 10. Not yet
 
-Skills reading the card and only their own records, archive and trash, freshness (TTL) and typed fields — v3.12; provider blocks as records with a three-way merge — v3.13; the configurator as a loop and a `/context` command — v3.15; an index and a graph — v4.0.
+Provider blocks as records with a three-way merge — v3.13; the configurator as a loop, deltas proposed by skills and a `/context` command — v3.15; checking records against the connectors (`validate --recheck`) — v3.15; an index and a graph — v4.0.
