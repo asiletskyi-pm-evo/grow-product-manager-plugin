@@ -72,7 +72,8 @@ with tempfile.TemporaryDirectory() as d:
           and "#### Platforms" in text and "#### Competitors" not in text and "product.zorg-app" in res["records"], text[:900])
     text, res = t.view("requirements-creator")
     check("two products need a choice", res["needs_product"] and "Zorg App" in text and "Zorg Lite" in text
-          and "- **Jira Project Key:**" not in text, text[-500:])
+          and "- **Jira Project Key:**" not in text
+          and 'ctx.py" read --skill requirements-creator --product "<' in text, text[-500:])
     text, res = t.view("requirements-creator", product="Zorg")
     check("ambiguous product needs a choice", res["needs_product"], res)
     text, res = t.view("requirements-creator", product="product.zorg-lite")

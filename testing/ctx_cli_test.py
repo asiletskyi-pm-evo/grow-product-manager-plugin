@@ -382,7 +382,8 @@ with tempfile.TemporaryDirectory() as d:
 # --- v3.12 Task 10: docs
 lcp = read(ROOT, "references", "local-context-protocol.md")
 check("Step 0c names ctx read and the fallback", 'ctx.py" read --skill' in lcp and "exit 3" in lcp
-      and "whole" in lcp and "станом на" in lcp, "Step 0c")
+      and "whole" in lcp and "станом на" in lcp and "only on exit 3" in lcp
+      and "the product the request names" in lcp, "Step 0c")
 check("configurator lists the stale review item",
       "Review stale records" in read(ROOT, "skills", "plugin-configurator", "references", "maintenance-modes.md"))
 cp = read(ROOT, "references", "context-protocol.md")

@@ -167,7 +167,9 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None):
             if needs:
                 res["needs_product"] = True
                 res["products"] = [p["title"].split(":", 1)[-1].strip() for p in products]
-                blocks = ["Продукти: %s — обери продукт (крок 0d) і повтори з --product" % ", ".join(res["products"])]
+                blocks = ["Продукти: %s. Повтори з назвою продукту із запиту, або спитай користувача (крок 0d):\n"
+                          'python3 "<plugin root>/scripts/ctx.py" read --skill %s --product "<назва>"\n'
+                          "Не читай local-context.md цілком." % (", ".join(res["products"]), skill)]
         if not res["needs_product"]:
             for kind in spec["records"]:
                 rec = next((r for r in recs if r["id"] == kind or r["type"] == kind), None)
