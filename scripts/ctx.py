@@ -449,8 +449,13 @@ def cmd_undo(a, c):
             existed = json.load(f).get("store_existed")
         if existed:
             cs.atomic_write(jpath, journal)
-            c.store.journal({"ts": now(), "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre})
-            print("restored the state before the %s — %s" % ("last change" if a.steps == 1 else "%d last changes" % a.steps, target))
+            t = now()
+            c.store.journal({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre})
+            # an import's snapshot holds the copies as they were on disk then — already edited; rebuild them
+            # from the restored records so the edit is undone and nothing waits to be imported again
+            co.compile_store(c.store, c.copies, t, c.home, pre)
+            print("restored the state before the %s — %s; the copies were rebuilt from the records"
+                  % ("last change" if a.steps == 1 else "%d last changes" % a.steps, target))
         else:
             co.forget_store(c.home)
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)

@@ -520,6 +520,35 @@ with tempfile.TemporaryDirectory() as d:      # m6: card platforms match by head
     run_ok(e, "card")
     check("card platforms match by heading prefix", "platforms web, iOS" in read(e.store, "INDEX.md"), read(e.store, "INDEX.md")[:900])
 
+# --- v3.12.1: undo after an import leaves the store consistent (compressed acceptance S8/S9)
+def latest_snapshot(e, label):
+    snaps = os.path.join(e.home, ".grow-pm", "snapshots")
+    return os.path.join(snaps, sorted(n for n in os.listdir(snaps) if n.endswith(label))[-1])
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    before = read(e.ctx)
+    t = read(e.ctx); i = t.index("## Templates"); j = t.index("\n## ", i + 3)
+    open(e.ctx, "w", encoding="utf-8", newline="").write(t[:i] + t[j + 1:])
+    run_ok(e, "sync")
+    rc, out, r = run_ok(e, "undo")
+    rc_s, out_s, r_s = run_ok(e, "status")
+    check("undo after an imported removal brings the section back in both copies",
+          rc == 0 and read(e.ctx) == before and read(e.mirror) == before, (rc, out[-300:]))
+    check("undo after an import leaves the store in sync", "to import: nothing — in sync" in out_s and r_s["conflicts"] == [],
+          out_s[-300:])
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** EDIT")
+    run_ok(e, "sync")
+    run_ok(e, "undo")
+    check("undo after an imported edit reverts it in the copies", "PROJ" in read(e.ctx) and "EDIT" not in read(e.ctx)
+          and "EDIT" not in read(e.mirror))
+    check("the edit is kept in the pre-undo snapshot", "EDIT" in read(latest_snapshot(e, "pre-undo"), "copies", "0.md"))
+    run_ok(e, "set", "product.zorg-app", "Locales", "uk")
+    rc, out, r = run_ok(e, "undo")
+    check("undo of a ctx write unchanged", rc == 0 and "Locales:** uk" not in read(e.ctx), out[-300:])
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
