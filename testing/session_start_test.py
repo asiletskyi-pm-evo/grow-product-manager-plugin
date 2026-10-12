@@ -164,7 +164,8 @@ with tempfile.TemporaryDirectory() as d:
     out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
     line = next((l for l in out.splitlines() if "context:" in l), "")
     check("stale count in the context line", " stale" in line and "records 14" in line, line)
-    check("ctx read hint with a store", 'ctx.py" read --skill <your name>' in out and OLD_HINT not in out, out[-300:])
+    check("ctx read hint with a store", 'ctx.py" read --skill <your name> --product' in out and OLD_HINT not in out
+          and "instead of reading local-context.md" in out and "exits 3" in out, out[-400:])
     os.rename(vault, vault + "-away")
     out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
     check("unavailable store line", "context: store at %s unavailable — vault not mounted?" % root in out

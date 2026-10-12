@@ -286,8 +286,11 @@ def digest(path, facts, searched, version):
     if s and not s.get("unavailable"):
         lines.append(
             "Skills: take this path for Step 0a of references/local-context-protocol.md and skip the "
-            'location search; Step 0c: run python3 "<plugin root>/scripts/ctx.py" read --skill <your name> '
-            "(references/context-protocol.md). Env GROW_PM_CONTEXT_PATH is set for Bash."
+            "location search. A context store exists: where a skill says to read local-context.md (Step 0c), "
+            'run python3 "<plugin root>/scripts/ctx.py" read --skill <your name> --product "<the product the '
+            'request names>" (no --product when it names none) and use its output instead of reading '
+            "local-context.md; read the file whole only if that exits 3 (references/context-protocol.md). "
+            "Env GROW_PM_CONTEXT_PATH is set for Bash."
         )
     else:
         lines.append(
