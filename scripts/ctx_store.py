@@ -132,7 +132,7 @@ def assign_ids(frags, taken=frozenset()):
     return out
 
 
-OPTIONAL_KEYS = ("status", "verified", "ttl_days", "archived", "archived_reason", "former_after")
+OPTIONAL_KEYS = ("status", "verified", "ttl_days", "archived", "archived_reason", "former_after", "trashed")
 _FM_START = re.compile(r"^---\r?\n")
 _FM_END = re.compile(r"\r?\n---\r?\n")
 
@@ -316,6 +316,7 @@ class Store:
         self.records_dir = os.path.join(root, "records")
         self.state_dir = os.path.join(root, ".state")
         self.card_path = os.path.join(root, "INDEX.md")
+        self.archive_dir = os.path.join(root, "archive")
 
     def exists(self):
         return os.path.isdir(self.state_dir)
@@ -367,8 +368,28 @@ class Store:
                 pass
         return sorted(stray)
 
+    def archived(self):
+        """Archived records (`archive/<year>/<id>.md`), each with its `path`."""
+        out = []
+        if os.path.isdir(self.archive_dir):
+            for year in sorted(os.listdir(self.archive_dir)):
+                folder = os.path.join(self.archive_dir, year)
+                for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+                    if name.endswith(".md") and ID_RE.match(name[:-3]):
+                        try:
+                            out.append(dict(parse_record(read_text(os.path.join(folder, name))),
+                                            path=os.path.join(folder, name)))
+                        except (OSError, UnicodeDecodeError, ValueError, StoreError):
+                            continue
+        return out
+
+    def reserved_ids(self):
+        """Ids a new record may not take: the archived ones."""
+        return {r["id"] for r in self.archived()}
+
     def write(self, rec):
-        rec = dict(rec, sha=sha_text(rec.get("body") or ""))
+        """A live record: `status` follows the ctx status region (invalid) — absent means active."""
+        rec = dict(rec, sha=sha_text(rec.get("body") or ""), status="invalid" if has_status_region(rec.get("body")) else None)
         atomic_write(os.path.join(self.records_dir, rec["id"] + ".md"), render_record(rec))
         return rec
 

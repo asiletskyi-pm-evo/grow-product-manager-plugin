@@ -405,5 +405,98 @@ with tempfile.TemporaryDirectory() as d:
     check("card marks stale rows and rebuilds when the stale set changes", "⚠" not in before and "⚠ 2026-10-20" in after
           and "Застарілі:" in after and "product.zorg-app" in e.store.state().get("stale", []), after[:400])
 
+# --- v3.12 Task 5: lifecycle — invalidate, archive, trash, restore
+def copies_text(env):
+    return read(env.ctx), read(env.mirror)
+
+
+def refused(fn, *a):
+    try:
+        fn(*a)
+    except co.Refused:
+        return True
+    return False
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    before = copies_text(e)
+    co.invalidate(e.store, e.copies, e.home, "team.alpha-a", "reorg", NOW)
+    h, m = copies_text(e)
+    rec = {r["id"]: r for r in e.store.load()}["team.alpha-a"]
+    check("invalidate adds the region, keeps the section and journals", "> ⚠ Неактуально з 2026-10-20: reorg" in h
+          and h == m and "### Team: Alpha (A)" in h and rec.get("status") == "invalid"
+          and e.store.journal_entries()[-1]["op"] == "invalidate", rec.get("status"))
+    co.restore_record(e.store, e.copies, e.home, "team.alpha-a", NOW)
+    check("restore clears an invalid record byte for byte", copies_text(e) == before
+          and {r["id"]: r for r in e.store.load()}["team.alpha-a"].get("status") is None)
+    check("invalidate the header is refused", refused(co.invalidate, e.store, e.copies, e.home, "header", "x", NOW))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    before = copies_text(e)
+    co.archive(e.store, e.copies, e.home, "setting.templates", "old", NOW)
+    gone = "## Templates" not in read(e.ctx) and os.path.isfile(os.path.join(e.store.root, "archive", "2026", "setting.templates.md"))
+    co.restore_record(e.store, e.copies, e.home, "setting.templates", NOW)
+    check("archive removes the section and restore puts it back at its place byte for byte", gone
+          and copies_text(e) == before and not os.path.exists(os.path.join(e.store.root, "archive", "2026", "setting.templates.md")))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    co.archive(e.store, e.copies, e.home, "setting.templates", "", NOW)
+    open(e.ctx, "a", encoding="utf-8").write("\n" + TEMPLATES)
+    e.sync()
+    ids = [r["id"] for r in e.store.load()]
+    co.restore_record(e.store, e.copies, e.home, "setting.templates", NOW)
+    ids2 = [r["id"] for r in e.store.load()]
+    check("archived ids are reserved", "setting.templates-2" in ids and "setting.templates" not in ids
+          and {"setting.templates", "setting.templates-2"} <= set(ids2), (ids, ids2))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    before = copies_text(e)
+    e.edit(e.ctx, TEMPLATES, "")
+    e.sync()
+    trashed = [r["id"] for _, r in co.trash_entries(e.home)]
+    co.restore_record(e.store, e.copies, e.home, "setting.templates", NOW)
+    check("a removed section lands in the trash and restores", trashed == ["setting.templates"]
+          and copies_text(e) == before, trashed)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    os.remove(os.path.join(e.store.records_dir, "setting.templates.md"))
+    e.sync(accept_removals=True)
+    entry = [r for _, r in co.trash_entries(e.home) if r["id"] == "setting.templates"]
+    check("accept-removals of a missing record trashes the copy's text", len(entry) == 1 and entry[0]["body"] == TEMPLATES,
+          entry[:1])
+
+with tempfile.TemporaryDirectory() as d:
+    home = os.path.join(d, "home"); root = os.path.join(home, ".grow-pm", "trash"); os.makedirs(root)
+    t = datetime.datetime(2026, 10, 20, 10, 0, 0)
+    old = (t - datetime.timedelta(days=40)).strftime("%Y%m%dT%H%M%S") + "-setting.old.md"
+    new = (t - datetime.timedelta(days=3)).strftime("%Y%m%dT%H%M%S") + "-setting.new.md"
+    for n in (old, new):
+        open(os.path.join(root, n), "w").write("x")
+    gone = [os.path.basename(p) for p in co.purge_trash(home, now=t)]
+    check("trash older than 30 days is purged", gone == [old] and os.listdir(root) == [new], (gone, os.listdir(root)))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(e.ctx, TEMPLATES, ""); e.sync()
+    open(e.ctx, "a", encoding="utf-8").write("\n" + TEMPLATES); e.sync()
+    check("restore refuses an id that is taken", "setting.templates" in [r["id"] for r in e.store.load()]
+          and refused(co.restore_record, e.store, e.copies, e.home, "setting.templates", NOW))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    co.invalidate(e.store, e.copies, e.home, "team.alpha-a", "reorg", NOW)
+    t = read(e.ctx)
+    a, b = t.index(cs.STATUS_BEGIN), t.index(cs.STATUS_END) + len(cs.STATUS_END) + 1
+    open(e.ctx, "w", encoding="utf-8", newline="").write(t[:a] + t[b:])
+    res = e.sync()
+    rec = {r["id"]: r for r in e.store.load()}["team.alpha-a"]
+    check("removing the status region reactivates", rec.get("status") is None and not cs.has_status_region(rec["body"])
+          and "team.alpha-a" in res["changed"], (rec.get("status"), res["changed"]))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
