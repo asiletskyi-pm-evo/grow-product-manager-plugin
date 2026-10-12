@@ -23,6 +23,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
 import ctx_store as cs  # noqa: E402
+import ctx_schema as sc  # noqa: E402
 
 
 class Busy(Exception):
@@ -263,6 +264,9 @@ def compile_store(store, copies, now, home, snap=None):
     written = [p for p in copies if not os.path.isfile(p) or _read(p) != text]
     new = _state_for(recs, text, copies)
     old = store.state()
+    new["freshness_since"] = old.get("freshness_since") or now[:10]
+    stale = {r["id"]: sc.verified_of(r, new) for r in recs if sc.is_stale(r, new, now[:10])}
+    new["stale"] = sorted(stale)
     if not written and os.path.isfile(store.card_path) and {k: old.get(k) for k in new} == new:
         return {"written": [], "card_lines": _read(store.card_path).count("\n"), "changed": False, "snapshot": None}
     own = bool(written) and snap is None
@@ -270,7 +274,7 @@ def compile_store(store, copies, now, home, snap=None):
         snap = snapshot(store, copies, home, "compile")
     for p in written:
         cs.atomic_write(p, text)
-    card = cs.build_card(recs, text, now[:10])
+    card = cs.build_card(recs, text, now[:10], stale=stale)
     if not os.path.isfile(store.card_path) or _read(store.card_path) != card:
         cs.atomic_write(store.card_path, card)
     new["compiled_at"] = now
@@ -314,6 +318,8 @@ def migrate(context_path, store_root, copies, home, apply, now):
     same = [home_copy] + [p for p in others if os.path.isfile(p) and _read(p) == text]
     state = _state_for(written, text, same)
     state["compiled_at"] = now
+    state["freshness_since"] = now[:10]
+    state["stale"] = []
     store.save_state(state)
     cs.atomic_write(store.card_path, cs.build_card(written, text, now[:10]))
     store.journal({"ts": now, "op": "migrate", "ids": [r["id"] for r in written], "source": "migrate",
@@ -481,6 +487,7 @@ def _insert(store, adds, source, now):
         if rec["type"] in ("product", "team"):
             parent = next((i for i in reversed(ids[:pos]) if recs[i]["type"] == "org"), None)
         recs[rec["id"]] = {"id": rec["id"], "type": rec["type"], "title": rec["title"], "parent": parent, "order": 0,
+                           "verified": now[:10],
                            "ctx": 1, "owner": "user", "source": source or "import", "modified": now, "body": a["text"]}
         new_ids.append(rec["id"])
     ended = set()
@@ -493,6 +500,30 @@ def _insert(store, adds, source, now):
         if recs[rid]["order"] != (k + 1) * 10 or rid in new_ids or rid in ended:
             store.write(dict(recs[rid], order=(k + 1) * 10))
     return new_ids
+
+
+def touch(rec, now):
+    """The record verified today."""
+    return dict(rec, verified=now[:10])
+
+
+def verify(store, copies, home, ids, now, stale=False):
+    """Mark records verified today — the given ids, or with `stale` every stale record; snapshot, write,
+    one journal line, compile. The lock and the import are the caller's. Returns the ids verified."""
+    recs = {r["id"]: r for r in store.load()}
+    if stale:
+        ids = sc.stale_ids(list(recs.values()), store.state(), now[:10])
+    unknown = [i for i in ids if i not in recs]
+    if unknown:
+        raise cs.StoreError("no record %s — `ctx list` shows the ids" % ", ".join(unknown))
+    if not ids:
+        return []
+    snap = snapshot(store, copies, home, "verify")
+    for rid in ids:
+        store.write(touch(recs[rid], now))
+    store.journal({"ts": now, "op": "verify", "ids": list(ids), "source": "ctx-verify", "reason": "", "snapshot": snap})
+    compile_store(store, copies, now, home, snap)
+    return list(ids)
 
 
 def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, accept_removals=False):
@@ -514,10 +545,10 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
     src = lambda p: source or ("import:home" if p == copies[0] else "import:mirror")
     changed, removed = [], []
     for e in plan["edits"]:
-        store.write(dict(recs[e["id"]], body=e["text"], source=src(e["copy"]), modified=now))
+        store.write(touch(dict(recs[e["id"]], body=e["text"], source=src(e["copy"]), modified=now), now))
         changed.append(e["id"])
     for r in plan["renames"]:
-        store.write(dict(recs[r["id"]], body=r["text"], title=r["title"], source=src(r["copy"]), modified=now))
+        store.write(touch(dict(recs[r["id"]], body=r["text"], title=r["title"], source=src(r["copy"]), modified=now), now))
         changed.append(r["id"])
     for c in plan["conflicts"]:
         if resolve[c["id"]] == "file":
@@ -526,11 +557,14 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
                 store.remove(c["id"])
                 removed.append(c["id"])
             else:
-                store.write(dict(recs[c["id"]], body=ver, source=source or "import:resolve", modified=now))
+                store.write(touch(dict(recs[c["id"]], body=ver, source=source or "import:resolve", modified=now), now))
                 changed.append(c["id"])
     for rid in plan["removes"] + plan["missing"]:
         store.remove(rid)
         removed.append(rid)
+    for rid in plan["record_changes"]:                  # edited in Obsidian: the body stays, verified moves
+        if rid in recs and rid not in changed and rid not in removed:
+            store.write(touch(recs[rid], now))
     moved = _reorder(store, plan["reorder"]) if plan["reorder"] else []
     added = _insert(store, plan["adds"], source, now) if plan["adds"] else []
     ids = changed + removed + [i for i in moved if i not in changed] + added

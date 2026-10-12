@@ -350,5 +350,60 @@ with tempfile.TemporaryDirectory() as d:
     check("an id with a slash or .. is never a record file", cs.ID_RE.match("../x") is None
           and cs.ID_RE.match("a/b") is None and "." not in ids and ".." not in ids, ids)
 
+# --- v3.12 Task 4: freshness
+import ctx_schema as sc  # noqa: E402
+
+TODAY = NOW[:10]
+check("a record past its TTL is stale", sc.is_stale({"type": "product", "verified": "2026-01-01"}, {}, TODAY)
+      and not sc.is_stale({"type": "setting", "verified": "2026-05-01"}, {}, TODAY))
+check("ttl_days 0 is never stale", not sc.is_stale({"type": "product", "verified": "2020-01-01", "ttl_days": 0}, {}, TODAY))
+check("garbage verified falls back", sc.verified_of({"type": "team", "verified": "soon"}, {"freshness_since": "2026-10-01"}) == "2026-10-01"
+      and sc.ttl_of({"type": "team", "ttl_days": "x"}) == 90)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    st = e.store.state()
+    fresh_at_migrate = st.get("freshness_since")
+    st.pop("freshness_since", None); e.store.save_state(st)
+    e.sync()
+    check("first v3.12 compile sets freshness_since", fresh_at_migrate == TODAY
+          and e.store.state().get("freshness_since") == TODAY, (fresh_at_migrate, e.store.state().get("freshness_since")))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** PRJ")
+    e.sync()
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-app"]
+    check("an imported edit refreshes verified", rec.get("verified") == TODAY, rec.get("verified"))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** R")
+    body_before = {r["id"]: r for r in e.store.load()}["product.zorg-app"]["body"]
+    e.sync()
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-app"]
+    check("an Obsidian record edit refreshes verified without touching the body", rec.get("verified") == TODAY
+          and rec["body"] == body_before and "- **Jira Project Key:** R" in read(e.ctx), rec.get("verified"))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    st = e.store.state(); st["freshness_since"] = "2025-01-01"; e.store.save_state(st)
+    done = co.verify(e.store, e.copies, e.home, [], NOW, stale=True)
+    recs = {r["id"]: r for r in e.store.load()}
+    ops = [j["op"] for j in e.store.journal_entries()]
+    check("verify --stale refreshes all stale and journals once", "product.zorg-app" in done and "profile" in done
+          and "header" not in done and all(recs[i].get("verified") == TODAY for i in done)
+          and ops.count("verify") == 1, (done, ops))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    co.compile_store(e.store, e.copies, NOW, e.home)
+    before = read(e.store.card_path)
+    co.compile_store(e.store, e.copies, "2027-03-01T10:00:00+02:00", e.home)
+    after = read(e.store.card_path)
+    check("card marks stale rows and rebuilds when the stale set changes", "⚠" not in before and "⚠ 2026-10-20" in after
+          and "Застарілі:" in after and "product.zorg-app" in e.store.state().get("stale", []), after[:400])
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

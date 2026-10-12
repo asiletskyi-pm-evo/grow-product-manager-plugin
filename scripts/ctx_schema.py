@@ -7,9 +7,11 @@ the context card and the skills read. Semantics: references/context-protocol.md.
 
 - load_fields                         the schema, {record type: {field: spec}}
 - raw_value / parse_value / check_value  read, convert and check one field
+- ttl_of / verified_of / is_stale / stale_ids  freshness of a record
 
 Stdlib only.
 """
+import datetime
 import os
 import re
 import sys
@@ -25,6 +27,7 @@ PATTERNS = {"key": (r"^[A-Z][A-Z0-9_]+$", "a Jira key such as PROJ"),
             "email": (r"^[^@\s]+@[^@\s]+$", "an email address"),
             "url": (r"^https?://", "a URL starting with http:// or https://")}
 _COMMENT = re.compile(r"\s*<!--.*?-->\s*")
+TTL_DAYS = {"product": 90, "team": 90, "org": 180, "profile": 180, "setting": 180}
 
 
 def load_fields(path=None):
@@ -85,3 +88,39 @@ def check_value(spec, raw):
     if pattern and not re.match(pattern, raw):
         return "%r is not %s" % (raw, what)
     return None
+
+
+# ---------------------------------------------------------------- freshness
+def _date(v):
+    try:
+        return datetime.date.fromisoformat(str(v)[:10]).isoformat() if v and len(str(v)) >= 10 else None
+    except ValueError:
+        return None
+
+
+def ttl_of(rec):
+    """Days a record stays fresh: a valid `ttl_days` (0 = never stale → None), else the type's default."""
+    t = rec.get("ttl_days")
+    if isinstance(t, bool):
+        t = None
+    if isinstance(t, str) and t.strip().isdigit():
+        t = int(t)
+    if isinstance(t, int) and t >= 0:
+        return t or None
+    return TTL_DAYS.get(rec.get("type"))
+
+
+def verified_of(rec, state):
+    """The record's `verified` date when it is a date, else the store's `freshness_since`."""
+    return _date(rec.get("verified")) or _date((state or {}).get("freshness_since"))
+
+
+def is_stale(rec, state, today):
+    ttl, seen = ttl_of(rec), verified_of(rec, state)
+    if not ttl or not seen:
+        return False
+    return datetime.date.fromisoformat(today[:10]) > datetime.date.fromisoformat(seen) + datetime.timedelta(days=ttl)
+
+
+def stale_ids(records, state, today):
+    return [r["id"] for r in records if is_stale(r, state, today)]

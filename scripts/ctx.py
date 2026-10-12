@@ -207,7 +207,7 @@ def _write_one(c, op, rid, mutate, source, reason):
             return {"command": op, "id": rid, "changed": False, "imported": pre["changed"] + pre["added"]}
         t = now()
         snap = co.snapshot(c.store, c.copies, c.home, op)
-        c.store.write(dict(rec, body=body, source=source, modified=t))
+        c.store.write(co.touch(dict(rec, body=body, source=source, modified=t), t))
         c.store.journal({"ts": t, "op": op, "ids": [rid], "source": source, "reason": reason or "", "snapshot": snap})
         comp = co.compile_store(c.store, c.copies, t, c.home, snap)
     print("%s: %s · wrote %s" % (op, rid, ", ".join(comp["written"]) or "no copy"))
