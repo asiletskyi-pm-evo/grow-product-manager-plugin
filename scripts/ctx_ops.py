@@ -132,9 +132,9 @@ def snapshot(store, copies, home, label):
     name, k = base, 2
     while os.path.exists(os.path.join(root, name)):
         name, k = "%s-%d" % (base, k), k + 1
-    snap = os.path.join(root, name)
+    snap = cs.check_target(os.path.join(root, name))
     for rel, data in files.items():
-        p = os.path.join(snap, rel)
+        p = cs.check_target(os.path.join(snap, rel))
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "wb") as f:
             f.write(data)
@@ -169,15 +169,20 @@ def rotate(snap_root, keep_last=20, keep_daily_days=14, now=None, protect=None):
     removed = []
     for _, name in dated:
         if name not in keep:
-            shutil.rmtree(os.path.join(snap_root, name))
+            shutil.rmtree(cs.check_target(os.path.join(snap_root, name)))
             removed.append(os.path.join(snap_root, name))
     return removed
 
 
 def restore(snap_dir, store, copies):
-    """Put the store and the compiled copies back exactly as the snapshot holds them."""
+    """Put the store and the compiled copies back as the snapshot holds them. The copies are the current
+    ones, matched by position (0 = home copy, 1 = vault mirror): a path in the manifest is never written
+    or deleted. Returns the manifest entries with no current copy (skipped)."""
     with open(os.path.join(snap_dir, "manifest.json"), encoding="utf-8") as f:
         manifest = json.load(f)
+    entries = manifest.get("copies", [])
+    for p in [store.records_dir, store.state_dir, store.card_path] + list(copies[:len(entries)]):
+        cs.check_target(p)
     for folder in (store.records_dir, store.state_dir):
         if os.path.isdir(folder):
             shutil.rmtree(folder)
@@ -190,17 +195,27 @@ def restore(snap_dir, store, copies):
                 shutil.copytree(src, target)
         if os.path.isfile(os.path.join(snap_dir, "INDEX.md")):
             shutil.copy2(os.path.join(snap_dir, "INDEX.md"), store.card_path)
-    for c in manifest.get("copies", []):
+    skipped = []
+    for n, c in enumerate(entries):
+        if n >= len(copies):
+            skipped.append(c.get("path") or "?")
+            continue
         if c.get("existed"):
             with open(os.path.join(snap_dir, c["file"]), encoding="utf-8", newline="") as f:
-                cs.atomic_write(c["path"], f.read())
-        elif os.path.exists(c["path"]):
-            os.remove(c["path"])
+                cs.atomic_write(copies[n], f.read())
+        elif os.path.exists(copies[n]):
+            os.remove(copies[n])
+    return skipped
 
 
 # ------------------------------------------------------- store and copies
 def _read(path):
     return cs.read_text(path)
+
+
+def allowed_roots(home, context_text):
+    """Where ctx may write: ~/.grow-pm and the storage root (spec §7a)."""
+    return (_grow(home), cc.storage_root(context_text, home))
 
 
 def store_root_for(context_text, home=None):
@@ -285,6 +300,9 @@ def migrate(context_path, store_root, copies, home, apply, now):
         raise Refused("a context store already exists at %s — see `ctx status`" % store_root)
     if not identical:
         raise Refused("the split does not give the file back byte for byte — nothing migrated")
+    vault = cc.vault_root(text)
+    if vault and not os.path.isdir(os.path.expanduser(vault)):
+        raise cs.StoreError("the vault folder %s does not exist — check ## Obsidian Vaults" % vault)
     snap = snapshot(store, copies, home, "pre-migrate")
     written = []
     for r in recs:

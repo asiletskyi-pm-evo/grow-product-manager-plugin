@@ -7,7 +7,7 @@ codes (0 ok, 2 conflict, 3 bad input / no store / unreadable, 4 refused) and the
 (import before write, snapshot, lock, managed regions, the provider boundary).
 Semantics: references/context-protocol.md. Stdlib only; run from the repo root.
 """
-import json, os, stat, subprocess, sys, tempfile, time
+import json, os, shutil, stat, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CTX = os.path.join(ROOT, "scripts", "ctx.py")
@@ -245,6 +245,64 @@ check("every writer's sync step also covers a host without the session digest", 
 matrix = read(ROOT, "testing", "host-matrix.md")
 check("the host matrix says what the ctx engine needs (spec §10)", "`ctx`" in matrix and "SHELL" in matrix
       and "ctx_cli_test" not in matrix, "no ctx note")
+
+# --- v3.12 Task 0: write allow-list and safe undo (spec §7a)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    outside = os.path.join(d, "outside.md")
+    open(outside, "w", encoding="utf-8", newline="").write(read(e.ctx))
+    os.remove(e.ctx); os.symlink(outside, e.ctx)
+    e.edit(e.mirror, "- **Cadence:** daily", "- **Cadence:** weekly")
+    before = read(outside)
+    rc, out, res = run_ok(e, "compile")
+    check("a home copy linked outside the allowed roots is refused", rc == 4 and read(outside) == before,
+          (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    elsewhere = os.path.join(d, "elsewhere")
+    shutil.move(os.path.join(e.store, "records"), elsewhere)
+    os.symlink(elsewhere, os.path.join(e.store, "records"))
+    before = read(elsewhere, "product.zorg-app.md")
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "OUT")
+    check("a records folder linked outside is refused", rc == 4 and read(elsewhere, "product.zorg-app.md") == before,
+          (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = migrated_with_set(d)
+    victim = os.path.join(d, "victim.txt"); open(victim, "w").write("precious")
+    last = [json.loads(l) for l in open(os.path.join(e.store, ".state", "journal.jsonl"), encoding="utf-8")][-1]["snapshot"]
+    m = json.load(open(os.path.join(last, "manifest.json"), encoding="utf-8"))
+    m["copies"].append({"path": victim, "file": "copies/0.md", "existed": True})
+    json.dump(m, open(os.path.join(last, "manifest.json"), "w", encoding="utf-8"))
+    rc, out, res = run_ok(e, "undo")
+    check("undo never writes a path from the snapshot manifest", rc == 0 and open(victim).read() == "precious"
+          and "skipped (not a current copy)" in out, (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "S", "--store", e.store)
+    check("--store with a writing command is exit 3", rc == 3 and "PROJ" in e.record("product.zorg-app")
+          and "- **Jira Project Key:** S" not in read(e.ctx), (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    shutil.rmtree(e.vault)
+    rc, out, res = run_ok(e, "migrate", "--apply")
+    check("migrate --apply with a missing vault folder is exit 3 and creates nothing", rc == 3
+          and not os.path.exists(e.vault), (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    os.remove(e.ctx); os.symlink(e.mirror, e.ctx)
+    run_ok(e, "migrate", "--apply")
+    e.edit(e.mirror, "- **Cadence:** daily", "- **Cadence:** weekly")
+    rc, out, res = run_ok(e, "sync")
+    check("the home copy linked to the vault mirror still works", rc == 0 and os.path.islink(e.ctx)
+          and "weekly" in e.record("setting.focus-focus-advisor"), (rc, out[-300:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

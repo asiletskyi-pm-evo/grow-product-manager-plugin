@@ -195,6 +195,14 @@ def vault_modes(context_text):
     return uniq
 
 
+def vault_root(context_text):
+    """The vault folder behind `storage_root`: the first vault whose sync mode is not `off`, or None."""
+    for p, f, s in vault_modes(context_text):
+        if s != "off":
+            return p
+    return None
+
+
 def storage_root(context_text, home=None):
     """`storage_root` of persistent-storage.md: the first vault whose sync mode is not `off`
     → {vault_path}/{plugin_folder}; otherwise ~/.grow-pm."""

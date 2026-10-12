@@ -12,6 +12,7 @@ references/context-protocol.md. Used by ctx_ops.py and the `ctx` command line.
 
 Stdlib only.
 """
+import contextlib
 import hashlib
 import json
 import os
@@ -172,6 +173,33 @@ class RegionError(Exception):
     """An edit would land inside a provider's managed region (exit 4)."""
 
 
+class PathRefused(Exception):
+    """A write would land outside ~/.grow-pm and the storage root (exit 4)."""
+
+
+WRITE_ROOTS = None
+
+
+@contextlib.contextmanager
+def guard_roots(roots):
+    """Every write and delete inside the block must land, after realpath, under one of `roots`."""
+    global WRITE_ROOTS
+    prev = WRITE_ROOTS
+    WRITE_ROOTS = tuple(os.path.realpath(r) for r in roots if r)
+    try:
+        yield WRITE_ROOTS
+    finally:
+        WRITE_ROOTS = prev
+
+
+def check_target(path):
+    """The target's realpath; outside the guarded roots → PathRefused (no check without a guard)."""
+    rp = os.path.realpath(path)
+    if WRITE_ROOTS is not None and not any(rp == r or rp.startswith(r.rstrip(os.sep) + os.sep) for r in WRITE_ROOTS):
+        raise PathRefused("%s is outside ~/.grow-pm and the storage root" % path)
+    return rp
+
+
 READ_TIMEOUT_S = 30.0
 
 
@@ -211,6 +239,7 @@ def read_text(path, timeout=None):
 
 def atomic_write(path, text):
     """Write `text` byte for byte through a hidden temp file in the same folder, then replace."""
+    check_target(path)
     folder = os.path.dirname(path) or "."
     os.makedirs(folder, exist_ok=True)
     tmp = os.path.join(folder, ".%s.tmp" % os.path.basename(path))
@@ -294,6 +323,7 @@ class Store:
     def remove(self, rec_id):
         path = os.path.join(self.records_dir, rec_id + ".md")
         if os.path.exists(path):
+            check_target(path)
             os.remove(path)
 
     def state(self):
@@ -309,7 +339,7 @@ class Store:
 
     def journal(self, entry):
         os.makedirs(self.state_dir, exist_ok=True)
-        with open(os.path.join(self.state_dir, "journal.jsonl"), "a", encoding="utf-8") as f:
+        with open(check_target(os.path.join(self.state_dir, "journal.jsonl")), "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
 
     def journal_entries(self):

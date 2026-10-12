@@ -342,5 +342,13 @@ with tempfile.TemporaryDirectory() as d:
     check("every new snapshot rotates the folder", os.path.isdir(snap) and len(os.listdir(root)) == 20,
           len(os.listdir(root)))
 
+# --- v3.12 Task 0: write allow-list (spec §7a)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    open(os.path.join(e.store.records_dir, "..md"), "w", encoding="utf-8").write(e.text[:200])
+    ids = [r["id"] for r in e.store.load()]
+    check("an id with a slash or .. is never a record file", cs.ID_RE.match("../x") is None
+          and cs.ID_RE.match("a/b") is None and "." not in ids and ".." not in ids, ids)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

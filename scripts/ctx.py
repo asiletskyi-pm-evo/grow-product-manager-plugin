@@ -46,6 +46,10 @@ class Usage(Exception):
     pass
 
 
+WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card",
+           "invalidate", "archive", "restore", "verify"}
+
+
 class Parser(argparse.ArgumentParser):
     def error(self, message):
         raise Usage(message)
@@ -57,6 +61,8 @@ def now():
 
 class Ctx:
     def __init__(self, a):
+        if a.store and (a.cmd in WRITING or (a.cmd == "migrate" and getattr(a, "apply", False))):
+            raise Usage("--store is for read commands only; writing commands use the context's own store")
         self.home = a.home or os.path.expanduser("~")
         found = cc.find_context(a.context, home=self.home)
         if not found:
@@ -77,6 +83,8 @@ class Ctx:
         hit = cc.boundary_hit(os.path.join(self.store.root, "records", "x.md"), regs)
         if hit:
             raise co.Refused("the store %s lies inside the provider %s's folder" % (self.store.root, hit.get("id")))
+        for p in list(self.copies) + [self.store.root, self.store.records_dir, self.store.state_dir, self.store.card_path]:
+            cs.check_target(p)
 
     def import_first(self):
         return co.apply_sync(self.store, co.plan_sync(self.store, self.copies), self.copies, self.home, None, "", now())
@@ -266,6 +274,7 @@ def cmd_undo(a, c):
         raise Usage("--steps takes a whole number from 1")
     c.need_store()
     with co.lock(c.home):
+        c.guard()
         plan = co.plan_sync(c.store, c.copies)
         waiting = sum(co.pending(plan).values()) + len(plan["conflicts"]) + len(plan["missing"])
         if waiting:
@@ -280,7 +289,9 @@ def cmd_undo(a, c):
         jpath = os.path.join(c.store.state_dir, "journal.jsonl")
         journal = co._read(jpath)
         pre = co.snapshot(c.store, c.copies, c.home, "pre-undo")
-        co.restore(target, c.store, c.copies)
+        skipped = co.restore(target, c.store, c.copies)
+        for p in skipped:
+            print("skipped (not a current copy): %s" % p)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
             existed = json.load(f).get("store_existed")
         if existed:
@@ -289,7 +300,7 @@ def cmd_undo(a, c):
             print("restored the state before the %s — %s" % ("last change" if a.steps == 1 else "%d last changes" % a.steps, target))
         else:
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)
-    return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed}
+    return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped}
 
 
 def cmd_validate(a, c):
@@ -343,6 +354,7 @@ def cmd_validate(a, c):
 def cmd_card(a, c):
     c.need_store()
     with co.lock(c.home):
+        c.guard()
         recs = c.store.load()
         card = cs.build_card(recs, cs.compile_records(recs), now()[:10])
         cs.atomic_write(c.store.card_path, card)
@@ -400,14 +412,16 @@ def main(argv=None):
         emit({"ok": False, "error": str(e)})
         return 3
     try:
-        rc, res = COMMANDS[a.cmd](a, Ctx(a))
+        c = Ctx(a)
+        with cs.guard_roots(co.allowed_roots(c.home, c.text)):
+            rc, res = COMMANDS[a.cmd](a, c)
         emit(dict(res, ok=rc == 0))
         return rc
     except co.Conflict as e:
         print("ctx: %s" % e)
         emit({"ok": False, "command": a.cmd, "error": str(e)}, conflict=e.payload)
         return 2
-    except (co.Refused, co.Busy, cs.RegionError) as e:
+    except (co.Refused, co.Busy, cs.RegionError, cs.PathRefused) as e:
         print("ctx: refused — %s" % e)
         emit({"ok": False, "command": a.cmd, "error": str(e)})
         return 4
