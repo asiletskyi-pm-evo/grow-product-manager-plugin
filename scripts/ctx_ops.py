@@ -132,9 +132,11 @@ def snapshot(store, copies, home, label):
     name, k = base, 2
     while os.path.exists(os.path.join(root, name)):
         name, k = "%s-%d" % (base, k), k + 1
-    snap = cs.check_target(os.path.join(root, name))
+    snap = os.path.join(root, name)
+    cs.check_target(snap)
     for rel, data in files.items():
-        p = cs.check_target(os.path.join(snap, rel))
+        p = os.path.join(snap, rel)
+        cs.check_target(p)
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "wb") as f:
             f.write(data)
@@ -169,7 +171,8 @@ def rotate(snap_root, keep_last=20, keep_daily_days=14, now=None, protect=None):
     removed = []
     for _, name in dated:
         if name not in keep:
-            shutil.rmtree(cs.check_target(os.path.join(snap_root, name)))
+            cs.check_target(os.path.join(snap_root, name))
+            shutil.rmtree(os.path.join(snap_root, name))
             removed.append(os.path.join(snap_root, name))
     return removed
 
