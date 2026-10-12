@@ -53,7 +53,7 @@ class Usage(Exception):
 
 
 WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card",
-           "invalidate", "archive", "restore", "verify"}
+           "invalidate", "archive", "restore", "verify", "assign"}
 
 
 class Parser(argparse.ArgumentParser):
@@ -323,6 +323,47 @@ def cmd_set(a, c):
     return 0, _write_one(c, "set", a.id, lambda b: cs.field_set(b, a.field, a.value), a.source or "ctx-set", a.reason)
 
 
+def _readers_value(text):
+    """`all`, `none` (→ None) or skill names → the stored read_by value; unknown names → Usage."""
+    v = text.strip().lower()
+    if v == "none":
+        return None
+    if v == "all":
+        return "all"
+    names = sorted(cr.readers({"read_by": v}) or [])
+    if not names:
+        raise Usage("assign takes all, none or skill names separated by commas")
+    unknown = [n for n in names if n not in (cr.load_manifest().get("skills") or {})]
+    if unknown:
+        raise Usage("unknown skill(s): %s — the names of skills/ folders" % ", ".join(unknown))
+    return ", ".join(names)
+
+
+def cmd_assign(a, c):
+    """Who reads a custom or setting record in `ctx read` (read_by)."""
+    value = _readers_value(a.readers)
+    c.need_store()
+    with co.lock(c.home):
+        c.guard()
+        pre = c.import_first()
+        rec = _record(c, a.id)
+        if rec["type"] not in ("custom", "setting"):
+            raise Usage("read_by is for custom and setting records, not %s (%s)" % (rec["type"], a.id))
+        if rec.get("read_by") == value:
+            print("unchanged — %s already has read_by %s" % (a.id, value or "unset"))
+            return 0, {"command": "assign", "id": a.id, "read_by": value, "changed": False, "snapshot": None}
+        t = now()
+        source = a.source or "ctx-assign"
+        snap = co.snapshot(c.store, c.copies, c.home, "assign")
+        c.store.write(co.touch(dict(rec, read_by=value, source=source, modified=t), t))
+        c.store.journal({"ts": t, "op": "assign", "ids": [a.id], "source": source, "reason": a.reason or "",
+                         "snapshot": snap})
+        comp = co.compile_store(c.store, c.copies, t, c.home, snap)
+    print("assign: %s read_by %s · wrote %s" % (a.id, value or "unset", ", ".join(comp["written"]) or "no copy"))
+    return 0, {"command": "assign", "id": a.id, "read_by": value, "changed": True, "snapshot": snap,
+               "imported": pre["changed"] + pre["added"]}
+
+
 def cmd_append(a, c):
     return 0, _write_one(c, "append", a.id, lambda b: cs.append_line(b, a.text, under=a.under),
                          a.source or "ctx-append", a.reason)
@@ -506,6 +547,8 @@ def build_parser():
     sp = sub.add_parser("verify", parents=[common]); sp.add_argument("ids", nargs="*"); sp.add_argument("--stale", action="store_true")
     sp = sub.add_parser("set", parents=[common]); sp.add_argument("id"); sp.add_argument("field"); sp.add_argument("value")
     sp.add_argument("--source"); sp.add_argument("--reason")
+    sp = sub.add_parser("assign", parents=[common]); sp.add_argument("id"); sp.add_argument("readers")
+    sp.add_argument("--source"); sp.add_argument("--reason")
     sp = sub.add_parser("append", parents=[common]); sp.add_argument("id"); sp.add_argument("--text", required=True)
     sp.add_argument("--under"); sp.add_argument("--source"); sp.add_argument("--reason")
     sp = sub.add_parser("add", parents=[common]); sp.add_argument("type"); sp.add_argument("title")
@@ -522,7 +565,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify}
+            "verify": cmd_verify, "assign": cmd_assign}
 
 
 def emit(result, conflict=None):

@@ -404,6 +404,48 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = run_ok(e, "get", "product.zorg-app", "--section", "#### Platforms")
     check("get --section prints the subsection", rc == 0 and "#### Platforms" in out and "- web" in out, (rc, out[-200:]))
 
+# --- v3.12.1: ctx assign
+CUSTOM = "\n## Zorg Partner Rules\n\n- Always say Zorg Partner.\n- Detail: never Partner Zorg in print.\n"
+
+
+def with_custom(e, extra=CUSTOM):
+    for p in (e.ctx, e.mirror):
+        if os.path.exists(p):
+            text = read(p).rstrip("\n") + "\n" + extra
+            open(p, "w", encoding="utf-8", newline="").write(text)
+    run_ok(e, "migrate", "--apply")
+    return "custom.zorg-partner-rules"
+
+
+def last_journal(e):
+    return json.loads(read(e.store, ".state", "journal.jsonl").strip().splitlines()[-1])
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    cid = with_custom(e)
+    before = read(e.ctx)
+    rc, out, r = run_ok(e, "assign", cid, "all")
+    check("assign all", rc == 0 and r["read_by"] == "all" and 'read_by: "all"' in e.record(cid), (rc, out[-300:]))
+    check("assign writes the journal", last_journal(e)["op"] == "assign", last_journal(e))
+    check("assign leaves local-context.md as is", read(e.ctx) == before)
+    rc, out, r = run_ok(e, "read", "--skill", "product-analysis", "--product", "Zorg App")
+    check("an assigned record is read", "never Partner Zorg in print" in out, out[-400:])
+    rc, out, r = run_ok(e, "assign", cid, "write-concept,product-analysis")
+    check("assign names, sorted", rc == 0 and r["read_by"] == "product-analysis, write-concept", r)
+    rc, out, r = run_ok(e, "assign", cid, "none")
+    check("assign none removes the key", rc == 0 and "read_by" not in e.record(cid), e.record(cid)[:400])
+    rc, out, r = run_ok(e, "assign", cid, "no-such-skill")
+    check("unknown skill is exit 3", rc == 3 and "unknown skill" in out and "no-such-skill" in out, (rc, out[-300:]))
+    rc, out, r = run_ok(e, "assign", "product.zorg-app", "all")
+    check("product record is refused", rc == 3 and "custom and setting" in out, (rc, out[-300:]))
+    run_ok(e, "assign", cid, "all")
+    rc, out, r = run_ok(e, "undo")
+    check("undo removes read_by", rc == 0 and "read_by" not in e.record(cid), (rc, out[-300:]))
+    e.edit(e.ctx, "never Partner Zorg in print.", "never Partner Zorg — pending.")
+    rc, out, r = run_ok(e, "assign", cid, "all")
+    check("assign imports pending edits first", rc == 0 and "pending" in e.record(cid), (rc, out[-300:]))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
