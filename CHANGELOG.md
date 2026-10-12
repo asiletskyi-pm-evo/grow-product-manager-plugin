@@ -12,6 +12,45 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.12.0 (2026-10-12)
+
+**Lean reading, record lifecycle, freshness and typed fields** (Context Core, phase 2 — second half). With a context store, a skill no longer reads the whole `local-context.md` at Step 0: `ctx read --skill <name>` gives it the context card plus only the fields and subsections its entry in `references/context-manifest.yaml` names. On a real 926-line context about 25,600 tokens became 900–3,000 per skill (measured with this release's engine on the release machine, all 33 skills). Records get a lifecycle (invalidate → archive → trash, `restore`), a verified date with a time to live (a stale fact is stated "as of" its date), and typed fields; `ctx` writes only under `~/.grow-pm` and the storage root. Without a store nothing changes.
+
+MINOR: new `ctx` commands, two new shared files (`references/context-manifest.yaml`, `references/context-fields.yaml`), validator check 16, and the configurator's "Review stale records" (plugin-configurator 2.15.0).
+
+### Added
+
+- **`ctx read --skill S [--product P]`** — reads only: the card, then one block per record the skill needs (`## <title> · <id> · перевірено <date>`, with `⚠ застаріле` or `⚠ неактуально` when that applies) and one closing `Відсутнє:` line. Edits not imported yet, new sections and records missing on disk are read from the canonical copy with a note; archived records never appear; several products and no `--product` → the list and the exact command to run again; exit 3 (a record still downloading, an unknown skill) → the skill reads the file whole. `ctx get <id> --section "…"` gives any other subsection.
+- **`references/context-manifest.yaml`** — what each of the 33 skills reads (fields, `####` subsections matched by the start of their heading, settings by the start of their title, obligatory ones marked); validator check 16 keeps it in step with the skills and with "Which Skills Read What".
+- **Lifecycle** — `ctx invalidate ID --reason R` (a status region after the heading; the record stays in the file), `ctx archive ID` (to `{store}/archive/<year>/`, its id reserved), a trash for every record a sync removes (`~/.grow-pm/trash/`, 30 days), `ctx restore ID` (the body and both copies come back byte for byte, inside its organisation), `ctx list --archived | --trash`; the archive is part of every snapshot.
+- **Freshness** — `verified` per record (every write, an Obsidian edit picked up, `ctx verify ID… | --stale`); default TTL 90 days for products and teams, 180 for organisations, the profile and settings, none for custom sections (`ttl_days` overrides, `0` = never); stale records counted in the digest (`· K stale`), marked on the card and in `ctx read`, listed by `status` and `validate`.
+- **Typed fields** — `references/context-fields.yaml` (role, role scope, level home, email; Jira key, Confluence space, platforms, locales, URL; onboarding mode and deferred steps; the Judgment switches): `validate` warns about a mismatch, `set` refuses one with the allowed values, `get --json` returns the parsed value. The text line stays the source of truth; Obsidian properties added to a record are kept.
+- Tests: `ctx_read_test.py` (new, 18 checks); `ctx_store_test.py` 47, `ctx_ops_test.py` 64, `ctx_cli_test.py` 56, `ctx_common_test.py` 16, `session_start_test.py` 24 — each new check failed before its code. A whole-branch review before the release found eight more defects (two of them a restore that could break the file on the next sync); each was fixed with a check that failed first.
+
+### Changed
+
+- **Step 0c** (`references/local-context-protocol.md`): with a store and a shell — `ctx read`; with a filesystem only — the card and the manifest's records, whole; without a store — the whole file, as before. The session digest tells skills that `ctx read` replaces reading `local-context.md`, with the product the request names — an isolated scenario run showed skills follow the digest and their own "read local-context.md" line, not the protocol.
+- **plugin-configurator 2.15.0** — Validate counts stale, invalid and archived records; the Update item "Review stale records" confirms, edits, invalidates or archives each.
+- `references/context-protocol.md` (§5a–§5d), `context-schema.md`, `persistent-storage.md`, `host-profiles.md`, `testing/host-matrix.md`; `.gitignore` ignores a project-local `.codex/config.toml`.
+
+### Fixed
+
+- **Write allow-list** (an internal audit of the v3.11 engine): every write or delete target, after its links are resolved, lies under `~/.grow-pm/` or the storage root — anything else is refused (exit 4) before a byte is written; `undo` writes only the current copies and store, never a path from a snapshot's manifest; `--store` only for reading commands; `migrate --apply` never creates a missing vault folder. Not a privilege escalation — `ctx` runs as the user, without network or code execution — but two gaps were real and are closed.
+- From the v3.11 review: a renamed section takes the type of its new heading; products and teams follow the organisation above them; an Obsidian edit of a record is journalled with its id; records imported by `compile` keep `import:home` / `import:mirror`; a half-migrated store says which folder to remove; a vault that is not mounted is reported as "store unavailable"; a migrate dry run that does not give the file back exits 3; `status` shows the last snapshot, `list` the modified date; CRLF in a record's frontmatter is read.
+
+### Not in this version
+
+- Provider blocks as records with a three-way merge (v3.13.0); the configurator as a loop, deltas proposed by skills, a `/context` command and checking records against the connectors (v3.15.0); an index and a graph (v4.0.0).
+
+### Backwards compatibility
+
+- Without a store nothing changes: no new digest line, the v3.11 hint, Step 0 reads the file as before.
+- A v3.11 store keeps working: its records render byte-identically until something writes them; the first v3.12 compile adds `freshness_since` to the state (one write) and the freshness clock starts there.
+- `ctx set` now refuses a value outside its type (a role outside the list, a one-letter Jira key) with exit 3; a context file outside `~/.grow-pm` and the storage root makes writing `ctx` commands refuse (exit 4).
+- No skill renamed, no description changed: routing is as in v3.11.
+
+---
+
 ## v3.11.0 (2026-10-09)
 
 **The context store: your context as records, `local-context.md` as their compiled view** (Context Core, phase 2). The context can now live as records — one markdown note per section of `local-context.md` — in the vault (`{storage_root}/_System/context/records/`). `local-context.md` becomes the compiled view: every skill reads it exactly as before, and anything written into it directly — by a skill, another plugin or the user in Obsidian — is imported back into the records. A deterministic engine, `ctx`, moves a single-file context in losslessly (it proves the compile gives the file back byte for byte before it writes anything), snapshots before every change, keeps a journal, undoes and generates a context card (`INDEX.md`). The sixth contour, **Context** — `context-connect`, `context-navigator` and the store — is declared in the README, the three manifests and `AGENTS.md`. Without the move nothing changes.

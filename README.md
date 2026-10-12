@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.11.0
+**Version:** 3.12.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.12.0** — **Lean reading, record lifecycle, freshness and typed fields** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). With a context store, a skill no longer reads the whole `local-context.md` at Step 0: `ctx read --skill <name>` gives it the context card plus only the fields and subsections its entry in `references/context-manifest.yaml` names — on a real 926-line context about 25,600 tokens became 900–3,000 per skill (measured on the release machine, all 33 skills). Records can be marked no longer current, archived, and come back from a 30-day trash with `ctx restore`; each knows when it was last verified, and a skill states a stale fact "as of" its date. `ctx` writes only under `~/.grow-pm` and the storage root. Without a store nothing changes. See [Context store](#context-store-since-v3110).
 
 **New in v3.11.0** — **The context store: your context as records, `local-context.md` as their compiled view** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Your context can now live as records — one note per section of `local-context.md` — in your vault, next to a context card (`INDEX.md`). `local-context.md` becomes the compiled view: every skill reads it exactly as before, and whatever a skill, another plugin or you in Obsidian write into it directly is imported back into the records. A deterministic engine, `ctx`, moves a single-file context in losslessly — it proves the compile gives your file back byte for byte before it writes anything — snapshots before every change, keeps a journal and undoes; a record that is missing or still downloading stops a run before anything is written. The sixth contour, **Context**, groups `context-connect`, `context-navigator` and the store. The configurator offers the move once; without it nothing changes. See [Context store](#context-store-since-v3110).
 
@@ -1042,5 +1044,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.11.0  
+**Version:** 3.12.0  
 **Last Updated:** October 2026
