@@ -157,11 +157,11 @@ def _split_frontmatter(fm):
     """(known-key lines, unknown-key text): a top-level `key:` line and its indented lines go together."""
     known, extra, cur = [], [], None
     for line in fm.split("\n"):
-        m = re.match(r"^([A-Za-z_][\w.-]*):", line)
-        if m:
-            cur = known if m.group(1) in RECORD_KEYS or m.group(1) in OPTIONAL_KEYS else extra
+        if line and not line[0].isspace() and not line.startswith("-"):
+            key = line.split(":", 1)[0].strip() if ":" in line else None
+            cur = known if key in RECORD_KEYS or key in OPTIONAL_KEYS else extra
         (cur if cur is not None else extra).append(line)
-    return "\n".join(known), "".join(l + "\n" for l in extra if l.strip() or extra)
+    return "\n".join(known), "".join(l + "\n" for l in extra)
 
 
 def parse_record(text):

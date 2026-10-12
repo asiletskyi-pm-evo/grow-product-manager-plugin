@@ -207,6 +207,13 @@ def _field_spec(rec, field):
 def cmd_get(a, c):
     c.need_store()
     rec = _record(c, a.id)
+    if a.section:
+        name = a.section.lstrip("#").strip()
+        part = cr._subsection(rec["body"], name)
+        if part is None:
+            raise cs.StoreError("no subsection %r in %s" % (name, a.id))
+        sys.stdout.write(part)
+        return 0, {"command": "get", "id": a.id, "section": name, "text": part if a.json else None}
     if a.field:
         spec = _field_spec(rec, a.field)
         raw = sc.raw_value(rec["body"], a.field, spec) if spec else cs.field_get(rec["body"], a.field)
@@ -396,6 +403,7 @@ def cmd_undo(a, c):
             c.store.journal({"ts": now(), "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre})
             print("restored the state before the %s — %s" % ("last change" if a.steps == 1 else "%d last changes" % a.steps, target))
         else:
+            co.forget_store(c.home)
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)
     return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped}
 
@@ -486,6 +494,7 @@ def build_parser():
     sp.add_argument("--source"); sp.add_argument("--reason")
     sp.add_argument("--resolve", action="append"); sp.add_argument("--accept-removals", action="store_true")
     sp = sub.add_parser("get", parents=[common]); sp.add_argument("id"); sp.add_argument("field", nargs="?")
+    sp.add_argument("--section")
     sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("list", parents=[common]); sp.add_argument("--type"); sp.add_argument("--json", action="store_true")
     g = sp.add_mutually_exclusive_group(); g.add_argument("--archived", action="store_true"); g.add_argument("--trash", action="store_true")

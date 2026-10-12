@@ -127,6 +127,18 @@ def _live_view(store, copies, now):
             notes[rid] = "запису немає на диску — ctx sync"
     for rid in plan["removes"]:
         recs.pop(rid, None)
+    taken = set(recs) | store.reserved_ids()
+    for k, a in enumerate(plan["adds"]):
+        frag = {"type": a["type"], "title": a["title"], "heading": None, "parent_index": None, "text": a["text"]}
+        rid = cs.assign_ids([frag], taken)[0]["id"]
+        taken.add(rid)
+        prev = recs.get(a.get("after"))
+        parent = None
+        if a["type"] in ("product", "team") and prev:
+            parent = prev["id"] if prev["type"] == "org" else prev.get("parent")
+        recs[rid] = {"id": rid, "type": a["type"], "title": a["title"], "parent": parent, "body": a["text"],
+                     "order": (prev["order"] if prev else 0) + 0.5 + k / 1000.0}
+        notes[rid] = "нова секція з файлу, ще не підхоплено — ctx sync"
     pending = sum(co.pending(plan).values()) + len(plan["missing"]) + len(plan["conflicts"])
     return sorted(recs.values(), key=lambda r: r["order"]), notes, pending
 

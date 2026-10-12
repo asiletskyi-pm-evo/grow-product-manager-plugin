@@ -391,6 +391,19 @@ check("context-protocol documents every new command", all(("`%s" % c) in cp for 
       ("read --skill", "invalidate", "archive", "restore", "verify")) and "--trash" in cp, "commands")
 check(".gitignore ignores .codex/config.toml", ".codex/config.toml" in read(ROOT, ".gitignore").splitlines())
 
+# --- v3.12 final review: undo of a migration, get --section
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "undo")
+    check("undo of a migration forgets the noted store", not os.path.exists(os.path.join(e.home, ".grow-pm", ".ctx-last-store")))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rc, out, res = run_ok(e, "get", "product.zorg-app", "--section", "#### Platforms")
+    check("get --section prints the subsection", rc == 0 and "#### Platforms" in out and "- web" in out, (rc, out[-200:]))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

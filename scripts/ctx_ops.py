@@ -107,6 +107,9 @@ def snapshot(store, copies, home, label):
     os.makedirs(root, exist_ok=True)
     files = _files(store.records_dir, "records/")
     files.update(_files(store.state_dir, "state/"))
+    if os.path.isdir(store.archive_dir):
+        for year in sorted(os.listdir(store.archive_dir)):
+            files.update(_files(os.path.join(store.archive_dir, year), "archive/%s/" % year))
     if os.path.isfile(store.card_path):
         files["INDEX.md"] = open(store.card_path, "rb").read()
     existed = os.path.isdir(store.records_dir) or os.path.isdir(store.state_dir)
@@ -185,15 +188,15 @@ def restore(snap_dir, store, copies):
     with open(os.path.join(snap_dir, "manifest.json"), encoding="utf-8") as f:
         manifest = json.load(f)
     entries = manifest.get("copies", [])
-    for p in [store.records_dir, store.state_dir, store.card_path] + list(copies[:len(entries)]):
+    for p in [store.records_dir, store.state_dir, store.archive_dir, store.card_path] + list(copies[:len(entries)]):
         cs.check_target(p)
-    for folder in (store.records_dir, store.state_dir):
+    for folder in (store.records_dir, store.state_dir, store.archive_dir):
         if os.path.isdir(folder):
             shutil.rmtree(folder)
     if os.path.isfile(store.card_path):
         os.remove(store.card_path)
     if manifest.get("store_existed"):
-        for sub, target in (("records", store.records_dir), ("state", store.state_dir)):
+        for sub, target in (("records", store.records_dir), ("state", store.state_dir), ("archive", store.archive_dir)):
             src = os.path.join(snap_dir, sub)
             if os.path.isdir(src):
                 shutil.copytree(src, target)
@@ -625,7 +628,18 @@ def store_unavailable(context_text, home=None):
     current = store_root_for(context_text, home)
     if not last or cs.Store(current).exists():
         return None
-    return last if (last != current or not cs.Store(last).exists()) else None
+    if last != current:
+        return last                                    # the store lives elsewhere (a vault switched off)
+    vault = cc.vault_root(context_text)
+    return last if vault and not os.path.isdir(os.path.expanduser(vault)) else None
+
+
+def forget_store(home):
+    """Drop the note of the last store (after `undo` removed the store on purpose)."""
+    path = _last_store_path(home)
+    if os.path.isfile(path):
+        cs.check_target(path)
+        os.remove(path)
 
 
 # ---------------------------------------------------------------- lifecycle
@@ -735,6 +749,19 @@ def archive(store, copies, home, rid, reason, now):
     return {"id": rid, "snapshot": snap, "written": comp["written"]}
 
 
+def _place_after(recs, ids, rec):
+    """Where a record whose predecessor is gone goes back: a product or a team stays inside an organisation
+    (after the last product/team of its organisation, else after the organisation itself, else in the last
+    organisation); anything else at the end."""
+    if rec["type"] in ("product", "team"):
+        orgs = [i for i in ids if recs[i]["type"] == "org"]
+        org = rec.get("parent") if rec.get("parent") in orgs else (orgs[-1] if orgs else None)
+        if org:
+            kids = [i for i in ids if recs[i]["type"] in ("product", "team") and recs[i].get("parent") == org]
+            return kids[-1] if kids else org
+    return ids[-1] if ids else None
+
+
 def restore_record(store, copies, home, rid, now):
     """Bring a record back: an invalid one becomes current; else from the archive, else the newest in the
     trash, at its former place (after `former_after`, else after its last sibling, else at the end)."""
@@ -761,17 +788,22 @@ def restore_record(store, copies, home, rid, now):
         ids = [r["id"] for r in sorted(recs.values(), key=lambda r: r["order"])]
         after = source.get("former_after")
         if after not in ids:
-            sib = [i for i in ids if source["type"] in ("product", "team") and recs[i]["parent"] == source.get("parent")
-                   and recs[i]["type"] in ("product", "team")]
-            after = sib[-1] if sib else (ids[-1] if ids else None)
+            after = _place_after(recs, ids, source)
         pos = ids.index(after) + 1 if after in ids else len(ids)
         ids.insert(pos, rid)
         rec = {k: v for k, v in source.items() if k not in ("path", "archived", "archived_reason", "former_after", "trashed")}
         rec = touch(dict(rec, status=None), now)
+        if pos < len(ids) - 1 and not rec["body"].endswith("\n"):
+            rec["body"] += "\n"                      # a former last record without a final newline
         recs[rid] = rec
+        ended = set()
+        if pos and not recs[ids[pos - 1]]["body"].endswith("\n"):
+            recs[ids[pos - 1]] = dict(recs[ids[pos - 1]], body=recs[ids[pos - 1]]["body"] + "\n")
+            ended.add(ids[pos - 1])
         for k, i in enumerate(ids):
-            if recs[i]["order"] != (k + 1) * 10 or i == rid:
+            if recs[i]["order"] != (k + 1) * 10 or i == rid or i in ended:
                 store.write(dict(recs[i], order=(k + 1) * 10))
+        _reparent(store)
         cs.check_target(origin)
         os.remove(origin)
     store.journal({"ts": now, "op": "restore", "ids": [rid], "source": "ctx-restore", "reason": origin or "invalid",

@@ -551,5 +551,66 @@ with tempfile.TemporaryDirectory() as d:
     check("the last store is noted and an unmounted vault is reported", noted is None
           and gone == e.store.root, (noted, gone))
 
+# --- v3.12 final review fixes
+def no_final_newline(d):
+    e = Env(d)
+    e.text = e.text.rstrip("\n")
+    for path in (e.ctx, e.mirror):
+        open(path, "w", encoding="utf-8", newline="").write(e.text)
+    e.migrate()
+    return e
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = no_final_newline(d)
+    co.archive(e.store, e.copies, e.home, "setting.custom-sections", "", NOW)
+    open(e.ctx, "a", encoding="utf-8").write("\n## Zorg Extra\n\n- one\n")
+    e.sync()
+    co.restore_record(e.store, e.copies, e.home, "setting.custom-sections", NOW)
+    glued = "_none_## Zorg Extra" in read(e.ctx)
+    e.edit(e.ctx, "- **Cadence:** daily", "- **Cadence:** weekly")
+    res = e.sync()
+    check("a restored record never glues onto the next heading", not glued and res["removed"] == []
+          and "custom.zorg-extra" in [r["id"] for r in e.store.load()], (glued, res["removed"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    for rid in ("product.zorg-lite", "team.alpha-a", "team.beta-b", "product.zorg-app"):
+        co.archive(e.store, e.copies, e.home, rid, "", NOW)
+    co.restore_record(e.store, e.copies, e.home, "product.zorg-lite", NOW)
+    t = read(e.ctx)
+    inside = t.index("## Organization: Zorg") < t.index("### Product: Zorg Lite") < t.index("## CJM Configuration")
+    e.edit(e.ctx, "- **Cadence:** daily", "- **Cadence:** weekly")
+    res = e.sync()
+    rec = {r["id"]: r for r in e.store.load()}.get("product.zorg-lite")
+    check("a product restored without its neighbours stays inside its organisation", inside and res["removed"] == []
+          and rec is not None and rec["parent"] == "org.zorg", (inside, res["removed"], rec and rec["parent"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    os.remove(os.path.join(e.store.records_dir, "product.zorg-app.md"))
+    e.sync(accept_removals=True)
+    co.restore_record(e.store, e.copies, e.home, "product.zorg-app", NOW)
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-app"]
+    check("a record restored from the trash gets its organisation back", rec["parent"] == "org.zorg", rec["parent"])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    arch = os.path.join(e.store.root, "archive", "2026", "setting.templates.md")
+    res = co.archive(e.store, e.copies, e.home, "setting.templates", "", NOW)
+    co.restore(res["snapshot"], e.store, e.copies)
+    undone_archive = not os.path.exists(arch) and "setting.templates" in [r["id"] for r in e.store.load()]
+    co.archive(e.store, e.copies, e.home, "setting.templates", "", NOW)
+    res = co.restore_record(e.store, e.copies, e.home, "setting.templates", NOW)
+    co.restore(res["snapshot"], e.store, e.copies)
+    undone_restore = os.path.exists(arch) and "setting.templates" not in [r["id"] for r in e.store.load()]
+    check("undo keeps the archive in step", undone_archive and undone_restore, (undone_archive, undone_restore))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    shutil.rmtree(e.store.root)
+    check("a store removed while the vault is present is 'no store', not 'unavailable'",
+          co.store_unavailable(e.text, e.home) is None, co.store_unavailable(e.text, e.home))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

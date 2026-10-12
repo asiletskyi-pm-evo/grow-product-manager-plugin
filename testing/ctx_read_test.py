@@ -144,6 +144,17 @@ with tempfile.TemporaryDirectory() as d:
     check("subsections match by the start of their heading", "#### Platforms (mobile first)" in text
           and "Platforms" not in res["missing"], res["missing"])
 
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "minimal")
+    t = read(e.ctx)
+    at = t.index("### Product: Zorg App")
+    new = "### Product: Zorg Lite\n\n- **Jira Project Key:** LITE\n\n"
+    open(e.ctx, "w", encoding="utf-8", newline="").write(t[:at] + new + t[at:])
+    text, res = e.view("requirements-creator")
+    text2, res2 = e.view("requirements-creator", product="Zorg Lite")
+    check("a new section not imported yet is read through", res["needs_product"]
+          and "- **Jira Project Key:** LITE" in text2 and "ctx sync" in text2 and not res2["needs_product"], (res, res2))
+
 check("check_manifest is clean on the repo", cr.check_manifest(ROOT) == [], cr.check_manifest(ROOT))
 with tempfile.TemporaryDirectory() as d:
     src = read(cr.MANIFEST_PATH)

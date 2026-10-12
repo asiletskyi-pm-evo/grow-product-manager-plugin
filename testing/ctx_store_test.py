@@ -237,5 +237,13 @@ check("the status region never splits a record", len(f1) == len(f2)
       and [f["title"] for f in f1] == [f["title"] for f in f2]
       and any(cs.STATUS_BEGIN in f["text"] and f["title"] == "Product: Zorg App" for f in f2))
 
+# --- v3.12 final review: any Obsidian property name survives
+odd_props = v311.replace("\n---\n", "\nДата: 2026-10-01\nmy key: v\n1st: x\n---\n", 1)
+try:
+    back = cs.render_record(cs.parse_record(odd_props)); odd_ok = back == odd_props
+except ValueError as e:
+    odd_ok = False
+check("a property with a Cyrillic name, a space or a leading digit survives", odd_ok)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
