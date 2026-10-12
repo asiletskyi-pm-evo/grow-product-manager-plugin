@@ -144,5 +144,31 @@ with tempfile.TemporaryDirectory() as d:
     out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
     check("one direct edit waits to be imported", " · 1 edit to import" in out, out)
 
+# --- v3.12.0: stale count, the ctx read hint, an unavailable store
+OLD_HINT = ("still parse the file for 0c–0j (product selection, required fields, vault level, role, judgment "
+            "contract). Env GROW_PM_CONTEXT_PATH is set for Bash.")
+out = run(example)
+check("v3.11 hint without a store", OLD_HINT in out and "read --skill" not in out, out[-300:])
+
+with tempfile.TemporaryDirectory() as d:
+    home, vault = os.path.join(d, "home"), os.path.join(d, "vault")
+    os.makedirs(os.path.join(home, ".grow-pm")); os.makedirs(os.path.join(vault, "Notes", "_System"))
+    text = open(os.path.join(ROOT, "testing", "fixtures", "ctx", "typical.md"), encoding="utf-8").read().replace("{{VAULT}}", vault)
+    ctxp = os.path.join(home, ".grow-pm", "local-context.md")
+    for p in (ctxp, os.path.join(vault, "Notes", "_System", "local-context.md")):
+        open(p, "w", encoding="utf-8").write(text)
+    root = co.store_root_for(text, home=home)
+    co.migrate(ctxp, root, co.copies_for(ctxp, text, home=home), home, apply=True, now="2026-10-20T10:00:00+03:00")
+    import ctx_store as cs  # noqa: E402
+    st = cs.Store(root); state = st.state(); state["freshness_since"] = "2025-01-01"; st.save_state(state)
+    out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    line = next((l for l in out.splitlines() if "context:" in l), "")
+    check("stale count in the context line", " stale" in line and "records 14" in line, line)
+    check("ctx read hint with a store", 'ctx.py" read --skill <your name>' in out and OLD_HINT not in out, out[-300:])
+    os.rename(vault, vault + "-away")
+    out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    check("unavailable store line", "context: store at %s unavailable — vault not mounted?" % root in out
+          and "records" not in next((l for l in out.splitlines() if "context:" in l), ""), out[-400:])
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

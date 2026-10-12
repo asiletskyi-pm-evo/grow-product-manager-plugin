@@ -271,19 +271,30 @@ def digest(path, facts, searched, version):
         if b:
             lines.append("  bundle: team=%s role=%s core=%s" % (b.get("team") or "?", b.get("role_profile") or "?", b.get("core_version") or "?"))
     s = facts.get("context_store")
-    if s:
+    if s and s.get("unavailable"):
+        lines.append("  context: store at %s unavailable — vault not mounted?" % s["unavailable"])
+    elif s:
         if s["conflicts"]:
             tail = "%d conflict%s (ctx sync)" % (s["conflicts"], "" if s["conflicts"] == 1 else "s")
         elif s["pending"]:
             tail = "%d edit%s to import" % (s["pending"], "" if s["pending"] == 1 else "s")
         else:
             tail = "in sync"
+        if s.get("stale"):
+            tail += " · %d stale" % s["stale"]
         lines.append("  context: records %d · card %d lines · %s" % (s["records"], s["card_lines"], tail))
-    lines.append(
-        "Skills: take this path for Step 0a of references/local-context-protocol.md and skip the "
-        "location search; still parse the file for 0c–0j (product selection, required fields, vault "
-        "level, role, judgment contract). Env GROW_PM_CONTEXT_PATH is set for Bash."
-    )
+    if s and not s.get("unavailable"):
+        lines.append(
+            "Skills: take this path for Step 0a of references/local-context-protocol.md and skip the "
+            'location search; Step 0c: run python3 "<plugin root>/scripts/ctx.py" read --skill <your name> '
+            "(references/context-protocol.md). Env GROW_PM_CONTEXT_PATH is set for Bash."
+        )
+    else:
+        lines.append(
+            "Skills: take this path for Step 0a of references/local-context-protocol.md and skip the "
+            "location search; still parse the file for 0c–0j (product selection, required fields, vault "
+            "level, role, judgment contract). Env GROW_PM_CONTEXT_PATH is set for Bash."
+        )
     return "\n".join(lines[:MAX_LINES])
 
 

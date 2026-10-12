@@ -782,17 +782,23 @@ def restore_record(store, copies, home, rid, now):
 
 # ------------------------------------------------------- digest (read-only)
 def status_summary(context_path, home=None):
-    """{records, card_lines, pending, conflicts} for the SessionStart digest; None without a store or on any
-    error. Reads only."""
+    """{records, card_lines, pending, conflicts, stale} for the SessionStart digest; {unavailable: root} when
+    the store used before cannot be reached; None without a store or on any error. Reads only. The home
+    defaults to the one the context file lives in (~/.grow-pm/local-context.md)."""
     try:
+        if home is None and os.path.basename(os.path.dirname(os.path.abspath(context_path))) == ".grow-pm":
+            home = os.path.dirname(os.path.dirname(os.path.abspath(context_path)))
         text = _read(context_path)
         store = cs.Store(store_root_for(text, home))
         if not store.exists():
-            return None
+            gone = store_unavailable(text, home)
+            return {"unavailable": gone} if gone else None
         recs = store.load()
         plan = plan_sync(store, copies_for(context_path, text, home))
         card = _read(store.card_path).count("\n") if os.path.isfile(store.card_path) else 0
         return {"records": len(recs), "card_lines": card, "pending": sum(pending(plan).values()),
-                "conflicts": len(plan["conflicts"]) + (1 if plan["suspicious_removal"] else 0) + len(plan["missing"])}
+                "conflicts": len(plan["conflicts"]) + (1 if plan["suspicious_removal"] else 0) + len(plan["missing"]),
+                "stale": len(sc.stale_ids(recs, store.state(), datetime.date.today().isoformat())),
+                "unavailable": None}
     except Exception:
         return None
