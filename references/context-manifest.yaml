@@ -1,0 +1,219 @@
+# What each skill reads at Step 0c when a context store exists (since v3.12.0) — `ctx read --skill <name>`.
+# A translation of "Which Skills Read What" (skills/plugin-configurator/references/context-schema.md);
+# validator check 16 keeps the two in step. references/context-protocol.md has the semantics.
+#
+#   product / team: required (missing → listed as obligatory), fields, sections — a field is its
+#     `- **Field:** value` line, or the `#### Field` subsection when there is no such line; sections are
+#     `####` subsections (heading text without the hashes). team: whole: true reads the whole record.
+#   profile: required — fields of the User Profile, which is always read whole (every_skill).
+#   settings / required_settings: setting records by the start of their title (case-insensitive), read whole.
+#   full: true — the skill edits local-context.md and reads it whole; `ctx read` gives the card only.
+schema: context-manifest/1
+every_skill:
+  records:
+    - profile
+  settings:
+    - Judgment
+skills:
+  brainstorm-features:
+    product:
+      fields:
+        - Description
+      sections:
+        - Key Metrics
+        - Competitors
+        - Current OKRs
+  cjm-research:
+    product:
+      sections:
+        - Analytics Dashboards
+    required_settings:
+      - CJM Configuration
+    settings:
+      - Knowledge Library
+  context-connect:
+    full: true
+    profile:
+      required:
+        - Email
+  context-navigator:
+    team:
+      whole: true
+    settings:
+      - Obsidian Vaults
+  decision-log:
+    product:
+      fields:
+        - Description
+  delegation-coach:
+    settings:
+      - People
+  design-bridge:
+    product:
+      sections:
+        - Design System
+  diagram-prototyper:
+    product:
+      sections:
+        - Design System
+  experiment-tracker:
+    product:
+      fields:
+        - Description
+    settings:
+      - Experiments
+  feedback-triage:
+    settings:
+      - Feedback
+  flow-walkthrough:
+    product:
+      fields:
+        - Platforms
+      sections:
+        - Test Accounts
+  focus-advisor:
+    product:
+      fields:
+        - Description
+    required_settings:
+      - Planning
+    settings:
+      - Focus
+  goal-setter:
+    product:
+      sections:
+        - Current OKRs
+    settings:
+      - People
+      - Planning
+  hiring-designer:
+    team:
+      sections:
+        - Members
+    settings:
+      - People
+  knowledge-library:
+    settings:
+      - Knowledge Library
+      - Terminology & Style
+  meeting-processor:
+    product:
+      fields:
+        - Confluence Space
+  offboarding-guide:
+    settings:
+      - People
+  one-on-one:
+    settings:
+      - People
+  performance-review:
+    settings:
+      - People
+  plugin-configurator:
+    full: true
+  product-analysis:
+    product:
+      sections:
+        - Analytics Dashboards
+        - Key Metrics
+        - Current OKRs
+  product-landscape:
+    product:
+      sections:
+        - Competitors
+    settings:
+      - Landscape
+  product-reporter:
+    product:
+      required:
+        - Jira Project Key
+    team:
+      sections:
+        - Members
+    settings:
+      - People
+  product-research:
+    product:
+      fields:
+        - URL
+        - Description
+      sections:
+        - Competitors
+    settings:
+      - Knowledge Library
+  project-planning:
+    product:
+      fields:
+        - Jira Project Key
+    team:
+      sections:
+        - Members
+    required_settings:
+      - Planning
+  quarterly-planning:
+    product:
+      sections:
+        - Current OKRs
+    team:
+      sections:
+        - Members
+    required_settings:
+      - Planning
+  release-manager:
+    settings:
+      - Release
+  requirements-creator:
+    product:
+      required:
+        - Jira Project Key
+        - Platforms
+      fields:
+        - Confluence Template URL
+        - Confluence Template Name
+        - Locales
+      sections:
+        - Key Metrics
+    settings:
+      - Templates
+      - Terminology & Style
+  roadmap-architect:
+    product:
+      sections:
+        - Current OKRs
+    settings:
+      - Planning
+  sprint-planning:
+    product:
+      fields:
+        - Jira Project Key
+    required_settings:
+      - Planning
+    settings:
+      - People
+  task-creator:
+    product:
+      required:
+        - Jira Project Key
+      fields:
+        - Confluence Space
+    team:
+      fields:
+        - Jira Team ID
+      sections:
+        - Members
+    settings:
+      - Terminology & Style
+  template-library:
+    settings:
+      - Templates
+  write-concept:
+    product:
+      fields:
+        - Confluence Space
+        - Description
+      sections:
+        - Key Metrics
+        - Current OKRs
+    settings:
+      - Templates
+      - Terminology & Style

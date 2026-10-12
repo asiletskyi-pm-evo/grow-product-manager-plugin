@@ -335,6 +335,19 @@ for f in skills/*/SKILL.md; do
 done
 [ "$THIN_BAD" -eq 0 ] && ok "thin core: every SKILL.md <= $THIN_MAX lines (longest: $(wc -l skills/*/SKILL.md | grep -v ' total$' | sort -n | tail -1 | awk '{print $1" "$2}'))"
 
+# --- 16. Context manifest covers every skill (v3.12.0) -----------------------
+# `ctx read --skill <name>` gives a skill only what references/context-manifest.yaml names; a
+# skill without an entry, a setting name nothing matches, or a required field of "Which Skills
+# Read What" the manifest drops would silently starve Step 0c.
+MANIFEST_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import ctx_read; print('\n'.join(ctx_read.check_manifest('.')))" 2>&1)
+if [ -n "$MANIFEST_ERRS" ]; then
+  while IFS= read -r line; do err "context manifest: $line"; done <<EOF
+$MANIFEST_ERRS
+EOF
+else
+  ok "context manifest covers $(ls -d skills/*/ | wc -l | tr -d ' ') skills"
+fi
+
 # --- 10. Component counts in the three public descriptions -------------------
 # "33 skills across six contours" lives in plugin.json, marketplace.json and
 # README. With agents/commands/connectors the counts multiply; grep them all.
