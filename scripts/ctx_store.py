@@ -132,31 +132,83 @@ def assign_ids(frags, taken=frozenset()):
     return out
 
 
+OPTIONAL_KEYS = ("status", "verified", "ttl_days", "archived", "archived_reason", "former_after")
+_FM_START = re.compile(r"^---\r?\n")
+_FM_END = re.compile(r"\r?\n---\r?\n")
+
+
+def _render_value(v):
+    if isinstance(v, bool) or v is None:
+        v = "" if v is None else str(v).lower()
+    return v if isinstance(v, int) else json.dumps(v, ensure_ascii=False)
+
+
 def render_record(rec):
-    """Frontmatter in RECORD_KEYS order (strings JSON-quoted, None as ""), then the body as is."""
-    out = ["---"]
-    for k in RECORD_KEYS:
-        v = rec.get(k)
-        if isinstance(v, bool) or v is None:
-            v = "" if v is None else str(v).lower()
-        out.append("%s: %s" % (k, v if isinstance(v, int) else json.dumps(v, ensure_ascii=False)))
-    return "\n".join(out) + "\n---\n" + (rec.get("body") or "")
+    """Frontmatter: RECORD_KEYS in order (strings JSON-quoted, None as ""), the OPTIONAL_KEYS that are
+    set, then the unknown keys (`extra`) verbatim; then the body as is."""
+    out = ["---"] + ["%s: %s" % (k, _render_value(rec.get(k))) for k in RECORD_KEYS]
+    out += ["%s: %s" % (k, _render_value(rec[k])) for k in OPTIONAL_KEYS if rec.get(k) is not None]
+    extra = rec.get("extra") or ""
+    return "\n".join(out) + "\n" + extra + ("" if not extra or extra.endswith("\n") else "\n") + \
+        "---\n" + (rec.get("body") or "")
+
+
+def _split_frontmatter(fm):
+    """(known-key lines, unknown-key text): a top-level `key:` line and its indented lines go together."""
+    known, extra, cur = [], [], None
+    for line in fm.split("\n"):
+        m = re.match(r"^([A-Za-z_][\w.-]*):", line)
+        if m:
+            cur = known if m.group(1) in RECORD_KEYS or m.group(1) in OPTIONAL_KEYS else extra
+        (cur if cur is not None else extra).append(line)
+    return "\n".join(known), "".join(l + "\n" for l in extra if l.strip() or extra)
 
 
 def parse_record(text):
-    """Inverse of render_record. Raises ValueError when the frontmatter is missing or unreadable."""
-    if not text.startswith("---\n"):
+    """Inverse of render_record. Raises ValueError when the file is empty or half written, or when the
+    frontmatter is missing or unreadable. CRLF inside the frontmatter is read; the body stays as is."""
+    if not text.strip():
+        raise ValueError("empty or still being written by a sync tool")
+    start = _FM_START.match(text)
+    if not start:
         raise ValueError("no frontmatter")
-    end = text.find("\n---\n", 3)
-    if end < 0:
-        raise ValueError("frontmatter not closed")
-    meta = cc.read_yaml_subset(text[4:end])
+    end = _FM_END.search(text, start.end() - 1)
+    if not end:
+        raise ValueError("frontmatter not closed — empty or still being written by a sync tool")
+    known, extra = _split_frontmatter(text[start.end():end.start()].replace("\r\n", "\n").replace("\r", "\n"))
+    meta = cc.read_yaml_subset(known)
     rec = {k: meta.get(k) for k in RECORD_KEYS}
+    rec.update({k: (meta.get(k) if meta.get(k) != "" else None) for k in OPTIONAL_KEYS})
     rec["parent"] = rec["parent"] or None
     if not rec.get("id") or not isinstance(rec.get("order"), int):
         raise ValueError("frontmatter lacks id or order")
-    rec["body"] = text[end + 5:]
+    rec["extra"] = extra.rstrip("\n") + "\n" if extra.strip() else ""
+    rec["body"] = text[end.end():]
     return rec
+
+
+STATUS_BEGIN = "<!-- ctx:begin id=status -->"
+STATUS_END = "<!-- ctx:end id=status -->"
+_STATUS_RE = re.compile(re.escape(STATUS_BEGIN) + r".*?" + re.escape(STATUS_END) + r"\r?\n?", re.S)
+
+
+def has_status_region(body):
+    return bool(_STATUS_RE.search(body or ""))
+
+
+def clear_status_region(body):
+    return _STATUS_RE.sub("", body or "", count=1)
+
+
+def set_status_region(body, since, reason):
+    """The `ctx` status region right after the record's first line (an existing one is replaced)."""
+    body = clear_status_region(body)
+    nl = "\r\n" if "\r\n" in body else "\n"
+    block = STATUS_BEGIN + nl + "> ⚠ Неактуально з %s: %s" % (since, reason) + nl + STATUS_END + nl
+    cut = body.find("\n")
+    if cut < 0:
+        return body + nl + block
+    return body[:cut + 1] + block + body[cut + 1:]
 
 
 def compile_records(records):
