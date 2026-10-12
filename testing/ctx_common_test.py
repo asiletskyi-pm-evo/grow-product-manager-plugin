@@ -168,6 +168,61 @@ def _():
             else:
                 os.environ["GROW_PM_CONTEXT_PATH"] = old
 
+
+CTX_MANIFEST = """schema: context-manifest/1
+every_skill:                 # Step 0i / 0j
+  records:
+    - profile
+  settings:
+    - Judgment
+skills:
+  requirements-creator:
+    product:
+      required:
+        - Jira Project Key
+        - Platforms
+      fields:
+        - Locales
+      sections:
+        - "#### Key Metrics"
+    settings:
+      - Templates
+      - Terminology & Style
+"""
+
+
+@case("read_yaml_tree: nested maps and lists")
+def _():
+    assert cc.read_yaml_tree(CTX_MANIFEST) == {
+        "schema": "context-manifest/1",
+        "every_skill": {"records": ["profile"], "settings": ["Judgment"]},
+        "skills": {"requirements-creator": {
+            "product": {"required": ["Jira Project Key", "Platforms"], "fields": ["Locales"],
+                        "sections": ["#### Key Metrics"]},
+            "settings": ["Templates", "Terminology & Style"]}}}, cc.read_yaml_tree(CTX_MANIFEST)
+
+
+@case("read_yaml_tree: keys with spaces")
+def _():
+    t = "types:\n  product:\n    Jira Project Key:\n      type: key\n    Platforms:\n      type: list\n"
+    assert cc.read_yaml_tree(t) == {"types": {"product": {"Jira Project Key": {"type": "key"},
+                                                          "Platforms": {"type": "list"}}}}
+
+
+@case("read_yaml_tree: rejects flow style")
+def _():
+    try:
+        cc.read_yaml_tree("fields: [a, b]\n")
+    except ValueError as e:
+        assert "line 1" in str(e), e
+    else:
+        raise AssertionError("flow style accepted")
+
+
+@case("read_yaml_tree: a quoted # is text")
+def _():
+    assert cc.read_yaml_tree('sections:\n  - "#### Key Metrics"  # a comment\n') == {"sections": ["#### Key Metrics"]}
+
 fails = 0
 for name, fn in cases:
     try:

@@ -51,7 +51,7 @@ Then, and only then, resolve the contours that depend on it (storage mode, deleg
 | Quality gate | two checker subagents, distinct lenses | sequential inline lens passes, role reset between them | single self-check, marked as reduced independence |
 | Fan-out reads | parallel `extractor` subagents | sequential batches inline | fewer sources, stated explicitly |
 | Deterministic scripts | `scripts/*.py` | the same logic as prose steps | — |
-| Context store (`ctx`, since v3.11.0) | SHELL: `scripts/ctx.py` — records, sync of direct edits, card, digest line | FS without SHELL: edit `local-context.md` as before; a later `ctx` run on a host with a shell imports the edits | no FS: no store (`storage_mode: session`) |
+| Context store (`ctx`, since v3.11.0) | SHELL: `scripts/ctx.py` — records, sync of direct edits, card, digest line; since v3.12.0 `ctx read` at Step 0c, lifecycle, freshness | FS without SHELL: edit `local-context.md` as before; Step 0c reads `INDEX.md` and the manifest's records whole; a later `ctx` run on a host with a shell imports the edits | no FS: no store (`storage_mode: session`) |
 | Write gate | PreToolUse hook (`ask`) | in-skill confirmation before the write step | — |
 | Structured questions (`AskUserQuestion`: onboarding, Step 0i role, template choice) | the host's option picker (2–4 options per question, up to 4 questions per call) | a numbered list in chat; the answer is parsed from the user's reply (a number or the text) | — (no capability mark needed: every host can ask in plain text) |
 | Product drive (`flow-walkthrough`) | best level per `app-drive-protocol.md` §1 | a lower level (foreground instead of background; sequential compare) | user-driven variant — the user walks, the agent logs |

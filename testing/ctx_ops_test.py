@@ -342,5 +342,275 @@ with tempfile.TemporaryDirectory() as d:
     check("every new snapshot rotates the folder", os.path.isdir(snap) and len(os.listdir(root)) == 20,
           len(os.listdir(root)))
 
+# --- v3.12 Task 0: write allow-list (spec §7a)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    open(os.path.join(e.store.records_dir, "..md"), "w", encoding="utf-8").write(e.text[:200])
+    ids = [r["id"] for r in e.store.load()]
+    check("an id with a slash or .. is never a record file", cs.ID_RE.match("../x") is None
+          and cs.ID_RE.match("a/b") is None and "." not in ids and ".." not in ids, ids)
+
+# --- v3.12 Task 4: freshness
+import ctx_schema as sc  # noqa: E402
+
+TODAY = NOW[:10]
+check("a record past its TTL is stale", sc.is_stale({"type": "product", "verified": "2026-01-01"}, {}, TODAY)
+      and not sc.is_stale({"type": "setting", "verified": "2026-05-01"}, {}, TODAY))
+check("ttl_days 0 is never stale", not sc.is_stale({"type": "product", "verified": "2020-01-01", "ttl_days": 0}, {}, TODAY))
+check("garbage verified falls back", sc.verified_of({"type": "team", "verified": "soon"}, {"freshness_since": "2026-10-01"}) == "2026-10-01"
+      and sc.ttl_of({"type": "team", "ttl_days": "x"}) == 90)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    st = e.store.state()
+    fresh_at_migrate = st.get("freshness_since")
+    st.pop("freshness_since", None); e.store.save_state(st)
+    e.sync()
+    check("first v3.12 compile sets freshness_since", fresh_at_migrate == TODAY
+          and e.store.state().get("freshness_since") == TODAY, (fresh_at_migrate, e.store.state().get("freshness_since")))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** PRJ")
+    e.sync()
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-app"]
+    check("an imported edit refreshes verified", rec.get("verified") == TODAY, rec.get("verified"))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** R")
+    body_before = {r["id"]: r for r in e.store.load()}["product.zorg-app"]["body"]
+    e.sync()
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-app"]
+    check("an Obsidian record edit refreshes verified without touching the body", rec.get("verified") == TODAY
+          and rec["body"] == body_before and "- **Jira Project Key:** R" in read(e.ctx), rec.get("verified"))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    st = e.store.state(); st["freshness_since"] = "2025-01-01"; e.store.save_state(st)
+    done = co.verify(e.store, e.copies, e.home, [], NOW, stale=True)
+    recs = {r["id"]: r for r in e.store.load()}
+    ops = [j["op"] for j in e.store.journal_entries()]
+    check("verify --stale refreshes all stale and journals once", "product.zorg-app" in done and "profile" in done
+          and "header" not in done and all(recs[i].get("verified") == TODAY for i in done)
+          and ops.count("verify") == 1, (done, ops))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    co.compile_store(e.store, e.copies, NOW, e.home)
+    before = read(e.store.card_path)
+    co.compile_store(e.store, e.copies, "2027-03-01T10:00:00+02:00", e.home)
+    after = read(e.store.card_path)
+    check("card marks stale rows and rebuilds when the stale set changes", "⚠" not in before and "⚠ 2026-10-20" in after
+          and "Застарілі:" in after and "product.zorg-app" in e.store.state().get("stale", []), after[:400])
+
+# --- v3.12 Task 5: lifecycle — invalidate, archive, trash, restore
+def copies_text(env):
+    return read(env.ctx), read(env.mirror)
+
+
+def refused(fn, *a):
+    try:
+        fn(*a)
+    except co.Refused:
+        return True
+    return False
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    before = copies_text(e)
+    co.invalidate(e.store, e.copies, e.home, "team.alpha-a", "reorg", NOW)
+    h, m = copies_text(e)
+    rec = {r["id"]: r for r in e.store.load()}["team.alpha-a"]
+    check("invalidate adds the region, keeps the section and journals", "> ⚠ Неактуально з 2026-10-20: reorg" in h
+          and h == m and "### Team: Alpha (A)" in h and rec.get("status") == "invalid"
+          and e.store.journal_entries()[-1]["op"] == "invalidate", rec.get("status"))
+    co.restore_record(e.store, e.copies, e.home, "team.alpha-a", NOW)
+    check("restore clears an invalid record byte for byte", copies_text(e) == before
+          and {r["id"]: r for r in e.store.load()}["team.alpha-a"].get("status") is None)
+    check("invalidate the header is refused", refused(co.invalidate, e.store, e.copies, e.home, "header", "x", NOW))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    before = copies_text(e)
+    co.archive(e.store, e.copies, e.home, "setting.templates", "old", NOW)
+    gone = "## Templates" not in read(e.ctx) and os.path.isfile(os.path.join(e.store.root, "archive", "2026", "setting.templates.md"))
+    co.restore_record(e.store, e.copies, e.home, "setting.templates", NOW)
+    check("archive removes the section and restore puts it back at its place byte for byte", gone
+          and copies_text(e) == before and not os.path.exists(os.path.join(e.store.root, "archive", "2026", "setting.templates.md")))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    co.archive(e.store, e.copies, e.home, "setting.templates", "", NOW)
+    open(e.ctx, "a", encoding="utf-8").write("\n" + TEMPLATES)
+    e.sync()
+    ids = [r["id"] for r in e.store.load()]
+    co.restore_record(e.store, e.copies, e.home, "setting.templates", NOW)
+    ids2 = [r["id"] for r in e.store.load()]
+    check("archived ids are reserved", "setting.templates-2" in ids and "setting.templates" not in ids
+          and {"setting.templates", "setting.templates-2"} <= set(ids2), (ids, ids2))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    before = copies_text(e)
+    e.edit(e.ctx, TEMPLATES, "")
+    e.sync()
+    trashed = [r["id"] for _, r in co.trash_entries(e.home)]
+    co.restore_record(e.store, e.copies, e.home, "setting.templates", NOW)
+    check("a removed section lands in the trash and restores", trashed == ["setting.templates"]
+          and copies_text(e) == before, trashed)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    os.remove(os.path.join(e.store.records_dir, "setting.templates.md"))
+    e.sync(accept_removals=True)
+    entry = [r for _, r in co.trash_entries(e.home) if r["id"] == "setting.templates"]
+    check("accept-removals of a missing record trashes the copy's text", len(entry) == 1 and entry[0]["body"] == TEMPLATES,
+          entry[:1])
+
+with tempfile.TemporaryDirectory() as d:
+    home = os.path.join(d, "home"); root = os.path.join(home, ".grow-pm", "trash"); os.makedirs(root)
+    t = datetime.datetime(2026, 10, 20, 10, 0, 0)
+    old = (t - datetime.timedelta(days=40)).strftime("%Y%m%dT%H%M%S") + "-setting.old.md"
+    new = (t - datetime.timedelta(days=3)).strftime("%Y%m%dT%H%M%S") + "-setting.new.md"
+    for n in (old, new):
+        open(os.path.join(root, n), "w").write("x")
+    gone = [os.path.basename(p) for p in co.purge_trash(home, now=t)]
+    check("trash older than 30 days is purged", gone == [old] and os.listdir(root) == [new], (gone, os.listdir(root)))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(e.ctx, TEMPLATES, ""); e.sync()
+    open(e.ctx, "a", encoding="utf-8").write("\n" + TEMPLATES); e.sync()
+    check("restore refuses an id that is taken", "setting.templates" in [r["id"] for r in e.store.load()]
+          and refused(co.restore_record, e.store, e.copies, e.home, "setting.templates", NOW))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    co.invalidate(e.store, e.copies, e.home, "team.alpha-a", "reorg", NOW)
+    t = read(e.ctx)
+    a, b = t.index(cs.STATUS_BEGIN), t.index(cs.STATUS_END) + len(cs.STATUS_END) + 1
+    open(e.ctx, "w", encoding="utf-8", newline="").write(t[:a] + t[b:])
+    res = e.sync()
+    rec = {r["id"]: r for r in e.store.load()}["team.alpha-a"]
+    check("removing the status region reactivates", rec.get("status") is None and not cs.has_status_region(rec["body"])
+          and "team.alpha-a" in res["changed"], (rec.get("status"), res["changed"]))
+
+# --- v3.12 Task 8: v3.11 review minors
+def env_with(d, extra):
+    e = Env(d)
+    e.text += extra
+    for path in (e.ctx, e.mirror):
+        open(path, "w", encoding="utf-8", newline="").write(e.text)
+    e.migrate()
+    return e
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = env_with(d, "\n## Zorg Notes\n\n- one\n- two\n- three\n\n")
+    e.edit(e.ctx, "## Zorg Notes", "## Feedback (Zorg)")
+    e.sync()
+    rec = {r["id"]: r for r in e.store.load()}.get("custom.zorg-notes")
+    check("a section renamed to a schema title becomes a setting", rec is not None and rec["type"] == "setting"
+          and rec["title"] == "Feedback (Zorg)", rec and (rec["type"], rec["title"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = env_with(d, "\n## Organization: Other\n\n")
+    t = read(e.ctx)
+    lite = t[t.index("### Product: Zorg Lite"):t.index("### Team: Alpha (A)")]
+    open(e.ctx, "w", encoding="utf-8", newline="").write(t.replace(lite, "") + lite)
+    e.sync()
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-lite"]
+    check("a product moved under another organisation gets the new parent", rec["parent"] == "org.other", rec["parent"])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** OBS")
+    e.sync()
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-app"]
+    check("an Obsidian record edit is journalled with its id and a fresh sha",
+          "product.zorg-app" in e.store.journal_entries()[-1]["ids"] and rec["sha"] == cs.sha_text(rec["body"]),
+          e.store.journal_entries()[-1])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** CMP")
+    co.apply_sync(e.store, co.plan_sync(e.store, e.copies), e.copies, e.home, "compile", "", NOW)
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-app"]
+    check("compile imports carry import:home", rec["source"] == "import:home"
+          and e.store.journal_entries()[-1]["source"] == "compile", rec["source"])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    noted = co.store_unavailable(e.text, e.home)
+    os.rename(e.vault, e.vault + "-away")
+    gone = co.store_unavailable(e.text, e.home)
+    check("the last store is noted and an unmounted vault is reported", noted is None
+          and gone == e.store.root, (noted, gone))
+
+# --- v3.12 final review fixes
+def no_final_newline(d):
+    e = Env(d)
+    e.text = e.text.rstrip("\n")
+    for path in (e.ctx, e.mirror):
+        open(path, "w", encoding="utf-8", newline="").write(e.text)
+    e.migrate()
+    return e
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = no_final_newline(d)
+    co.archive(e.store, e.copies, e.home, "setting.custom-sections", "", NOW)
+    open(e.ctx, "a", encoding="utf-8").write("\n## Zorg Extra\n\n- one\n")
+    e.sync()
+    co.restore_record(e.store, e.copies, e.home, "setting.custom-sections", NOW)
+    glued = "_none_## Zorg Extra" in read(e.ctx)
+    e.edit(e.ctx, "- **Cadence:** daily", "- **Cadence:** weekly")
+    res = e.sync()
+    check("a restored record never glues onto the next heading", not glued and res["removed"] == []
+          and "custom.zorg-extra" in [r["id"] for r in e.store.load()], (glued, res["removed"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    for rid in ("product.zorg-lite", "team.alpha-a", "team.beta-b", "product.zorg-app"):
+        co.archive(e.store, e.copies, e.home, rid, "", NOW)
+    co.restore_record(e.store, e.copies, e.home, "product.zorg-lite", NOW)
+    t = read(e.ctx)
+    inside = t.index("## Organization: Zorg") < t.index("### Product: Zorg Lite") < t.index("## CJM Configuration")
+    e.edit(e.ctx, "- **Cadence:** daily", "- **Cadence:** weekly")
+    res = e.sync()
+    rec = {r["id"]: r for r in e.store.load()}.get("product.zorg-lite")
+    check("a product restored without its neighbours stays inside its organisation", inside and res["removed"] == []
+          and rec is not None and rec["parent"] == "org.zorg", (inside, res["removed"], rec and rec["parent"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    os.remove(os.path.join(e.store.records_dir, "product.zorg-app.md"))
+    e.sync(accept_removals=True)
+    co.restore_record(e.store, e.copies, e.home, "product.zorg-app", NOW)
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-app"]
+    check("a record restored from the trash gets its organisation back", rec["parent"] == "org.zorg", rec["parent"])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    arch = os.path.join(e.store.root, "archive", "2026", "setting.templates.md")
+    res = co.archive(e.store, e.copies, e.home, "setting.templates", "", NOW)
+    co.restore(res["snapshot"], e.store, e.copies)
+    undone_archive = not os.path.exists(arch) and "setting.templates" in [r["id"] for r in e.store.load()]
+    co.archive(e.store, e.copies, e.home, "setting.templates", "", NOW)
+    res = co.restore_record(e.store, e.copies, e.home, "setting.templates", NOW)
+    co.restore(res["snapshot"], e.store, e.copies)
+    undone_restore = os.path.exists(arch) and "setting.templates" not in [r["id"] for r in e.store.load()]
+    check("undo keeps the archive in step", undone_archive and undone_restore, (undone_archive, undone_restore))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    shutil.rmtree(e.store.root)
+    check("a store removed while the vault is present is 'no store', not 'unavailable'",
+          co.store_unavailable(e.text, e.home) is None, co.store_unavailable(e.text, e.home))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

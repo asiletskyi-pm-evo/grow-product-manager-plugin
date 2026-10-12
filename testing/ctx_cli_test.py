@@ -7,7 +7,7 @@ codes (0 ok, 2 conflict, 3 bad input / no store / unreadable, 4 refused) and the
 (import before write, snapshot, lock, managed regions, the provider boundary).
 Semantics: references/context-protocol.md. Stdlib only; run from the repo root.
 """
-import json, os, stat, subprocess, sys, tempfile, time
+import json, os, shutil, stat, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CTX = os.path.join(ROOT, "scripts", "ctx.py")
@@ -139,7 +139,7 @@ with tempfile.TemporaryDirectory() as d:
     os.remove(os.path.join(e.store, "records", "product.zorg-copy.md"))
     lockf = os.path.join(e.home, ".grow-pm", ".ctx.lock")
     open(lockf, "w").write(json.dumps({"pid": os.getpid(), "at": time.time()}))
-    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "X")
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "XX")
     os.remove(lockf)
     check("a held lock exits 4", rc == 4, (rc, out[-300:]))
     rc, out, res = e.run("set", "--nope")
@@ -166,7 +166,7 @@ with tempfile.TemporaryDirectory() as d:
     open(os.path.join(regdir, "zorg-core.yaml"), "w").write(
         "schema: provider-registration/1\nid: zorg-core\nkind: bundle\npaths:\n  - %s\nstatus: active\n"
         % os.path.join(e.vault, "Notes"))
-    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "X")
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "XX")
     check("store under a provider root is refused", rc == 4 and "PROJ" in read(e.ctx), (rc, out[-300:]))
 
 # --- Final review: undo bounds, explicit paths, a file without a final newline, a record that never loads
@@ -245,6 +245,164 @@ check("every writer's sync step also covers a host without the session digest", 
 matrix = read(ROOT, "testing", "host-matrix.md")
 check("the host matrix says what the ctx engine needs (spec §10)", "`ctx`" in matrix and "SHELL" in matrix
       and "ctx_cli_test" not in matrix, "no ctx note")
+
+# --- v3.12 Task 0: write allow-list and safe undo (spec §7a)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    outside = os.path.join(d, "outside.md")
+    open(outside, "w", encoding="utf-8", newline="").write(read(e.ctx))
+    os.remove(e.ctx); os.symlink(outside, e.ctx)
+    e.edit(e.mirror, "- **Cadence:** daily", "- **Cadence:** weekly")
+    before = read(outside)
+    rc, out, res = run_ok(e, "compile")
+    check("a home copy linked outside the allowed roots is refused", rc == 4 and read(outside) == before,
+          (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    elsewhere = os.path.join(d, "elsewhere")
+    shutil.move(os.path.join(e.store, "records"), elsewhere)
+    os.symlink(elsewhere, os.path.join(e.store, "records"))
+    before = read(elsewhere, "product.zorg-app.md")
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "OUT")
+    check("a records folder linked outside is refused", rc == 4 and read(elsewhere, "product.zorg-app.md") == before,
+          (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = migrated_with_set(d)
+    victim = os.path.join(d, "victim.txt"); open(victim, "w").write("precious")
+    last = [json.loads(l) for l in open(os.path.join(e.store, ".state", "journal.jsonl"), encoding="utf-8")][-1]["snapshot"]
+    m = json.load(open(os.path.join(last, "manifest.json"), encoding="utf-8"))
+    m["copies"].append({"path": victim, "file": "copies/0.md", "existed": True})
+    json.dump(m, open(os.path.join(last, "manifest.json"), "w", encoding="utf-8"))
+    rc, out, res = run_ok(e, "undo")
+    check("undo never writes a path from the snapshot manifest", rc == 0 and open(victim).read() == "precious"
+          and "skipped (not a current copy)" in out, (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "S", "--store", e.store)
+    check("--store with a writing command is exit 3", rc == 3 and "PROJ" in e.record("product.zorg-app")
+          and "- **Jira Project Key:** S" not in read(e.ctx), (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    shutil.rmtree(e.vault)
+    rc, out, res = run_ok(e, "migrate", "--apply")
+    check("migrate --apply with a missing vault folder is exit 3 and creates nothing", rc == 3
+          and not os.path.exists(e.vault), (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    os.remove(e.ctx); os.symlink(e.mirror, e.ctx)
+    run_ok(e, "migrate", "--apply")
+    e.edit(e.mirror, "- **Cadence:** daily", "- **Cadence:** weekly")
+    rc, out, res = run_ok(e, "sync")
+    check("the home copy linked to the vault mirror still works", rc == 0 and os.path.islink(e.ctx)
+          and "weekly" in e.record("setting.focus-focus-advisor"), (rc, out[-300:]))
+
+# --- v3.12 Task 7: read, lifecycle, verify, typed set/get
+def journal_ops(env):
+    return [json.loads(l)["op"] for l in open(os.path.join(env.store, ".state", "journal.jsonl"), encoding="utf-8")]
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rc, out, res = run_ok(e, "read", "--skill", "requirements-creator", "--product", "Zorg App")
+    check("read prints the card and the product block", rc == 0 and "# Context card" in out
+          and "- **Jira Project Key:** PROJ" in out and res and res.get("tokens_est", 10 ** 6) <= 6000, (rc, out[-300:]))
+    rc, out, res = run_ok(e, "read", "--skill", "no-such-skill")
+    check("read of an unknown skill is exit 3", rc == 3 and "no manifest entry" in out, (rc, out[-200:]))
+    rc, out, res = run_ok(e, "status")
+    check("status shows the last snapshot", rc == 0 and "last snapshot:" in out, out[-400:])
+    ok = []
+    for args, op in ((("invalidate", "team.alpha-a", "--reason", "reorg"), "invalidate"),
+                     (("archive", "setting.templates", "--reason", "old"), "archive"),
+                     (("restore", "setting.templates"), "restore"),
+                     (("verify", "product.zorg-app"), "verify")):
+        rc, out, res = run_ok(e, *args)
+        ok.append(rc == 0 and journal_ops(e)[-1] == op)
+    check("invalidate / archive / restore / verify exit 0 and journal", all(ok), ok)
+    rc, out, res = run_ok(e, "verify")
+    check("verify without ids is exit 3", rc == 3, (rc, out[-200:]))
+    run_ok(e, "archive", "setting.templates")
+    e.edit(e.ctx, "## Focus (focus-advisor)\n\n- **Cadence:** daily\n\n", "")
+    run_ok(e, "sync")
+    rc1, out1, _ = run_ok(e, "list", "--archived")
+    rc2, out2, _ = run_ok(e, "list", "--trash")
+    check("list --archived and --trash", rc1 == 0 and "setting.templates" in out1 and rc2 == 0
+          and "setting.focus-focus-advisor" in out2, (out1[-300:], out2[-300:]))
+    rc, out, res = run_ok(e, "set", "profile", "Role", "Senior PM")
+    check("set refuses a role outside the enum", rc == 3 and "head_of_product" in out
+          and "- **Role:** pm" in read(e.ctx) and "- **Role:** pm" in read(e.mirror), (rc, out[-300:]))
+    rc, out, res = run_ok(e, "get", "product.zorg-app", "Platforms", "--json")
+    check("get --json returns a list for Platforms", rc == 0 and res and res.get("value") == ["web", "iOS"], (rc, res))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    fifo = os.path.join(e.store, "records", "custom.zorg-slow.md")
+    os.mkfifo(fifo)
+    t0 = time.time()
+    rc, out = raw(e, ["read", "--skill", "requirements-creator", "--product", "Zorg App", "--home", e.home,
+                      "--context", e.ctx], extra_env={"GROW_PM_CTX_READ_TIMEOUT": "1"}, timeout=30)
+    took = time.time() - t0
+    os.remove(fifo)
+    check("read with an evicted record is exit 3", rc == 3 and took < 20 and "custom.zorg-slow.md" in out, (rc, took, out[-200:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    import io, contextlib  # noqa: E401
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import ctx as ctx_cli  # noqa: E402
+    real = ctx_cli.co.migrate
+    ctx_cli.co.migrate = lambda *a, **k: dict(real(*a, **k), identical=False)
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = ctx_cli.main(["migrate", "--home", e.home, "--context", e.ctx])
+    finally:
+        ctx_cli.co.migrate = real
+    check("migrate dry run DIFFERENT is exit 3", rc == 3 and '"ok": false' in buf.getvalue(), (rc, buf.getvalue()[-200:]))
+
+# --- v3.12 Task 8: a half-migrated store
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    os.makedirs(os.path.join(e.store, "records"))
+    open(os.path.join(e.store, "records", "profile.md"), "w").write("x")
+    rc1, out1, _ = run_ok(e, "status")
+    rc2, out2, _ = run_ok(e, "migrate", "--apply")
+    check("a half-migrated store says what to remove", rc1 == 3 and "half-migrated store" in out1
+          and "records" in out1 and rc2 == 4 and "half-migrated store" in out2, (out1[-300:], out2[-300:]))
+
+# --- v3.12 Task 10: docs
+lcp = read(ROOT, "references", "local-context-protocol.md")
+check("Step 0c names ctx read and the fallback", 'ctx.py" read --skill' in lcp and "exit 3" in lcp
+      and "whole" in lcp and "станом на" in lcp and "only on exit 3" in lcp
+      and "the product the request names" in lcp, "Step 0c")
+check("configurator lists the stale review item",
+      "Review stale records" in read(ROOT, "skills", "plugin-configurator", "references", "maintenance-modes.md"))
+cp = read(ROOT, "references", "context-protocol.md")
+check("context-protocol documents every new command", all(("`%s" % c) in cp for c in
+      ("read --skill", "invalidate", "archive", "restore", "verify")) and "--trash" in cp, "commands")
+check(".gitignore ignores .codex/config.toml", ".codex/config.toml" in read(ROOT, ".gitignore").splitlines())
+
+# --- v3.12 final review: undo of a migration, get --section
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "undo")
+    check("undo of a migration forgets the noted store", not os.path.exists(os.path.join(e.home, ".grow-pm", ".ctx-last-store")))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rc, out, res = run_ok(e, "get", "product.zorg-app", "--section", "#### Platforms")
+    check("get --section prints the subsection", rc == 0 and "#### Platforms" in out and "- web" in out, (rc, out[-200:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

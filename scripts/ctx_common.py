@@ -125,6 +125,71 @@ def read_yaml_subset(text):
     return data
 
 
+_TREE_KEY = re.compile(r"""^(?P<key>"[^"]*"|'[^']*'|[^:]+?)\s*:(?:\s+(?P<val>.*))?$""")
+
+
+def read_yaml_tree(text):
+    """Nested block mappings of any depth and block lists of scalars — the context manifest and the
+    field schema. A key is any text before the first ': ' (or a trailing ':'), quoted or not; '#'
+    starts a comment only outside quotes; a list sits indented under its key. Tabs, flow style
+    ([…] / {…}), a mapping inside a list and an indent that matches no open level raise
+    ValueError('line N: unsupported YAML (…)')."""
+    root = {}
+    stack = [(0, root)]
+    pending = None                      # (indent, mapping, key) waiting for a nested block
+    for lineno, raw in enumerate((text or "").replace("\r\n", "\n").split("\n"), 1):
+        lead = raw[:len(raw) - len(raw.lstrip(" \t"))]
+        if "\t" in lead:
+            raise ValueError("line %d: unsupported YAML (tab indentation)" % lineno)
+        line = _strip_comment(raw)
+        if not line.strip() or line.strip() in ("---", "..."):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        body = line.strip()
+        if pending is not None:
+            p_indent, p_map, p_key = pending
+            pending = None
+            if indent > p_indent:
+                child = [] if (body == "-" or body.startswith("- ")) else {}
+                p_map[p_key] = child
+                stack.append((indent, child))
+        while len(stack) > 1 and indent < stack[-1][0]:
+            stack.pop()
+        if indent != stack[-1][0]:
+            raise ValueError("line %d: unsupported YAML (indent matches no open level)" % lineno)
+        cur = stack[-1][1]
+        if body == "-" or body.startswith("- "):
+            if not isinstance(cur, list):
+                raise ValueError("line %d: unsupported YAML (list item inside a mapping)" % lineno)
+            item = body[1:].strip()
+            if _TREE_KEY.match(item) and not item.startswith(("'", '"')):
+                raise ValueError("line %d: unsupported YAML (mapping inside a list)" % lineno)
+            cur.append(_tree_scalar(item, lineno))
+            continue
+        m = _TREE_KEY.match(body)
+        if not m:
+            raise ValueError("line %d: unsupported YAML" % lineno)
+        if not isinstance(cur, dict):
+            raise ValueError("line %d: unsupported YAML (mapping inside a list)" % lineno)
+        key = m.group("key").strip()
+        if key[:1] in ("'", '"'):
+            key = key[1:-1]
+        val = m.group("val")
+        if val is None or val.strip() == "":
+            cur[key] = ""
+            pending = (indent, cur, key)
+        else:
+            cur[key] = _tree_scalar(val, lineno)
+    return root
+
+
+def _tree_scalar(v, lineno):
+    v = v.strip()
+    if v[:1] in ("[", "{") and v != "[]":
+        raise ValueError("line %d: unsupported YAML (flow style)" % lineno)
+    return _scalar(v, lineno)
+
+
 # --------------------------------------------------------- managed regions
 REGION_RE = re.compile(
     r"<!--\s*([a-z][a-z0-9-]*(?::section)?):begin(?:\s+id=([A-Za-z0-9_.-]+))?[^>]*-->"
@@ -193,6 +258,14 @@ def vault_modes(context_text):
         if key not in seen:
             seen.add(key); uniq.append(key + (s,))
     return uniq
+
+
+def vault_root(context_text):
+    """The vault folder behind `storage_root`: the first vault whose sync mode is not `off`, or None."""
+    for p, f, s in vault_modes(context_text):
+        if s != "off":
+            return p
+    return None
 
 
 def storage_root(context_text, home=None):

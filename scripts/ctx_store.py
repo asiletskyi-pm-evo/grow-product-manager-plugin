@@ -12,6 +12,7 @@ references/context-protocol.md. Used by ctx_ops.py and the `ctx` command line.
 
 Stdlib only.
 """
+import contextlib
 import hashlib
 import json
 import os
@@ -131,31 +132,83 @@ def assign_ids(frags, taken=frozenset()):
     return out
 
 
+OPTIONAL_KEYS = ("status", "verified", "ttl_days", "archived", "archived_reason", "former_after", "trashed")
+_FM_START = re.compile(r"^---\r?\n")
+_FM_END = re.compile(r"\r?\n---\r?\n")
+
+
+def _render_value(v):
+    if isinstance(v, bool) or v is None:
+        v = "" if v is None else str(v).lower()
+    return v if isinstance(v, int) else json.dumps(v, ensure_ascii=False)
+
+
 def render_record(rec):
-    """Frontmatter in RECORD_KEYS order (strings JSON-quoted, None as ""), then the body as is."""
-    out = ["---"]
-    for k in RECORD_KEYS:
-        v = rec.get(k)
-        if isinstance(v, bool) or v is None:
-            v = "" if v is None else str(v).lower()
-        out.append("%s: %s" % (k, v if isinstance(v, int) else json.dumps(v, ensure_ascii=False)))
-    return "\n".join(out) + "\n---\n" + (rec.get("body") or "")
+    """Frontmatter: RECORD_KEYS in order (strings JSON-quoted, None as ""), the OPTIONAL_KEYS that are
+    set, then the unknown keys (`extra`) verbatim; then the body as is."""
+    out = ["---"] + ["%s: %s" % (k, _render_value(rec.get(k))) for k in RECORD_KEYS]
+    out += ["%s: %s" % (k, _render_value(rec[k])) for k in OPTIONAL_KEYS if rec.get(k) is not None]
+    extra = rec.get("extra") or ""
+    return "\n".join(out) + "\n" + extra + ("" if not extra or extra.endswith("\n") else "\n") + \
+        "---\n" + (rec.get("body") or "")
+
+
+def _split_frontmatter(fm):
+    """(known-key lines, unknown-key text): a top-level `key:` line and its indented lines go together."""
+    known, extra, cur = [], [], None
+    for line in fm.split("\n"):
+        if line and not line[0].isspace() and not line.startswith("-"):
+            key = line.split(":", 1)[0].strip() if ":" in line else None
+            cur = known if key in RECORD_KEYS or key in OPTIONAL_KEYS else extra
+        (cur if cur is not None else extra).append(line)
+    return "\n".join(known), "".join(l + "\n" for l in extra)
 
 
 def parse_record(text):
-    """Inverse of render_record. Raises ValueError when the frontmatter is missing or unreadable."""
-    if not text.startswith("---\n"):
+    """Inverse of render_record. Raises ValueError when the file is empty or half written, or when the
+    frontmatter is missing or unreadable. CRLF inside the frontmatter is read; the body stays as is."""
+    if not text.strip():
+        raise ValueError("empty or still being written by a sync tool")
+    start = _FM_START.match(text)
+    if not start:
         raise ValueError("no frontmatter")
-    end = text.find("\n---\n", 3)
-    if end < 0:
-        raise ValueError("frontmatter not closed")
-    meta = cc.read_yaml_subset(text[4:end])
+    end = _FM_END.search(text, start.end() - 1)
+    if not end:
+        raise ValueError("frontmatter not closed — empty or still being written by a sync tool")
+    known, extra = _split_frontmatter(text[start.end():end.start()].replace("\r\n", "\n").replace("\r", "\n"))
+    meta = cc.read_yaml_subset(known)
     rec = {k: meta.get(k) for k in RECORD_KEYS}
+    rec.update({k: (meta.get(k) if meta.get(k) != "" else None) for k in OPTIONAL_KEYS})
     rec["parent"] = rec["parent"] or None
     if not rec.get("id") or not isinstance(rec.get("order"), int):
         raise ValueError("frontmatter lacks id or order")
-    rec["body"] = text[end + 5:]
+    rec["extra"] = extra.rstrip("\n") + "\n" if extra.strip() else ""
+    rec["body"] = text[end.end():]
     return rec
+
+
+STATUS_BEGIN = "<!-- ctx:begin id=status -->"
+STATUS_END = "<!-- ctx:end id=status -->"
+_STATUS_RE = re.compile(re.escape(STATUS_BEGIN) + r".*?" + re.escape(STATUS_END) + r"\r?\n?", re.S)
+
+
+def has_status_region(body):
+    return bool(_STATUS_RE.search(body or ""))
+
+
+def clear_status_region(body):
+    return _STATUS_RE.sub("", body or "", count=1)
+
+
+def set_status_region(body, since, reason):
+    """The `ctx` status region right after the record's first line (an existing one is replaced)."""
+    body = clear_status_region(body)
+    nl = "\r\n" if "\r\n" in body else "\n"
+    block = STATUS_BEGIN + nl + "> ⚠ Неактуально з %s: %s" % (since, reason) + nl + STATUS_END + nl
+    cut = body.find("\n")
+    if cut < 0:
+        return body + nl + block
+    return body[:cut + 1] + block + body[cut + 1:]
 
 
 def compile_records(records):
@@ -170,6 +223,33 @@ class StoreError(Exception):
 
 class RegionError(Exception):
     """An edit would land inside a provider's managed region (exit 4)."""
+
+
+class PathRefused(Exception):
+    """A write would land outside ~/.grow-pm and the storage root (exit 4)."""
+
+
+WRITE_ROOTS = None
+
+
+@contextlib.contextmanager
+def guard_roots(roots):
+    """Every write and delete inside the block must land, after realpath, under one of `roots`."""
+    global WRITE_ROOTS
+    prev = WRITE_ROOTS
+    WRITE_ROOTS = tuple(os.path.realpath(r) for r in roots if r)
+    try:
+        yield WRITE_ROOTS
+    finally:
+        WRITE_ROOTS = prev
+
+
+def check_target(path):
+    """The target's realpath; outside the guarded roots → PathRefused (no check without a guard)."""
+    rp = os.path.realpath(path)
+    if WRITE_ROOTS is not None and not any(rp == r or rp.startswith(r.rstrip(os.sep) + os.sep) for r in WRITE_ROOTS):
+        raise PathRefused("%s is outside ~/.grow-pm and the storage root" % path)
+    return rp
 
 
 READ_TIMEOUT_S = 30.0
@@ -211,6 +291,7 @@ def read_text(path, timeout=None):
 
 def atomic_write(path, text):
     """Write `text` byte for byte through a hidden temp file in the same folder, then replace."""
+    check_target(path)
     folder = os.path.dirname(path) or "."
     os.makedirs(folder, exist_ok=True)
     tmp = os.path.join(folder, ".%s.tmp" % os.path.basename(path))
@@ -235,11 +316,12 @@ class Store:
         self.records_dir = os.path.join(root, "records")
         self.state_dir = os.path.join(root, ".state")
         self.card_path = os.path.join(root, "INDEX.md")
+        self.archive_dir = os.path.join(root, "archive")
 
     def exists(self):
         return os.path.isdir(self.state_dir)
 
-    def _record_files(self):
+    def record_files(self):
         if not os.path.isdir(self.records_dir):
             return [], []
         valid, stray = [], []
@@ -262,7 +344,7 @@ class Store:
     def load(self):
         """Records sorted by `order`. A record that cannot be read in time or parsed → StoreError naming its file."""
         out = []
-        valid, _ = self._record_files()
+        valid, _ = self.record_files()
         texts = self._texts(valid)
         for name in valid:
             text = texts[name]
@@ -277,7 +359,7 @@ class Store:
 
     def stray_files(self):
         """Files in records/ that compile ignores: other names, or a record's copy under another name."""
-        valid, stray = self._record_files()
+        valid, stray = self.record_files()
         for name in valid:
             try:
                 if parse_record(read_text(os.path.join(self.records_dir, name)))["id"] != name[:-3]:
@@ -286,14 +368,35 @@ class Store:
                 pass
         return sorted(stray)
 
+    def archived(self):
+        """Archived records (`archive/<year>/<id>.md`), each with its `path`."""
+        out = []
+        if os.path.isdir(self.archive_dir):
+            for year in sorted(os.listdir(self.archive_dir)):
+                folder = os.path.join(self.archive_dir, year)
+                for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+                    if name.endswith(".md") and ID_RE.match(name[:-3]):
+                        try:
+                            out.append(dict(parse_record(read_text(os.path.join(folder, name))),
+                                            path=os.path.join(folder, name)))
+                        except (OSError, UnicodeDecodeError, ValueError, StoreError):
+                            continue
+        return out
+
+    def reserved_ids(self):
+        """Ids a new record may not take: the archived ones."""
+        return {r["id"] for r in self.archived()}
+
     def write(self, rec):
-        rec = dict(rec, sha=sha_text(rec.get("body") or ""))
+        """A live record: `status` follows the ctx status region (invalid) — absent means active."""
+        rec = dict(rec, sha=sha_text(rec.get("body") or ""), status="invalid" if has_status_region(rec.get("body")) else None)
         atomic_write(os.path.join(self.records_dir, rec["id"] + ".md"), render_record(rec))
         return rec
 
     def remove(self, rec_id):
         path = os.path.join(self.records_dir, rec_id + ".md")
         if os.path.exists(path):
+            check_target(path)
             os.remove(path)
 
     def state(self):
@@ -309,7 +412,7 @@ class Store:
 
     def journal(self, entry):
         os.makedirs(self.state_dir, exist_ok=True)
-        with open(os.path.join(self.state_dir, "journal.jsonl"), "a", encoding="utf-8") as f:
+        with open(check_target(os.path.join(self.state_dir, "journal.jsonl")), "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
 
     def journal_entries(self):
@@ -475,8 +578,13 @@ def _summary(rec):
     return "—"
 
 
-def build_card(records, compiled_text, now):
-    """INDEX.md: who, onboarding, products, teams, vaults and providers, then one row per record; ≤ CARD_MAX lines."""
+def build_card(records, compiled_text, now, stale=(), archived=0):
+    """INDEX.md: who, onboarding, products, teams, vaults and providers, then one row per record; ≤ CARD_MAX lines.
+    `stale` maps a stale record's id to its verified date (its row ends with ⚠ <date>); `archived` counts the
+    archived records."""
+    import ctx_schema as sc                    # here: ctx_schema imports this module
+    fields = sc.load_fields().get("product", {})
+    stale = stale if isinstance(stale, dict) else {i: "" for i in stale}
     recs = sorted(records, key=lambda r: r["order"])
     first = lambda t: next((r for r in recs if r["type"] == t), None)
     over = []
@@ -494,10 +602,12 @@ def build_card(records, compiled_text, now):
     for r in recs:
         if r["type"] == "product":
             parts = []
-            jira, space = field_get(r["body"], "Jira Project Key"), field_get(r["body"], "Confluence Space")
+            jira = sc.raw_value(r["body"], "Jira Project Key", fields.get("Jira Project Key", {}))
+            space = sc.raw_value(r["body"], "Confluence Space", fields.get("Confluence Space", {}))
             parts += ["Jira %s" % jira] if jira else []
             parts += ["Confluence %s" % space] if space else []
-            plats = _bullets_under(r["body"], "Platforms")
+            spec = fields.get("Platforms", {"type": "list"})
+            plats = sc.parse_value(spec, sc.raw_value(r["body"], "Platforms", spec)) or []
             parts += ["platforms %s" % ", ".join(plats)] if plats else []
             over.append("- **Product:** %s%s" % (r["title"].split(":", 1)[-1].strip(), " — " + " · ".join(parts) if parts else ""))
     for r in recs:
@@ -507,11 +617,16 @@ def build_card(records, compiled_text, now):
     vaults = ", ".join("%s (%s)" % (f or os.path.basename(p), m or "auto") for p, f, m in cc.vault_modes(compiled_text)) or "—"
     provs = ", ".join(b["id"] for b in cc.vault_search_bullets(compiled_text)) or "—"
     over.append("- **Vaults:** %s · **Providers:** %s" % (vaults, provs))
+    if stale:
+        over.append("- **Застарілі:** %d — ctx verify --stale або конфігуратор" % len(stale))
+    if archived:
+        over.append("- **Архів:** %d — ctx list --archived" % archived)
     head = ["# Context card",
             "> Generated by ctx from %d records on %s. Edit local-context.md or the records, not this card." % (len(recs), now),
             ""]
     table = ["| Record | Title | Summary | Modified |", "|---|---|---|---|"]
-    rows = ["| %s | %s | %s | %s |" % (r["id"], _cell(r["title"]), _summary(r), (r.get("modified") or "")[:10]) for r in recs]
+    rows = ["| %s | %s | %s | %s%s |" % (r["id"], _cell(r["title"]), _summary(r), (r.get("modified") or "")[:10],
+                                          " ⚠ %s" % stale[r["id"]] if r["id"] in stale else "") for r in recs]
     fixed = len(head) + len(over) + 1 + len(table)
     if fixed + len(rows) > CARD_MAX:
         keep = max(CARD_MAX - fixed - 1, 0)

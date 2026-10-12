@@ -177,5 +177,73 @@ with tempfile.TemporaryDirectory() as d:
     check("a file that does not arrive in time is a StoreError naming it", "product.zorg-slow.md" in err
           and "not available locally" in err and took < 3, (err, took))
 
+# --- v3.12: field schema
+import ctx_schema as sc  # noqa: E402
+
+fields = sc.load_fields()
+check("schema loads every type in spec §6", set(fields) == {"profile", "product", "onboarding", "judgment"}
+      and fields["profile"]["Role"]["type"] == "enum" and fields["product"]["Platforms"]["type"] == "list"
+      and fields["product"]["Jira Project Key"]["type"] == "key" and "URL" in fields["product"]
+      and fields["judgment"]["Hats allowed"]["type"] == "hats" and fields["onboarding"]["Mode"]["values"] == ["basic", "extended"],
+      fields)
+err = sc.check_value(fields["profile"]["Role"], "Senior PM")
+check("Role outside the enum is reported", err is not None and "head_of_product" in err
+      and sc.check_value(fields["profile"]["Role"], "cpo") is None, err)
+key = fields["product"]["Jira Project Key"]
+check("Jira key pattern", sc.check_value(key, "PROJ") is None and sc.check_value(key, "proj x") is not None)
+plat = fields["product"]["Platforms"]
+check("Platforms read from the #### subsection", sc.raw_value(body, "Platforms", plat) == "web, iOS"
+      and sc.parse_value(plat, "web, iOS") == ["web", "iOS"], sc.raw_value(body, "Platforms", plat))
+with_line = body.replace("- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ\n- **Platforms:** android\n")
+check("a field line wins over the subsection", sc.raw_value(with_line, "Platforms", plat) == "android")
+check("a field inside a managed region is not read", sc.raw_value(team, "Lead", {"type": "text"}) is None)
+
+# --- v3.12: record format v2
+rec0 = dict(records_of("typical")[4], ctx=1, owner="user", source="migrated", modified="2026-10-20T10:00:00+03:00")
+v311 = cs.render_record(rec0)
+check("optional keys only when set", cs.render_record(cs.parse_record(v311)) == v311)
+with_props = v311.replace("\n---\n", "\ntags:\n  - a\n  - b\ncssclass: x\n---\n", 1)
+back = cs.render_record(cs.parse_record(with_props))
+check("unknown frontmatter keys survive a write", back == with_props
+      and back.index("cssclass: x") > back.index("sha:"), back[:600])
+_cut = v311.index("\n---\n")
+crlf_fm = v311[:_cut].replace("\n", "\r\n") + "\r\n---\r\n" + v311[_cut + 5:]
+try:
+    crlf_rec = cs.parse_record(crlf_fm); crlf_ok = crlf_rec["id"] == rec0["id"] and crlf_rec["order"] == rec0["order"]
+except ValueError as e:
+    crlf_ok = False
+check("CRLF frontmatter parses", crlf_ok)
+with tempfile.TemporaryDirectory() as d:
+    st = cs.Store(d)
+    os.makedirs(st.records_dir)
+    open(os.path.join(st.records_dir, "profile.md"), "w").close()
+    try:
+        st.load(); err = ""
+    except cs.StoreError as e:
+        err = str(e)
+    check("an empty record file names the cause", "profile.md" in err and "empty or still being written" in err, err)
+b = rec0["body"]
+marked = cs.set_status_region(b, "2026-10-12", "R")
+check("status region round trip", cs.clear_status_region(marked) == b and cs.has_status_region(marked)
+      and not cs.has_status_region(b)
+      and marked.splitlines()[1] == cs.STATUS_BEGIN
+      and "> ⚠ Неактуально з 2026-10-12: R" in marked, marked[:300])
+typ_recs = records_of("typical")
+plain = cs.compile_records(typ_recs)
+withreg = cs.compile_records([dict(r, body=cs.set_status_region(r["body"], "2026-10-12", "R")) if r["id"] == "product.zorg-app"
+                              else r for r in typ_recs])
+f1, f2 = cs.split_sections(plain), cs.split_sections(withreg)
+check("the status region never splits a record", len(f1) == len(f2)
+      and [f["title"] for f in f1] == [f["title"] for f in f2]
+      and any(cs.STATUS_BEGIN in f["text"] and f["title"] == "Product: Zorg App" for f in f2))
+
+# --- v3.12 final review: any Obsidian property name survives
+odd_props = v311.replace("\n---\n", "\nДата: 2026-10-01\nmy key: v\n1st: x\n---\n", 1)
+try:
+    back = cs.render_record(cs.parse_record(odd_props)); odd_ok = back == odd_props
+except ValueError as e:
+    odd_ok = False
+check("a property with a Cyrillic name, a space or a leading digit survives", odd_ok)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

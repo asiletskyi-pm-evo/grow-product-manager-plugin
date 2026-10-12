@@ -23,6 +23,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
 import ctx_store as cs  # noqa: E402
+import ctx_schema as sc  # noqa: E402
 
 
 class Busy(Exception):
@@ -106,6 +107,9 @@ def snapshot(store, copies, home, label):
     os.makedirs(root, exist_ok=True)
     files = _files(store.records_dir, "records/")
     files.update(_files(store.state_dir, "state/"))
+    if os.path.isdir(store.archive_dir):
+        for year in sorted(os.listdir(store.archive_dir)):
+            files.update(_files(os.path.join(store.archive_dir, year), "archive/%s/" % year))
     if os.path.isfile(store.card_path):
         files["INDEX.md"] = open(store.card_path, "rb").read()
     existed = os.path.isdir(store.records_dir) or os.path.isdir(store.state_dir)
@@ -133,8 +137,10 @@ def snapshot(store, copies, home, label):
     while os.path.exists(os.path.join(root, name)):
         name, k = "%s-%d" % (base, k), k + 1
     snap = os.path.join(root, name)
+    cs.check_target(snap)
     for rel, data in files.items():
         p = os.path.join(snap, rel)
+        cs.check_target(p)
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "wb") as f:
             f.write(data)
@@ -169,38 +175,54 @@ def rotate(snap_root, keep_last=20, keep_daily_days=14, now=None, protect=None):
     removed = []
     for _, name in dated:
         if name not in keep:
+            cs.check_target(os.path.join(snap_root, name))
             shutil.rmtree(os.path.join(snap_root, name))
             removed.append(os.path.join(snap_root, name))
     return removed
 
 
 def restore(snap_dir, store, copies):
-    """Put the store and the compiled copies back exactly as the snapshot holds them."""
+    """Put the store and the compiled copies back as the snapshot holds them. The copies are the current
+    ones, matched by position (0 = home copy, 1 = vault mirror): a path in the manifest is never written
+    or deleted. Returns the manifest entries with no current copy (skipped)."""
     with open(os.path.join(snap_dir, "manifest.json"), encoding="utf-8") as f:
         manifest = json.load(f)
-    for folder in (store.records_dir, store.state_dir):
+    entries = manifest.get("copies", [])
+    for p in [store.records_dir, store.state_dir, store.archive_dir, store.card_path] + list(copies[:len(entries)]):
+        cs.check_target(p)
+    for folder in (store.records_dir, store.state_dir, store.archive_dir):
         if os.path.isdir(folder):
             shutil.rmtree(folder)
     if os.path.isfile(store.card_path):
         os.remove(store.card_path)
     if manifest.get("store_existed"):
-        for sub, target in (("records", store.records_dir), ("state", store.state_dir)):
+        for sub, target in (("records", store.records_dir), ("state", store.state_dir), ("archive", store.archive_dir)):
             src = os.path.join(snap_dir, sub)
             if os.path.isdir(src):
                 shutil.copytree(src, target)
         if os.path.isfile(os.path.join(snap_dir, "INDEX.md")):
             shutil.copy2(os.path.join(snap_dir, "INDEX.md"), store.card_path)
-    for c in manifest.get("copies", []):
+    skipped = []
+    for n, c in enumerate(entries):
+        if n >= len(copies):
+            skipped.append(c.get("path") or "?")
+            continue
         if c.get("existed"):
             with open(os.path.join(snap_dir, c["file"]), encoding="utf-8", newline="") as f:
-                cs.atomic_write(c["path"], f.read())
-        elif os.path.exists(c["path"]):
-            os.remove(c["path"])
+                cs.atomic_write(copies[n], f.read())
+        elif os.path.exists(copies[n]):
+            os.remove(copies[n])
+    return skipped
 
 
 # ------------------------------------------------------- store and copies
 def _read(path):
     return cs.read_text(path)
+
+
+def allowed_roots(home, context_text):
+    """Where ctx may write: ~/.grow-pm and the storage root (spec §7a)."""
+    return (_grow(home), cc.storage_root(context_text, home))
 
 
 def store_root_for(context_text, home=None):
@@ -245,6 +267,9 @@ def compile_store(store, copies, now, home, snap=None):
     written = [p for p in copies if not os.path.isfile(p) or _read(p) != text]
     new = _state_for(recs, text, copies)
     old = store.state()
+    new["freshness_since"] = old.get("freshness_since") or now[:10]
+    stale = {r["id"]: sc.verified_of(r, new) for r in recs if sc.is_stale(r, new, now[:10])}
+    new["stale"] = sorted(stale)
     if not written and os.path.isfile(store.card_path) and {k: old.get(k) for k in new} == new:
         return {"written": [], "card_lines": _read(store.card_path).count("\n"), "changed": False, "snapshot": None}
     own = bool(written) and snap is None
@@ -252,11 +277,12 @@ def compile_store(store, copies, now, home, snap=None):
         snap = snapshot(store, copies, home, "compile")
     for p in written:
         cs.atomic_write(p, text)
-    card = cs.build_card(recs, text, now[:10])
+    card = cs.build_card(recs, text, now[:10], stale=stale, archived=len(store.archived()))
     if not os.path.isfile(store.card_path) or _read(store.card_path) != card:
         cs.atomic_write(store.card_path, card)
     new["compiled_at"] = now
     store.save_state(new)
+    note_store(home, store.root)
     if own:
         what = ["the home copy" if p == copies[0] else "the vault mirror" for p in written]
         store.journal({"ts": now, "op": "compile", "ids": [], "source": "compile", "snapshot": snap,
@@ -281,10 +307,15 @@ def migrate(context_path, store_root, copies, home, apply, now):
               "mirror_differs": any(os.path.isfile(p) and _read(p) != text for p in others)}
     if not apply:
         return report
-    if store.exists() or os.path.isdir(store.records_dir):
+    if not store.exists() and os.path.isdir(store.records_dir):
+        raise Refused(half_migrated(store_root))
+    if store.exists():
         raise Refused("a context store already exists at %s — see `ctx status`" % store_root)
     if not identical:
         raise Refused("the split does not give the file back byte for byte — nothing migrated")
+    vault = cc.vault_root(text)
+    if vault and not os.path.isdir(os.path.expanduser(vault)):
+        raise cs.StoreError("the vault folder %s does not exist — check ## Obsidian Vaults" % vault)
     snap = snapshot(store, copies, home, "pre-migrate")
     written = []
     for r in recs:
@@ -293,7 +324,10 @@ def migrate(context_path, store_root, copies, home, apply, now):
     same = [home_copy] + [p for p in others if os.path.isfile(p) and _read(p) == text]
     state = _state_for(written, text, same)
     state["compiled_at"] = now
+    state["freshness_since"] = now[:10]
+    state["stale"] = []
     store.save_state(state)
+    note_store(home, store_root)
     cs.atomic_write(store.card_path, cs.build_card(written, text, now[:10]))
     store.journal({"ts": now, "op": "migrate", "ids": [r["id"] for r in written], "source": "migrate",
                    "reason": "", "snapshot": snap})
@@ -336,7 +370,7 @@ def _copy_changes(text, rec_by, base, order):
         prev_new = next((matched[j] for j in range(k - 1, -1, -1) if matched[j] is not None), None)
         for rid in loose:
             if rid not in renames and prev_old.get(rid) == prev_new and _similar(rec_by[rid]["body"], f["text"]):
-                renames[rid] = (f["text"], f["title"])
+                renames[rid] = (f["text"], f["title"], f["type"])
                 matched[k] = rid
                 break
     for k, f in enumerate(frags):
@@ -403,7 +437,7 @@ def plan_sync(store, copies):
         elif kind == "remove":
             plan["removes"].append(rid)
         else:
-            plan["renames"].append({"id": rid, "text": val[0], "title": val[1], "copy": copy})
+            plan["renames"].append({"id": rid, "text": val[0], "title": val[1], "type": val[2], "copy": copy})
     plan["conflicts"].sort(key=lambda c: c["id"])
     plan["suspicious_removal"] = len(plan["removes"]) >= 3
     return plan
@@ -451,7 +485,7 @@ def _insert(store, adds, source, now):
     chain, new_ids = {}, []
     for a in adds:
         frag = {"type": a["type"], "title": a["title"], "heading": None, "parent_index": None, "text": a["text"]}
-        rec = cs.assign_ids([frag], set(recs))[0]
+        rec = cs.assign_ids([frag], set(recs) | store.reserved_ids())[0]
         anchor = chain.get(a["after"], a["after"])
         pos = ids.index(anchor) + 1 if anchor in ids else 0
         ids.insert(pos, rec["id"])
@@ -460,7 +494,9 @@ def _insert(store, adds, source, now):
         if rec["type"] in ("product", "team"):
             parent = next((i for i in reversed(ids[:pos]) if recs[i]["type"] == "org"), None)
         recs[rec["id"]] = {"id": rec["id"], "type": rec["type"], "title": rec["title"], "parent": parent, "order": 0,
-                           "ctx": 1, "owner": "user", "source": source or "import", "modified": now, "body": a["text"]}
+                           "verified": now[:10],
+                           "ctx": 1, "owner": "user", "source": a.get("source") or source or "import", "modified": now,
+                           "body": a["text"]}
         new_ids.append(rec["id"])
     ended = set()
     for rid in new_ids:
@@ -472,6 +508,30 @@ def _insert(store, adds, source, now):
         if recs[rid]["order"] != (k + 1) * 10 or rid in new_ids or rid in ended:
             store.write(dict(recs[rid], order=(k + 1) * 10))
     return new_ids
+
+
+def touch(rec, now):
+    """The record verified today."""
+    return dict(rec, verified=now[:10])
+
+
+def verify(store, copies, home, ids, now, stale=False):
+    """Mark records verified today — the given ids, or with `stale` every stale record; snapshot, write,
+    one journal line, compile. The lock and the import are the caller's. Returns the ids verified."""
+    recs = {r["id"]: r for r in store.load()}
+    if stale:
+        ids = sc.stale_ids(list(recs.values()), store.state(), now[:10])
+    unknown = [i for i in ids if i not in recs]
+    if unknown:
+        raise cs.StoreError("no record %s — `ctx list` shows the ids" % ", ".join(unknown))
+    if not ids:
+        return []
+    snap = snapshot(store, copies, home, "verify")
+    for rid in ids:
+        store.write(touch(recs[rid], now))
+    store.journal({"ts": now, "op": "verify", "ids": list(ids), "source": "ctx-verify", "reason": "", "snapshot": snap})
+    compile_store(store, copies, now, home, snap)
+    return list(ids)
 
 
 def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, accept_removals=False):
@@ -490,47 +550,287 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
         return {"changed": [], "removed": [], "added": [], "moved": [], "snapshot": comp["snapshot"], "compiled": comp}
     snap = snapshot(store, copies, home, "sync")
     recs = {r["id"]: r for r in store.load()}
-    src = lambda p: source or ("import:home" if p == copies[0] else "import:mirror")
+    src = lambda p: (source if source not in (None, "compile") else
+                     ("import:home" if p == copies[0] else "import:mirror"))
     changed, removed = [], []
     for e in plan["edits"]:
-        store.write(dict(recs[e["id"]], body=e["text"], source=src(e["copy"]), modified=now))
+        store.write(touch(dict(recs[e["id"]], body=e["text"], source=src(e["copy"]), modified=now), now))
         changed.append(e["id"])
     for r in plan["renames"]:
-        store.write(dict(recs[r["id"]], body=r["text"], title=r["title"], source=src(r["copy"]), modified=now))
+        store.write(touch(dict(recs[r["id"]], body=r["text"], title=r["title"], type=r.get("type") or recs[r["id"]]["type"],
+                               source=src(r["copy"]), modified=now), now))
         changed.append(r["id"])
     for c in plan["conflicts"]:
         if resolve[c["id"]] == "file":
             ver = next((c["versions"][p] for p in copies if p in c["versions"]), None)
             if ver is None:
+                put_in_trash(home, recs[c["id"]], _before(store.state().get("order", []), c["id"]), now)
                 store.remove(c["id"])
                 removed.append(c["id"])
             else:
-                store.write(dict(recs[c["id"]], body=ver, source=source or "import:resolve", modified=now))
+                store.write(touch(dict(recs[c["id"]], body=ver, source=source or "import:resolve", modified=now), now))
                 changed.append(c["id"])
+    order = store.state().get("order", [])
     for rid in plan["removes"] + plan["missing"]:
+        rec = recs.get(rid) or _from_copy(store, copies, rid, now)
+        if rec:
+            put_in_trash(home, rec, _before(order, rid), now)
         store.remove(rid)
         removed.append(rid)
+    for rid in plan["record_changes"]:                  # edited in Obsidian: the body stays, verified moves
+        if rid in recs and rid not in changed and rid not in removed:
+            store.write(touch(recs[rid], now))
     moved = _reorder(store, plan["reorder"]) if plan["reorder"] else []
-    added = _insert(store, plan["adds"], source, now) if plan["adds"] else []
+    added = _insert(store, [dict(a, source=src(a.get("copy"))) for a in plan["adds"]], source, now) if plan["adds"] else []
+    _reparent(store)
     ids = changed + removed + [i for i in moved if i not in changed] + added
+    ids += [i for i in plan["record_changes"] if i not in ids]
     store.journal({"ts": now, "op": "sync", "ids": ids, "source": source or "import", "reason": reason, "snapshot": snap})
     return {"changed": changed, "removed": removed, "added": added, "moved": moved, "snapshot": snap,
             "compiled": compile_store(store, copies, now, home, snap)}
 
 
+def _reparent(store):
+    """Products and teams belong to the organisation above them in the file; returns the ids re-parented."""
+    moved, org = [], None
+    for r in store.load():
+        if r["type"] == "org":
+            org = r["id"]
+        elif r["type"] in ("product", "team") and r.get("parent") != org:
+            store.write(dict(r, parent=org))
+            moved.append(r["id"])
+    return moved
+
+
+def half_migrated(root):
+    return ("half-migrated store at %s: remove %s to start over, or restore the pre-migrate snapshot"
+            % (root, os.path.join(root, "records")))
+
+
+def _last_store_path(home):
+    return os.path.join(_grow(home), ".ctx-last-store")
+
+
+def note_store(home, root):
+    """Remember the store's root (diagnosis only: never used to find the store)."""
+    path = _last_store_path(home)
+    if not os.path.isfile(path) or _read(path).strip() != root:
+        cs.atomic_write(path, root + "\n")
+
+
+def store_unavailable(context_text, home=None):
+    """The last store root, when the context's own root has no store but a store was used before — a vault
+    not mounted, moved, or switched off; else None. Reads only."""
+    path = _last_store_path(home)
+    if not os.path.isfile(path):
+        return None
+    last = _read(path).strip()
+    current = store_root_for(context_text, home)
+    if not last or cs.Store(current).exists():
+        return None
+    if last != current:
+        return last                                    # the store lives elsewhere (a vault switched off)
+    vault = cc.vault_root(context_text)
+    return last if vault and not os.path.isdir(os.path.expanduser(vault)) else None
+
+
+def forget_store(home):
+    """Drop the note of the last store (after `undo` removed the store on purpose)."""
+    path = _last_store_path(home)
+    if os.path.isfile(path):
+        cs.check_target(path)
+        os.remove(path)
+
+
+# ---------------------------------------------------------------- lifecycle
+TRASH_DAYS = 30
+TRASH_RE = re.compile(r"^(\d{8}T\d{6})-(.+)\.md$")
+
+
+def _before(order, rid):
+    k = order.index(rid) if rid in order else -1
+    return order[k - 1] if k > 0 else None
+
+
+def _from_copy(store, copies, rid, now):
+    """A record missing on disk, rebuilt from the canonical copy's section with its last compiled hash."""
+    base = store.state().get("records", {}).get(rid)
+    if not base or not copies or not os.path.isfile(copies[0]):
+        return None
+    frag = next((f for f in cs.split_sections(_read(copies[0])) if cs.sha_text(f["text"]) == base), None)
+    if not frag:
+        return None
+    return {"ctx": 1, "id": rid, "type": frag["type"], "title": frag["title"], "parent": None, "order": 0,
+            "owner": "user", "source": "import:home", "modified": now, "body": frag["text"]}
+
+
+def trash_root(home):
+    return os.path.join(_grow(home), "trash")
+
+
+def put_in_trash(home, rec, former_after, now):
+    """A removed record into ~/.grow-pm/trash/<time>-<id>.md (kept TRASH_DAYS days)."""
+    root = trash_root(home)
+    base = time.strftime("%Y%m%dT%H%M%S") + "-" + rec["id"]
+    path, k = os.path.join(root, base + ".md"), 2
+    while os.path.exists(path):
+        path, k = os.path.join(root, "%s-%d.md" % (base, k)), k + 1
+    keep = {k2: v for k2, v in rec.items() if k2 not in ("path", "archived", "archived_reason")}
+    cs.atomic_write(path, cs.render_record(dict(keep, trashed=now, former_after=former_after)))
+    return path
+
+
+def trash_entries(home):
+    """[(path, record)] in the trash, newest first; unreadable files are skipped."""
+    root, out = trash_root(home), []
+    for name in sorted(os.listdir(root), reverse=True) if os.path.isdir(root) else []:
+        if TRASH_RE.match(name):
+            try:
+                out.append((os.path.join(root, name), cs.parse_record(_read(os.path.join(root, name)))))
+            except (OSError, UnicodeDecodeError, ValueError, cs.StoreError):
+                continue
+    return out
+
+
+def purge_trash(home, now=None):
+    """Remove trash entries older than TRASH_DAYS days; returns the removed paths."""
+    now = now or datetime.datetime.now()
+    root, gone = trash_root(home), []
+    for name in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+        m = TRASH_RE.match(name)
+        if m and now - datetime.datetime.strptime(m.group(1), "%Y%m%dT%H%M%S") > datetime.timedelta(days=TRASH_DAYS):
+            path = os.path.join(root, name)
+            cs.check_target(path)
+            os.remove(path)
+            gone.append(path)
+    return gone
+
+
+def _live(store, copies, home, now):
+    """Import direct edits first, then the live records by id."""
+    apply_sync(store, plan_sync(store, copies), copies, home, None, "", now)
+    return {r["id"]: r for r in store.load()}
+
+
+def invalidate(store, copies, home, rid, reason, now):
+    """Mark a record no longer current: the ctx status region after its heading; it stays in the copies."""
+    if not (reason or "").strip():
+        raise ValueError("invalidate needs --reason")
+    recs = _live(store, copies, home, now)
+    if rid not in recs:
+        raise cs.StoreError("no record %s — `ctx list` shows the ids" % rid)
+    if recs[rid]["type"] == "header":
+        raise Refused("the file header cannot be marked invalid")
+    snap = snapshot(store, copies, home, "invalidate")
+    body = cs.set_status_region(recs[rid]["body"], now[:10], reason.strip())
+    store.write(dict(recs[rid], body=body, source="ctx-invalidate", modified=now))
+    store.journal({"ts": now, "op": "invalidate", "ids": [rid], "source": "ctx-invalidate", "reason": reason,
+                   "snapshot": snap})
+    comp = compile_store(store, copies, now, home, snap)
+    return {"id": rid, "snapshot": snap, "written": comp["written"]}
+
+
+def archive(store, copies, home, rid, reason, now):
+    """Move a record to {store}/archive/<year>/<id>.md; it leaves the copies, its id stays reserved."""
+    recs = _live(store, copies, home, now)
+    if rid not in recs:
+        raise cs.StoreError("no record %s — `ctx list` shows the ids" % rid)
+    if recs[rid]["type"] == "header":
+        raise Refused("the file header cannot be archived")
+    order = [r["id"] for r in sorted(recs.values(), key=lambda r: r["order"])]
+    snap = snapshot(store, copies, home, "archive")
+    rec = dict(recs[rid], status="archived", archived=now[:10], archived_reason=(reason or "").strip() or None,
+               former_after=_before(order, rid))
+    cs.atomic_write(os.path.join(store.archive_dir, now[:4], rid + ".md"), cs.render_record(rec))
+    store.remove(rid)
+    store.journal({"ts": now, "op": "archive", "ids": [rid], "source": "ctx-archive", "reason": reason or "",
+                   "snapshot": snap})
+    comp = compile_store(store, copies, now, home, snap)
+    return {"id": rid, "snapshot": snap, "written": comp["written"]}
+
+
+def _place_after(recs, ids, rec):
+    """Where a record whose predecessor is gone goes back: a product or a team stays inside an organisation
+    (after the last product/team of its organisation, else after the organisation itself, else in the last
+    organisation); anything else at the end."""
+    if rec["type"] in ("product", "team"):
+        orgs = [i for i in ids if recs[i]["type"] == "org"]
+        org = rec.get("parent") if rec.get("parent") in orgs else (orgs[-1] if orgs else None)
+        if org:
+            kids = [i for i in ids if recs[i]["type"] in ("product", "team") and recs[i].get("parent") == org]
+            return kids[-1] if kids else org
+    return ids[-1] if ids else None
+
+
+def restore_record(store, copies, home, rid, now):
+    """Bring a record back: an invalid one becomes current; else from the archive, else the newest in the
+    trash, at its former place (after `former_after`, else after its last sibling, else at the end)."""
+    recs = _live(store, copies, home, now)
+    source, origin = None, None
+    if rid in recs:
+        if not cs.has_status_region(recs[rid]["body"]):
+            arch = rid in store.reserved_ids() or any(r["id"] == rid for _, r in trash_entries(home))
+            raise Refused("id %s is taken by a current record — archive or rename it first" % rid if arch else
+                          "%s is current — nothing to restore" % rid)
+        snap = snapshot(store, copies, home, "restore")
+        store.write(touch(dict(recs[rid], body=cs.clear_status_region(recs[rid]["body"]), source="ctx-restore",
+                               modified=now), now))
+    else:
+        found = next((r for r in store.archived() if r["id"] == rid), None)
+        if found:
+            source, origin = found, found["path"]
+        else:
+            hit = next(((p, r) for p, r in trash_entries(home) if r["id"] == rid), None)
+            if not hit:
+                raise cs.StoreError("nothing to restore for %s — not invalid, not in the archive or the trash" % rid)
+            origin, source = hit
+        snap = snapshot(store, copies, home, "restore")
+        ids = [r["id"] for r in sorted(recs.values(), key=lambda r: r["order"])]
+        after = source.get("former_after")
+        if after not in ids:
+            after = _place_after(recs, ids, source)
+        pos = ids.index(after) + 1 if after in ids else len(ids)
+        ids.insert(pos, rid)
+        rec = {k: v for k, v in source.items() if k not in ("path", "archived", "archived_reason", "former_after", "trashed")}
+        rec = touch(dict(rec, status=None), now)
+        if pos < len(ids) - 1 and not rec["body"].endswith("\n"):
+            rec["body"] += "\n"                      # a former last record without a final newline
+        recs[rid] = rec
+        ended = set()
+        if pos and not recs[ids[pos - 1]]["body"].endswith("\n"):
+            recs[ids[pos - 1]] = dict(recs[ids[pos - 1]], body=recs[ids[pos - 1]]["body"] + "\n")
+            ended.add(ids[pos - 1])
+        for k, i in enumerate(ids):
+            if recs[i]["order"] != (k + 1) * 10 or i == rid or i in ended:
+                store.write(dict(recs[i], order=(k + 1) * 10))
+        _reparent(store)
+        cs.check_target(origin)
+        os.remove(origin)
+    store.journal({"ts": now, "op": "restore", "ids": [rid], "source": "ctx-restore", "reason": origin or "invalid",
+                   "snapshot": snap})
+    comp = compile_store(store, copies, now, home, snap)
+    return {"id": rid, "snapshot": snap, "written": comp["written"]}
+
+
 # ------------------------------------------------------- digest (read-only)
 def status_summary(context_path, home=None):
-    """{records, card_lines, pending, conflicts} for the SessionStart digest; None without a store or on any
-    error. Reads only."""
+    """{records, card_lines, pending, conflicts, stale} for the SessionStart digest; {unavailable: root} when
+    the store used before cannot be reached; None without a store or on any error. Reads only. The home
+    defaults to the one the context file lives in (~/.grow-pm/local-context.md)."""
     try:
+        if home is None and os.path.basename(os.path.dirname(os.path.abspath(context_path))) == ".grow-pm":
+            home = os.path.dirname(os.path.dirname(os.path.abspath(context_path)))
         text = _read(context_path)
         store = cs.Store(store_root_for(text, home))
         if not store.exists():
-            return None
+            gone = store_unavailable(text, home)
+            return {"unavailable": gone} if gone else None
         recs = store.load()
         plan = plan_sync(store, copies_for(context_path, text, home))
         card = _read(store.card_path).count("\n") if os.path.isfile(store.card_path) else 0
         return {"records": len(recs), "card_lines": card, "pending": sum(pending(plan).values()),
-                "conflicts": len(plan["conflicts"]) + (1 if plan["suspicious_removal"] else 0) + len(plan["missing"])}
+                "conflicts": len(plan["conflicts"]) + (1 if plan["suspicious_removal"] else 0) + len(plan["missing"]),
+                "stale": len(sc.stale_ids(recs, store.state(), datetime.date.today().isoformat())),
+                "unavailable": None}
     except Exception:
         return None

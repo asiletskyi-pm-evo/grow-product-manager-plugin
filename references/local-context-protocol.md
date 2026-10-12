@@ -38,6 +38,13 @@ After the Configurator finishes — return to the original skill and continue it
 
 ### 0c. If found → read and parse
 
+**With a context store (since v3.12.0, `references/context-protocol.md` §5a).** When the session digest shows a `context: records …` line — or, on a host without the digest, `{storage_root}/_System/context/.state/` exists:
+- **SHELL available:** run `python3 "<plugin root>/scripts/ctx.py" read --skill <this skill's name> --product "<name>"` — with the product the request names (0d rule 1); without `--product` when it names none — and take what it prints as the context for 0c–0j: the card, the records this skill needs and a closing `Відсутнє:` line. Several products and none given → it lists them with the command to run again: choose per 0d and run it. A part it does not show → `ctx.py get <id> [--section "…"]`. Read `local-context.md` whole only on exit 3 (a record still downloading, no entry for this skill), as below — never on top of a successful `ctx read`.
+- **FS without SHELL:** read `{storage_root}/_System/context/INDEX.md` and the records `references/context-manifest.yaml` names for this skill, whole.
+- A fact from a record marked `⚠ застаріле` is stated as "станом на <its verified date>"; a record marked `⚠ неактуально` is not used as current. Never ask about either mid-run — the configurator's "Review stale records" is where they are confirmed.
+
+Without a store, read `local-context.md` whole:
+
 Read `local-context.md` and extract:
 - Active user profile (name, role, role label, role scope, level home, email, language, jira_account_id) and the `## Judgment` section (`hypothesis_first`, `learning_mode`, `hats_allowed`, and since v3.9.0 `build_first`; defaults `on` / `off` / `all` / `on` when the section or a line is absent; a value is read without a trailing note in brackets, and a value outside its set reads as the default)
 - List of organizations and their products

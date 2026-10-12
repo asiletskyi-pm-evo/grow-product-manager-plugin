@@ -46,7 +46,7 @@ Profiles: `claude-cowork` = Claude Code / Cowork (reference). `codex-cli` = Code
 
 ## The `ctx` engine (since v3.11.0)
 
-Not a skill, so not a row. The context store's command line (`scripts/ctx.py`, `references/context-protocol.md`) needs FS and SHELL. `claude-cowork`: full — measured in v3.11.0 (the CLI suites and a scenario walk of the configurator). `codex-cli`: full — derived, not run in v3.11.0: the same `python3` and filesystem; with no session digest, the writers find the store by its `.state/` folder. `chatgpt`, `codex-cloud`: no `ctx` — `local-context.md` is edited as before and the next `ctx` run on a host with a shell imports the edits.
+Not a skill, so not a row. The context store's command line (`scripts/ctx.py`, `references/context-protocol.md`) needs FS and SHELL. `claude-cowork`: full — measured in v3.11.0 (the CLI suites and a scenario walk of the configurator). `codex-cli`: full — derived, not run in v3.11.0: the same `python3` and filesystem; with no session digest, the writers find the store by its `.state/` folder. Since v3.12.0 Step 0c runs `ctx read --skill <name>` where SHELL is available; with FS only it reads the card and the records `references/context-manifest.yaml` names, whole. `chatgpt`, `codex-cloud`: no `ctx` — `local-context.md` is edited as before and the next `ctx` run on a host with a shell imports the edits.
 
 ## Measured in the v3.0.0 pilot (Codex CLI 0.153.2)
 

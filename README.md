@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.11.0
+**Version:** 3.12.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.12.0** — **Lean reading, record lifecycle, freshness and typed fields** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). With a context store, a skill no longer reads the whole `local-context.md` at Step 0: `ctx read --skill <name>` gives it the context card plus only the fields and subsections its entry in `references/context-manifest.yaml` names — on a real 926-line context about 25,600 tokens became 900–3,000 per skill (measured on the release machine, all 33 skills). Records can be marked no longer current, archived, and come back from a 30-day trash with `ctx restore`; each knows when it was last verified, and a skill states a stale fact "as of" its date. `ctx` writes only under `~/.grow-pm` and the storage root. Without a store nothing changes. See [Context store](#context-store-since-v3110).
 
 **New in v3.11.0** — **The context store: your context as records, `local-context.md` as their compiled view** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Your context can now live as records — one note per section of `local-context.md` — in your vault, next to a context card (`INDEX.md`). `local-context.md` becomes the compiled view: every skill reads it exactly as before, and whatever a skill, another plugin or you in Obsidian write into it directly is imported back into the records. A deterministic engine, `ctx`, moves a single-file context in losslessly — it proves the compile gives your file back byte for byte before it writes anything — snapshots before every change, keeps a journal and undoes; a record that is missing or still downloading stops a run before anything is written. The sixth contour, **Context**, groups `context-connect`, `context-navigator` and the store. The configurator offers the move once; without it nothing changes. See [Context store](#context-store-since-v3110).
 
@@ -323,7 +325,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.14.0)
+### 10. Plugin Configurator (v2.15.0)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -612,7 +614,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.18.1 | Process meetings and extract action items |
-| Plugin Configurator | v2.14.0 | Configure plugin for your organization |
+| Plugin Configurator | v2.15.0 | Configure plugin for your organization |
 | Knowledge Library | v0.9.1 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
@@ -694,7 +696,9 @@ The sixth contour, **Context**, groups `context-connect`, `context-navigator` an
 - **Moving in** — the configurator offers it once at the end of onboarding and as the Update item "Move my context to records": `ctx migrate` shows the records and proves the compile gives your file back byte for byte, `--apply` moves it. `ctx undo` right after it moves back.
 - **Safety** — a snapshot before every change (`~/.grow-pm/snapshots/`), a journal of every change, atomic writes, one writer at a time, never a write into a provider's folder or block; a record that is missing on disk or still downloading (iCloud) stops a run before anything is written.
 - **The digest** shows `context: records N · card M lines · in sync` (or the edits waiting) at every session start.
-- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
+- **Lean reading** (since v3.12.0) — with a store, a skill's Step 0 runs `ctx read --skill <name>`: the card plus only the fields and subsections its entry in `references/context-manifest.yaml` names, instead of the whole file.
+- **Lifecycle and freshness** (since v3.12.0) — `ctx invalidate` marks a record no longer current, `ctx archive` moves it out of the file, removed records wait 30 days in a trash, `ctx restore` brings any of them back; every record knows when it was last verified, the digest counts stale ones and skills state their facts "as of" that date; `ctx verify` or the configurator's "Review stale records" confirms them.
+- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, and since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
 
 ## Multilingual Artifact Templates
 
@@ -1040,5 +1044,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.11.0  
+**Version:** 3.12.0  
 **Last Updated:** October 2026
