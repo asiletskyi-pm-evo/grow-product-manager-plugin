@@ -125,6 +125,9 @@ def cmd_status(a, c):
     if plan["missing"]:
         print("missing on disk (not downloaded, not synced or deleted): %s — `ctx sync` says what to do"
               % ", ".join(i + ".md" for i in plan["missing"]))
+    lonely = cs.unassigned_ids(recs)
+    if lonely:
+        print("custom without read_by: %s — ctx assign <id> all|<skills>" % ", ".join(lonely))
     for s in stray:
         print("stray file (ignored): %s" % s)
     for j in tail:
@@ -132,7 +135,7 @@ def cmd_status(a, c):
     return 0, {"command": "status", "store": c.store.root, "records": len(recs), "card_lines": card,
                "pending": pending, "conflicts": [x["id"] for x in plan["conflicts"]], "missing": plan["missing"],
                "stray": stray, "journal": tail, "stale": stale, "invalid": invalid, "archived": archived,
-               "last_snapshot": last[0] if last else None}
+               "last_snapshot": last[0] if last else None, "unassigned": lonely}
 
 
 def cmd_migrate(a, c):
@@ -488,6 +491,15 @@ def cmd_validate(a, c):
             errors.append("%s: parent %s does not exist" % (r["id"], r["parent"]))
         if r["type"] == "product" and cs.field_get(r["body"], "Jira Project Key") is None:
             warnings.append("%s: no Jira Project Key (task-creator and requirements-creator need it)" % r["id"])
+    skills = cr.load_manifest().get("skills") or {}
+    for r in recs:
+        unknown = sorted((cs.readers(r) or frozenset()) - {"all"} - set(skills))
+        if unknown:
+            warnings.append("%s: read_by names unknown skill(s): %s" % (r["id"], ", ".join(unknown)))
+    lonely = cs.unassigned_ids(recs)
+    if lonely:
+        warnings.append("custom without read_by: %d (%s) — skills see only the card row; ctx assign <id> all|<skills>"
+                        % (len(lonely), ", ".join(lonely)))
     if recs and not any(r["type"] == "profile" for r in recs):
         warnings.append("no User Profile record")
     if os.path.isfile(c.store.card_path) and co._read(c.store.card_path).count("\n") > cs.CARD_MAX:

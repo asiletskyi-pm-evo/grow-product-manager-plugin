@@ -195,6 +195,22 @@ def parse_record(text):
     return rec
 
 
+def readers(rec):
+    """The skills a custom or setting record is assigned to (`read_by`): a frozenset of lower-case names,
+    where "all" means every skill; None when the key is unset or empty. Accepts "a, b", "[a, b]" and a list."""
+    v = rec.get("read_by")
+    if v is None:
+        return None
+    items = v if isinstance(v, list) else str(v).strip().strip("[]").split(",")
+    names = frozenset(re.sub(r"\s+", "", str(x)).strip("\"'").lower() for x in items) - {""}
+    return names or None
+
+
+def unassigned_ids(records):
+    """Ids of the custom records nobody reads in `ctx read` (no read_by), in record order."""
+    return [r["id"] for r in sorted(records, key=lambda r: r["order"]) if r["type"] == "custom" and readers(r) is None]
+
+
 STATUS_BEGIN = "<!-- ctx:begin id=status -->"
 STATUS_END = "<!-- ctx:end id=status -->"
 _STATUS_RE = re.compile(re.escape(STATUS_BEGIN) + r".*?" + re.escape(STATUS_END) + r"\r?\n?", re.S)

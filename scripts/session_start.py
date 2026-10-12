@@ -282,6 +282,8 @@ def digest(path, facts, searched, version):
             tail = "in sync"
         if s.get("stale"):
             tail += " · %d stale" % s["stale"]
+        if s.get("unassigned"):
+            tail += " · %d custom unassigned" % s["unassigned"]
         lines.append("  context: records %d · card %d lines · %s" % (s["records"], s["card_lines"], tail))
     if s and not s.get("unavailable"):
         lines.append(

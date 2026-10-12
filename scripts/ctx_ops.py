@@ -831,6 +831,7 @@ def status_summary(context_path, home=None):
         return {"records": len(recs), "card_lines": card, "pending": sum(pending(plan).values()),
                 "conflicts": len(plan["conflicts"]) + (1 if plan["suspicious_removal"] else 0) + len(plan["missing"]),
                 "stale": len(sc.stale_ids(recs, store.state(), datetime.date.today().isoformat())),
+                "unassigned": len(cs.unassigned_ids(recs)),
                 "unavailable": None}
     except Exception:
         return None

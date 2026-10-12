@@ -51,15 +51,7 @@ def manifest_for(manifest, skill):
 BUDGET_TOKENS = 8000
 
 
-def readers(rec):
-    """The skills a custom or setting record is assigned to (`read_by`): a frozenset of lower-case names,
-    where "all" means every skill; None when the key is unset or empty. Accepts "a, b", "[a, b]" and a list."""
-    v = rec.get("read_by")
-    if v is None:
-        return None
-    items = v if isinstance(v, list) else str(v).strip().strip("[]").split(",")
-    names = frozenset(re.sub(r"\s+", "", str(x)).strip("\"'").lower() for x in items) - {""}
-    return names or None
+readers = cs.readers   # who reads a custom or setting record (read_by); lives in ctx_store for ctx_ops
 
 
 def tokens_est(text):
@@ -242,7 +234,7 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None):
                 who = readers(rec) if rec["type"] in ("custom", "setting") else None
                 if who and rec["id"] not in used and ("all" in who or skill.lower() in who):
                     add(rec, _without_heading(rec["body"]))
-            unassigned.extend(r["id"] for r in recs if r["type"] == "custom" and readers(r) is None)
+            unassigned.extend(cs.unassigned_ids(recs))
             if unassigned:
                 byid = {r["id"]: r for r in recs}
                 blocks.append("Власні секції без призначення: %s — ctx get <id>, якщо запит їх стосується"

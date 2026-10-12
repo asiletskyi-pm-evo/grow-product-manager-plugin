@@ -446,6 +446,19 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, r = run_ok(e, "assign", cid, "all")
     check("assign imports pending edits first", rc == 0 and "pending" in e.record(cid), (rc, out[-300:]))
 
+# --- v3.12.1: validate, status count custom records nobody reads
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    cid = with_custom(e)
+    sp = os.path.join(e.store, "records", "setting.templates.md")
+    st = read(sp)
+    open(sp, "w", encoding="utf-8", newline="").write(st.replace("\n---\n", '\nread_by: "no-such-skill"\n---\n', 1))
+    rc, out, r = run_ok(e, "validate")
+    check("validate names unassigned custom", "custom without read_by: 1" in out and "ctx assign" in out, out[-500:])
+    check("validate warns on an unknown reader", "read_by names unknown skill(s): no-such-skill" in out, out[-500:])
+    rc, out_status, r = run_ok(e, "status")
+    check("status lists unassigned", "custom without read_by: " + cid in out_status and r["unassigned"] == [cid], out_status[-400:])
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
