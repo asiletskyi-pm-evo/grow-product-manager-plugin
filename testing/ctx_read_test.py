@@ -35,12 +35,15 @@ def read(*parts):
 class Env:
     """A migrated store over a fixture: temp HOME, temp vault and its mirror."""
 
-    def __init__(self, d, fixture="typical", extra=""):
+    def __init__(self, d, fixture="typical", extra="", edit=None):
         self.home = os.path.join(d, "home")
         self.vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(self.home, ".grow-pm"))
         os.makedirs(os.path.join(self.vault, "Notes", "_System"))
         self.text = read(FIX, fixture + ".md").replace("{{VAULT}}", self.vault) + extra
+        if edit:
+            assert edit[0] in self.text, edit[0]
+            self.text = self.text.replace(edit[0], edit[1], 1)
         self.ctx = os.path.join(self.home, ".grow-pm", "local-context.md")
         for p in (self.ctx, os.path.join(self.vault, "Notes", "_System", "local-context.md")):
             open(p, "w", encoding="utf-8", newline="").write(self.text)
@@ -134,6 +137,12 @@ with tempfile.TemporaryDirectory() as d:
     text, res = e.view("requirements-creator", product="Zorg App")
     check("missing required field is listed", "Jira Project Key (обов'язкове)" in text
           and "Jira Project Key" in res["missing"], text[-400:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edit=("#### Platforms", "#### Platforms (mobile first)"))
+    text, res = e.view("requirements-creator", product="Zorg App")
+    check("subsections match by the start of their heading", "#### Platforms (mobile first)" in text
+          and "Platforms" not in res["missing"], res["missing"])
 
 check("check_manifest is clean on the repo", cr.check_manifest(ROOT) == [], cr.check_manifest(ROOT))
 with tempfile.TemporaryDirectory() as d:

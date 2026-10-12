@@ -56,11 +56,20 @@ def _lines(body):
     return [core for _, core, _ in cs._lines(body)]
 
 
+def _heading_matches(core, name):
+    """A heading whose text is `name` or starts with it followed by a non-word character
+    ("Key Metrics (focus)" answers "Key Metrics"; "Localesx" does not answer "Locales")."""
+    text = (cs._heading_text(core) or "").lower()
+    want = name.lower()
+    return cs._level(core) > 0 and (text == want or (text.startswith(want) and not text[len(want)].isalnum()))
+
+
 def _subsection(body, name):
-    """The `#…# name` subsection (heading to the next heading of the same or a higher level), or None."""
+    """The `#…# name` subsection (heading to the next heading of the same or a higher level), or None; the
+    heading may carry a qualifier after the name."""
     lines = body.splitlines(keepends=True)
     cores = [l.rstrip("\r\n") for l in lines]
-    at = next((k for k, c in enumerate(cores) if cs._heading_text(c) == name and cs._level(c) > 0), None)
+    at = next((k for k, c in enumerate(cores) if _heading_matches(c, name)), None)
     if at is None:
         return None
     lvl, end = cs._level(cores[at]), len(lines)
