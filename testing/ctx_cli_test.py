@@ -139,7 +139,7 @@ with tempfile.TemporaryDirectory() as d:
     os.remove(os.path.join(e.store, "records", "product.zorg-copy.md"))
     lockf = os.path.join(e.home, ".grow-pm", ".ctx.lock")
     open(lockf, "w").write(json.dumps({"pid": os.getpid(), "at": time.time()}))
-    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "X")
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "XX")
     os.remove(lockf)
     check("a held lock exits 4", rc == 4, (rc, out[-300:]))
     rc, out, res = e.run("set", "--nope")
@@ -166,7 +166,7 @@ with tempfile.TemporaryDirectory() as d:
     open(os.path.join(regdir, "zorg-core.yaml"), "w").write(
         "schema: provider-registration/1\nid: zorg-core\nkind: bundle\npaths:\n  - %s\nstatus: active\n"
         % os.path.join(e.vault, "Notes"))
-    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "X")
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "XX")
     check("store under a provider root is refused", rc == 4 and "PROJ" in read(e.ctx), (rc, out[-300:]))
 
 # --- Final review: undo bounds, explicit paths, a file without a final newline, a record that never loads
@@ -303,6 +303,71 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = run_ok(e, "sync")
     check("the home copy linked to the vault mirror still works", rc == 0 and os.path.islink(e.ctx)
           and "weekly" in e.record("setting.focus-focus-advisor"), (rc, out[-300:]))
+
+# --- v3.12 Task 7: read, lifecycle, verify, typed set/get
+def journal_ops(env):
+    return [json.loads(l)["op"] for l in open(os.path.join(env.store, ".state", "journal.jsonl"), encoding="utf-8")]
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rc, out, res = run_ok(e, "read", "--skill", "requirements-creator", "--product", "Zorg App")
+    check("read prints the card and the product block", rc == 0 and "# Context card" in out
+          and "- **Jira Project Key:** PROJ" in out and res and res.get("tokens_est", 10 ** 6) <= 6000, (rc, out[-300:]))
+    rc, out, res = run_ok(e, "read", "--skill", "no-such-skill")
+    check("read of an unknown skill is exit 3", rc == 3 and "no manifest entry" in out, (rc, out[-200:]))
+    rc, out, res = run_ok(e, "status")
+    check("status shows the last snapshot", rc == 0 and "last snapshot:" in out, out[-400:])
+    ok = []
+    for args, op in ((("invalidate", "team.alpha-a", "--reason", "reorg"), "invalidate"),
+                     (("archive", "setting.templates", "--reason", "old"), "archive"),
+                     (("restore", "setting.templates"), "restore"),
+                     (("verify", "product.zorg-app"), "verify")):
+        rc, out, res = run_ok(e, *args)
+        ok.append(rc == 0 and journal_ops(e)[-1] == op)
+    check("invalidate / archive / restore / verify exit 0 and journal", all(ok), ok)
+    rc, out, res = run_ok(e, "verify")
+    check("verify without ids is exit 3", rc == 3, (rc, out[-200:]))
+    run_ok(e, "archive", "setting.templates")
+    e.edit(e.ctx, "## Focus (focus-advisor)\n\n- **Cadence:** daily\n\n", "")
+    run_ok(e, "sync")
+    rc1, out1, _ = run_ok(e, "list", "--archived")
+    rc2, out2, _ = run_ok(e, "list", "--trash")
+    check("list --archived and --trash", rc1 == 0 and "setting.templates" in out1 and rc2 == 0
+          and "setting.focus-focus-advisor" in out2, (out1[-300:], out2[-300:]))
+    rc, out, res = run_ok(e, "set", "profile", "Role", "Senior PM")
+    check("set refuses a role outside the enum", rc == 3 and "head_of_product" in out
+          and "- **Role:** pm" in read(e.ctx) and "- **Role:** pm" in read(e.mirror), (rc, out[-300:]))
+    rc, out, res = run_ok(e, "get", "product.zorg-app", "Platforms", "--json")
+    check("get --json returns a list for Platforms", rc == 0 and res and res.get("value") == ["web", "iOS"], (rc, res))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    fifo = os.path.join(e.store, "records", "custom.zorg-slow.md")
+    os.mkfifo(fifo)
+    t0 = time.time()
+    rc, out = raw(e, ["read", "--skill", "requirements-creator", "--product", "Zorg App", "--home", e.home,
+                      "--context", e.ctx], extra_env={"GROW_PM_CTX_READ_TIMEOUT": "1"}, timeout=30)
+    took = time.time() - t0
+    os.remove(fifo)
+    check("read with an evicted record is exit 3", rc == 3 and took < 20 and "custom.zorg-slow.md" in out, (rc, took, out[-200:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    import io, contextlib  # noqa: E401
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import ctx as ctx_cli  # noqa: E402
+    real = ctx_cli.co.migrate
+    ctx_cli.co.migrate = lambda *a, **k: dict(real(*a, **k), identical=False)
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = ctx_cli.main(["migrate", "--home", e.home, "--context", e.ctx])
+    finally:
+        ctx_cli.co.migrate = real
+    check("migrate dry run DIFFERENT is exit 3", rc == 3 and '"ok": false' in buf.getvalue(), (rc, buf.getvalue()[-200:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

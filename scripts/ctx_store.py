@@ -321,7 +321,7 @@ class Store:
     def exists(self):
         return os.path.isdir(self.state_dir)
 
-    def _record_files(self):
+    def record_files(self):
         if not os.path.isdir(self.records_dir):
             return [], []
         valid, stray = [], []
@@ -344,7 +344,7 @@ class Store:
     def load(self):
         """Records sorted by `order`. A record that cannot be read in time or parsed → StoreError naming its file."""
         out = []
-        valid, _ = self._record_files()
+        valid, _ = self.record_files()
         texts = self._texts(valid)
         for name in valid:
             text = texts[name]
@@ -359,7 +359,7 @@ class Store:
 
     def stray_files(self):
         """Files in records/ that compile ignores: other names, or a record's copy under another name."""
-        valid, stray = self._record_files()
+        valid, stray = self.record_files()
         for name in valid:
             try:
                 if parse_record(read_text(os.path.join(self.records_dir, name)))["id"] != name[:-3]:

@@ -16,6 +16,10 @@
   snapshot [--label L]          a snapshot of the store and both copies
   undo [--steps N]              back to the state before the N-th last change (N from 1); refused while
                                 edits wait to be imported
+  read --skill S [--product P]  the card plus what the skill's manifest entry names (reads only)
+  invalidate ID --reason R      mark a record no longer current (it stays, with a status region)
+  archive ID [--reason R]       move a record to the archive; restore ID brings it (or a trashed one) back
+  verify [ID ...] [--stale]     mark records verified today
   validate                      records, ids, parents, card size, edits waiting
   card                          regenerate INDEX.md only
 
@@ -37,6 +41,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
+import ctx_read as cr  # noqa: E402
+import ctx_schema as sc  # noqa: E402
 
 HEADINGS = {"product": "### Product: %s", "team": "### Team: %s", "org": "## Organization: %s",
             "setting": "## %s", "custom": "## %s"}
@@ -85,6 +91,7 @@ class Ctx:
             raise co.Refused("the store %s lies inside the provider %s's folder" % (self.store.root, hit.get("id")))
         for p in list(self.copies) + [self.store.root, self.store.records_dir, self.store.state_dir, self.store.card_path]:
             cs.check_target(p)
+        co.purge_trash(self.home)
 
     def import_first(self):
         return co.apply_sync(self.store, co.plan_sync(self.store, self.copies), self.copies, self.home, None, "", now())
@@ -100,20 +107,29 @@ def cmd_status(a, c):
     pending = co.pending(plan)
     card = co._read(c.store.card_path).count("\n") if os.path.isfile(c.store.card_path) else 0
     tail = c.store.journal_entries()[-3:]
+    stray = c.store.stray_files()
+    stale = sc.stale_ids(recs, c.store.state(), now()[:10])
+    invalid = [r["id"] for r in recs if cs.has_status_region(r["body"])]
+    archived = len(c.store.archived())
+    snaps = os.path.join(c.home, ".grow-pm", "snapshots")
+    last = sorted(n for n in os.listdir(snaps) if co.SNAP_RE.match(n))[-1:] if os.path.isdir(snaps) else []
     print("store: %s · records %d · card %d lines" % (c.store.root, len(recs), card))
+    print("freshness: %d stale · %d invalid · %d archived" % (len(stale), len(invalid), archived))
+    print("last snapshot: %s" % (last[0] if last else "none"))
     print("to import: " + (", ".join("%s %d" % kv for kv in pending.items() if kv[1]) or "nothing — in sync"))
     for x in plan["conflicts"]:
         print("conflict: %s (%s)" % (x["id"], "; ".join(x["reasons"])))
     if plan["missing"]:
         print("missing on disk (not downloaded, not synced or deleted): %s — `ctx sync` says what to do"
               % ", ".join(i + ".md" for i in plan["missing"]))
-    for s in c.store.stray_files():
+    for s in stray:
         print("stray file (ignored): %s" % s)
     for j in tail:
         print("journal: %s %s %s" % (j.get("ts", ""), j.get("op"), j.get("source", "")))
     return 0, {"command": "status", "store": c.store.root, "records": len(recs), "card_lines": card,
                "pending": pending, "conflicts": [x["id"] for x in plan["conflicts"]], "missing": plan["missing"],
-               "stray": c.store.stray_files(), "journal": tail}
+               "stray": stray, "journal": tail, "stale": stale, "invalid": invalid, "archived": archived,
+               "last_snapshot": last[0] if last else None}
 
 
 def cmd_migrate(a, c):
@@ -132,7 +148,7 @@ def cmd_migrate(a, c):
     if rep["mirror_differs"]:
         print("the vault mirror differs from %s — the first compile rewrites it, after a snapshot" % c.context)
     print("migrated" if rep["applied"] else "dry run — nothing written; `ctx migrate --apply` moves it")
-    return 0, dict(rep, command="migrate")
+    return (0 if rep["identical"] else 3), dict(rep, command="migrate")
 
 
 def _resolve(items):
@@ -173,26 +189,99 @@ def _record(c, rid):
     return recs[rid]
 
 
+def _field_kind(rec):
+    """The record's section of references/context-fields.yaml, or None."""
+    if rec["type"] in ("profile", "product", "onboarding"):
+        return rec["type"]
+    return "judgment" if rec["type"] == "setting" and rec["title"].startswith("Judgment") else None
+
+
+def _field_spec(rec, field):
+    """The field's type from references/context-fields.yaml, or None (plain text)."""
+    return (sc.load_fields().get(_field_kind(rec)) or {}).get(field)
+
+
 def cmd_get(a, c):
     c.need_store()
     rec = _record(c, a.id)
     if a.field:
-        v = cs.field_get(rec["body"], a.field)
-        if v is None:
+        spec = _field_spec(rec, a.field)
+        raw = sc.raw_value(rec["body"], a.field, spec) if spec else cs.field_get(rec["body"], a.field)
+        if raw is None:
             raise cs.StoreError("no field %r outside managed regions in %s" % (a.field, a.id))
-        print(v)
-        return 0, {"command": "get", "id": a.id, "field": a.field, "value": v}
+        print(raw)
+        return 0, {"command": "get", "id": a.id, "field": a.field, "value": sc.parse_value(spec, raw) if spec else raw}
     sys.stdout.write(rec["body"] if rec["body"].endswith("\n") else rec["body"] + "\n")
     return 0, {"command": "get", "id": a.id, "body": rec["body"] if a.json else None}
 
 
 def cmd_list(a, c):
     c.need_store()
+    if a.archived:
+        recs = [r for r in c.store.archived() if not a.type or r["type"] == a.type]
+        for r in recs:
+            print("%-48s %-10s archived %s  %s%s" % (r["id"], r["type"], r.get("archived") or "", r["title"],
+                                                     " — " + r["archived_reason"] if r.get("archived_reason") else ""))
+        return 0, {"command": "list", "archived": [{k: r.get(k) for k in ("id", "type", "title", "archived", "archived_reason")}
+                                                   for r in recs]}
+    if a.trash:
+        items = [(p, r) for p, r in co.trash_entries(c.home) if not a.type or r["type"] == a.type]
+        for p, r in items:
+            print("%-48s %-10s trashed %s  %s" % (r["id"], r["type"], (r.get("trashed") or "")[:10], r["title"]))
+        return 0, {"command": "list", "trash": [{"id": r["id"], "type": r["type"], "title": r["title"],
+                                                 "trashed": r.get("trashed"), "file": p} for p, r in items]}
     recs = [r for r in c.store.load() if not a.type or r["type"] == a.type]
     for r in recs:
-        print("%-48s %-10s %s" % (r["id"], r["type"], r["title"]))
+        print("%-48s %-10s %-10s %s" % (r["id"], r["type"], (r.get("modified") or "")[:10], r["title"]))
     return 0, {"command": "list", "records": [{k: r[k] for k in ("id", "type", "title", "parent", "modified")}
                                                for r in recs]}
+
+
+def cmd_read(a, c):
+    c.need_store()
+    try:
+        text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10])
+    except KeyError:
+        raise cs.StoreError("no manifest entry for %s — read local-context.md whole" % a.skill)
+    sys.stdout.write(text)
+    return 0, dict(res, command="read", skill=a.skill, text=text if a.json else None)
+
+
+def _lifecycle(c, fn, *args):
+    c.need_store()
+    with co.lock(c.home):
+        c.guard()
+        return fn(c.store, c.copies, c.home, *args)
+
+
+def cmd_invalidate(a, c):
+    res = _lifecycle(c, co.invalidate, a.id, a.reason, now())
+    print("invalidated %s · wrote %s" % (a.id, ", ".join(res["written"]) or "no copy"))
+    return 0, dict(res, command="invalidate")
+
+
+def cmd_archive(a, c):
+    res = _lifecycle(c, co.archive, a.id, a.reason or "", now())
+    print("archived %s · wrote %s (back: ctx restore %s)" % (a.id, ", ".join(res["written"]) or "no copy", a.id))
+    return 0, dict(res, command="archive")
+
+
+def cmd_restore(a, c):
+    res = _lifecycle(c, co.restore_record, a.id, now())
+    print("restored %s · wrote %s" % (a.id, ", ".join(res["written"]) or "no copy"))
+    return 0, dict(res, command="restore")
+
+
+def cmd_verify(a, c):
+    if not a.ids and not a.stale:
+        raise Usage("verify takes record ids or --stale")
+    c.need_store()
+    with co.lock(c.home):
+        c.guard()
+        c.import_first()
+        done = co.verify(c.store, c.copies, c.home, a.ids, now(), stale=a.stale)
+    print("verified today: %s" % (", ".join(done) or "nothing"))
+    return 0, {"command": "verify", "ids": done}
 
 
 def _write_one(c, op, rid, mutate, source, reason):
@@ -216,6 +305,11 @@ def _write_one(c, op, rid, mutate, source, reason):
 
 
 def cmd_set(a, c):
+    c.need_store()
+    spec = _field_spec(_record(c, a.id), a.field)
+    err = sc.check_value(spec, a.value) if spec else None
+    if err:
+        raise ValueError("%s: %s" % (a.field, err))
     return 0, _write_one(c, "set", a.id, lambda b: cs.field_set(b, a.field, a.value), a.source or "ctx-set", a.reason)
 
 
@@ -311,7 +405,19 @@ def cmd_validate(a, c):
     except cs.StoreError as e:
         errors.append(str(e))
         recs = []
-    valid, odd = c.store._record_files()
+    valid, odd = c.store.record_files()
+    state = c.store.state()
+    for r in recs:
+        for field, spec in (sc.load_fields().get(_field_kind(r)) or {}).items():
+            problem = sc.check_value(spec, sc.raw_value(r["body"], field, spec))
+            if problem:
+                warnings.append("%s: %s — %s%s" % (r["id"], field, problem, " (Step 0i asks once)" if field == "Role" else ""))
+        if r.get("verified") is not None and sc._date(r.get("verified")) is None:
+            warnings.append("%s: verified %r is not a date — the store's freshness date applies" % (r["id"], r.get("verified")))
+        if r.get("ttl_days") is not None and not str(r.get("ttl_days")).strip().isdigit():
+            warnings.append("%s: ttl_days %r is not a whole number — the type's default applies" % (r["id"], r.get("ttl_days")))
+        if sc.is_stale(r, state, now()[:10]):
+            warnings.append("stale: %s (verified %s, TTL %s d) — ctx verify %s" % (r["id"], sc.verified_of(r, state), sc.ttl_of(r), r["id"]))
     for name in valid:
         try:
             rid = cs.parse_record(co._read(os.path.join(c.store.records_dir, name)))["id"]
@@ -379,6 +485,13 @@ def build_parser():
     sp = sub.add_parser("get", parents=[common]); sp.add_argument("id"); sp.add_argument("field", nargs="?")
     sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("list", parents=[common]); sp.add_argument("--type"); sp.add_argument("--json", action="store_true")
+    g = sp.add_mutually_exclusive_group(); g.add_argument("--archived", action="store_true"); g.add_argument("--trash", action="store_true")
+    sp = sub.add_parser("read", parents=[common]); sp.add_argument("--skill", required=True); sp.add_argument("--product")
+    sp.add_argument("--json", action="store_true")
+    sp = sub.add_parser("invalidate", parents=[common]); sp.add_argument("id"); sp.add_argument("--reason", required=True)
+    sp = sub.add_parser("archive", parents=[common]); sp.add_argument("id"); sp.add_argument("--reason")
+    sp = sub.add_parser("restore", parents=[common]); sp.add_argument("id")
+    sp = sub.add_parser("verify", parents=[common]); sp.add_argument("ids", nargs="*"); sp.add_argument("--stale", action="store_true")
     sp = sub.add_parser("set", parents=[common]); sp.add_argument("id"); sp.add_argument("field"); sp.add_argument("value")
     sp.add_argument("--source"); sp.add_argument("--reason")
     sp = sub.add_parser("append", parents=[common]); sp.add_argument("id"); sp.add_argument("--text", required=True)
@@ -395,7 +508,9 @@ def build_parser():
 
 COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c: cmd_sync(a, c, source="compile"),
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
-            "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card}
+            "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
+            "read": cmd_read, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
+            "verify": cmd_verify}
 
 
 def emit(result, conflict=None):
