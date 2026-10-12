@@ -369,6 +369,16 @@ with tempfile.TemporaryDirectory() as d:
         ctx_cli.co.migrate = real
     check("migrate dry run DIFFERENT is exit 3", rc == 3 and '"ok": false' in buf.getvalue(), (rc, buf.getvalue()[-200:]))
 
+# --- v3.12 Task 8: a half-migrated store
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    os.makedirs(os.path.join(e.store, "records"))
+    open(os.path.join(e.store, "records", "profile.md"), "w").write("x")
+    rc1, out1, _ = run_ok(e, "status")
+    rc2, out2, _ = run_ok(e, "migrate", "--apply")
+    check("a half-migrated store says what to remove", rc1 == 3 and "half-migrated store" in out1
+          and "records" in out1 and rc2 == 4 and "half-migrated store" in out2, (out1[-300:], out2[-300:]))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

@@ -498,5 +498,58 @@ with tempfile.TemporaryDirectory() as d:
     check("removing the status region reactivates", rec.get("status") is None and not cs.has_status_region(rec["body"])
           and "team.alpha-a" in res["changed"], (rec.get("status"), res["changed"]))
 
+# --- v3.12 Task 8: v3.11 review minors
+def env_with(d, extra):
+    e = Env(d)
+    e.text += extra
+    for path in (e.ctx, e.mirror):
+        open(path, "w", encoding="utf-8", newline="").write(e.text)
+    e.migrate()
+    return e
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = env_with(d, "\n## Zorg Notes\n\n- one\n- two\n- three\n\n")
+    e.edit(e.ctx, "## Zorg Notes", "## Feedback (Zorg)")
+    e.sync()
+    rec = {r["id"]: r for r in e.store.load()}.get("custom.zorg-notes")
+    check("a section renamed to a schema title becomes a setting", rec is not None and rec["type"] == "setting"
+          and rec["title"] == "Feedback (Zorg)", rec and (rec["type"], rec["title"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = env_with(d, "\n## Organization: Other\n\n")
+    t = read(e.ctx)
+    lite = t[t.index("### Product: Zorg Lite"):t.index("### Team: Alpha (A)")]
+    open(e.ctx, "w", encoding="utf-8", newline="").write(t.replace(lite, "") + lite)
+    e.sync()
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-lite"]
+    check("a product moved under another organisation gets the new parent", rec["parent"] == "org.other", rec["parent"])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** OBS")
+    e.sync()
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-app"]
+    check("an Obsidian record edit is journalled with its id and a fresh sha",
+          "product.zorg-app" in e.store.journal_entries()[-1]["ids"] and rec["sha"] == cs.sha_text(rec["body"]),
+          e.store.journal_entries()[-1])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** CMP")
+    co.apply_sync(e.store, co.plan_sync(e.store, e.copies), e.copies, e.home, "compile", "", NOW)
+    rec = {r["id"]: r for r in e.store.load()}["product.zorg-app"]
+    check("compile imports carry import:home", rec["source"] == "import:home"
+          and e.store.journal_entries()[-1]["source"] == "compile", rec["source"])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    noted = co.store_unavailable(e.text, e.home)
+    os.rename(e.vault, e.vault + "-away")
+    gone = co.store_unavailable(e.text, e.home)
+    check("the last store is noted and an unmounted vault is reported", noted is None
+          and gone == e.store.root, (noted, gone))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

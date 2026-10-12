@@ -279,6 +279,7 @@ def compile_store(store, copies, now, home, snap=None):
         cs.atomic_write(store.card_path, card)
     new["compiled_at"] = now
     store.save_state(new)
+    note_store(home, store.root)
     if own:
         what = ["the home copy" if p == copies[0] else "the vault mirror" for p in written]
         store.journal({"ts": now, "op": "compile", "ids": [], "source": "compile", "snapshot": snap,
@@ -303,7 +304,9 @@ def migrate(context_path, store_root, copies, home, apply, now):
               "mirror_differs": any(os.path.isfile(p) and _read(p) != text for p in others)}
     if not apply:
         return report
-    if store.exists() or os.path.isdir(store.records_dir):
+    if not store.exists() and os.path.isdir(store.records_dir):
+        raise Refused(half_migrated(store_root))
+    if store.exists():
         raise Refused("a context store already exists at %s — see `ctx status`" % store_root)
     if not identical:
         raise Refused("the split does not give the file back byte for byte — nothing migrated")
@@ -321,6 +324,7 @@ def migrate(context_path, store_root, copies, home, apply, now):
     state["freshness_since"] = now[:10]
     state["stale"] = []
     store.save_state(state)
+    note_store(home, store_root)
     cs.atomic_write(store.card_path, cs.build_card(written, text, now[:10]))
     store.journal({"ts": now, "op": "migrate", "ids": [r["id"] for r in written], "source": "migrate",
                    "reason": "", "snapshot": snap})
@@ -363,7 +367,7 @@ def _copy_changes(text, rec_by, base, order):
         prev_new = next((matched[j] for j in range(k - 1, -1, -1) if matched[j] is not None), None)
         for rid in loose:
             if rid not in renames and prev_old.get(rid) == prev_new and _similar(rec_by[rid]["body"], f["text"]):
-                renames[rid] = (f["text"], f["title"])
+                renames[rid] = (f["text"], f["title"], f["type"])
                 matched[k] = rid
                 break
     for k, f in enumerate(frags):
@@ -430,7 +434,7 @@ def plan_sync(store, copies):
         elif kind == "remove":
             plan["removes"].append(rid)
         else:
-            plan["renames"].append({"id": rid, "text": val[0], "title": val[1], "copy": copy})
+            plan["renames"].append({"id": rid, "text": val[0], "title": val[1], "type": val[2], "copy": copy})
     plan["conflicts"].sort(key=lambda c: c["id"])
     plan["suspicious_removal"] = len(plan["removes"]) >= 3
     return plan
@@ -488,7 +492,8 @@ def _insert(store, adds, source, now):
             parent = next((i for i in reversed(ids[:pos]) if recs[i]["type"] == "org"), None)
         recs[rec["id"]] = {"id": rec["id"], "type": rec["type"], "title": rec["title"], "parent": parent, "order": 0,
                            "verified": now[:10],
-                           "ctx": 1, "owner": "user", "source": source or "import", "modified": now, "body": a["text"]}
+                           "ctx": 1, "owner": "user", "source": a.get("source") or source or "import", "modified": now,
+                           "body": a["text"]}
         new_ids.append(rec["id"])
     ended = set()
     for rid in new_ids:
@@ -542,13 +547,15 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
         return {"changed": [], "removed": [], "added": [], "moved": [], "snapshot": comp["snapshot"], "compiled": comp}
     snap = snapshot(store, copies, home, "sync")
     recs = {r["id"]: r for r in store.load()}
-    src = lambda p: source or ("import:home" if p == copies[0] else "import:mirror")
+    src = lambda p: (source if source not in (None, "compile") else
+                     ("import:home" if p == copies[0] else "import:mirror"))
     changed, removed = [], []
     for e in plan["edits"]:
         store.write(touch(dict(recs[e["id"]], body=e["text"], source=src(e["copy"]), modified=now), now))
         changed.append(e["id"])
     for r in plan["renames"]:
-        store.write(touch(dict(recs[r["id"]], body=r["text"], title=r["title"], source=src(r["copy"]), modified=now), now))
+        store.write(touch(dict(recs[r["id"]], body=r["text"], title=r["title"], type=r.get("type") or recs[r["id"]]["type"],
+                               source=src(r["copy"]), modified=now), now))
         changed.append(r["id"])
     for c in plan["conflicts"]:
         if resolve[c["id"]] == "file":
@@ -571,11 +578,54 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
         if rid in recs and rid not in changed and rid not in removed:
             store.write(touch(recs[rid], now))
     moved = _reorder(store, plan["reorder"]) if plan["reorder"] else []
-    added = _insert(store, plan["adds"], source, now) if plan["adds"] else []
+    added = _insert(store, [dict(a, source=src(a.get("copy"))) for a in plan["adds"]], source, now) if plan["adds"] else []
+    _reparent(store)
     ids = changed + removed + [i for i in moved if i not in changed] + added
+    ids += [i for i in plan["record_changes"] if i not in ids]
     store.journal({"ts": now, "op": "sync", "ids": ids, "source": source or "import", "reason": reason, "snapshot": snap})
     return {"changed": changed, "removed": removed, "added": added, "moved": moved, "snapshot": snap,
             "compiled": compile_store(store, copies, now, home, snap)}
+
+
+def _reparent(store):
+    """Products and teams belong to the organisation above them in the file; returns the ids re-parented."""
+    moved, org = [], None
+    for r in store.load():
+        if r["type"] == "org":
+            org = r["id"]
+        elif r["type"] in ("product", "team") and r.get("parent") != org:
+            store.write(dict(r, parent=org))
+            moved.append(r["id"])
+    return moved
+
+
+def half_migrated(root):
+    return ("half-migrated store at %s: remove %s to start over, or restore the pre-migrate snapshot"
+            % (root, os.path.join(root, "records")))
+
+
+def _last_store_path(home):
+    return os.path.join(_grow(home), ".ctx-last-store")
+
+
+def note_store(home, root):
+    """Remember the store's root (diagnosis only: never used to find the store)."""
+    path = _last_store_path(home)
+    if not os.path.isfile(path) or _read(path).strip() != root:
+        cs.atomic_write(path, root + "\n")
+
+
+def store_unavailable(context_text, home=None):
+    """The last store root, when the context's own root has no store but a store was used before — a vault
+    not mounted, moved, or switched off; else None. Reads only."""
+    path = _last_store_path(home)
+    if not os.path.isfile(path):
+        return None
+    last = _read(path).strip()
+    current = store_root_for(context_text, home)
+    if not last or cs.Store(current).exists():
+        return None
+    return last if (last != current or not cs.Store(last).exists()) else None
 
 
 # ---------------------------------------------------------------- lifecycle

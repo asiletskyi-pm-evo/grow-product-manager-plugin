@@ -100,6 +100,9 @@ class Ctx:
 # ------------------------------------------------------------------ commands
 def cmd_status(a, c):
     if not c.store.exists():
+        if os.path.isdir(c.store.records_dir):
+            print(co.half_migrated(c.store.root))
+            return 3, {"command": "status", "store": None, "half_migrated": True}
         print("no store at %s — local-context.md is a single file; `ctx migrate` shows the move" % c.store.root)
         return 3, {"command": "status", "store": None}
     recs = c.store.load()
