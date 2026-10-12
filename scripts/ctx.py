@@ -363,7 +363,7 @@ def cmd_assign(a, c):
         t = now()
         source = a.source or "ctx-assign"
         snap = co.snapshot(c.store, c.copies, c.home, "assign")
-        c.store.write(co.touch(dict(rec, read_by=value, source=source, modified=t), t))
+        c.store.write(dict(rec, read_by=value, source=source, modified=t))     # who reads it — not a content check
         c.store.journal({"ts": t, "op": "assign", "ids": [a.id], "source": source, "reason": a.reason or "",
                          "snapshot": snap})
         comp = co.compile_store(c.store, c.copies, t, c.home, snap)
@@ -452,10 +452,14 @@ def cmd_undo(a, c):
             t = now()
             c.store.journal({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre})
             # an import's snapshot holds the copies as they were on disk then — already edited; rebuild them
-            # from the restored records so the edit is undone and nothing waits to be imported again
-            co.compile_store(c.store, c.copies, t, c.home, pre)
-            print("restored the state before the %s — %s; the copies were rebuilt from the records"
-                  % ("last change" if a.steps == 1 else "%d last changes" % a.steps, target))
+            # from the restored records so the edit is undone and nothing waits to be imported again. A compile's
+            # own snapshot (a mirror created or rewritten) is the one case whose copies must stay as restored.
+            rebuilt = bool({m.get("op") for m in marks[-a.steps:]} - {"compile"})
+            if rebuilt:
+                co.compile_store(c.store, c.copies, t, c.home, pre)
+            print("restored the state before the %s — %s%s"
+                  % ("last change" if a.steps == 1 else "%d last changes" % a.steps, target,
+                     "; the copies were rebuilt from the records" if rebuilt else ""))
         else:
             co.forget_store(c.home)
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)

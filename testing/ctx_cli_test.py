@@ -544,6 +544,24 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, r = run_ok(e, "undo")
     check("undo of a ctx write unchanged", rc == 0 and "Locales:** uk" not in read(e.ctx), out[-300:])
 
+# --- v3.12.1 final review: undo of a compile snapshot; assign does not verify
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    os.remove(e.mirror)
+    run_ok(e, "compile")
+    recreated = os.path.exists(e.mirror)
+    rc, out, r = run_ok(e, "undo")
+    check("undo of a compile snapshot takes the compile back", recreated and rc == 0 and not os.path.exists(e.mirror),
+          (recreated, rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    cid = with_custom(e)
+    add_frontmatter(e, cid, 'verified: "2025-01-01"')
+    rc, out, r = run_ok(e, "assign", cid, "all")
+    check("assign keeps the verified date", rc == 0 and 'verified: "2025-01-01"' in e.record(cid), e.record(cid)[:500])
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
