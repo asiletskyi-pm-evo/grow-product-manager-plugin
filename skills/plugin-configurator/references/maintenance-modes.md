@@ -203,6 +203,7 @@ Present current sections as options via AskUserQuestion:
 - Custom Sections
 - Add new custom section
 - Review stale records (since v3.12.0; shown when the digest's `context:` line counts stale records) — run `python3 "<plugin root>/scripts/ctx.py" status` for the list; for each stale record show its title and a two-line summary and ask: still true → `ctx verify <id>`; needs a change → edit it as in U-3, then `ctx sync`; no longer current → `ctx invalidate <id> --reason "…"`; history only → `ctx archive <id>`. `ctx verify --stale` confirms all at once when the user says everything is still true
+- Who reads custom sections (since v3.12.1; shown when the digest's `context:` line counts `custom unassigned`) — run `python3 "<plugin root>/scripts/ctx.py" status` for the list; for each unassigned record show its title and a two-line summary with a proposed assignment: `all` for rules that apply to any work (naming, disambiguation, data access), otherwise the 2–6 skills its content serves; one batch confirmation, then `ctx assign <id> all|<skill,skill>` for each. Each `all` adds the whole record to every skill's Step 0c — name the size when a record is large
 - Move my context to records (since v3.11.0; shown when SHELL is available and the digest has no `context:` line) — run `python3 "<plugin root>/scripts/ctx.py" migrate`, show its record list and the line `round trip: identical`, then on "yes" `ctx migrate --apply` (a snapshot comes first; `ctx undo` reverses it)
 
 > The last four are the sections the Planning / Focus / People / Design Toolkit setup steps write and then hand off here ("offer review/update via `update config`"). They were missing from this menu until v2.1.0, so that handoff was a dead end.
@@ -355,7 +356,7 @@ For each configured vault:
 5. Check .vault-schema-version → compatible or needs migration
 6. Check the search providers (`references/context-provider-protocol.md` §4) → one row per provider: reachable (3-second probe), `last_index` or `synced_at`, stale or fresh (§6), local paths present → ✅ L2 available or ℹ️ L1 only
 7. Verify last save timestamp → "Last artifact saved: [date]"
-8. Context store (since v3.11.0) — when the digest shows a `context:` line, run `ctx status` and `ctx validate` (`references/context-protocol.md`) and add their lines to the report: records, edits waiting, conflicts, stray files; since v3.12.0 also stale, invalid and archived counts and type warnings (offer "Review stale records" when anything is stale)
+8. Context store (since v3.11.0) — when the digest shows a `context:` line, run `ctx status` and `ctx validate` (`references/context-protocol.md`) and add their lines to the report: records, edits waiting, conflicts, stray files; since v3.12.0 also stale, invalid and archived counts and type warnings (offer "Review stale records" when anything is stale); since v3.12.1 the `custom` records without `read_by` (offer "Who reads custom sections")
 
 Add to the validation report output.
 
