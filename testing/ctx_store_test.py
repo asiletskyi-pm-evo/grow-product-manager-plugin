@@ -177,5 +177,26 @@ with tempfile.TemporaryDirectory() as d:
     check("a file that does not arrive in time is a StoreError naming it", "product.zorg-slow.md" in err
           and "not available locally" in err and took < 3, (err, took))
 
+# --- v3.12: field schema
+import ctx_schema as sc  # noqa: E402
+
+fields = sc.load_fields()
+check("schema loads every type in spec §6", set(fields) == {"profile", "product", "onboarding", "judgment"}
+      and fields["profile"]["Role"]["type"] == "enum" and fields["product"]["Platforms"]["type"] == "list"
+      and fields["product"]["Jira Project Key"]["type"] == "key" and "URL" in fields["product"]
+      and fields["judgment"]["Hats allowed"]["type"] == "hats" and fields["onboarding"]["Mode"]["values"] == ["basic", "extended"],
+      fields)
+err = sc.check_value(fields["profile"]["Role"], "Senior PM")
+check("Role outside the enum is reported", err is not None and "head_of_product" in err
+      and sc.check_value(fields["profile"]["Role"], "cpo") is None, err)
+key = fields["product"]["Jira Project Key"]
+check("Jira key pattern", sc.check_value(key, "PROJ") is None and sc.check_value(key, "proj x") is not None)
+plat = fields["product"]["Platforms"]
+check("Platforms read from the #### subsection", sc.raw_value(body, "Platforms", plat) == "web, iOS"
+      and sc.parse_value(plat, "web, iOS") == ["web", "iOS"], sc.raw_value(body, "Platforms", plat))
+with_line = body.replace("- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ\n- **Platforms:** android\n")
+check("a field line wins over the subsection", sc.raw_value(with_line, "Platforms", plat) == "android")
+check("a field inside a managed region is not read", sc.raw_value(team, "Lead", {"type": "text"}) is None)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
