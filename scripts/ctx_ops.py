@@ -268,7 +268,7 @@ def compile_store(store, copies, now, home, snap=None):
     new = _state_for(recs, text, copies)
     old = store.state()
     new["freshness_since"] = old.get("freshness_since") or now[:10]
-    stale = {r["id"]: sc.verified_of(r, new) for r in recs if sc.is_stale(r, new, now[:10])}
+    stale, archived = card_marks(store, recs, now[:10], state=new)
     new["stale"] = sorted(stale)
     if not written and os.path.isfile(store.card_path) and {k: old.get(k) for k in new} == new:
         return {"written": [], "card_lines": _read(store.card_path).count("\n"), "changed": False, "snapshot": None}
@@ -277,7 +277,7 @@ def compile_store(store, copies, now, home, snap=None):
         snap = snapshot(store, copies, home, "compile")
     for p in written:
         cs.atomic_write(p, text)
-    card = cs.build_card(recs, text, now[:10], stale=stale, archived=len(store.archived()))
+    card = cs.build_card(recs, text, now[:10], stale=stale, archived=archived)
     if not os.path.isfile(store.card_path) or _read(store.card_path) != card:
         cs.atomic_write(store.card_path, card)
     new["compiled_at"] = now
@@ -813,6 +813,12 @@ def restore_record(store, copies, home, rid, now):
 
 
 # ------------------------------------------------------- digest (read-only)
+def card_marks(store, recs, today, state=None):
+    """({stale record id: its verified date}, number of archived records) for the card."""
+    st = store.state() if state is None else state
+    return ({r["id"]: sc.verified_of(r, st) for r in recs if sc.is_stale(r, st, today)}, len(store.archived()))
+
+
 def status_summary(context_path, home=None):
     """{records, card_lines, pending, conflicts, stale} for the SessionStart digest; {unavailable: root} when
     the store used before cannot be reached; None without a store or on any error. Reads only. The home

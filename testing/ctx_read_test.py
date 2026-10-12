@@ -208,6 +208,12 @@ check("readers normalises three forms", cr.readers({"read_by": "Product-Analysis
       == cr.readers({"read_by": "[product-analysis, write-concept]"}) == frozenset({"product-analysis", "write-concept"}))
 check("readers unset", cr.readers({}) is None and cr.readers({"read_by": ""}) is None)
 
+# --- v3.12.1 minor m2: --product on a context without products
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "minimal", edit=("### Product: Zorg App\n\n- **Jira Project Key:** PROJ\n", ""))
+    text, res = e.view("requirements-creator", product="Zorg App")
+    check("--product on a context without products", not res["needs_product"] and "продукт (обов'язкове)" in text, text[-400:])
+
 check("check_manifest is clean on the repo", cr.check_manifest(ROOT) == [], cr.check_manifest(ROOT))
 with tempfile.TemporaryDirectory() as d:
     src = read(cr.MANIFEST_PATH)

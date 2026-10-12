@@ -258,5 +258,9 @@ except ValueError as e:
     flow_ok = False
 check("a flow list read_by typed by hand does not break the record", flow_ok)
 
+# --- v3.12.1 minor m6: one heading rule for the card and ctx read
+check("heading_matches", hasattr(cs, "heading_matches") and cs.heading_matches("#### Platforms (mobile first)", "Platforms")
+      and cs.heading_matches("#### Platforms", "Platforms") and not cs.heading_matches("#### Platformsx", "Platforms"))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

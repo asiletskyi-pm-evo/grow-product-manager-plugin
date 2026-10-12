@@ -220,6 +220,10 @@ def cmd_get(a, c):
     if a.field:
         spec = _field_spec(rec, a.field)
         raw = sc.raw_value(rec["body"], a.field, spec) if spec else cs.field_get(rec["body"], a.field)
+        placeholder = cs.field_get(rec["body"], a.field) if raw is None and spec else None
+        if placeholder is not None:            # the line is there with a placeholder such as _(not set)_
+            print(placeholder)
+            return 0, {"command": "get", "id": a.id, "field": a.field, "value": None, "not_set": True}
         if raw is None:
             raise cs.StoreError("no field %r outside managed regions in %s" % (a.field, a.id))
         print(raw)
@@ -253,9 +257,10 @@ def cmd_list(a, c):
 def cmd_read(a, c):
     c.need_store()
     try:
-        text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10])
+        cr.manifest_for(cr.load_manifest(), a.skill)
     except KeyError:
         raise cs.StoreError("no manifest entry for %s — read local-context.md whole" % a.skill)
+    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10])
     sys.stdout.write(text)
     return 0, dict(res, command="read", skill=a.skill, text=text if a.json else None)
 
@@ -526,7 +531,8 @@ def cmd_card(a, c):
     with co.lock(c.home):
         c.guard()
         recs = c.store.load()
-        card = cs.build_card(recs, cs.compile_records(recs), now()[:10])
+        stale, archived = co.card_marks(c.store, recs, now()[:10])
+        card = cs.build_card(recs, cs.compile_records(recs), now()[:10], stale=stale, archived=archived)
         cs.atomic_write(c.store.card_path, card)
     print("INDEX.md: %d lines" % card.count("\n"))
     return 0, {"command": "card", "card_lines": card.count("\n")}

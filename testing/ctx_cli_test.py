@@ -459,6 +459,67 @@ with tempfile.TemporaryDirectory() as d:
     rc, out_status, r = run_ok(e, "status")
     check("status lists unassigned", "custom without read_by: " + cid in out_status and r["unassigned"] == [cid], out_status[-400:])
 
+# --- v3.12.1 minors
+def edit_both(e, old, new):
+    for p in (e.ctx, e.mirror):
+        if os.path.exists(p):
+            e.edit(p, old, new)
+
+
+def add_frontmatter(e, rid, lines):
+    p = os.path.join(e.store, "records", rid + ".md")
+    text = read(p).replace("\n---\n", "\n" + lines + "\n---\n", 1)
+    open(p, "w", encoding="utf-8", newline="").write(text)
+
+
+with tempfile.TemporaryDirectory() as d:      # m1: ctx card keeps the stale and archive marks
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    add_frontmatter(e, "setting.templates", 'verified: "2025-01-01"\nttl_days: 30')
+    run_ok(e, "archive", "setting.planning-planning-suite", "--reason", "old")
+    rc, out, r = run_ok(e, "card")
+    card = read(e.store, "INDEX.md")
+    check("ctx card keeps stale and archive marks", rc == 0 and "⚠ 2025-01-01" in card and "**Архів:** 1" in card, card[-600:])
+
+with tempfile.TemporaryDirectory() as d:      # m3: a typed get of a placeholder
+    e = Env(d)
+    edit_both(e, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** _(not set)_")
+    run_ok(e, "migrate", "--apply")
+    rc, out, r = run_ok(e, "get", "product.zorg-app", "Jira Project Key")
+    check("typed get of a placeholder", rc == 0 and "_(not set)_" in out and r["value"] is None and r.get("not_set") is True,
+          (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:      # m5: an internal KeyError in read is not "no manifest entry"
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    import contextlib, io
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import ctx as ctxmod  # noqa: E402
+    orig = ctxmod.cr.read_view
+
+    def boom(*a, **k):
+        raise KeyError("internal")
+    ctxmod.cr.read_view = boom
+    buf, raised = io.StringIO(), False
+    os.environ.pop("GROW_PM_CONTEXT_PATH", None)
+    try:
+        with contextlib.redirect_stdout(buf):
+            ctxmod.main(["read", "--skill", "product-analysis", "--home", e.home, "--context", e.ctx])
+    except KeyError:
+        raised = True
+    finally:
+        ctxmod.cr.read_view = orig
+    check("an internal KeyError in read is not masked", raised and "no manifest entry" not in buf.getvalue(), buf.getvalue()[-300:])
+    rc, out, r = run_ok(e, "read", "--skill", "no-such-skill")
+    check("unknown skill in read is exit 3", rc == 3 and "no manifest entry for no-such-skill" in out, out[-300:])
+
+with tempfile.TemporaryDirectory() as d:      # m6: card platforms match by heading prefix
+    e = Env(d)
+    edit_both(e, "#### Platforms\n", "#### Platforms (mobile first)\n")
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "card")
+    check("card platforms match by heading prefix", "platforms web, iOS" in read(e.store, "INDEX.md"), read(e.store, "INDEX.md")[:900])
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

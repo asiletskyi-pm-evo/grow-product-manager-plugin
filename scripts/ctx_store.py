@@ -563,9 +563,17 @@ def _member_count(body):
     return max(len(rows) - 2, 0) if rows else None
 
 
+def heading_matches(core, name):
+    """A heading whose text is `name` or starts with it followed by a non-word character
+    ("Key Metrics (focus)" answers "Key Metrics"; "Localesx" does not answer "Locales")."""
+    text = (_heading_text(core) or "").lower()
+    want = name.lower()
+    return _level(core) > 0 and (text == want or (text.startswith(want) and not text[len(want)].isalnum()))
+
+
 def _bullets_under(body, name):
     lines = [core for _, core, _ in _lines(body)]
-    at = next((k for k, c in enumerate(lines) if _heading_text(c) == name), None)
+    at = next((k for k, c in enumerate(lines) if heading_matches(c, name)), None)
     out = []
     for c in lines[at + 1:] if at is not None else []:
         if _heading_text(c) is not None:
