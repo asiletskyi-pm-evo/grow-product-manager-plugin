@@ -7,14 +7,23 @@ references/context-provider-protocol.md §3b). `load_repos` reads them through
 `ctx_common.find_registrations` and gives every one the same shape, with defaults, so the code
 that fetches blocks never branches on the schema version.
 
-Reads local files only — no network, nothing written. Stdlib only.
+`fetch` reads a repository's blocks ("theirs") from its MCP server or from its core folder; the registrations
+themselves are read from local files only. Nothing is ever written. Stdlib only.
 """
+import collections
+import contextlib
+import datetime
+import io
+import json
 import os
 import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
+import ctx_mcp as cm  # noqa: E402
+import ctx_store as cs  # noqa: E402
+import provider_bundle as pb  # noqa: E402
 
 RANKS = {"personal": 100, "team": 500, "org": 1000}     # a higher rank wins when two repositories disagree
 DEFAULT_AUTHORITY = "org"                               # what the bundle builder writes
@@ -93,3 +102,191 @@ def load_repos(context_text, home, extra_dirs=None, skipped=None):
     dirs = [os.path.join(home, ".grow-pm", "providers")] if extra_dirs is None else list(extra_dirs)
     regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped)
     return [normalise(r) for r in regs]
+
+
+# ------------------------------------------------------------------ fetch
+NOTE_TOOL = "vault_get_note"        # the one MCP tool a fetch calls; it is on cm.ALLOWED
+MAX_ERROR = 300
+
+
+def _stamp(now):
+    """`now` (a datetime, or text taken as it is; None → the present moment) as ISO text with the offset."""
+    if isinstance(now, str):
+        return now
+    t = now if isinstance(now, datetime.datetime) else datetime.datetime.now()
+    if t.tzinfo is None:
+        t = t.astimezone()
+    return t.isoformat(timespec="seconds")
+
+
+def _clean(text):
+    """A message that came from a server, on one line: control characters gone, length bounded."""
+    return re.sub(r"[\x00-\x1f\x7f]+", " ", str(text)).strip()[:MAX_ERROR]
+
+
+def _lf(text):
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _read_bounded(path):
+    """The text of a file the way `provider_bundle.rd` gives it (universal newlines), but through the store's
+    reader: a file iCloud has not downloaded costs the time budget, not a hang."""
+    return _lf(cs.read_text(path))
+
+
+@contextlib.contextmanager
+def _bounded_reads():
+    prev = pb.READ
+    pb.READ = _read_bounded
+    try:
+        yield
+    finally:
+        pb.READ = prev
+
+
+def _manifest(core_root):
+    """The core's provider manifest as the bundle builder reads it, or None. The builder's `sys.exit(3)` and its
+    message on stdout are not ours: neither leaves this function."""
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            return pb.load_manifest(core_root)
+    except (Exception, SystemExit):
+        return None
+
+
+def _team_block(repo, manifest):
+    """The team region the connect flow builds from the core's team card and people — text without the final
+    newline — or None: no team in the registration, no manifest, no such team in the role model, or anything in
+    the core that cannot be read. The team block is optional; its absence never costs the blocks."""
+    team, core_root = repo["team"], repo["core_root"]
+    if manifest is None or not team:
+        return None
+    try:
+        bundles = manifest.s("bundles_file") or os.path.join(manifest.s("plugin_folder", "."), "_System", "access-bundles.json")
+        model = json.loads(pb.rd(os.path.join(core_root, bundles)))
+        teams = model["teams"]
+        key = team if team in teams else (team[len("team-"):] if team.startswith("team-") else team)
+        block = pb.team_context(core_root, manifest, key, teams[key], model, repo["jira_write"] or "ask")[0]
+        return block.rstrip("\n")
+    except (Exception, SystemExit):
+        return None
+
+
+def _from_mcp(repo, blocks_file, client_factory):
+    """(text, None) of the blocks file as the server serves it, or (None, why not)."""
+    ep = repo["endpoint"]
+    if not ep["url"]:
+        return None, "no endpoint url in the registration"
+    if not blocks_file:
+        return None, "the registration names no blocks_file"
+    hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
+    try:
+        client = client_factory(ep["url"], headers=hdrs)
+        if not client.probe():
+            hint = "; %s is not set (or not 'Name: value')" % ep["headers_env"] if ep["headers_env"] and not hdrs else ""
+            return None, "MCP unreachable: %s%s" % (_clean(getattr(client, "last_error", "") or "no answer"), hint)
+        note = client.call(NOTE_TOOL, {"path": ep["root"] + blocks_file})      # Ruling P1: plain concatenation
+    except cm.McpError as e:
+        return None, "MCP: %s" % _clean(e)
+    except Exception as e:                              # a fetch is an answer or a reason, whatever the server did
+        return None, "MCP failed unexpectedly (%s)" % type(e).__name__
+    content = note.get("content")
+    if isinstance(content, str):
+        return _lf(content), None
+    why = note.get("error")
+    return None, "MCP: %s" % (_clean(why) if isinstance(why, str) and why.strip() else "the note has no text content")
+
+
+def _from_folder(repo, blocks_file):
+    """(text, None) of the blocks file in the core folder, or (None, why not)."""
+    root = repo["core_root"]
+    if not root:
+        return None, "no core folder in the registration"
+    if not os.path.isdir(root):
+        return None, "core folder not found: %s" % root
+    if not blocks_file:
+        return None, "neither the registration nor the core's manifest names a blocks_file"
+    rel = os.path.normpath(blocks_file)
+    if os.path.isabs(blocks_file) or rel == os.pardir or rel.startswith(os.pardir + os.sep):
+        return None, "blocks_file points outside the core folder: %s" % blocks_file
+    try:
+        return _lf(cs.read_text(os.path.join(root, rel))), None
+    except cs.StoreError as e:
+        return None, str(e)
+    except FileNotFoundError:
+        return None, "blocks file not found: %s" % blocks_file
+    except OSError as e:
+        return None, "blocks file not available: %s" % (e.strerror or type(e).__name__)
+    except UnicodeDecodeError:
+        return None, "blocks file is not UTF-8 text: %s" % blocks_file
+
+
+def _regions(text, namespace):
+    """({id: the whole region, markers included, no final newline}, [v= of each]) for the regions of `namespace`
+    in `text`, in file order. An id met twice keeps the first; a region that is never closed is no region."""
+    ns = re.escape(namespace)
+    rx = re.compile(r"<!--\s*%s:begin\s+id=([A-Za-z0-9_.-]+)([^>]*)-->.*?<!--\s*%s:end\s+id=\1\s*-->" % (ns, ns), re.S)
+    blocks, versions = {}, []
+    for mo in rx.finditer(text):
+        if mo.group(1) in blocks:
+            continue
+        blocks[mo.group(1)] = mo.group(0)
+        v = re.search(r"(?:^|\s)v=([^\s>]+)", mo.group(2))
+        versions.append(v.group(1) if v else None)
+    return blocks, versions
+
+
+def fetch(repo, client_factory=cm.McpClient, now=None):
+    """A repository's blocks ("theirs") — read only, nothing is written anywhere.
+
+    `blocks_source` decides where from: "mcp" asks the server only; "paths" reads the core folder only; "auto"
+    asks the server when it answers the handshake and otherwise reads the core folder. A server that answers an
+    error, a bad answer or nothing counts as unavailable for this fetch; under "auto" the folder is then tried.
+
+    The server path of the blocks file is `endpoint.root + blocks_file`; in the core folder it is
+    `core_root/blocks_file`. A registration that names no blocks_file (a v1 bundle) gets the one in the core's
+    provider manifest. Files are read through ctx_store.read_text (the iCloud time budget).
+
+    Returns {source: "mcp"|"folder"|None, version: the v= most blocks carry (the first met on a tie; counted
+    before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks, team: the team
+    region or None, team_source: "folder"|None, error: why no blocks came, or None, checked: ISO time}.
+    The team region is built from the core folder alone (the card, the people, the role model), whichever
+    source the blocks came from; a repository with no core folder has none.
+    """
+    out = {"source": None, "version": None, "blocks": {}, "team": None, "team_source": None, "error": None,
+           "checked": _stamp(now)}
+    src, core_root, url = repo["blocks_source"], repo["core_root"], repo["endpoint"]["url"]
+    with _bounded_reads():
+        blocks_file = repo["blocks_file"]
+        manifest = None
+        if core_root and os.path.isdir(core_root) and (repo["team"] or not blocks_file):
+            manifest = _manifest(core_root)
+        if not blocks_file and manifest is not None:
+            blocks_file = manifest.s("blocks_file")
+        out["team"] = _team_block(repo, manifest)
+        out["team_source"] = "folder" if out["team"] is not None else None
+
+        text, errors = None, []
+        if src == "auto" and not url and not core_root:
+            errors.append("the registration has neither an endpoint url nor a core folder")
+        else:
+            if src == "mcp" or (src == "auto" and url):
+                text, why = _from_mcp(repo, blocks_file, client_factory)
+                if text is not None:
+                    out["source"] = "mcp"
+                else:
+                    errors.append(why)
+            if text is None and src in ("auto", "paths"):
+                text, why = _from_folder(repo, blocks_file)
+                if text is not None:
+                    out["source"] = "folder"
+                else:
+                    errors.append(why)
+    if text is None:
+        out["error"] = "; ".join(errors)
+        return out
+    blocks, versions = _regions(text, repo["namespace"])
+    counts = collections.Counter(v for v in versions if v)
+    out["version"] = counts.most_common(1)[0][0] if counts else None
+    out["blocks"] = {k: v for k, v in blocks.items() if k not in repo["skip_blocks"]}
+    return out

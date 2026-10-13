@@ -6,7 +6,8 @@ thread; JSON and SSE answers, a session id, recorded requests). Covers the hands
 answer formats, the session id going back, the allow-list refusing before any request, errors (isError,
 JSON-RPC error, HTTP status, timeout, dropped connection) and retries on network errors only, no redirects
 and no secrets in messages, `headers_from_env`, and the command: reachable yes / no for an MCP repository
-and for a folder, the header from the environment, the version on the source. No real server, no real data.
+and for a folder, the header from the environment, the version on the source (what its blocks carry now, the
+registration's own as the fallback). No real server, no real data.
 Semantics: references/context-provider-protocol.md. Stdlib only; run from the repo root.
 """
 import json, os, socket, subprocess, sys, tempfile, threading, time, traceback
@@ -18,7 +19,7 @@ os.environ["NO_PROXY"] = "127.0.0.1,localhost"          # the fake is local; a p
 os.environ["no_proxy"] = "127.0.0.1,localhost"
 import ctx_mcp as cm  # noqa: E402
 from ctx_mcp import McpClient, McpError, McpRefused  # noqa: E402
-from mcp_fake import FakeMcp  # noqa: E402
+from mcp_fake import BLOCKS, FakeMcp  # noqa: E402
 
 CTX = os.path.join(ROOT, "scripts", "ctx.py")
 FIX = os.path.join(ROOT, "testing", "fixtures", "ctx")
@@ -220,6 +221,21 @@ with FakeMcp() as fake:
     fake.handlers["brain_status"] = lambda args: ("", False)
     err = raises(lambda: c.call("brain_status", {}), McpError)
     check("an empty text → McpError", err is not None, repr(err))
+
+# a server that sends something the protocol does not allow as the content: an McpError with a fixed message, never a TypeError
+for label, content in (("a number", 5), ("a bool", True), ("null", None), ("an object", {"type": "text", "text": "{}"}),
+                       ("a string", "{}"), ("a list of numbers", [1, 2]), ("a list of nulls", [None])):
+    with FakeMcp(raw_result={"content": content, "isError": False}) as fake:
+        c = McpClient(fake.url)
+        err = raises(lambda: c.call("vault_get_note", {"path": "a"}), McpError)
+        check("content that is %s → McpError with a fixed message, no value in it" % label,
+              err is not None and type(err) is McpError and str(err) == "vault_get_note returned no text content", repr(err))
+with FakeMcp(raw_result={"content": 5, "isError": True}) as fake:
+    err = raises(lambda: McpClient(fake.url).call("vault_get_note", {"path": "a"}), McpError)
+    check("isError with a content that is a number → McpError too", err is not None and type(err) is McpError, repr(err))
+with FakeMcp(raw_result={"isError": False}) as fake:
+    err = raises(lambda: McpClient(fake.url).call("vault_get_note", {"path": "a"}), McpError)
+    check("a result with no content at all → McpError", err is not None and type(err) is McpError, repr(err))
 
 with FakeMcp(rpc_error="no such index") as fake:
     c = McpClient(fake.url)
@@ -462,7 +478,9 @@ def block(out, rid):
     return "\n".join(got)
 
 
-with tempfile.TemporaryDirectory() as d, FakeMcp(require_headers={"X-Token": "tok-9f3a"}) as fake:
+ROOTED = {"ZorgGrowth/" + BLOCKS_PATH: BLOCKS}          # the server's tree: the registration's endpoint.root + blocks_file
+
+with tempfile.TemporaryDirectory() as d, FakeMcp(tree=ROOTED, require_headers={"X-Token": "tok-9f3a"}) as fake:
     e = Env(d)
     rc, out, res = e.run("repo", "status")
     check("ctx repo status with none says so", rc == 0 and res is not None and res["repos"] == [] and "no repositories" in out, (rc, out))
@@ -483,8 +501,10 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(require_headers={"X-Token": "to
           and any(s["headers"].get("X-Token") == "tok-9f3a" for s in fake.seen), g)
     check("the secret never reaches the output", "tok-9f3a" not in out and "tok-9f3a" not in json.dumps(res), out)
     check("the dead one says why, in the same line", "reachable no (" in dd and "refused" in dd.lower(), dd)
-    check("version on source vs base: the registration's version, the base is a dash until blocks are kept",
-          "growth 1.4" in g and "base" in g and "—" in g.splitlines()[-1] and "core 0.2" in cc_, g)
+    check("version on source vs base: the version its blocks carry now, the base is a dash until blocks are kept",
+          "version on source: 0.1" in g and "growth 1.4" not in g and "base" in g and "—" in g.splitlines()[-1], g)
+    check("…the registration's version is the fallback when the source cannot be read (a dead server, an empty core folder)",
+          "version on source: growth 1.4" in dd and "version on source: core 0.2, bundle 0.4.0" in cc_, (dd, cc_))
     check("each line names the kind and the endpoint without credentials", "mcp" in g.splitlines()[0] and fake.url in g.splitlines()[0]
           and "bundle" in cc_.splitlines()[0], g)
     check("CTX_RESULT is last and carries the verdicts", out.splitlines()[-1].startswith("CTX_RESULT ") and res["command"] == "repo"
@@ -493,9 +513,17 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(require_headers={"X-Token": "to
     by_id = {r["id"]: r for r in res["repos"]}
     check("…with the reason, the registration's version and an empty base",
           all(k in by_id["zorg-growth"] for k in ("id", "kind", "status", "url", "reachable", "reason", "source_version", "base_version"))
-          and by_id["zorg-dead"]["reason"] and by_id["zorg-growth"]["source_version"] == "growth 1.4"
+          and by_id["zorg-dead"]["reason"] and by_id["zorg-growth"]["source_version"] == "0.1"
+          and by_id["zorg-dead"]["source_version"] == "growth 1.4" and by_id["zorg-core"]["source_version"] == "core 0.2, bundle 0.4.0"
           and by_id["zorg-growth"]["base_version"] is None and by_id["zorg-growth"]["reason"] == "", res["repos"])
     check("a dead port does not stall the command", took < 8, took)
+
+    e.reg("zorg-lost", MCP_V2.format(id="zorg-lost", url=fake.url).replace('root: "ZorgGrowth/"', 'root: "Elsewhere/"'))
+    rc, out, res = e.run("repo", "status", "zorg-lost", **good)
+    gl = block(out, "zorg-lost")
+    check("a server that answers the handshake but not for the blocks file: reachable, and the registration's version stands",
+          rc == 0 and "reachable yes" in gl and "version on source: growth 1.4" in gl, gl)
+    os.remove(os.path.join(e.providers, "zorg-lost.yaml"))
 
     rc, out, res = e.run("repo", "status", "zorg-growth", "--json", **good)
     check("an id narrows it to that repository, --json is accepted and the result line stays last",
@@ -542,8 +570,10 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(require_headers={"X-Token": "to
     check("repo status is a reading command: nothing is written", not os.path.exists(os.path.join(e.vault, "Notes", "_System", "context"))
           and not os.path.exists(os.path.join(e.home, ".grow-pm", "snapshots")) and sorted(os.listdir(os.path.join(e.home, ".grow-pm"))) == ["local-context.md"],
           os.listdir(os.path.join(e.home, ".grow-pm")))
-    check("…and the engine only called what the allow-list names (the status only handshakes)",
-          set(s["method"] for s in fake.seen) <= {"initialize", "notifications/initialized"}, set(s["method"] for s in fake.seen))
+    check("…and the engine only called what the allow-list names (a handshake, and the note with the blocks)",
+          set(s["method"] for s in fake.seen) <= {"initialize", "notifications/initialized", "tools/call"}
+          and all(s["body"]["params"]["name"] in cm.ALLOWED for s in fake.seen if s["method"] == "tools/call"),
+          set(s["method"] for s in fake.seen))
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

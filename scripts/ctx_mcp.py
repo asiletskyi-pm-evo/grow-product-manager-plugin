@@ -79,8 +79,10 @@ def _reason(exc):
 
 
 def _text_of(result):
-    """The first text item of a tools/call result, or None."""
-    for item in result.get("content") or []:
+    """The first text item of a tools/call result, or None — also when `content` is not a list at all
+    (a server may send a number there; the caller then raises its own fixed message)."""
+    content = result.get("content")
+    for item in content if isinstance(content, list) else ():
         if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str):
             return item["text"]
     return None

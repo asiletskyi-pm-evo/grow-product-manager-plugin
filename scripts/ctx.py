@@ -620,9 +620,11 @@ def cmd_repo_status(a, c):
     rows = []
     for r in repos:
         ok, why = _reach(r)
-        # no block state is kept yet, so there is no base to set the source's version against
+        # the version on the source is what its blocks carry now; the registration's own is the fallback when
+        # the source cannot be read. No block state is kept yet, so there is no base to set it against.
+        live = crp.fetch(r)["version"] if ok else None
         rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": _public_url(r["endpoint"]["url"]),
-                     "reachable": ok, "reason": why, "source_version": r["source_version"], "base_version": None})
+                     "reachable": ok, "reason": why, "source_version": live or r["source_version"], "base_version": None})
     if rows:
         for row in rows:
             where = row["url"] or "—"

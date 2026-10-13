@@ -68,7 +68,12 @@ DEFAULT_JIRA_LABELS = {
 }
 
 
+READ = None     # a caller that must not hang on a file iCloud has not downloaded (ctx_repos.fetch) sets a reader here: path -> text
+
+
 def rd(p):
+    if READ is not None:
+        return READ(p)
     with open(p, encoding="utf-8") as f:
         return f.read()
 
