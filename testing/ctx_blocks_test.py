@@ -5,10 +5,12 @@ Pure functions on the fictional "Zorg": `norm` (the text two blocks are compared
 repository's managed regions in the records' bodies — inside a section wrapper too, found in whichever record
 holds them now, and the structure errors: a duplicate id, a broken marker, a nested region) and `classify`
 (the plan's sign for one block from mine / theirs / the stored base — the golden cases of the spec's tables
-B5 and B6, and the order the rules apply in). One test runs on a real migrated store. Semantics:
-references/context-provider-protocol.md. Stdlib only; run from the repo root.
+B5 and B6, and the order the rules apply in). One test runs on a real migrated store. The persistent side: a
+repository's block state (`.state/blocks/<repo>.json`) and the base texts (`.state/blocks/<repo>/<sha>.md`) —
+load/save, bases kept to ten, pruning, the write allow-list, refused repository ids and the read-only
+`last_checked`. Semantics: references/context-provider-protocol.md. Stdlib only; run from the repo root.
 """
-import os, shutil, sys, tempfile
+import json, os, shutil, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -227,6 +229,232 @@ with tempfile.TemporaryDirectory() as d:
           ({k: v["host"] for k, v in fg.items()}, eg))
     check("the found text is what the repository would publish, so an untouched block classifies =",
           cb.classify(fr["scope"]["text"], region("scope", "0.4", "### Scope of work\nThe user works on Zorg App only."), None) == "=", fr["scope"])
+
+# ------------------------------------------------------------------ the state of a repository's blocks, and the bases
+def files_under(path):
+    """{relative path: bytes} of every file under path, hidden ones too (empty when absent)."""
+    out = {}
+    for dp, _, fn in os.walk(path):
+        for f in fn:
+            out[os.path.relpath(os.path.join(dp, f), path)] = open(os.path.join(dp, f), "rb").read()
+    return out
+
+
+def sha_of(text):
+    return cs.sha_text(cb.norm(text))
+
+
+def raises(exc, fn, *a):
+    try:
+        fn(*a)
+    except exc as e:
+        return e
+    except BaseException as e:
+        return type(e).__name__ + ": " + str(e)
+    return None
+
+
+def hexes(n):
+    return [cs.sha_text("version %d" % i) for i in range(n)]
+
+
+with tempfile.TemporaryDirectory() as d:
+    store = cs.Store(os.path.join(d, "vault", "_System", "context"))
+    blocks_root = os.path.join(store.state_dir, "blocks")
+    empty = {"checked": None, "source": None, "version": None, "blocks": {}}
+    check("a repository with no state file: the empty state",
+          cb.load_state(store, "zorg-core") == empty and not os.path.exists(store.root), cb.load_state(store, "zorg-core"))
+
+    scope_text = region("scope", "0.4", "### Scope\r\nThe user works on Zorg App only.  \r\n")
+    sha = cb.put_base(store, "zorg-core", scope_text)
+    saved = {"checked": "2026-10-20T10:00:00+03:00", "source": "mcp", "version": "0.4",
+             "blocks": {"scope": {"base_sha": sha, "bases": [sha], "v": "0.4", "host": "custom.zorg-core-notes",
+                                  "checked": "2026-10-20T10:00:00+03:00", "user_removed": False},
+                        "teams": {"base_sha": None, "bases": [], "v": "", "host": None, "checked": None, "user_removed": True}}}
+    cb.save_state(store, "zorg-core", saved)
+    check("state round trip", cb.load_state(store, "zorg-core") == saved, cb.load_state(store, "zorg-core"))
+    state_file = os.path.join(blocks_root, "zorg-core.json")
+    raw = open(state_file, encoding="utf-8", newline="").read()
+    check("the state is one JSON file per repository under .state/blocks, sorted, ending with a newline",
+          os.path.isfile(state_file) and raw.endswith("}\n") and json.loads(raw) == saved
+          and raw == json.dumps(saved, ensure_ascii=False, indent=1, sort_keys=True) + "\n", raw[:200])
+    check("the version of a marker that carries none is stored as the empty string (unknown)",
+          cb.load_state(store, "zorg-core")["blocks"]["teams"]["v"] == "", "")
+    check("another repository's state is separate",
+          cb.load_state(store, "zorg-growth") == empty and cb.load_state(store, "zorg-core") == saved, "")
+
+    # ---- put_base / get_base
+    check("put_base returns the hash of the normalised text and names the file by it",
+          sha == sha_of(scope_text) and os.path.isfile(os.path.join(blocks_root, "zorg-core", sha + ".md")), sha)
+    check("the base is stored as given — CRLF and trailing spaces stay — and read back byte for byte",
+          open(os.path.join(blocks_root, "zorg-core", sha + ".md"), "rb").read() == scope_text.encode("utf-8")
+          and cb.get_base(store, "zorg-core", sha) == scope_text, repr(cb.get_base(store, "zorg-core", sha)))
+    lf_sha = cb.put_base(store, "zorg-core", scope_text.replace("\r\n", "\n"))
+    check("a text equal once normalised is the same base (the first stored stays)",
+          lf_sha == sha and cb.get_base(store, "zorg-core", sha) == scope_text
+          and len(os.listdir(os.path.join(blocks_root, "zorg-core"))) == 1, lf_sha)
+    calls = []
+    real_write = cs.atomic_write
+    cs.atomic_write = lambda path, text: (calls.append(path), real_write(path, text))[1]
+    try:
+        again = cb.put_base(store, "zorg-core", scope_text)
+        fresh = cb.put_base(store, "zorg-core", "another block text")
+    finally:
+        cs.atomic_write = real_write
+    check("writing the same base twice is a no-op — nothing is written; a new text is",
+          again == sha and len(calls) == 1 and calls[0].endswith(sha_of("another block text") + ".md"), calls)
+    check("get_base: unknown hash, a repository with no bases, and a hash that is no hash are None",
+          cb.get_base(store, "zorg-core", cs.sha_text("never stored")) is None
+          and cb.get_base(store, "zorg-growth", sha) is None
+          and cb.get_base(store, "zorg-core", "../zorg-core.json") is None
+          and cb.get_base(store, "zorg-core", "") is None and cb.get_base(store, "zorg-core", None) is None, "")
+    check("an empty base text and None are the same empty base",
+          cb.put_base(store, "zorg-core", "") == cb.put_base(store, "zorg-core", None) == cs.sha_text("")
+          and cb.get_base(store, "zorg-core", cs.sha_text("")) == "", "")
+
+    # ---- a corrupt state is an error, never a silent reset
+    bad = "{\"checked\": \"2026-10-20\", \"blocks\": {oops"
+    open(state_file, "w", encoding="utf-8").write(bad)
+    e = raises(cs.StoreError, cb.load_state, store, "zorg-core")
+    check("a corrupt state file raises StoreError naming the file — and is left as it is",
+          isinstance(e, cs.StoreError) and "zorg-core.json" in str(e) and open(state_file, encoding="utf-8").read() == bad, e)
+    for label, payload in (("a list", "[]"), ("blocks that are not an object", "{\"blocks\": []}"),
+                           ("a block that is not an object", "{\"blocks\": {\"scope\": 3}}"),
+                           ("bases that are not a list", "{\"blocks\": {\"scope\": {\"bases\": \"abc\"}}}"),
+                           ("a base that is not a hash string", "{\"blocks\": {\"scope\": {\"bases\": [1]}}}")):
+        open(state_file, "w", encoding="utf-8").write(payload)
+        e = raises(cs.StoreError, cb.load_state, store, "zorg-core")
+        check("a state file of the wrong shape (%s) raises StoreError naming the file" % label,
+              isinstance(e, cs.StoreError) and "zorg-core.json" in str(e), e)
+    cb.save_state(store, "zorg-core", saved)
+
+    # ---- missing keys come back filled; bases are kept to ten, newest last, base_sha the newest of them
+    open(state_file, "w", encoding="utf-8").write(json.dumps({"blocks": {"scope": {"base_sha": sha}}}))
+    loaded = cb.load_state(store, "zorg-core")
+    check("a state with keys missing is filled with their defaults on load",
+          loaded == {"checked": None, "source": None, "version": None,
+                     "blocks": {"scope": {"base_sha": sha, "bases": [sha], "v": "", "host": None, "checked": None,
+                                          "user_removed": False}}}, loaded)
+    hs = hexes(12)
+    many = {"checked": None, "source": None, "version": None,
+            "blocks": {"scope": {"base_sha": hs[11], "bases": list(hs), "v": "0.5", "host": "h", "checked": None, "user_removed": False}}}
+    cb.save_state(store, "zorg-core", many)
+    state = cb.load_state(store, "zorg-core")
+    check("bases are kept to the last 10 — the oldest dropped first", state["blocks"]["scope"]["bases"] == hs[2:], state["blocks"]["scope"]["bases"])
+    moved = {"checked": None, "source": None, "version": None,
+             "blocks": {"scope": {"base_sha": hs[3], "bases": list(hs[:6]) + [hs[3]], "v": "", "host": None, "checked": None, "user_removed": False}}}
+    cb.save_state(store, "zorg-core", moved)
+    check("base_sha is always the newest entry of bases, and a hash appears once",
+          cb.load_state(store, "zorg-core")["blocks"]["scope"]["bases"] == [hs[0], hs[1], hs[2], hs[4], hs[5], hs[3]],
+          cb.load_state(store, "zorg-core")["blocks"]["scope"]["bases"])
+    lone = {"checked": None, "source": None, "version": None,
+            "blocks": {"scope": {"base_sha": hs[0], "bases": [], "v": "", "host": None, "checked": None, "user_removed": False}}}
+    cb.save_state(store, "zorg-core", lone)
+    check("a base_sha missing from bases is added to them",
+          cb.load_state(store, "zorg-core")["blocks"]["scope"]["bases"] == [hs[0]], "")
+    mine_only = {"checked": None, "source": None, "version": None,
+                 "blocks": {"scope": {"base_sha": None, "bases": [hs[1]], "v": "", "host": None, "checked": None, "user_removed": False}}}
+    cb.save_state(store, "zorg-core", mine_only)
+    check("a block with no base_sha keeps its bases as they are",
+          cb.load_state(store, "zorg-core")["blocks"]["scope"]["bases"] == [hs[1]], "")
+
+# ---- prune_bases
+with tempfile.TemporaryDirectory() as d:
+    store = cs.Store(os.path.join(d, "store"))
+    texts = ["base text %d" % i for i in range(12)]
+    shas = [cb.put_base(store, "zorg-core", t) for t in texts]
+    teams_sha = cb.put_base(store, "zorg-core", "the teams block")
+    orphan = cb.put_base(store, "zorg-core", "a block the state no longer has")
+    other_sha = cb.put_base(store, "zorg-growth", "growth's own base")
+    bases_dir = os.path.join(store.state_dir, "blocks", "zorg-core")
+    state = {"checked": "2026-10-20T10:00:00+03:00", "source": "folder", "version": "0.5",
+             "blocks": {"scope": {"base_sha": shas[11], "bases": list(shas), "v": "0.5", "host": "h", "checked": None, "user_removed": False},
+                        "teams": {"base_sha": teams_sha, "bases": [teams_sha], "v": "1", "host": "h", "checked": None, "user_removed": False}}}
+    cb.save_state(store, "zorg-core", state)
+    open(os.path.join(bases_dir, "notes.txt"), "w").write("not a base")
+    cb.prune_bases(store, "zorg-core", state)
+    state = cb.load_state(store, "zorg-core")
+    left = sorted(f for f in os.listdir(bases_dir) if f.endswith(".md"))
+    check("bases kept to 10", len(state["blocks"]["scope"]["bases"]) == 10
+          and len([f for f in left if f[:-3] in state["blocks"]["scope"]["bases"]]) == 10, (len(state["blocks"]["scope"]["bases"]), left))
+    check("prune keeps exactly the texts of some block's base_sha or bases — the older versions, an orphan and nothing else go",
+          set(left) == {s + ".md" for s in shas[2:] + [teams_sha]}, left)
+    check("…and its texts are still readable; the pruned ones are gone",
+          cb.get_base(store, "zorg-core", shas[11]) == texts[11] and cb.get_base(store, "zorg-core", teams_sha) == "the teams block"
+          and cb.get_base(store, "zorg-core", shas[0]) is None and cb.get_base(store, "zorg-core", orphan) is None, "")
+    check("a file that is not a base text is left alone; another repository's bases are not touched",
+          os.path.isfile(os.path.join(bases_dir, "notes.txt")) and cb.get_base(store, "zorg-growth", other_sha) == "growth's own base", "")
+    before = files_under(store.root)
+    cb.prune_bases(store, "zorg-core", state)
+    check("pruning again changes nothing", files_under(store.root) == before, "")
+    cb.prune_bases(store, "zorg-core", {"checked": None, "source": None, "version": None, "blocks": {}})
+    check("a state with no blocks prunes every base text of the repository",
+          [f for f in os.listdir(bases_dir) if f.endswith(".md")] == [], os.listdir(bases_dir))
+    cb.prune_bases(store, "zorg-empty", {"checked": None, "source": None, "version": None, "blocks": {}})
+    check("pruning a repository that has no bases is a no-op", not os.path.exists(os.path.join(store.state_dir, "blocks", "zorg-empty")), "")
+
+# ---- the write allow-list: every write and delete passes cs.check_target
+with tempfile.TemporaryDirectory() as d:
+    store = cs.Store(os.path.join(d, "vault", "context"))
+    elsewhere = os.path.join(d, "elsewhere")
+    os.makedirs(elsewhere)
+    st_ok = {"checked": None, "source": None, "version": None, "blocks": {}}
+    with cs.guard_roots([store.root]):
+        sha = cb.put_base(store, "zorg-core", "inside the guard")
+        cb.save_state(store, "zorg-core", st_ok)
+        inside = cb.get_base(store, "zorg-core", sha) == "inside the guard"
+    check("inside the guarded root the writes go through", inside, "")
+    with cs.guard_roots([elsewhere]):
+        r1 = raises(cs.PathRefused, cb.put_base, store, "zorg-core", "outside the guard")
+        r2 = raises(cs.PathRefused, cb.save_state, store, "zorg-core", st_ok)
+        r3 = raises(cs.PathRefused, cb.prune_bases, store, "zorg-core", st_ok)
+    check("outside the guarded roots put_base, save_state and the pruning delete are refused (PathRefused)",
+          all(isinstance(r, cs.PathRefused) for r in (r1, r2, r3)) and cb.get_base(store, "zorg-core", sha) == "inside the guard",
+          (r1, r2, r3))
+
+# ---- a repository id that could escape .state/blocks is refused everywhere
+with tempfile.TemporaryDirectory() as d:
+    store = cs.Store(os.path.join(d, "store"))
+    st_ok = {"checked": None, "source": None, "version": None, "blocks": {}}
+    ok_sha = cb.put_base(store, "zorg-core", "one")
+    before = files_under(d)
+    refused = {}
+    for rid in ("../escape", "..", ".", "a/b", "Zorg-Core", "zorg_core", "-zorg", "", "zorg-core\n", "zorg core", "zorg-core/", None, 7):
+        outcome = [raises(cs.StoreError, cb.load_state, store, rid), raises(cs.StoreError, cb.save_state, store, rid, st_ok),
+                   raises(cs.StoreError, cb.put_base, store, rid, "x"), raises(cs.StoreError, cb.get_base, store, rid, ok_sha),
+                   raises(cs.StoreError, cb.prune_bases, store, rid, st_ok)]
+        refused[repr(rid)] = all(isinstance(o, cs.StoreError) for o in outcome)
+    check("load_state, save_state, put_base, get_base and prune_bases refuse any id that is not kebab-case with StoreError",
+          all(refused.values()), [k for k, v in refused.items() if not v])
+    check("…and nothing was written anywhere", files_under(d) == before, set(files_under(d)) ^ set(before))
+    check("a kebab-case id with digits and inner dashes is fine",
+          cb.load_state(store, "team-2-core") == {"checked": None, "source": None, "version": None, "blocks": {}}
+          and cb.put_base(store, "9-zorg", "x") == sha_of("x"), "")
+
+# ---- last_checked: read-only, never raises
+with tempfile.TemporaryDirectory() as d:
+    store = cs.Store(os.path.join(d, "store"))
+    check("last_checked without a state is None", cb.last_checked(store.root, "nope") is None, "")
+    check("last_checked in a store root that is not there is None, and nothing is created",
+          cb.last_checked(os.path.join(d, "no", "such", "root"), "zorg-core") is None and not os.path.exists(os.path.join(d, "no")), "")
+    cb.save_state(store, "zorg-core", {"checked": "2026-10-20T10:00:00+03:00", "source": "mcp", "version": "0.4", "blocks": {}})
+    before = files_under(d)
+    check("last_checked is the time the repository was last checked",
+          cb.last_checked(store.root, "zorg-core") == "2026-10-20T10:00:00+03:00" and cb.last_checked(store.root, "zorg-growth") is None, "")
+    check("…and reading it writes nothing", files_under(d) == before, "")
+    cb.save_state(store, "zorg-growth", {"checked": None, "source": None, "version": None, "blocks": {}})
+    check("a repository that was never checked has None", cb.last_checked(store.root, "zorg-growth") is None, "")
+    open(os.path.join(store.state_dir, "blocks", "zorg-core.json"), "w").write("{oops")
+    check("a corrupt state file gives None — last_checked never raises",
+          cb.last_checked(store.root, "zorg-core") is None, "")
+    check("a bad id, a non-string root and a non-string `checked` give None",
+          cb.last_checked(store.root, "../x") is None and cb.last_checked(store.root, None) is None
+          and cb.last_checked(None, "zorg-core") is None, "")
+    open(os.path.join(store.state_dir, "blocks", "zorg-core.json"), "w").write("{\"checked\": 5, \"blocks\": {}}")
+    check("…a checked that is not text is None", cb.last_checked(store.root, "zorg-core") is None, "")
+    check("a directory in place of the state file gives None", (os.remove(os.path.join(store.state_dir, "blocks", "zorg-core.json")),
+          os.makedirs(os.path.join(store.state_dir, "blocks", "zorg-core.json")), cb.last_checked(store.root, "zorg-core") is None)[2], "")
+
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

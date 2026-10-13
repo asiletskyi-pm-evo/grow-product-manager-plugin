@@ -12,6 +12,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
+import ctx_blocks as cb  # noqa: E402
 
 FIX = os.path.join(ROOT, "testing", "fixtures", "ctx")
 fails = 0
@@ -62,6 +63,88 @@ with tempfile.TemporaryDirectory() as d:
     open(copy, "w", encoding="utf-8").write("changed\n")
     co.restore(snap, st, [copy])
     check("restore gives the bytes back", tree(st.root) == before_store and read(copy) == before_copy)
+
+# --- v3.13 Task 5: the block state and the bases are in every snapshot, and come back on restore
+with tempfile.TemporaryDirectory() as d:
+    st, copy = seeded_store(d)
+    home = os.path.join(d, "home")
+    text = "<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope\nThe user works on Zorg App only.\n<!-- zorg-core:end id=scope -->"
+    sha = cb.put_base(st, "zorg-core", text)
+    growth = cb.put_base(st, "zorg-growth", "growth base")
+    saved = {"checked": "2026-10-20T10:00:00+03:00", "source": "folder", "version": "0.4",
+             "blocks": {"scope": {"base_sha": sha, "bases": [sha], "v": "0.4", "host": "custom.zorg-core-notes",
+                                  "checked": "2026-10-20T10:00:00+03:00", "user_removed": False}}}
+    cb.save_state(st, "zorg-core", saved)
+    before = tree(st.root)
+    snap = co.snapshot(st, [copy], home, "blocks")
+    check("snapshot copies state subfolders",
+          os.path.isfile(os.path.join(snap, "state", "blocks", "zorg-core", sha + ".md"))
+          and os.path.isfile(os.path.join(snap, "state", "blocks", "zorg-growth", growth + ".md"))
+          and os.path.isfile(os.path.join(snap, "state", "blocks", "zorg-core.json"))
+          and os.path.isfile(os.path.join(snap, "state", "compiled.json")), sorted(tree(snap)))
+    check("a nested base is copied byte for byte",
+          os.path.isfile(os.path.join(snap, "state", "blocks", "zorg-core", sha + ".md"))
+          and read(snap, "state", "blocks", "zorg-core", sha + ".md") == text, "")
+    check("a snapshot with the same files, nested ones too, is reused", co.snapshot(st, [copy], home, "again") == snap, "")
+    # a hidden file (a temp file of an interrupted write), a hidden folder and a linked folder are never captured
+    blocks = os.path.join(st.state_dir, "blocks")
+    elsewhere = os.path.join(d, "elsewhere"); os.makedirs(elsewhere)
+    open(os.path.join(elsewhere, "outside.md"), "w").write("outside")
+    os.makedirs(os.path.join(blocks, "zorg-core", ".cache")); os.makedirs(os.path.join(blocks, ".hidden"))
+    open(os.path.join(blocks, "zorg-core", ".halfway.md.tmp"), "w").write("half")
+    open(os.path.join(blocks, "zorg-core", ".cache", "x.md"), "w").write("x")
+    open(os.path.join(blocks, ".hidden", "y.md"), "w").write("y")
+    os.symlink(elsewhere, os.path.join(blocks, "zorg-linked"))
+    check("a hidden file or folder and a linked folder under state/ are skipped — the snapshot is the same",
+          co.snapshot(st, [copy], home, "hidden") == snap
+          and sorted(tree(os.path.join(snap, "state", "blocks"))) == sorted(
+              ["zorg-core.json", "zorg-core/" + sha + ".md", "zorg-growth/" + growth + ".md"]), sorted(tree(os.path.join(snap, "state", "blocks"))))
+    os.remove(os.path.join(blocks, "zorg-linked"))
+    shutil.rmtree(os.path.join(blocks, ".hidden")); shutil.rmtree(os.path.join(blocks, "zorg-core", ".cache"))
+    os.remove(os.path.join(blocks, "zorg-core", ".halfway.md.tmp"))
+    # undo: the bases are gone from the store, restore brings them back
+    shutil.rmtree(os.path.join(st.state_dir, "blocks"))
+    check("(setup) the bases are gone", cb.get_base(st, "zorg-core", sha) is None and cb.load_state(st, "zorg-core")["blocks"] == {}, "")
+    co.restore(snap, st, [copy])
+    check("undo restores the bases", cb.get_base(st, "zorg-core", sha) == text and cb.get_base(st, "zorg-growth", growth) == "growth base", "")
+    check("…and the block state, and the store byte for byte", cb.load_state(st, "zorg-core") == saved and tree(st.root) == before,
+          set(tree(st.root)) ^ set(before))
+    # a change in a nested base is a change of the snapshot
+    cb.put_base(st, "zorg-core", "a second version of the block")
+    snap2 = co.snapshot(st, [copy], home, "second")
+    check("a new base makes a new snapshot that holds both bases",
+          snap2 != snap and os.path.isfile(os.path.join(snap2, "state", "blocks", "zorg-core", sha + ".md"))
+          and os.path.isfile(os.path.join(snap2, "state", "blocks", "zorg-core", cs.sha_text("a second version of the block") + ".md")), snap2)
+    # undo an operation that pruned: restore from the older snapshot gives back the pruned base
+    cb.prune_bases(st, "zorg-core", saved)
+    check("(setup) pruning dropped the second version", cb.get_base(st, "zorg-core", cs.sha_text("a second version of the block")) is None, "")
+    co.restore(snap2, st, [copy])
+    check("undo of a pruning gives the pruned base back", cb.get_base(st, "zorg-core", cs.sha_text("a second version of the block"))
+          == "a second version of the block", "")
+
+# a snapshot made before v3.13 (the state folder holds files only) restores as it did
+with tempfile.TemporaryDirectory() as d:
+    st, copy = seeded_store(d)
+    home = os.path.join(d, "home")
+    old_tree = tree(st.root)
+    snap = os.path.join(d, "snap-v312")
+    for rel, data in old_tree.items():
+        p = os.path.join(snap, rel.replace(".state", "state", 1) if rel.startswith(".state") else rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, "wb").write(data)
+    os.makedirs(os.path.join(snap, "copies"))
+    open(os.path.join(snap, "copies", "0.md"), "w", encoding="utf-8", newline="").write(read(copy))
+    json.dump({"label": "old", "created": "2026-09-01T10:00:00+03:00", "store": st.root, "store_existed": True,
+               "copies": [{"path": copy, "file": "copies/0.md", "existed": True}], "hash": "x"},
+              open(os.path.join(snap, "manifest.json"), "w", encoding="utf-8"))
+    sha = cb.put_base(st, "zorg-core", "made after the snapshot")
+    cb.save_state(st, "zorg-core", {"checked": "x", "source": None, "version": None, "blocks": {}})
+    rec = st.load()[4]
+    st.write(dict(rec, body=rec["body"].replace("PROJ", "XXX")))
+    co.restore(snap, st, [copy])
+    check("a snapshot made before v3.13 (no state subfolders) restores the store as it was",
+          tree(st.root) == {k: v for k, v in old_tree.items()}, set(tree(st.root)) ^ set(old_tree))
+    check("…and what was added since is gone, as before", cb.get_base(st, "zorg-core", sha) is None, "")
 
 with tempfile.TemporaryDirectory() as d:
     home = os.path.join(d, "home"); os.makedirs(os.path.join(home, ".grow-pm"))

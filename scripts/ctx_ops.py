@@ -90,13 +90,19 @@ SNAP_RE = re.compile(r"^(\d{8}T\d{6})")
 
 
 def _files(folder, prefix):
+    """{prefix + relative path: bytes} of the files under `folder`, subfolders too (the block bases live in
+    `state/blocks/<repo>/`). A hidden name — a file or a folder — and a linked folder are skipped."""
     out = {}
     if os.path.isdir(folder):
         for name in sorted(os.listdir(folder)):
             p = os.path.join(folder, name)
-            if os.path.isfile(p) and not name.startswith("."):
+            if name.startswith("."):
+                continue
+            if os.path.isfile(p):
                 with open(p, "rb") as f:
                     out[prefix + name] = f.read()
+            elif os.path.isdir(p) and not os.path.islink(p):
+                out.update(_files(p, prefix + name + "/"))
     return out
 
 
