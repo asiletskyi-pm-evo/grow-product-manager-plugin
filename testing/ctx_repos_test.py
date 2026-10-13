@@ -437,7 +437,8 @@ with tempfile.TemporaryDirectory() as d:
                                    blocks_file=GROWTH_FILE, namespace="zorg-growth", core_root=gone))
         check("blocks from the server and a core folder not on this machine → the team block is unavailable (a reason), never 'not offered'",
               fgone["source"] == "mcp" and fgone["error"] is None and set(fgone["blocks"]) == {"growth-metrics", "team"}
-              and fgone["team"] is None and fgone["team_source"] is None and fgone["team_error"] == "team block: core folder not found", fgone)
+              and fgone["team"] is None and fgone["team_source"] is None
+              and fgone["team_error"] == "team block: not available (core folder not found)", fgone)
         check("…the reason names no path", "ZorgCoreNotHere" not in json.dumps(fgone), fgone["team_error"])
         fnt = cr.fetch(core_repo(blocks_source="auto", endpoint={"url": fake.url, "root": "ZorgGrowth/", "headers_env": ""},
                                  blocks_file=GROWTH_FILE, namespace="zorg-growth", core_root=gone, team=""))
@@ -453,6 +454,14 @@ with tempfile.TemporaryDirectory() as d:
         cr.fetch(growth_repo(fake.url), client_factory=factory)
         check("client_factory is called with the endpoint url and the (empty) headers", seen == [(fake.url, {})], seen)
 
+    with FakeMcp(tree={"ZorgCore/" + CORE_BLOCKS_FILE: read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))}) as fake:
+        fnc = cr.fetch(repo_of({"id": "zorg-core", "kind": "mcp", "blocks_file": CORE_BLOCKS_FILE, "blocks_source": "mcp",
+                                "endpoint": {"url": fake.url, "root": "ZorgCore/", "headers_env": ""}, "team": "team-alpha"}))
+        check("a team in the registration, no core folder, and a blocks file without a team region → the team block unavailable",
+              fnc["source"] == "mcp" and fnc["error"] is None and fnc["team"] is None
+              and fnc["team_error"] == "team block: not available (no core folder in the registration)", fnc)
+    check("…while a blocks file that carries the team region offers it: no core folder is then no failure (zorg-growth)",
+          fm["team_error"] is None and "team" in fm["blocks"], fm)
     with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}, require_headers={"X-Token": "tok-9f3a"}) as fake:
         repo = growth_repo(fake.url, endpoint={"url": fake.url, "root": "ZorgGrowth/", "headers_env": HDR_VAR})
         os.environ[HDR_VAR] = "X-Token: tok-9f3a"
@@ -584,9 +593,20 @@ with tempfile.TemporaryDirectory() as d:
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         fnm = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [nomf], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
-    check("no manifest in the core → blocks yes, team not offered (no error), and nothing printed (the builder's exit is not ours)",
+    check("no manifest in the core → blocks yes, the team block unavailable (never 'not offered'), nothing printed (the builder's exit is not ours)",
           fnm["source"] == "folder" and set(fnm["blocks"]) == {"scope", "product", "teams"} and fnm["team"] is None
-          and fnm["team_source"] is None and fnm["team_error"] is None and out.getvalue() == "", (fnm, out.getvalue()))
+          and fnm["team_source"] is None and fnm["team_error"] == "team block: not available (no provider manifest in the core)"
+          and out.getvalue() == "", (fnm, out.getvalue()))
+    evicted = os.path.join(d, "EvictedCore")
+    shutil.copytree(CORE_FIX, evicted)
+    sysdir = os.path.join(evicted, "Core", "_System")
+    os.rename(os.path.join(sysdir, "provider-manifest.yaml"), os.path.join(sysdir, ".provider-manifest.yaml.icloud"))
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        fev = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [evicted], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
+    check("a manifest iCloud has evicted (only its .icloud placeholder is there) → the team block unavailable, the blocks stay",
+          fev["source"] == "folder" and fev["blocks"] == f["blocks"] and fev["team"] is None
+          and fev["team_error"] == "team block: not available (no provider manifest in the core)" and out.getvalue() == "", fev)
     badj = os.path.join(d, "BadJsonCore")
     shutil.copytree(CORE_FIX, badj)
     open(os.path.join(badj, "Core", "_System", "access-bundles.json"), "w", encoding="utf-8").write("{ not json")
@@ -609,6 +629,10 @@ with tempfile.TemporaryDirectory() as d:
     check("a manifest that cannot be parsed → blocks stay, team error says so, nothing printed", fbm["source"] == "folder"
           and fbm["blocks"] == f["blocks"] and fbm["team"] is None and isinstance(fbm["team_error"], str)
           and "manifest" in fbm["team_error"] and len(fbm["team_error"]) <= 300 and out.getvalue() == "", (fbm, out.getvalue()))
+    check("…and names no path", "BadManifestCore" not in fbm["team_error"] and os.sep + "Core" not in fbm["team_error"], fbm["team_error"])
+    check("every reason a team block cannot be built reads 'team block: not available (…)'",
+          all(x["team_error"].startswith("team block: not available (") for x in (fbj, fnmod, fbm, fsl)),
+          [x["team_error"] for x in (fbj, fnmod, fbm, fsl)])
     if hasattr(os, "geteuid") and os.geteuid() != 0:
         noread = os.path.join(d, "NoReadPeopleCore")
         shutil.copytree(CORE_FIX, noread)

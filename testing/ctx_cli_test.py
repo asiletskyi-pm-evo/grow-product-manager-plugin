@@ -1118,6 +1118,27 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         rc, out, r = run_ok(e, "provider", "plan", "zorg-core")
         check("…and the next plan has no row for it", rc == 0 and "teams" not in signs_in(r) and r["questions"] == 0, out[-400:])
 
+    with tempfile.TemporaryDirectory() as d:            # the core's provider manifest is not there (iCloud evicted it)
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        rc, out, r = apply_run(e, core, "zorg-core")
+        sysdir = os.path.join(core, "Core", "_System")
+        os.rename(os.path.join(sysdir, "provider-manifest.yaml"), os.path.join(sysdir, ".provider-manifest.yaml.icloud"))
+        team_before = region_in(read(e.ctx), "zorg-core", "team")
+        before = tree_of(e.home, e.vault)
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("…a registration that takes its blocks_file from that manifest: unreachable, exit 5, nothing written",
+              rc == 5 and tree_of(e.home, e.vault) == before, (rc, out[-300:]))
+        with open(os.path.join(e.home, ".grow-pm", "providers", "zorg-core.yaml"), "a", encoding="utf-8") as f:
+            f.write("blocks_file: Core/_System/context-blocks.md\n")
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("the core's provider manifest evicted: apply exits 0, the team region byte-identical, its row '·'",
+              rc == 0 and team_before is not None and region_in(read(e.ctx), "zorg-core", "team") == team_before
+              and signs_in(r).get("team") == "·" and "team" not in r["applied"]
+              and any(l.startswith("·") and "provider manifest" in l for l in out.splitlines()), (rc, out[-500:]))
+
 check("apply never writes into the core folder", core_untouched and all(core_untouched), core_untouched)
 
 

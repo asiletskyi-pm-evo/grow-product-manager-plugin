@@ -144,6 +144,12 @@ def _bounded_reads():
         pb.READ = prev
 
 
+def _unavailable(why):
+    """The team error: "team block: not available (<why>)" — a team was due and could not be built, so the plan shows
+    the row as "·" and leaves the region you hold alone. `why` is short and names no path."""
+    return _clean("team block: not available (%s)" % why)
+
+
 def _team_why(exc):
     """Why the team block could not be built, in words that carry no secret: a short reason (the file's name, not
     its path; the class of an unexpected exception, not its message), at most MAX_ERROR characters."""
@@ -160,13 +166,14 @@ def _team_why(exc):
         text = "the role model is not valid JSON"
     else:
         text = "unexpected %s" % type(exc).__name__
-    return _clean("team block: " + text)
+    return _unavailable(text)
 
 
 def _manifest(core_root):
-    """(manifest, why not) of the core's provider manifest as the bundle builder reads it. No manifest in the core is
-    (None, None) — a core that offers no team, not a failure; one that cannot be read or parsed is (None, reason).
-    The builder's `sys.exit(3)` and its message on stdout are not ours: neither leaves this function."""
+    """(manifest, why not) of the core's provider manifest as the bundle builder reads it. A manifest that is not there
+    (never written, or evicted by iCloud: only its `.icloud` placeholder is), or that cannot be read or parsed, is
+    (None, reason) — the reason in the words of `_unavailable`, with no path. The builder's `sys.exit(3)` and its
+    message on stdout are not ours: neither leaves this function."""
     buf = io.StringIO()
     try:
         with contextlib.redirect_stdout(buf):
@@ -174,26 +181,33 @@ def _manifest(core_root):
     except SystemExit:
         said = buf.getvalue().strip()
         if said.startswith("no provider manifest"):
-            return None, None
-        return None, _clean("team block: " + (said or "the provider manifest cannot be read"))
+            return None, _unavailable("no provider manifest in the core")
+        detail = said.split("provider-manifest.yaml: ", 1)[1] if "provider-manifest.yaml: " in said else ""
+        return None, _unavailable("the provider manifest cannot be parsed" + (": " + detail if detail else ""))
     except Exception as e:
         return None, _team_why(e)
 
 
-def _team_block(repo, manifest, manifest_why):
+def _team_block(repo, manifest, manifest_why, in_file=False):
     """(the team region, None), (None, None) or (None, why not). The region is what the connect flow builds from the
-    core's team card and people, without the final newline. (None, None) is "not offered": no team in the
-    registration, no manifest in the core, a team the role model does not list. A card, a role model or a manifest
-    that cannot be read in time or at all is (None, reason); so is anything unexpected (the class only). So is a core
-    folder the registration names that is not on this machine (the blocks may still come from the server): a team
-    was due, and "not offered" would make the plan remove the region you hold."""
+    core's team card and people, without the final newline.
+
+    (None, None) is "not offered" — the plan then removes a team region you hold — and it is said only when that is
+    known: the registration names no team; or the role model was read and does not list the team; or there is no
+    core folder in the registration and the blocks file itself carries the team region (`in_file`: the file offers
+    it). Whenever a team was due and cannot be built — no core folder in the registration, a core folder not on this
+    machine, a provider manifest that is missing (iCloud evicted it), unreadable or unparsable, a role model or a
+    card that does not arrive or cannot be read, anything unexpected — it is (None, "team block: not available
+    (<why>)"): the plan shows "·" and the region is never touched."""
     team, core_root = repo["team"], repo["core_root"]
-    if not team or not core_root:
+    if not team:
         return None, None
+    if not core_root:
+        return (None, None) if in_file else (None, _unavailable("no core folder in the registration"))
     if not os.path.isdir(core_root):
-        return None, "team block: core folder not found"
+        return None, _unavailable("core folder not found")
     if manifest is None:
-        return None, manifest_why
+        return None, manifest_why or _unavailable("no provider manifest in the core")
     try:
         bundles = manifest.s("bundles_file") or os.path.join(manifest.s("plugin_folder", "."), "_System", "access-bundles.json")
         model = json.loads(pb.rd(os.path.join(core_root, bundles)))
@@ -291,8 +305,10 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
     The team region is built from the core folder alone (the card, the people, the role model), whichever
     source the blocks came from, and only once the blocks have arrived: when `error` is set, team, team_source
     and team_error are all empty. `team` None with `team_error` None means the repository offers no team
-    (none in the registration, no provider manifest in the core, a team the role model does not list); with
-    `team_error` set, a team was due and a file of the core could not be read in time or at all.
+    (none in the registration, a team the readable role model does not list, or a team region the blocks file
+    carries itself when the registration names no core folder); with
+    `team_error` set ("team block: not available (<why>)"), a team was due and could not be built — see `_team_block`:
+    a missing core folder or provider manifest is a reason, never "not offered".
     """
     out = {"source": None, "version": None, "blocks": {}, "team": None, "team_source": None, "team_error": None,
            "error": None, "checked": _stamp(now)}
@@ -322,12 +338,12 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
                 else:
                     errors.append(why)
         if text is not None:                            # the team is only worth building for a fetch that succeeded
-            out["team"], out["team_error"] = _team_block(repo, manifest, manifest_why)
+            blocks, versions = _regions(text, repo["namespace"])
+            out["team"], out["team_error"] = _team_block(repo, manifest, manifest_why, in_file="team" in blocks)
             out["team_source"] = "folder" if out["team"] is not None else None
     if text is None:
         out["error"] = "; ".join(errors)
         return out
-    blocks, versions = _regions(text, repo["namespace"])
     counts = collections.Counter(v for v in versions if v)
     out["version"] = counts.most_common(1)[0][0] if counts else None
     out["blocks"] = {k: v for k, v in blocks.items() if include_skipped or k not in repo["skip_blocks"]}
