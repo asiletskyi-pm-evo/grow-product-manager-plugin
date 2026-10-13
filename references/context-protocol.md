@@ -69,7 +69,8 @@ sha: "<sha256 of the body>"
 | `append ID --text T [--under "#### Heading"]` | adds a line after the last non-empty line of the record or of the named subsection; an identical line is not repeated |
 | `add TYPE TITLE [--parent ID] [--after ID] [--body-file F]` | a new `product`, `team`, `org`, `setting` or `custom` record with the right heading, after its last sibling |
 | `snapshot [--label L]` | a snapshot of the store and both copies |
-| `undo [--steps N]` | back to the state before the N-th last change, N from 1 (a `pre-undo` snapshot first; the journal is kept); refused while edits wait to be imported — `ctx sync` first; right after a migration it removes the store |
+| `undo [--steps N]` | back to the state before the N-th last change, N from 1 (a `pre-undo` snapshot first; the journal is kept); the copies are rebuilt from the restored records, so undoing an import also undoes the imported edit in `local-context.md` (since v3.12.1; the edit stays in the `pre-undo` snapshot) — except when only a compile's own snapshot is undone, whose copies stay as restored; refused while edits wait to be imported — `ctx sync` first; right after a migration it removes the store |
+| `assign ID all\|none\|S1,S2` | who reads a `custom` or `setting` record in `ctx read` (§5a, since v3.12.1): `read_by` in its frontmatter — `all`, or skill names (folder names under `skills/`; an unknown name → exit 3), or `none` to clear it; another record type → exit 3. A snapshot and a journal line; the copies do not change |
 | `validate` | records parse, ids match their file names, parents exist, orders are unique, the card fits, required fields (warnings), edits waiting, stray files |
 | `card` | regenerates `INDEX.md` only |
 | `invalidate ID --reason R` | marks a record no longer current (§5b): it stays in the copies with a status region after its heading |
@@ -108,6 +109,8 @@ Each compiled copy is cut with the same rules and compared, section by section, 
 
 `references/context-manifest.yaml` says, for each skill, what Step 0c needs: from the active product and its teams, fields (a `- **Field:**` line, or the `#### Field` subsection when there is no such line) and `####` subsections; settings by the start of their title, read whole; `required` and `required_settings` mark the obligatory ones. Every skill also gets the User Profile and `Judgment`. The configurator and context-connect are `full: true` — they edit `local-context.md` and read it whole. Validator check 16 keeps the manifest in step with the skills and with "Which Skills Read What".
 
+**Your own sections (since v3.12.1).** The manifest cannot name a user's own sections, so a `custom` or `setting` record says itself who reads it: `read_by` in its frontmatter — `all`, or skill names (`ctx assign`, or the Obsidian property as a list). `ctx read` adds such a record whole for those skills. A `custom` record without `read_by` is named in one line — `Власні секції без призначення: <title> (<id>), … — ctx get <id>, якщо запит їх стосується` — and the skill reads it with `ctx get` when the request is about it. Output over 8 000 tokens ends with `⚠ ≈N токенів — більше за 8000; найбільший запис: <id> (≈M)`; trimming is the user's call. `validate` and `status` list the unassigned `custom` records; the configurator's Update item "Who reads custom sections" assigns them.
+
 `ctx read --skill S [--product P]` prints the card, then one block per record headed `## <title> · <id> · перевірено <date>`, with `⚠ застаріле (TTL N д)` or `⚠ неактуально: <reason>` when that applies, and one closing line `Відсутнє: …` — `(обов'язкове)` marks the obligatory ones; defaults apply to the rest. Edits not imported yet, and a record missing on disk, are read from the canonical copy with a note (`ctx sync`). Archived records never appear. With several products and no `--product` (or an ambiguous one) the output is the card and the product list — the skill asks (Step 0d) and runs again. Step 0c of `local-context-protocol.md` says when a skill uses it.
 
 ## 5b. Lifecycle — invalidate, archive, trash, restore (since v3.12.0)
@@ -123,7 +126,7 @@ Each compiled copy is cut with the same rules and compared, section by section, 
 
 ## 5d. Freshness (since v3.12.0)
 
-Each record has a `verified` date — set by every write of it through `ctx` (an import, `set`, `append`, `add`, `restore`), by an Obsidian edit of it being picked up, and by `ctx verify`; until then the store's first v3.12 run (`freshness_since`). Default TTL: product and team 90 days; organisation, profile and settings 180; the header, onboarding and custom sections none — `ttl_days` in the frontmatter overrides (`0` = never stale). A stale record: the digest counts it (`· K stale`), the card marks its row (`⚠ <date>`), `ctx read` marks its block, `status` and `validate` list it. A skill states a fact from a stale record as "станом на <date>" and never asks about it mid-run; `ctx verify --stale` or the configurator's "Review stale records" confirms.
+Each record has a `verified` date — set by every write of it through `ctx` (an import, `set`, `append`, `add`, `restore` — not `assign`, which changes only who reads it), by an Obsidian edit of it being picked up, and by `ctx verify`; until then the store's first v3.12 run (`freshness_since`). Default TTL: product and team 90 days; organisation, profile and settings 180; the header, onboarding and custom sections none — `ttl_days` in the frontmatter overrides (`0` = never stale). A stale record: the digest counts it (`· K stale`), the card marks its row (`⚠ <date>`), `ctx read` marks its block, `status` and `validate` list it. A skill states a fact from a stale record as "станом на <date>" and never asks about it mid-run; `ctx verify --stale` or the configurator's "Review stale records" confirms.
 
 ## 6. The context card
 
@@ -131,7 +134,7 @@ Each record has a `verified` date — set by every write of it through `ctx` (an
 
 ## 7. The session digest
 
-With a store, the SessionStart digest adds one read-only line: `context: records N · card M lines · in sync` — or `· K edits to import`, or `· C conflicts (ctx sync)` (a record missing on disk counts as one) — plus `· K stale` when records are stale, and tells skills to run `ctx read --skill <name>` at Step 0c. A store used before that cannot be reached (a vault not mounted, moved or switched off) → `context: store at <path> unavailable — vault not mounted?`. It is read within a two-second budget so an iCloud download never holds the session start; no store, or any failure → no line.
+With a store, the SessionStart digest adds one read-only line: `context: records N · card M lines · in sync` — or `· K edits to import`, or `· C conflicts (ctx sync)` (a record missing on disk counts as one) — plus `· K stale` when records are stale and `· N custom unassigned` when `custom` records have no `read_by` (since v3.12.1), and tells skills to run `ctx read --skill <name>` at Step 0c. A store used before that cannot be reached (a vault not mounted, moved or switched off) → `context: store at <path> unavailable — vault not mounted?`. It is read within a two-second budget so an iCloud download never holds the session start; no store, or any failure → no line.
 
 ## 8. Snapshots and the journal
 

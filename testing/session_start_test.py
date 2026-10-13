@@ -171,5 +171,27 @@ with tempfile.TemporaryDirectory() as d:
     check("unavailable store line", "context: store at %s unavailable — vault not mounted?" % root in out
           and "records" not in next((l for l in out.splitlines() if "context:" in l), ""), out[-400:])
 
+# --- v3.12.1: custom records nobody reads
+with tempfile.TemporaryDirectory() as d:
+    home, vault = os.path.join(d, "home"), os.path.join(d, "vault")
+    os.makedirs(os.path.join(home, ".grow-pm")); os.makedirs(os.path.join(vault, "Notes", "_System"))
+    text = open(os.path.join(ROOT, "testing", "fixtures", "ctx", "typical.md"), encoding="utf-8").read().replace("{{VAULT}}", vault)
+    text = text.rstrip("\n") + "\n\n## Zorg Partner Rules\n\n- Always say Zorg Partner.\n"
+    ctxp = os.path.join(home, ".grow-pm", "local-context.md")
+    for p in (ctxp, os.path.join(vault, "Notes", "_System", "local-context.md")):
+        open(p, "w", encoding="utf-8").write(text)
+    root = co.store_root_for(text, home=home)
+    co.migrate(ctxp, root, co.copies_for(ctxp, text, home=home), home, apply=True, now="2026-10-20T10:00:00+03:00")
+    out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    line = next((l for l in out.splitlines() if "context:" in l), "")
+    check("digest counts unassigned custom", "· 1 custom unassigned" in line, line)
+    import ctx_store as cs  # noqa: E402
+    st = cs.Store(root)
+    rec = next(r for r in st.load() if r["type"] == "custom")
+    st.write(dict(rec, read_by="all"))
+    out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    line_after_assign = next((l for l in out.splitlines() if "context:" in l), "")
+    check("no unassigned → no tail", "custom unassigned" not in line_after_assign and "records" in line_after_assign, line_after_assign)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

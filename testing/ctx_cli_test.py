@@ -404,6 +404,164 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = run_ok(e, "get", "product.zorg-app", "--section", "#### Platforms")
     check("get --section prints the subsection", rc == 0 and "#### Platforms" in out and "- web" in out, (rc, out[-200:]))
 
+# --- v3.12.1: ctx assign
+CUSTOM = "\n## Zorg Partner Rules\n\n- Always say Zorg Partner.\n- Detail: never Partner Zorg in print.\n"
+
+
+def with_custom(e, extra=CUSTOM):
+    for p in (e.ctx, e.mirror):
+        if os.path.exists(p):
+            text = read(p).rstrip("\n") + "\n" + extra
+            open(p, "w", encoding="utf-8", newline="").write(text)
+    run_ok(e, "migrate", "--apply")
+    return "custom.zorg-partner-rules"
+
+
+def last_journal(e):
+    return json.loads(read(e.store, ".state", "journal.jsonl").strip().splitlines()[-1])
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    cid = with_custom(e)
+    before = read(e.ctx)
+    rc, out, r = run_ok(e, "assign", cid, "all")
+    check("assign all", rc == 0 and r["read_by"] == "all" and 'read_by: "all"' in e.record(cid), (rc, out[-300:]))
+    check("assign writes the journal", last_journal(e)["op"] == "assign", last_journal(e))
+    check("assign leaves local-context.md as is", read(e.ctx) == before)
+    rc, out, r = run_ok(e, "read", "--skill", "product-analysis", "--product", "Zorg App")
+    check("an assigned record is read", "never Partner Zorg in print" in out, out[-400:])
+    rc, out, r = run_ok(e, "assign", cid, "write-concept,product-analysis")
+    check("assign names, sorted", rc == 0 and r["read_by"] == "product-analysis, write-concept", r)
+    rc, out, r = run_ok(e, "assign", cid, "none")
+    check("assign none removes the key", rc == 0 and "read_by" not in e.record(cid), e.record(cid)[:400])
+    rc, out, r = run_ok(e, "assign", cid, "no-such-skill")
+    check("unknown skill is exit 3", rc == 3 and "unknown skill" in out and "no-such-skill" in out, (rc, out[-300:]))
+    rc, out, r = run_ok(e, "assign", "product.zorg-app", "all")
+    check("product record is refused", rc == 3 and "custom and setting" in out, (rc, out[-300:]))
+    run_ok(e, "assign", cid, "all")
+    rc, out, r = run_ok(e, "undo")
+    check("undo removes read_by", rc == 0 and "read_by" not in e.record(cid), (rc, out[-300:]))
+    e.edit(e.ctx, "never Partner Zorg in print.", "never Partner Zorg — pending.")
+    rc, out, r = run_ok(e, "assign", cid, "all")
+    check("assign imports pending edits first", rc == 0 and "pending" in e.record(cid), (rc, out[-300:]))
+
+# --- v3.12.1: validate, status count custom records nobody reads
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    cid = with_custom(e)
+    sp = os.path.join(e.store, "records", "setting.templates.md")
+    st = read(sp)
+    open(sp, "w", encoding="utf-8", newline="").write(st.replace("\n---\n", '\nread_by: "no-such-skill"\n---\n', 1))
+    rc, out, r = run_ok(e, "validate")
+    check("validate names unassigned custom", "custom without read_by: 1" in out and "ctx assign" in out, out[-500:])
+    check("validate warns on an unknown reader", "read_by names unknown skill(s): no-such-skill" in out, out[-500:])
+    rc, out_status, r = run_ok(e, "status")
+    check("status lists unassigned", "custom without read_by: " + cid in out_status and r["unassigned"] == [cid], out_status[-400:])
+
+# --- v3.12.1 minors
+def edit_both(e, old, new):
+    for p in (e.ctx, e.mirror):
+        if os.path.exists(p):
+            e.edit(p, old, new)
+
+
+def add_frontmatter(e, rid, lines):
+    p = os.path.join(e.store, "records", rid + ".md")
+    text = read(p).replace("\n---\n", "\n" + lines + "\n---\n", 1)
+    open(p, "w", encoding="utf-8", newline="").write(text)
+
+
+with tempfile.TemporaryDirectory() as d:      # m1: ctx card keeps the stale and archive marks
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    add_frontmatter(e, "setting.templates", 'verified: "2025-01-01"\nttl_days: 30')
+    run_ok(e, "archive", "setting.planning-planning-suite", "--reason", "old")
+    rc, out, r = run_ok(e, "card")
+    card = read(e.store, "INDEX.md")
+    check("ctx card keeps stale and archive marks", rc == 0 and "⚠ 2025-01-01" in card and "**Архів:** 1" in card, card[-600:])
+
+with tempfile.TemporaryDirectory() as d:      # m3: a typed get of a placeholder
+    e = Env(d)
+    edit_both(e, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** _(not set)_")
+    run_ok(e, "migrate", "--apply")
+    rc, out, r = run_ok(e, "get", "product.zorg-app", "Jira Project Key")
+    check("typed get of a placeholder", rc == 0 and "_(not set)_" in out and r["value"] is None and r.get("not_set") is True,
+          (rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:      # m5: an internal KeyError in read is not "no manifest entry"
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    import contextlib, io
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import ctx as ctxmod  # noqa: E402
+    orig = ctxmod.cr.read_view
+
+    def boom(*a, **k):
+        raise KeyError("internal")
+    ctxmod.cr.read_view = boom
+    buf, raised = io.StringIO(), False
+    os.environ.pop("GROW_PM_CONTEXT_PATH", None)
+    try:
+        with contextlib.redirect_stdout(buf):
+            ctxmod.main(["read", "--skill", "product-analysis", "--home", e.home, "--context", e.ctx])
+    except KeyError:
+        raised = True
+    finally:
+        ctxmod.cr.read_view = orig
+    check("an internal KeyError in read is not masked", raised and "no manifest entry" not in buf.getvalue(), buf.getvalue()[-300:])
+    rc, out, r = run_ok(e, "read", "--skill", "no-such-skill")
+    check("unknown skill in read is exit 3", rc == 3 and "no manifest entry for no-such-skill" in out, out[-300:])
+
+with tempfile.TemporaryDirectory() as d:      # m6: card platforms match by heading prefix
+    e = Env(d)
+    edit_both(e, "#### Platforms\n", "#### Platforms (mobile first)\n")
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "card")
+    check("card platforms match by heading prefix", "platforms web, iOS" in read(e.store, "INDEX.md"), read(e.store, "INDEX.md")[:900])
+
+# --- v3.12.1: undo after an import leaves the store consistent (compressed acceptance S8/S9)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    before = read(e.ctx)
+    t = read(e.ctx); i = t.index("## Templates"); j = t.index("\n## ", i + 3)
+    open(e.ctx, "w", encoding="utf-8", newline="").write(t[:i] + t[j + 1:])
+    run_ok(e, "sync")
+    rc, out, r = run_ok(e, "undo")
+    rc_s, out_s, r_s = run_ok(e, "status")
+    check("undo after an imported removal brings the section back in both copies",
+          rc == 0 and read(e.ctx) == before and read(e.mirror) == before, (rc, out[-300:]))
+    check("undo after an import leaves the store in sync", "to import: nothing — in sync" in out_s and r_s["conflicts"] == [],
+          out_s[-300:])
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** EDIT")
+    run_ok(e, "sync")
+    rc, out, r_undo = run_ok(e, "undo")
+    check("undo after an imported edit reverts it in the copies", "PROJ" in read(e.ctx) and "EDIT" not in read(e.ctx)
+          and "EDIT" not in read(e.mirror))
+    check("the edit is kept in the pre-undo snapshot", "EDIT" in read(r_undo["snapshot"], "copies", "0.md"), r_undo)
+    run_ok(e, "set", "product.zorg-app", "Locales", "uk")
+    rc, out, r = run_ok(e, "undo")
+    check("undo of a ctx write unchanged", rc == 0 and "Locales:** uk" not in read(e.ctx), out[-300:])
+
+# --- v3.12.1 final review: undo of a compile snapshot; assign does not verify
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    os.remove(e.mirror)
+    run_ok(e, "compile")
+    recreated = os.path.exists(e.mirror)
+    rc, out, r = run_ok(e, "undo")
+    check("undo of a compile snapshot takes the compile back", recreated and rc == 0 and not os.path.exists(e.mirror),
+          (recreated, rc, out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    cid = with_custom(e)
+    add_frontmatter(e, cid, 'verified: "2025-01-01"')
+    rc, out, r = run_ok(e, "assign", cid, "all")
+    check("assign keeps the verified date", rc == 0 and 'verified: "2025-01-01"' in e.record(cid), e.record(cid)[:500])
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

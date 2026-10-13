@@ -155,6 +155,65 @@ with tempfile.TemporaryDirectory() as d:
     check("a new section not imported yet is read through", res["needs_product"]
           and "- **Jira Project Key:** LITE" in text2 and "ctx sync" in text2 and not res2["needs_product"], (res, res2))
 
+# --- v3.12.1: read_by — the custom and setting records a skill reads
+CUSTOM = "\n## Zorg Partner Rules\n\n- Always say Zorg Partner.\n- Detail: never Partner Zorg in print.\n\n"   # the card shows line 1 only
+
+
+def rec_titled(e, title):
+    return next(r for r in e.store.load() if r["title"] == title)
+
+
+def set_meta(e, title, **kw):
+    e.store.write(dict(rec_titled(e, title), **kw))
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, extra=CUSTOM)
+    cid = rec_titled(e, "Zorg Partner Rules")["id"]
+    text, res = e.view("product-analysis", product="Zorg App")
+    check("unassigned custom is named, not read",
+          "Власні секції без призначення: Zorg Partner Rules (%s)" % cid in text
+          and "never Partner Zorg" not in text and res["unassigned"] == [cid], text[-600:])
+    set_meta(e, "Zorg Partner Rules", read_by="all")
+    text, res = e.view("product-analysis", product="Zorg App")
+    check("read_by all → read whole", "never Partner Zorg" in text and cid in res["records"]
+          and "без призначення" not in text and res["unassigned"] == [], text[-600:])
+    set_meta(e, "Zorg Partner Rules", read_by="product-analysis")
+    pa_text, _ = e.view("product-analysis", product="Zorg App")
+    wc_text, _ = e.view("write-concept", product="Zorg App")
+    check("read_by names one skill", "never Partner Zorg" in pa_text and "never Partner Zorg" not in wc_text
+          and "без призначення" not in wc_text, wc_text[-400:])
+    cfg_text, _ = e.view("plugin-configurator")
+    check("full skill: no custom block, no unassigned line",
+          "never Partner Zorg" not in cfg_text and "без призначення" not in cfg_text)
+    set_meta(e, "Zorg Partner Rules", read_by="all", verified="2025-01-01", ttl_days=30)
+    text_stale, _ = e.view("product-analysis", product="Zorg App")
+    check("assigned stale record keeps its mark", "⚠ застаріле" in text_stale, text_stale[-600:])
+    e.edit(e.ctx, "never Partner Zorg in print.", "never Partner Zorg — edited.")
+    text_p, _ = e.view("product-analysis", product="Zorg App")
+    check("pending edit of a custom section is read through", "never Partner Zorg — edited" in text_p
+          and "ctx sync" in text_p, text_p[-600:])
+
+with tempfile.TemporaryDirectory() as d:
+    big = "\n## Zorg Big Appendix\n\n" + "- filler line about Zorg partners and their programmes\n" * 600 + "\n"
+    e = Env(d, extra=CUSTOM + big)
+    big_id = rec_titled(e, "Zorg Big Appendix")["id"]
+    set_meta(e, "Zorg Big Appendix", read_by="all")
+    text, res = e.view("product-analysis", product="Zorg App")
+    check("over budget is flagged", res["over_budget"] and res["largest"] == big_id
+          and "більше за 8000; найбільший запис: %s" % big_id in text, (res.get("over_budget"), res.get("largest")))
+
+check("readers normalises three forms", cr.readers({"read_by": "Product-Analysis , write-concept"})
+      == cr.readers({"read_by": ["product-analysis", "write-concept"]})
+      == cr.readers({"read_by": "[product-analysis, write-concept]"}) == frozenset({"product-analysis", "write-concept"}))
+check("readers unset", cr.readers({}) is None and cr.readers({"read_by": ""}) is None)
+
+# --- v3.12.1 minor m2: --product on a context without products
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "minimal", edit=("### Product: Zorg App\n\n- **Jira Project Key:** PROJ\n", ""))
+    text, res = e.view("requirements-creator", product="Zorg App")
+    check("--product on a context without products", not res["needs_product"] and "продукт (обов'язкове)" in text, text[-400:])
+
 check("check_manifest is clean on the repo", cr.check_manifest(ROOT) == [], cr.check_manifest(ROOT))
 with tempfile.TemporaryDirectory() as d:
     src = read(cr.MANIFEST_PATH)

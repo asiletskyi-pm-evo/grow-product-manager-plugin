@@ -53,7 +53,7 @@ class Usage(Exception):
 
 
 WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card",
-           "invalidate", "archive", "restore", "verify"}
+           "invalidate", "archive", "restore", "verify", "assign"}
 
 
 class Parser(argparse.ArgumentParser):
@@ -125,6 +125,9 @@ def cmd_status(a, c):
     if plan["missing"]:
         print("missing on disk (not downloaded, not synced or deleted): %s — `ctx sync` says what to do"
               % ", ".join(i + ".md" for i in plan["missing"]))
+    lonely = cs.unassigned_ids(recs)
+    if lonely:
+        print("custom without read_by: %s — ctx assign <id> all|<skills>" % ", ".join(lonely))
     for s in stray:
         print("stray file (ignored): %s" % s)
     for j in tail:
@@ -132,7 +135,7 @@ def cmd_status(a, c):
     return 0, {"command": "status", "store": c.store.root, "records": len(recs), "card_lines": card,
                "pending": pending, "conflicts": [x["id"] for x in plan["conflicts"]], "missing": plan["missing"],
                "stray": stray, "journal": tail, "stale": stale, "invalid": invalid, "archived": archived,
-               "last_snapshot": last[0] if last else None}
+               "last_snapshot": last[0] if last else None, "unassigned": lonely}
 
 
 def cmd_migrate(a, c):
@@ -217,6 +220,10 @@ def cmd_get(a, c):
     if a.field:
         spec = _field_spec(rec, a.field)
         raw = sc.raw_value(rec["body"], a.field, spec) if spec else cs.field_get(rec["body"], a.field)
+        placeholder = cs.field_get(rec["body"], a.field) if raw is None and spec else None
+        if placeholder is not None:            # the line is there with a placeholder such as _(not set)_
+            print(placeholder)
+            return 0, {"command": "get", "id": a.id, "field": a.field, "value": None, "not_set": True}
         if raw is None:
             raise cs.StoreError("no field %r outside managed regions in %s" % (a.field, a.id))
         print(raw)
@@ -250,9 +257,10 @@ def cmd_list(a, c):
 def cmd_read(a, c):
     c.need_store()
     try:
-        text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10])
+        cr.manifest_for(cr.load_manifest(), a.skill)
     except KeyError:
         raise cs.StoreError("no manifest entry for %s — read local-context.md whole" % a.skill)
+    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10])
     sys.stdout.write(text)
     return 0, dict(res, command="read", skill=a.skill, text=text if a.json else None)
 
@@ -321,6 +329,47 @@ def cmd_set(a, c):
     if err:
         raise ValueError("%s: %s" % (a.field, err))
     return 0, _write_one(c, "set", a.id, lambda b: cs.field_set(b, a.field, a.value), a.source or "ctx-set", a.reason)
+
+
+def _readers_value(text):
+    """`all`, `none` (→ None) or skill names → the stored read_by value; unknown names → Usage."""
+    v = text.strip().lower()
+    if v == "none":
+        return None
+    if v == "all":
+        return "all"
+    names = sorted(cr.readers({"read_by": v}) or [])
+    if not names:
+        raise Usage("assign takes all, none or skill names separated by commas")
+    unknown = [n for n in names if n not in (cr.load_manifest().get("skills") or {})]
+    if unknown:
+        raise Usage("unknown skill(s): %s — the names of skills/ folders" % ", ".join(unknown))
+    return ", ".join(names)
+
+
+def cmd_assign(a, c):
+    """Who reads a custom or setting record in `ctx read` (read_by)."""
+    value = _readers_value(a.readers)
+    c.need_store()
+    with co.lock(c.home):
+        c.guard()
+        pre = c.import_first()
+        rec = _record(c, a.id)
+        if rec["type"] not in ("custom", "setting"):
+            raise Usage("read_by is for custom and setting records, not %s (%s)" % (rec["type"], a.id))
+        if rec.get("read_by") == value:
+            print("unchanged — %s already has read_by %s" % (a.id, value or "unset"))
+            return 0, {"command": "assign", "id": a.id, "read_by": value, "changed": False, "snapshot": None}
+        t = now()
+        source = a.source or "ctx-assign"
+        snap = co.snapshot(c.store, c.copies, c.home, "assign")
+        c.store.write(dict(rec, read_by=value, source=source, modified=t))     # who reads it — not a content check
+        c.store.journal({"ts": t, "op": "assign", "ids": [a.id], "source": source, "reason": a.reason or "",
+                         "snapshot": snap})
+        comp = co.compile_store(c.store, c.copies, t, c.home, snap)
+    print("assign: %s read_by %s · wrote %s" % (a.id, value or "unset", ", ".join(comp["written"]) or "no copy"))
+    return 0, {"command": "assign", "id": a.id, "read_by": value, "changed": True, "snapshot": snap,
+               "imported": pre["changed"] + pre["added"]}
 
 
 def cmd_append(a, c):
@@ -400,8 +449,17 @@ def cmd_undo(a, c):
             existed = json.load(f).get("store_existed")
         if existed:
             cs.atomic_write(jpath, journal)
-            c.store.journal({"ts": now(), "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre})
-            print("restored the state before the %s — %s" % ("last change" if a.steps == 1 else "%d last changes" % a.steps, target))
+            t = now()
+            c.store.journal({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre})
+            # an import's snapshot holds the copies as they were on disk then — already edited; rebuild them
+            # from the restored records so the edit is undone and nothing waits to be imported again. A compile's
+            # own snapshot (a mirror created or rewritten) is the one case whose copies must stay as restored.
+            rebuilt = bool({m.get("op") for m in marks[-a.steps:]} - {"compile"})
+            if rebuilt:
+                co.compile_store(c.store, c.copies, t, c.home, pre)
+            print("restored the state before the %s — %s%s"
+                  % ("last change" if a.steps == 1 else "%d last changes" % a.steps, target,
+                     "; the copies were rebuilt from the records" if rebuilt else ""))
         else:
             co.forget_store(c.home)
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)
@@ -447,6 +505,15 @@ def cmd_validate(a, c):
             errors.append("%s: parent %s does not exist" % (r["id"], r["parent"]))
         if r["type"] == "product" and cs.field_get(r["body"], "Jira Project Key") is None:
             warnings.append("%s: no Jira Project Key (task-creator and requirements-creator need it)" % r["id"])
+    skills = cr.load_manifest().get("skills") or {}
+    for r in recs:
+        unknown = sorted((cs.readers(r) or frozenset()) - {"all"} - set(skills))
+        if unknown:
+            warnings.append("%s: read_by names unknown skill(s): %s" % (r["id"], ", ".join(unknown)))
+    lonely = cs.unassigned_ids(recs)
+    if lonely:
+        warnings.append("custom without read_by: %d (%s) — skills see only the card row; ctx assign <id> all|<skills>"
+                        % (len(lonely), ", ".join(lonely)))
     if recs and not any(r["type"] == "profile" for r in recs):
         warnings.append("no User Profile record")
     if os.path.isfile(c.store.card_path) and co._read(c.store.card_path).count("\n") > cs.CARD_MAX:
@@ -473,7 +540,8 @@ def cmd_card(a, c):
     with co.lock(c.home):
         c.guard()
         recs = c.store.load()
-        card = cs.build_card(recs, cs.compile_records(recs), now()[:10])
+        stale, archived = co.card_marks(c.store, recs, now()[:10])
+        card = cs.build_card(recs, cs.compile_records(recs), now()[:10], stale=stale, archived=archived)
         cs.atomic_write(c.store.card_path, card)
     print("INDEX.md: %d lines" % card.count("\n"))
     return 0, {"command": "card", "card_lines": card.count("\n")}
@@ -506,6 +574,8 @@ def build_parser():
     sp = sub.add_parser("verify", parents=[common]); sp.add_argument("ids", nargs="*"); sp.add_argument("--stale", action="store_true")
     sp = sub.add_parser("set", parents=[common]); sp.add_argument("id"); sp.add_argument("field"); sp.add_argument("value")
     sp.add_argument("--source"); sp.add_argument("--reason")
+    sp = sub.add_parser("assign", parents=[common]); sp.add_argument("id"); sp.add_argument("readers")
+    sp.add_argument("--source"); sp.add_argument("--reason")
     sp = sub.add_parser("append", parents=[common]); sp.add_argument("id"); sp.add_argument("--text", required=True)
     sp.add_argument("--under"); sp.add_argument("--source"); sp.add_argument("--reason")
     sp = sub.add_parser("add", parents=[common]); sp.add_argument("type"); sp.add_argument("title")
@@ -522,7 +592,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify}
+            "verify": cmd_verify, "assign": cmd_assign}
 
 
 def emit(result, conflict=None):

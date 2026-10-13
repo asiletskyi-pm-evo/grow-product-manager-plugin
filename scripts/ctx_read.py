@@ -48,6 +48,12 @@ def manifest_for(manifest, skill):
     return out
 
 
+BUDGET_TOKENS = 8000
+
+
+readers = cs.readers   # who reads a custom or setting record (read_by); lives in ctx_store for ctx_ops
+
+
 def tokens_est(text):
     return int(math.ceil(len(text) / 3.2))
 
@@ -56,20 +62,12 @@ def _lines(body):
     return [core for _, core, _ in cs._lines(body)]
 
 
-def _heading_matches(core, name):
-    """A heading whose text is `name` or starts with it followed by a non-word character
-    ("Key Metrics (focus)" answers "Key Metrics"; "Localesx" does not answer "Locales")."""
-    text = (cs._heading_text(core) or "").lower()
-    want = name.lower()
-    return cs._level(core) > 0 and (text == want or (text.startswith(want) and not text[len(want)].isalnum()))
-
-
 def _subsection(body, name):
     """The `#…# name` subsection (heading to the next heading of the same or a higher level), or None; the
     heading may carry a qualifier after the name."""
     lines = body.splitlines(keepends=True)
     cores = [l.rstrip("\r\n") for l in lines]
-    at = next((k for k, c in enumerate(cores) if _heading_matches(c, name)), None)
+    at = next((k for k, c in enumerate(cores) if cs.heading_matches(c, name)), None)
     if at is None:
         return None
     lvl, end = cs._level(cores[at]), len(lines)
@@ -145,6 +143,8 @@ def _live_view(store, copies, now):
 
 def _pick_product(products, wanted):
     """(product or None, needs_choice)."""
+    if not products:
+        return None, False
     if wanted:
         w = wanted.strip().lower()
         exact = [p for p in products if p["id"] == wanted or p["title"].split(":", 1)[-1].strip().lower() == w]
@@ -165,12 +165,14 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None):
     state = store.state()
     card = co._read(store.card_path) if os.path.isfile(store.card_path) else ""
     recs, notes, pending = _live_view(store, copies, today + "T00:00:00")
-    blocks, used, missing = [], [], []
-    res = {"records": used, "missing": missing, "pending": pending, "needs_product": False}
+    blocks, used, missing, sizes, unassigned = [], [], [], {}, []
+    res = {"records": used, "missing": missing, "pending": pending, "needs_product": False,
+           "unassigned": unassigned, "over_budget": False, "largest": None}
 
     def add(rec, text):
         blocks.append(_head(rec, state, today, notes.get(rec["id"], "")) + "\n" + text.rstrip("\n") + "\n")
         used.append(rec["id"])
+        sizes[rec["id"]] = tokens_est(blocks[-1])
 
     absent = []
 
@@ -222,11 +224,25 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None):
                     add(rec, _without_heading(rec["body"]))
                 else:
                     miss("налаштування %s" % name, name in req)
+            for rec in recs:
+                who = readers(rec) if rec["type"] in ("custom", "setting") else None
+                if who and rec["id"] not in used and ("all" in who or skill.lower() in who):
+                    add(rec, _without_heading(rec["body"]))
+            unassigned.extend(cs.unassigned_ids(recs))
+            if unassigned:
+                byid = {r["id"]: r for r in recs}
+                blocks.append("Власні секції без призначення: %s — ctx get <id>, якщо запит їх стосується"
+                              % ", ".join("%s (%s)" % (byid[i]["title"], i) for i in unassigned))
     if absent:
         blocks.append("Відсутнє: %s — для решти діють типові значення" % ", ".join(absent))
     head = "# Контекст для %s · записів %d · %s" % (skill, len(used), "%d правок не підхоплено — ctx sync" % pending if pending else "in sync")
     tail = "Більше з запису: ctx get <id> --section \"…\""
     text = "\n".join([head, "", card.rstrip("\n"), ""] + blocks + ["", tail]) + "\n"
+    if tokens_est(text) > BUDGET_TOKENS and sizes:
+        big = max(sizes, key=sizes.get)
+        res.update(over_budget=True, largest=big)
+        warn = "⚠ ≈%d токенів — більше за %d; найбільший запис: %s (≈%d)" % (tokens_est(text), BUDGET_TOKENS, big, sizes[big])
+        text = "\n".join([head, "", card.rstrip("\n"), ""] + blocks + ["", warn, tail]) + "\n"
     res.update(chars=len(text), tokens_est=tokens_est(text))
     return text, res
 

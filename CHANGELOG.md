@@ -12,6 +12,33 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.12.1 (2026-10-12)
+
+**Your own sections reach the skills again; `ctx undo` after an import is whole.** Found in the v3.11 acceptance run on a real store: since v3.12.0 a skill reads only what `references/context-manifest.yaml` names, and the manifest — shipped with the plugin — cannot name a user's own `##` sections, so none of them reached any skill (before v3.12 skills read the whole file and saw them). And `ctx undo` after a sync that imported a direct edit or removal restored the records but left `local-context.md` as edited, so the next sync applied the edit again.
+
+PATCH by the owner's decision: it repairs a v3.12.0 regression and an undo defect; the one new command exists only to make the repair usable (plugin-configurator 2.15.1).
+
+### Added
+
+- **`read_by`** — an optional key of a `custom` or `setting` record: `all`, or skill names. `ctx read --skill S` adds the record whole for those skills; a `custom` record without it is named in one line — `Власні секції без призначення: <title> (<id>), … — ctx get <id>, якщо запит їх стосується` — and the skill reads it when the request is about it. The Obsidian property works too, as a list, a comma string or a hand-typed `[a, b]` (which used to make the record unreadable).
+- **`ctx assign ID all|none|S1,S2`** — sets or clears `read_by` (an unknown skill or another record type → exit 3); a snapshot and a journal line, the copies do not change, the record's verified date stays.
+- `ctx validate` and `ctx status` list the `custom` records without `read_by` and warn about unknown names; the session digest adds `· N custom unassigned`; `ctx read` output over 8,000 tokens ends with a warning naming the largest record.
+- **plugin-configurator 2.15.1** — the Update item "Who reads custom sections" proposes an assignment per section (`all` for rules that apply to any work, otherwise the skills its content serves) and applies it with one confirmation; Validate lists the unassigned ones.
+- Tests: `ctx_read_test.py` 27, `ctx_store_test.py` 50, `ctx_cli_test.py` 80, `session_start_test.py` 25 checks — each new check failed before its code. A whole-branch review found two more defects (an undo of a compile snapshot became a no-op; `assign` marked the record verified); each was fixed with a check that failed first.
+
+### Fixed
+
+- **`ctx undo` after an import** — the copies are rebuilt from the restored records, so undoing a sync that imported an edit or a removal undoes it in both copies and leaves the store in sync; the edit stays in the `pre-undo` snapshot. Undoing only a compile's own snapshot (a mirror created or rewritten) keeps the restored copies.
+- v3.12.0 minors: `ctx card` keeps the stale and archive marks; `ctx read --product X` on a context without products says the product is missing instead of listing none; a typed `ctx get` of a placeholder (`_(not set)_`) prints it with `not_set` instead of "no field"; an internal error in `ctx read` is no longer reported as "no manifest entry"; the card's platforms match a heading with a qualifier ("Platforms (mobile first)"), as `ctx read` does.
+
+### Backwards compatibility
+
+- Nothing changes until a record gets `read_by`: unassigned sections behave as in v3.12.0, plus the one line naming them. A v3.12.0 engine keeps a `read_by` key it does not know.
+- `ctx undo` now also rewrites `local-context.md` and its vault mirror when the undone change was an import — that is the documented behaviour ("`ctx undo` brings it back") the engine did not deliver.
+- No skill renamed, no description changed: routing is as in v3.12.0.
+
+---
+
 ## v3.12.0 (2026-10-12)
 
 **Lean reading, record lifecycle, freshness and typed fields** (Context Core, phase 2 — second half). With a context store, a skill no longer reads the whole `local-context.md` at Step 0: `ctx read --skill <name>` gives it the context card plus only the fields and subsections its entry in `references/context-manifest.yaml` names. On a real 926-line context about 25,600 tokens became 900–3,000 per skill (measured with this release's engine on the release machine, all 33 skills). Records get a lifecycle (invalidate → archive → trash, `restore`), a verified date with a time to live (a stale fact is stated "as of" its date), and typed fields; `ctx` writes only under `~/.grow-pm` and the storage root. Without a store nothing changes.

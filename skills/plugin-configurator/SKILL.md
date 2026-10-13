@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.15.0
+version: 2.15.1
 description: Configure the plugin and your Obsidian vault — organization, products, teams, data sources — validate or view the config. Not the typed /status or /config commands. UA — «налаштуй плагін», «підключи Obsidian-вейлт», «покажи мій конфіг», «статус плагіна», «змінити роль», «налаштуй тестові акаунти», «налаштуй карту конкурентів». EN — "set my role".
 ---
 
@@ -125,7 +125,7 @@ This applies equally to:
 - Plugin Configurator modes (Onboarding, Update, View)
 - Context Enrichment by other skills (Product Research adding competitors, etc.)
 
-**Context store (since v3.11.0, `references/context-protocol.md`; freshness and the record lifecycle since v3.12.0 — Validate counts stale, invalid and archived records, the Update item "Review stale records" confirms them).** After every save of `local-context.md` in any mode: When the session digest shows a `context: records …` line — on a host without the digest (Codex CLI): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` writes the vault mirror itself — skip the manual mirror copy. Moving a single-file context into records is the Update item "Move my context to records" and the one-time offer at the end of onboarding (Step 16).
+**Context store (since v3.11.0, `references/context-protocol.md`; freshness and the record lifecycle since v3.12.0 — Validate counts stale, invalid and archived records, the Update item "Review stale records" confirms them; since v3.12.1 `ctx assign` sets who reads a custom section — the Update item "Who reads custom sections").** After every save of `local-context.md` in any mode: When the session digest shows a `context: records …` line — on a host without the digest (Codex CLI): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` writes the vault mirror itself — skip the manual mirror copy. Moving a single-file context into records is the Update item "Move my context to records" and the one-time offer at the end of onboarding (Step 16).
 
 ---
 

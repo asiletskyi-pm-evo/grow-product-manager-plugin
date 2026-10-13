@@ -245,5 +245,22 @@ except ValueError as e:
     odd_ok = False
 check("a property with a Cyrillic name, a space or a leading digit survives", odd_ok)
 
+# --- v3.12.1: read_by
+check("read_by survives render/parse", cs.parse_record(cs.render_record(dict(rec0, read_by="all")))["read_by"] == "all")
+block_list = v311.replace("\n---\n", "\nread_by:\n  - product-analysis\n  - write-concept\n---\n", 1)
+check("Obsidian block list read_by is read",
+      cs.parse_record(block_list)["read_by"] == ["product-analysis", "write-concept"], cs.parse_record(block_list).get("read_by"))
+
+flow = v311.replace("\n---\n", "\nread_by: [product-analysis, write-concept]\n---\n", 1)
+try:
+    flow_rec = cs.parse_record(flow); flow_ok = "product-analysis" in str(flow_rec.get("read_by"))
+except ValueError as e:
+    flow_ok = False
+check("a flow list read_by typed by hand does not break the record", flow_ok)
+
+# --- v3.12.1 minor m6: one heading rule for the card and ctx read
+check("heading_matches", hasattr(cs, "heading_matches") and cs.heading_matches("#### Platforms (mobile first)", "Platforms")
+      and cs.heading_matches("#### Platforms", "Platforms") and not cs.heading_matches("#### Platformsx", "Platforms"))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

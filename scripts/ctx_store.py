@@ -132,7 +132,8 @@ def assign_ids(frags, taken=frozenset()):
     return out
 
 
-OPTIONAL_KEYS = ("status", "verified", "ttl_days", "archived", "archived_reason", "former_after", "trashed")
+OPTIONAL_KEYS = ("status", "verified", "ttl_days", "archived", "archived_reason", "former_after", "trashed", "read_by")
+_FLOW_READ_BY = re.compile(r"^(read_by:[ \t]*)(\[.*\])[ \t]*$", re.M)
 _FM_START = re.compile(r"^---\r?\n")
 _FM_END = re.compile(r"\r?\n---\r?\n")
 
@@ -143,11 +144,17 @@ def _render_value(v):
     return v if isinstance(v, int) else json.dumps(v, ensure_ascii=False)
 
 
+def _render_kv(k, v):
+    if isinstance(v, list):                    # a block list, as Obsidian writes list properties
+        return "%s:" % k + "".join("\n  - %s" % _render_value(x) for x in v)
+    return "%s: %s" % (k, _render_value(v))
+
+
 def render_record(rec):
     """Frontmatter: RECORD_KEYS in order (strings JSON-quoted, None as ""), the OPTIONAL_KEYS that are
     set, then the unknown keys (`extra`) verbatim; then the body as is."""
     out = ["---"] + ["%s: %s" % (k, _render_value(rec.get(k))) for k in RECORD_KEYS]
-    out += ["%s: %s" % (k, _render_value(rec[k])) for k in OPTIONAL_KEYS if rec.get(k) is not None]
+    out += [_render_kv(k, rec[k]) for k in OPTIONAL_KEYS if rec.get(k) is not None]
     extra = rec.get("extra") or ""
     return "\n".join(out) + "\n" + extra + ("" if not extra or extra.endswith("\n") else "\n") + \
         "---\n" + (rec.get("body") or "")
@@ -176,7 +183,8 @@ def parse_record(text):
     if not end:
         raise ValueError("frontmatter not closed — empty or still being written by a sync tool")
     known, extra = _split_frontmatter(text[start.end():end.start()].replace("\r\n", "\n").replace("\r", "\n"))
-    meta = cc.read_yaml_subset(known)
+    known = _FLOW_READ_BY.sub(lambda m: m.group(1) + json.dumps(m.group(2), ensure_ascii=False), known)
+    meta = cc.read_yaml_subset(known)            # `read_by: [a, b]` typed by hand is read as text
     rec = {k: meta.get(k) for k in RECORD_KEYS}
     rec.update({k: (meta.get(k) if meta.get(k) != "" else None) for k in OPTIONAL_KEYS})
     rec["parent"] = rec["parent"] or None
@@ -185,6 +193,22 @@ def parse_record(text):
     rec["extra"] = extra.rstrip("\n") + "\n" if extra.strip() else ""
     rec["body"] = text[end.end():]
     return rec
+
+
+def readers(rec):
+    """The skills a custom or setting record is assigned to (`read_by`): a frozenset of lower-case names,
+    where "all" means every skill; None when the key is unset or empty. Accepts "a, b", "[a, b]" and a list."""
+    v = rec.get("read_by")
+    if v is None:
+        return None
+    items = v if isinstance(v, list) else str(v).strip().strip("[]").split(",")
+    names = frozenset(re.sub(r"\s+", "", str(x)).strip("\"'").lower() for x in items) - {""}
+    return names or None
+
+
+def unassigned_ids(records):
+    """Ids of the custom records nobody reads in `ctx read` (no read_by), in record order."""
+    return [r["id"] for r in sorted(records, key=lambda r: r["order"]) if r["type"] == "custom" and readers(r) is None]
 
 
 STATUS_BEGIN = "<!-- ctx:begin id=status -->"
@@ -539,9 +563,17 @@ def _member_count(body):
     return max(len(rows) - 2, 0) if rows else None
 
 
+def heading_matches(core, name):
+    """A heading whose text is `name` or starts with it followed by a non-word character
+    ("Key Metrics (focus)" answers "Key Metrics"; "Localesx" does not answer "Locales")."""
+    text = (_heading_text(core) or "").lower()
+    want = name.lower()
+    return _level(core) > 0 and (text == want or (text.startswith(want) and not text[len(want)].isalnum()))
+
+
 def _bullets_under(body, name):
     lines = [core for _, core, _ in _lines(body)]
-    at = next((k for k, c in enumerate(lines) if _heading_text(c) == name), None)
+    at = next((k for k, c in enumerate(lines) if heading_matches(c, name)), None)
     out = []
     for c in lines[at + 1:] if at is not None else []:
         if _heading_text(c) is not None:
