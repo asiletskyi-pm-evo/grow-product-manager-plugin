@@ -9,7 +9,7 @@ and no secrets in messages, `headers_from_env`, and the command: reachable yes /
 and for a folder, the header from the environment, the version on the source. No real server, no real data.
 Semantics: references/context-provider-protocol.md. Stdlib only; run from the repo root.
 """
-import json, os, socket, subprocess, sys, tempfile, threading, time
+import json, os, socket, subprocess, sys, tempfile, threading, time, traceback
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -165,6 +165,23 @@ for noise, after in ((True, False), (False, False), (True, True)):
               got["path"].endswith(".md") and "zorg-growth:begin" in got["content"], got)
         check("…the session id goes back there too", fake.seen[-1]["headers"].get("Mcp-Session-Id") == "s-1")
 
+# --- SSE with events that are not messages: an empty-data priming event, a non-JSON ping
+for noise in (True, False):
+    with FakeMcp(mode="sse", sse_junk=True, sse_noise=noise, sse_after=True) as fake:
+        c = McpClient(fake.url)
+        got = raises(lambda: c.call("vault_get_note", {"path": BLOCKS_PATH}), McpError)
+        ok = got is None and c.call("vault_get_note", {"path": BLOCKS_PATH})["path"] == BLOCKS_PATH
+        check("SSE: an empty `data:` event and a `data: ping` before the answer do not fail the call (noise=%s)" % noise,
+              ok, repr(got))
+        check("…nor the probe", McpClient(fake.url).probe() is True)
+c = McpClient("http://127.0.0.1:9/mcp")
+c._send = lambda msg, timeout, retries: ({}, "text/event-stream", b"data:\n\nevent: ping\ndata: ping\n\n")
+err = raises(lambda: c._rpc("tools/call", {}, 1, 0), McpError)
+check("SSE with nothing but such events → McpError (no message in it)", err is not None and "no JSON-RPC message" in str(err), repr(err))
+c._send = lambda msg, timeout, retries: ({}, "text/event-stream", b"data: {\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{}}\n\ndata: ping\n\n")
+check("SSE: a parseable message with another id is the fallback when none matches (the last parseable one)",
+      c._rpc("tools/call", {}, 1, 0)[0] == {})
+
 # --- the allow-list
 with FakeMcp() as fake:
     c = McpClient(fake.url)
@@ -193,7 +210,13 @@ with FakeMcp() as fake:
     err = raises(lambda: c.call("vault_search", {"query": "x"}), McpError)
     check("a result whose text is not JSON → McpError", err is not None and "JSON" in str(err), repr(err))
     fake.handlers["vault_search"] = lambda args: ([{"path": "a.md"}, {"path": "b.md"}], False)
-    check("any JSON the tool returned is passed on (a list too)", c.call("vault_search", {}) == [{"path": "a.md"}, {"path": "b.md"}])
+    for label, text in (("a list", [{"path": "a.md"}]), ("null", None), ("a number", 5), ("a JSON string", '"a.md"'), ("true", True)):
+        fake.handlers["vault_search"] = lambda args, t=text: (t, False)
+        err = raises(lambda: c.call("vault_search", {}), McpError)
+        check("call() returns a dict: %s is an McpError with a fixed message" % label,
+              err is not None and type(err) is McpError and "not an object" in str(err) and "a.md" not in str(err), repr(err))
+    fake.handlers["vault_search"] = lambda args: ({"results": []}, False)
+    check("…and an object is passed on as is", c.call("vault_search", {}) == {"results": []})
     fake.handlers["brain_status"] = lambda args: ("", False)
     err = raises(lambda: c.call("brain_status", {}), McpError)
     check("an empty text → McpError", err is not None, repr(err))
@@ -278,6 +301,53 @@ err = raises(lambda: c.call("vault_get_note", {"path": "a"}), McpError)
 c.probe()
 check("a url with credentials is not repeated in a message", err is not None and "zorgpass9" not in str(err)
       and "zorgtok7" not in str(err) and "zorgpass9" not in c.last_error and "zorgtok7" not in c.last_error, (repr(err), c.last_error))
+
+# --- nothing of a header or a url survives in the exception chain or the traceback
+def chain_blob(e):
+    """Everything an unhandled exception would print or carry: the formatted traceback, and the repr and text
+    of every exception reachable through __cause__ / __context__."""
+    blob, seen, x = "".join(traceback.format_exception(type(e), e, e.__traceback__)), [], e
+    while x is not None and not any(x is y for y in seen):
+        seen.append(x)
+        blob += repr(x) + str(x)
+        x = x.__cause__ or x.__context__
+    return blob, len(seen)
+
+
+secret = "sekret-7c1d"
+scenarios = []
+with FakeMcp(require_headers={"X-Token": "different"}) as f401, FakeMcp(redirect_to="http://127.0.0.1:1/", redirect_status=302) as f302, \
+        FakeMcp() as ftext:
+    closer = Closer()
+    ftext.handlers["vault_search"] = lambda args: ("not json at all", False)
+    ftext.handlers["brain_status"] = lambda args: ([1, 2], False)
+    cases = (
+        ("a header that cannot be sent (CR LF in the value)", "http://127.0.0.1:9/mcp", {"X-Token": secret + "\r\nX-Evil: 1"}, "vault_get_note", [secret, "X-Evil"]),
+        ("a url with credentials and a query", "http://zorguser:zorgpass9@127.0.0.1:%d/mcp?tok=zorgtok7" % free_port(), {"X-Token": secret}, "vault_get_note", [secret, "zorgpass9", "zorgtok7", "zorguser"]),
+        ("a port that is not a number", "http://127.0.0.1:zorgpass9/mcp", {"X-Token": secret}, "vault_get_note", [secret, "zorgpass9"]),
+        ("a dropped connection, retried", closer.url, {"X-Token": secret}, "vault_get_note", [secret]),
+        ("a refused connection, retried", "http://127.0.0.1:%d/mcp" % free_port(), {"X-Token": secret}, "vault_get_note", [secret]),
+        ("an HTTP 401", f401.url, {"X-Token": secret}, "vault_get_note", [secret]),
+        ("a 302 redirect", f302.url, {"X-Token": secret}, "vault_get_note", [secret]),
+        ("a result that is not JSON", ftext.url, {"X-Token": secret}, "vault_search", [secret]),
+        ("a result that is not an object", ftext.url, {"X-Token": secret}, "brain_status", [secret]),
+        ("a file url", "file:///etc/hosts", {"X-Token": secret}, "vault_get_note", [secret]),
+    )
+    for label, url, hdrs, tool, banned in cases:
+        c = McpClient(url, headers=hdrs, retries=1, call_timeout=2)
+        err = raises(lambda: c.call(tool, {"path": "a"}), McpError)
+        blob, depth = chain_blob(err) if err is not None else ("", 0)
+        check("the exception for %s carries no chain and prints no secret" % label,
+              err is not None and depth == 1 and err.__context__ is None and err.__cause__ is None
+              and not any(b in blob for b in banned), (repr(err), depth, [b for b in banned if b in blob]))
+        c = McpClient(url, headers=hdrs, call_timeout=2)
+        c.probe()
+        check("…and probe's last_error neither (%s)" % label, not any(b in c.last_error for b in banned), c.last_error)
+    closer.close()
+    # an unexpected error raised inside the handshake is still reported without the chain
+    c = McpClient(f401.url, headers={"X-Token": secret})
+    err = raises(lambda: c.call("vault_get_note", {"path": "a"}), McpError)
+    check("the lazy handshake of a call: no chain either", err is not None and err.__context__ is None and secret not in chain_blob(err)[0])
 
 # --- a response bigger than the cap
 big = {"Growth/big.md": "x" * 5000}

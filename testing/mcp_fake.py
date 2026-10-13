@@ -5,7 +5,8 @@ Streamable HTTP as the real server speaks it (measured): POST JSON-RPC 2.0 to on
 answers `serverInfo` and `protocolVersion` and hands out the session id in the `mcp-session-id`
 header; later requests must send it back; a response is `application/json` or `text/event-stream`
 (mode "sse"; a keep-alive comment and an event with a notification come before the answer, and with
-sse_after a notification event after it too);
+sse_after a notification event after it too, and with sse_junk an empty `data:` event and a
+`data: ping` event before all of that);
 `notifications/*` get 202 and no body; `tools/call` answers `result.content` = [{"type": "text",
 "text": "<JSON string>"}] and `isError`. `vault_get_note` answers the note
 {"path", "title", "frontmatter", "tags", "headings", "content", "outgoing_links"}, and for a path the
@@ -71,6 +72,8 @@ class _Handler(BaseHTTPRequestHandler):
                 noise = (": keep-alive\n\n" + "event: message\ndata: "
                          + json.dumps({"jsonrpc": "2.0", "method": "notifications/message",
                                        "params": {"level": "info", "data": "working"}}) + "\n\n")
+            if fake.sse_junk:                                  # a priming event with empty data, then a non-JSON ping
+                noise = "id: 0\ndata:\n\n" + "event: ping\ndata: ping\n\n" + noise
             tail = ""
             if fake.sse_after:
                 tail = "event: message\ndata: " + json.dumps({"jsonrpc": "2.0", "method": "notifications/done"}) + "\n\n"
@@ -125,13 +128,13 @@ class _Handler(BaseHTTPRequestHandler):
 
 class FakeMcp:
     def __init__(self, mode="json", tree=None, require_headers=None, drop=0, delay=0.0, fail_status=0,
-                 redirect_to="", redirect_status=307, rpc_error="", sse_noise=True, sse_after=False):
+                 redirect_to="", redirect_status=307, rpc_error="", sse_noise=True, sse_after=False, sse_junk=False):
         self.mode = mode
         self.tree = dict(DEFAULT_TREE if tree is None else tree)
         self.require_headers = dict(require_headers or {})
         self.drop, self.delay, self.fail_status = drop, delay, fail_status
         self.redirect_to, self.redirect_status = redirect_to, redirect_status
-        self.rpc_error, self.sse_noise, self.sse_after = rpc_error, sse_noise, sse_after
+        self.rpc_error, self.sse_noise, self.sse_after, self.sse_junk = rpc_error, sse_noise, sse_after, sse_junk
         self.handlers = {"vault_get_note": self._get_note}
         self.seen = []
         self._lock = threading.Lock()

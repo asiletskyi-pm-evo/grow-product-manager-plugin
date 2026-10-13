@@ -15,7 +15,9 @@ What it will do, and nothing more:
     connection) is retried `retries` times, a server's answer — an HTTP status, a JSON-RPC error,
     `isError` — never is;
   * follow no redirect (a header meant for one host does not travel to another) and speak only http and https;
-  * keep secrets out of every message it raises or keeps: no header value, no url (it may hold credentials).
+  * keep secrets out of every message it raises or keeps: no header value, no url (it may hold credentials) —
+    and out of the exception chain: an error is raised outside the `except` that caught the original, so
+    `__context__` is None and a traceback prints nothing of the request.
 
 The header a server wants (`headers_env` of the registration names an environment variable that holds
 `Name: value`) is read by `headers_from_env`; the value is never stored by the engine.
@@ -84,6 +86,15 @@ def _text_of(result):
     return None
 
 
+def _loads(text):
+    """(True, value) for a text that is JSON, else (False, None) — no exception, so that nothing of the text
+    is chained to the error a caller raises for it."""
+    try:
+        return True, json.loads(text)
+    except (ValueError, RecursionError):
+        return False, None
+
+
 def _sse_events(text):
     """The `data:` payloads of an event stream, one per event, in order (comments and other fields skipped)."""
     events, data = [], []
@@ -129,6 +140,7 @@ class McpClient:
         hdrs.update(self.headers)
         if self.session_id:
             hdrs["Mcp-Session-Id"] = self.session_id
+        failure = None                                 # raised below, outside the `except`: nothing is chained to it
         try:
             req = urllib.request.Request(self.url, data=json.dumps(message).encode("utf-8"), headers=hdrs, method="POST")
             with _OPENER.open(req, timeout=timeout) as resp:
@@ -137,13 +149,16 @@ class McpClient:
         except urllib.error.HTTPError as e:            # before URLError, which it extends: the server did answer
             e.close()
             hint = " (a redirect is not followed)" if 300 <= e.code < 400 else ""
-            raise McpError("HTTP %d from the server%s" % (e.code, hint))
+            failure = McpError("HTTP %d from the server%s" % (e.code, hint))
         except http.client.InvalidURL:
-            raise McpError("the endpoint url is not valid")
+            failure = McpError("the endpoint url is not valid")
         except ValueError:                             # a header or the url that cannot be put on the wire
-            raise McpError("the request could not be built (check the endpoint url and the header)")
+            failure = McpError("the request could not be built (check the endpoint url and the header)")
         except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
-            raise _Network("connection failed: %s" % _reason(e))
+            failure = _Network("connection failed: %s" % _reason(e))
+        if failure is not None:
+            raise failure       # outside the handler, so __context__ is None: the original exception (it can
+                                # hold a header value or the url, e.g. urllib's "Invalid header value b'...'") is dropped
         if len(body) > MAX_BODY:
             raise McpError("the response is too large (over %d bytes)" % MAX_BODY)
         return headers, ctype, body
@@ -152,13 +167,15 @@ class McpClient:
         """_post with the retries: only a failure of the connection is tried again."""
         attempt = 0
         while True:
+            failure = None
             try:
                 return self._post(message, timeout)
             except _Network as e:
-                if attempt >= retries:
-                    raise McpError("%s (after %d attempts)" % (e, attempt + 1) if attempt else str(e))
-                attempt += 1
-                time.sleep(self.BACKOFF * attempt)
+                failure = e
+            if attempt >= retries:
+                raise McpError("%s (after %d attempts)" % (failure, attempt + 1) if attempt else str(failure))
+            attempt += 1
+            time.sleep(self.BACKOFF * attempt)
 
     def _rpc(self, method, params, timeout, retries):
         """A request → (its result object, response headers)."""
@@ -166,14 +183,13 @@ class McpClient:
         rid = self._ids
         headers, ctype, body = self._send({"jsonrpc": "2.0", "id": rid, "method": method, "params": params}, timeout, retries)
         text = body.decode("utf-8", "replace")
-        try:
-            if "text/event-stream" in ctype.lower():
-                msgs = [json.loads(e) for e in _sse_events(text)]
-            else:
-                parsed = json.loads(text)
-                msgs = parsed if isinstance(parsed, list) else [parsed]
-        except (ValueError, RecursionError):
-            raise McpError("the server's answer is not JSON-RPC")
+        if "text/event-stream" in ctype.lower():           # an event that is empty or not JSON (a priming event, a ping) is skipped
+            msgs = [v for ok, v in (_loads(e) for e in _sse_events(text)) if ok]
+        else:
+            ok, parsed = _loads(text)
+            if not ok:
+                raise McpError("the server's answer is not JSON-RPC")
+            msgs = parsed if isinstance(parsed, list) else [parsed]
         msgs = [m for m in msgs if isinstance(m, dict)]
         mine = [m for m in msgs if m.get("id") == rid] or msgs[-1:]   # the answer, not a notification beside it
         if not mine:
@@ -214,9 +230,9 @@ class McpClient:
         return False
 
     def call(self, name, args=None):
-        """The JSON a tool returned in its text content (an object for every tool measured so far; whatever
-        the tool sent when it is not). A tool outside ALLOWED → McpRefused, before any request; the network,
-        a timeout, a JSON-RPC error, `isError` or a text that is not JSON → McpError."""
+        """The JSON object a tool returned in its text content. A tool outside ALLOWED → McpRefused, before any
+        request; the network, a timeout, a JSON-RPC error, `isError`, a text that is not JSON or JSON that is not
+        an object (a list, null, a number, a string) → McpError."""
         if not isinstance(name, str) or name not in ALLOWED:
             raise McpRefused("tool %r is not on the allow-list (%s)" % (name, ", ".join(sorted(ALLOWED))))
         if not self._ready:
@@ -227,7 +243,9 @@ class McpClient:
             raise McpError("%s failed: %s" % (name, (text or "no detail")[:300]))
         if text is None:
             raise McpError("%s returned no text content" % name)
-        try:
-            return json.loads(text)
-        except (ValueError, RecursionError):
+        ok, value = _loads(text)
+        if not ok:
             raise McpError("%s returned text that is not JSON" % name)
+        if not isinstance(value, dict):
+            raise McpError("%s returned JSON that is not an object" % name)
+        return value
