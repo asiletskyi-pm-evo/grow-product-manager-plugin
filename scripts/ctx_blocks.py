@@ -29,6 +29,14 @@ The persistent part is the store's memory of a repository, under `<store>/.state
 - prune_bases               drop the base texts no block refers to any more
 - last_checked              read-only, never raises: the time of the last check, for the session digest
 
+And the first use of it, for a context that already holds a repository's blocks:
+
+- adopt                     the initial base of every block of the repository that is in the context (spec B5):
+                            "base" (yours is the repository's), "edit" (the same version, yours differs: the
+                            repository's text is the base and yours counts as your edit), "none" (another version, or
+                            the repository does not offer it: no base, the plan shows "?"). Only the state and the
+                            base texts are written (after a snapshot); the records and the compiled copies never.
+
 Every write goes through ctx_store.atomic_write / check_target (the write allow-list). A repository id is
 kebab-case and nothing else, so it can never name a path outside `.state/blocks/`.
 
@@ -42,6 +50,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_ops as co  # noqa: E402
 import ctx_store as cs  # noqa: E402
 
 ID = r"[A-Za-z0-9_.-]+"
@@ -323,3 +332,91 @@ def last_checked(store_root, repo_id):
     except Exception:  # noqa: BLE001 — a digest must not fail over a state file
         return None
     return checked if isinstance(checked, str) and checked else None
+
+
+# ------------------------------------------------------------------ adopt
+def _marker_version(text):
+    """The `v=` of the begin marker of a region text; "" when it carries none."""
+    found = VERSION.search((text or "").split("-->", 1)[0])
+    return found.group(1) if found else ""
+
+
+def _initial_base(mine, theirs):
+    """(outcome, why) for one block that is in the context (`mine`, a region text) and has no base yet.
+
+    `theirs` is the repository's region text, or None when it does not offer the block. The version is part of the
+    region text (the begin marker), so equal texts have equal versions. The rules (spec B5):
+      "base"  the texts are equal once normalised: yours is the repository's
+      "edit"  the same known version and different texts: the repository's text is the base, yours is your edit
+      "none"  the repository does not offer it; another version; or a version nobody knows and different texts
+              (nothing says which of the two moved)
+    """
+    if theirs is None:
+        return "none", "the repository does not offer this block"
+    vm, vt = _marker_version(mine), _marker_version(theirs)
+    if norm(mine) == norm(theirs):
+        return "base", "same as the repository's%s" % (" (v=%s)" % vt if vt else "")
+    if vm and vm == vt:
+        return "edit", ("same version (v=%s), your text differs: the repository's text is the base, yours is your edit" % vm)
+    if vm and vt:
+        return "none", "another version (yours v=%s, the repository's v=%s)" % (vm, vt)
+    return "none", "version unknown (yours %s, the repository's %s) and the texts differ" % (vm or "—", vt or "—")
+
+
+def adopt(store, copies, home, repo, fetched, now, apply):
+    """The initial bases of the blocks of `repo` that are already in the context, from `fetched` (what
+    `ctx_repos.fetch` returned, with no `error`).
+
+    Returns {"repo": id, "blocks": {block id: "base" | "edit" | "none" | "has-base"}, "why": {block id: text},
+    "new": [ids the repository offers and the context lacks: the plan shows "+"], "problems": [find_regions errors:
+    the blocks left out because their regions are broken], "written": bool, "snapshot": folder or None}.
+    "has-base" is a block whose state entry holds a base: it is left exactly as it is, so adopting again never
+    hides an edit (an entry with no base, such as a removal mark on a region you have put back, gets one). A block of `skip_blocks` is not part of it. The repository's `team` region is the block "team"
+    (a failed team build, `team_error`, gives "none"); every other block comes from `fetched["blocks"]`.
+
+    Without `apply` nothing is written. With it, and when some block gets a base: a snapshot (labelled adopt), then
+    the base texts, then the state (checked, source and an entry per adopted block: the hash of the base, its
+    version, the record holding the region, when it was checked, nothing removed), then the base texts nobody refers
+    to are pruned, then one journal line `provider-adopt`. The records and the compiled copies are never written;
+    the caller holds the lock. A crash after the texts leaves orphan base texts and no state.
+    """
+    if fetched.get("error"):
+        raise ValueError("adopt needs a repository that was fetched, not one that failed: %s" % fetched["error"])
+    rid, skip = repo["id"], set(repo.get("skip_blocks") or ())
+    mine, problems = find_regions(store.load(), repo["namespace"])
+    theirs = dict(fetched.get("blocks") or {})
+    if fetched.get("team") is not None:
+        theirs["team"] = fetched["team"]
+    team_error = fetched.get("team_error")
+    state = load_state(store, rid)
+    checked = fetched.get("checked") or now
+    blocks, why, entries, texts = {}, {}, {}, {}
+    for bid, found in mine.items():
+        if bid in skip:
+            continue
+        held = state["blocks"].get(bid) or {}
+        if held.get("base_sha") or held.get("bases"):
+            blocks[bid], why[bid] = "has-base", "already has a base — left as it is"
+        elif bid == "team" and team_error:
+            blocks[bid], why[bid] = "none", team_error
+        else:
+            blocks[bid], why[bid] = _initial_base(found["text"], theirs.get(bid))
+            if blocks[bid] in ("base", "edit"):
+                texts[bid] = theirs[bid]
+                entries[bid] = {"v": _marker_version(theirs[bid]), "host": found["host"], "checked": checked,
+                                "user_removed": None}
+    left_out = {x["block"] for x in problems}
+    new = [bid for bid in theirs if bid not in mine and bid not in left_out and bid not in skip and bid not in state["blocks"]]
+    res = {"repo": rid, "blocks": blocks, "why": why, "new": new, "problems": problems, "written": False, "snapshot": None}
+    if not apply or not entries:
+        return res
+    snap = co.snapshot(store, copies, home, "adopt")
+    for bid, text in texts.items():
+        sha = put_base(store, rid, text)
+        state["blocks"][bid] = dict(entries[bid], base_sha=sha, bases=[sha])
+    state["checked"], state["source"] = checked, fetched.get("source")
+    save_state(store, rid, state)
+    prune_bases(store, rid, state)
+    store.journal({"ts": now, "op": "provider-adopt", "source": "repo:" + rid, "ids": list(entries), "snapshot": snap})
+    res.update(written=True, snapshot=snap)
+    return res

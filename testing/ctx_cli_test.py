@@ -10,8 +10,15 @@ Semantics: references/context-protocol.md. Stdlib only; run from the repo root.
 import json, os, shutil, stat, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "testing"))
+os.environ["NO_PROXY"] = "127.0.0.1,localhost"          # the fake MCP server is local; a proxy in the environment must not see it
+os.environ["no_proxy"] = "127.0.0.1,localhost"
+from mcp_fake import FakeMcp  # noqa: E402
+
 CTX = os.path.join(ROOT, "scripts", "ctx.py")
 FIX = os.path.join(ROOT, "testing", "fixtures", "ctx")
+REPOS_FIX = os.path.join(ROOT, "testing", "fixtures", "ctx-repos")
+CORE_FIX = os.path.join(ROOT, "testing", "fixtures", "context-connect", "zorg-core")
 fails = 0
 
 
@@ -26,17 +33,17 @@ def read(*parts):
 
 
 class Env:
-    def __init__(self, d, fixture="typical"):
+    def __init__(self, d, fixture="typical", fix=FIX):
         self.home = os.path.join(d, "home")
         self.vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(self.home, ".grow-pm"))
         os.makedirs(os.path.join(self.vault, "Notes", "_System"))
-        self.text = read(FIX, fixture + ".md").replace("{{VAULT}}", self.vault)
+        self.text = read(fix, fixture + ".md").replace("{{VAULT}}", self.vault)
         self.ctx = os.path.join(self.home, ".grow-pm", "local-context.md")
         self.mirror = os.path.join(self.vault, "Notes", "_System", "local-context.md")
         self.store = os.path.join(self.vault, "Notes", "_System", "context")
         open(self.ctx, "w", encoding="utf-8", newline="").write(self.text)
-        if "{{VAULT}}" in read(FIX, fixture + ".md"):
+        if "{{VAULT}}" in read(fix, fixture + ".md"):
             open(self.mirror, "w", encoding="utf-8", newline="").write(self.text)
         else:
             self.store = os.path.join(self.home, ".grow-pm", "_System", "context")
@@ -561,6 +568,139 @@ with tempfile.TemporaryDirectory() as d:
     add_frontmatter(e, cid, 'verified: "2025-01-01"')
     rc, out, r = run_ok(e, "assign", cid, "all")
     check("assign keeps the verified date", rc == 0 and 'verified: "2025-01-01"' in e.record(cid), e.record(cid)[:500])
+
+# --- v3.13.0: ctx provider adopt — bases for the blocks already in your context
+GROWTH_FILE = "Growth/_System/context-blocks.md"
+GROWTH_PATH = "ZorgGrowth/" + GROWTH_FILE                       # endpoint.root + blocks_file
+GROWTH_TEXT = read(REPOS_FIX, "zorg-growth", *GROWTH_FILE.split("/"))
+CORE_SCOPE = "<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope of work\nThe user works on Zorg App only.\n<!-- zorg-core:end id=scope -->"
+
+
+def tree_of(*roots):
+    """{path: bytes} of every file under the roots — to prove that a run wrote nothing."""
+    out = {}
+    for r in roots:
+        for dp, _, fn in os.walk(r):
+            for n in fn:
+                out[os.path.join(dp, n)] = open(os.path.join(dp, n), "rb").read()
+    return out
+
+
+def repos_env(d, url, patch=()):
+    """The fixture context with zorg-core (a folder: a run-time copy of the core fixture) and zorg-growth (an MCP
+    server at `url`) registered, and zorg-dead (a server nobody answers). `patch` is [(old, new)] applied to both copies."""
+    e = Env(d, fixture="context", fix=REPOS_FIX)
+    for old_, new_ in patch:
+        edit_both(e, old_, new_)
+    core = os.path.join(d, "ZorgCore")
+    shutil.copytree(CORE_FIX, core)
+    prov = os.path.join(e.home, ".grow-pm", "providers")
+    os.makedirs(prov)
+    open(os.path.join(prov, "zorg-core.yaml"), "w", encoding="utf-8").write(
+        "schema: provider-registration/1\nid: zorg-core\nkind: bundle\nauthority: org\npaths:\n  - %s\nteam: team-alpha\n"
+        "role: pm\njira_write: own\n" % core)
+    reg = ("schema: provider-registration/2\nid: %s\nkind: mcp\nauthority: team\nendpoint:\n  url: %s\n  root: \"ZorgGrowth/\"\n"
+           "blocks_file: %s\nblocks_source: mcp\nteam: team-alpha\n")
+    open(os.path.join(prov, "zorg-growth.yaml"), "w", encoding="utf-8").write(reg % ("zorg-growth", url, GROWTH_FILE))
+    open(os.path.join(prov, "zorg-dead.yaml"), "w", encoding="utf-8").write(reg % ("zorg-dead", "http://127.0.0.1:9/mcp", GROWTH_FILE))
+    return e
+
+
+def block_state(e, repo):
+    path = os.path.join(e.store, ".state", "blocks", repo + ".json")
+    return json.loads(read(path)) if os.path.isfile(path) else None
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        blocks_dir = os.path.join(e.store, ".state", "blocks")
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-core")
+        check("adopt without a store: exit 3, nothing created", rc == 3 and "no store" in out and not os.path.exists(e.store)
+              and not os.path.exists(os.path.join(e.home, ".grow-pm", "snapshots")), (rc, out[-300:]))
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        check("…--apply too", rc == 3 and "no store" in out and not os.path.exists(e.store)
+              and not os.path.exists(os.path.join(e.home, ".grow-pm", "snapshots")), (rc, out[-300:]))
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "provider")
+        check("provider without an action is a usage error", rc == 3, (rc, out[-200:]))
+        rc, out, res = run_ok(e, "provider", "adopt", "no-such-repo", "--apply")
+        check("an unknown repository: exit 3, nothing written", rc == 3 and "no-such-repo" in out and not os.path.isdir(blocks_dir), (rc, out[-300:]))
+
+        ctx_before, mirror_before = read(e.ctx), read(e.mirror)
+        records_before = tree_of(os.path.join(e.store, "records"))
+        everything = tree_of(e.home, e.vault)
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-core")
+        check("adopt dry run writes nothing", rc == 0 and not os.path.isdir(blocks_dir) and "dry run" in out
+              and tree_of(e.home, e.vault) == everything, (rc, out[-400:]))
+        check("…and says what it would do: the blocks and what they become", res is not None and res["written"] is False
+              and res["blocks"] == {"scope": "base", "teams": "base", "team": "base"} and res["new"] == ["product"]
+              and "scope" in out and "product" in out, (res, out[-500:]))
+
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        st = block_state(e, "zorg-core")
+        check("adopt --apply records bases, no record changes", rc == 0 and res["written"] is True
+              and tree_of(os.path.join(e.store, "records")) == records_before and read(e.ctx) == ctx_before
+              and read(e.mirror) == mirror_before and st is not None and set(st["blocks"]) == {"scope", "teams", "team"}, (rc, out[-400:]))
+        check("…the base of a block is the repository's text, kept by its hash",
+              read(blocks_dir, "zorg-core", st["blocks"]["scope"]["base_sha"] + ".md") == CORE_SCOPE
+              and st["blocks"]["scope"]["host"] == "custom.zorg-core-notes" and st["blocks"]["team"]["host"] == "team.alpha-a"
+              and st["blocks"]["scope"]["user_removed"] is None and st["source"] == "folder", st)
+        check("adopt is journalled", last_journal(e)["op"] == "provider-adopt" and last_journal(e)["source"] == "repo:zorg-core"
+              and sorted(last_journal(e)["ids"]) == ["scope", "team", "teams"] and os.path.isdir(last_journal(e)["snapshot"]), last_journal(e))
+        check("…and the state is in the snapshot's successor, not in the snapshot taken before it",
+              not os.path.isdir(os.path.join(last_journal(e)["snapshot"], "state", "blocks")), "")
+
+        state_file = read(blocks_dir, "zorg-core.json")
+        n_lines = len(read(e.store, ".state", "journal.jsonl").splitlines())
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        check("adopt again: every block already has a base, and nothing changes", rc == 0 and "already has a base" in out
+              and set(res["blocks"].values()) == {"has-base"} and read(blocks_dir, "zorg-core.json") == state_file
+              and len(read(e.store, ".state", "journal.jsonl").splitlines()) == n_lines, (rc, out[-400:]))
+
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        sg = block_state(e, "zorg-growth")
+        check("an MCP repository: its blocks get bases too, apart from the core's block of the same id",
+              rc == 0 and res["blocks"] == {"growth-metrics": "base", "team": "base"} and set(sg["blocks"]) == {"growth-metrics", "team"}
+              and sg["source"] == "mcp" and block_state(e, "zorg-core") == json.loads(state_file), (rc, out[-400:], sg))
+        rc, out, res = run_ok(e, "undo")
+        check("undo takes an adopt back: the state of that repository is gone, the other's stays",
+              rc == 0 and block_state(e, "zorg-growth") is None and block_state(e, "zorg-core") == json.loads(state_file), (rc, out[-300:]))
+        rc, out, res = run_ok(e, "undo", "--steps", "3")        # the undo above is itself a change in the journal
+        check("…and the adopt before it: no block state at all", rc == 0 and block_state(e, "zorg-core") is None
+              and not os.path.isdir(os.path.join(blocks_dir, "zorg-core")), (rc, out[-300:]))
+
+        e.edit(e.ctx, "The user works on Zorg App only.", "The user works on Zorg App only (typed in the file).")
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-core")
+        check("edits to local-context.md that are not imported yet are mentioned, so adopt is not run on a stale view",
+              rc == 0 and "not imported" in out and res["pending"] > 0, (rc, out[-400:]))
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-core", "--apply", "--store", e.store)
+        check("--store is refused for adopt --apply, as for every writing command", rc == 3 and "--store is for read commands only" in out
+              and block_state(e, "zorg-core") is None, (rc, out[-300:]))
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-core", "--store", e.store)
+        check("…and allowed for the dry run", rc == 0 and "dry run" in out, (rc, out[-300:]))
+
+        before = tree_of(e.home, e.vault)
+        rc5, out5, res5 = run_ok(e, "provider", "adopt", "zorg-dead", "--apply")
+        check("an unreachable repository: exit 5, nothing written", rc5 == 5 and not os.path.isdir(blocks_dir)
+              and tree_of(e.home, e.vault) == before and res5["ok"] is False and "unreachable" in out5, (rc5, out5[-400:]))
+        rc5, out5, res5 = run_ok(e, "provider", "adopt", "zorg-dead")
+        check("…a dry run too", rc5 == 5 and tree_of(e.home, e.vault) == before, (rc5, out5[-300:]))
+
+    with tempfile.TemporaryDirectory() as d:            # a block you edited, a block of another version
+        e = repos_env(d, fake.url, patch=[("The user works on Zorg App only.", "The user works on Zorg App only. (my note)"),
+                                          ("zorg-core:begin id=teams v=0.4", "zorg-core:begin id=teams v=0.3")])
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        st = block_state(e, "zorg-core")
+        check("an edited block is adopted as your edit", rc == 0 and res["blocks"]["scope"] == "edit" and "edit" in out, (rc, out[-400:], res))
+        check("another version → no base", res["blocks"]["teams"] == "none" and "teams" not in st["blocks"], (res, st))
+        check("…the repository's text is the base of the edit, not yours",
+              read(e.store, ".state", "blocks", "zorg-core", st["blocks"]["scope"]["base_sha"] + ".md") == CORE_SCOPE
+              and "(my note)" in e.record("custom.zorg-core-notes"), st)
+        check("…the block with no base is named, with the two versions", "teams" in out and "0.3" in out and "0.4" in out, out[-500:])
+        check("the team block is a base", res["blocks"]["team"] == "base" and "team" in st["blocks"], res)
+
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

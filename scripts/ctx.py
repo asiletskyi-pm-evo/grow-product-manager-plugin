@@ -27,13 +27,19 @@
   repo status [ID] [--json]     is each repository reachable (an MCP server answers the handshake within 3 s;
                                 a folder is there) and its version on the source against the base — the only
                                 repo command that touches the network, and it only handshakes
+  provider adopt REPO [--apply] [--json]
+                                a base for each block of REPO that is already in your context (dry run unless
+                                --apply): the blocks the repository publishes at the version you hold are taken
+                                as they are (an edit of yours counts as your edit); another version gets no base.
+                                Writes the block state only — never the records or the compiled copies
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
 edits first, snapshots, writes, journals and compiles. Files are read within a time budget
 (GROW_PM_CTX_READ_TIMEOUT, default 30 s): a record that does not arrive (iCloud) or is missing
 on disk stops the run before anything is written. The last stdout line is `CTX_RESULT {json}`;
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
-unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists).
+unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists) · 5 a repository is
+unreachable, nothing written (provider commands).
 Semantics: references/context-protocol.md. Stdlib only.
 """
 import argparse
@@ -44,6 +50,7 @@ import sys
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_blocks as cb  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_store as cs  # noqa: E402
@@ -64,6 +71,15 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
            "invalidate", "archive", "restore", "verify", "assign"}
 
 
+def writes(a):
+    """Does this run write to the store? Every command of WRITING does; `migrate` and `provider adopt` only with --apply."""
+    if a.cmd in WRITING:
+        return True
+    if a.cmd == "migrate" or (a.cmd == "provider" and getattr(a, "action", None) == "adopt"):
+        return getattr(a, "apply", False)
+    return False
+
+
 class Parser(argparse.ArgumentParser):
     def error(self, message):
         raise Usage(message)
@@ -75,7 +91,7 @@ def now():
 
 class Ctx:
     def __init__(self, a):
-        if a.store and (a.cmd in WRITING or (a.cmd == "migrate" and getattr(a, "apply", False))):
+        if a.store and writes(a):
             raise Usage("--store is for read commands only; writing commands use the context's own store")
         self.home = a.home or os.path.expanduser("~")
         found = cc.find_context(a.context, home=self.home)
@@ -647,6 +663,57 @@ def cmd_repo(a, c):
     raise Usage("repo takes list or status")
 
 
+def _repository(c, rid):
+    """The registered repository named `rid`; an unknown one is a usage error (exit 3)."""
+    repos = [r for r in crp.load_repos(c.text, c.home) if r["id"] == rid]
+    if not repos:
+        raise Usage("no repository %r is registered — `ctx.py repo list`" % rid)
+    return repos[0]
+
+
+def cmd_provider_adopt(a, c):
+    c.need_store()
+    repo = _repository(c, a.repo)
+    fetched = crp.fetch(repo)
+    if fetched["error"]:
+        print("ctx: the repository %s is unreachable — %s" % (repo["id"], fetched["error"]))
+        print("nothing written")
+        return 5, {"command": "provider", "action": "adopt", "repo": repo["id"], "written": False, "error": fetched["error"]}
+    plan = co.plan_sync(c.store, c.copies)
+    pending = sum(co.pending(plan).values()) + len(plan["conflicts"]) + len(plan["missing"])
+    if a.apply:
+        with co.lock(c.home):
+            c.guard()
+            res = cb.adopt(c.store, c.copies, c.home, repo, fetched, now(), True)
+    else:
+        res = cb.adopt(c.store, c.copies, c.home, repo, fetched, now(), False)
+    gets = [b for b, o in res["blocks"].items() if o in ("base", "edit")]
+    print("adopt %s — source %s, %d block(s) of %s in your context" % (repo["id"], fetched["source"], len(res["blocks"]), repo["namespace"]))
+    if res["blocks"]:
+        print(_table([("block", "result", "why")] + [(b, o, res["why"][b]) for b, o in res["blocks"].items()]))
+    if res["new"]:
+        print("offered by the repository, not in your context (the plan shows +): " + ", ".join(res["new"]))
+    for x in res["problems"]:
+        print("problem: block %s in %s — %s (left out)" % (x["block"] or "?", x["host"], x["why"]))
+    if pending:
+        print("note: %d change(s) to local-context.md are not imported yet — `ctx sync` first, so adopt sees them" % pending)
+    if res["written"]:
+        print("adopted %d block(s) · snapshot %s (back: ctx undo)" % (len(gets), res["snapshot"]))
+    elif a.apply:
+        print("nothing to adopt — no base written")
+    elif gets:
+        print("dry run — nothing written; `ctx provider adopt %s --apply` sets the bases" % repo["id"])
+    else:
+        print("dry run — nothing written, and there is nothing to adopt")
+    return 0, dict(res, command="provider", action="adopt", pending=pending)
+
+
+def cmd_provider(a, c):
+    if a.action == "adopt":
+        return cmd_provider_adopt(a, c)
+    raise Usage("provider takes adopt")
+
+
 # ---------------------------------------------------------------------- main
 def build_parser():
     common = Parser(add_help=False)
@@ -688,6 +755,9 @@ def build_parser():
     rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
+    pp = sub.add_parser("provider").add_subparsers(dest="action", required=True, parser_class=Parser)
+    sp = pp.add_parser("adopt", parents=[common]); sp.add_argument("repo"); sp.add_argument("--apply", action="store_true")
+    sp.add_argument("--json", action="store_true")
     return p
 
 
@@ -695,7 +765,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo}
+            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider}
 
 
 def emit(result, conflict=None):

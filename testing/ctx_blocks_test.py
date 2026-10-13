@@ -456,5 +456,225 @@ with tempfile.TemporaryDirectory() as d:
           os.makedirs(os.path.join(store.state_dir, "blocks", "zorg-core.json")), cb.last_checked(store.root, "zorg-core") is None)[2], "")
 
 
+# ------------------------------------------------------------------ adopt: bases for the blocks already in the context
+import ctx_repos as crp  # noqa: E402
+
+CHECKED = "2026-10-20T10:00:00+03:00"
+REPO = crp.normalise({"id": "zorg-core", "kind": "bundle", "paths": ["/zorg/core"], "team": "team-alpha"})
+PRODUCT = region("product", "0.4", "### Product: Zorg App (shared core view)\n- Platforms: web, app")
+
+
+def migrated(d, patch=()):
+    """A migrated store of the fixture context on a temp HOME; `patch` is [(old, new)] applied to the context first."""
+    home, vault = os.path.join(d, "home"), os.path.join(d, "vault")
+    os.makedirs(os.path.join(home, ".grow-pm"))
+    os.makedirs(os.path.join(vault, "Notes", "_System"))
+    text = open(os.path.join(FIX, "context.md"), encoding="utf-8", newline="").read().replace("{{VAULT}}", vault)
+    for old, new in patch:
+        assert old in text, old
+        text = text.replace(old, new, 1)
+    ctxp = os.path.join(home, ".grow-pm", "local-context.md")
+    for p in (ctxp, os.path.join(vault, "Notes", "_System", "local-context.md")):
+        open(p, "w", encoding="utf-8", newline="").write(text)
+    copies = co.copies_for(ctxp, text, home=home)
+    store = cs.Store(co.store_root_for(text, home=home))
+    co.migrate(ctxp, store.root, copies, home, apply=True, now=NOW)
+    return home, text, copies, store
+
+
+def published(mine_store, **over):
+    """What zorg-core publishes: the very regions the unedited fixture context holds, and a product block it lacks."""
+    pristine = {"scope": region("scope", "0.4", "### Scope of work\nThe user works on Zorg App only."),
+                "teams": region("teams", "0.4", "### Teams map\n- Alpha, Beta"), "product": PRODUCT}
+    team = cb.find_regions(mine_store.load(), "zorg-core")[0]["team"]["text"] if over.pop("team_from_store", True) else None
+    f = {"source": "folder", "version": "0.4", "blocks": pristine, "team": team, "team_source": "folder",
+         "team_error": None, "error": None, "checked": CHECKED}
+    f.update(over)
+    return f
+
+
+def adopt_apply(home, text, copies, store, repo, fetched, apply=True):
+    with cs.guard_roots(co.allowed_roots(home, text)):
+        return cb.adopt(store, copies, home, repo, fetched, NOW, apply)
+
+
+EDIT_SCOPE = ("The user works on Zorg App only.", "The user works on Zorg App only. (my note)")
+OLD_TEAMS = ("<!-- zorg-core:begin id=teams v=0.4 -->", "<!-- zorg-core:begin id=teams v=0.3 -->")
+
+with tempfile.TemporaryDirectory() as d:                      # the untouched fixture: every block of the context is the repository's
+    home, text, copies, store = migrated(d)
+    fetched = published(store)
+    tree = files_under(d)
+    res = adopt_apply(home, text, copies, store, REPO, fetched, apply=False)
+    check("adopt dry run: every block that is in your context and in the repository is a base",
+          res["blocks"] == {"scope": "base", "teams": "base", "team": "base"} and res["repo"] == "zorg-core", res)
+    check("…a dry run writes nothing (no state, no snapshot, no journal) and says so", res["written"] is False
+          and res["snapshot"] is None and files_under(d) == tree, [k for k in files_under(d) if k not in tree])
+    check("…the block the repository offers and your context lacks is reported, not adopted", res["new"] == ["product"]
+          and res["problems"] == [], res)
+    check("…the result carries the documented keys only",
+          set(res) == {"repo", "blocks", "why", "new", "problems", "written", "snapshot"}, sorted(res))
+    check("…and a reason for each block", set(res["why"]) == {"scope", "teams", "team"}, res["why"])
+
+    records_before = files_under(store.records_dir)
+    copies_before = [open(c, "rb").read() for c in copies]
+    res = adopt_apply(home, text, copies, store, REPO, fetched)
+    state = cb.load_state(store, "zorg-core")
+    check("adopt --apply: the same outcome, written", res["blocks"] == {"scope": "base", "teams": "base", "team": "base"}
+          and res["written"] is True, res)
+    check("…the state holds the three blocks, no others", set(state["blocks"]) == {"scope", "teams", "team"}, state)
+    check("…each entry: the hash of the repository's text, the host record, the version, the time, nothing removed",
+          all(state["blocks"][k] == {"base_sha": sha_of(v), "bases": [sha_of(v)], "v": "0.4" if k != "team" else "0.2",
+                                     "host": h, "checked": CHECKED, "user_removed": None}
+              for k, v, h in (("scope", fetched["blocks"]["scope"], "custom.zorg-core-notes"),
+                              ("teams", fetched["blocks"]["teams"], "custom.zorg-core-notes"),
+                              ("team", fetched["team"], "team.alpha-a"))), state["blocks"])
+    check("…where and when the repository was checked", state["checked"] == CHECKED and state["source"] == "folder", state)
+    check("…the text of every base is kept as the repository published it",
+          cb.get_base(store, "zorg-core", state["blocks"]["scope"]["base_sha"]) == fetched["blocks"]["scope"]
+          and cb.get_base(store, "zorg-core", state["blocks"]["team"]["base_sha"]) == fetched["team"], "")
+    check("…records and compiled copies are not touched",
+          files_under(store.records_dir) == records_before and [open(c, "rb").read() for c in copies] == copies_before, "")
+    jr = store.journal_entries()[-1]
+    check("…one journal line: provider-adopt from repo:zorg-core with the ids and the snapshot",
+          jr["op"] == "provider-adopt" and jr["source"] == "repo:zorg-core" and sorted(jr["ids"]) == ["scope", "team", "teams"]
+          and jr["snapshot"] == res["snapshot"] and os.path.isdir(res["snapshot"]) and jr["ts"] == NOW, jr)
+    check("…the snapshot is the state before the adopt (no block state in it)",
+          not os.path.isdir(os.path.join(res["snapshot"], "state", "blocks")), os.listdir(res["snapshot"]))
+
+    n_journal, state_file = len(store.journal_entries()), files_under(store.state_dir)
+    res2 = adopt_apply(home, text, copies, store, REPO, published(store, checked="2026-10-21T09:00:00+03:00"))
+    check("adopt again: a block that has a base keeps it — reported as already having one",
+          res2["blocks"] == {"scope": "has-base", "teams": "has-base", "team": "has-base"}, res2)
+    check("…and nothing is written: no snapshot, no journal line, the state as it was",
+          res2["written"] is False and res2["snapshot"] is None and len(store.journal_entries()) == n_journal
+          and files_under(store.state_dir) == state_file, res2)
+
+with tempfile.TemporaryDirectory() as d:                      # your edit, another version, a block the repository dropped
+    home, text, copies, store = migrated(d, patch=[EDIT_SCOPE, OLD_TEAMS])
+    res = adopt_apply(home, text, copies, store, REPO, published(store))
+    check("same version, your text differs → edit (the repository's text is the base, yours is your edit)",
+          res["blocks"]["scope"] == "edit", res)
+    check("another version → no base", res["blocks"]["teams"] == "none", res)
+    state = cb.load_state(store, "zorg-core")
+    check("…the edit has a base (the repository's), the other version has no state entry",
+          set(state["blocks"]) == {"scope", "team"}
+          and cb.get_base(store, "zorg-core", state["blocks"]["scope"]["base_sha"]) == published(store)["blocks"]["scope"], state)
+    check("…and the plan would read it right: mine is not the base, theirs is → ✎ kept; no entry → ?",
+          cb.classify(cb.find_regions(store.load(), "zorg-core")[0]["scope"]["text"], published(store)["blocks"]["scope"],
+                      state["blocks"]["scope"]) == "✎"
+          and cb.classify(cb.find_regions(store.load(), "zorg-core")[0]["teams"]["text"], published(store)["blocks"]["teams"], None) == "?", "")
+    check("…the reason names both versions", "0.3" in res["why"]["teams"] and "0.4" in res["why"]["teams"], res["why"])
+    check("an adopted edit counts as adopted in the journal; a block with no base does not",
+          sorted(store.journal_entries()[-1]["ids"]) == ["scope", "team"], store.journal_entries()[-1])
+
+with tempfile.TemporaryDirectory() as d:                      # what the repository does not offer
+    home, text, copies, store = migrated(d)
+    fetched = published(store)
+    fetched["blocks"].pop("teams")
+    res = adopt_apply(home, text, copies, store, REPO, fetched)
+    check("the repository does not offer the block → no base", res["blocks"]["teams"] == "none"
+          and "does not offer" in res["why"]["teams"] and "teams" not in cb.load_state(store, "zorg-core")["blocks"], res)
+
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d)
+    res = adopt_apply(home, text, copies, store, REPO, published(store, team=None, team_error="team block: the team card is not there"),
+                      apply=False)
+    check("the team block could not be built → no base for it, the reason is shown, the other blocks are unaffected",
+          res["blocks"] == {"scope": "base", "teams": "base", "team": "none"} and "team card" in res["why"]["team"], res)
+    res = adopt_apply(home, text, copies, store, REPO, published(store, team=None), apply=False)
+    check("the repository offers no team → no base for the team block", res["blocks"]["team"] == "none"
+          and "does not offer" in res["why"]["team"], res)
+
+with tempfile.TemporaryDirectory() as d:                      # a team block that comes in the blocks file itself (an MCP repository)
+    home, text, copies, store = migrated(d)
+    growth = crp.normalise({"id": "zorg-growth", "kind": "mcp", "team": "team-alpha"})
+    gm = cb.find_regions(store.load(), "zorg-growth")[0]
+    fetched = {"source": "mcp", "version": "0.1", "blocks": {k: v["text"] for k, v in gm.items()}, "team": None, "team_source": None,
+               "team_error": None, "error": None, "checked": CHECKED}
+    res = adopt_apply(home, text, copies, store, growth, fetched)
+    check("the id 'team' of another repository: its own blocks file is where its team block comes from",
+          res["blocks"] == {"growth-metrics": "base", "team": "base"} and set(cb.load_state(store, "zorg-growth")["blocks"]) == {"growth-metrics", "team"}
+          and cb.load_state(store, "zorg-growth")["blocks"]["team"]["host"] == "team.alpha-a"
+          and cb.load_state(store, "zorg-core")["blocks"] == {}, res)
+
+with tempfile.TemporaryDirectory() as d:                      # an unknown version is not a version
+    home, text, copies, store = migrated(d)
+    host = [r for r in store.load() if r["id"] == "custom.zorg-core-notes"][0]
+    store.write(dict(host, body=host["body"].replace("id=scope v=0.4", "id=scope")))
+    fetched = published(store)
+    fetched["blocks"]["scope"] = fetched["blocks"]["scope"].replace("id=scope v=0.4", "id=scope")
+    res = adopt_apply(home, text, copies, store, REPO, fetched, apply=False)
+    check("no version on either side, the texts equal → base (equal text is proof enough)", res["blocks"]["scope"] == "base", res)
+    fetched["blocks"]["scope"] = fetched["blocks"]["scope"].replace("only.", "only, and Beta.")
+    res = adopt_apply(home, text, copies, store, REPO, fetched, apply=False)
+    check("no version on either side, the texts differ → no base (nothing says which of them moved)",
+          res["blocks"]["scope"] == "none" and "version" in res["why"]["scope"], res)
+    fetched["blocks"]["scope"] = region("scope", "0.4", "### Scope of work\nThe user works on Zorg App only, and Beta.")
+    res = adopt_apply(home, text, copies, store, REPO, fetched, apply=False)
+    check("your region has no version, the repository's has one and the texts differ → no base",
+          res["blocks"]["scope"] == "none", res)
+
+with tempfile.TemporaryDirectory() as d:                      # a block that already has a base is left alone
+    home, text, copies, store = migrated(d)
+    old = region("scope", "0.1", "### Scope of work\nAlpha only.")
+    old_sha = cb.put_base(store, "zorg-core", old)
+    cb.save_state(store, "zorg-core", {"checked": "2026-10-01T10:00:00+03:00", "source": "mcp", "version": "0.1",
+                                       "blocks": {"scope": {"base_sha": old_sha, "bases": [old_sha], "v": "0.1", "host": "custom.zorg-core-notes",
+                                                            "checked": "2026-10-01T10:00:00+03:00", "user_removed": None},
+                                          "teams": {"base_sha": None, "bases": [], "v": "", "host": None, "checked": None,
+                                                    "user_removed": "2026-10-02"}}})
+    res = adopt_apply(home, text, copies, store, REPO, published(store))
+    state = cb.load_state(store, "zorg-core")
+    check("a block with a state entry keeps it (its base is not replaced by the repository's text)",
+          res["blocks"]["scope"] == "has-base" and state["blocks"]["scope"]["base_sha"] == old_sha
+          and state["blocks"]["scope"]["bases"] == [old_sha] and state["blocks"]["scope"]["v"] == "0.1", state["blocks"]["scope"])
+    check("…the others get their base, and the state's checked time is the new one",
+          res["blocks"]["teams"] == "base" and res["blocks"]["team"] == "base" and state["checked"] == CHECKED
+          and state["source"] == "folder", state)
+    check("…an entry with no base (a removal mark on a region you have put back) is not a base: it gets one, the mark goes",
+          state["blocks"]["teams"]["base_sha"] == sha_of(published(store)["blocks"]["teams"])
+          and state["blocks"]["teams"]["user_removed"] is None, state["blocks"]["teams"])
+
+with tempfile.TemporaryDirectory() as d:                      # skip_blocks, broken regions, a block that is absent from both
+    home, text, copies, store = migrated(d)
+    skipping = crp.normalise({"id": "zorg-core", "kind": "bundle", "paths": ["/zorg/core"], "skip_blocks": ["teams"]})
+    fetched = published(store)
+    fetched["blocks"].pop("teams")                           # fetch drops them already
+    res = adopt_apply(home, text, copies, store, skipping, fetched, apply=False)
+    check("a skipped block is left out of adopt altogether", set(res["blocks"]) == {"scope", "team"}, res)
+    host = [r for r in store.load() if r["id"] == "custom.zorg-core-notes"][0]
+    dup = host["body"] + "\n" + region("scope", "0.4", "### Scope of work\nAgain.") + "\n"
+    store.write(dict(host, body=dup))
+    res = adopt_apply(home, text, copies, store, REPO, published(store), apply=False)
+    check("a broken or repeated region is reported and left out — never a base, never 'new'",
+          "scope" not in res["blocks"] and "scope" not in res["new"] and res["problems"]
+          and {(x["block"], x["why"]) for x in res["problems"]} == {("scope", "duplicate")}, res)
+    check("…the other blocks go on", res["blocks"] == {"teams": "base", "team": "base"}, res)
+
+with tempfile.TemporaryDirectory() as d:                      # guards
+    home, text, copies, store = migrated(d)
+    err = raises(ValueError, cb.adopt, store, copies, home, REPO, dict(published(store), error="MCP unreachable: x", blocks={}, team=None), NOW, True)
+    check("a fetch that failed cannot be adopted", isinstance(err, ValueError) and "fetch" in str(err), err)
+    check("…and nothing was written", not os.path.isdir(os.path.join(store.state_dir, "blocks")), "")
+    real_save = cb.save_state
+
+    def boom(*a, **k):
+        raise cs.StoreError("disk full")
+    cb.save_state = boom
+    try:
+        err = raises(cs.StoreError, adopt_apply, home, text, copies, store, REPO, published(store))
+    finally:
+        cb.save_state = real_save
+    check("write order: the base texts first — a crash before the state leaves only orphan texts, no state, no journal line",
+          isinstance(err, cs.StoreError) and not os.path.exists(os.path.join(store.state_dir, "blocks", "zorg-core.json"))
+          and len(os.listdir(os.path.join(store.state_dir, "blocks", "zorg-core"))) == 3
+          and not [j for j in store.journal_entries() if j.get("op") == "provider-adopt"], err)
+    res = adopt_apply(home, text, copies, store, REPO, published(store))
+    check("…and the next adopt completes it (the same texts are not written twice)", res["written"] is True
+          and len(os.listdir(os.path.join(store.state_dir, "blocks", "zorg-core"))) == 3
+          and set(cb.load_state(store, "zorg-core")["blocks"]) == {"scope", "teams", "team"}, res)
+
+
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)
