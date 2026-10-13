@@ -24,6 +24,9 @@
   card                          regenerate INDEX.md only
   repo list [--json]            the repositories (provider registrations) a product draws context blocks
                                 from: kind, products, rank, access, version — reads local files, no network
+  repo status [ID] [--json]     is each repository reachable (an MCP server answers the handshake within 3 s;
+                                a folder is there) and its version on the source against the base — the only
+                                repo command that touches the network, and it only handshakes
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
 edits first, snapshots, writes, journals and compiles. Files are read within a time budget
@@ -38,9 +41,11 @@ import datetime
 import json
 import os
 import sys
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
+import ctx_mcp as cm  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
@@ -556,6 +561,10 @@ def _table(rows):
     return "\n".join("  ".join(cell.ljust(w) for cell, w in zip(r, widths)).rstrip() for r in rows)
 
 
+NO_REPOS = ("no repositories registered — a registration is {vault}/{plugin folder}/_System/providers/<id>.yaml "
+            "(references/context-provider-protocol.md §3b)")
+
+
 def cmd_repo_list(a, c):
     skipped = []
     repos = crp.load_repos(c.text, c.home, skipped=skipped)
@@ -567,18 +576,73 @@ def cmd_repo_list(a, c):
                          r["source_version"] or "—", "—"))
         print(_table(rows))
     else:
-        print("no repositories registered — a registration is {vault}/{plugin folder}/_System/providers/<id>.yaml "
-              "(references/context-provider-protocol.md §3b)")
+        print(NO_REPOS)
     for path, why in skipped:
         print("unreadable registration: %s (%s)" % (path, why))
     return 0, {"command": "repo", "action": "list", "repos": repos,
                "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
 
 
+def _public_url(url):
+    """An endpoint as it may be shown: scheme, host, port and path — no credentials, no query, no fragment."""
+    try:
+        u = urllib.parse.urlsplit(url)
+        return "%s://%s%s" % (u.scheme, u.netloc.rpartition("@")[2], u.path) if u.scheme and u.netloc else ""
+    except ValueError:
+        return ""
+
+
+def _reach(r):
+    """(reachable, reason) of one repository. An MCP repository answers the handshake within 3 s (the header its
+    registration names, if any, comes from the environment); a folder or bundle is there when its core folder is."""
+    ep = r["endpoint"]
+    if r["kind"] == "mcp" or ep["url"]:
+        if not ep["url"]:
+            return False, "no endpoint url in the registration"
+        hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
+        client = cm.McpClient(ep["url"], headers=hdrs)
+        if client.probe():
+            return True, ""
+        hint = "; %s is not set (or not 'Name: value')" % ep["headers_env"] if ep["headers_env"] and not hdrs else ""
+        return False, client.last_error + hint
+    if r["core_root"]:
+        return (True, "") if os.path.isdir(r["core_root"]) else (False, "core folder not found")
+    return False, "no endpoint and no core folder in the registration"
+
+
+def cmd_repo_status(a, c):
+    skipped = []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    if a.id:
+        repos = [r for r in repos if r["id"] == a.id]
+        if not repos:
+            raise Usage("no repository %r is registered — `ctx.py repo list`" % a.id)
+    rows = []
+    for r in repos:
+        ok, why = _reach(r)
+        # no block state is kept yet, so there is no base to set the source's version against
+        rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": _public_url(r["endpoint"]["url"]),
+                     "reachable": ok, "reason": why, "source_version": r["source_version"], "base_version": None})
+    if rows:
+        for row in rows:
+            where = row["url"] or "—"
+            print("%s  %s  %s" % (row["id"] + (" (paused)" if row["status"] == "paused" else ""), row["kind"] or "—", where))
+            print("  reachable %s" % ("yes" if row["reachable"] else "no (%s)" % row["reason"]))
+            print("  version on source: %s · base: %s" % (row["source_version"] or "—", row["base_version"] or "—"))
+    else:
+        print(NO_REPOS)
+    for path, why in skipped:
+        print("unreadable registration: %s (%s)" % (path, why))
+    return 0, {"command": "repo", "action": "status", "repos": rows,
+               "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
+
+
 def cmd_repo(a, c):
     if a.action == "list":
         return cmd_repo_list(a, c)
-    raise Usage("repo takes list")
+    if a.action == "status":
+        return cmd_repo_status(a, c)
+    raise Usage("repo takes list or status")
 
 
 # ---------------------------------------------------------------------- main
@@ -621,6 +685,7 @@ def build_parser():
     sub.add_parser("card", parents=[common])
     rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
+    sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
     return p
 
 
