@@ -43,6 +43,13 @@ And the second, which only reads:
                             without decisions would rewrite, the questions it would ask. Nothing is written, no
                             lock is taken. `render_plan` is its text; `base_version` the version it speaks of.
 
+And the third, which writes your records:
+
+- apply                     one pass of the plan (spec B6/B7): what needs no answer is applied, your edits stay,
+                            a "⚠" / "?" waits for its answer (theirs | mine | both) and a "+" for --add; one
+                            snapshot, the host records, the state, one journal line, the compile. A pass that
+                            changes nothing writes only the time of the check. `render_apply` is its text.
+
 Every write goes through ctx_store.atomic_write / check_target (the write allow-list). A repository id is
 kebab-case and nothing else, so it can never name a path outside `.state/blocks/`.
 
@@ -51,6 +58,7 @@ what a repository publishes (it keeps the first of a repeated id and skips what 
 on purpose and share only the marker grammar. Stdlib only.
 """
 import collections
+import copy
 import difflib
 import json
 import os
@@ -480,22 +488,35 @@ def _changed(base, side):
     return added, gone
 
 
+def _version_only(ref, side):
+    """["(лише версія v<a> → v<b>)"] when the words of `side` are those of `ref` and only the `v=` of the begin
+    marker moved (a release bumps it on every block); [] when the versions are the same too."""
+    a, b = _marker_version(ref), _marker_version(side)
+    if a == b:
+        return []
+    return ["(лише версія v%s → v%s)" % (clip(a or "—", HEADER_CLIP), clip(b or "—", HEADER_CLIP))]
+
+
 def _differences(mine, theirs, base):
     """{"theirs", "mine", "base"}: the first DIFF_LINES lines (blank ones skipped, each clipped to LINE_CLIP) of what
     the repository changed, what you changed and what both started from, all against the base text. Without the base
-    text ("base" is None) each side is set against the other."""
+    text ("base" is None) each side is set against the other. A side whose words did not change and whose version
+    did says only that: "(лише версія v<a> → v<b>)"."""
     m, t = _body_lines(mine), _body_lines(theirs)
     if base is None:
         said_t, said_m, was = _changed(m, t)[0], _changed(t, m)[0], None
+        ref_t, ref_m = mine, theirs
     else:
         b = _body_lines(base)
         said_t, gone_t = _changed(b, t)
         said_m, gone_m = _changed(b, m)
         was = [b[i] for i in sorted(gone_t | gone_m)]
+        ref_t = ref_m = base
 
     def first(lines):
         return [c for c in (clip(l, LINE_CLIP) for l in lines if l.strip()) if c][:DIFF_LINES]
-    return {"theirs": first(said_t), "mine": first(said_m), "base": None if was is None else first(was)}
+    return {"theirs": first(said_t) or _version_only(ref_t, theirs), "mine": first(said_m) or _version_only(ref_m, mine),
+            "base": None if was is None else first(was)}
 
 
 def _source_label(repo, source):
@@ -507,6 +528,16 @@ def _source_label(repo, source):
             host = None
         return "MCP (%s)" % clip(host, HEADER_CLIP) if host else "MCP"
     return "тека" if source == "folder" else "—"
+
+
+def _theirs(fetched):
+    """({block id: the repository's region text}, {block id: where that text came from}) of a fetch: the blocks of its
+    blocks file, and the team region when it was built (a team region built from the core wins over one of the file)."""
+    theirs = dict(fetched.get("blocks") or {})
+    where = {bid: fetched.get("source") for bid in theirs}
+    if fetched.get("team") is not None:
+        theirs["team"], where["team"] = fetched["team"], fetched.get("team_source") or fetched.get("source")
+    return theirs, where
 
 
 def _held(entry, mine):
@@ -540,11 +571,7 @@ def plan(store, copies, repo, fetched, now, all_=False):
     rid, skip = repo["id"], set(repo.get("skip_blocks") or ())
     records, _, _ = cr._live_view(store, copies, now)
     mine, problems = find_regions(records, repo["namespace"])
-    theirs, where = dict(fetched.get("blocks") or {}), {}
-    for bid in theirs:
-        where[bid] = fetched.get("source")
-    if fetched.get("team") is not None:
-        theirs["team"], where["team"] = fetched["team"], fetched.get("team_source") or fetched.get("source")
+    theirs, where = _theirs(fetched)
     team_error = fetched.get("team_error")
     state = load_state(store, rid)
     bad = {x["block"] for x in problems if x["block"]}
@@ -620,4 +647,259 @@ def render_plan(p):
     for x in p["errors"]:
         lines.append("помилка: %s — %s" % (clip(x["block"] or "?", HEADER_CLIP), clip(x["why"], HEADER_CLIP)))
     lines.append("Питань: %d · зміниться записів: %d" % (p["questions"], p["changes"]))
+    return "\n".join(lines)
+
+
+# ------------------------------------------------------------------ apply
+CHOICES = ("theirs", "mine", "both")            # the answers to a "⚠" or a "?"
+BOTH_THEIRS, BOTH_MINE = "<!-- ctx:both theirs -->", "<!-- ctx:both mine -->"
+BLOCK_SERVICE = ("checked", "host")             # what a check moves by itself in a block's entry: no snapshot, no journal line
+
+
+def _spans(body, ns):
+    """{block id: (start, end)} of the sound regions of `ns` in one record's body."""
+    return {bid: (start, end) for bid, start, end, _ in _scan(body, ns)[0]}
+
+
+def _sound(text, ns, bid):
+    """Is `text` one whole, well-formed region of `ns` named `bid`, with no other marker of `ns` inside it? Only
+    then does a repository's text go into your records: a region nested in it would break your context."""
+    regions, errors = _scan(text or "", ns)
+    return not errors and len(regions) == 1 and regions[0][:3] == (bid, 0, len(text))
+
+
+def _cut(body, start, end):
+    """`body` without body[start:end] and the line break that ends it; a blank line doubled by the cut is closed up."""
+    for nl in ("\r\n", "\n"):
+        if body.startswith(nl, end):
+            end += len(nl)
+            break
+    if body[:start].endswith("\n\n") and body.startswith("\n", end):
+        end += 1
+    return body[:start] + body[end:]
+
+
+def _inner(text):
+    """(begin marker, the text between the markers, end marker) of a region text."""
+    head, tail = text.index("-->") + 3, text.rindex("<!--")
+    inner = text[head:tail]
+    inner = inner[1:] if inner.startswith("\n") else inner
+    return text[:head], inner[:-1] if inner.endswith("\n") else inner, text[tail:]
+
+
+def _both(theirs, mine):
+    """ONE region with the repository's markers (its v= too): the repository's text, then yours, each under its mark."""
+    begin, said, end = _inner(theirs)
+    return "\n".join([begin, BOTH_THEIRS, said, BOTH_MINE, _inner(mine)[1], end])
+
+
+def _at_end(body, ns, texts):
+    """`body` with the regions `texts` added at its end, a blank line before each — before the end of the
+    `<ns>:section` wrapper when the record holds one."""
+    add = "\n\n".join(texts)
+    ends = list(re.finditer(r"<!--\s*%s:section:end\s*-->" % re.escape(ns), body))
+    if ends:
+        pos = ends[-1].start()
+        return body[:pos].rstrip("\n") + "\n\n" + add + "\n" + body[pos:]
+    head = body.rstrip("\n")
+    return head + "\n\n" + add + body[len(head):]
+
+
+def _home_record(repo, mine, records, title):
+    """Where a new block of the repository goes: the registration's `home_record` when it names one of your records;
+    else the record that holds most of the repository's regions (the first in order on a tie); else your custom
+    record titled as the repository; else None — a new record is made."""
+    ids = [r["id"] for r in records]
+    if repo.get("home_record") in ids:
+        return repo["home_record"]
+    count = collections.Counter(found["host"] for found in mine.values())
+    if count:
+        top = max(count.values())
+        return next(i for i in ids if count.get(i) == top)
+    return next((r["id"] for r in records if r["type"] == "custom" and r["title"] == title), None)
+
+
+def _rebase(entry, text):
+    """The repository's `text` becomes the block's base: its hash the newest of the history, its version the entry's."""
+    sha = cs.sha_text(norm(text))
+    if entry.get("base_sha") != sha:
+        entry["bases"] = [h for h in (entry.get("bases") or []) if h != sha] + [sha]
+        entry["base_sha"] = sha
+    entry["v"] = _marker_version(text)
+
+
+def _substance(state):
+    """What of a state counts as a change: every block entry, without the time it was checked and its host."""
+    return {bid: {k: v for k, v in b.items() if k not in BLOCK_SERVICE} for bid, b in _clean(state, "state")["blocks"].items()}
+
+
+def apply(store, copies, home, repo, fetched, choose, add, now):
+    """One pass of `repo` over your context, from `fetched` (`ctx_repos.fetch` with no `error`). The caller holds the
+    lock and has imported the edits of local-context.md first: with edits still waiting it is refused (co.Refused),
+    and nothing is written.
+
+    The signs are `plan`'s — the plan is made here, on the records as they are now — and each is acted on (spec B6):
+      =   nothing in the records; the base becomes the repository's text when it was not
+      ~   the region becomes the repository's text, and so does the base
+      ✎   your region stays, the base too
+      −   the region is removed (its text stays in the snapshot), and the block's state entry with it
+      ✂   nothing in the records; the state marks it removed by you (`user_removed`, today) — never offered again
+      ⚠ ? only with an answer in `choose` {block: "theirs" | "mine" | "both"}: theirs — the region becomes the
+          repository's; mine — yours stays; both — ONE region with the repository's markers holding its text under
+          `<!-- ctx:both theirs -->` and yours under `<!-- ctx:both mine -->`. The base becomes the repository's text
+          in all three, so the next plan sees yours as your edit ("✎") and does not ask again
+      +   only when the block is in `add`: the repository's region goes at the end of the home record (see
+          `_home_record`; inside its `<ns>:section` wrapper when it has one), or into a new custom record
+          `## <the registration's title>` at the end of your context
+      ·   and the blocks with structure errors (`find_regions`) are never touched
+    A "⚠", "?" or "+" without its answer waits (`pending`); everything else is applied. A repository region that is
+    not one sound region of its block is never written into a record: that block goes to `errors`, untouched.
+
+    The order: snapshot "provider-apply" → the new base texts → the host records (verified today, source
+    "repo:<id>") → the state (checked, source, version; per block v, host, checked) → the base texts nobody refers
+    to are pruned → one journal line {op provider-apply, source repo:<id>, from_v, to_v, ids: the records written,
+    decisions: {block: sign, or "<sign> <answer>"}, pending, snapshot} → the compiled copies. A pass that changes
+    nothing but the time of the check writes the state file alone: no snapshot, no journal line, no record.
+
+    A `choose` value that is not an answer, or a block in `choose` / `add` that the plan does not have → ValueError
+    before anything is written; an answer for a block that needs none is left out and listed in `ignored`.
+
+    Returns {"repo", "plan", "applied": {block: sign}, "decisions", "pending": [block], "ignored": {block: sign},
+    "errors", "changed": bool, "written": [record ids], "snapshot": folder or None, "compiled": [copies]}.
+    """
+    if fetched.get("error"):
+        raise ValueError("apply needs a repository that was fetched, not one that failed: %s" % fetched["error"])
+    choose, add = dict(choose or {}), list(add or [])
+    wrong = ["%s=%s" % (b, how) for b, how in choose.items() if how not in CHOICES]
+    if wrong:
+        raise ValueError("--choose takes BLOCK=theirs|mine|both, not %s" % ", ".join(wrong))
+    waiting = co.plan_sync(store, copies)
+    if sum(co.pending(waiting).values()) + len(waiting["conflicts"]) + len(waiting["missing"]):
+        raise co.Refused("changes to local-context.md or to the records wait to be imported — `ctx sync` first, then apply")
+    rid, ns = repo["id"], repo["namespace"]
+    p = plan(store, copies, repo, fetched, now)
+    known = {r["block"] for r in p["rows"]} | {x["block"] for x in p["errors"] if x["block"]}
+    unknown = sorted(b for b in set(choose) | set(add) if b not in known)
+    if unknown:
+        raise ValueError("no block %s in the plan of %s — `ctx provider plan %s` lists them" % (", ".join(unknown), rid, rid))
+    records = store.load()
+    by_id = {r["id"]: r for r in records}
+    mine = find_regions(records, ns)[0]
+    theirs = _theirs(fetched)[0]
+    old = load_state(store, rid)
+    state = copy.deepcopy(old)
+    checked, today = fetched.get("checked") or now, now[:10]
+    edits, rebased, adds = {}, {}, []
+    applied, decisions, pending, ignored, refused = {}, {}, [], {}, []
+    for row in p["rows"]:
+        bid, sign = row["block"], row["sign"]
+        how, wanted = choose.get(bid), bid in add
+        if (how and sign not in ("⚠", "?")) or (wanted and sign != "+"):
+            ignored[bid] = sign                         # an answer to a question the plan does not ask: dropped
+        how = how if sign in ("⚠", "?") else None
+        wanted = wanted and sign == "+"
+        if sign == SKIPPED:
+            continue
+        m, t, entry = mine.get(bid), theirs.get(bid), state["blocks"].get(bid)
+        if (sign in ("⚠", "?") and not how) or (sign == "+" and not wanted):
+            pending.append(bid)
+            if entry:
+                entry["checked"] = checked
+            continue
+        if (sign in ("~", "+") or (sign in ("⚠", "?") and how in ("theirs", "both"))) and not _sound(t, ns, bid):
+            refused.append({"block": bid, "host": row["host"], "why": "the repository's region is not well-formed"})
+            continue
+        if sign == "−":
+            edits.setdefault(m["host"], {})[bid] = None
+            state["blocks"].pop(bid, None)
+        elif sign == "✂":
+            entry["user_removed"] = entry.get("user_removed") or today
+            entry["checked"] = checked
+        else:
+            if sign == "~" or how == "theirs":
+                edits.setdefault(m["host"], {})[bid] = t
+            elif how == "both":
+                edits.setdefault(m["host"], {})[bid] = _both(t, m["text"])
+            elif sign == "+":
+                adds.append(bid)
+            entry = state["blocks"].setdefault(bid, {"base_sha": None, "bases": [], "v": "", "host": None, "checked": None,
+                                                     "user_removed": None})
+            if sign != "✎":
+                _rebase(entry, t)
+                rebased[bid] = t
+            entry.update(host=m["host"] if m else None, checked=checked, user_removed=None)
+        applied[bid] = sign
+        decisions[bid] = "%s %s" % (sign, how) if sign in ("⚠", "?") else sign
+
+    bodies = {}
+    for host, ops in edits.items():
+        body = by_id[host]["body"]
+        spans = _spans(body, ns)
+        for bid in sorted(ops, key=lambda b: spans[b][0], reverse=True):   # from the end: earlier offsets stay true
+            start, end = spans[bid]
+            body = _cut(body, start, end) if ops[bid] is None else body[:start] + ops[bid] + body[end:]
+        bodies[host] = body
+    title = clip(repo.get("title") or rid, HEADER_CLIP)
+    new_record = None
+    if adds:
+        home_id = _home_record(repo, mine, records, title)
+        if home_id:
+            bodies[home_id] = _at_end(bodies.get(home_id, by_id[home_id]["body"]), ns, [theirs[b] for b in adds])
+            for bid in adds:
+                state["blocks"][bid]["host"] = home_id
+        else:
+            new_record = {"text": "## %s\n\n%s\n" % (title, "\n\n".join(theirs[b] for b in adds)), "type": cs._h2_type(title),
+                          "title": title, "after": records[-1]["id"] if records else None}
+    state.update(checked=checked, source=fetched.get("source"), version=fetched.get("version"))
+    res = {"repo": rid, "plan": p, "applied": applied, "decisions": decisions, "pending": pending, "ignored": ignored,
+           "errors": [dict(x) for x in p["errors"]] + refused, "written": [], "snapshot": None, "compiled": [],
+           "changed": bool(bodies or new_record) or _substance(old) != _substance(state)}
+    if not res["changed"]:
+        save_state(store, rid, state)                  # the time of the check, and nothing else
+        return res
+    snap = co.snapshot(store, copies, home, "provider-apply")
+    for text in rebased.values():
+        put_base(store, rid, text)
+    source = "repo:" + rid
+    for host, body in bodies.items():
+        if body != by_id[host]["body"]:
+            store.write(co.touch(dict(by_id[host], body=body, source=source, modified=now), now))
+            res["written"].append(host)
+    if new_record:
+        made = co._insert(store, [new_record], source, now)
+        for bid in adds:
+            state["blocks"][bid]["host"] = made[0]
+        res["written"].extend(made)
+    save_state(store, rid, state)
+    prune_bases(store, rid, state)
+    store.journal({"ts": now, "op": "provider-apply", "source": source, "from_v": old.get("version") or base_version(old),
+                   "to_v": fetched.get("version"), "ids": res["written"], "decisions": decisions, "pending": pending,
+                   "snapshot": snap})
+    if res["written"]:
+        res["compiled"] = co.compile_store(store, copies, now, home, snap)["written"]
+    res["snapshot"] = snap
+    return res
+
+
+def render_apply(res):
+    """The text of an apply: the plan's table (a "⚠" with its three versions under it), then what was not needed,
+    what waits and how to answer it, what was written — and the last line `Чекають рішення: N · змінено записів: M`.
+    A pass that changed nothing, with nothing waiting, is the header and the one line "без змін"."""
+    p = res["plan"]
+    lines = render_plan(p).splitlines()[:-1]            # the plan's last line speaks of what would change
+    if not (res["changed"] or res["pending"] or res["errors"] or res["ignored"]):
+        return "\n".join([lines[0], "без змін"])
+    for x in res["errors"][len(p["errors"]):]:
+        lines.append("помилка: %s — %s" % (clip(x["block"] or "?", HEADER_CLIP), clip(x["why"], HEADER_CLIP)))
+    for bid, sign in res["ignored"].items():
+        lines.append("не потрібне: --choose/--add %s — знак %s" % (clip(bid, HEADER_CLIP), sign))
+    signs = {r["block"]: r["sign"] for r in p["rows"]}
+    for bid in res["pending"]:
+        how = "--add %s" % bid if signs[bid] == "+" else "--choose %s=theirs|mine|both" % bid
+        lines.append("чекає рішення: %s %s — %s" % (signs[bid], clip(bid, HEADER_CLIP), clip(how, NOTE_CLIP)))
+    if res["changed"]:
+        lines.append("записано: %s · знімок %s (назад: ctx undo)" % (", ".join(res["written"]) or "лише стан блоків", res["snapshot"]))
+    else:
+        lines.append("записів не змінено")
+    lines.append("Чекають рішення: %d · змінено записів: %d" % (len(res["pending"]), len(res["written"])))
     return "\n".join(lines)

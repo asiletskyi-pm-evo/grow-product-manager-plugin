@@ -7,7 +7,7 @@ codes (0 ok, 2 conflict, 3 bad input / no store / unreadable, 4 refused) and the
 (import before write, snapshot, lock, managed regions, the provider boundary).
 Semantics: references/context-protocol.md. Stdlib only; run from the repo root.
 """
-import json, os, shutil, stat, subprocess, sys, tempfile, time
+import json, os, re, shutil, stat, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "testing"))
@@ -824,6 +824,253 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("a named repository is planned whatever --product says", rc == 0 and res["repo"] == "zorg-growth"
               and set(signs_in(res).values()) == {"="}, (rc, out[-400:]))
         check("plan never wrote anything: not the store, the home, the vault or the core", untouched and all(untouched), untouched)
+
+
+# --- v3.13.0: ctx provider apply — one pass, your edits kept, one question per conflicting block
+SCOPE_04 = "<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope of work\nThe user works on Zorg App only."
+SCOPE_05 = "<!-- zorg-core:begin id=scope v=0.5 -->\n### Scope of work\nThe user works on Zorg App and Zorg Lite."
+SCOPE_06 = "<!-- zorg-core:begin id=scope v=0.6 -->\n### Scope of work\nThe user works on Zorg App, Zorg Lite and Zorg Max."
+OKR = "<!-- zorg-core:begin id=okr v=0.1 -->\n### OKR\n- grow\n<!-- zorg-core:end id=okr -->"
+core_untouched = []
+
+
+def apply_run(e, core, *args):
+    """An apply run, with the proof that it wrote nothing into the core folder."""
+    before = tree_of(core)
+    rc, out, res = run_ok(e, "provider", "apply", *args)
+    core_untouched.append(tree_of(core) == before)
+    return rc, out, res
+
+
+def mtimes(*paths):
+    """{path: mtime in ns} of the files given and of every file under the folders given."""
+    out = {}
+    for p in paths:
+        for dp, _, fn in os.walk(p) if os.path.isdir(p) else [(os.path.dirname(p), None, [os.path.basename(p)])]:
+            for n in fn:
+                out[os.path.join(dp, n)] = os.stat(os.path.join(dp, n)).st_mtime_ns
+    return out
+
+
+def region_in(text, ns, bid):
+    """The region `bid` of namespace `ns` in `text`, markers included, or None (`id=team` never matches `id=teams`)."""
+    m = re.search(r"<!-- %s:begin id=%s[ -].*?<!-- %s:end id=%s -->" % (ns, re.escape(bid), ns, re.escape(bid)), text, re.S)
+    return m.group(0) if m else None
+
+
+def changed_records(before, after):
+    return {os.path.basename(p)[:-3] for p in set(before) | set(after) if before.get(p) != after.get(p)}
+
+
+def snapshot_names(e):
+    root = os.path.join(e.home, ".grow-pm", "snapshots")
+    return sorted(os.listdir(root)) if os.path.isdir(root) else []
+
+
+def journal_len(e):
+    return len(read(e.store, ".state", "journal.jsonl").splitlines())
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        blocks_file, card = os.path.join(core, CORE_BLOCKS), os.path.join(core, CORE_CARD)
+        records_dir, blocks_dir = os.path.join(e.store, "records"), os.path.join(e.store, ".state", "blocks")
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("apply without a store: exit 3, nothing created", rc == 3 and "no store" in out and not os.path.exists(e.store), (rc, out[-300:]))
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+
+        before_m, ctx_before, mirror_before = mtimes(records_dir, e.ctx, e.mirror), read(e.ctx), read(e.mirror)
+        n_journal, snaps, checked_before = journal_len(e), snapshot_names(e), block_state(e, "zorg-core")["checked"]
+        time.sleep(1.1)                                 # the time of the check is to the second
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("criterion 2: no change → 0 record writes, 0 questions", rc == 0 and mtimes(records_dir, e.ctx, e.mirror) == before_m
+              and read(e.ctx) == ctx_before and read(e.mirror) == mirror_before and "без змін" in out and r["pending"] == [], (rc, out[-500:]))
+        check("…no snapshot, no journal line; only the time of the check moves", journal_len(e) == n_journal and snapshot_names(e) == snaps
+              and r["snapshot"] is None and r["written"] == [] and block_state(e, "zorg-core")["checked"] != checked_before, r)
+        check("…the output is the header and one line", [l for l in out.splitlines() if not l.startswith("CTX_RESULT")]
+              == ["zorg-core · джерело: тека · ядро v0.4 · база v0.4", "без змін"], out)
+
+        ctx_before_apply, bases_before, recs_before = read(e.ctx), tree_of(blocks_dir), tree_of(records_dir)
+        growth_region_before = {b: region_in(read(e.ctx), "zorg-growth", b) for b in ("growth-metrics", "team")}
+        change(blocks_file, SCOPE_04, SCOPE_05)
+        rc, out, r = apply_run(e, core, "zorg-core")
+        changed_hosts = changed_records(recs_before, tree_of(records_dir))
+        check("criterion 3: core changed one block → only its host changes", rc == 0 and changed_hosts == {"custom.zorg-core-notes"}
+              and last_journal(e)["op"] == "provider-apply" and last_journal(e)["decisions"]["scope"] == "~", (rc, changed_hosts, out[-500:]))
+        check("…the new text is in both copies; one journal line names the repository, the versions and the record",
+              SCOPE_05 in read(e.ctx) and SCOPE_05 in read(e.mirror) and journal_len(e) == n_journal + 1
+              and last_journal(e)["source"] == "repo:zorg-core" and last_journal(e)["ids"] == ["custom.zorg-core-notes"]
+              and last_journal(e)["from_v"] == "0.4" and "to_v" in last_journal(e), last_journal(e))
+        check("…the data: what was applied, nothing waits, the snapshot", r["applied"]["scope"] == "~" and r["pending"] == []
+              and r["written"] == ["custom.zorg-core-notes"] and os.path.isdir(r["snapshot"]) and r["rows"], r)
+        rc_p, out_p, r_p = run_ok(e, "provider", "plan", "zorg-core")
+        signs_final = signs_in(r_p)
+        check("idempotent: plan after apply is all =", set(signs_final.values()) == {"="}, out_p[-400:])
+        growth_region_after = {b: region_in(read(e.ctx), "zorg-growth", b) for b in ("growth-metrics", "team")}
+        check("criterion 8: two repos, one product — growth untouched by core apply", growth_region_before == growth_region_after
+              and all(growth_region_after.values()) and set(signs_in(run_ok(e, "provider", "plan", "zorg-growth")[2]).values()) == {"="},
+              growth_region_after)
+        rc, out, r = apply_run(e, core, "zorg-core", "--choose", "scope=theirs")
+        check("a --choose for a block that needs no decision is ignored, and said so", rc == 0 and "scope" in out and "не потрібне" in out
+              and r["ignored"] == {"scope": "="} and "без змін" not in [l for l in out.splitlines()][:1], (rc, out[-300:]))
+
+        rc, out, r = run_ok(e, "undo")
+        check("criterion 9: undo returns records, copies and bases", rc == 0 and read(e.ctx) == ctx_before_apply
+              and read(e.mirror) == ctx_before_apply and tree_of(blocks_dir) == bases_before, (rc, out[-300:]))
+
+        change(blocks_file, SCOPE_05, SCOPE_06)         # the core moved on again; you never took 0.5
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("criterion 5: skipped releases, no edits → no question", rc == 0 and r["applied"]["scope"] == "~" and r["pending"] == []
+              and SCOPE_06 in read(e.ctx) and "v0.4 → v0.6" in out, (rc, out[-500:]))
+
+        growth_team_before = region_in(read(e.ctx), "zorg-growth", "team")
+        change(card, 'head: "Alex One"', 'head: "Alex Prime"')
+        edit_both(e, "- **jira_team_field:** Alpha\n", "- **jira_team_field:** Alpha (mine)\n")
+        rc, out, r = apply_run(e, core, "zorg-core")
+        team_now = region_in(read(e.ctx), "zorg-core", "team")
+        check("criterion 4: both changed → exactly one question, exit 2", rc == 2 and r["pending"] == ["team"] and r["ok"] is False
+              and "Ядро тепер каже: " in out and "Alex Prime" in out and "--choose team=theirs|mine|both" in out, (rc, out[-700:]))
+        check("…the block in question is not touched", "Alex One" in team_now and "Alpha (mine)" in team_now, team_now)
+        rc, out, r = apply_run(e, core, "zorg-core", "--choose", "team=mine")
+        base_team = read(blocks_dir, "zorg-core", block_state(e, "zorg-core")["blocks"]["team"]["base_sha"] + ".md")
+        check("criterion 4: --choose team=mine applies in the same pass", rc == 0 and "Alpha (mine)" in read(e.ctx)
+              and "Alex Prime" in base_team and "Alex Prime" not in read(e.ctx) and last_journal(e)["decisions"]["team"] == "⚠ mine", (rc, out[-500:]))
+        rc, out, r = run_ok(e, "provider", "plan", "zorg-core")
+        signs_after = signs_in(r)
+        check("keep mine is not asked again", signs_after["team"] == "✎" and r["questions"] == 0, out[-400:])
+        growth_team_after = region_in(read(e.ctx), "zorg-growth", "team")
+        check("same block id in two repos: core apply leaves zorg-growth:team as is", growth_team_before == growth_team_after
+              and growth_team_after is not None, growth_team_after)
+
+        ctx_pre_okr = read(e.ctx)
+        open(blocks_file, "a", encoding="utf-8").write("\n" + OKR + "\n")
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("a new block waits for --add: exit 2, nothing added", rc == 2 and r["pending"] == ["okr"] and "--add okr" in out
+              and "id=okr" not in read(e.ctx), (rc, out[-400:]))
+        rc, out, r = apply_run(e, core, "zorg-core", "--add", "okr")
+        check("+ goes to home_record", "<!-- zorg-core:begin id=okr " in e.record("custom.zorg-core-notes") and rc == 0
+              and OKR in read(e.ctx) and r["applied"]["okr"] == "+", (rc, out[-400:]))
+        change(blocks_file, "\n" + OKR + "\n", "")
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("− removes the region, and the record is as it was before the block came", rc == 0 and r["applied"]["okr"] == "−"
+              and read(e.ctx) == ctx_pre_okr and "okr" not in block_state(e, "zorg-core")["blocks"], (rc, out[-400:]))
+
+        teams_region = region_in(read(e.ctx), "zorg-core", "teams")
+        edit_both(e, teams_region + "\n\n", "")
+        rc_cut, out_cut, r_cut = apply_run(e, core, "zorg-core")
+        signs_after_cut = signs_in(run_ok(e, "provider", "plan", "zorg-core")[2])
+        check("✂ you removed a block — not offered again", signs_after_cut["teams"] == "✂" and rc_cut == 0
+              and r_cut["applied"]["teams"] == "✂" and "id=teams" not in read(e.ctx)
+              and block_state(e, "zorg-core")["blocks"]["teams"]["user_removed"] == time.strftime("%Y-%m-%d"), (rc_cut, out_cut[-400:]))
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("…the next pass asks nothing and changes nothing", rc == 0 and "без змін" in out and r["pending"] == [], (rc, out[-300:]))
+
+        everything = tree_of(e.home, e.vault, core)
+        rc, out, r = run_ok(e, "provider", "apply", "zorg-core", "--choose", "team=maybe")
+        check("--choose takes theirs|mine|both: anything else is exit 3, nothing written", rc == 3 and tree_of(e.home, e.vault, core) == everything,
+              (rc, out[-300:]))
+        rc, out, r = run_ok(e, "provider", "apply", "zorg-core", "--choose", "nosuch=mine")
+        check("--choose of a block the plan does not have: exit 3, nothing written", rc == 3 and "nosuch" in out
+              and tree_of(e.home, e.vault, core) == everything, (rc, out[-300:]))
+        rc, out, r = run_ok(e, "provider", "apply", "--choose", "team=mine")
+        check("--choose without a repository while several are in scope: exit 3", rc == 3 and tree_of(e.home, e.vault, core) == everything,
+              (rc, out[-300:]))
+        rc, out, r = run_ok(e, "provider", "apply", "zorg-dead")
+        check("an unreachable repository: exit 5, nothing written", rc == 5 and "недоступний" in out and r["ok"] is False
+              and tree_of(e.home, e.vault, core) == everything, (rc, out[-300:]))
+        rc, out, r = run_ok(e, "provider", "apply")
+        check("no repository named and one of them unreachable: exit 5 before anything is written", rc == 5 and "zorg-dead" in out
+              and "нічого не записано" in out and tree_of(e.home, e.vault, core) == everything, (rc, out[-400:]))
+        rc, out, r = run_ok(e, "provider", "apply", "zorg-core", "--store", e.store)
+        check("--store is refused: apply always writes", rc == 3 and "--store is for read commands only" in out, (rc, out[-300:]))
+
+        with open(os.path.join(e.home, ".grow-pm", "providers", "zorg-dead.yaml"), "a", encoding="utf-8") as f:
+            f.write("status: paused\n")
+        rc, out, r = run_ok(e, "provider", "plan")
+        check("a paused repository is left out of plan when none is named, with one line", rc == 0 and "призупинено: zorg-dead" in out
+              and "zorg-dead · недоступний" not in out and r["paused"] == ["zorg-dead"]
+              and [x["repo"] for x in r["repos"]] == ["zorg-core", "zorg-growth"], (rc, out[-500:]))
+        rc, out, r = apply_run(e, core)
+        check("…and out of apply: the others are applied", rc == 0 and "призупинено: zorg-dead" in out and r["paused"] == ["zorg-dead"]
+              and [x["repo"] for x in r["repos"]] == ["zorg-core", "zorg-growth"], (rc, out[-500:]))
+        rc, out, r = run_ok(e, "provider", "plan", "zorg-dead")
+        check("…a paused repository named explicitly still works", rc == 5 and "недоступний" in out, (rc, out[-300:]))
+
+    with tempfile.TemporaryDirectory() as d:            # a section wrapper; both texts kept
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT, patch=[
+            ("## Zorg Core Notes\n\n", "## Zorg Core Notes\n\n<!-- zorg-core:section:begin -->\n"),
+            ("<!-- zorg-core:end id=teams -->\n", "<!-- zorg-core:end id=teams -->\n<!-- zorg-core:section:end -->\n")])
+        core = os.path.join(d, "ZorgCore")
+        blocks_file = os.path.join(core, CORE_BLOCKS)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        change(blocks_file, SCOPE_04, SCOPE_05)
+        rc, out, r = apply_run(e, core, "zorg-core")
+        body_w = e.record("custom.zorg-core-notes")
+        check("a block inside a section wrapper is replaced in place", "<!-- zorg-core:section:begin -->" in body_w
+              and body_w.index("<!-- zorg-core:begin id=scope ") > body_w.index("<!-- zorg-core:section:begin -->")
+              and rc == 0 and SCOPE_05 in body_w and body_w.index("<!-- zorg-core:end id=teams -->") < body_w.index("<!-- zorg-core:section:end -->"),
+              (rc, body_w[-500:]))
+        open(blocks_file, "a", encoding="utf-8").write("\n" + OKR + "\n")
+        rc, out, r = apply_run(e, core, "zorg-core", "--add", "okr")
+        body_w = e.record("custom.zorg-core-notes")
+        check("+ goes inside the wrapper of its home record", rc == 0
+              and body_w.index("<!-- zorg-core:end id=teams -->") < body_w.index("id=okr") < body_w.index("<!-- zorg-core:section:end -->"),
+              (rc, body_w[-400:]))
+        edit_both(e, "The user works on Zorg App and Zorg Lite.", "The user works on Zorg App and Zorg Lite (and my notes).")
+        change(blocks_file, SCOPE_05, SCOPE_06)
+        rc, out, r = apply_run(e, core, "zorg-core", "--choose", "scope=both")
+        body = e.record("custom.zorg-core-notes")
+        check("both keeps the two texts marked", "<!-- ctx:both theirs -->" in body and "<!-- ctx:both mine -->" in body
+              and rc == 0 and body.count("<!-- zorg-core:begin id=scope ") == 1 and "<!-- zorg-core:begin id=scope v=0.6 -->" in body
+              and body.index("Zorg Lite and Zorg Max") < body.index("<!-- ctx:both mine -->") < body.index("(and my notes)"), (rc, body[-600:]))
+        rc, out, r = run_ok(e, "provider", "plan", "zorg-core")
+        check("…one region, the repository's markers: the next plan keeps it as your edit", rc == 0 and signs_in(r)["scope"] == "✎", out[-400:])
+        rc, out, r = run_ok(e, "status")
+        check("…and the copies apply wrote read back as the records: nothing waits to be imported", rc == 0
+              and "to import: nothing — in sync" in out and r["conflicts"] == [], out[-400:])
+
+    with tempfile.TemporaryDirectory() as d:            # a broken marker
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT, patch=[("<!-- zorg-core:end id=teams -->", "<!-- zorg-core:end id=teams x -->")])
+        core = os.path.join(d, "ZorgCore")
+        blocks_file = os.path.join(core, CORE_BLOCKS)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        ctx_b = read(e.ctx)
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("a broken marker and nothing else to do: exit 4, nothing written", rc == 4 and "помилка: teams — broken marker" in out
+              and read(e.ctx) == ctx_b and r["snapshot"] is None, (rc, out[-400:]))
+        change(blocks_file, SCOPE_04, SCOPE_05)
+        rc_b, out_b, r_b = apply_run(e, core, "zorg-core")
+        check("a broken marker refuses that block, the rest applies", (rc_b == 4 or (rc_b in (0, 2) and "scope" in r_b["applied"]))
+              and any(x["block"] == "teams" and x["why"] == "broken marker" for x in r_b["errors"]), (rc_b, out_b[-400:]))
+        check("…here the rest is a change: exit 0, the block applied, the broken one as it was", rc_b == 0 and r_b["applied"]["scope"] == "~"
+              and SCOPE_05 in read(e.ctx) and "<!-- zorg-core:end id=teams x -->" in read(e.ctx), (rc_b, out_b[-400:]))
+
+    with tempfile.TemporaryDirectory() as d:            # a repository whose blocks you never had, and no home record
+        gm, gt = region_in(GROWTH_TEXT, "zorg-growth", "growth-metrics"), region_in(GROWTH_TEXT, "zorg-growth", "team")
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT, patch=[(gm + "\n\n", ""), (gt + "\n\n", "")])
+        with open(os.path.join(e.home, ".grow-pm", "providers", "zorg-growth.yaml"), "a", encoding="utf-8") as f:
+            f.write("title: Zorg Growth\n")
+        core = os.path.join(d, "ZorgCore")
+        rec_path = lambda rid: os.path.join(e.store, "records", rid + ".md")
+        run_ok(e, "migrate", "--apply")
+        rc, out, r = apply_run(e, core, "zorg-growth")
+        check("blocks you never had wait for --add", rc == 2 and r["pending"] == ["growth-metrics", "team"], (rc, out[-400:]))
+        rc, out, r = apply_run(e, core, "zorg-growth", "--add", "growth-metrics", "--add", "team")
+        check("+ without home_record creates the repo's custom record", os.path.isfile(rec_path("custom.zorg-growth")) and rc == 0
+              and "\n## Zorg Growth\n\n" + gm + "\n\n" + gt + "\n" in read(e.ctx) and read(e.ctx).rstrip("\n").endswith(gt), (rc, read(e.ctx)[-400:]))
+        rc, out, r = run_ok(e, "provider", "plan", "zorg-growth")
+        check("…the next plan is all '='", rc == 0 and set(signs_in(r).values()) == {"="}, out[-400:])
+        rc, out, r = run_ok(e, "status")
+        check("…the new record reads back from the copies as it was written: nothing waits to be imported", rc == 0
+              and "to import: nothing — in sync" in out and r["conflicts"] == [], out[-400:])
+
+check("apply never writes into the core folder", core_untouched and all(core_untouched), core_untouched)
 
 
 check("every command ends with a CTX_RESULT line", contract_ok)

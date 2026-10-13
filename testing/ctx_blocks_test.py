@@ -923,5 +923,232 @@ with tempfile.TemporaryDirectory() as d:                      # a removal mark w
     check("the region put back, different from the repository's, a mark and no base → '?'",
           signs_of(plan_of(store, copies, published(store)))["teams"] == "?", signs_of(plan_of(store, copies, published(store))))
 
+with tempfile.TemporaryDirectory() as d:                      # a release that bumps only the v= of a block you edited
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    team0 = published(store)["team"]
+    edit_record(store, "team.alpha-a", "- **jira_team_field:** Alpha", "- **jira_team_field:** Alpha (mine)")
+    p = plan_of(store, copies, published(store, team=team0.replace("id=team v=0.2", "id=team v=0.3")))
+    row = row_of(p, "team")
+    check("a '⚠' whose repository side changed only the version says so, not an empty side",
+          row["sign"] == "⚠" and row["diff"]["theirs"] == ["(лише версія v0.2 → v0.3)"]
+          and any("Alpha (mine)" in x for x in row["diff"]["mine"]), row.get("diff"))
+    check("…and the text shows it on the line 'Ядро тепер каже'",
+          "    Ядро тепер каже: (лише версія v0.2 → v0.3)" in cb.render_plan(p).splitlines(), cb.render_plan(p))
+
+
+# ------------------------------------------------------------------ apply: one pass, your edits kept, one question per conflicting block
+OKR = region("okr", "0.1", "### OKR\n- grow")
+TODAY = NOW[:10]
+
+
+def settle(home, text, copies, store):
+    """Import what the records and the copies changed (as every writing command does first) — a test that edits a
+    record directly must leave the store in sync before apply, which refuses to run over edits waiting."""
+    with cs.guard_roots(co.allowed_roots(home, text)):
+        co.apply_sync(store, co.plan_sync(store, copies), copies, home, None, "", NOW)
+
+
+def apply_of(home, text, copies, store, fetched, choose=None, add=None, repo=SKIPPING):
+    with cs.guard_roots(co.allowed_roots(home, text)):
+        return cb.apply(store, copies, home, repo, fetched, choose or {}, add or [], NOW)
+
+
+def body_of(store, rid):
+    return [r for r in store.load() if r["id"] == rid][0]["body"]
+
+
+def journal_of(store):
+    path = os.path.join(store.state_dir, "journal.jsonl")
+    return [json.loads(l) for l in open(path, encoding="utf-8")] if os.path.isfile(path) else []
+
+
+def base_text(store, bid, repo="zorg-core"):
+    return cb.get_base(store, repo, cb.load_state(store, repo)["blocks"][bid]["base_sha"])
+
+
+with tempfile.TemporaryDirectory() as d:                      # nothing moved: no write but the time of the check
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    everything = files_under(d)
+    state_path = os.path.join(store.state_dir, "blocks", "zorg-core.json")
+    res = apply_of(home, text, copies, store, published(store, checked="2026-10-21T09:00:00+03:00"))
+    changed = sorted(k for k in set(files_under(d)) | set(everything) if files_under(d).get(k) != everything.get(k))
+    check("apply with nothing moved: the documented keys, every block '=', nothing waits",
+          set(res) >= {"applied", "pending", "snapshot", "written"} and res["applied"] == {"scope": "=", "teams": "=", "team": "="}
+          and res["pending"] == [] and res["changed"] is False, res)
+    check("…no snapshot, no journal line, no record or copy written: only the state file, for the time of the check",
+          res["snapshot"] is None and res["written"] == [] and changed == [os.path.relpath(state_path, d)]
+          and cb.load_state(store, "zorg-core")["checked"] == "2026-10-21T09:00:00+03:00", changed)
+
+with tempfile.TemporaryDirectory() as d:                      # the repository moved one block; you edited another; a new block waits
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    edit_record(store, HOST_NOTES, "- Alpha, Beta", "- Alpha, Beta, Gamma")
+    settle(home, text, copies, store)
+    teams_base = base_text(store, "teams")
+    f = published(store)
+    f["blocks"]["scope"], f["blocks"]["okr"] = NEW_SCOPE, OKR
+    n_journal = len(journal_of(store))
+    res = apply_of(home, text, copies, store, f)
+    body = body_of(store, HOST_NOTES)
+    check("apply: '~' takes the repository's text, '✎' keeps yours, '+' waits for --add",
+          res["applied"] == {"scope": "~", "teams": "✎", "team": "="} and res["pending"] == ["okr"]
+          and NEW_SCOPE in body and "Alpha, Beta, Gamma" in body and "id=okr" not in body, (res["applied"], res["pending"]))
+    check("…the compiled copies carry it", all(NEW_SCOPE in open(c, encoding="utf-8").read() for c in copies), "")
+    state = cb.load_state(store, "zorg-core")
+    check("…the base of '~' is the new text, with the old one kept in the history; '✎' keeps its base",
+          base_text(store, "scope") == NEW_SCOPE and len(state["blocks"]["scope"]["bases"]) == 2 and state["blocks"]["scope"]["v"] == "0.5"
+          and base_text(store, "teams") == teams_base and "okr" not in state["blocks"], state["blocks"])
+    check("…the state remembers where the repository was read from and its version",
+          state["source"] == "folder" and state["version"] == "0.4" and state["checked"] == CHECKED, state)
+    j = journal_of(store)
+    check("…one journal line: op, source, versions, the records written, the decision on every block, the snapshot",
+          len(j) == n_journal + 1 and j[-1]["op"] == "provider-apply" and j[-1]["source"] == "repo:zorg-core"
+          and j[-1]["ids"] == [HOST_NOTES] and j[-1]["decisions"] == {"scope": "~", "teams": "✎", "team": "="}
+          and j[-1]["from_v"] == "0.4" and j[-1]["to_v"] == "0.4" and j[-1]["snapshot"] == res["snapshot"] and os.path.isdir(res["snapshot"]), j[-1])
+    rec = [r for r in store.load() if r["id"] == HOST_NOTES][0]
+    check("…the record written names the repository as its source", rec["source"] == "repo:zorg-core" and rec["verified"] == TODAY, rec)
+    check("…the snapshot holds what was there before: the old region and the old state",
+          "The user works on Zorg App only." in open(os.path.join(res["snapshot"], "records", HOST_NOTES + ".md"), encoding="utf-8").read()
+          and json.load(open(os.path.join(res["snapshot"], "state", "blocks", "zorg-core.json"), encoding="utf-8"))["blocks"]["scope"]["v"] == "0.4", "")
+    p = plan_of(store, copies, f)
+    check("…the next plan asks only what is still open", signs_of(p) == {"scope": "=", "teams": "✎", "team": "=", "okr": "+"}, signs_of(p))
+    res = apply_of(home, text, copies, store, f, add=["okr"])
+    check("--add puts the new block at the end of the record that holds most of the repository's blocks",
+          res["applied"]["okr"] == "+" and res["pending"] == [] and body_of(store, HOST_NOTES).rstrip("\n").endswith(OKR)
+          and cb.load_state(store, "zorg-core")["blocks"]["okr"]["host"] == HOST_NOTES, res["applied"])
+    f_gone = dict(f, blocks={k: v for k, v in f["blocks"].items() if k != "okr"})
+    res = apply_of(home, text, copies, store, f_gone)
+    check("'−' removes the region and its state entry; the record is as it was before the block came",
+          res["applied"]["okr"] == "−" and body_of(store, HOST_NOTES) == body and "okr" not in cb.load_state(store, "zorg-core")["blocks"],
+          repr(body_of(store, HOST_NOTES)[-120:]))
+    check("…and the base text nobody refers to is gone",
+          OKR.encode("utf-8") not in files_under(os.path.join(store.state_dir, "blocks", "zorg-core")).values(), "")
+
+with tempfile.TemporaryDirectory() as d:                      # you removed a block
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    host = [r for r in store.load() if r["id"] == HOST_NOTES][0]
+    teams_text = cb.find_regions([host], "zorg-core")[0]["teams"]["text"]
+    store.write(dict(host, body=host["body"].replace(teams_text + "\n\n", "")))
+    settle(home, text, copies, store)
+    res = apply_of(home, text, copies, store, published(store))
+    entry = cb.load_state(store, "zorg-core")["blocks"]["teams"]
+    check("'✂': the state marks it removed today, the base stays, no record is written",
+          res["applied"]["teams"] == "✂" and entry["user_removed"] == TODAY and entry["base_sha"] and res["written"] == [] and res["snapshot"], (res, entry))
+    res = apply_of(home, text, copies, store, published(store))
+    check("…and it is not offered again: the next pass changes nothing", res["applied"]["teams"] == "✂" and res["changed"] is False
+          and res["pending"] == [], res)
+
+with tempfile.TemporaryDirectory() as d:                      # no base: '?', and the three answers
+    home, text, copies, store = migrated(d, patch=[EDIT_SCOPE])
+    f = published(store)
+    res = apply_of(home, text, copies, store, f)
+    check("'?' waits for --choose; the rest is applied", res["pending"] == ["scope"] and res["applied"] == {"teams": "=", "team": "="}
+          and "(my note)" in body_of(store, HOST_NOTES), res)
+    res = apply_of(home, text, copies, store, f, choose={"scope": "mine"})
+    check("'?' mine: your text stays, the repository's becomes the base — the next plan says '✎'",
+          res["applied"]["scope"] == "?" and "(my note)" in body_of(store, HOST_NOTES) and base_text(store, "scope") == f["blocks"]["scope"]
+          and signs_of(plan_of(store, copies, f))["scope"] == "✎" and journal_of(store)[-1]["decisions"]["scope"] == "? mine", res)
+
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d, patch=[EDIT_SCOPE])
+    f = published(store)
+    res = apply_of(home, text, copies, store, f, choose={"scope": "theirs"})
+    check("'?' theirs: the repository's text replaces yours; the next plan is all '='",
+          "(my note)" not in body_of(store, HOST_NOTES) and f["blocks"]["scope"] in body_of(store, HOST_NOTES)
+          and set(signs_of(plan_of(store, copies, f)).values()) == {"="}, res)
+
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    edit_record(store, HOST_NOTES, "The user works on Zorg App only.", "The user works on Zorg App only. (mine)")
+    settle(home, text, copies, store)
+    f = published(store)
+    f["blocks"]["scope"] = NEW_SCOPE
+    res = apply_of(home, text, copies, store, f, choose={"scope": "both"})
+    body = body_of(store, HOST_NOTES)
+    both = cb.find_regions([{"id": HOST_NOTES, "body": body}], "zorg-core")[0]["scope"]["text"]
+    check("'⚠' both: one region with the repository's markers, its text then yours, each under its mark",
+          res["applied"]["scope"] == "⚠" and both.startswith("<!-- zorg-core:begin id=scope v=0.5 -->\n<!-- ctx:both theirs -->\n### Scope of work\n"
+                                                              "The user works on Zorg App and Zorg Lite.\n<!-- ctx:both mine -->\n")
+          and both.endswith("The user works on Zorg App only. (mine)\n<!-- zorg-core:end id=scope -->"), both)
+    check("…the base is the repository's text; the next plan keeps it as your edit",
+          base_text(store, "scope") == NEW_SCOPE and signs_of(plan_of(store, copies, f))["scope"] == "✎", "")
+
+with tempfile.TemporaryDirectory() as d:                      # what apply refuses
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f = published(store)
+    f["blocks"]["scope"] = NEW_SCOPE
+    everything = files_under(d)
+    for name, choose, add in (("a choice that is none of theirs | mine | both", {"team": "maybe"}, []),
+                              ("a --choose of a block the plan does not have", {"nosuch": "mine"}, []),
+                              ("an --add of a block the plan does not have", {}, ["nosuch"])):
+        try:
+            apply_of(home, text, copies, store, f, choose=choose, add=add)
+            raised = False
+        except ValueError:
+            raised = True
+        check("%s: ValueError, nothing written" % name, raised and files_under(d) == everything, "")
+    for path in copies:
+        t = open(path, encoding="utf-8", newline="").read()
+        open(path, "w", encoding="utf-8", newline="").write(t.replace("- Alpha, Beta", "- Alpha, Beta, Gamma", 1))
+    everything = files_under(d)
+    try:
+        apply_of(home, text, copies, store, f)
+        refused = False
+    except co.Refused:
+        refused = True
+    check("edits to local-context.md that wait to be imported: refused, nothing written (the caller imports first)",
+          refused and files_under(d) == everything, "")
+    settle(home, text, copies, store)
+    res = apply_of(home, text, copies, store, f, choose={"teams": "theirs"})
+    check("a --choose for a block that needs no decision is ignored and said so; your edit stays",
+          res["ignored"] == {"teams": "✎"} and "Gamma" in body_of(store, HOST_NOTES) and res["applied"]["scope"] == "~", res)
+
+with tempfile.TemporaryDirectory() as d:                      # a repository text that is not one sound region is never written
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f = published(store)
+    f["blocks"]["scope"] = ("<!-- zorg-core:begin id=scope v=0.5 -->\n### Scope\n<!-- zorg-core:begin id=sneak v=1 -->\nx\n"
+                            "<!-- zorg-core:end id=sneak -->\n<!-- zorg-core:end id=scope -->")
+    f["team"] = f["team"].replace(HEAD_OLD, HEAD_NEW)
+    before = body_of(store, HOST_NOTES)
+    res = apply_of(home, text, copies, store, f)
+    check("a repository region with another region inside: that block is refused into errors, the rest applies",
+          "scope" not in res["applied"] and any(x["block"] == "scope" for x in res["errors"]) and body_of(store, HOST_NOTES) == before
+          and res["applied"]["team"] == "~" and HEAD_NEW in body_of(store, "team.alpha-a"), res)
+
+with tempfile.TemporaryDirectory() as d:                      # the write order: base texts, records, state — a crash before the state
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f = published(store)
+    f["blocks"]["scope"] = NEW_SCOPE
+    state_path = os.path.join(store.state_dir, "blocks", "zorg-core.json")
+    state_before, n_journal = open(state_path, encoding="utf-8").read(), len(journal_of(store))
+    real = cb.save_state
+
+    def crash(*a, **k):
+        raise RuntimeError("crash before the state")
+    cb.save_state = crash
+    try:
+        apply_of(home, text, copies, store, f)
+        crashed = False
+    except RuntimeError:
+        crashed = True
+    finally:
+        cb.save_state = real
+    orphan = os.path.join(store.state_dir, "blocks", "zorg-core", cs.sha_text(cb.norm(NEW_SCOPE)) + ".md")
+    check("a crash before the state: the new base text is there (an orphan), the state and the journal are as they were",
+          crashed and os.path.isfile(orphan) and open(state_path, encoding="utf-8").read() == state_before
+          and len(journal_of(store)) == n_journal and NEW_SCOPE in body_of(store, HOST_NOTES), crashed)
+    settle(home, text, copies, store)
+    res = apply_of(home, text, copies, store, f)
+    check("…the next pass finds your record already at the repository's text and only sets the base",
+          res["applied"]["scope"] == "=" and base_text(store, "scope") == NEW_SCOPE
+          and set(signs_of(plan_of(store, copies, f)).values()) == {"="}, res)
+
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

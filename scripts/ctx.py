@@ -39,7 +39,17 @@
                                 matches it), else all of them. --all also lists the blocks a repository skips.
                                 Reads only — no lock, nothing written; an unreachable repository exits 5 (the
                                 others still print). CTX_RESULT: with REPO the plan itself (rows, questions,
-                                changes, errors …), without it {repos: [plan …], questions, changes}
+                                changes, errors …), without it {repos: [plan …], paused, questions, changes}.
+                                Without REPO a paused repository is left out, with one line "призупинено: <id>"
+  provider apply [REPO] [--product P] [--choose BLOCK=theirs|mine|both ...] [--add BLOCK ...] [--json]
+                                one pass per repository: = ~ ✎ − ✂ are applied (your edits stay), ⚠ and ? wait
+                                for --choose, + for --add (it goes to the record holding most of the repository's
+                                blocks, else a new record); the snapshot, the records, the block state, one
+                                journal line, the compile. Nothing moved: only the time of the check, "без змін".
+                                Every repository is read first: one unreachable → exit 5, nothing written.
+                                Exit 2 when an answer is awaited (the rest applied), 4 when only refused blocks
+                                (a broken marker) are left. --choose / --add need REPO when several are in scope.
+                                CTX_RESULT: the plan with applied, decisions, pending, ignored, written, snapshot
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
 edits first, snapshots, writes, journals and compiles. Files are read within a time budget
@@ -47,7 +57,7 @@ edits first, snapshots, writes, journals and compiles. Files are read within a t
 on disk stops the run before anything is written. The last stdout line is `CTX_RESULT {json}`;
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
 unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists) · 5 a repository is
-unreachable, nothing written (provider commands).
+unreachable, nothing written (provider commands). `provider apply`: 2 also means answers are awaited.
 Semantics: references/context-protocol.md. Stdlib only.
 """
 import argparse
@@ -80,8 +90,9 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
 
 
 def writes(a):
-    """Does this run write to the store? Every command of WRITING does; `migrate` and `provider adopt` only with --apply."""
-    if a.cmd in WRITING:
+    """Does this run write to the store? Every command of WRITING does, and `provider apply`; `migrate` and `provider
+    adopt` only with --apply."""
+    if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) == "apply"):
         return True
     if a.cmd == "migrate" or (a.cmd == "provider" and getattr(a, "action", None) == "adopt"):
         return getattr(a, "apply", False)
@@ -738,20 +749,31 @@ def _product_repos(c, repos, wanted):
     return [r for r in repos if not r["products"] or names & {x.lower() for x in r["products"]}]
 
 
+def _in_scope(c, a):
+    """(repositories, ids of the paused ones) of a plan or an apply: the one named — paused or not — else those of the
+    product --product names (and those serving every product), else all; without a name the paused are left out.
+    Prints the line for an empty scope and one line "призупинено: <id>" per paused repository."""
+    if a.repo:
+        return [_repository(c, a.repo)], []
+    repos = crp.load_repos(c.text, c.home)
+    if a.product:
+        repos = _product_repos(c, repos, a.product)
+    paused = [r["id"] for r in repos if r["status"] == "paused"]
+    repos = [r for r in repos if r["status"] != "paused"]
+    if not repos and not paused:
+        print(NO_REPOS if not a.product else "no repository serves the product %r" % a.product)
+    for rid in paused:
+        print("призупинено: %s" % cb.clip(rid, cb.HEADER_CLIP))
+    return repos, paused
+
+
 def cmd_provider_plan(a, c):
     c.need_store()
-    if a.repo:
-        repos = [_repository(c, a.repo)]
-    else:
-        repos = crp.load_repos(c.text, c.home)
-        if a.product:
-            repos = _product_repos(c, repos, a.product)
-    if not repos:
-        print(NO_REPOS if not a.product else "no repository serves the product %r" % a.product)
+    repos, paused = _in_scope(c, a)
     plans, down = [], 0
     for k, repo in enumerate(repos):
         fetched = crp.fetch(repo, include_skipped=a.all)
-        if k:
+        if k or paused:
             print()
         if fetched["error"]:
             down += 1
@@ -765,8 +787,70 @@ def cmd_provider_plan(a, c):
     rc = 5 if down else 0
     if a.repo:
         return rc, dict(plans[0], command="provider", action="plan")
-    return rc, {"command": "provider", "action": "plan", "repos": plans,
+    return rc, {"command": "provider", "action": "plan", "repos": plans, "paused": paused,
                 "questions": sum(p.get("questions", 0) for p in plans), "changes": sum(p.get("changes", 0) for p in plans)}
+
+
+def _choices(items):
+    """--choose BLOCK=theirs|mine|both … → {block: answer}; anything else is a usage error."""
+    out = {}
+    for it in items or []:
+        bid, eq, how = it.partition("=")
+        if not eq or not bid or how not in cb.CHOICES:
+            raise Usage("--choose takes BLOCK=theirs|mine|both, not %r" % it)
+        out[bid] = how
+    return out
+
+
+def _applied(res):
+    """The data of one apply: the plan's (rows, versions …) and what the pass did."""
+    out = dict(res["plan"])
+    out.update((k, v) for k, v in res.items() if k != "plan")
+    return out
+
+
+def cmd_provider_apply(a, c):
+    """One pass per repository: every repository is read first, and one that cannot be read stops the run before
+    the lock (exit 5, nothing written); then, under the lock, the edits waiting are imported and each repository is
+    applied (its own snapshot, journal line and compile). Exit 2 when an answer is still awaited (the rest applied),
+    4 when a block was refused (a broken marker) and nothing else changed, else 0."""
+    choose, add = _choices(a.choose), list(a.add or [])
+    c.need_store()
+    repos, paused = _in_scope(c, a)
+    if (choose or add) and len(repos) > 1:
+        raise Usage("--choose and --add answer one repository's plan — name it: ctx provider apply <repo> …")
+    fetched = [(repo, crp.fetch(repo)) for repo in repos]
+    down = [{"repo": repo["id"], "error": cb.clip(f["error"], cb.NOTE_CLIP)} for repo, f in fetched if f["error"]]
+    if down:
+        for x in down:
+            print("%s · недоступний: %s" % (cb.clip(x["repo"], cb.HEADER_CLIP), x["error"]))
+        print("нічого не записано")
+        res = {"command": "provider", "action": "apply", "unreachable": down, "paused": paused, "written": []}
+        if a.repo:
+            res.update(repo=a.repo, error=down[0]["error"])
+        return 5, res
+    results = []
+    if fetched:
+        with co.lock(c.home):
+            c.guard()
+            c.import_first()
+            for repo, f in fetched:
+                results.append(cb.apply(c.store, c.copies, c.home, repo, f, choose, add, now()))
+    for k, res in enumerate(results):
+        if k or paused:
+            print()
+        print(cb.render_apply(res))
+    if any(r["pending"] for r in results):
+        rc = 2
+    elif any(r["errors"] for r in results) and not any(r["changed"] for r in results):
+        rc = 4
+    else:
+        rc = 0
+    data = [_applied(r) for r in results]
+    if a.repo:
+        return rc, dict(data[0], command="provider", action="apply")
+    return rc, {"command": "provider", "action": "apply", "repos": data, "paused": paused,
+                "questions": sum(len(r["pending"]) for r in results), "changes": sum(len(r["written"]) for r in results)}
 
 
 def cmd_provider(a, c):
@@ -774,7 +858,9 @@ def cmd_provider(a, c):
         return cmd_provider_adopt(a, c)
     if a.action == "plan":
         return cmd_provider_plan(a, c)
-    raise Usage("provider takes adopt or plan")
+    if a.action == "apply":
+        return cmd_provider_apply(a, c)
+    raise Usage("provider takes adopt, plan or apply")
 
 
 # ---------------------------------------------------------------------- main
@@ -823,6 +909,9 @@ def build_parser():
     sp.add_argument("--json", action="store_true")
     sp = pp.add_parser("plan", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--product")
     sp.add_argument("--all", action="store_true"); sp.add_argument("--json", action="store_true")
+    sp = pp.add_parser("apply", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--product")
+    sp.add_argument("--choose", action="append"); sp.add_argument("--add", action="append")
+    sp.add_argument("--json", action="store_true")
     return p
 
 
