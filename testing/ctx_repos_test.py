@@ -206,12 +206,22 @@ with tempfile.TemporaryDirectory() as d:
     e.reg("e-explicit", "id: e-explicit\nkind: mcp\nauthority: org\nrank: 250\n")
     e.reg("f-quoted", "id: f-quoted\nkind: mcp\nauthority: org\nrank: \"750\"\n")
     e.reg("g-bad", "id: g-bad\nkind: mcp\nauthority: team\nrank: high\n")
+    e.reg("g-dashes", "id: g-dashes\nkind: mcp\nauthority: org\nrank: --5\n")
+    e.reg("g-super", "id: g-super\nkind: mcp\nauthority: personal\nrank: \u00b2\n")
+    e.reg("g-super-quoted", "id: g-super-quoted\nkind: mcp\nauthority: team\nrank: \"\u00b2\"\n")
+    e.reg("g-float", "id: g-float\nkind: mcp\nauthority: org\nrank: 2.5\n")
     ranks = {x["id"]: x["rank"] for x in e.repos()}
     check("rank by authority: personal 100, team 500, org 1000",
           ranks.get("a-personal") == 100 and ranks.get("b-team") == 500 and ranks.get("c-org") == 1000, ranks)
     check("no authority reads as org (the bundle builder's default)", ranks.get("d-none") == 1000, ranks)
     check("an explicit rank wins, quoted or not", ranks.get("e-explicit") == 250 and ranks.get("f-quoted") == 750, ranks)
-    check("a rank that is not a whole number falls back to the authority's", ranks.get("g-bad") == 500, ranks)
+    check("a rank that is not a whole number falls back to the authority's", ranks.get("g-bad") == 500
+          and ranks.get("g-float") == 1000, ranks)
+    check("a rank that only looks like a number (--5, a superscript digit) falls back, and `repo list` survives it",
+          ranks.get("g-dashes") == 1000 and ranks.get("g-super") == 100 and ranks.get("g-super-quoted") == 500, ranks)
+    rc, out, res = e.run("repo", "list")
+    check("…a hand-edited rank never fails the command", rc == 0 and res is not None and res["ok"] is True
+          and {x["id"]: x["rank"] for x in res["repos"]}.get("g-dashes") == 1000, (rc, out[-300:]))
     check("every rank is an int", all(type(v) is int for v in ranks.values()), ranks)
 
 with tempfile.TemporaryDirectory() as d:
@@ -236,15 +246,20 @@ blocks_source: sideways
 """)
     e.reg("j-folder", "id: j-folder\nkind: folder\npaths:\n  - {core}\n")
     e.reg("k-bundle-nopath", "id: k-bundle-nopath\nkind: bundle\n")
+    e.reg("l-mcp", "id: l-mcp\nkind: mcp\nendpoint:\n  url: http://127.0.0.1:9/mcp\n")
     by = {x["id"]: x for x in e.repos()}
     h, i, j, k = by.get("h-full", {}), by.get("i-bundle-explicit", {}), by.get("j-folder", {}), by.get("k-bundle-nopath", {})
+    m = by.get("l-mcp", {})
     check("explicit core_root and namespace win; a single product given as text is a list",
           h.get("core_root") == os.path.normpath(os.path.join(e.core, "Shared", "Core")) and h.get("namespace") == "hcore"
           and h.get("blocks_source") == "paths" and h.get("products") == ["product.zorg-lite"], h)
     check("an explicit core_root on a bundle beats paths[0]; an unknown blocks_source reads as auto",
           i.get("core_root") == os.path.normpath(os.path.join(e.core, "Inner")) and i.get("blocks_source") == "auto", i)
-    check("core_root defaults to paths[0] for a bundle only", j.get("core_root") == "" and j.get("paths") == [os.path.normpath(e.core)]
-          and k.get("core_root") == "" and k.get("paths") == [], (j, k))
+    check("core_root defaults to paths[0] for a bundle and for a folder (its path is the core itself)",
+          j.get("core_root") == os.path.normpath(e.core) and j.get("core_root") == j.get("paths", [None])[0]
+          and i.get("core_root") != i.get("paths", [None])[0], (i, j))
+    check("…a mcp repository has no core folder; a bundle with no path has none either",
+          m.get("core_root") == "" and m.get("paths") == [] and k.get("core_root") == "" and k.get("paths") == [], (k, m))
 
 with tempfile.TemporaryDirectory() as d:
     e = Env(d)

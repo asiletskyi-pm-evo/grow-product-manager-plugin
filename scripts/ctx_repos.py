@@ -10,6 +10,7 @@ that fetches blocks never branches on the schema version.
 Reads local files only — no network, nothing written. Stdlib only.
 """
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -38,7 +39,7 @@ def _rank(v, authority):
     """The explicit rank when it is a whole number (quoted or not), else the authority's."""
     if isinstance(v, int) and not isinstance(v, bool):
         return v
-    if isinstance(v, str) and v.strip().lstrip("-").isdigit():
+    if isinstance(v, str) and re.fullmatch(r"-?[0-9]+", v.strip()):    # not isdigit(): "²" passes it, int() rejects it
         return int(v.strip())
     return RANKS.get(authority, FALLBACK_RANK)
 
@@ -53,7 +54,7 @@ def normalise(reg):
     core_root = _s(reg.get("core_root"))
     if core_root:
         core_root = os.path.normpath(os.path.expanduser(cc.N(core_root)))
-    elif kind == "bundle" and paths:
+    elif kind in ("bundle", "folder") and paths:       # a folder's path is the core itself; an mcp repository has none
         core_root = paths[0]
     ep = reg.get("endpoint") if isinstance(reg.get("endpoint"), dict) else {}
     source = _s(reg.get("blocks_source")).lower()
