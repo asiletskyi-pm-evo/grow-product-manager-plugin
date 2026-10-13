@@ -184,10 +184,14 @@ def _team_block(repo, manifest, manifest_why):
     """(the team region, None), (None, None) or (None, why not). The region is what the connect flow builds from the
     core's team card and people, without the final newline. (None, None) is "not offered": no team in the
     registration, no manifest in the core, a team the role model does not list. A card, a role model or a manifest
-    that cannot be read in time or at all is (None, reason); so is anything unexpected (the class only)."""
+    that cannot be read in time or at all is (None, reason); so is anything unexpected (the class only). So is a core
+    folder the registration names that is not on this machine (the blocks may still come from the server): a team
+    was due, and "not offered" would make the plan remove the region you hold."""
     team, core_root = repo["team"], repo["core_root"]
     if not team or not core_root:
         return None, None
+    if not os.path.isdir(core_root):
+        return None, "team block: core folder not found"
     if manifest is None:
         return None, manifest_why
     try:

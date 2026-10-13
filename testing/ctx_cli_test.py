@@ -1070,6 +1070,54 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("…the new record reads back from the copies as it was written: nothing waits to be imported", rc == 0
               and "to import: nothing — in sync" in out and r["conflicts"] == [], out[-400:])
 
+CORE_BLOCKS_PATH = "ZorgCore/" + "Core/_System/context-blocks.md"          # endpoint.root + blocks_file of a v2 zorg-core
+
+with FakeMcp(tree={CORE_BLOCKS_PATH: read(CORE_FIX, CORE_BLOCKS)}) as fake:
+    with tempfile.TemporaryDirectory() as d:            # the blocks from MCP, the team block from a core folder that is not here
+        e = Env(d, fixture="context", fix=REPOS_FIX)
+        core = os.path.join(d, "ZorgCore")
+        shutil.copytree(CORE_FIX, core)
+        prov = os.path.join(e.home, ".grow-pm", "providers")
+        os.makedirs(prov)
+        open(os.path.join(prov, "zorg-core.yaml"), "w", encoding="utf-8").write(
+            "schema: provider-registration/2\nid: zorg-core\nkind: mcp\nauthority: org\nendpoint:\n  url: %s\n  root: \"ZorgCore/\"\n"
+            "blocks_file: Core/_System/context-blocks.md\nblocks_source: auto\ncore_root: %s\nteam: team-alpha\nrole: pm\n"
+            "jira_write: own\n%s" % (fake.url, core, SKIP_PRODUCT))
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("an MCP repository with its core folder: nothing moved, 'без змін'", rc == 0 and "без змін" in out, (rc, out[-300:]))
+        os.rename(core, core + ".away")                 # the core folder is not on this machine now; the server still answers
+        team_before = region_in(read(e.ctx), "zorg-core", "team")
+        rc, out, r = apply_run(e, core + ".away", "zorg-core")
+        check("the core folder gone and MCP up: the team block is unavailable ('·'), never removed",
+              rc == 0 and region_in(read(e.ctx), "zorg-core", "team") == team_before and team_before is not None
+              and signs_in(r).get("team") == "·" and "team" not in r["applied"], (rc, out[-500:]))
+        shown = [l for l in out.splitlines() if not l.startswith("CTX_RESULT")]
+        check("…and the text says so under 'без змін': the team block was not checked", "без змін" in shown
+              and any(l.startswith("·") and "team" in l and "core folder not found" in l for l in shown), shown)
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:            # the repository removed a block you edited
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        blocks_file = os.path.join(core, CORE_BLOCKS)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        edit_both(e, "- Alpha, Beta\n", "- Alpha, Beta\n- my own note on Gamma\n")
+        change(blocks_file, "\n" + region_in(read(blocks_file), "zorg-core", "teams") + "\n", "")
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("the repository removed a block you edited: a question, exit 2, your text as it is",
+              rc == 2 and r["pending"] == ["teams"] and "my own note on Gamma" in read(e.ctx) and "--choose teams=theirs|mine" in out
+              and "--choose teams=theirs|mine|both" not in out and "theirs прибере, mine лишить текст як ваш" in out, (rc, out[-500:]))
+        rc, out, r = apply_run(e, core, "zorg-core", "--choose", "teams=both")
+        check("…both is no answer for a removed block: exit 3", rc == 3 and "both" in out and "id=teams" in read(e.ctx), (rc, out[-300:]))
+        rc, out, r = apply_run(e, core, "zorg-core", "--choose", "teams=mine")
+        check("…mine keeps your text in place without the markers", rc == 0 and "zorg-core:begin id=teams" not in read(e.ctx)
+              and "### Teams map\n- Alpha, Beta\n- my own note on Gamma\n" in read(e.ctx), (rc, out[-400:]))
+        rc, out, r = run_ok(e, "provider", "plan", "zorg-core")
+        check("…and the next plan has no row for it", rc == 0 and "teams" not in signs_in(r) and r["questions"] == 0, out[-400:])
+
 check("apply never writes into the core folder", core_untouched and all(core_untouched), core_untouched)
 
 

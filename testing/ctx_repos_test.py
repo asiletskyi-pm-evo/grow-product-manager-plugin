@@ -432,6 +432,17 @@ with tempfile.TemporaryDirectory() as d:
         check("blocks from the server, the team block from the core folder", fh["source"] == "mcp"
               and set(fh["blocks"]) == {"growth-metrics", "team"} and fh["team_source"] == "folder"
               and fh["team"].startswith("<!-- zorg-core:begin id=team "), fh)
+        gone = os.path.join(d, "ZorgCoreNotHere")
+        fgone = cr.fetch(core_repo(blocks_source="auto", endpoint={"url": fake.url, "root": "ZorgGrowth/", "headers_env": ""},
+                                   blocks_file=GROWTH_FILE, namespace="zorg-growth", core_root=gone))
+        check("blocks from the server and a core folder not on this machine → the team block is unavailable (a reason), never 'not offered'",
+              fgone["source"] == "mcp" and fgone["error"] is None and set(fgone["blocks"]) == {"growth-metrics", "team"}
+              and fgone["team"] is None and fgone["team_source"] is None and fgone["team_error"] == "team block: core folder not found", fgone)
+        check("…the reason names no path", "ZorgCoreNotHere" not in json.dumps(fgone), fgone["team_error"])
+        fnt = cr.fetch(core_repo(blocks_source="auto", endpoint={"url": fake.url, "root": "ZorgGrowth/", "headers_env": ""},
+                                 blocks_file=GROWTH_FILE, namespace="zorg-growth", core_root=gone, team=""))
+        check("…a registration with no team is not hurt by it: no team, no reason", fnt["source"] == "mcp" and fnt["team"] is None
+              and fnt["team_error"] is None, fnt)
 
         seen = []
 

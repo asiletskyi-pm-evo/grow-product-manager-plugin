@@ -82,8 +82,11 @@ check("= even without a base, when the texts are equal", cb.classify(A, A, None)
 check("✂ also when the base is there but the removal was not flagged", cb.classify(None, A, st(A)) == "✂")
 check("✂ stays ✂ whatever upstream did since", cb.classify(None, C, st(A, user_removed="2026-10-13")) == "✂")
 check("+ means no base: a block with a base and no copy of yours is not new", cb.classify(None, A, st(A)) != "+")
-check("− with no base too", cb.classify(A, None, None) == "−")
-check("− even when you changed the block", cb.classify(B, None, st(A)) == "−")
+check("? when the repository removed a block you hold and there is no base: nothing says it is the repository's text",
+      cb.classify(A, None, None) == "?")
+check("⚠ when the repository removed a block you changed: your edit is not dropped without a question",
+      cb.classify(B, None, st(A)) == "⚠")
+check("− when yours is an older base the repository removed", cb.classify(A0, None, st(A2, bases=[A0, A1, A2])) == "−")
 check("~ wins when both texts are known bases: yours is the older one",
       cb.classify(A0, A1, st(A2, bases=[A0, A1, A2])) == "~")
 check("✎ when upstream is back at an older base and you changed it", cb.classify(B, A0, st(A2, bases=[A0, A1, A2])) == "✎")
@@ -937,6 +940,18 @@ with tempfile.TemporaryDirectory() as d:                      # a release that b
           "    Ядро тепер каже: (лише версія v0.2 → v0.3)" in cb.render_plan(p).splitlines(), cb.render_plan(p))
 
 
+DEL_BASE = region("scope", "0.4", "### Scope\n- a\n- b")
+DEL_THEIRS = region("scope", "0.5", "### Scope\n- a")                  # the repository removed "- b" and bumped v=
+DEL_MINE = region("scope", "0.4", "### Scope\n- a\n- b\n- mine")
+dd = cb._differences(DEL_MINE, DEL_THEIRS, DEL_BASE)
+check("a release that removed a line and bumped v= is not 'only the version': the repository's side shows no line, the base the removed one",
+      dd["theirs"] == [] and dd["mine"] == ["- mine"] and dd["base"] == ["- b"], dd)
+dn = cb._differences(DEL_MINE, DEL_THEIRS, None)
+check("…and without the base text neither (each side against the other)", dn["theirs"] == [] and "- mine" in dn["mine"], dn)
+dv = cb._differences(DEL_MINE, DEL_BASE.replace("v=0.4", "v=0.5"), DEL_BASE)
+check("…while the same words with a new v= still say so", dv["theirs"] == ["(лише версія v0.4 → v0.5)"], dv)
+
+
 # ------------------------------------------------------------------ apply: one pass, your edits kept, one question per conflicting block
 OKR = region("okr", "0.1", "### OKR\n- grow")
 TODAY = NOW[:10]
@@ -1149,6 +1164,64 @@ with tempfile.TemporaryDirectory() as d:                      # the write order:
     check("…the next pass finds your record already at the repository's text and only sets the base",
           res["applied"]["scope"] == "=" and base_text(store, "scope") == NEW_SCOPE
           and set(signs_of(plan_of(store, copies, f)).values()) == {"="}, res)
+
+REMOVED_NOTE = "репозиторій прибрав блок, а у вас правки — theirs прибере, mine лишить текст як ваш"
+
+with tempfile.TemporaryDirectory() as d:                      # the repository removed a block you edited
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    edit_record(store, HOST_NOTES, "- Alpha, Beta", "- Alpha, Beta\n- my own note on Gamma")
+    settle(home, text, copies, store)
+    f = published(store)
+    f["blocks"].pop("teams")
+    p = plan_of(store, copies, f)
+    row = row_of(p, "teams")
+    check("plan: the repository removed a block you edited → '⚠', a question, with a note that says what each answer does",
+          row["sign"] == "⚠" and row["note"] == REMOVED_NOTE and p["questions"] == 1 and p["changes"] == 0, row)
+    check("…its three lines: the repository has no such block now, what you wrote, what both said",
+          row["diff"]["theirs"] == ["(репозиторій прибрав цей блок)"] and row["diff"]["mine"] == ["- my own note on Gamma"], row["diff"])
+    before = body_of(store, HOST_NOTES)
+    res = apply_of(home, text, copies, store, f)
+    check("apply: it waits for --choose; your text stays", res["pending"] == ["teams"] and body_of(store, HOST_NOTES) == before, res)
+    everything = files_under(d)
+    try:
+        apply_of(home, text, copies, store, f, choose={"teams": "both"})
+        refused = False
+    except ValueError as e:
+        refused = "both" in str(e)
+    check("both is not an answer for a block the repository removed: ValueError, nothing written", refused and files_under(d) == everything, "")
+    res = apply_of(home, text, copies, store, f, choose={"teams": "mine"})
+    body = body_of(store, HOST_NOTES)
+    check("mine: the markers go, your text stays where it was, as your own text",
+          res["applied"]["teams"] == "⚠" and "zorg-core:begin id=teams" not in body and "zorg-core:end id=teams" not in body
+          and "### Teams map\n- Alpha, Beta\n- my own note on Gamma\n" in body and journal_of(store)[-1]["decisions"]["teams"] == "⚠ mine", body)
+    check("…the state forgets the block, and the next plan has no row for it",
+          "teams" not in cb.load_state(store, "zorg-core")["blocks"] and "teams" not in signs_of(plan_of(store, copies, f)), "")
+
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    edit_record(store, HOST_NOTES, "- Alpha, Beta", "- Alpha, Beta\n- my own note on Gamma")
+    settle(home, text, copies, store)
+    f = published(store)
+    f["blocks"].pop("teams")
+    res = apply_of(home, text, copies, store, f, choose={"teams": "theirs"})
+    check("theirs: the region goes, your edit with it (it stays in the snapshot); the state forgets the block",
+          res["applied"]["teams"] == "⚠" and "Teams map" not in body_of(store, HOST_NOTES) and "teams" not in cb.load_state(store, "zorg-core")["blocks"]
+          and "my own note on Gamma" in open(os.path.join(res["snapshot"], "records", HOST_NOTES + ".md"), encoding="utf-8").read(), res)
+
+with tempfile.TemporaryDirectory() as d:                      # a region with no base that the repository does not offer
+    home, text, copies, store = migrated(d)
+    f = published(store)
+    f["blocks"].pop("teams")
+    p = plan_of(store, copies, f)
+    check("plan: no base and the repository does not offer it → '?', not a silent removal",
+          row_of(p, "teams")["sign"] == "?" and "theirs прибере, mine лишить текст як ваш" in row_of(p, "teams")["note"], row_of(p, "teams"))
+    res = apply_of(home, text, copies, store, f)
+    check("apply: it waits; the region stays", res["pending"] == ["teams"] and "id=teams" in body_of(store, HOST_NOTES), res)
+    res = apply_of(home, text, copies, store, f, choose={"teams": "mine"})
+    check("…mine keeps the text without the markers", "id=teams" not in body_of(store, HOST_NOTES)
+          and "### Teams map\n- Alpha, Beta\n" in body_of(store, HOST_NOTES) and "teams" not in signs_of(plan_of(store, copies, f)), res)
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

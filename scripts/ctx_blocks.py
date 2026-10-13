@@ -172,7 +172,10 @@ def classify(mine, theirs, st):
       "="  both are present and equal once normalised (even with no base)
       "+"  yours is absent and there never was a base: a new block
       "✂"  yours is absent and there is a base: you removed it (flagged or not)
-      "−"  the repository's is absent and yours is there: the repository removed the block
+      the repository's is absent and yours is there — the repository removed the block:
+      "?"    there is no base: nothing says yours is the repository's text
+      "−"    yours is the base (or an older base): you never changed it, remove it
+      "⚠"    yours is no base: you changed it — your edit is not dropped without a question
       "?"  both are present, differ, and there is no base to tell which moved
       "~"  yours is the base (or an older base): the repository moved on, take it
       "✎"  theirs is the base (or an older base): only you changed it, keep it
@@ -188,13 +191,13 @@ def classify(mine, theirs, st):
         return "="
     if nm is None:
         return "+" if st is None else "✂"
-    if nt is None:
-        return "−"
     if st is None:
         return "?"
     known = set(st.get("bases") or ())
     if st.get("base_sha"):
         known.add(st["base_sha"])
+    if nt is None:
+        return "−" if cs.sha_text(nm) in known else "⚠"
     if cs.sha_text(nm) in known:
         return "~"
     if cs.sha_text(nt) in known:
@@ -448,6 +451,9 @@ MARKER_LINE = re.compile(r"^\s*<!--\s*[^\s:>]+:(?:begin|end)(?![A-Za-z0-9_:.])[^
 NOTES = {"=": "без змін", "~": "оновлено з репозиторію", "✎": "лишаються ваші правки", "⚠": "змінили обидва — потрібне рішення",
          "+": "новий блок у репозиторії", "−": "репозиторій прибрав блок", "✂": "ви прибрали блок",
          "?": "бази немає — невідомо, хто змінив"}
+REMOVED_NOTES = {"⚠": "репозиторій прибрав блок, а у вас правки — theirs прибере, mine лишить текст як ваш",
+                 "?": "репозиторій не має цього блоку, а бази немає — theirs прибере, mine лишить текст як ваш"}
+REMOVED_LINE = "(репозиторій прибрав цей блок)"
 QUESTIONS = ("⚠", "+", "?")                     # the signs that need an answer
 REWRITES = ("~", "−")                           # the signs an apply without decisions acts on: it rewrites the record that holds the block
 
@@ -500,22 +506,29 @@ def _version_only(ref, side):
 def _differences(mine, theirs, base):
     """{"theirs", "mine", "base"}: the first DIFF_LINES lines (blank ones skipped, each clipped to LINE_CLIP) of what
     the repository changed, what you changed and what both started from, all against the base text. Without the base
-    text ("base" is None) each side is set against the other. A side whose words did not change and whose version
-    did says only that: "(лише версія v<a> → v<b>)"."""
-    m, t = _body_lines(mine), _body_lines(theirs)
+    text ("base" is None) each side is set against the other. A side whose lines are exactly those it is set against
+    and whose version moved says only that: "(лише версія v<a> → v<b>)" — a side that removed lines says nothing new.
+    `theirs` None is a block the repository removed: its side says so, and what both said is the base's first lines."""
+    m = _body_lines(mine)
+    t = None if theirs is None else _body_lines(theirs)
     if base is None:
-        said_t, said_m, was = _changed(m, t)[0], _changed(t, m)[0], None
-        ref_t, ref_m = mine, theirs
+        said_t = [] if t is None else _changed(m, t)[0]
+        said_m, was = (m if t is None else _changed(t, m)[0]), None
+        ref_t, ref_m, vref_t, vref_m = m, t, mine, theirs
     else:
         b = _body_lines(base)
-        said_t, gone_t = _changed(b, t)
+        said_t, gone_t = _changed(b, t) if t is not None else ([], set(range(len(b))))
         said_m, gone_m = _changed(b, m)
         was = [b[i] for i in sorted(gone_t | gone_m)]
-        ref_t = ref_m = base
+        ref_t, ref_m, vref_t, vref_m = b, b, base, base
 
     def first(lines):
         return [c for c in (clip(l, LINE_CLIP) for l in lines if l.strip()) if c][:DIFF_LINES]
-    return {"theirs": first(said_t) or _version_only(ref_t, theirs), "mine": first(said_m) or _version_only(ref_m, mine),
+    if theirs is None:
+        said = [REMOVED_LINE]
+    else:
+        said = first(said_t) or (_version_only(vref_t, theirs) if t == ref_t else [])
+    return {"theirs": said, "mine": first(said_m) or (_version_only(vref_m, mine) if m == ref_m else []),
             "base": None if was is None else first(was)}
 
 
@@ -592,7 +605,7 @@ def plan(store, copies, repo, fetched, now, all_=False):
             if m is None and t is None:
                 continue
             row["sign"] = classify(m["text"] if m else None, t, _held(entry, m["text"] if m else None))
-            row["note"] = NOTES[row["sign"]]
+            row["note"] = REMOVED_NOTES[row["sign"]] if t is None and row["sign"] in REMOVED_NOTES else NOTES[row["sign"]]
             if row["sign"] == "✂":
                 row["host"] = (entry or {}).get("host")
             elif row["sign"] == "~":
@@ -654,6 +667,7 @@ def render_plan(p):
 CHOICES = ("theirs", "mine", "both")            # the answers to a "⚠" or a "?"
 BOTH_THEIRS, BOTH_MINE = "<!-- ctx:both theirs -->", "<!-- ctx:both mine -->"
 BLOCK_SERVICE = ("checked", "host")             # what a check moves by itself in a block's entry: no snapshot, no journal line
+DETACH = object()                               # an edit that drops a region's markers and keeps its text in place
 
 
 def _spans(body, ns):
@@ -685,6 +699,12 @@ def _inner(text):
     inner = text[head:tail]
     inner = inner[1:] if inner.startswith("\n") else inner
     return text[:head], inner[:-1] if inner.endswith("\n") else inner, text[tail:]
+
+
+def _detach(region):
+    """A region's own text without its two markers — what stays in your record when you keep a block the repository
+    removed ("" when there is none)."""
+    return _inner(region)[1]
 
 
 def _both(theirs, mine):
@@ -747,7 +767,10 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
       ⚠ ? only with an answer in `choose` {block: "theirs" | "mine" | "both"}: theirs — the region becomes the
           repository's; mine — yours stays; both — ONE region with the repository's markers holding its text under
           `<!-- ctx:both theirs -->` and yours under `<!-- ctx:both mine -->`. The base becomes the repository's text
-          in all three, so the next plan sees yours as your edit ("✎") and does not ask again
+          in all three, so the next plan sees yours as your edit ("✎") and does not ask again.
+          A block the repository removed (yours edited, or no base): theirs — the region is removed; mine — its
+          markers are removed and its text stays in place as your own; the state entry goes in both, so it is never
+          asked again; both is no answer (ValueError)
       +   only when the block is in `add`: the repository's region goes at the end of the home record (see
           `_home_record`; inside its `<ns>:section` wrapper when it has one), or into a new custom record
           `## <the registration's title>` at the end of your context
@@ -806,11 +829,15 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
             if entry:
                 entry["checked"] = checked
             continue
-        if (sign in ("~", "+") or (sign in ("⚠", "?") and how in ("theirs", "both"))) and not _sound(t, ns, bid):
+        gone = t is None and sign in ("⚠", "?")        # the repository removed a block you edited (or never had a base for)
+        if gone and how == "both":
+            raise ValueError("both is not possible for a block the repository removed: %s — theirs removes it, mine keeps "
+                             "your text without its markers" % bid)
+        if (sign in ("~", "+") or (sign in ("⚠", "?") and how in ("theirs", "both") and not gone)) and not _sound(t, ns, bid):
             refused.append({"block": bid, "host": row["host"], "why": "the repository's region is not well-formed"})
             continue
-        if sign == "−":
-            edits.setdefault(m["host"], {})[bid] = None
+        if sign == "−" or gone:
+            edits.setdefault(m["host"], {})[bid] = DETACH if gone and how == "mine" else None
             state["blocks"].pop(bid, None)
         elif sign == "✂":
             entry["user_removed"] = entry.get("user_removed") or today
@@ -837,7 +864,8 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
         spans = _spans(body, ns)
         for bid in sorted(ops, key=lambda b: spans[b][0], reverse=True):   # from the end: earlier offsets stay true
             start, end = spans[bid]
-            body = _cut(body, start, end) if ops[bid] is None else body[:start] + ops[bid] + body[end:]
+            new = _detach(body[start:end]) if ops[bid] is DETACH else ops[bid]
+            body = _cut(body, start, end) if not new else body[:start] + new + body[end:]
         bodies[host] = body
     title = clip(repo.get("title") or rid, HEADER_CLIP)
     new_record = None
@@ -884,18 +912,21 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
 def render_apply(res):
     """The text of an apply: the plan's table (a "⚠" with its three versions under it), then what was not needed,
     what waits and how to answer it, what was written — and the last line `Чекають рішення: N · змінено записів: M`.
-    A pass that changed nothing, with nothing waiting, is the header and the one line "без змін"."""
+    A pass that changed nothing, with nothing waiting, is the header and the one line "без змін" — and under it the
+    blocks that could not be checked ("·", such as a team block whose core folder is not here)."""
     p = res["plan"]
     lines = render_plan(p).splitlines()[:-1]            # the plan's last line speaks of what would change
     if not (res["changed"] or res["pending"] or res["errors"] or res["ignored"]):
-        return "\n".join([lines[0], "без змін"])
+        return "\n".join([lines[0], "без змін"] + ["%s  %s  %s" % (SKIPPED, clip(r["block"], HEADER_CLIP), clip(r["note"], NOTE_CLIP))
+                                                  for r in p["rows"] if r["sign"] == SKIPPED])
     for x in res["errors"][len(p["errors"]):]:
         lines.append("помилка: %s — %s" % (clip(x["block"] or "?", HEADER_CLIP), clip(x["why"], HEADER_CLIP)))
     for bid, sign in res["ignored"].items():
         lines.append("не потрібне: --choose/--add %s — знак %s" % (clip(bid, HEADER_CLIP), sign))
     signs = {r["block"]: r["sign"] for r in p["rows"]}
+    gone = {r["block"] for r in p["rows"] if r["source"] is None and r["sign"] in ("⚠", "?")}
     for bid in res["pending"]:
-        how = "--add %s" % bid if signs[bid] == "+" else "--choose %s=theirs|mine|both" % bid
+        how = "--add %s" % bid if signs[bid] == "+" else "--choose %s=theirs|mine%s" % (bid, "" if bid in gone else "|both")
         lines.append("чекає рішення: %s %s — %s" % (signs[bid], clip(bid, HEADER_CLIP), clip(how, NOTE_CLIP)))
     if res["changed"]:
         lines.append("записано: %s · знімок %s (назад: ctx undo)" % (", ".join(res["written"]) or "лише стан блоків", res["snapshot"]))
