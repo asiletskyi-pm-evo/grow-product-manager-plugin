@@ -267,20 +267,22 @@ def _regions(text, namespace):
     return blocks, versions
 
 
-def fetch(repo, client_factory=cm.McpClient, now=None):
+def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
     """A repository's blocks ("theirs") — read only, nothing is written anywhere.
 
     `blocks_source` decides where from: "mcp" asks the server only; "paths" reads the core folder only; "auto"
     asks the server when it answers the handshake and otherwise reads the core folder. A server that answers an
     error, a bad answer or nothing counts as unavailable for this fetch; under "auto" the folder is then tried.
+    `include_skipped` keeps the blocks of `skip_blocks` in `blocks` (the plan's `--all` lists them); by default they
+    are dropped.
 
     The server path of the blocks file is `endpoint.root + blocks_file`; in the core folder it is
     `core_root/blocks_file`. A registration that names no blocks_file (a v1 bundle) gets the one in the core's
     provider manifest. Files are read through ctx_store.read_text (the iCloud time budget).
 
     Returns {source: "mcp"|"folder"|None, version: the v= most blocks carry (the first met on a tie; counted
-    before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks, team: the team
-    region or None, team_source: "folder"|None, team_error: why the team region could not be built, or None,
+    before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks (unless `include_skipped`),
+    team: the team region or None, team_source: "folder"|None, team_error: why the team region could not be built, or None,
     error: why no blocks came, or None, checked: ISO time}.
     The team region is built from the core folder alone (the card, the people, the role model), whichever
     source the blocks came from, and only once the blocks have arrived: when `error` is set, team, team_source
@@ -324,5 +326,5 @@ def fetch(repo, client_factory=cm.McpClient, now=None):
     blocks, versions = _regions(text, repo["namespace"])
     counts = collections.Counter(v for v in versions if v)
     out["version"] = counts.most_common(1)[0][0] if counts else None
-    out["blocks"] = {k: v for k, v in blocks.items() if k not in repo["skip_blocks"]}
+    out["blocks"] = {k: v for k, v in blocks.items() if include_skipped or k not in repo["skip_blocks"]}
     return out

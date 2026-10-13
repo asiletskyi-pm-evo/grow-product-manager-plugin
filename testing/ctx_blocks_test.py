@@ -10,7 +10,7 @@ repository's block state (`.state/blocks/<repo>.json`) and the base texts (`.sta
 load/save, bases kept to ten, pruning, the write allow-list, refused repository ids and the read-only
 `last_checked`. Semantics: references/context-provider-protocol.md. Stdlib only; run from the repo root.
 """
-import json, os, shutil, sys, tempfile
+import json, os, re, shutil, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -675,6 +675,253 @@ with tempfile.TemporaryDirectory() as d:                      # guards
           and len(os.listdir(os.path.join(store.state_dir, "blocks", "zorg-core"))) == 3
           and set(cb.load_state(store, "zorg-core")["blocks"]) == {"scope", "teams", "team"}, res)
 
+
+# ------------------------------------------------------------------ plan: one table per repository, read only
+SKIPPING = crp.normalise({"id": "zorg-core", "kind": "bundle", "paths": ["/zorg/core"], "team": "team-alpha", "skip_blocks": ["product"]})
+HOST_NOTES = "custom.zorg-core-notes"
+CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def plan_of(store, copies, fetched, repo=SKIPPING, all_=False):
+    return cb.plan(store, copies, repo, fetched, NOW, all_=all_)
+
+
+def signs_of(p):
+    return {r["block"]: r["sign"] for r in p["rows"]}
+
+
+def row_of(p, bid):
+    return [r for r in p["rows"] if r["block"] == bid][0]
+
+
+def edit_record(store, rid, old, new):
+    r = [x for x in store.load() if x["id"] == rid][0]
+    assert old in r["body"], old
+    store.write(dict(r, body=r["body"].replace(old, new, 1)))
+
+
+NEW_SCOPE = region("scope", "0.5", "### Scope of work\nThe user works on Zorg App and Zorg Lite.")
+HEAD_OLD = "- **Directory node:** `Dev/Shop/Alpha` — head: Alex One"
+HEAD_NEW = "- **Directory node:** `Dev/Shop/Alpha` — head: Alex Prime"
+
+with tempfile.TemporaryDirectory() as d:                      # nothing moved since the adopt
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    fetched = published(store)
+    everything = files_under(d)
+    p = plan_of(store, copies, fetched)
+    check("plan: the documented keys", set(p) >= {"repo", "source", "version", "base_version", "rows", "questions", "changes", "errors"}
+          and p["repo"] == "zorg-core" and p["source"] == "folder" and p["version"] == "0.4", sorted(p))
+    check("…nothing moved: every block is '=', a skipped block is not shown",
+          signs_of(p) == {"scope": "=", "teams": "=", "team": "="} and p["questions"] == 0 and p["changes"] == 0 and p["errors"] == [], p["rows"])
+    check("…a row carries the block, the sign, the record that holds it, where the repository's text came from, a note",
+          all(set(r) >= {"block", "sign", "host", "source", "note"} for r in p["rows"])
+          and {r["block"]: r["host"] for r in p["rows"]} == {"scope": HOST_NOTES, "teams": HOST_NOTES, "team": "team.alpha-a"}
+          and all(r["source"] == "folder" for r in p["rows"]), p["rows"])
+    check("…the base version is the one most blocks were adopted at", p["base_version"] == "0.4", p["base_version"])
+    out = cb.render_plan(p)
+    lines = out.splitlines()
+    check("render: the header names the repository, the source, the repository's version and ours",
+          lines[0] == "zorg-core · джерело: тека · ядро v0.4 · база v0.4", lines[0])
+    check("render: the last line counts the questions and the records that would change",
+          lines[-1] == "Питань: 0 · зміниться записів: 0", lines[-1])
+    check("render: one line per block with its sign, block and record",
+          any(l.startswith("=") and "scope" in l and HOST_NOTES in l for l in lines)
+          and not any("product" in l for l in lines), out)
+    check("plan writes nothing: no state, no snapshot, no journal line", files_under(d) == everything, [k for k in files_under(d) if k not in everything])
+    pa = plan_of(store, copies, fetched, all_=True)
+    check("all_: a skipped block of the repository is listed, as '·' skipped, with no decision",
+          signs_of(pa) == {"scope": "=", "teams": "=", "team": "=", "product": "·"} and pa["questions"] == 0 and pa["changes"] == 0
+          and row_of(pa, "product")["note"] == "пропущено", pa["rows"])
+    check("without all_ the skipped block is dropped even from a fetch that carried it", "product" in fetched["blocks"] and "product" not in signs_of(p), "")
+    host = [r for r in store.load() if r["id"] == HOST_NOTES][0]
+    store.write(dict(host, body=host["body"] + "\n" + region("product", "0.4", "### Product: mine\n- my words") + "\n"))
+    check("…and the user's own region of a skipped block never shows either", "product" not in signs_of(plan_of(store, copies, fetched)), "")
+    check("…unless all_ — then it is '·' too, and its host is shown",
+          (row_of(plan_of(store, copies, fetched, all_=True), "product")["sign"], row_of(plan_of(store, copies, fetched, all_=True), "product")["host"])
+          == ("·", HOST_NOTES), "")
+
+with tempfile.TemporaryDirectory() as d:                      # the signs
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f_moved = published(store)
+    f_moved["blocks"]["scope"] = NEW_SCOPE
+    p = plan_of(store, copies, f_moved)
+    row = row_of(p, "scope")
+    check("the repository moved on, you did not → '~' (no question; one record would be rewritten)",
+          row["sign"] == "~" and p["questions"] == 0 and p["changes"] == 1 and row["host"] == HOST_NOTES
+          and "0.4" in row["note"] and "0.5" in row["note"], (row, p["changes"]))
+    edit_record(store, HOST_NOTES, "- Alpha, Beta", "- Alpha, Beta, Gamma")
+    p = plan_of(store, copies, f_moved)
+    check("you edited another block of the same record → '✎'; two blocks in one record rewrite it once",
+          signs_of(p) == {"scope": "~", "teams": "✎", "team": "="} and p["changes"] == 1 and p["questions"] == 0, (signs_of(p), p["changes"]))
+    f_two = published(store, team=published(store)["team"].replace(HEAD_OLD, HEAD_NEW))
+    f_two["blocks"]["scope"] = NEW_SCOPE
+    p = plan_of(store, copies, f_two)
+    check("…a block in another record that moved is another record: two",
+          signs_of(p) == {"scope": "~", "teams": "✎", "team": "~"} and p["changes"] == 2, (signs_of(p), p["changes"]))
+    f_new = published(store)
+    f_new["blocks"]["okr"] = region("okr", "0.1", "### OKR\n- grow")
+    p = plan_of(store, copies, f_new)
+    check("a block the repository offers and you lack → '+' (a question; it rewrites no record, and has no host)",
+          signs_of(p)["okr"] == "+" and p["questions"] == 1 and p["changes"] == 0 and row_of(p, "okr")["host"] is None, p["rows"])
+    f_gone = published(store)
+    f_gone["blocks"].pop("scope")
+    p = plan_of(store, copies, f_gone)
+    check("a block the repository no longer has → '−' (one record would be rewritten)",
+          signs_of(p)["scope"] == "−" and p["changes"] == 1 and p["questions"] == 0 and row_of(p, "scope")["source"] is None,
+          (signs_of(p), p["changes"]))
+
+with tempfile.TemporaryDirectory() as d:                      # you removed it
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    host = [r for r in store.load() if r["id"] == HOST_NOTES][0]
+    store.write(dict(host, body=host["body"].replace(cb.find_regions([host], "zorg-core")[0]["teams"]["text"], "")))
+    p = plan_of(store, copies, published(store))
+    check("you removed a block that has a base → '✂' (no question; no record changes)",
+          signs_of(p) == {"scope": "=", "teams": "✂", "team": "="} and p["questions"] == 0 and p["changes"] == 0, (signs_of(p), p["questions"]))
+    check("…the record it was in is shown", row_of(p, "teams")["host"] == HOST_NOTES, p["rows"])
+    p = plan_of(store, copies, dict(published(store), blocks={}))
+    check("…a block that is gone from both sides is no row at all", "teams" not in signs_of(p), signs_of(p))
+
+with tempfile.TemporaryDirectory() as d:                      # no state: nothing says who moved
+    home, text, copies, store = migrated(d, patch=[EDIT_SCOPE])
+    p = plan_of(store, copies, published(store))
+    check("your text differs and there is no base → '?' (a question); equal texts are '=' with no base",
+          signs_of(p) == {"scope": "?", "teams": "=", "team": "="} and p["questions"] == 1 and p["changes"] == 0, signs_of(p))
+    check("…base_version of a repository with no base is '—', in the data and in the header",
+          p["base_version"] == "—" and cb.render_plan(p).splitlines()[0].endswith("база v—"), (p["base_version"], cb.render_plan(p).splitlines()[0]))
+
+with tempfile.TemporaryDirectory() as d:                      # both changed the team block
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    team0 = published(store)["team"]
+    edit_record(store, "team.alpha-a", "- **jira_team_field:** Alpha", "- **jira_team_field:** Alpha (mine)")
+    f_both = published(store, team=team0.replace(HEAD_OLD, HEAD_NEW))
+    p = plan_of(store, copies, f_both)
+    row = row_of(p, "team")
+    check("both sides changed → '⚠', a question", row["sign"] == "⚠" and p["questions"] == 1 and p["changes"] == 0, (row, p["questions"]))
+    check("…the row carries the lines each side changed against the base",
+          any("Alex Prime" in x for x in row["diff"]["theirs"]) and not any("Alex One" in x for x in row["diff"]["theirs"])
+          and any("Alpha (mine)" in x for x in row["diff"]["mine"]) and not any("Alex Prime" in x for x in row["diff"]["mine"])
+          and any("Alex One" in x for x in row["diff"]["base"]), row.get("diff"))
+    check("…at most three lines per side, and the markers are not among them",
+          all(len(row["diff"][k]) <= 3 for k in ("theirs", "mine", "base"))
+          and not any("zorg-core:" in x for k in ("theirs", "mine", "base") for x in row["diff"][k]), row["diff"])
+    out = cb.render_plan(p)
+    check("render: the three versions are under the row, as the brief words them",
+          "    Ядро тепер каже: " in out and "    Ви писали: " in out and "    Раніше обидва казали: " in out
+          and out.index("Ядро тепер каже") < out.index("Ви писали") < out.index("Раніше обидва казали"), out)
+    check("…each says what changed: the repository's head, your field, the old head",
+          "Alex Prime" in out.split("Ядро тепер каже:")[1].split("Ви писали:")[0]
+          and "Alpha (mine)" in out.split("Ви писали:")[1].split("Раніше обидва казали:")[0]
+          and "Alex One" in out.split("Раніше обидва казали:")[1], out)
+    base_sha = cb.load_state(store, "zorg-core")["blocks"]["team"]["base_sha"]
+    os.remove(os.path.join(store.state_dir, "blocks", "zorg-core", base_sha + ".md"))
+    p = plan_of(store, copies, f_both)
+    out = cb.render_plan(p)
+    check("the base text is missing → no 'Раніше обидва казали' line; the other two stay, each side against the other",
+          row_of(p, "team")["sign"] == "⚠" and row_of(p, "team")["diff"]["base"] is None and "Раніше обидва" not in out
+          and "Ядро тепер каже: " in out and "Ви писали: " in out and "Alex Prime" in out and "Alpha (mine)" in out, out)
+    f_long = published(store, team=team0.replace(HEAD_OLD, "- **Directory node:** " + "x" * 300))
+    out = cb.render_plan(plan_of(store, copies, f_long))
+    said = [l for l in out.splitlines() if "Ядро тепер каже:" in l][0].split("Ядро тепер каже: ", 1)[1]
+    check("a line of the diff is clipped to 120 characters", 100 < len(said) <= 120, len(said))
+
+with tempfile.TemporaryDirectory() as d:                      # edits that are not imported yet are part of "mine"
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    for path in copies:
+        t = open(path, encoding="utf-8", newline="").read()
+        assert EDIT_SCOPE[0] in t
+        open(path, "w", encoding="utf-8", newline="").write(t.replace(EDIT_SCOPE[0], EDIT_SCOPE[1], 1))
+    records_before = files_under(store.records_dir)
+    p = plan_of(store, copies, published(store))
+    check("a change typed into local-context.md and not imported yet is seen: '✎'", signs_of(p)["scope"] == "✎", signs_of(p))
+    check("…and the plan imported nothing", files_under(store.records_dir) == records_before, "")
+
+with tempfile.TemporaryDirectory() as d:                      # the team block cannot be built; broken regions
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    p = plan_of(store, copies, published(store, team=None, team_error="team block: the team card is not there"))
+    row = row_of(p, "team")
+    check("the team block cannot be built → '·' unavailable with the reason, and no decision",
+          row["sign"] == "·" and row["note"] == "недоступний: team block: the team card is not there"
+          and p["questions"] == 0 and p["changes"] == 0 and signs_of(p)["scope"] == "=", row)
+    f_blocks_team = published(store, team=None, team_error="team block: x")
+    f_blocks_team["blocks"]["team"] = published(store)["team"]
+    check("…a team region the blocks file itself carries does not undo that", signs_of(plan_of(store, copies, f_blocks_team))["team"] == "·", "")
+    p = plan_of(store, copies, published(store, team=None, team_error="team block: x"), repo=crp.normalise(
+        {"id": "zorg-core", "kind": "bundle", "paths": ["/zorg/core"], "skip_blocks": ["team"]}))
+    check("…and when the repository skips the team block, it is not shown", "team" not in signs_of(p), signs_of(p))
+    p = plan_of(store, copies, published(store, team=None))
+    check("the repository offers no team and you hold the block → '−'", signs_of(p)["team"] == "−" and p["changes"] == 1, signs_of(p))
+    host = [r for r in store.load() if r["id"] == HOST_NOTES][0]
+    store.write(dict(host, body=host["body"] + "\n" + region("scope", "0.4", "### Again") + "\n"))
+    p = plan_of(store, copies, published(store))
+    out = cb.render_plan(p)
+    check("a repeated region is an error, no row: listed in errors and shown as a line",
+          "scope" not in signs_of(p) and {(x["block"], x["why"]) for x in p["errors"]} == {("scope", "duplicate")}
+          and "помилка: scope — duplicate" in out.splitlines(), (p["errors"], out))
+    check("…the other blocks go on, and the summary is still the last line",
+          signs_of(p) == {"teams": "=", "team": "="} and out.splitlines()[-1].startswith("Питань: "), out)
+    skip_scope = crp.normalise({"id": "zorg-core", "kind": "bundle", "paths": ["/zorg/core"], "skip_blocks": ["scope"]})
+    check("an error on a skipped block is not shown either", plan_of(store, copies, published(store), repo=skip_scope)["errors"] == [], "")
+    p = plan_of(store, copies, published(store), repo=skip_scope, all_=True)
+    check("…unless all_ — an error line, still no row", [x["block"] for x in p["errors"]] == ["scope"] and "scope" not in signs_of(p),
+          (p["errors"], signs_of(p)))
+
+with tempfile.TemporaryDirectory() as d:                      # what a server controls is cleaned: control characters out, length bounded
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f = published(store, version="0.4\x1b[31m" + "9" * 200)
+    f["blocks"]["scope"] = region("scope", "0.5\x07\x1b[2J", "### Scope of work\nMoved on.\x1b[31m red")
+    p = plan_of(store, copies, f)
+    out = cb.render_plan(p)
+    header = out.splitlines()[0]
+    check("a version from the server: no control character reaches the header, and it is clipped to 80",
+          not CONTROL.search(out.replace("\n", "")) and len(header.split("ядро v")[1].split(" · база")[0]) <= 80, repr(header))
+    check("…nor the note of a row", signs_of(p)["scope"] == "~" and not CONTROL.search(row_of(p, "scope")["note"])
+          and len(row_of(p, "scope")["note"]) <= 300, row_of(p, "scope"))
+    edit_record(store, HOST_NOTES, "The user works on Zorg App only.", "The user works on Zorg App only. (mine)")
+    p = plan_of(store, copies, f)
+    out = cb.render_plan(p)
+    check("…nor the lines of the diff (data and text)", row_of(p, "scope")["sign"] == "⚠" and not CONTROL.search(out.replace("\n", ""))
+          and not CONTROL.search("".join(x for k in ("theirs", "mine", "base") for x in row_of(p, "scope")["diff"][k])), repr(out))
+    f = published(store, team=None, team_error="team block: bad\x1b[31m\n" + "z" * 400)
+    note = row_of(plan_of(store, copies, f), "team")["note"]
+    check("a long reason from the server is bounded to 300 and has no control character",
+          len(note) <= 300 and not CONTROL.search(note) and note.startswith("недоступний: team block: bad"), repr(note))
+
+# ------------------------------------------------------------------ base_version
+def entry(v, base="x"):
+    return {"base_sha": base, "bases": [base] if base else [], "v": v}
+
+
+check("base_version: the version most blocks have a base at; a tie goes to the first block by id",
+      cb.base_version({"blocks": {"a": entry("0.3"), "b": entry("0.4"), "c": entry("0.4")}}) == "0.4"
+      and cb.base_version({"blocks": {"a": entry("0.3"), "b": entry("0.4")}}) == "0.3", "")
+check("base_version: a block with no base, or with no version, does not count; none at all is None",
+      cb.base_version({"blocks": {"a": entry("0.9", base=None), "b": entry("")}}) is None
+      and cb.base_version({"blocks": {}}) is None and cb.base_version({}) is None, "")
+check("base_version: the state's own `version` is not consulted (adopt leaves it unset)",
+      cb.base_version({"version": "9.9", "blocks": {"a": entry("0.2")}}) == "0.2", "")
+
+with tempfile.TemporaryDirectory() as d:                      # a removal mark with no base; a block in the state that is gone from both sides
+    home, text, copies, store = migrated(d)
+    cb.save_state(store, "zorg-core", {"checked": CHECKED, "source": "folder", "version": None, "blocks": {
+        "teams": {"base_sha": None, "bases": [], "v": "", "host": None, "checked": None, "user_removed": "2026-10-02"},
+        "ghost": {"base_sha": sha_of("x"), "bases": [sha_of("x")], "v": "0.1", "host": HOST_NOTES, "checked": CHECKED, "user_removed": None}}})
+    host = [r for r in store.load() if r["id"] == HOST_NOTES][0]
+    teams_text = cb.find_regions([host], "zorg-core")[0]["teams"]["text"]
+    store.write(dict(host, body=host["body"].replace(teams_text, "")))
+    p = plan_of(store, copies, published(store))
+    check("a removal mark with no base and no region → '✂'; a state entry nobody has any more is no row",
+          signs_of(p)["teams"] == "✂" and "ghost" not in signs_of(p) and p["base_version"] == "0.1", (signs_of(p), p["base_version"]))
+    host = [r for r in store.load() if r["id"] == HOST_NOTES][0]
+    store.write(dict(host, body=host["body"] + "\n" + teams_text.replace("Alpha, Beta", "Alpha, Beta (mine)") + "\n"))
+    check("the region put back, different from the repository's, a mark and no base → '?'",
+          signs_of(plan_of(store, copies, published(store)))["teams"] == "?", signs_of(plan_of(store, copies, published(store))))
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

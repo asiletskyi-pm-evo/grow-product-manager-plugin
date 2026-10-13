@@ -371,6 +371,11 @@ with tempfile.TemporaryDirectory() as d:
     f_skip = cr.fetch(core_repo(skip_blocks=["product"]))
     check("skip_blocks are dropped", set(f_skip["blocks"]) == {"scope", "teams"} and f_skip["error"] is None, f_skip["blocks"])
     check("…and the version still tells the source's", f_skip["version"] == "0.4", f_skip["version"])
+    f_all = cr.fetch(core_repo(skip_blocks=["product"]), include_skipped=True)
+    check("include_skipped=True keeps them (for `plan --all`): the same fetch, with the skipped block back",
+          set(f_all["blocks"]) == {"scope", "product", "teams"} and f_all["blocks"] == f["blocks"] and f_all["version"] == "0.4"
+          and f_all["team"] == f["team"], f_all["blocks"])
+    check("…and the default is unchanged: skipped blocks stay out", set(cr.fetch(core_repo(skip_blocks=["product"]), include_skipped=False)["blocks"]) == {"scope", "teams"}, "")
 
     # --- the team block: from the folder only
     check("team block from the folder: the core's team region, generated from the card and the people",

@@ -37,6 +37,12 @@ And the first use of it, for a context that already holds a repository's blocks:
                             the repository does not offer it: no base, the plan shows "?"). Only the state and the
                             base texts are written (after a snapshot); the records and the compiled copies never.
 
+And the second, which only reads:
+
+- plan                      one table per repository: the sign of every block (spec B5/B6), the records an apply
+                            without decisions would rewrite, the questions it would ask. Nothing is written, no
+                            lock is taken. `render_plan` is its text; `base_version` the version it speaks of.
+
 Every write goes through ctx_store.atomic_write / check_target (the write allow-list). A repository id is
 kebab-case and nothing else, so it can never name a path outside `.state/blocks/`.
 
@@ -44,13 +50,17 @@ kebab-case and nothing else, so it can never name a path outside `.state/blocks/
 what a repository publishes (it keeps the first of a repeated id and skips what is never closed); the two differ
 on purpose and share only the marker grammar. Stdlib only.
 """
+import collections
+import difflib
 import json
 import os
 import re
 import sys
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_ops as co  # noqa: E402
+import ctx_read as cr  # noqa: E402
 import ctx_store as cs  # noqa: E402
 
 ID = r"[A-Za-z0-9_.-]+"
@@ -420,3 +430,194 @@ def adopt(store, copies, home, repo, fetched, now, apply):
     store.journal({"ts": now, "op": "provider-adopt", "source": "repo:" + rid, "ids": list(entries), "snapshot": snap})
     res.update(written=True, snapshot=snap)
     return res
+
+
+# ------------------------------------------------------------------ plan
+SKIPPED = "·"                                   # not a decision: a block the registration skips, or a team block that cannot be built
+HEADER_CLIP, NOTE_CLIP, LINE_CLIP, DIFF_LINES = 80, 300, 120, 3
+CONTROLS = re.compile(r"[\x00-\x1f\x7f-\x9f  ]+")
+MARKER_LINE = re.compile(r"^\s*<!--\s*[^\s:>]+:(?:begin|end)(?![A-Za-z0-9_:.])[^>]*-->\s*$")
+NOTES = {"=": "без змін", "~": "оновлено з репозиторію", "✎": "лишаються ваші правки", "⚠": "змінили обидва — потрібне рішення",
+         "+": "новий блок у репозиторії", "−": "репозиторій прибрав блок", "✂": "ви прибрали блок",
+         "?": "бази немає — невідомо, хто змінив"}
+QUESTIONS = ("⚠", "+", "?")                     # the signs that need an answer
+REWRITES = ("~", "−")                           # the signs an apply without decisions acts on: it rewrites the record that holds the block
+
+
+def clip(text, limit):
+    """`text` as one line that is safe to print: every run of control characters becomes one space, the ends are
+    trimmed, and at most `limit` characters stay (the last is "…" when it was cut). Whatever a server sent goes
+    through here before it is printed."""
+    one = CONTROLS.sub(" ", "" if text is None else str(text)).strip()
+    return one if len(one) <= limit else one[:limit - 1].rstrip() + "…"
+
+
+def base_version(state):
+    """The version most blocks of a repository have a base at: the `v` of the state's entries that hold a base,
+    the first block by id on a tie; None when no block has a base or none of them knows its version. The state's own
+    `version` is not consulted (adopt leaves it unset)."""
+    blocks = (state or {}).get("blocks") or {}
+    count = collections.Counter(blocks[b]["v"] for b in sorted(blocks)
+                                if (blocks[b].get("base_sha") or blocks[b].get("bases")) and blocks[b].get("v"))
+    return count.most_common(1)[0][0] if count else None
+
+
+def _body_lines(text):
+    """The normalised lines of a region, without its two marker lines: the version is in the marker, and what the plan
+    shows are the words."""
+    return [line for line in norm(text).split("\n") if not MARKER_LINE.match(line)]
+
+
+def _changed(base, side):
+    """(the lines of `side` that are new or changed against `base`, the indexes of the `base` lines that were removed
+    or changed)."""
+    added, gone = [], set()
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, base, side, autojunk=False).get_opcodes():
+        if tag in ("replace", "insert"):
+            added.extend(side[j1:j2])
+        if tag in ("replace", "delete"):
+            gone.update(range(i1, i2))
+    return added, gone
+
+
+def _differences(mine, theirs, base):
+    """{"theirs", "mine", "base"}: the first DIFF_LINES lines (blank ones skipped, each clipped to LINE_CLIP) of what
+    the repository changed, what you changed and what both started from, all against the base text. Without the base
+    text ("base" is None) each side is set against the other."""
+    m, t = _body_lines(mine), _body_lines(theirs)
+    if base is None:
+        said_t, said_m, was = _changed(m, t)[0], _changed(t, m)[0], None
+    else:
+        b = _body_lines(base)
+        said_t, gone_t = _changed(b, t)
+        said_m, gone_m = _changed(b, m)
+        was = [b[i] for i in sorted(gone_t | gone_m)]
+
+    def first(lines):
+        return [c for c in (clip(l, LINE_CLIP) for l in lines if l.strip()) if c][:DIFF_LINES]
+    return {"theirs": first(said_t), "mine": first(said_m), "base": None if was is None else first(was)}
+
+
+def _source_label(repo, source):
+    """"MCP (<host of the endpoint>)" or "тека" (the core folder)."""
+    if source == "mcp":
+        try:
+            host = urllib.parse.urlsplit(repo["endpoint"]["url"]).hostname
+        except ValueError:
+            host = None
+        return "MCP (%s)" % clip(host, HEADER_CLIP) if host else "MCP"
+    return "тека" if source == "folder" else "—"
+
+
+def _held(entry, mine):
+    """What `classify` gets for a block: the state's entry when it holds a base — or a removal mark and no region of
+    yours — else None (no base: the region you hold now is not one, and a mark with nothing to put back is a removal)."""
+    if entry and (entry.get("base_sha") or entry.get("bases")):
+        return entry
+    return entry if entry and mine is None and entry.get("user_removed") else None
+
+
+def plan(store, copies, repo, fetched, now, all_=False):
+    """The plan of one repository: what each of its blocks is in your context against what the repository publishes
+    now (`fetched`, from `ctx_repos.fetch` with no `error`; with `all_` it should have been fetched with
+    `include_skipped`). Reads only — no lock, nothing written.
+
+    Returns {"repo", "source" ("mcp" | "folder"), "source_label", "version" (the repository's), "base_version" ("—" when no
+    block has a base), "rows": [{"block", "sign", "host", "source", "note"}], "questions", "changes", "errors"}.
+
+    The rows are the blocks in your records (the pending edits of local-context.md count: the live view) followed by
+    those only the repository offers; a block absent on both sides is none. `host` is the record that holds your
+    region (for "✂", the one that held it); `source` where the repository's text came from (None when it has none).
+    A "⚠" row also carries `diff`, the lines each side changed against the base (see `_differences`). The signs are
+    `classify`'s, and "·" for a block of `skip_blocks` (listed only with `all_`; yours never appears without it) and
+    for the team block when it could not be built (its reason is the note) — neither is a question or a change.
+    `questions` counts the rows "⚠", "+" and "?"; `changes` the records an apply without decisions would rewrite: the
+    distinct hosts of the rows "~" and "−". `errors` are `find_regions`' problems (a block with one has no row).
+    Every text a server controls is cleaned of control characters and bounded (HEADER_CLIP, NOTE_CLIP, LINE_CLIP).
+    """
+    if fetched.get("error"):
+        raise ValueError("plan needs a repository that was fetched, not one that failed: %s" % fetched["error"])
+    rid, skip = repo["id"], set(repo.get("skip_blocks") or ())
+    records, _, _ = cr._live_view(store, copies, now)
+    mine, problems = find_regions(records, repo["namespace"])
+    theirs, where = dict(fetched.get("blocks") or {}), {}
+    for bid in theirs:
+        where[bid] = fetched.get("source")
+    if fetched.get("team") is not None:
+        theirs["team"], where["team"] = fetched["team"], fetched.get("team_source") or fetched.get("source")
+    team_error = fetched.get("team_error")
+    state = load_state(store, rid)
+    bad = {x["block"] for x in problems if x["block"]}
+    ids = [b for b in list(mine) + [b for b in theirs if b not in mine] if b not in bad]
+    if team_error and "team" not in ids and "team" not in bad:
+        ids.append("team")
+    rows = []
+    for bid in ids:
+        m, t, entry = mine.get(bid), theirs.get(bid), state["blocks"].get(bid)
+        row = {"block": bid, "sign": SKIPPED, "host": m["host"] if m else None, "source": where.get(bid), "note": ""}
+        if bid in skip:
+            if not all_:
+                continue
+            row["note"] = "пропущено"
+        elif bid == "team" and team_error:
+            row["note"] = clip("недоступний: " + team_error, NOTE_CLIP)
+        else:
+            if m is None and t is None:
+                continue
+            row["sign"] = classify(m["text"] if m else None, t, _held(entry, m["text"] if m else None))
+            row["note"] = NOTES[row["sign"]]
+            if row["sign"] == "✂":
+                row["host"] = (entry or {}).get("host")
+            elif row["sign"] == "~":
+                vm, vt = _marker_version(m["text"]), _marker_version(t)
+                if vm and vt and vm != vt:
+                    row["note"] = clip("%s (v%s → v%s)" % (row["note"], clip(vm, HEADER_CLIP), clip(vt, HEADER_CLIP)), NOTE_CLIP)
+            elif row["sign"] == "⚠":
+                try:
+                    base = get_base(store, rid, entry.get("base_sha")) if entry else None
+                except cs.StoreError:
+                    base = None
+                row["diff"] = _differences(m["text"], t, base)
+        rows.append(row)
+    version = fetched.get("version")
+    return {"repo": rid, "source": fetched.get("source"), "source_label": _source_label(repo, fetched.get("source")),
+            "version": clip(version, HEADER_CLIP) if version else None,
+            "base_version": clip(base_version(state) or "—", HEADER_CLIP), "rows": rows,
+            "questions": sum(1 for r in rows if r["sign"] in QUESTIONS),
+            "changes": len({r["host"] for r in rows if r["sign"] in REWRITES and r["host"]}),
+            "errors": [dict(x) for x in problems if all_ or x["block"] not in skip]}
+
+
+def _detail_lines(diff):
+    """The three lines under a "⚠" row: what the repository says now, what you wrote, what both said before (this
+    one only when the base text is there). A side with several changed lines continues on aligned lines."""
+    out = []
+    for label, key in (("Ядро тепер каже", "theirs"), ("Ви писали", "mine"), ("Раніше обидва казали", "base")):
+        lines = diff.get(key)
+        if lines is None:
+            continue
+        head = "    %s: " % label
+        out.append(head + (lines[0] if lines else "—"))
+        out.extend(" " * len(head) + line for line in lines[1:])
+    return out
+
+
+def render_plan(p):
+    """The text of a plan: the header, one line per block (a "⚠" with its three versions under it), the errors, and
+    the last line `Питань: N · зміниться записів: M`."""
+    lines = ["%s · джерело: %s · ядро v%s · база v%s" % (clip(p["repo"], HEADER_CLIP), p["source_label"], p["version"] or "—",
+                                                        p["base_version"])]
+    rows = p["rows"]
+    w_block = max([len(clip(r["block"], HEADER_CLIP)) for r in rows] or [0])
+    w_host = max([len(clip(r["host"] or "—", HEADER_CLIP)) for r in rows] or [0])
+    for r in rows:
+        lines.append(("%s  %s  %s  %s" % (r["sign"], clip(r["block"], HEADER_CLIP).ljust(w_block),
+                                           clip(r["host"] or "—", HEADER_CLIP).ljust(w_host), clip(r["note"], NOTE_CLIP))).rstrip())
+        if r.get("diff"):
+            lines.extend(_detail_lines(r["diff"]))
+    if not rows:
+        lines.append("блоків цього репозиторію немає")
+    for x in p["errors"]:
+        lines.append("помилка: %s — %s" % (clip(x["block"] or "?", HEADER_CLIP), clip(x["why"], HEADER_CLIP)))
+    lines.append("Питань: %d · зміниться записів: %d" % (p["questions"], p["changes"]))
+    return "\n".join(lines)

@@ -586,9 +586,10 @@ def tree_of(*roots):
     return out
 
 
-def repos_env(d, url, patch=()):
+def repos_env(d, url, patch=(), core_extra=""):
     """The fixture context with zorg-core (a folder: a run-time copy of the core fixture) and zorg-growth (an MCP
-    server at `url`) registered, and zorg-dead (a server nobody answers). `patch` is [(old, new)] applied to both copies."""
+    server at `url`) registered, and zorg-dead (a server nobody answers). `patch` is [(old, new)] applied to both copies;
+    `core_extra` is more lines for zorg-core's registration."""
     e = Env(d, fixture="context", fix=REPOS_FIX)
     for old_, new_ in patch:
         edit_both(e, old_, new_)
@@ -598,7 +599,7 @@ def repos_env(d, url, patch=()):
     os.makedirs(prov)
     open(os.path.join(prov, "zorg-core.yaml"), "w", encoding="utf-8").write(
         "schema: provider-registration/1\nid: zorg-core\nkind: bundle\nauthority: org\npaths:\n  - %s\nteam: team-alpha\n"
-        "role: pm\njira_write: own\n" % core)
+        "role: pm\njira_write: own\n%s" % (core, core_extra))
     reg = ("schema: provider-registration/2\nid: %s\nkind: mcp\nauthority: team\nendpoint:\n  url: %s\n  root: \"ZorgGrowth/\"\n"
            "blocks_file: %s\nblocks_source: mcp\nteam: team-alpha\n")
     open(os.path.join(prov, "zorg-growth.yaml"), "w", encoding="utf-8").write(reg % ("zorg-growth", url, GROWTH_FILE))
@@ -700,6 +701,129 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
               and "(my note)" in e.record("custom.zorg-core-notes"), st)
         check("…the block with no base is named, with the two versions", "teams" in out and "0.3" in out and "0.4" in out, out[-500:])
         check("the team block is a base", res["blocks"]["team"] == "base" and "team" in st["blocks"], res)
+
+
+# --- v3.13.0: ctx provider plan — one table per repository, read only
+CORE_BLOCKS = os.path.join("Core", "_System", "context-blocks.md")
+CORE_CARD = os.path.join("Core", "Teams", "team-alpha.md")
+SKIP_PRODUCT = "skip_blocks:\n  - product\n"
+
+
+def signs_in(res):
+    return {r["block"]: r["sign"] for r in res["rows"]}
+
+
+untouched = []
+
+
+def plan_run(e, core, *args):
+    """A plan run, with the proof that it wrote nothing: the home, the vault and the core are the same bytes after it."""
+    before = tree_of(e.home, e.vault, core)
+    rc, out, res = run_ok(e, "provider", "plan", *args)
+    untouched.append(tree_of(e.home, e.vault, core) == before)
+    return rc, out, res
+
+
+def change(path, old, new):
+    t = read(path)
+    assert old in t, old
+    open(path, "w", encoding="utf-8", newline="").write(t.replace(old, new, 1))
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        blocks_file, card = os.path.join(core, CORE_BLOCKS), os.path.join(core, CORE_CARD)
+        pristine_blocks, pristine_card = read(blocks_file), read(card)
+        rc, out, res = plan_run(e, core, "zorg-core")
+        check("plan without a store: exit 3, nothing created", rc == 3 and "no store" in out and not os.path.exists(e.store), (rc, out[-300:]))
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = plan_run(e, core, "no-such-repo")
+        check("plan of an unknown repository: exit 3", rc == 3 and "no-such-repo" in out, (rc, out[-300:]))
+        rc, out, res = run_ok(e, "provider", "plan", "zorg-core", "--product")
+        check("a flag without its value is a usage error", rc == 3, (rc, out[-200:]))
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+
+        rc, out, res = plan_run(e, core, "zorg-core")
+        check("nothing moved: exit 0, every block '=', a skipped block is not shown",
+              rc == 0 and set(signs_in(res).values()) == {"="} and set(signs_in(res)) == {"scope", "teams", "team"}
+              and "Питань: 0 · зміниться записів: 0" in out, (rc, out[-500:]))
+        check("…the header and the last line are the table's own",
+              out.splitlines()[0] == "zorg-core · джерело: тека · ядро v0.4 · база v0.4"
+              and out.splitlines()[-2] == "Питань: 0 · зміниться записів: 0", out)
+        check("…the data: the documented keys and rows",
+              res["repo"] == "zorg-core" and res["questions"] == 0 and res["changes"] == 0 and res["errors"] == []
+              and res["rows"][0].keys() >= {"block", "sign", "host", "source", "note"} and res["base_version"] == "0.4", res)
+        rc, out, res = plan_run(e, core, "zorg-core", "--all")
+        check("--all shows the skipped block: '·'", signs_in(res).get("product") == "·" and "пропущено" in out and res["questions"] == 0, (rc, out[-400:]))
+        rc, out, res = plan_run(e, core, "zorg-core", "--json", "--store", e.store)
+        check("--json and --store are accepted: a read command", rc == 0 and res["rows"], (rc, out[-300:]))
+
+        change(blocks_file, "<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope of work\nThe user works on Zorg App only.",
+               "<!-- zorg-core:begin id=scope v=0.5 -->\n### Scope of work\nThe user works on Zorg App and Zorg Lite.")
+        rc, out, res = plan_run(e, core, "zorg-core")
+        check("the core changed a block you did not touch → '~', one record would change",
+              rc == 0 and signs_in(res)["scope"] == "~" and "Питань: 0 · зміниться записів: 1" in out
+              and res["version"] in ("0.4", "0.5"), (rc, out[-500:]))
+        open(blocks_file, "w", encoding="utf-8", newline="").write(pristine_blocks.replace(
+            "<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope of work\nThe user works on Zorg App only.\n<!-- zorg-core:end id=scope -->\n\n", ""))
+        rc, out, res = plan_run(e, core, "zorg-core")
+        check("the core no longer has a block you hold → '−'", signs_in(res)["scope"] == "−" and "зміниться записів: 1" in out, (rc, out[-500:]))
+        open(blocks_file, "w", encoding="utf-8", newline="").write(pristine_blocks.rstrip("\n") + "\n\n"
+              "<!-- zorg-core:begin id=okr v=0.1 -->\n### OKR\n- grow\n<!-- zorg-core:end id=okr -->\n")
+        rc, out, res = plan_run(e, core, "zorg-core")
+        check("a new block in the core → '+', a question", signs_in(res)["okr"] == "+" and "Питань: 1 · зміниться записів: 0" in out
+              and signs_in(res)["scope"] == "=", (rc, out[-500:]))
+        open(blocks_file, "w", encoding="utf-8", newline="").write(pristine_blocks)
+
+        edit_both(e, "- Alpha, Beta", "- Alpha, Beta, Gamma")
+        rc, out, res = plan_run(e, core, "zorg-core")
+        check("you edited a block in local-context.md (not imported yet) → '✎'", signs_in(res)["teams"] == "✎" and rc == 0
+              and "Питань: 0 · зміниться записів: 0" in out, (rc, out[-500:]))
+        run_ok(e, "sync")
+        rc, out, res = plan_run(e, core, "zorg-core")
+        check("…and after the import too", signs_in(res)["teams"] == "✎" and signs_in(res)["scope"] == "=", (rc, out[-500:]))
+
+        change(card, 'head: "Alex One"', 'head: "Alex Prime"')
+        edit_both(e, "- **jira_team_field:** Alpha", "- **jira_team_field:** Alpha (mine)")
+        rc, out, res = plan_run(e, core, "zorg-core")
+        check("both sides changed the team block → '⚠', with the three versions under the row",
+              signs_in(res)["team"] == "⚠" and "    Ядро тепер каже: " in out and "    Ви писали: " in out
+              and "    Раніше обидва казали: " in out and "Alex Prime" in out and "Alpha (mine)" in out, (rc, out[-900:]))
+        check("…a question for it", "Питань: 1 · зміниться записів: 0" in out and res["questions"] == 1, out[-200:])
+        open(card, "w", encoding="utf-8", newline="").write(pristine_card)
+
+        rc, out, res = run_ok(e, "repo", "status", "zorg-core")
+        row = res["repos"][0]
+        check("repo status shows the base version the plan reads", rc == 0 and "base: 0.4" in out and row["base_version"] == "0.4", (rc, out[-300:]))
+        rc, out, res = run_ok(e, "repo", "status", "zorg-dead")
+        check("…and '—' where nothing was adopted", rc == 0 and "base: —" in out and res["repos"][0]["base_version"] is None, (rc, out[-300:]))
+
+        rc, out, res = plan_run(e, core)
+        check("no repository named: one table per registered repository, the unreachable one named; exit 5, the others printed",
+              rc == 5 and "zorg-core · джерело: тека" in out and "zorg-growth · джерело: MCP (127.0.0.1)" in out
+              and "zorg-dead · недоступний" in out and res["ok"] is False
+              and [r["repo"] for r in res["repos"]] == ["zorg-core", "zorg-dead", "zorg-growth"], (rc, out[-900:]))
+        check("…the unreachable one carries its reason in the data", [x for x in res["repos"] if x["repo"] == "zorg-dead"][0].get("error"), res["repos"])
+        rc, out, res = plan_run(e, core, "zorg-dead")
+        check("an unreachable repository: exit 5, 'недоступний', nothing written", rc == 5 and "недоступний" in out and res["ok"] is False
+              and "error" in res, (rc, out[-400:]))
+
+        prov = os.path.join(e.home, ".grow-pm", "providers")
+        for rid, names in (("zorg-core", ["Zorg App"]), ("zorg-growth", ["Other Product"])):
+            with open(os.path.join(prov, rid + ".yaml"), "a", encoding="utf-8") as f:
+                f.write("products:\n" + "".join("  - %s\n" % n for n in names))
+        rc, out, res = plan_run(e, core, "--product", "zorg app")
+        check("--product: the repositories of that product (matched like `ctx read`), and those that serve every product",
+              "zorg-core · джерело" in out and "zorg-growth" not in out and "zorg-dead · недоступний" in out and rc == 5, (rc, out[-600:]))
+        rc, out, res = plan_run(e, core, "--product", "No Such Product")
+        check("--product that is none of the products: exit 3", rc == 3 and "No Such Product" in out, (rc, out[-300:]))
+        rc, out, res = plan_run(e, core, "zorg-growth", "--product", "Zorg App")
+        check("a named repository is planned whatever --product says", rc == 0 and res["repo"] == "zorg-growth"
+              and set(signs_in(res).values()) == {"="}, (rc, out[-400:]))
+        check("plan never wrote anything: not the store, the home, the vault or the core", untouched and all(untouched), untouched)
 
 
 check("every command ends with a CTX_RESULT line", contract_ok)

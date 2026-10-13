@@ -32,6 +32,14 @@
                                 --apply): the blocks the repository publishes at the version you hold are taken
                                 as they are (an edit of yours counts as your edit); another version gets no base.
                                 Writes the block state only — never the records or the compiled copies
+  provider plan [REPO] [--product P] [--all] [--json]
+                                one table per repository: what each block is in your context against what the
+                                repository publishes now (= ~ ✎ ⚠ + − ✂ ?), the questions and the records an apply
+                                would rewrite. Without REPO: the repositories of the product P (matched as `read`
+                                matches it), else all of them. --all also lists the blocks a repository skips.
+                                Reads only — no lock, nothing written; an unreachable repository exits 5 (the
+                                others still print). CTX_RESULT: with REPO the plan itself (rows, questions,
+                                changes, errors …), without it {repos: [plan …], questions, changes}
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
 edits first, snapshots, writes, journals and compiles. Files are read within a time budget
@@ -637,16 +645,25 @@ def cmd_repo_status(a, c):
     for r in repos:
         ok, why = _reach(r)
         # the version on the source is what its blocks carry now; the registration's own is the fallback when
-        # the source cannot be read. No block state is kept yet, so there is no base to set it against.
+        # the source cannot be read. The base is the version most of the blocks the store holds a base for are at.
         live = crp.fetch(r)["version"] if ok else None
+        base, bad_state = None, None
+        try:
+            base = cb.base_version(cb.load_state(c.store, r["id"]))
+        except cs.StoreError as e:                      # a status must not fail over a state file; it says so
+            bad_state = str(e)
         rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": _public_url(r["endpoint"]["url"]),
-                     "reachable": ok, "reason": why, "source_version": live or r["source_version"], "base_version": None})
+                     "reachable": ok, "reason": why, "source_version": live or r["source_version"], "base_version": base})
+        if bad_state:
+            rows[-1]["state_error"] = bad_state
     if rows:
         for row in rows:
             where = row["url"] or "—"
             print("%s  %s  %s" % (row["id"] + (" (paused)" if row["status"] == "paused" else ""), row["kind"] or "—", where))
             print("  reachable %s" % ("yes" if row["reachable"] else "no (%s)" % row["reason"]))
             print("  version on source: %s · base: %s" % (row["source_version"] or "—", row["base_version"] or "—"))
+            if row.get("state_error"):
+                print("  block state: %s" % row["state_error"])
     else:
         print(NO_REPOS)
     for path, why in skipped:
@@ -708,10 +725,56 @@ def cmd_provider_adopt(a, c):
     return 0, dict(res, command="provider", action="adopt", pending=pending)
 
 
+def _product_repos(c, repos, wanted):
+    """The repositories that serve the product `wanted` names (picked among the product records the way `ctx read`
+    picks it), and those that name no product (they serve all). An unknown or ambiguous product is a usage error."""
+    records, _, _ = cr._live_view(c.store, c.copies, now())
+    products = [r for r in records if r["type"] == "product"]
+    prod, _ = cr._pick_product(products, wanted)
+    if prod is None:
+        raise Usage("no single product matches %r — products: %s" % (
+            wanted, ", ".join(p["title"].split(":", 1)[-1].strip() for p in products) or "none"))
+    names = {prod["id"].lower(), prod["title"].strip().lower(), prod["title"].split(":", 1)[-1].strip().lower()}
+    return [r for r in repos if not r["products"] or names & {x.lower() for x in r["products"]}]
+
+
+def cmd_provider_plan(a, c):
+    c.need_store()
+    if a.repo:
+        repos = [_repository(c, a.repo)]
+    else:
+        repos = crp.load_repos(c.text, c.home)
+        if a.product:
+            repos = _product_repos(c, repos, a.product)
+    if not repos:
+        print(NO_REPOS if not a.product else "no repository serves the product %r" % a.product)
+    plans, down = [], 0
+    for k, repo in enumerate(repos):
+        fetched = crp.fetch(repo, include_skipped=a.all)
+        if k:
+            print()
+        if fetched["error"]:
+            down += 1
+            why = cb.clip(fetched["error"], cb.NOTE_CLIP)
+            print("%s · недоступний: %s" % (cb.clip(repo["id"], cb.HEADER_CLIP), why))
+            plans.append({"repo": repo["id"], "error": why})
+            continue
+        plan = cb.plan(c.store, c.copies, repo, fetched, now(), all_=a.all)
+        print(cb.render_plan(plan))
+        plans.append(plan)
+    rc = 5 if down else 0
+    if a.repo:
+        return rc, dict(plans[0], command="provider", action="plan")
+    return rc, {"command": "provider", "action": "plan", "repos": plans,
+                "questions": sum(p.get("questions", 0) for p in plans), "changes": sum(p.get("changes", 0) for p in plans)}
+
+
 def cmd_provider(a, c):
     if a.action == "adopt":
         return cmd_provider_adopt(a, c)
-    raise Usage("provider takes adopt")
+    if a.action == "plan":
+        return cmd_provider_plan(a, c)
+    raise Usage("provider takes adopt or plan")
 
 
 # ---------------------------------------------------------------------- main
@@ -758,6 +821,8 @@ def build_parser():
     pp = sub.add_parser("provider").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = pp.add_parser("adopt", parents=[common]); sp.add_argument("repo"); sp.add_argument("--apply", action="store_true")
     sp.add_argument("--json", action="store_true")
+    sp = pp.add_parser("plan", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--product")
+    sp.add_argument("--all", action="store_true"); sp.add_argument("--json", action="store_true")
     return p
 
 
