@@ -144,32 +144,63 @@ def _bounded_reads():
         pb.READ = prev
 
 
+def _team_why(exc):
+    """Why the team block could not be built, in words that carry no secret: a short reason (the file's name, not
+    its path; the class of an unexpected exception, not its message), at most MAX_ERROR characters."""
+    name = os.path.basename(getattr(exc, "filename", None) or "") if isinstance(exc, OSError) else ""
+    if isinstance(exc, cs.StoreError):
+        text = str(exc)
+    elif isinstance(exc, FileNotFoundError):
+        text = "%s not found" % (name or "a file")
+    elif isinstance(exc, OSError):
+        text = "%s: %s" % (name or "a file", exc.strerror or type(exc).__name__)
+    elif isinstance(exc, UnicodeDecodeError):
+        text = "a file is not UTF-8 text"
+    elif isinstance(exc, json.JSONDecodeError):
+        text = "the role model is not valid JSON"
+    else:
+        text = "unexpected %s" % type(exc).__name__
+    return _clean("team block: " + text)
+
+
 def _manifest(core_root):
-    """The core's provider manifest as the bundle builder reads it, or None. The builder's `sys.exit(3)` and its
-    message on stdout are not ours: neither leaves this function."""
+    """(manifest, why not) of the core's provider manifest as the bundle builder reads it. No manifest in the core is
+    (None, None) — a core that offers no team, not a failure; one that cannot be read or parsed is (None, reason).
+    The builder's `sys.exit(3)` and its message on stdout are not ours: neither leaves this function."""
+    buf = io.StringIO()
     try:
-        with contextlib.redirect_stdout(io.StringIO()):
-            return pb.load_manifest(core_root)
-    except (Exception, SystemExit):
-        return None
+        with contextlib.redirect_stdout(buf):
+            return pb.load_manifest(core_root), None
+    except SystemExit:
+        said = buf.getvalue().strip()
+        if said.startswith("no provider manifest"):
+            return None, None
+        return None, _clean("team block: " + (said or "the provider manifest cannot be read"))
+    except Exception as e:
+        return None, _team_why(e)
 
 
-def _team_block(repo, manifest):
-    """The team region the connect flow builds from the core's team card and people — text without the final
-    newline — or None: no team in the registration, no manifest, no such team in the role model, or anything in
-    the core that cannot be read. The team block is optional; its absence never costs the blocks."""
+def _team_block(repo, manifest, manifest_why):
+    """(the team region, None), (None, None) or (None, why not). The region is what the connect flow builds from the
+    core's team card and people, without the final newline. (None, None) is "not offered": no team in the
+    registration, no manifest in the core, a team the role model does not list. A card, a role model or a manifest
+    that cannot be read in time or at all is (None, reason); so is anything unexpected (the class only)."""
     team, core_root = repo["team"], repo["core_root"]
-    if manifest is None or not team:
-        return None
+    if not team or not core_root:
+        return None, None
+    if manifest is None:
+        return None, manifest_why
     try:
         bundles = manifest.s("bundles_file") or os.path.join(manifest.s("plugin_folder", "."), "_System", "access-bundles.json")
         model = json.loads(pb.rd(os.path.join(core_root, bundles)))
         teams = model["teams"]
         key = team if team in teams else (team[len("team-"):] if team.startswith("team-") else team)
+        if key not in teams:
+            return None, None
         block = pb.team_context(core_root, manifest, key, teams[key], model, repo["jira_write"] or "ask")[0]
-        return block.rstrip("\n")
-    except (Exception, SystemExit):
-        return None
+        return block.rstrip("\n"), None
+    except (Exception, SystemExit) as e:
+        return None, _team_why(e)
 
 
 def _from_mcp(repo, blocks_file, client_factory):
@@ -249,22 +280,24 @@ def fetch(repo, client_factory=cm.McpClient, now=None):
 
     Returns {source: "mcp"|"folder"|None, version: the v= most blocks carry (the first met on a tie; counted
     before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks, team: the team
-    region or None, team_source: "folder"|None, error: why no blocks came, or None, checked: ISO time}.
+    region or None, team_source: "folder"|None, team_error: why the team region could not be built, or None,
+    error: why no blocks came, or None, checked: ISO time}.
     The team region is built from the core folder alone (the card, the people, the role model), whichever
-    source the blocks came from; a repository with no core folder has none.
+    source the blocks came from, and only once the blocks have arrived: when `error` is set, team, team_source
+    and team_error are all empty. `team` None with `team_error` None means the repository offers no team
+    (none in the registration, no provider manifest in the core, a team the role model does not list); with
+    `team_error` set, a team was due and a file of the core could not be read in time or at all.
     """
-    out = {"source": None, "version": None, "blocks": {}, "team": None, "team_source": None, "error": None,
-           "checked": _stamp(now)}
+    out = {"source": None, "version": None, "blocks": {}, "team": None, "team_source": None, "team_error": None,
+           "error": None, "checked": _stamp(now)}
     src, core_root, url = repo["blocks_source"], repo["core_root"], repo["endpoint"]["url"]
     with _bounded_reads():
         blocks_file = repo["blocks_file"]
-        manifest = None
+        manifest, manifest_why = None, None
         if core_root and os.path.isdir(core_root) and (repo["team"] or not blocks_file):
-            manifest = _manifest(core_root)
+            manifest, manifest_why = _manifest(core_root)
         if not blocks_file and manifest is not None:
             blocks_file = manifest.s("blocks_file")
-        out["team"] = _team_block(repo, manifest)
-        out["team_source"] = "folder" if out["team"] is not None else None
 
         text, errors = None, []
         if src == "auto" and not url and not core_root:
@@ -282,6 +315,9 @@ def fetch(repo, client_factory=cm.McpClient, now=None):
                     out["source"] = "folder"
                 else:
                     errors.append(why)
+        if text is not None:                            # the team is only worth building for a fetch that succeeded
+            out["team"], out["team_error"] = _team_block(repo, manifest, manifest_why)
+            out["team_source"] = "folder" if out["team"] is not None else None
     if text is None:
         out["error"] = "; ".join(errors)
         return out

@@ -355,7 +355,8 @@ with tempfile.TemporaryDirectory() as d:
     # --- the folder
     f = cr.fetch(core_repo())
     check("fetch returns the documented keys",
-          set(f) == {"source", "version", "blocks", "team", "team_source", "error", "checked"}, sorted(f))
+          set(f) == {"source", "version", "blocks", "team", "team_source", "team_error", "error", "checked"}, sorted(f))
+    check("…a clean fetch has no error and no team error", f["error"] is None and f["team_error"] is None, f)
     check("folder source: the blocks of the core's blocks file and nothing else",
           f["source"] == "folder" and set(f["blocks"]) == {"scope", "product", "teams"} and f["error"] is None, f)
     scope = f["blocks"].get("scope", "")
@@ -381,10 +382,13 @@ with tempfile.TemporaryDirectory() as d:
     check("…the registration's team id is team-<key>; the bare key works too",
           cr.fetch(core_repo(team="alpha"))["team"] == f["team"], "")
     check("…jira_write comes from the registration", "read only" in cr.fetch(core_repo(jira_write="none"))["team"], "")
-    check("no team in the registration → no team block", cr.fetch(core_repo(team=""))["team"] is None
-          and cr.fetch(core_repo(team=""))["team_source"] is None, "")
-    check("a team the role model does not know → no team block, blocks still there",
-          cr.fetch(core_repo(team="team-nobody"))["team"] is None and cr.fetch(core_repo(team="team-nobody"))["source"] == "folder", "")
+    fnt = cr.fetch(core_repo(team=""))
+    check("no team in the registration → no team block, and that is not an error",
+          fnt["team"] is None and fnt["team_source"] is None and fnt["team_error"] is None and fnt["source"] == "folder", fnt)
+    fnb = cr.fetch(core_repo(team="team-nobody"))
+    check("a team the role model does not know → not offered: no team block, no team error, blocks still there",
+          fnb["team"] is None and fnb["team_source"] is None and fnb["team_error"] is None and fnb["source"] == "folder"
+          and fnb["blocks"] == f["blocks"], fnb)
 
     # --- the checked time
     stamp = datetime.datetime(2026, 10, 13, 12, 0, 0, tzinfo=datetime.timezone.utc)
@@ -410,7 +414,8 @@ with tempfile.TemporaryDirectory() as d:
         check("the server path is endpoint.root + blocks_file (plain concatenation)",
               [c["name"] for c in calls_of(fake)] == ["vault_get_note"]
               and calls_of(fake)[0]["arguments"] == {"path": GROWTH_PATH}, calls_of(fake))
-        check("an MCP repository has no core folder: no team block", fm["team"] is None and fm["team_source"] is None, fm)
+        check("an MCP repository has no core folder: no team block, not an error",
+              fm["team"] is None and fm["team_source"] is None and fm["team_error"] is None, fm)
         check("the engine only called what the allow-list names", all(c["name"] in cm.ALLOWED for c in calls_of(fake)), calls_of(fake))
         fs = cr.fetch(growth_repo(fake.url, skip_blocks=["team"]))
         check("skip_blocks apply to an MCP repository too", set(fs["blocks"]) == {"growth-metrics"}, fs["blocks"])
@@ -455,8 +460,16 @@ with tempfile.TemporaryDirectory() as d:
     t0 = time.time()
     fx = cr.fetch(growth_repo(dead))
     check("mcp only and down → error, no blocks", fx["source"] is None and fx["blocks"] == {} and "unreachable" in fx["error"]
-          and fx["team"] is None and fx["version"] is None, fx)
+          and fx["team"] is None and fx["team_source"] is None and fx["team_error"] is None and fx["version"] is None, fx)
     check("…a dead port does not stall it", time.time() - t0 < 8, time.time() - t0)
+    fxc = cr.fetch(core_repo(blocks_source="mcp", endpoint={"url": dead, "root": "", "headers_env": ""}))
+    check("mcp only and down, with a core folder that could build the team → still no team beside the error",
+          fxc["source"] is None and "unreachable" in fxc["error"] and fxc["blocks"] == {} and fxc["team"] is None
+          and fxc["team_source"] is None and fxc["team_error"] is None, fxc)
+    fbf = cr.fetch(core_repo(blocks_file="Core/none.md"))
+    check("a blocks file that is not there, with a core that could build the team → no team beside the error",
+          fbf["source"] is None and fbf["error"] and fbf["team"] is None and fbf["team_source"] is None
+          and fbf["team_error"] is None, fbf)
     fd = cr.fetch(core_repo(blocks_source="auto", endpoint={"url": dead, "root": "", "headers_env": ""}))
     check("auto falls back to the folder when MCP is down", fd["source"] == "folder" and fd["error"] is None
           and fd["blocks"] == f["blocks"] and fd["team_source"] == "folder", fd)
@@ -534,7 +547,11 @@ with tempfile.TemporaryDirectory() as d:
     t0 = time.time()
     fsl = cr.fetch(repo_of({"id": "zorg-slow", "namespace": "zorg-core", "kind": "bundle", "paths": [slow], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
     check("a people card that never arrives → no team block within the budget, the blocks stay",
-          fsl["source"] == "folder" and fsl["blocks"] == f["blocks"] and fsl["team"] is None and time.time() - t0 < 5, (fsl, time.time() - t0))
+          fsl["source"] == "folder" and fsl["blocks"] == f["blocks"] and fsl["team"] is None and fsl["team_source"] is None
+          and fsl["error"] is None and time.time() - t0 < 5, (fsl, time.time() - t0))
+    check("…and the team error says why: the card, the time budget, nothing else",
+          isinstance(fsl["team_error"], str) and "not available" in fsl["team_error"] and "zz-slow.md" in fsl["team_error"]
+          and len(fsl["team_error"]) <= 300 and fsl["team_error"].startswith("team block"), fsl["team_error"])
     try:
         os.close(os.open(pipe, os.O_WRONLY | os.O_NONBLOCK))
     except OSError:
@@ -551,15 +568,54 @@ with tempfile.TemporaryDirectory() as d:
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         fnm = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [nomf], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
-    check("no manifest in the core → blocks yes, team no, and nothing printed (the builder's exit is not ours)",
+    check("no manifest in the core → blocks yes, team not offered (no error), and nothing printed (the builder's exit is not ours)",
           fnm["source"] == "folder" and set(fnm["blocks"]) == {"scope", "product", "teams"} and fnm["team"] is None
-          and out.getvalue() == "", (fnm, out.getvalue()))
+          and fnm["team_source"] is None and fnm["team_error"] is None and out.getvalue() == "", (fnm, out.getvalue()))
     badj = os.path.join(d, "BadJsonCore")
     shutil.copytree(CORE_FIX, badj)
     open(os.path.join(badj, "Core", "_System", "access-bundles.json"), "w", encoding="utf-8").write("{ not json")
     fbj = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [badj], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
-    check("a role model that is not JSON → no team block, blocks stay", fbj["source"] == "folder" and fbj["team"] is None
-          and fbj["blocks"] == f["blocks"], fbj)
+    check("a role model that is not JSON → no team block, blocks stay, and the team error says the role model", fbj["source"] == "folder"
+          and fbj["team"] is None and fbj["team_source"] is None and fbj["blocks"] == f["blocks"] and fbj["error"] is None
+          and isinstance(fbj["team_error"], str) and "role model" in fbj["team_error"] and "JSON" in fbj["team_error"], fbj)
+    nomodel = os.path.join(d, "NoModelCore")
+    shutil.copytree(CORE_FIX, nomodel)
+    os.remove(os.path.join(nomodel, "Core", "_System", "access-bundles.json"))
+    fnmod = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [nomodel], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
+    check("a manifest whose role model is not there → team error naming it (not 'not offered')", fnmod["source"] == "folder"
+          and fnmod["team"] is None and isinstance(fnmod["team_error"], str) and "access-bundles.json" in fnmod["team_error"], fnmod)
+    badm = os.path.join(d, "BadManifestCore")
+    shutil.copytree(CORE_FIX, badm)
+    open(os.path.join(badm, "Core", "_System", "provider-manifest.yaml"), "w", encoding="utf-8").write("id: zorg-core\nexclude:\n  nested:\n    deeper: 1\n")
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        fbm = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [badm], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
+    check("a manifest that cannot be parsed → blocks stay, team error says so, nothing printed", fbm["source"] == "folder"
+          and fbm["blocks"] == f["blocks"] and fbm["team"] is None and isinstance(fbm["team_error"], str)
+          and "manifest" in fbm["team_error"] and len(fbm["team_error"]) <= 300 and out.getvalue() == "", (fbm, out.getvalue()))
+    if hasattr(os, "geteuid") and os.geteuid() != 0:
+        noread = os.path.join(d, "NoReadPeopleCore")
+        shutil.copytree(CORE_FIX, noread)
+        card = os.path.join(noread, "Core", "People", "a-one.md")
+        os.chmod(card, 0)
+        fnr = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [noread], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
+        os.chmod(card, 0o644)
+        check("a people card without read permission → team error naming the file, blocks stay", fnr["source"] == "folder"
+              and fnr["blocks"] == f["blocks"] and fnr["team"] is None and isinstance(fnr["team_error"], str)
+              and "a-one.md" in fnr["team_error"] and "Permission" in fnr["team_error"], fnr)
+    real_tc = cr.pb.team_context
+
+    def exploding(*a, **k):
+        raise RuntimeError("zorgsecret-4411")
+
+    cr.pb.team_context = exploding
+    try:
+        fex = cr.fetch(core_repo())
+    finally:
+        cr.pb.team_context = real_tc
+    check("an unexpected exception in the team build never leaves fetch: the team error names the class, not the message",
+          fex["source"] == "folder" and fex["blocks"] == f["blocks"] and fex["team"] is None and fex["team_source"] is None
+          and isinstance(fex["team_error"], str) and "RuntimeError" in fex["team_error"] and "zorgsecret-4411" not in json.dumps(fex), fex)
 
     # --- the blocks file: what counts as a block
     def folder_with(text, **kw):
