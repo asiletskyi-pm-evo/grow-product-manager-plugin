@@ -22,6 +22,8 @@
   verify [ID ...] [--stale]     mark records verified today
   validate                      records, ids, parents, card size, edits waiting
   card                          regenerate INDEX.md only
+  repo list [--json]            the repositories (provider registrations) a product draws context blocks
+                                from: kind, products, rank, access, version — reads local files, no network
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
 edits first, snapshots, writes, journals and compiles. Files are read within a time budget
@@ -42,6 +44,7 @@ import ctx_common as cc  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
+import ctx_repos as crp  # noqa: E402
 import ctx_schema as sc  # noqa: E402
 
 HEADINGS = {"product": "### Product: %s", "team": "### Team: %s", "org": "## Organization: %s",
@@ -547,6 +550,37 @@ def cmd_card(a, c):
     return 0, {"command": "card", "card_lines": card.count("\n")}
 
 
+def _table(rows):
+    """Rows of texts as aligned columns; the first row is the header."""
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    return "\n".join("  ".join(cell.ljust(w) for cell, w in zip(r, widths)).rstrip() for r in rows)
+
+
+def cmd_repo_list(a, c):
+    skipped = []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    if repos:
+        rows = [("id", "kind", "products", "rank", "access", "blocks", "version", "checked")]
+        for r in repos:      # blocks and checked come from the block state; none is kept yet
+            rows.append((r["id"] + (" (paused)" if r["status"] == "paused" else ""), r["kind"] or "—",
+                         ", ".join(r["products"]) or "all", str(r["rank"]), r["access"] or "—", "—",
+                         r["source_version"] or "—", "—"))
+        print(_table(rows))
+    else:
+        print("no repositories registered — a registration is {vault}/{plugin folder}/_System/providers/<id>.yaml "
+              "(references/context-provider-protocol.md §3b)")
+    for path, why in skipped:
+        print("unreadable registration: %s (%s)" % (path, why))
+    return 0, {"command": "repo", "action": "list", "repos": repos,
+               "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
+
+
+def cmd_repo(a, c):
+    if a.action == "list":
+        return cmd_repo_list(a, c)
+    raise Usage("repo takes list")
+
+
 # ---------------------------------------------------------------------- main
 def build_parser():
     common = Parser(add_help=False)
@@ -585,6 +619,8 @@ def build_parser():
     sp = sub.add_parser("undo", parents=[common]); sp.add_argument("--steps", type=int, default=1)
     sub.add_parser("validate", parents=[common])
     sub.add_parser("card", parents=[common])
+    rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
+    sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
     return p
 
 
@@ -592,7 +628,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify, "assign": cmd_assign}
+            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo}
 
 
 def emit(result, conflict=None):
