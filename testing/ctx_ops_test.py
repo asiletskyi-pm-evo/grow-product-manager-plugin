@@ -789,6 +789,11 @@ with tempfile.TemporaryDirectory() as d:
     digest = co.status_summary(e.ctx, home=e.home)
     check("status_summary: the day of the last check of each repository, read from the state; what is unknown or unreadable is left out",
           digest["checked"] == {"zorg-core": NOW} and digest["records"] == 7, digest)
+    facts = co.status_summary(e.ctx, home=e.home, checked=False)
+    check("status_summary(checked=False): the facts without the days, and the store root to read them from on another budget",
+          facts["checked"] == {} and facts["records"] == 7 and facts["store"] == e.store.root
+          and co.checked_by_repo(facts["store"]) == {"zorg-core": NOW}, facts)
+    check("checked_by_repo never fails: a store root that is not there is no days", co.checked_by_repo(os.path.join(d, "nowhere")) == {}, "")
     real_mod = sys.modules.get("ctx_blocks")
     sys.modules["ctx_blocks"] = None                                # an import that fails
     try:

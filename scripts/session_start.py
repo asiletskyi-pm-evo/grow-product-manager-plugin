@@ -190,18 +190,36 @@ def providers_info(text, extra_dirs=None, skipped=None, checked=None):
     return labels, roots, bundle
 
 
-def _store_summary(path, budget_s=2.0):
+def _store_summary(path, budget_s=2.0, dates_s=0.5):
     """The context store's summary (since v3.11.0), read in a thread with a time budget so an
-    iCloud download can never hold the session start; any failure → None (no line)."""
+    iCloud download can never hold the session start; any failure → None (no line).
+    The days the repositories were last checked (since v3.13.0, `checked`) are read after the summary, in the
+    same thread, and waited for at most `dates_s` more: a block state that does not arrive (an iCloud-evicted
+    `.state/blocks/<repo>.json`) or fails costs the days — the providers line falls back to `synced_at` —
+    never the context line."""
     try:
         import ctx_ops
     except Exception:
         return None
-    box = {}
-    t = threading.Thread(target=lambda: box.update(s=ctx_ops.status_summary(path)), daemon=True)
+    box, facts_in = {}, threading.Event()
+
+    def work():
+        try:
+            box["s"] = ctx_ops.status_summary(path, checked=False)
+        finally:
+            facts_in.set()
+        if box.get("s") and box["s"].get("store"):
+            box["checked"] = ctx_ops.checked_by_repo(box["s"]["store"])
+
+    t = threading.Thread(target=work, daemon=True)
     t.start()
-    t.join(budget_s)
-    return box.get("s")
+    if not facts_in.wait(budget_s):
+        return None
+    s = box.get("s")
+    if not s or s.get("unavailable"):
+        return s
+    t.join(dates_s)
+    return dict(s, checked=box.get("checked") or {})
 
 
 def parse(path, extra_dirs=None):

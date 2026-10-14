@@ -265,5 +265,31 @@ with tempfile.TemporaryDirectory() as d:
     line = providers_line(ctxp)
     check("a block state that cannot be read: synced_at, no failure", "zorg-core (snapshot, vpn, synced 2026-01-01, stale)" in line, line)
 
+# --- v3.13.0 final review: a block state that never arrives (iCloud) costs the days of the checks, never the context line
+import time  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:
+    ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
+    state = os.path.join(co.store_root_for(open(ctxp, encoding="utf-8").read(), home=os.path.join(d, "home")), ".state", "blocks", "zorg-core.json")
+    os.remove(state)
+    os.mkfifo(state)                                      # its read waits for a writer that never comes, like an evicted file
+    t0 = time.time()
+    out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    took = time.time() - t0
+    try:                                                  # let the reader thread out of open()
+        os.close(os.open(state, os.O_WRONLY | os.O_NONBLOCK))
+    except OSError:
+        pass
+    line = next((l.strip() for l in out.splitlines() if l.strip().startswith("providers:")), "")
+    check("a block state that never arrives: the context line is still there, the providers line falls back to synced_at",
+          "  context: records 14 · card " in out and "zorg-core (snapshot, vpn, synced 2026-01-01, stale)" in line, out[-700:])
+    check("…and the digest stays within its budget (2 s for the store, half a second more for the days)", took < 4, took)
+
+with tempfile.TemporaryDirectory() as d:                  # the days still come when they are quick
+    ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
+    s = ss._store_summary(ctxp)
+    check("the summary carries the days of the checks as before", s and s.get("checked", {}).get("zorg-core", "").startswith(TODAY.isoformat())
+          and s["records"] == 14, s)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

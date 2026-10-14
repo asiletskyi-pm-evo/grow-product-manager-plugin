@@ -899,11 +899,14 @@ def refresh_card_repos(store, home, today):
     return True
 
 
-def _checked_by_repo(store):
-    """{repository id: when it was last checked} from the block states in the store, for the SessionStart digest.
-    Read only, and never fails: whatever cannot be read — the folder, a state, the module that reads it — gives
-    no date, and the digest falls back to the registration's own. A store with no block state never imports it."""
+def checked_by_repo(store_root):
+    """{repository id: when it was last checked} from the block states in the store at `store_root`, for the
+    SessionStart digest. Read only, and never fails: whatever cannot be read — the folder, a state, the module that
+    reads it — gives no date, and the digest falls back to the registration's own. A store with no block state never
+    imports it. A state iCloud has evicted is read within the store's time budget (30 s), so the digest calls this
+    after the store's facts, on a budget of its own (scripts/session_start.py `_store_summary`)."""
     try:
+        store = cs.Store(store_root)
         folder = os.path.join(store.state_dir, "blocks")
         ids = sorted(n[:-5] for n in os.listdir(folder) if n.endswith(".json"))
         if not ids:
@@ -915,9 +918,10 @@ def _checked_by_repo(store):
         return {}
 
 
-def status_summary(context_path, home=None):
-    """{records, card_lines, pending, conflicts, stale, unassigned, checked} for the SessionStart digest (`checked`:
-    {repository id: when the store last checked it}); {unavailable: root} when
+def status_summary(context_path, home=None, checked=True):
+    """{records, card_lines, pending, conflicts, stale, unassigned, checked, store} for the SessionStart digest
+    (`checked`: {repository id: when the store last checked it}, read last — with `checked` False it is {} and the
+    caller reads it on its own budget from `store`, the store root, with `checked_by_repo`); {unavailable: root} when
     the store used before cannot be reached; None without a store or on any error. Reads only. The home
     defaults to the one the context file lives in (~/.grow-pm/local-context.md)."""
     try:
@@ -931,11 +935,11 @@ def status_summary(context_path, home=None):
         recs = store.load()
         plan = plan_sync(store, copies_for(context_path, text, home))
         card = _read(store.card_path).count("\n") if os.path.isfile(store.card_path) else 0
-        return {"records": len(recs), "card_lines": card, "pending": sum(pending(plan).values()),
-                "conflicts": len(plan["conflicts"]) + (1 if plan["suspicious_removal"] else 0) + len(plan["missing"]),
-                "stale": len(sc.stale_ids(recs, store.state(), datetime.date.today().isoformat())),
-                "unassigned": len(cs.unassigned_ids(recs)),
-                "checked": _checked_by_repo(store),
-                "unavailable": None}
+        facts = {"records": len(recs), "card_lines": card, "pending": sum(pending(plan).values()),
+                 "conflicts": len(plan["conflicts"]) + (1 if plan["suspicious_removal"] else 0) + len(plan["missing"]),
+                 "stale": len(sc.stale_ids(recs, store.state(), datetime.date.today().isoformat())),
+                 "unassigned": len(cs.unassigned_ids(recs)), "unavailable": None, "store": store.root}
     except Exception:
         return None
+    facts["checked"] = checked_by_repo(store.root) if checked else {}   # last, and never the reason the facts are lost
+    return facts
