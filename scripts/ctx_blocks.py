@@ -404,7 +404,7 @@ def adopt(store, copies, home, repo, fetched, now, apply):
     if fetched.get("error"):
         raise ValueError("adopt needs a repository that was fetched, not one that failed: %s" % fetched["error"])
     rid, skip = repo["id"], set(repo.get("skip_blocks") or ())
-    mine, problems = find_regions(store.load(), repo["namespace"])
+    mine, problems = find_regions(store.load(), namespace_of(repo, fetched))
     theirs = dict(fetched.get("blocks") or {})
     if fetched.get("team") is not None:
         theirs["team"] = fetched["team"]
@@ -544,6 +544,12 @@ def _source_label(repo, source):
     return "тека" if source == "folder" else "—"
 
 
+def namespace_of(repo, fetched):
+    """The marker namespace of a repository's regions in your records: the one its fetch read the blocks in (a
+    registration with no namespace takes the core manifest's), else the registration's."""
+    return fetched.get("namespace") or repo["namespace"]
+
+
 def _theirs(fetched):
     """({block id: the repository's region text}, {block id: where that text came from}) of a fetch: the blocks of its
     blocks file, and the team region when it was built (a team region built from the core wins over one of the file)."""
@@ -584,7 +590,7 @@ def plan(store, copies, repo, fetched, now, all_=False):
         raise ValueError("plan needs a repository that was fetched, not one that failed: %s" % fetched["error"])
     rid, skip = repo["id"], set(repo.get("skip_blocks") or ())
     records, _, _ = cr._live_view(store, copies, now)
-    mine, problems = find_regions(records, repo["namespace"])
+    mine, problems = find_regions(records, namespace_of(repo, fetched))
     theirs, where = _theirs(fetched)
     team_error = fetched.get("team_error")
     state = load_state(store, rid)
@@ -800,7 +806,7 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
     waiting = co.plan_sync(store, copies)
     if sum(co.pending(waiting).values()) + len(waiting["conflicts"]) + len(waiting["missing"]):
         raise co.Refused("changes to local-context.md or to the records wait to be imported — `ctx sync` first, then apply")
-    rid, ns = repo["id"], repo["namespace"]
+    rid, ns = repo["id"], namespace_of(repo, fetched)
     p = plan(store, copies, repo, fetched, now)
     known = {r["block"] for r in p["rows"]} | {x["block"] for x in p["errors"] if x["block"]}
     unknown = sorted(b for b in set(choose) | set(add) if b not in known)

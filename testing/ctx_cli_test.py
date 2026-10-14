@@ -1352,6 +1352,86 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("…and a refused command is still refused: the card line does not turn exit 3 into anything else",
               rc == 3 and "nosuch" in out and "card not refreshed" not in out, (rc, out[-300:]))
 
+# --- v3.13.0 Task 11: a registration without a namespace takes the core manifest's
+NS_WARNING = "registration has no namespace \u2014 the core's manifest says zorg-core; add `namespace: zorg-core`"
+
+
+def shown(out):
+    """The text of a run, without its CTX_RESULT line."""
+    return out.split("CTX_RESULT")[0]
+
+
+def renamed_core(d, rid, extra=""):
+    """repos_env with the core's v1 registration under another id (a v1 registration names no namespace, so the id would
+    stand in for it); the markers in the context and in the core's blocks file stay `zorg-core`."""
+    e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra=SKIP_PRODUCT + extra)
+    prov = os.path.join(e.home, ".grow-pm", "providers")
+    old = os.path.join(prov, "zorg-core.yaml")
+    text = read(old).replace("id: zorg-core", "id: " + rid)
+    os.remove(old)
+    os.remove(os.path.join(prov, "zorg-growth.yaml"))
+    os.remove(os.path.join(prov, "zorg-dead.yaml"))
+    open(os.path.join(prov, rid + ".yaml"), "w", encoding="utf-8").write(text)
+    return e
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = renamed_core(d, "zorg-context")
+    core = os.path.join(d, "ZorgCore")
+    blocks_file = os.path.join(core, CORE_BLOCKS)
+    run_ok(e, "migrate", "--apply")
+    rc, out, res = run_ok(e, "repo", "list")
+    check("repo list: one warning for a registration with no namespace whose core says another",
+          rc == 0 and shown(out).count(NS_WARNING) == 1 and res["repos"][0].get("namespace_warning") == NS_WARNING, (rc, out[-500:]))
+    rc, out, res = run_ok(e, "repo", "status", "zorg-context")
+    check("repo status: the same warning, and the version on the source is read in the core's namespace",
+          rc == 0 and shown(out).count(NS_WARNING) == 1 and res["repos"][0]["source_version"] == "0.4"
+          and res["repos"][0].get("namespace_warning") == NS_WARNING, (rc, out[-500:]))
+    rc, out, res = run_ok(e, "provider", "adopt", "zorg-context")
+    check("adopt (dry run) sees the three blocks of the core's namespace in your context",
+          rc == 0 and res["blocks"] == {"scope": "base", "teams": "base", "team": "base"} and res["new"] == []
+          and "block(s) of zorg-core in your context" in out, (rc, out[-500:], res))
+    rc, out, res = run_ok(e, "provider", "adopt", "zorg-context", "--apply")
+    st = block_state(e, "zorg-context")
+    check("adopt --apply records the bases under the registration's id", rc == 0 and res["written"] is True
+          and st is not None and set(st["blocks"]) == {"scope", "teams", "team"}, (rc, out[-400:], st))
+    rc, out, res = run_ok(e, "provider", "plan", "zorg-context")
+    check("plan: the blocks are found and nothing moved ('='); the warning follows the table",
+          rc == 0 and set(signs_in(res).values()) == {"="} and set(signs_in(res)) == {"scope", "teams", "team"}
+          and shown(out).count(NS_WARNING) == 1 and res.get("namespace_warning") == NS_WARNING
+          and "warning: " + NS_WARNING in out.splitlines() and "Питань: 0 \u00b7 зміниться записів: 0" in out.splitlines()
+          and out.splitlines().index("warning: " + NS_WARNING) > out.splitlines().index("Питань: 0 \u00b7 зміниться записів: 0"), (rc, out[-600:]))
+    change(blocks_file, SCOPE_04, SCOPE_05)
+    rc, out, res = run_ok(e, "provider", "plan", "zorg-context")
+    check("the core changed a block you did not touch → '~'", signs_in(res).get("scope") == "~" and res["changes"] == 1, (rc, out[-400:]))
+    rc, out, res = run_ok(e, "provider", "apply", "zorg-context")
+    check("apply writes it into your records, in the core's namespace", rc == 0 and res["written"] == ["custom.zorg-core-notes"]
+          and SCOPE_05 in read(e.ctx) and NS_WARNING not in shown(out), (rc, out[-500:]))
+    rc, out, res = run_ok(e, "provider", "plan", "zorg-context")
+    check("…and the next plan is all '='", rc == 0 and set(signs_in(res).values()) == {"="}, (rc, out[-400:]))
+
+for label, extra, rid in (("a registration that names its namespace", "namespace: zorg-core\n", "zorg-context"),
+                          ("a registration whose id is the core's namespace", "", "zorg-core")):
+    with tempfile.TemporaryDirectory() as d:
+        e = renamed_core(d, rid, extra)
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "repo", "list")
+        rc2, out2, res2 = run_ok(e, "repo", "status", rid)
+        rc3, out3, res3 = run_ok(e, "provider", "plan", rid)
+        shown = [o.split("CTX_RESULT")[0] for o in (out, out2, out3)]
+        check("%s: no warning anywhere, the blocks are found" % label,
+              all("namespace" not in s for s in shown) and res["repos"][0].get("namespace_warning", "x") is None
+              and res2["repos"][0].get("namespace_warning", "x") is None and res3.get("namespace_warning", "x") is None
+              and set(signs_in(res3)) == {"scope", "teams", "team"}, (shown, res3))
+
+with tempfile.TemporaryDirectory() as d:            # an explicit namespace that is not the core's: the repository finds only its own regions
+    e = renamed_core(d, "zorg-context", "namespace: zorg-elsewhere\n")
+    run_ok(e, "migrate", "--apply")
+    rc, out, res = run_ok(e, "provider", "plan", "zorg-context")
+    check("an explicit namespace beats the manifest's: the core's scope and teams blocks are not this repository's, and no warning",
+          rc == 0 and "scope" not in signs_in(res) and "teams" not in signs_in(res) and "namespace" not in out.split("CTX_RESULT")[0],
+          (rc, out[-300:]))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

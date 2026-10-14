@@ -625,9 +625,15 @@ def cmd_repo_list(a, c):
         print(_table(rows))
     else:
         print(NO_REPOS)
+    rows = []
+    for r in repos:
+        warning = crp.namespace_warning(r)
+        if warning:
+            print("warning: %s: %s" % (cb.clip(r["id"], cb.HEADER_CLIP), warning))
+        rows.append(dict(r, namespace_warning=warning))
     for path, why in skipped:
         print("unreadable registration: %s (%s)" % (path, why))
-    return 0, {"command": "repo", "action": "list", "repos": repos,
+    return 0, {"command": "repo", "action": "list", "repos": rows,
                "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
 
 
@@ -670,14 +676,17 @@ def cmd_repo_status(a, c):
         ok, why = _reach(r)
         # the version on the source is what its blocks carry now; the registration's own is the fallback when
         # the source cannot be read. The base is the version most of the blocks the store holds a base for are at.
-        live = crp.fetch(r)["version"] if ok else None
+        fetched = crp.fetch(r) if ok else None
+        live = fetched["version"] if fetched else None
+        warning = crp.namespace_warning(r, fetched["namespace"] if fetched else None)
         base, bad_state = None, None
         try:
             base = cb.base_version(cb.load_state(c.store, r["id"]))
         except cs.StoreError as e:                      # a status must not fail over a state file; it says so
             bad_state = str(e)
         rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": _public_url(r["endpoint"]["url"]),
-                     "reachable": ok, "reason": why, "source_version": live or r["source_version"], "base_version": base})
+                     "reachable": ok, "reason": why, "source_version": live or r["source_version"], "base_version": base,
+                     "namespace_warning": warning})
         if bad_state:
             rows[-1]["state_error"] = bad_state
     if rows:
@@ -688,6 +697,8 @@ def cmd_repo_status(a, c):
             print("  version on source: %s · base: %s" % (row["source_version"] or "—", row["base_version"] or "—"))
             if row.get("state_error"):
                 print("  block state: %s" % row["state_error"])
+            if row["namespace_warning"]:
+                print("  warning: %s" % row["namespace_warning"])
     else:
         print(NO_REPOS)
     for path, why in skipped:
@@ -743,7 +754,8 @@ def cmd_provider_adopt(a, c):
         res = cb.adopt(c.store, c.copies, c.home, repo, fetched, now(), False)
         card_note = None
     gets = [b for b, o in res["blocks"].items() if o in ("base", "edit")]
-    print("adopt %s — source %s, %d block(s) of %s in your context" % (repo["id"], fetched["source"], len(res["blocks"]), repo["namespace"]))
+    print("adopt %s — source %s, %d block(s) of %s in your context" % (repo["id"], fetched["source"], len(res["blocks"]),
+                                                                     cb.namespace_of(repo, fetched)))
     if res["blocks"]:
         print(_table([("block", "result", "why")] + [(b, o, res["why"][b]) for b, o in res["blocks"].items()]))
     if res["new"]:
@@ -812,6 +824,9 @@ def cmd_provider_plan(a, c):
             continue
         plan = cb.plan(c.store, c.copies, repo, fetched, now(), all_=a.all)
         print(cb.render_plan(plan))
+        plan["namespace_warning"] = crp.namespace_warning(repo, fetched["namespace"])
+        if plan["namespace_warning"]:
+            print("warning: %s" % plan["namespace_warning"])
         plans.append(plan)
     rc = 5 if down else 0
     if a.repo:

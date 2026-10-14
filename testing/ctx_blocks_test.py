@@ -1226,5 +1226,11 @@ with tempfile.TemporaryDirectory() as d:                      # a region with no
     check("…mine keeps the text without the markers", "id=teams" not in body_of(store, HOST_NOTES)
           and "### Teams map\n- Alpha, Beta\n" in body_of(store, HOST_NOTES) and "teams" not in signs_of(plan_of(store, copies, f)), res)
 
+# --- v3.13.0 Task 11: the namespace a plan, an adopt and an apply read your regions in
+check("namespace_of: the fetch's (a registration with no namespace takes the core manifest's), else the registration's",
+      cb.namespace_of({"namespace": "zorg-context"}, {"namespace": "zorg-core"}) == "zorg-core"
+      and cb.namespace_of({"namespace": "zorg-context"}, {}) == "zorg-context"
+      and cb.namespace_of({"namespace": "zorg-context"}, {"namespace": ""}) == "zorg-context", "")
+
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

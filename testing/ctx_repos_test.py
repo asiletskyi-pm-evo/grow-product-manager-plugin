@@ -142,6 +142,8 @@ with tempfile.TemporaryDirectory() as d:
 
     check("v1 registration reads with defaults", r.get("rank") == 1000 and r.get("core_root") == r.get("paths", [None])[0]
           and r.get("namespace") == "zorg-core" and r.get("blocks_source") == "auto" and r.get("products") == [], r)
+    check("a namespace that the registration names is explicit; the id standing in for it is not (v1, and v2 without one)",
+          r.get("namespace_explicit") is False and g.get("namespace_explicit") is False, (r.get("namespace_explicit"), g.get("namespace_explicit")))
     check("v1 keys survive", r.get("kind") == "bundle" and r.get("authority") == "org" and r.get("team") == "team-alpha"
           and r.get("role") == "pm" and r.get("jira_write") == "own" and r.get("status") == "active"
           and r.get("synced_at") == "2026-09-15" and r.get("skip_blocks") == [] and r.get("title") == "Zorg shared product core"
@@ -262,6 +264,9 @@ blocks_source: sideways
     by = {x["id"]: x for x in e.repos()}
     h, i, j, k = by.get("h-full", {}), by.get("i-bundle-explicit", {}), by.get("j-folder", {}), by.get("k-bundle-nopath", {})
     m = by.get("l-mcp", {})
+    check("…a registration that names a namespace has it explicit; a blank one does not",
+          h.get("namespace_explicit") is True and cr.normalise({"id": "x", "namespace": "  "})["namespace_explicit"] is False
+          and cr.normalise({"id": "x", "namespace": ["a"]})["namespace_explicit"] is False, h)
     check("explicit core_root and namespace win; a single product given as text is a list",
           h.get("core_root") == os.path.normpath(os.path.join(e.core, "Shared", "Core")) and h.get("namespace") == "hcore"
           and h.get("blocks_source") == "paths" and h.get("products") == ["product.zorg-lite"], h)
@@ -355,7 +360,7 @@ with tempfile.TemporaryDirectory() as d:
     # --- the folder
     f = cr.fetch(core_repo())
     check("fetch returns the documented keys",
-          set(f) == {"source", "version", "blocks", "team", "team_source", "team_error", "error", "checked"}, sorted(f))
+          set(f) == {"source", "version", "blocks", "namespace", "team", "team_source", "team_error", "error", "checked"}, sorted(f))
     check("…a clean fetch has no error and no team error", f["error"] is None and f["team_error"] is None, f)
     check("folder source: the blocks of the core's blocks file and nothing else",
           f["source"] == "folder" and set(f["blocks"]) == {"scope", "product", "teams"} and f["error"] is None, f)
@@ -394,6 +399,60 @@ with tempfile.TemporaryDirectory() as d:
     check("a team the role model does not know → not offered: no team block, no team error, blocks still there",
           fnb["team"] is None and fnb["team_source"] is None and fnb["team_error"] is None and fnb["source"] == "folder"
           and fnb["blocks"] == f["blocks"], fnb)
+
+    # --- a registration without a namespace takes the core manifest's
+    check("fetch says which namespace its regions were read in; the registration's own when it names one",
+          f["namespace"] == "zorg-core" and cr.fetch(core_repo(namespace="zorg-core"))["namespace"] == "zorg-core", f["namespace"])
+    for label, kw in (("team and blocks_file named", {}), ("no team", {"team": ""}), ("no blocks_file", {"blocks_file": ""}),
+                      ("neither", {"team": "", "blocks_file": ""})):
+        fn = cr.fetch(core_repo(id="zorg-context", **kw))
+        check("a v1 registration whose id is not the core's namespace (%s): the manifest's namespace finds the blocks" % label,
+              fn["source"] == "folder" and fn["namespace"] == "zorg-core" and fn["blocks"] == f["blocks"] and fn["error"] is None, fn)
+    fn = cr.fetch(core_repo(id="zorg-context"))
+    check("…the team region is read in the manifest's namespace too", fn["team"] == f["team"]
+          and fn["team"].startswith("<!-- zorg-core:begin id=team "), fn["team"])
+    fx = cr.fetch(core_repo(id="zorg-context", namespace="zorg-other"))
+    check("an explicit namespace beats the manifest's: the repository finds only its own regions",
+          fx["namespace"] == "zorg-other" and fx["blocks"] == {} and fx["error"] is None, fx)
+    fx = cr.fetch(core_repo(id="zorg-context", namespace="zorg-context"))
+    check("…even when it equals the id", fx["namespace"] == "zorg-context" and fx["blocks"] == {}, fx)
+    fe_ns = cr.fetch(core_repo(id="zorg-context", blocks_file="Core/none.md"))
+    check("a fetch that failed still names its namespace (the manifest's)", fe_ns["source"] is None and fe_ns["namespace"] == "zorg-core"
+          and fe_ns["error"], fe_ns)
+    check("an MCP repository with no core folder: the id stands in", cr.fetch(growth_repo())["namespace"] == "zorg-growth", "")
+    nomanifest = os.path.join(d, "NoManifestCore")
+    os.makedirs(os.path.join(nomanifest, "Core"))
+    open(os.path.join(nomanifest, "Core", "blocks.md"), "w", encoding="utf-8", newline="").write(
+        blocks_of(region("zorg-core", "a", "1", "A"), region("zorg-case", "b", "1", "B")))
+    fnm = cr.fetch(repo_of({"id": "zorg-case", "kind": "folder", "paths": [nomanifest], "blocks_file": "Core/blocks.md"}))
+    check("a core with no manifest: the id stands in, and no error comes of looking",
+          fnm["namespace"] == "zorg-case" and set(fnm["blocks"]) == {"b"} and fnm["error"] is None, fnm)
+    badmf = os.path.join(d, "BadManifestNs")
+    os.makedirs(os.path.join(badmf, "Core", "_System"))
+    open(os.path.join(badmf, "Core", "_System", "provider-manifest.yaml"), "w", encoding="utf-8").write("id: x\n\tnamespace: y\n")
+    open(os.path.join(badmf, "Core", "blocks.md"), "w", encoding="utf-8", newline="").write(blocks_of(region("zorg-case", "b", "1", "B")))
+    out_buf = io.StringIO()
+    with contextlib.redirect_stdout(out_buf):
+        fbm_ns = cr.fetch(repo_of({"id": "zorg-case", "kind": "folder", "paths": [badmf], "blocks_file": "Core/blocks.md"}))
+    check("a manifest that cannot be parsed: the id stands in, the blocks come, nothing is printed",
+          fbm_ns["namespace"] == "zorg-case" and set(fbm_ns["blocks"]) == {"b"} and out_buf.getvalue() == "", (fbm_ns, out_buf.getvalue()))
+    check("a repository dict built without the flag reads as explicit (the old behaviour)",
+          cr.fetch(dict(core_repo(id="zorg-context"), namespace_explicit=True))["blocks"] == {}, "")
+
+    # --- the warning a registration without a namespace earns
+    warn = lambda **kw: cr.namespace_warning(core_repo(**kw))
+    WARNING = "registration has no namespace \u2014 the core's manifest says zorg-core; add `namespace: zorg-core`"
+    check("namespace_warning: no namespace and the manifest says another → the one line", warn(id="zorg-context") == WARNING, warn(id="zorg-context"))
+    check("…none when the manifest says the id, or the registration names the namespace, or there is no core folder to ask",
+          warn() is None and warn(id="zorg-context", namespace="zorg-core") is None and warn(id="zorg-context", namespace="zorg-other") is None
+          and cr.namespace_warning(growth_repo()) is None
+          and cr.namespace_warning(core_repo(id="zorg-context", paths=[os.path.join(d, "gone")], core_root="")) is None, "")
+    check("…given the namespace a fetch found, it asks nobody",
+          cr.namespace_warning(core_repo(id="zorg-context", paths=[os.path.join(d, "gone")], core_root=""), "zorg-core") == WARNING
+          and cr.namespace_warning(core_repo(id="zorg-context"), "zorg-context") is None, "")
+    check("manifest_namespace: the manifest's when the registration names none, else None",
+          cr.manifest_namespace(core_repo(id="zorg-context")) == "zorg-core" and cr.manifest_namespace(core_repo(namespace="zorg-core")) is None
+          and cr.manifest_namespace(growth_repo()) is None, "")
 
     # --- the checked time
     stamp = datetime.datetime(2026, 10, 13, 12, 0, 0, tzinfo=datetime.timezone.utc)

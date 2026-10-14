@@ -72,6 +72,7 @@ def normalise(reg):
         "title": _s(reg.get("title")) or rid,
         "kind": kind,
         "namespace": _s(reg.get("namespace")) or rid,
+        "namespace_explicit": bool(_s(reg.get("namespace"))),       # False: the id stands in; `fetch` asks the core's manifest
         "blocks_file": _s(reg.get("blocks_file")),
         "core_root": core_root,
         "paths": paths,
@@ -310,6 +311,29 @@ def _regions(text, namespace):
     return blocks, versions
 
 
+def manifest_namespace(repo):
+    """The marker namespace the core's provider manifest names, when the registration names none and the core folder
+    is on this machine; otherwise None. A local read within the time budget: nothing is printed, nothing fails."""
+    root = repo["core_root"]
+    if repo.get("namespace_explicit", True) or not root or not os.path.isdir(root):
+        return None
+    with _bounded_reads():
+        manifest, _ = _manifest(root)
+    return (_s(manifest.get("namespace")) or None) if manifest is not None else None
+
+
+def namespace_warning(repo, namespace=None):
+    """The one line a registration with no namespace earns when the core's manifest says another: the namespace the
+    manifest names (`namespace`, when a fetch has found it already, else read from the core folder) and the line to add.
+    None when the registration names its namespace, or the manifest agrees with the id, or there is nobody to ask."""
+    if repo.get("namespace_explicit", True):
+        return None
+    ns = _clean(namespace if namespace is not None else manifest_namespace(repo) or "")
+    if not ns or ns == repo["namespace"]:
+        return None
+    return "registration has no namespace \u2014 the core's manifest says %s; add `namespace: %s`" % (ns, ns)
+
+
 def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
     """A repository's blocks ("theirs") — read only, nothing is written anywhere.
 
@@ -321,10 +345,14 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
 
     The server path of the blocks file is `endpoint.root + blocks_file`; in the core folder it is
     `core_root/blocks_file`. A registration that names no blocks_file (a v1 bundle) gets the one in the core's
-    provider manifest. Files are read through ctx_store.read_text (the iCloud time budget).
+    provider manifest, and one that names no namespace gets the manifest's (the id of a v1 registration is only
+    a stand-in: the markers in the core carry the manifest's namespace). A core folder that is not here, or a
+    manifest that cannot be read, leaves the stand-in. Files are read through ctx_store.read_text (the iCloud time
+    budget).
 
     Returns {source: "mcp"|"folder"|None, version: the v= most blocks carry (the first met on a tie; counted
     before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks (unless `include_skipped`),
+    namespace: the marker namespace the blocks were read in (set even when `error` is),
     team: the team region or None, team_source: "folder"|None, team_error: why the team region could not be built, or None,
     error: why no blocks came, or None, checked: ISO time}.
     The team region is built from the core folder alone (the card, the people, the role model), whichever
@@ -335,16 +363,19 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
     `team_error` set ("team block: not available (<why>)"), a team was due and could not be built — see `_team_block`:
     a missing core folder or provider manifest is a reason, never "not offered".
     """
-    out = {"source": None, "version": None, "blocks": {}, "team": None, "team_source": None, "team_error": None,
-           "error": None, "checked": _stamp(now)}
+    out = {"source": None, "version": None, "blocks": {}, "namespace": repo["namespace"], "team": None, "team_source": None,
+           "team_error": None, "error": None, "checked": _stamp(now)}
     src, core_root, url = repo["blocks_source"], repo["core_root"], repo["endpoint"]["url"]
+    explicit = repo.get("namespace_explicit", True)         # a repository built by hand has no flag: its namespace is meant
     with _bounded_reads():
         blocks_file = repo["blocks_file"]
         manifest, manifest_why = None, None
-        if core_root and os.path.isdir(core_root) and (repo["team"] or not blocks_file):
+        if core_root and os.path.isdir(core_root) and (repo["team"] or not blocks_file or not explicit):
             manifest, manifest_why = _manifest(core_root)
         if not blocks_file and manifest is not None:
             blocks_file = manifest.s("blocks_file")
+        if not explicit and manifest is not None:
+            out["namespace"] = _s(manifest.get("namespace")) or out["namespace"]
 
         text, errors = None, []
         if src == "auto" and not url and not core_root:
@@ -363,7 +394,7 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
                 else:
                     errors.append(why)
         if text is not None:                            # the team is only worth building for a fetch that succeeded
-            blocks, versions = _regions(text, repo["namespace"])
+            blocks, versions = _regions(text, out["namespace"])
             out["team"], out["team_error"] = _team_block(repo, manifest, manifest_why, in_file="team" in blocks)
             out["team_source"] = "folder" if out["team"] is not None else None
     if text is None:
