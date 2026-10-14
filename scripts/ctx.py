@@ -303,7 +303,11 @@ def cmd_read(a, c):
         cr.manifest_for(cr.load_manifest(), a.skill)
     except KeyError:
         raise cs.StoreError("no manifest entry for %s — read local-context.md whole" % a.skill)
-    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10])
+    try:
+        repos = crp.load_repos(c.text, c.home)
+    except Exception:  # noqa: BLE001 — the line that names a block's repository is not worth a read
+        repos = []
+    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10], repos=repos)
     sys.stdout.write(text)
     return 0, dict(res, command="read", skill=a.skill, text=text if a.json else None)
 
@@ -584,7 +588,9 @@ def cmd_card(a, c):
         c.guard()
         recs = c.store.load()
         stale, archived = co.card_marks(c.store, recs, now()[:10])
-        card = cs.build_card(recs, cs.compile_records(recs), now()[:10], stale=stale, archived=archived)
+        compiled = cs.compile_records(recs)
+        card = cs.build_card(recs, compiled, now()[:10], stale=stale, archived=archived,
+                             repos=co.card_repos(c.store, recs, compiled, c.home))
         cs.atomic_write(c.store.card_path, card)
     print("INDEX.md: %d lines" % card.count("\n"))
     return 0, {"command": "card", "card_lines": card.count("\n")}
@@ -713,6 +719,8 @@ def cmd_provider_adopt(a, c):
         with co.lock(c.home):
             c.guard()
             res = cb.adopt(c.store, c.copies, c.home, repo, fetched, now(), True)
+            if res["written"]:
+                co.refresh_card_repos(c.store, c.home, now()[:10])
     else:
         res = cb.adopt(c.store, c.copies, c.home, repo, fetched, now(), False)
     gets = [b for b, o in res["blocks"].items() if o in ("base", "edit")]
@@ -836,6 +844,7 @@ def cmd_provider_apply(a, c):
             c.import_first()
             for repo, f in fetched:
                 results.append(cb.apply(c.store, c.copies, c.home, repo, f, choose, add, now()))
+            co.refresh_card_repos(c.store, c.home, now()[:10])
     for k, res in enumerate(results):
         if k or paused:
             print()

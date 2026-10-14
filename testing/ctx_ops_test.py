@@ -15,6 +15,7 @@ import ctx_ops as co  # noqa: E402
 import ctx_blocks as cb  # noqa: E402
 
 FIX = os.path.join(ROOT, "testing", "fixtures", "ctx")
+REPOS_FIX = os.path.join(ROOT, "testing", "fixtures", "ctx-repos")
 fails = 0
 
 
@@ -200,12 +201,12 @@ NOW = "2026-10-20T10:00:00+03:00"
 class Env:
     """A temp HOME with the typical context, a temp vault with its mirror, and the store paths."""
 
-    def __init__(self, d, fixture="typical"):
+    def __init__(self, d, fixture="typical", fix=FIX):
         self.home = os.path.join(d, "home")
         self.vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(self.home, ".grow-pm"))
         os.makedirs(os.path.join(self.vault, "Notes", "_System"))
-        self.text = read(FIX, fixture + ".md").replace("{{VAULT}}", self.vault)
+        self.text = read(fix, fixture + ".md").replace("{{VAULT}}", self.vault)
         self.ctx = os.path.join(self.home, ".grow-pm", "local-context.md")
         self.mirror = os.path.join(self.vault, "Notes", "_System", "local-context.md")
         for p in (self.ctx, self.mirror):
@@ -694,6 +695,79 @@ with tempfile.TemporaryDirectory() as d:
     shutil.rmtree(e.store.root)
     check("a store removed while the vault is present is 'no store', not 'unavailable'",
           co.store_unavailable(e.text, e.home) is None, co.store_unavailable(e.text, e.home))
+
+# --- v3.13.0: the repositories on the card, and the days of the last checks in the digest
+def register(env, rid, kind="bundle", extra=""):
+    prov = os.path.join(env.home, ".grow-pm", "providers")
+    os.makedirs(prov, exist_ok=True)
+    open(os.path.join(prov, rid + ".yaml"), "w", encoding="utf-8").write(
+        "schema: provider-registration/1\nid: %s\nkind: %s\nauthority: org\npaths:\n  - %s\n%s" % (rid, kind, os.path.join(env.home, "core-" + rid), extra))
+
+
+def save_state(env, rid, checked, blocks):
+    entry = lambda v: {"base_sha": "a" * 64, "bases": ["a" * 64], "v": v, "host": None, "checked": checked, "user_removed": None}
+    with cs.guard_roots(co.allowed_roots(env.home, env.text)):
+        cb.save_state(env.store, rid, {"checked": checked, "source": "folder", "version": "0.4", "blocks": {b: entry(v) for b, v in blocks.items()}})
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    register(e, "zorg-core"); register(e, "zorg-growth", "mcp"); register(e, "zorg-idle")
+    recs = e.store.load()
+    got = co.card_repos(e.store, recs, e.text, e.home)
+    check("card_repos: the registered repositories that put blocks in the records, in registration order, nothing known about a check yet",
+          got == [{"id": "zorg-core", "blocks": 3, "v": None, "checked": None},
+                  {"id": "zorg-growth", "blocks": 2, "v": None, "checked": None}], got)
+    save_state(e, "zorg-core", NOW, {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+    save_state(e, "zorg-growth", "2026-10-19T08:00:00+03:00", {"growth-metrics": "0.1"})
+    got = co.card_repos(e.store, recs, e.text, e.home)
+    check("…with a state: the version most blocks have a base at, and the last check",
+          got == [{"id": "zorg-core", "blocks": 3, "v": "0.4", "checked": NOW},
+                  {"id": "zorg-growth", "blocks": 2, "v": "0.1", "checked": "2026-10-19T08:00:00+03:00"}], got)
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-growth.json"), "w").write("{ not json")
+    got = co.card_repos(e.store, recs, e.text, e.home)
+    check("…a state that cannot be read leaves out the version and the day, not the repository",
+          got[1] == {"id": "zorg-growth", "blocks": 2, "v": None, "checked": None} and got[0]["checked"] == NOW, got)
+    with cs.guard_roots(co.allowed_roots(e.home, e.text)):          # a hand-edited state: a number for a time, a control character in a version
+        cb.save_state(e.store, "zorg-growth", {"checked": 20261019, "source": "mcp", "version": "0.1", "blocks": {
+            "growth-metrics": {"base_sha": "a" * 64, "bases": [], "v": "0.1\x1b[31m", "host": None, "checked": None, "user_removed": None}}})
+    got = co.card_repos(e.store, recs, e.text, e.home)
+    check("…a time that is not text, a version with a control character: the card still builds, clean",
+          got[1] == {"id": "zorg-growth", "blocks": 2, "v": "0.1 [31m", "checked": None}
+          and "\x1b" not in cs.build_card(recs, e.text, "2026-10-20", repos=got), got)
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-growth.json"), "w").write("{ not json")
+    card_before = read(e.store.card_path)
+    co.compile_store(e.store, e.copies, NOW, e.home)
+    check("a compile that has nothing to write leaves the card as it was", read(e.store.card_path) == card_before)
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** PROJ2")
+    e.sync()
+    check("a sync that changes a record writes the repositories into the card",
+          "- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено 2026-10-20; zorg-growth: 2 блоків\n" in read(e.store.card_path), read(e.store.card_path)[:700])
+    save_state(e, "zorg-core", "2026-10-25T09:00:00+03:00", {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+    check("refresh_card_repos: the line moved, so the card is written", co.refresh_card_repos(e.store, e.home, "2026-10-25") is True
+          and "zorg-core: 3 блоків · v0.4 · перевірено 2026-10-25" in read(e.store.card_path)
+          and "Generated by ctx from 7 records on 2026-10-25" in read(e.store.card_path), read(e.store.card_path)[:300])
+    card_now = read(e.store.card_path)
+    check("…and when the line has not moved it writes nothing", co.refresh_card_repos(e.store, e.home, "2026-10-26") is False
+          and read(e.store.card_path) == card_now)
+    os.remove(e.store.card_path)
+    check("…a card that is not there is left for the next compile", co.refresh_card_repos(e.store, e.home, "2026-10-26") is False
+          and not os.path.exists(e.store.card_path))
+    no_regs = Env(os.path.join(d, "n"), "context", fix=REPOS_FIX); no_regs.migrate()
+    check("no registration, no line about repositories (the regions stay in the records)",
+          co.card_repos(no_regs.store, no_regs.store.load(), no_regs.text, no_regs.home) == [] and "Repos" not in read(no_regs.store.card_path))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    check("status_summary: no block state, no checks", co.status_summary(e.ctx, home=e.home)["checked"] == {})
+    save_state(e, "zorg-core", NOW, {"scope": "0.4"})
+    save_state(e, "zorg-growth", None, {"growth-metrics": "0.1"})
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-idle.json"), "w").write("{ not json")
+    digest = co.status_summary(e.ctx, home=e.home)
+    check("status_summary: the day of the last check of each repository, read from the state; what is unknown or unreadable is left out",
+          digest["checked"] == {"zorg-core": NOW} and digest["records"] == 7, digest)
+    shutil.rmtree(os.path.join(e.store.state_dir, "blocks"))
+    check("…no folder of block states is no checks", co.status_summary(e.ctx, home=e.home)["checked"] == {})
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

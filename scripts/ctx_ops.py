@@ -283,7 +283,7 @@ def compile_store(store, copies, now, home, snap=None):
         snap = snapshot(store, copies, home, "compile")
     for p in written:
         cs.atomic_write(p, text)
-    card = cs.build_card(recs, text, now[:10], stale=stale, archived=archived)
+    card = cs.build_card(recs, text, now[:10], stale=stale, archived=archived, repos=card_repos(store, recs, text, home))
     if not os.path.isfile(store.card_path) or _read(store.card_path) != card:
         cs.atomic_write(store.card_path, card)
     new["compiled_at"] = now
@@ -334,7 +334,7 @@ def migrate(context_path, store_root, copies, home, apply, now):
     state["stale"] = []
     store.save_state(state)
     note_store(home, store_root)
-    cs.atomic_write(store.card_path, cs.build_card(written, text, now[:10]))
+    cs.atomic_write(store.card_path, cs.build_card(written, text, now[:10], repos=card_repos(store, written, text, home)))
     store.journal({"ts": now, "op": "migrate", "ids": [r["id"] for r in written], "source": "migrate",
                    "reason": "", "snapshot": snap})
     report.update(applied=True, snapshot=snap)
@@ -825,8 +825,70 @@ def card_marks(store, recs, today, state=None):
     return ({r["id"]: sc.verified_of(r, st) for r in recs if sc.is_stale(r, st, today)}, len(store.archived()))
 
 
+def card_repos(store, recs, text, home):
+    """[{"id", "blocks", "v", "checked"}] for the card, in registration order: each registered repository that has
+    blocks in `recs` — how many, the version most of them have a base at (None when none has) and when the store last
+    checked the repository (None when never). A repository whose state cannot be read is listed without the last two;
+    what a repository's markers or a state carry is cleaned of control characters before it reaches the card.
+    Reads only, and never fails: a card line is not worth a compile."""
+    import ctx_blocks as cb                      # here: both import this module
+    import ctx_repos as crp
+    try:
+        repos = crp.load_repos(text, home or os.path.expanduser("~"))
+    except Exception:  # noqa: BLE001 — a registration nobody can read must not stop a compile
+        return []
+    out = []
+    for r in repos:
+        n = len(cb.find_regions(recs, r["namespace"])[0])
+        if not n:
+            continue
+        try:
+            state = cb.load_state(store, r["id"])
+        except (cs.StoreError, OSError):
+            state = {}
+        v, checked = cb.base_version(state), state.get("checked")
+        out.append({"id": cb.clip(r["id"], 60), "blocks": n, "v": cb.clip(v, 40) if v else None,
+                    "checked": cb.clip(checked, 40) if isinstance(checked, str) and checked else None})
+    return out
+
+
+REPOS_LINE = "- **Repos:**"
+
+
+def refresh_card_repos(store, home, today):
+    """Rewrite the card when its line about the repositories is not what the store says now. A check or an adopt
+    moves a repository's state without touching a record, so no compile follows and the line would stay as it was.
+    Everything else on the card is as `ctx card` makes it; a card that is not there is left for the next compile.
+    Returns True when the card was written."""
+    if not os.path.isfile(store.card_path):
+        return False
+    recs = store.load()
+    text = cs.compile_records(recs)
+    stale, archived = card_marks(store, recs, today)
+    card = cs.build_card(recs, text, today, stale=stale, archived=archived, repos=card_repos(store, recs, text, home))
+    line = lambda c: next((l for l in c.splitlines() if l.startswith(REPOS_LINE)), None)
+    if line(card) == line(_read(store.card_path)):
+        return False
+    cs.atomic_write(store.card_path, card)
+    return True
+
+
+def _checked_by_repo(store):
+    """{repository id: when it was last checked} from the block states in the store, for the SessionStart digest.
+    Read only, and never fails: what cannot be read is left out."""
+    import ctx_blocks as cb                      # here: it imports this module
+    folder = os.path.join(store.state_dir, "blocks")
+    try:
+        ids = sorted(n[:-5] for n in os.listdir(folder) if n.endswith(".json"))
+    except OSError:
+        return {}
+    got = {rid: cb.last_checked(store.root, rid) for rid in ids}
+    return {rid: when for rid, when in got.items() if when}
+
+
 def status_summary(context_path, home=None):
-    """{records, card_lines, pending, conflicts, stale} for the SessionStart digest; {unavailable: root} when
+    """{records, card_lines, pending, conflicts, stale, unassigned, checked} for the SessionStart digest (`checked`:
+    {repository id: when the store last checked it}); {unavailable: root} when
     the store used before cannot be reached; None without a store or on any error. Reads only. The home
     defaults to the one the context file lives in (~/.grow-pm/local-context.md)."""
     try:
@@ -844,6 +906,7 @@ def status_summary(context_path, home=None):
                 "conflicts": len(plan["conflicts"]) + (1 if plan["suspicious_removal"] else 0) + len(plan["missing"]),
                 "stale": len(sc.stale_ids(recs, store.state(), datetime.date.today().isoformat())),
                 "unassigned": len(cs.unassigned_ids(recs)),
+                "checked": _checked_by_repo(store),
                 "unavailable": None}
     except Exception:
         return None

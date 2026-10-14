@@ -262,5 +262,42 @@ check("a flow list read_by typed by hand does not break the record", flow_ok)
 check("heading_matches", hasattr(cs, "heading_matches") and cs.heading_matches("#### Platforms (mobile first)", "Platforms")
       and cs.heading_matches("#### Platforms", "Platforms") and not cs.heading_matches("#### Platformsx", "Platforms"))
 
+# --- v3.13.0: members from the team block, and the repositories on the card
+OWN_MEMBERS = "#### Members\n\n| Name | Role |\n|---|---|\n| Alex | PM |\n| Bea | DA |\n| Cy | QA |\n"
+CORE_TEAM = ("<!-- zorg-core:begin id=team v=0.2 -->\n#### Members (registry)\n\n| Name | Role |\n|---|---|\n| Alex | PM |\n"
+             "| Bea | DA |\n<!-- zorg-core:end id=team -->\n")
+check("members: only in the team block", cs._member_count("### Team: Alpha\n\n" + CORE_TEAM) == 2)
+check("members: only in your own text", cs._member_count("### Team: Alpha\n\n" + OWN_MEMBERS) == 3)
+check("members: your own table wins over the block, whichever comes first",
+      cs._member_count("### Team: Alpha\n\n" + CORE_TEAM + "\n" + OWN_MEMBERS) == 3
+      and cs._member_count("### Team: Alpha\n\n" + OWN_MEMBERS + "\n" + CORE_TEAM) == 3)
+check("members: a Members heading of yours with no table leaves the count to the block",
+      cs._member_count("### Team: Alpha\n\n#### Members\n\nsee the core\n\n" + CORE_TEAM) == 2)
+check("members: none anywhere", cs._member_count("### Team: Alpha\n\n- **Lead:** Alex\n") is None
+      and cs._member_count("### Team: Alpha\n\n<!-- zorg-core:begin id=team v=0.2 -->\n- core\n<!-- zorg-core:end id=team -->\n") is None)
+
+repo_text = read(ROOT, "testing", "fixtures", "ctx-repos", "context.md").replace("{{VAULT}}", "/tmp/zorg-vault")
+repo_recs = [dict(r, ctx=1, owner="user", source="migrated", modified="2026-10-20T10:00:00+03:00", body=r["text"])
+             for r in cs.assign_ids(cs.split_sections(repo_text))]
+plain = cs.build_card(repo_recs, repo_text, now="2026-10-20")
+check("card member count from the team block", "- **Team:** Alpha (A) — 2 members" in plain.splitlines()
+      and "| team.alpha-a | Team: Alpha (A) | 2 members |" in plain, plain)
+check("no repositories given, no line about them", "Repos" not in plain, plain)
+REPOS = [{"id": "zorg-core", "blocks": 3, "v": "0.4", "checked": "2026-10-20T10:00:00+03:00"}]
+with_repos = cs.build_card(repo_recs, repo_text, now="2026-10-20", repos=REPOS)
+check("card repo line", "- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено 2026-10-20" in with_repos.splitlines(), with_repos)
+check("…it sits among the overview lines, after the vaults, and adds nothing else",
+      with_repos.splitlines().index("- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено 2026-10-20")
+      == with_repos.splitlines().index([l for l in with_repos.splitlines() if l.startswith("- **Vaults:**")][0]) + 1
+      and with_repos.replace("- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено 2026-10-20\n", "") == plain, with_repos)
+two = cs.build_card(repo_recs, repo_text, now="2026-10-20", repos=REPOS + [{"id": "zorg-growth", "blocks": 2, "v": "0.1", "checked": "2026-10-19"}])
+check("two repositories share one line, in the order given",
+      "- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено 2026-10-20; zorg-growth: 2 блоків · v0.1 · перевірено 2026-10-19" in two.splitlines()
+      and two.count("**Repos:**") == 1, two)
+odd = cs.build_card(repo_recs, repo_text, now="2026-10-20", repos=[{"id": "zorg-core", "blocks": 3, "v": None, "checked": None},
+                                                                  {"id": "zorg-growth", "blocks": 1, "v": "0.1", "checked": None}])
+check("what is not known is left out of the line", "- **Repos:** zorg-core: 3 блоків; zorg-growth: 1 блоків · v0.1" in odd.splitlines(), odd)
+check("the repositories are the card's only change", cs.build_card(typ, read(FIX, "typical.md"), now="2026-10-20", repos=[]) == golden)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

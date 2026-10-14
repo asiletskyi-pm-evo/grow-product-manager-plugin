@@ -120,9 +120,19 @@ def _index_date(index_path):
         return None
 
 
-def providers_info(text, extra_dirs=None, skipped=None):
+def _day(text):
+    """The date a text starts with, or None."""
+    try:
+        return datetime.date.fromisoformat(str(text or "")[:10])
+    except ValueError:
+        return None
+
+
+def providers_info(text, extra_dirs=None, skipped=None, checked=None):
     """[(id, label)], provider roots and the bundle facts — header-level only.
-    Registrations that cannot be read land in `skipped` as (path, reason)."""
+    Registrations that cannot be read land in `skipped` as (path, reason). `checked` is {provider id: when the
+    context store last checked it}: a day newer than the registration's `synced_at` is the day shown, and the
+    one `stale` is counted from (since v3.13.0)."""
     if cc is None:
         return [], [], None
     entries = cc.vault_entries(text)
@@ -144,10 +154,14 @@ def providers_info(text, extra_dirs=None, skipped=None):
         mode = e.get("mode") or "live"
         access = e.get("access") or ("local" if e.get("index") else "open")
         bits, stale = [mode, access], False
-        if e.get("synced"):
-            bits.append("synced %s" % e["synced"])
+        synced = e.get("synced")
+        seen = _day((checked or {}).get(pid))
+        if seen and (_day(synced) is None or seen > _day(synced)):
+            synced = seen.isoformat()
+        if synced:
+            bits.append("synced %s" % synced)
             try:
-                stale = (today - datetime.date.fromisoformat(e["synced"][:10])).days > e.get("stale_after", 30)
+                stale = (today - datetime.date.fromisoformat(synced[:10])).days > e.get("stale_after", 30)
             except ValueError:
                 pass
         idx = _index_date(e.get("index"))
@@ -229,11 +243,12 @@ def parse(path, extra_dirs=None):
     vault = re.search(r"^## Obsidian Vaults", text, re.M) and re.search(r"^\s*-\s*path:\s*\S+", text, re.M)
     facts["vault_section"] = bool(vault) or bool(cc and cc.vault_entries(text))  # table format too (v3.10.0)
     facts["unreadable_registrations"] = []
+    facts["context_store"] = _store_summary(path)   # first: the providers line takes the days of the last checks from it
     try:
-        facts["providers"], facts["provider_roots"], facts["bundle"] = providers_info(text, extra_dirs, facts["unreadable_registrations"])
+        facts["providers"], facts["provider_roots"], facts["bundle"] = providers_info(
+            text, extra_dirs, facts["unreadable_registrations"], (facts["context_store"] or {}).get("checked"))
     except Exception:
         facts["providers"], facts["provider_roots"], facts["bundle"] = [], [], None
-    facts["context_store"] = _store_summary(path)
     facts["cjm_section"] = bool(re.search(r"^## CJM Configuration\s*\n(?:.*\n){1,6}?.*(?:stages|funnel|template)", text, re.M | re.I))
     facts["terminology_section"] = bool(re.search(r"^### Terminology & Style", text, re.M))
     return facts

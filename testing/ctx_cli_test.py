@@ -1157,6 +1157,35 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
 check("apply never writes into the core folder", core_untouched and all(core_untouched), core_untouched)
 
 
+# --- v3.13.0 Task 9: ctx read says where a block comes from; the card lists the repositories
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        run_ok(e, "migrate", "--apply")
+        card_of = lambda: read(e.store, "INDEX.md")
+        check("before any check the card still says how many blocks each repository put in (a registered repository with none is left out)",
+              "- **Repos:** zorg-core: 3 блоків; zorg-growth: 2 блоків\n" in card_of(), card_of()[:600])
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        day = block_state(e, "zorg-core")["checked"][:10]
+        check("adopt --apply puts the check on the card: no compile follows an adopt, so the card is refreshed",
+              "- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено %s; zorg-growth: 2 блоків\n" % day in card_of(), card_of()[:600])
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        line = "- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено %s; zorg-growth: 2 блоків · v0.1 · перевірено %s\n" % (day, day)
+        check("…each repository once, with the version most of its blocks have a base at", line in card_of() and card_of().count("**Repos:**") == 1
+              and "Alpha (A) — 2 members" in card_of(), card_of()[:900])
+        rc, out, res = run_ok(e, "card")
+        check("ctx card says the same", rc == 0 and line in card_of(), card_of()[:900])
+        mtime = os.stat(os.path.join(e.store, "INDEX.md")).st_mtime_ns
+        time.sleep(1.1)
+        rc, out, r = run_ok(e, "provider", "apply", "zorg-core")
+        check("an apply that changes nothing leaves the card alone: the line has not moved", rc == 0 and "без змін" in out
+              and os.stat(os.path.join(e.store, "INDEX.md")).st_mtime_ns == mtime, (rc, out[-300:]))
+        rc, out, res = run_ok(e, "read", "--skill", "hiring-designer")
+        check("ctx read puts the repository, the version and the day of the check before a block",
+              rc == 0 and "> [zorg-core · v0.2 · станом на %s]\n#### Members" % day in out, (rc, out[-600:]))
+        check("…and carries the card with the repositories", line in out, out[:900])
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
