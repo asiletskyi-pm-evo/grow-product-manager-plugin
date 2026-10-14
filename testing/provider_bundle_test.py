@@ -228,8 +228,10 @@ check("dashboard rewritten and pruned", "my focus" in dash and "Missing note" no
       and "[[Core/Teams/_index|Teams]]" in dash, dash)
 check("bundle manifest frontmatter", 'team: "team-alpha"' in man and "role_profile: pm" in man and 'core_version: "0.2"' in man, man)
 check("focus note from default template", "Mission One" in now and "Alex One" in now, now)
-check("registration proposed", "id: zorg-core" in regp and "schema: provider-registration/1" in regp and out in regp
+check("registration proposed", "id: zorg-core" in regp and "schema: provider-registration/2" in regp and out in regp
       and "jira_write: own" in regp, regp)
+check("registration v2 proposed", "schema: provider-registration/2" in regp and "core_root: " in regp
+      and "namespace: zorg-core" in regp and "blocks_file: Core/_System/context-blocks.md" in regp and "rank: 1000" in regp, regp)
 check("bundle result line", res.get("team") == "alpha" and res.get("role") == "pm" and res.get("files", 0) >= 7, res)
 check("team block carries the write scope", "own project" in rd("Core", "_System", "team-context.md").lower(), rd("Core", "_System", "team-context.md"))
 shutil.rmtree(d)
@@ -314,6 +316,162 @@ check("--propose-only resolves team and role and writes nothing without a contex
 rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run")
 check("--dry-run still works and names its new spelling", rc == 0 and "--propose-only" in o, (rc, o[-300:]))
 shutil.rmtree(d)
+
+# 10 — v3.13.0: the registration proposal is provider-registration/2 (what `ctx provider plan/apply` read)
+import ctx_repos as cr
+
+def read_root(*parts):
+    return open(os.path.join(ROOT, *parts), encoding="utf-8").read()
+
+def proposed_registration(manifest_extra="", manifest_edit=None, vault=None, existing=None):
+    """(parsed registration, core, out, exit code, output) of a --propose-only run on a fresh copy of the Zorg core."""
+    d, core, out = fresh()
+    mf = os.path.join(core, "Core", "_System", "provider-manifest.yaml")
+    text = open(mf, encoding="utf-8").read()
+    if manifest_edit:
+        text = text.replace(*manifest_edit)
+    open(mf, "w", encoding="utf-8").write(text + manifest_extra)
+    ctx = existing or os.path.join(FIX, "existing-context.md")
+    if vault is not None:
+        ctx = os.path.join(d, "vault-context.md")
+        open(ctx, "w", encoding="utf-8").write(open(os.path.join(FIX, "existing-context.md"), encoding="utf-8").read().replace(
+            "/Users/name/Vault", vault.replace("{d}", d).replace("{core}", core)))
+    rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only", "--existing-context", ctx)
+    path = os.path.join(out, "Core", "_System", "provider-registration.proposed.yaml")
+    reg = cc.read_yaml_subset(open(path, encoding="utf-8").read()) if os.path.isfile(path) else {}
+    return reg, d, core, out, rc, o
+
+reg, d, core, out, rc, o = proposed_registration()
+check("v2 registration, as the reader reads it: schema, identity, rank as a number, core_root, namespace, blocks_file, no products",
+      rc == 0 and reg.get("schema") == "provider-registration/2" and reg.get("id") == "zorg-core" and reg.get("kind") == "bundle"
+      and reg.get("authority") == "org" and reg.get("rank") == 1000 and type(reg.get("rank")) is int
+      and reg.get("core_root") == os.path.abspath(core) and reg.get("namespace") == "zorg-core"
+      and reg.get("blocks_file") == "Core/_System/context-blocks.md" and reg.get("products") == [], (rc, reg))
+check("…the v1 keys are all still there: paths, writable, team, role, jira_write, status, mode, access",
+      reg.get("paths") == [os.path.abspath(out)] and reg.get("writable") == ["Core/Now.md", "Core/TODO*", "Core/_personal/"]
+      and reg.get("team") == "team-alpha" and reg.get("role") == "pm" and reg.get("jira_write") == "ask"
+      and reg.get("status") == "active" and reg.get("mode") == "snapshot" and reg.get("access") == "local"
+      and reg.get("skip_blocks") == [] and reg.get("index") == "" and reg.get("stale_after_days") == 30, reg)
+check("a manifest that names no server gives no endpoint", "endpoint" not in reg, reg)
+rep = cr.normalise(reg)
+check("the repository reader takes it whole: an explicit namespace, the core folder, the blocks file, the rank",
+      rep["namespace_explicit"] is True and rep["namespace"] == "zorg-core" and rep["core_root"] == os.path.abspath(core)
+      and rep["blocks_file"] == "Core/_System/context-blocks.md" and rep["rank"] == 1000 and rep["products"] == []
+      and rep["endpoint"] == {"url": "", "root": "", "headers_env": ""}, rep)
+fch = cr.fetch(rep)
+check("…and a fetch through it finds the core's blocks in the folder, with no warning to add a namespace",
+      fch["source"] == "folder" and fch["namespace"] == "zorg-core" and set(fch["blocks"]) == {"scope", "product", "teams"}
+      and cr.namespace_warning(rep) is None, fch)
+shutil.rmtree(d)
+
+SERVER = 'mcp:\n  url: https://context.zorg.example/mcp\n  transport: mcp-remote --transport http-only\n  access: vpn\n'
+reg, d, core, out, rc, o = proposed_registration(manifest_extra=SERVER)
+check("the manifest names a server: endpoint.url from mcp.url, access from mcp.access, no root outside a vault",
+      rc == 0 and reg.get("endpoint") == {"url": "https://context.zorg.example/mcp"} and reg.get("access") == "vpn"
+      and cr.normalise(reg)["endpoint"] == {"url": "https://context.zorg.example/mcp", "root": "", "headers_env": ""}, reg)
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_extra=SERVER, vault="{d}")
+check("a core nested in a vault of the user's context: endpoint.root is the core's folder in that vault, with the slash",
+      rc == 0 and reg.get("endpoint") == {"url": "https://context.zorg.example/mcp", "root": "core/"}, (rc, reg.get("endpoint"), o[-200:]))
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_extra=SERVER, vault="{core}")
+check("a core that is itself the vault is not nested: no root", rc == 0 and reg.get("endpoint") == {"url": "https://context.zorg.example/mcp"},
+      (rc, reg.get("endpoint")))
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_extra=SERVER, vault="{d}/elsewhere")
+check("a core outside every vault of the context (a sibling folder with a name that starts the same) has no root",
+      rc == 0 and reg.get("endpoint") == {"url": "https://context.zorg.example/mcp"}, (rc, reg.get("endpoint")))
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_extra='mcp:\n  url: "https://context.zorg.example/mcp?v=1#main"\n')
+check("a server address with '#' and '?' survives the registration", reg.get("endpoint") == {"url": "https://context.zorg.example/mcp?v=1#main"}, reg)
+shutil.rmtree(d)
+
+for authority, rank in (("team", 500), ("personal", 100), ("weird", 500)):
+    reg, d, core, out, rc, o = proposed_registration(manifest_edit=("authority: org", "authority: %s" % authority))
+    check("rank follows the authority (%s → %d)" % (authority, rank), rc == 0 and reg.get("rank") == rank and reg.get("authority") == authority, (rc, reg))
+    shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_edit=("namespace: zorg-core", "namespace: zorg-blocks"))
+check("a namespace of its own in the manifest is the registration's", rc == 0 and reg.get("namespace") == "zorg-blocks" and reg.get("id") == "zorg-core", (rc, reg))
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_edit=("blocks_file: Core/_System/context-blocks.md\n", ""))
+check("a manifest with no blocks file: the registration names none", rc == 0 and "blocks_file" not in reg and reg.get("namespace") == "zorg-core", (rc, reg))
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_edit=("namespace: zorg-core\n", ""))
+check("a manifest with no namespace: the registration names the id, as the builder does", rc == 0 and reg.get("namespace") == "zorg-core", (rc, reg))
+shutil.rmtree(d)
+
+# the section a new context gets, and the connect procedure the skill points to
+check("section template says edits are kept", "kept" in read_root("scripts", "provider_templates", "context-section.md"),
+      read_root("scripts", "provider_templates", "context-section.md"))
+steps = read_root("skills", "context-connect", "references", "connect-steps.md")
+skill = read_root("skills", "context-connect", "SKILL.md")
+check("connect-steps uses plan and apply", "ctx.py\" provider plan" in steps and "provider apply" in steps and "provider adopt --apply" in steps, "")
+check("connect-steps: the answers are --choose and --add, an unreachable repository (exit 5) writes nothing, the old path stays for no store",
+      "--choose" in steps and "--add" in steps and "exit 5" in steps and "unreachable" in steps and "provider_bundle.py" in steps, "")
+check("the skill is 0.3.0 and a refresh with a store never stamps Updated or appends a changelog",
+      "version: 0.3.0" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
+
+# 11 — fix round 1: a refresh keeps a registration the user completed; a removed block recommends keeping the text; the apply carve-out
+# (the builder only proposes the registration — it never writes the file in the user's vault, so the rule lives in the procedure)
+flat = lambda s: re.sub(r"\s+", " ", s)
+steps_f, skill_f = flat(steps), flat(skill)
+reg61 = steps_f[steps_f.index("## §6 Register and finish"):steps_f.index("## §7")]
+step61 = skill_f[skill_f.index("## Step 6"):skill_f.index("## What is forbidden")]
+for label, text in (("connect-steps §6.1", reg61), ("SKILL.md Step 6.1", step61)):
+    check("%s: an existing registration is kept — a refresh updates synced_at and source_version, adds a missing v2 key, never changes a present one"
+          % label, "synced_at" in text and "source_version" in text and "never chang" in text and "headers_env" in text
+          and "products" in text and "blocks_source" in text and "home_record" in text and "paused" in text, text[:500])
+    check("%s: replacing it by the proposal needs the user's explicit yes after the differences are shown" % label,
+          "explicit" in text and "differences" in text, text[:500])
+check("a v1 registration gets only the two dates until the user says yes (no silent upgrade)",
+      "v1" in reg61 and "only the two dates" in reg61, reg61[:600])
+refresh_q = steps_f[steps_f.index("Ask **once**"):steps_f.index("3. Apply the answers")]
+check("a `?` row whose block the core still offers recommends theirs; a block the core removed (`?` or `⚠`) recommends mine",
+      "`?` with the block still offered → theirs" in refresh_q and "removed" in refresh_q and "mine" in refresh_q
+      and "`?` → theirs." not in refresh_q and "recommended: mine" in refresh_q, refresh_q[:700])
+step4 = skill_f[skill_f.index("## Step 4"):skill_f.index("## Step 5")]
+check("SKILL.md Step 4 repeats the split: `?` theirs, mine when the core removed the block",
+      "`?` theirs" in step4 and "mine when the core removed the block" in step4, step4[:900])
+forbid = skill_f[skill_f.index("## What is forbidden"):skill_f.index("## Quality Standards")]
+check("the 'never overwrite local-context.md without a yes' rule has the snapshot-backed apply carve-out",
+      "without an explicit" in forbid and "ctx provider apply" in forbid and "snapshot" in forbid and "ctx undo" in forbid
+      and "`~`" in forbid and "`−`" in forbid and "one message" in forbid, forbid)
+check("connect-steps says the same where it says there is no question: the plan was shown, the snapshot is the gate",
+      "No `⚠`, `+` or `?` row → no question" in steps_f and "snapshot" in steps_f[steps_f.index("No `⚠`, `+` or `?` row"):][:400]
+      and "one message" in steps_f[steps_f.index("No `⚠`, `+` or `?` row"):][:400], steps_f[steps_f.index("No `⚠`"):][:400])
+
+# 12 — the docs pass (Task 12): the residual wording of the re-review of Task 11
+core_keys = ["`core_root`", "`namespace`", "`blocks_file`", "`paths`", "`endpoint.url`", "`endpoint.root`", "`rank`"]
+for label, text in (("connect-steps §6.1", reg61), ("SKILL.md Step 6.1", step61)):
+    check("%s: a kept core-derived key that differs from the proposal is reported in one line and the replacement is offered on a yes; exit 5 points to it"
+          % label, all(k in text for k in core_keys) and "one line" in text and "replacement" in text and "yes" in text and "exit 5" in text,
+          [k for k in core_keys if k not in text])
+    said = ["`products: []`", "`status: active`", "as defaults"] if label.startswith("connect-steps") else ["carries a default for the others"]
+    check("%s: the proposal lacks some user-finished keys and carries defaults for others — no 'never carries' for products or status" % label,
+          all(s in text for s in said) and "never carries" not in text and "always says" not in text, (said, text[:700]))
+check("connect-steps §6.1 and SKILL.md Step 6.1: a nested v2 key that is missing counts as missing",
+      "A nested key counts" in reg61 and "a nested one too" in step61, (reg61[:300], step61[:300]))
+check("connect-steps §6.1: a v2 file with no namespace gets it from the manifest, silently; §4a says the same, and a v1 file asks",
+      "no `namespace` gets it from the manifest the same way, silently" in reg61
+      and "A v2 file that lacks only the key gets it from the manifest on the Refresh, silently" in steps_f
+      and "A v1 file is the user's until they say yes" in steps_f, "")
+check("the carve-out names local-context.md only: the focus note, the to-do note and the rest keep the yes",
+      "names `local-context.md` only" in forbid and "the focus note, the to-do note and everything else keep the \"yes\"" in forbid, forbid)
+check("the order is the plan in one line → apply → the report, and ~ and − are never asked in either case (SKILL.md Step 4 and connect-steps §4a)",
+      "the plan in one line → `apply` → the report" in step4 and "never asked, in either case" in step4
+      and "the plan in one line → `apply` → the report" in steps_f and "whether or not there is a question about other rows" in steps_f,
+      (step4[-500:], refresh_q[-500:]))
+check("exit 5 in connect-steps: the core moved → point to the kept-key line and offer the replacement on a yes",
+      "point to that line and offer the replacement on a yes" in steps_f, "")
+check("connect-steps: the blocks the report lists as reference_only show as + in the next plan; exit 4 also means a refused run",
+      "reference_only" in steps_f and "show as `+` in the next plan" in steps_f and "a store inside a provider's folder, a busy lock" in steps_f, "")
 
 # 9
 tok_file = os.path.join(ROOT, "testing", "org-tokens.local")

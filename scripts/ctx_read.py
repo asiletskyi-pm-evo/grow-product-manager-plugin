@@ -4,7 +4,10 @@
 references/context-manifest.yaml says, per skill, which records, fields and subsections Step 0c
 needs; `read_view` gives the context card plus exactly those parts — read only, no lock, no
 writes. Edits not imported yet and records missing on disk are read from the canonical copy,
-with a note. Semantics: references/context-protocol.md.
+with a note. A field or a subsection is looked for in your own text first, outside the managed regions,
+and only then inside them. Every block a repository put in a record is read with the line that says
+whose it is, which version and when it was last checked (since v3.13.0). Semantics:
+references/context-protocol.md.
 
 - load_manifest / manifest_for    the manifest
 - read_view                       the text of `ctx read --skill <name>` and its result
@@ -62,6 +65,76 @@ def _lines(body):
     return [core for _, core, _ in cs._lines(body)]
 
 
+CONFLICT_NOTE = "⚠ конфлікт: файл і запис різняться — ctx sync"
+_VERSION = re.compile(r"(?:^|\s)v=([^\s>]+)")
+
+
+def _blocks(text, at=0):
+    """[(namespace, block id or None, version, start of the begin marker, inner text)] of the managed blocks of `text`,
+    in order, read the way that leaves them out of your own text (ctx_common.REGION_RE: a begin and its own end). A
+    `<ns>:section` wrapper is not a block, the blocks inside it are; a begin with no end is not one (its text is
+    yours). `start` counts from `at`."""
+    out = []
+    for m in cc.REGION_RE.finditer(text):
+        opened = text.index(">", m.start()) + 1
+        inner = text[opened:text.rindex("<!--", m.start(), m.end())]
+        if m.group(1).endswith(":section"):
+            out += _blocks(inner, at + opened)
+        else:
+            v = _VERSION.search(text[m.start():opened])
+            out.append((m.group(1), m.group(2), v.group(1) if v else "", at + m.start(), inner))
+    return out
+
+
+def _blocks_module():
+    import ctx_blocks                        # here: ctx_blocks imports this module
+    return ctx_blocks
+
+
+class _Origin:
+    """The line before a repository's text, `> [<repository> · v<version> · станом на <date>]`: the repository is the
+    registration whose namespace the block carries (the namespace itself when nobody registered it), the version is
+    the block's marker, the date the day the store last checked that block against its repository — none when it never
+    did or the state cannot be read."""
+
+    def __init__(self, store, repos):
+        self.store = store
+        self.repo_of = {}
+        for r in repos or ():
+            self.repo_of.setdefault(r.get("namespace") or r["id"], r["id"])
+        self._blocks = {}
+
+    def _state(self, repo_id):
+        if repo_id not in self._blocks:
+            try:
+                self._blocks[repo_id] = _blocks_module().load_state(self.store, repo_id)["blocks"]
+            except (cs.StoreError, OSError):
+                self._blocks[repo_id] = {}
+        return self._blocks[repo_id]
+
+    def line(self, ns, bid, v):
+        clip = _blocks_module().clip
+        repo = self.repo_of.get(ns)
+        entry = (self._state(repo).get(bid) if repo else None) or {}
+        marks = [clip(repo or ns, 60)]
+        if v or entry.get("v"):
+            marks.append("v" + clip(v or entry["v"], 40))
+        day = clip(entry.get("checked") or "", 40)[:10]
+        if day:
+            marks.append("станом на " + day)
+        return "> [" + " · ".join(marks) + "]"
+
+    def label(self, text):
+        """`text` with the line put before each block of it."""
+        pieces, at = [], 0
+        for ns, bid, v, start, _ in _blocks(text):
+            lead = text.rfind("\n", 0, start) + 1
+            pos = lead if not text[lead:start].strip() else start
+            pieces += [text[at:pos], "" if pos == lead else "\n", self.line(ns, bid, v), "\n"]
+            at = pos
+        return "".join(pieces) + text[at:]
+
+
 def _subsection(body, name):
     """The `#…# name` subsection (heading to the next heading of the same or a higher level), or None; the
     heading may carry a qualifier after the name."""
@@ -85,6 +158,21 @@ def _field_text(body, name):
         if m and m.group("name").strip() == name:
             return core + "\n"
     return _subsection(body, name)
+
+
+def _lookup(body, name, field=True):
+    """(text, block) of a field (its line, else its `####` subsection; `field=False`: the subsection alone). Your own
+    text is read first, with the managed regions left out; failing that, the first block that has it, and then
+    `block` is (namespace, id, version) — a subsection ends with its block. (None, None) when nothing has it."""
+    find = _field_text if field else _subsection
+    own = find(cc.strip_managed_regions(body), name)
+    if own is not None:
+        return own, None
+    for ns, bid, v, _, inner in _blocks(body):
+        text = find(inner, name)
+        if text is not None:
+            return text, (ns, bid, v)
+    return None, None
 
 
 def _without_heading(body):
@@ -125,6 +213,9 @@ def _live_view(store, copies, now):
             notes[rid] = "запису немає на диску — ctx sync"
     for rid in plan["removes"]:
         recs.pop(rid, None)
+    for x in plan["conflicts"]:
+        if x["id"] in recs:
+            notes[x["id"]] = CONFLICT_NOTE
     taken = set(recs) | store.reserved_ids()
     for k, a in enumerate(plan["adds"]):
         frag = {"type": a["type"], "title": a["title"], "heading": None, "parent_index": None, "text": a["text"]}
@@ -157,20 +248,22 @@ def _pick_product(products, wanted):
     return None, len(products) > 1
 
 
-def read_view(store, copies, skill, product=None, today=None, manifest=None):
+def read_view(store, copies, skill, product=None, today=None, manifest=None, repos=None):
     """The text of `ctx read --skill <skill>` and its result (records, missing, chars, tokens_est,
-    pending, needs_product). Reads only."""
+    pending, needs_product). Reads only. `repos` are the registrations (ctx_repos.load_repos): they name the
+    repository of each block; without them a block is named by its namespace."""
     spec = manifest_for(manifest or load_manifest(), skill)
     today = (today or datetime.date.today().isoformat())[:10]
     state = store.state()
     card = co._read(store.card_path) if os.path.isfile(store.card_path) else ""
     recs, notes, pending = _live_view(store, copies, today + "T00:00:00")
+    origin = _Origin(store, repos)
     blocks, used, missing, sizes, unassigned = [], [], [], {}, []
     res = {"records": used, "missing": missing, "pending": pending, "needs_product": False,
            "unassigned": unassigned, "over_budget": False, "largest": None}
 
     def add(rec, text):
-        blocks.append(_head(rec, state, today, notes.get(rec["id"], "")) + "\n" + text.rstrip("\n") + "\n")
+        blocks.append(_head(rec, state, today, notes.get(rec["id"], "")) + "\n" + origin.label(text).rstrip("\n") + "\n")
         used.append(rec["id"])
         sizes[rec["id"]] = tokens_est(blocks[-1])
 
@@ -199,7 +292,7 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None):
                 if rec:
                     add(rec, _without_heading(rec["body"]))
                     for f in ((spec.get(kind) or {}).get("required") or []):
-                        if _field_text(rec["body"], f) is None:
+                        if _lookup(rec["body"], f)[0] is None:
                             miss(f, True)
                 else:
                     miss(kind, False)
@@ -208,7 +301,7 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None):
                 if prod is None:
                     miss("продукт", bool(want.get("required")))
                 else:
-                    _parts(add, miss, prod, want)
+                    _parts(add, miss, prod, want, origin)
             want = spec.get("team")
             if want is not None:
                 teams = [r for r in recs if r["type"] == "team" and (prod is None or r.get("parent") == prod.get("parent"))]
@@ -216,7 +309,7 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None):
                     if want.get("whole"):
                         add(t, _without_heading(t["body"]))
                     else:
-                        _parts(add, miss, t, want)
+                        _parts(add, miss, t, want, origin)
             req = list(spec.get("required_settings") or [])
             for name in req + [n for n in spec["settings"] if n not in req]:
                 rec = next((r for r in recs if r["type"] == "setting" and r["title"].lower().startswith(name.lower())), None)
@@ -247,18 +340,22 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None):
     return text, res
 
 
-def _parts(add, miss, rec, want):
+def _parts(add, miss, rec, want, origin):
     parts = []
+
+    def shown(text, block):
+        return text.rstrip("\n") if block is None else origin.line(*block) + "\n" + text.rstrip("\n")
+
     for name in (want.get("required") or []) + (want.get("fields") or []):
-        t = _field_text(rec["body"], name)
+        t, block = _lookup(rec["body"], name)
         if t is None:
             miss(name, name in (want.get("required") or []))
         else:
-            parts.append(t.rstrip("\n"))
+            parts.append(shown(t, block))
     for name in want.get("sections") or []:
-        t = _subsection(rec["body"], name)
+        t, block = _lookup(rec["body"], name, field=False)
         if t is not None:
-            parts.append(t.rstrip("\n"))
+            parts.append(shown(t, block))
     add(rec, "\n".join(parts) + "\n")
 
 

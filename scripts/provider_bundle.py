@@ -15,8 +15,8 @@ personal, what must never be copied — comes from the provider manifest
 
 The user's context is never written: the script writes a PROPOSAL into
 <out>/<plugin_folder>/_System/, or into --proposal-dir (local-context.proposed.md,
-context-merge-report.md, team-context.md, provider-registration.proposed.yaml), and
-the connect skill applies it after the user confirms. The proposal holds the user's
+context-merge-report.md, team-context.md, provider-registration.proposed.yaml — schema
+provider-registration/2 since 1.1.0), and the connect skill applies it after the user confirms. The proposal holds the user's
 whole context: when <out> is a core that syncs back to others, pass --proposal-dir.
 A copy of the context named local-context.existing.md in the proposal folder (else in
 <out>/<plugin_folder>/_System/) is used when --existing-context is not given.
@@ -43,7 +43,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import ctx_common as cc  # noqa: E402
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 N = lambda s: unicodedata.normalize("NFC", s or "")
 BUILTIN_TEMPLATES = os.path.join(HERE, "provider_templates")
 BUILTIN_EXCLUDE = [r"\.zip$", r"\.plugin$", r"\.tgz$", r"\.tar\.gz$", r"(^|/)__pycache__/", r"\.pyc$",
@@ -68,7 +68,16 @@ DEFAULT_JIRA_LABELS = {
 }
 
 
+AUTHORITY_RANK = {"personal": 100, "team": 500, "org": 1000}    # the rank a registration gets from its authority (a higher one wins)
+DEFAULT_RANK = AUTHORITY_RANK["team"]                           # an authority that is none of the three
+
+
+READ = None     # a caller that must not hang on a file iCloud has not downloaded (ctx_repos.fetch) sets a reader here: path -> text
+
+
 def rd(p):
+    if READ is not None:
+        return READ(p)
     with open(p, encoding="utf-8") as f:
         return f.read()
 
@@ -425,6 +434,57 @@ def put_bullet(t, R, bullet, pid):
     return ((t[:pos] + sec + t[pos:]) if pos is not None else t.rstrip("\n") + "\n\n" + sec), "added"
 
 
+def yaml_value(v):
+    """`v` as the value of a registration key: plain when `cc.read_yaml_subset` gives the same text back, else a
+    double-quoted string (a '#', a leading quote or bracket, a number or a word like `true` would not survive plain)."""
+    s = str(v)
+    try:
+        if s and "\n" not in s and cc.read_yaml_subset("k: " + s) == {"k": s}:
+            return s
+    except ValueError:
+        pass
+    return json.dumps(s, ensure_ascii=False)
+
+
+def endpoint_root(core, context_text):
+    """Where the core sits on a server that serves the user's vault: the core's folder in that vault, with the trailing
+    slash ("ZorgCore/"), when the core is inside one of the vaults the user's context lists. "" when it is not, when it
+    is the vault itself (the server then serves the core as its root), or when no context is known."""
+    c = cc._norm(core)
+    for vault, _ in cc.vault_entries(context_text):
+        v = cc._norm(vault)
+        if c != v and cc.is_under(c, [v]):
+            return N(os.path.relpath(c, v)).replace(os.sep, "/") + "/"
+    return ""
+
+
+def registration(core, out, m, ident, jira_write, skip, cv, today, context_text):
+    """The text of provider-registration.proposed.yaml (schema provider-registration/2, the one `ctx provider plan/apply`
+    read): the v1 keys, plus the core folder (--core), the manifest's namespace and blocks file, the server it names
+    (`mcp.url`, and `endpoint.root` when the core sits in the user's vault), the rank of the authority and no products."""
+    authority = str(m.s("authority", "org"))
+    mcp = m.get("mcp") if isinstance(m.get("mcp"), dict) else {}
+    reg = ["schema: provider-registration/2", "id: %s" % m["id"], "title: %s" % json.dumps(m.s("title", m["id"]), ensure_ascii=False),
+           "kind: bundle", "contract: %s" % m.s("contract", "vault/v1"), "authority: %s" % authority,
+           "rank: %d" % AUTHORITY_RANK.get(authority, DEFAULT_RANK),
+           "mode: %s" % m.s("mode", "snapshot"), "access: %s" % (mcp.get("access") or "local"),
+           "paths:", "  - %s" % json.dumps(os.path.abspath(out), ensure_ascii=False),
+           "core_root: %s" % json.dumps(os.path.abspath(core), ensure_ascii=False),
+           "namespace: %s" % yaml_value(m["namespace"])]
+    if m.s("blocks_file"):
+        reg.append("blocks_file: %s" % yaml_value(m.s("blocks_file")))
+    if mcp.get("url"):
+        root = endpoint_root(core, context_text)
+        reg += ["endpoint:", "  url: %s" % yaml_value(mcp["url"])] + (["  root: %s" % yaml_value(root)] if root else [])
+    reg += ["products: []", "writable:"] + ["  - %s" % json.dumps(g, ensure_ascii=False) for g in (m.get("personal_overlay") or [])] + \
+           (["skip_blocks:"] + ["  - %s" % s for s in skip] if skip else ["skip_blocks: []"]) + \
+           ["index: \"\"", "synced_at: %s" % today, "source_version: %s" % json.dumps("core %s, provider_bundle %s" % (cv, __version__)),
+            "stale_after_days: 30", "team: team-%s" % ident["team"], "role: %s" % ident["role"], "jira_write: %s" % jira_write, "status: active"]
+    if (m.get("personal_overlay") or []) == []:
+        reg[reg.index("writable:")] = "writable: []"
+    return "\n".join(reg) + "\n"
+
+
 def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip=(), proposal_dir=None):
     ns, pf = m["namespace"], m.s("plugin_folder", ".")
     R = ns_rx(ns)
@@ -557,17 +617,8 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
         if os.path.abspath(dst) != os.path.abspath(bpath):
             os.makedirs(os.path.dirname(dst), exist_ok=True); shutil.copy2(bpath, dst)
     wr(os.path.join(sysd, "local-context.proposed.md"), proposed)
-    reg = ["schema: provider-registration/1", "id: %s" % m["id"], "title: %s" % json.dumps(m.s("title", m["id"]), ensure_ascii=False),
-           "kind: bundle", "contract: %s" % m.s("contract", "vault/v1"), "authority: %s" % m.s("authority", "org"),
-           "mode: %s" % m.s("mode", "snapshot"), "access: %s" % ((m.get("mcp") or {}).get("access") or "local"),
-           "paths:", "  - %s" % json.dumps(os.path.abspath(out), ensure_ascii=False), "writable:"] + \
-          ["  - %s" % json.dumps(g, ensure_ascii=False) for g in (m.get("personal_overlay") or [])] + \
-          (["skip_blocks:"] + ["  - %s" % s for s in skip] if skip else ["skip_blocks: []"]) + \
-          ["index: \"\"", "synced_at: %s" % today, "source_version: %s" % json.dumps("core %s, provider_bundle %s" % (cv, __version__)),
-           "stale_after_days: 30", "team: team-%s" % ident["team"], "role: %s" % ident["role"], "jira_write: %s" % jira_write, "status: active"]
-    if (m.get("personal_overlay") or []) == []:
-        reg[reg.index("writable:")] = "writable: []"
-    wr(os.path.join(sysd, "provider-registration.proposed.yaml"), "\n".join(reg) + "\n")
+    wr(os.path.join(sysd, "provider-registration.proposed.yaml"),
+       registration(core, out, m, ident, jira_write, skip, cv, today, rd(existing_path) if existing_path else ""))
     rep = ["# Context merge report — %s" % today, "",
            "- Mode: **%s** · core v%s · provider_bundle %s" % ("merge with your context" if existing_path else "new minimal context", cv, __version__),
            "- Proposal: `%s/_System/local-context.proposed.md` → after you confirm it is copied to `~/.grow-pm/local-context.md` (old one backed up)" % pf,

@@ -6,7 +6,7 @@ legacy free-text role, no role) and asserts the digest line
 `user.role: <enum | legacy | absent> | level_home: <Lx | derived at Step 0i>`.
 The free-text label must never reach the digest. Stdlib only; run from the repo root.
 """
-import importlib.util, os, re, sys, tempfile
+import datetime, importlib.util, os, re, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 spec = importlib.util.spec_from_file_location("session_start", os.path.join(ROOT, "scripts", "session_start.py"))
@@ -192,6 +192,104 @@ with tempfile.TemporaryDirectory() as d:
     out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
     line_after_assign = next((l for l in out.splitlines() if "context:" in l), "")
     check("no unassigned → no tail", "custom unassigned" not in line_after_assign and "records" in line_after_assign, line_after_assign)
+
+# --- v3.13.0: the providers line takes the day of the last check from the store when it is newer than synced_at
+import ctx_blocks as cb  # noqa: E402
+
+TODAY = datetime.date.today()
+REG = ("schema: provider-registration/1\nid: zorg-core\nkind: bundle\nmode: snapshot\naccess: vpn\npaths:\n  - %s\n"
+       "synced_at: %s\nstale_after_days: 30\nstatus: active\n")
+
+
+def with_checked(d, synced, checked, migrate=True):
+    """A migrated store, zorg-core registered with `synced_at`, and (when `checked`) a block state saying it was checked then."""
+    home, vault = os.path.join(d, "home"), os.path.join(d, "vault")
+    os.makedirs(os.path.join(home, ".grow-pm")); os.makedirs(os.path.join(vault, "Notes", "_System", "providers"))
+    text = open(os.path.join(ROOT, "testing", "fixtures", "ctx", "typical.md"), encoding="utf-8").read().replace("{{VAULT}}", vault)
+    ctxp = os.path.join(home, ".grow-pm", "local-context.md")
+    for p in (ctxp, os.path.join(vault, "Notes", "_System", "local-context.md")):
+        open(p, "w", encoding="utf-8").write(text)
+    open(os.path.join(vault, "Notes", "_System", "providers", "zorg-core.yaml"), "w").write(REG % (os.path.join(d, "ZorgCore"), synced))
+    root = co.store_root_for(text, home=home)
+    if migrate:
+        co.migrate(ctxp, root, co.copies_for(ctxp, text, home=home), home, apply=True, now="2026-10-20T10:00:00+03:00")
+    if checked:
+        import ctx_store as cs  # noqa: E402
+        with cs.guard_roots([home, vault]):
+            cb.save_state(cs.Store(root), "zorg-core", {"checked": checked + "T10:00:00+03:00", "source": "folder", "version": "0.4", "blocks": {}})
+    return ctxp
+
+
+def providers_line(ctxp):
+    out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    return next((l.strip() for l in out.splitlines() if l.strip().startswith("providers:")), "")
+
+
+with tempfile.TemporaryDirectory() as d:
+    line = providers_line(with_checked(d, "2026-01-01", TODAY.isoformat()))
+    check("digest uses last_checked", "zorg-core (snapshot, vpn, synced %s)" % TODAY.isoformat() in line and "stale" not in line, line)
+
+with tempfile.TemporaryDirectory() as d:
+    old = (TODAY - datetime.timedelta(days=40)).isoformat()
+    line = providers_line(with_checked(d, (TODAY - datetime.timedelta(days=90)).isoformat(), old))
+    check("…and stale is counted from it", "zorg-core (snapshot, vpn, synced %s, stale)" % old in line, line)
+
+with tempfile.TemporaryDirectory() as d:
+    line = providers_line(with_checked(d, TODAY.isoformat(), (TODAY - datetime.timedelta(days=5)).isoformat()))
+    check("a check older than synced_at changes nothing", "zorg-core (snapshot, vpn, synced %s)" % TODAY.isoformat() in line, line)
+
+with tempfile.TemporaryDirectory() as d:
+    line = providers_line(with_checked(d, "2026-01-01", None))
+    check("a store with no block state: synced_at as before", "zorg-core (snapshot, vpn, synced 2026-01-01, stale)" in line, line)
+
+with tempfile.TemporaryDirectory() as d:
+    line = providers_line(with_checked(d, "2026-01-01", None, migrate=False))
+    check("no store at all: synced_at as before", "zorg-core (snapshot, vpn, synced 2026-01-01, stale)" in line, line)
+
+with tempfile.TemporaryDirectory() as d:
+    ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
+    real_mod = sys.modules.get("ctx_blocks")
+    sys.modules["ctx_blocks"] = None                      # the module that reads the checks cannot be imported
+    try:
+        out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    finally:
+        sys.modules["ctx_blocks"] = real_mod
+    line = next((l.strip() for l in out.splitlines() if l.strip().startswith("providers:")), "")
+    check("an import that fails costs the days of the checks, not the context line",
+          "  context: records 14 · card " in out and "zorg-core (snapshot, vpn, synced 2026-01-01, stale)" in line, out[-700:])
+
+with tempfile.TemporaryDirectory() as d:
+    ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
+    import ctx_store as cs  # noqa: E402
+    open(os.path.join(co.store_root_for(open(ctxp, encoding="utf-8").read(), home=os.path.join(d, "home")), ".state", "blocks", "zorg-core.json"), "w").write("{ not json")
+    line = providers_line(ctxp)
+    check("a block state that cannot be read: synced_at, no failure", "zorg-core (snapshot, vpn, synced 2026-01-01, stale)" in line, line)
+
+# --- v3.13.0 final review: a block state that never arrives (iCloud) costs the days of the checks, never the context line
+import time  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:
+    ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
+    state = os.path.join(co.store_root_for(open(ctxp, encoding="utf-8").read(), home=os.path.join(d, "home")), ".state", "blocks", "zorg-core.json")
+    os.remove(state)
+    os.mkfifo(state)                                      # its read waits for a writer that never comes, like an evicted file
+    t0 = time.time()
+    out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    took = time.time() - t0
+    try:                                                  # let the reader thread out of open()
+        os.close(os.open(state, os.O_WRONLY | os.O_NONBLOCK))
+    except OSError:
+        pass
+    line = next((l.strip() for l in out.splitlines() if l.strip().startswith("providers:")), "")
+    check("a block state that never arrives: the context line is still there, the providers line falls back to synced_at",
+          "  context: records 14 · card " in out and "zorg-core (snapshot, vpn, synced 2026-01-01, stale)" in line, out[-700:])
+    check("…and the digest stays within its budget (2 s for the store, half a second more for the days)", took < 4, took)
+
+with tempfile.TemporaryDirectory() as d:                  # the days still come when they are quick
+    ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
+    s = ss._store_summary(ctxp)
+    check("the summary carries the days of the checks as before", s and s.get("checked", {}).get("zorg-core", "").startswith(TODAY.isoformat())
+          and s["records"] == 14, s)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

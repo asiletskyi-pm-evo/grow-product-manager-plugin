@@ -12,6 +12,42 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.13.0 (2026-10-14)
+
+**Repositories and block merge** (Context Core, phase 3 — first release). A product can now take context blocks from any number of repositories — a team's or an organisation's shared core, reached through its MCP server or its folder — and a refresh is one pass instead of a regenerated file: `ctx provider plan` shows what changed, `ctx provider apply` writes it, and a question comes only where both the repository and you changed the same block. Verified on a copy of a real context against a real core over MCP and from its folder: every block matched byte for byte and both sources gave the same plan.
+
+MINOR: new `ctx` commands, three new modules, registration v2, context-connect 0.3.0.
+
+### Added
+
+- **Registration v2** (`references/context-provider-protocol.md` §3b): `products`, `rank`, `core_root`, `namespace`, `blocks_file`, `blocks_source` (`auto` | `mcp` | `paths`), `endpoint` (`url`, `root`, `headers_env` — the name of an environment variable, never its value), `home_record`. v1 registrations read as before; one without `namespace` takes the core manifest's, with a warning to add it. `ctx repo list | status`.
+- **A stdlib MCP client** (`scripts/ctx_mcp.py`): Streamable HTTP, JSON or SSE, session id, 3 s probe, 30 s call, 2 retries; calls only `vault_get_note`, `vault_list_by_folder`, `vault_search`, `brain_status`, `brain_recent_changes`; no redirects, 32 MB cap; a header value or URL secret never reaches an error. Validator check 17 keeps the allow-list inside the contract.
+- **Block state and merge** (`scripts/ctx_blocks.py`, §12): blocks stay regions in your records; the store keeps, per repository, what each block was when the repository last gave it (the base, with the last 10). `ctx provider adopt` records the bases for blocks already in your context; `ctx provider plan` shows `=` `~` `✎` `⚠` `+` `−` `✂` `?`; `ctx provider apply` writes one pass (snapshot, records, state, journal, compile) — `--choose B=theirs|mine|both`, `--add B`. Exit codes 0 / 2 decisions waiting / 3 / 4 / 5 a repository unavailable, nothing written.
+- **Your edits are kept**: a block you edited is never overwritten; a block the repository removed while you had edited it is a question (`mine` keeps its text as yours); `both` keeps the two texts in one region.
+- **Never a silent change from a bad source**: an empty, cut or foreign blocks file, an empty server answer, a source that offers none of your blocks, or a team block whose core folder, manifest or cards are missing or still downloading from iCloud → "unavailable", nothing written; a source behind your base is not taken back.
+- `ctx read` marks each repository block with its source and the day it was checked, and a field or subsection missing from your own text is taken from a block with that mark; the card has a Repos line; the session digest dates a provider by its last check. Validator check 18 keeps the fixtures' regions well-formed.
+
+### Changed
+
+- **context-connect 0.3.0**: with a context store, Refresh is `ctx provider plan` → one message about ⚠ / + / ? only → `ctx provider apply`; Connect inserts the chosen blocks and adopts them. A Refresh keeps a registration you completed (only the sync dates move) and never stamps `Updated:`, appends changelog tables or rewrites the Vault Search line. Without a store the proposal path is unchanged. The bundle builder (1.1.0) proposes registration v2.
+- `references/context-protocol.md`, `context-provider-protocol.md` (§12 new), `vault-schema.md`, `host-profiles.md`, `connect-steps.md`; snapshots now include `.state/` subfolders.
+
+### Fixed
+
+- `ctx undo` after an Obsidian edit of a record that a sync imported now reverts that edit too (found in the v3.11 acceptance run).
+
+### Not in this version
+
+- Automatic refresh, the plugin's own copy of an MCP-only core, the cascade between repositories and `ctx explain` (v3.14.0); entities and cross-store links (v3.15.0); a declared overlay, identity and the provider kit (v3.16.0).
+
+### Backwards compatibility
+
+- Without a registration that offers blocks, nothing changes. A v3.12 store keeps working; the first provider command adds `.state/blocks/`.
+- Managed regions: an agent or skill still never writes inside one; a person's edit inside a provider block is now kept (and merged) when a context store exists.
+- No skill renamed, no description changed: routing is as in v3.12.1.
+
+---
+
 ## v3.12.1 (2026-10-12)
 
 **Your own sections reach the skills again; `ctx undo` after an import is whole.** Found in the v3.11 acceptance run on a real store: since v3.12.0 a skill reads only what `references/context-manifest.yaml` names, and the manifest — shipped with the plugin — cannot name a user's own `##` sections, so none of them reached any skill (before v3.12 skills read the whole file and saw them). And `ctx undo` after a sync that imported a direct edit or removal restored the records but left `local-context.md` as edited, so the next sync applied the edit again.

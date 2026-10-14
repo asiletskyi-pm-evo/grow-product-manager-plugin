@@ -12,8 +12,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
+import ctx_blocks as cb  # noqa: E402
 
 FIX = os.path.join(ROOT, "testing", "fixtures", "ctx")
+REPOS_FIX = os.path.join(ROOT, "testing", "fixtures", "ctx-repos")
 fails = 0
 
 
@@ -62,6 +64,88 @@ with tempfile.TemporaryDirectory() as d:
     open(copy, "w", encoding="utf-8").write("changed\n")
     co.restore(snap, st, [copy])
     check("restore gives the bytes back", tree(st.root) == before_store and read(copy) == before_copy)
+
+# --- v3.13 Task 5: the block state and the bases are in every snapshot, and come back on restore
+with tempfile.TemporaryDirectory() as d:
+    st, copy = seeded_store(d)
+    home = os.path.join(d, "home")
+    text = "<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope\nThe user works on Zorg App only.\n<!-- zorg-core:end id=scope -->"
+    sha = cb.put_base(st, "zorg-core", text)
+    growth = cb.put_base(st, "zorg-growth", "growth base")
+    saved = {"checked": "2026-10-20T10:00:00+03:00", "source": "folder", "version": "0.4",
+             "blocks": {"scope": {"base_sha": sha, "bases": [sha], "v": "0.4", "host": "custom.zorg-core-notes",
+                                  "checked": "2026-10-20T10:00:00+03:00", "user_removed": False}}}
+    cb.save_state(st, "zorg-core", saved)
+    before = tree(st.root)
+    snap = co.snapshot(st, [copy], home, "blocks")
+    check("snapshot copies state subfolders",
+          os.path.isfile(os.path.join(snap, "state", "blocks", "zorg-core", sha + ".md"))
+          and os.path.isfile(os.path.join(snap, "state", "blocks", "zorg-growth", growth + ".md"))
+          and os.path.isfile(os.path.join(snap, "state", "blocks", "zorg-core.json"))
+          and os.path.isfile(os.path.join(snap, "state", "compiled.json")), sorted(tree(snap)))
+    check("a nested base is copied byte for byte",
+          os.path.isfile(os.path.join(snap, "state", "blocks", "zorg-core", sha + ".md"))
+          and read(snap, "state", "blocks", "zorg-core", sha + ".md") == text, "")
+    check("a snapshot with the same files, nested ones too, is reused", co.snapshot(st, [copy], home, "again") == snap, "")
+    # a hidden file (a temp file of an interrupted write), a hidden folder and a linked folder are never captured
+    blocks = os.path.join(st.state_dir, "blocks")
+    elsewhere = os.path.join(d, "elsewhere"); os.makedirs(elsewhere)
+    open(os.path.join(elsewhere, "outside.md"), "w").write("outside")
+    os.makedirs(os.path.join(blocks, "zorg-core", ".cache")); os.makedirs(os.path.join(blocks, ".hidden"))
+    open(os.path.join(blocks, "zorg-core", ".halfway.md.tmp"), "w").write("half")
+    open(os.path.join(blocks, "zorg-core", ".cache", "x.md"), "w").write("x")
+    open(os.path.join(blocks, ".hidden", "y.md"), "w").write("y")
+    os.symlink(elsewhere, os.path.join(blocks, "zorg-linked"))
+    check("a hidden file or folder and a linked folder under state/ are skipped — the snapshot is the same",
+          co.snapshot(st, [copy], home, "hidden") == snap
+          and sorted(tree(os.path.join(snap, "state", "blocks"))) == sorted(
+              ["zorg-core.json", "zorg-core/" + sha + ".md", "zorg-growth/" + growth + ".md"]), sorted(tree(os.path.join(snap, "state", "blocks"))))
+    os.remove(os.path.join(blocks, "zorg-linked"))
+    shutil.rmtree(os.path.join(blocks, ".hidden")); shutil.rmtree(os.path.join(blocks, "zorg-core", ".cache"))
+    os.remove(os.path.join(blocks, "zorg-core", ".halfway.md.tmp"))
+    # undo: the bases are gone from the store, restore brings them back
+    shutil.rmtree(os.path.join(st.state_dir, "blocks"))
+    check("(setup) the bases are gone", cb.get_base(st, "zorg-core", sha) is None and cb.load_state(st, "zorg-core")["blocks"] == {}, "")
+    co.restore(snap, st, [copy])
+    check("undo restores the bases", cb.get_base(st, "zorg-core", sha) == text and cb.get_base(st, "zorg-growth", growth) == "growth base", "")
+    check("…and the block state, and the store byte for byte", cb.load_state(st, "zorg-core") == saved and tree(st.root) == before,
+          set(tree(st.root)) ^ set(before))
+    # a change in a nested base is a change of the snapshot
+    cb.put_base(st, "zorg-core", "a second version of the block")
+    snap2 = co.snapshot(st, [copy], home, "second")
+    check("a new base makes a new snapshot that holds both bases",
+          snap2 != snap and os.path.isfile(os.path.join(snap2, "state", "blocks", "zorg-core", sha + ".md"))
+          and os.path.isfile(os.path.join(snap2, "state", "blocks", "zorg-core", cs.sha_text("a second version of the block") + ".md")), snap2)
+    # undo an operation that pruned: restore from the older snapshot gives back the pruned base
+    cb.prune_bases(st, "zorg-core", saved)
+    check("(setup) pruning dropped the second version", cb.get_base(st, "zorg-core", cs.sha_text("a second version of the block")) is None, "")
+    co.restore(snap2, st, [copy])
+    check("undo of a pruning gives the pruned base back", cb.get_base(st, "zorg-core", cs.sha_text("a second version of the block"))
+          == "a second version of the block", "")
+
+# a snapshot made before v3.13 (the state folder holds files only) restores as it did
+with tempfile.TemporaryDirectory() as d:
+    st, copy = seeded_store(d)
+    home = os.path.join(d, "home")
+    old_tree = tree(st.root)
+    snap = os.path.join(d, "snap-v312")
+    for rel, data in old_tree.items():
+        p = os.path.join(snap, rel.replace(".state", "state", 1) if rel.startswith(".state") else rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, "wb").write(data)
+    os.makedirs(os.path.join(snap, "copies"))
+    open(os.path.join(snap, "copies", "0.md"), "w", encoding="utf-8", newline="").write(read(copy))
+    json.dump({"label": "old", "created": "2026-09-01T10:00:00+03:00", "store": st.root, "store_existed": True,
+               "copies": [{"path": copy, "file": "copies/0.md", "existed": True}], "hash": "x"},
+              open(os.path.join(snap, "manifest.json"), "w", encoding="utf-8"))
+    sha = cb.put_base(st, "zorg-core", "made after the snapshot")
+    cb.save_state(st, "zorg-core", {"checked": "x", "source": None, "version": None, "blocks": {}})
+    rec = st.load()[4]
+    st.write(dict(rec, body=rec["body"].replace("PROJ", "XXX")))
+    co.restore(snap, st, [copy])
+    check("a snapshot made before v3.13 (no state subfolders) restores the store as it was",
+          tree(st.root) == {k: v for k, v in old_tree.items()}, set(tree(st.root)) ^ set(old_tree))
+    check("…and what was added since is gone, as before", cb.get_base(st, "zorg-core", sha) is None, "")
 
 with tempfile.TemporaryDirectory() as d:
     home = os.path.join(d, "home"); os.makedirs(os.path.join(home, ".grow-pm"))
@@ -117,12 +201,12 @@ NOW = "2026-10-20T10:00:00+03:00"
 class Env:
     """A temp HOME with the typical context, a temp vault with its mirror, and the store paths."""
 
-    def __init__(self, d, fixture="typical"):
+    def __init__(self, d, fixture="typical", fix=FIX):
         self.home = os.path.join(d, "home")
         self.vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(self.home, ".grow-pm"))
         os.makedirs(os.path.join(self.vault, "Notes", "_System"))
-        self.text = read(FIX, fixture + ".md").replace("{{VAULT}}", self.vault)
+        self.text = read(fix, fixture + ".md").replace("{{VAULT}}", self.vault)
         self.ctx = os.path.join(self.home, ".grow-pm", "local-context.md")
         self.mirror = os.path.join(self.vault, "Notes", "_System", "local-context.md")
         for p in (self.ctx, self.mirror):
@@ -611,6 +695,173 @@ with tempfile.TemporaryDirectory() as d:
     shutil.rmtree(e.store.root)
     check("a store removed while the vault is present is 'no store', not 'unavailable'",
           co.store_unavailable(e.text, e.home) is None, co.store_unavailable(e.text, e.home))
+
+# --- v3.13.0: the repositories on the card, and the days of the last checks in the digest
+def register(env, rid, kind="bundle", extra=""):
+    prov = os.path.join(env.home, ".grow-pm", "providers")
+    os.makedirs(prov, exist_ok=True)
+    open(os.path.join(prov, rid + ".yaml"), "w", encoding="utf-8").write(
+        "schema: provider-registration/1\nid: %s\nkind: %s\nauthority: org\npaths:\n  - %s\n%s" % (rid, kind, os.path.join(env.home, "core-" + rid), extra))
+
+
+def save_state(env, rid, checked, blocks):
+    entry = lambda v: {"base_sha": "a" * 64, "bases": ["a" * 64], "v": v, "host": None, "checked": checked, "user_removed": None}
+    with cs.guard_roots(co.allowed_roots(env.home, env.text)):
+        cb.save_state(env.store, rid, {"checked": checked, "source": "folder", "version": "0.4", "blocks": {b: entry(v) for b, v in blocks.items()}})
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    register(e, "zorg-core"); register(e, "zorg-growth", "mcp"); register(e, "zorg-idle")
+    recs = e.store.load()
+    got = co.card_repos(e.store, recs, e.text, e.home)
+    check("card_repos: the registered repositories that put blocks in the records, in registration order, nothing known about a check yet",
+          got == [{"id": "zorg-core", "blocks": 3, "v": None, "checked": None},
+                  {"id": "zorg-growth", "blocks": 2, "v": None, "checked": None}], got)
+    save_state(e, "zorg-core", NOW, {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+    save_state(e, "zorg-growth", "2026-10-19T08:00:00+03:00", {"growth-metrics": "0.1"})
+    got = co.card_repos(e.store, recs, e.text, e.home)
+    check("…with a state: the version most blocks have a base at, and the last check",
+          got == [{"id": "zorg-core", "blocks": 3, "v": "0.4", "checked": NOW},
+                  {"id": "zorg-growth", "blocks": 2, "v": "0.1", "checked": "2026-10-19T08:00:00+03:00"}], got)
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-growth.json"), "w").write("{ not json")
+    got = co.card_repos(e.store, recs, e.text, e.home)
+    check("…a state that cannot be read leaves out the version and the day, not the repository",
+          got[1] == {"id": "zorg-growth", "blocks": 2, "v": None, "checked": None} and got[0]["checked"] == NOW, got)
+    with cs.guard_roots(co.allowed_roots(e.home, e.text)):          # a hand-edited state: a number for a time, a control character in a version
+        cb.save_state(e.store, "zorg-growth", {"checked": 20261019, "source": "mcp", "version": "0.1", "blocks": {
+            "growth-metrics": {"base_sha": "a" * 64, "bases": [], "v": "0.1\x1b[31m", "host": None, "checked": None, "user_removed": None}}})
+    got = co.card_repos(e.store, recs, e.text, e.home)
+    check("…a time that is not text, a version with a control character: the card still builds, clean",
+          got[1] == {"id": "zorg-growth", "blocks": 2, "v": "0.1 [31m", "checked": None}
+          and "\x1b" not in cs.build_card(recs, e.text, "2026-10-20", repos=got), got)
+    with cs.guard_roots(co.allowed_roots(e.home, e.text)):          # a version that is a list: the repository is listed, without a version
+        cb.save_state(e.store, "zorg-growth", {"checked": NOW, "source": "mcp", "version": "0.1", "blocks": {
+            "growth-metrics": {"base_sha": "a" * 64, "bases": [], "v": ["x"], "host": None, "checked": None, "user_removed": None}}})
+    try:
+        got = co.card_repos(e.store, recs, e.text, e.home)
+    except Exception as x:  # noqa: BLE001
+        got = repr(x)
+    check("card_repos: a state version that is not text is no version, not a crash",
+          got != [] and not isinstance(got, str) and got[1] == {"id": "zorg-growth", "blocks": 2, "v": None, "checked": NOW}, got)
+    real_base, real_load = cb.base_version, cb.load_state
+    cb.base_version = lambda st: 1 / 0                              # whatever else is wrong with a state: the card line is not worth a compile
+    try:
+        got = co.card_repos(e.store, recs, e.text, e.home)
+        cb.base_version = real_base
+        cb.load_state = lambda store, rid: (_ for _ in ()).throw(RuntimeError("odd"))
+        got2 = co.card_repos(e.store, recs, e.text, e.home)
+    except Exception as x:  # noqa: BLE001
+        got = got2 = repr(x)
+    finally:
+        cb.base_version, cb.load_state = real_base, real_load
+    check("card_repos is total: a repository whose state cannot be made sense of is listed without a version and a day",
+          [(g["id"], g["blocks"], g["v"], g["checked"]) for g in got] == [("zorg-core", 3, None, None), ("zorg-growth", 2, None, None)]
+          and [(g["id"], g["blocks"], g["v"], g["checked"]) for g in got2] == [("zorg-core", 3, None, None), ("zorg-growth", 2, None, None)], (got, got2))
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-growth.json"), "w").write("{ not json")
+    card_before = read(e.store.card_path)
+    co.compile_store(e.store, e.copies, NOW, e.home)
+    check("a compile that has nothing to write leaves the card as it was", read(e.store.card_path) == card_before)
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** PROJ2")
+    e.sync()
+    check("a sync that changes a record writes the repositories into the card",
+          "- **Repos:** zorg-core: 3 блоки · v0.4 · перевірено 2026-10-20; zorg-growth: 2 блоки\n" in read(e.store.card_path), read(e.store.card_path)[:700])
+    save_state(e, "zorg-core", "2026-10-25T09:00:00+03:00", {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+    check("refresh_card_repos: the line moved, so the card is written", co.refresh_card_repos(e.store, e.home, "2026-10-25") is True
+          and "zorg-core: 3 блоки · v0.4 · перевірено 2026-10-25" in read(e.store.card_path)
+          and "Generated by ctx from 7 records on 2026-10-25" in read(e.store.card_path), read(e.store.card_path)[:300])
+    card_now = read(e.store.card_path)
+    check("…and when the line has not moved it writes nothing", co.refresh_card_repos(e.store, e.home, "2026-10-26") is False
+          and read(e.store.card_path) == card_now)
+    os.remove(e.store.card_path)
+    check("…a card that is not there is left for the next compile", co.refresh_card_repos(e.store, e.home, "2026-10-26") is False
+          and not os.path.exists(e.store.card_path))
+    no_regs = Env(os.path.join(d, "n"), "context", fix=REPOS_FIX); no_regs.migrate()
+    check("no registration, no line about repositories (the regions stay in the records)",
+          co.card_repos(no_regs.store, no_regs.store.load(), no_regs.text, no_regs.home) == [] and "Repos" not in read(no_regs.store.card_path))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    check("status_summary: no block state, no checks", co.status_summary(e.ctx, home=e.home)["checked"] == {})
+    save_state(e, "zorg-core", NOW, {"scope": "0.4"})
+    save_state(e, "zorg-growth", None, {"growth-metrics": "0.1"})
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-idle.json"), "w").write("{ not json")
+    digest = co.status_summary(e.ctx, home=e.home)
+    check("status_summary: the day of the last check of each repository, read from the state; what is unknown or unreadable is left out",
+          digest["checked"] == {"zorg-core": NOW} and digest["records"] == 7, digest)
+    facts = co.status_summary(e.ctx, home=e.home, checked=False)
+    check("status_summary(checked=False): the facts without the days, and the store root to read them from on another budget",
+          facts["checked"] == {} and facts["records"] == 7 and facts["store"] == e.store.root
+          and co.checked_by_repo(facts["store"]) == {"zorg-core": NOW}, facts)
+    check("checked_by_repo never fails: a store root that is not there is no days", co.checked_by_repo(os.path.join(d, "nowhere")) == {}, "")
+    real_mod = sys.modules.get("ctx_blocks")
+    sys.modules["ctx_blocks"] = None                                # an import that fails
+    try:
+        digest = co.status_summary(e.ctx, home=e.home)
+    finally:
+        sys.modules["ctx_blocks"] = real_mod
+    check("status_summary: a module that cannot be imported costs the days of the checks, never the summary",
+          digest is not None and digest["checked"] == {} and digest["records"] == 7 and digest["unavailable"] is None, digest)
+    shutil.rmtree(os.path.join(e.store.state_dir, "blocks"))
+    check("…no folder of block states is no checks", co.status_summary(e.ctx, home=e.home)["checked"] == {})
+
+# --- v3.13 Task 10: consistent_records — a record edited in its file before a snapshot goes back to the last compile
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "setting.templates.md")
+    before = read(p)
+    open(p, "a", encoding="utf-8", newline="").write("- obsidian edit\n")
+    res = e.sync()                                       # its snapshot: the edited record, the old copies, the old state
+    co.restore(res["snapshot"], e.store, e.copies)
+    check("after restore the record is the edited one while the copies are the last compile",
+          "obsidian edit" in read(p) and "obsidian edit" not in read(e.ctx) and "obsidian edit" not in read(e.mirror))
+    changed = co.consistent_records(e.store, e.copies)
+    check("consistent_records puts the record back to the last compile's section, its frontmatter kept",
+          changed == ["setting.templates"] and read(p) == before, (changed, read(p)[-200:]))
+    check("…a second call finds nothing", co.consistent_records(e.store, e.copies) == [])
+    comp = co.compile_store(e.store, e.copies, NOW, e.home)
+    plan = co.plan_sync(e.store, e.copies)
+    check("…and nothing waits to be imported: the compile writes no copy",
+          comp["written"] == [] and not any(co.pending(plan).values()) and not plan["conflicts"], (comp, co.pending(plan)))
+
+with tempfile.TemporaryDirectory() as d:                 # the frontmatter the file has is kept; only the body goes back
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "setting.templates.md")
+    e.edit(p, "\n---\n", '\naliases: ["obsidian alias"]\n---\n')
+    open(p, "a", encoding="utf-8", newline="").write("- obsidian edit\n")
+    res = e.sync()
+    co.restore(res["snapshot"], e.store, e.copies)
+    co.consistent_records(e.store, e.copies)
+    rec = {r["id"]: r for r in e.store.load()}["setting.templates"]
+    check("a record's own frontmatter (an unknown key, its order) survives; the body is the compiled one",
+          "obsidian edit" not in rec["body"] and "obsidian alias" in rec["extra"] and rec["order"] == 100
+          and rec["sha"] == cs.sha_text(rec["body"]), rec)
+
+with tempfile.TemporaryDirectory() as d:                 # no section of the last compile in copy 0 → the record is left as it is
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    res = e.sync(resolve={"product.zorg-app": "record"})
+    co.restore(res["snapshot"], e.store, e.copies)
+    kept = read(p)
+    check("a record whose last-compile section copy 0 does not hold is left as it is — never guessed",
+          "REC" in kept and "PROJ" not in read(e.ctx) and co.consistent_records(e.store, e.copies) == [] and read(p) == kept)
+
+with tempfile.TemporaryDirectory() as d:                 # a consistent store, a record the state does not know, no home copy
+    e = Env(d); e.migrate()
+    before = tree(e.store.root)
+    check("a store that is consistent changes nothing", co.consistent_records(e.store, e.copies) == [] and tree(e.store.root) == before)
+    e.store.write({"ctx": 1, "id": "custom.zorg-new", "type": "custom", "title": "Zorg New", "parent": None,
+                   "order": 5000, "owner": "user", "source": "obsidian", "modified": NOW, "body": "## Zorg New\n\n- x\n"})
+    before = tree(e.store.root)
+    check("a record the last compile did not know (created in the file) is left as it is",
+          co.consistent_records(e.store, e.copies) == [] and tree(e.store.root) == before)
+    e.edit(os.path.join(e.store.records_dir, "setting.templates.md"), "builtin", "obsidian edit")
+    os.remove(e.copies[0])
+    before = tree(e.store.root)
+    check("no home copy → no section to take, nothing is written",
+          co.consistent_records(e.store, e.copies) == [] and tree(e.store.root) == before)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

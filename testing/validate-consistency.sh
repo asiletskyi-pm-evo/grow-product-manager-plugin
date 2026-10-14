@@ -348,6 +348,61 @@ else
   ok "context manifest covers $(ls -d skills/*/ | wc -l | tr -d ' ') skills"
 fi
 
+# --- 17. The MCP client's allow-list stays inside the contract (v3.13.0) ------
+# scripts/ctx_mcp.py calls only the tools of ALLOWED, and the engine reads a repository, it never writes to one. The
+# tool table of context-provider-protocol.md section 2 is what a provider's server promises (contract vault/v1): a name
+# added to ALLOWED that the table does not list, a write tool say, would send the engine to a tool nobody promised.
+ALLOW_ERRS=$(python3 - 2>&1 <<'PY_ALLOW'
+import re, sys
+sys.path.insert(0, "scripts")
+import ctx_mcp
+doc = open("references/context-provider-protocol.md", encoding="utf-8").read()
+sec = re.search(r"^## 2\. Contract.*?(?=^## )", doc, re.S | re.M)
+table = set(re.findall(r"^\| `([a-z_]+)`", sec.group(0), re.M)) if sec else set()
+if not table:
+    print("references/context-provider-protocol.md: no tool table found in section 2 (Contract vault/v1)")
+for name in sorted(ctx_mcp.ALLOWED - table):
+    print("scripts/ctx_mcp.py: ALLOWED lists '%s', which is not a tool of the vault/v1 table in references/context-provider-protocol.md section 2" % name)
+PY_ALLOW
+)
+if [ -n "$ALLOW_ERRS" ]; then
+  echo "$ALLOW_ERRS" | while IFS= read -r line; do err "MCP allow-list: $line"; done; FAIL=1
+else
+  ok "MCP allow-list: every tool ctx_mcp.ALLOWED may call is in the vault/v1 table of context-provider-protocol.md section 2"
+fi
+
+# --- 18. Fixture contexts carry well-formed managed regions (v3.13.0) ---------
+# `ctx provider plan/apply` find a repository's blocks in the user's records with ctx_blocks.find_regions, which leaves
+# a block out of the plan when its markers are broken, nested or repeated. A fixture that carried such a block would
+# teach the tests the wrong thing without a sound; broken and repeated regions are built inside the tests, so every
+# markdown fixture of the context tests (testing/fixtures/ctx*/) must read clean for each namespace it holds.
+FIXTURE_OUT=$(python3 - 2>&1 <<'PY_FIXTURES'
+import glob, re, sys
+sys.path.insert(0, "scripts")
+import ctx_blocks
+files = sorted(glob.glob("testing/fixtures/ctx*/**/*.md", recursive=True))
+if not files:
+    print("testing/fixtures/ctx*/: no markdown fixture found")
+regions = 0
+for f in files:
+    text = open(f, encoding="utf-8").read()
+    # the namespaces whose begin marker the file holds ("<ns>:section:begin" is a wrapper, not a region)
+    for ns in sorted(set(re.findall(r"<!--\s*([A-Za-z0-9_.-]+):begin(?![A-Za-z0-9_:.])", text))):
+        found, errors = ctx_blocks.find_regions([{"id": f, "body": text}], ns)
+        regions += len(found)
+        for x in errors:
+            print("%s: namespace %s, block %s: %s" % (f, ns, x["block"] or "?", x["why"]))
+print("SUMMARY %d %d" % (len(files), regions))
+PY_FIXTURES
+)
+FIXTURE_ERRS=$(echo "$FIXTURE_OUT" | grep -v '^SUMMARY ' || true)
+if [ -n "$FIXTURE_ERRS" ]; then
+  echo "$FIXTURE_ERRS" | while IFS= read -r line; do err "fixture regions: $line"; done; FAIL=1
+else
+  FIXTURE_SUM=$(echo "$FIXTURE_OUT" | sed -n 's/^SUMMARY \([0-9]*\) \([0-9]*\)$/\1 fixtures, \2 regions/p')
+  ok "fixture regions: ${FIXTURE_SUM:-no fixtures} read clean by ctx_blocks.find_regions"
+fi
+
 # --- 10. Component counts in the three public descriptions -------------------
 # "33 skills across six contours" lives in plugin.json, marketplace.json and
 # README. With agents/commands/connectors the counts multiply; grep them all.

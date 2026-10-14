@@ -11,11 +11,13 @@ import os, shutil, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import ctx_blocks as cb  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_store as cs  # noqa: E402
 
 FIX = os.path.join(ROOT, "testing", "fixtures", "ctx")
+REPOS_FIX = os.path.join(ROOT, "testing", "fixtures", "ctx-repos")
 NOW = "2026-10-20T10:00:00+03:00"
 TODAY = NOW[:10]
 SKILLS = sorted(n for n in os.listdir(os.path.join(ROOT, "skills")) if os.path.isdir(os.path.join(ROOT, "skills", n)))
@@ -35,15 +37,15 @@ def read(*parts):
 class Env:
     """A migrated store over a fixture: temp HOME, temp vault and its mirror."""
 
-    def __init__(self, d, fixture="typical", extra="", edit=None):
+    def __init__(self, d, fixture="typical", extra="", edit=None, fix=FIX, edits=()):
         self.home = os.path.join(d, "home")
         self.vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(self.home, ".grow-pm"))
         os.makedirs(os.path.join(self.vault, "Notes", "_System"))
-        self.text = read(FIX, fixture + ".md").replace("{{VAULT}}", self.vault) + extra
-        if edit:
-            assert edit[0] in self.text, edit[0]
-            self.text = self.text.replace(edit[0], edit[1], 1)
+        self.text = read(fix, fixture + ".md").replace("{{VAULT}}", self.vault) + extra
+        for old, new in ([edit] if edit else []) + list(edits):
+            assert old in self.text, old
+            self.text = self.text.replace(old, new, 1)
         self.ctx = os.path.join(self.home, ".grow-pm", "local-context.md")
         for p in (self.ctx, os.path.join(self.vault, "Notes", "_System", "local-context.md")):
             open(p, "w", encoding="utf-8", newline="").write(self.text)
@@ -51,8 +53,8 @@ class Env:
         self.store = cs.Store(co.store_root_for(self.text, home=self.home))
         co.migrate(self.ctx, self.store.root, self.copies, self.home, apply=True, now=NOW)
 
-    def view(self, skill, product=None, today=TODAY):
-        return cr.read_view(self.store, self.copies, skill, product=product, today=today)
+    def view(self, skill, product=None, today=TODAY, **kw):
+        return cr.read_view(self.store, self.copies, skill, product=product, today=today, **kw)
 
     def edit(self, path, old, new):
         t = read(path)
@@ -213,6 +215,119 @@ with tempfile.TemporaryDirectory() as d:
     e = Env(d, "minimal", edit=("### Product: Zorg App\n\n- **Jira Project Key:** PROJ\n", ""))
     text, res = e.view("requirements-creator", product="Zorg App")
     check("--product on a context without products", not res["needs_product"] and "продукт (обов'язкове)" in text, text[-400:])
+
+# --- v3.13.0: where a repository's text comes from — a provenance line, own text before a block, a conflict mark
+CHECKED = "2026-10-20T10:00:00+03:00"
+REPOS = [{"id": "zorg-core", "namespace": "zorg-core"}, {"id": "zorg-growth", "namespace": "zorg-growth"}]
+OWN_LEAD = ("- **Jira Team ID:** <team-uuid>\n", "- **Jira Team ID:** <team-uuid>\n- **Lead:** Own Lead\n")
+BLOCK_LEAD = ("### Team: Alpha\n\n- **Team card", "### Team: Alpha\n\n- **Lead:** Block Lead\n- **Team card")
+LEAD_SKILL = {"schema": "context-manifest/1", "skills": {"lead-skill": {"team": {"fields": ["Lead"]}}}}
+LEAD_REQ = {"schema": "context-manifest/1", "skills": {"lead-skill": {"team": {"required": ["Lead"]}}}}
+
+
+def block_state(env, repo, blocks, checked=CHECKED):
+    """What `ctx provider adopt/apply` leaves in the store: the repository's check and, per block, its version and check."""
+    entry = lambda v: {"base_sha": None, "bases": [], "v": v, "host": None, "checked": checked, "user_removed": None}
+    with cs.guard_roots(co.allowed_roots(env.home, env.text)):
+        cb.save_state(env.store, repo, {"checked": checked, "source": "folder", "version": "0.4",
+                                        "blocks": {b: entry(v) for b, v in blocks.items()}})
+
+
+def read_by(env, title, who):
+    rec = next(r for r in env.store.load() if r["title"] == title)
+    env.store.write(dict(rec, read_by=who))
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX)
+    block_state(e, "zorg-core", {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+    read_by(e, "Zorg Core Notes", "all")
+    text_rb, _ = e.view("product-analysis", product="Zorg App", repos=REPOS)
+    check("provenance line before a repo region", "> [zorg-core · v0.4 · станом на 2026-10-20]\n<!-- zorg-core:begin id=scope v=0.4 -->" in text_rb
+          and "> [zorg-core · v0.4 · станом на 2026-10-20]\n<!-- zorg-core:begin id=teams v=0.4 -->" in text_rb, text_rb[-700:])
+    check("a region in a read_by record is shown once", text_rb.count("<!-- zorg-core:begin id=scope ") == 1
+          and text_rb.count("[zorg-core ·") == 2, text_rb[-700:])
+    text_none, _ = e.view("product-analysis", product="Zorg App")
+    check("a namespace nobody registered gets its name, the version and no date",
+          "> [zorg-core · v0.4]\n<!-- zorg-core:begin id=scope" in text_none and "станом на" not in text_none, text_none[-500:])
+    block_state(e, "zorg-core", {"scope": "0.4"}, checked=None)
+    text_nd, _ = e.view("product-analysis", product="Zorg App", repos=REPOS)
+    check("a block never checked has no date", "> [zorg-core · v0.4]\n<!-- zorg-core:begin id=scope" in text_nd
+          and "станом на" not in text_nd, text_nd[-500:])
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-core.json"), "w", encoding="utf-8").write("{ not json")
+    text_bad, _ = e.view("product-analysis", product="Zorg App", repos=REPOS)
+    check("a state file that cannot be read is no date and no failure", "> [zorg-core · v0.4]\n<!-- zorg-core:begin id=scope" in text_bad, text_bad[-500:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX)
+    block_state(e, "zorg-core", {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+    text_hd, res_hd = e.view("hiring-designer", repos=REPOS)
+    check("Members falls back to the team block, labelled", "#### Members" in text_hd
+          and "> [zorg-core · v0.2 · станом на 2026-10-20]\n#### Members" in text_hd and "Bea Two" in text_hd
+          and "Members" not in res_hd["missing"], text_hd[-900:])
+    check("…and only the subsection: not the rest of the block, no region marker", "Team card (source of truth)" not in text_hd
+          and "<!-- zorg-core" not in text_hd and "Growth squad" not in text_hd, text_hd[-900:])
+
+SHARED = ("<!-- zorg-core:section:begin -->\n## Zorg shared core (reference)\n\n> From the core.\n\n"
+          "<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope of work\nZorg App only.\n<!-- zorg-core:end id=scope -->\n\n"
+          "<!-- zorg-core:begin id=teams v=0.3 -->\n### Teams map\n- Alpha\n<!-- zorg-core:end id=teams -->\n"
+          "<!-- zorg-core:section:end -->\n")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "minimal", extra="\n" + SHARED)
+    read_by(e, "Zorg shared core (reference)", "all")
+    text_w, _ = e.view("product-analysis", repos=REPOS)
+    check("a section wrapper is no block: each block of it is labelled, the wrapper is not", text_w.count("> [zorg-core ·") == 2
+          and "> [zorg-core · v0.3]\n<!-- zorg-core:begin id=teams" in text_w and "> [zorg-core · v0.4]\n<!-- zorg-core:begin id=scope" in text_w
+          and "section:begin" in text_w and "]\n<!-- zorg-core:section:begin" not in text_w, text_w[-700:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[OWN_LEAD, BLOCK_LEAD])
+    block_state(e, "zorg-core", {"team": "0.2"})
+    text, _ = e.view("lead-skill", repos=REPOS, manifest=LEAD_SKILL)
+    check("own field wins over the block", "**Lead:** Own Lead" in text and text.count("**Lead:**") == 1
+          and "Block Lead" not in text and "> [zorg-core" not in text, text[-500:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[BLOCK_LEAD])
+    block_state(e, "zorg-core", {"team": "0.2"})
+    text, res = e.view("lead-skill", repos=REPOS, manifest=LEAD_REQ)
+    check("a field only the block has is read from it, labelled", "> [zorg-core · v0.2 · станом на 2026-10-20]\n- **Lead:** Block Lead" in text
+          and res["missing"] == [], (text[-500:], res["missing"]))
+    e.edit(os.path.join(e.store.records_dir, "team.alpha-a.md"), "- **Lead:** Block Lead\n", "")
+    text, res = e.view("lead-skill", repos=REPOS, manifest=LEAD_REQ)
+    check("…and when neither has it, it is missing", "Lead" in res["missing"] and "Lead (обов'язкове)" in text, (text[-400:], res["missing"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[OWN_LEAD, BLOCK_LEAD])
+    e.edit(os.path.join(e.store.records_dir, "team.alpha-a.md"), "- **Lead:** Own Lead\n", "")
+    text, _ = e.view("lead-skill", repos=REPOS, manifest=LEAD_SKILL)
+    check("a field in a region is read, even when an own line of the same name sits after it", "- **Lead:** Block Lead" in text, text[-400:])
+
+with tempfile.TemporaryDirectory() as d:        # a region with no id is still a region: left out of your text, so it must be found where it is
+    e = Env(d, "context", fix=REPOS_FIX, edits=[("<!-- zorg-core:begin id=team v=0.2 -->", "<!-- zorg-core:begin v=0.2 -->"),
+                                                 ("<!-- zorg-core:end id=team -->", "<!-- zorg-core:end -->"),
+                                                 BLOCK_LEAD])
+    text, res = e.view("lead-skill", repos=REPOS, manifest=LEAD_REQ)
+    check("a region with no block id: found, labelled with the namespace's repository and the version", res["missing"] == []
+          and "> [zorg-core · v0.2]\n- **Lead:** Block Lead" in text, (text[-500:], res["missing"]))
+
+PRODUCT_KEY = {"schema": "context-manifest/1", "skills": {"key-skill": {"product": {"fields": ["Jira Project Key"]}}}}
+with tempfile.TemporaryDirectory() as d:        # a begin marker nothing closes is no region: what follows it is yours
+    e = Env(d, "minimal", edit=("- **Jira Project Key:** PROJ", "<!-- zorg-core:begin id=open v=0.1 -->\n- **Jira Project Key:** PROJ"))
+    text, res = e.view("key-skill", repos=REPOS, manifest=PRODUCT_KEY)
+    check("an unclosed begin marker is no region", res["missing"] == [] and "- **Jira Project Key:** PROJ" in text
+          and "> [zorg-core" not in text, (text[-500:], res["missing"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FROM-FILE")
+    e.edit(os.path.join(e.store.records_dir, "product.zorg-app.md"), "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FROM-RECORD")
+    text_conflict, res = e.view("requirements-creator", product="Zorg App")
+    head = [l for l in text_conflict.splitlines() if l.startswith("## ") and "product.zorg-app" in l]
+    other = [l for l in text_conflict.splitlines() if l.startswith("## ") and "product.zorg-app" not in l]
+    check("conflicting section is marked", len(head) == 1 and "⚠ конфлікт: файл і запис різняться — ctx sync" in head[0]
+          and not any("конфлікт" in l for l in other), head)
+    check("…the record is what is read, the file's text is not", "FROM-RECORD" in text_conflict and "FROM-FILE" not in text_conflict, text_conflict[:900])
 
 check("check_manifest is clean on the repo", cr.check_manifest(ROOT) == [], cr.check_manifest(ROOT))
 with tempfile.TemporaryDirectory() as d:

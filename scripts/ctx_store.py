@@ -333,7 +333,9 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 
 
 class Store:
-    """`{root}/records/<id>.md`, `{root}/INDEX.md`, `{root}/.state/{compiled.json, journal.jsonl}`."""
+    """`{root}/records/<id>.md`, `{root}/INDEX.md`, `{root}/.state/{compiled.json, journal.jsonl}` and, since v3.13.0,
+    `{root}/.state/blocks/` — a repository's block state `<repo>.json` and its base texts `<repo>/<sha>.md`
+    (ctx_blocks.py keeps them; a snapshot copies them with the rest of `.state/`)."""
 
     def __init__(self, root):
         self.root = root
@@ -547,7 +549,18 @@ def _heading_text(core):
 
 
 def _member_count(body):
-    """Rows of the first table after a `Members` heading, or None when there is none (names never leave)."""
+    """Rows of the first table after a `Members` heading in your own text; failing that, in a managed region (the
+    team block of a repository). None when there is none (names never leave)."""
+    count = _table_rows_after_members(cc.strip_managed_regions(body))
+    if count is None:
+        for start, end in cc.managed_spans(body):
+            count = _table_rows_after_members(body[start:end])
+            if count is not None:
+                break
+    return count
+
+
+def _table_rows_after_members(body):
     lines = [core for _, core, _ in _lines(body)]
     at = next((k for k, c in enumerate(lines) if (_heading_text(c) or "").startswith("Members")), None)
     if at is None:
@@ -610,10 +623,19 @@ def _summary(rec):
     return "—"
 
 
-def build_card(records, compiled_text, now, stale=(), archived=0):
+def blocks_word(n):
+    """The form of "блок" after the number `n`: блок for 1, 21, 101 …; блоки for 2–4, 22–24 …; блоків for the rest and 11–14."""
+    if n % 10 == 1 and n % 100 != 11:
+        return "блок"
+    return "блоки" if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14) else "блоків"
+
+
+def build_card(records, compiled_text, now, stale=(), archived=0, repos=()):
     """INDEX.md: who, onboarding, products, teams, vaults and providers, then one row per record; ≤ CARD_MAX lines.
     `stale` maps a stale record's id to its verified date (its row ends with ⚠ <date>); `archived` counts the
-    archived records."""
+    archived records; `repos` is [{"id", "blocks", "v", "checked"}] — the repositories that put blocks in the
+    records, as ctx_ops.card_repos gives them — and makes one line, `- **Repos:** <id>: <N> блок(и|ів) · v<v> · перевірено
+    <date>; …` (a version or a date nobody knows is left out)."""
     import ctx_schema as sc                    # here: ctx_schema imports this module
     fields = sc.load_fields().get("product", {})
     stale = stale if isinstance(stale, dict) else {i: "" for i in stale}
@@ -649,6 +671,10 @@ def build_card(records, compiled_text, now, stale=(), archived=0):
     vaults = ", ".join("%s (%s)" % (f or os.path.basename(p), m or "auto") for p, f, m in cc.vault_modes(compiled_text)) or "—"
     provs = ", ".join(b["id"] for b in cc.vault_search_bullets(compiled_text)) or "—"
     over.append("- **Vaults:** %s · **Providers:** %s" % (vaults, provs))
+    if repos:
+        over.append("- **Repos:** " + "; ".join(
+            " · ".join(["%s: %d %s" % (r["id"], r["blocks"], blocks_word(r["blocks"]))] + (["v%s" % r["v"]] if r.get("v") else [])
+                       + (["перевірено %s" % r["checked"][:10]] if r.get("checked") else [])) for r in repos))
     if stale:
         over.append("- **Застарілі:** %d — ctx verify --stale або конфігуратор" % len(stale))
     if archived:

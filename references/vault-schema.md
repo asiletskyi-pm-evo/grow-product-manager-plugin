@@ -430,7 +430,7 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
 
 ## Generated regions and layers (since v3.10.0)
 
-**Regions.** Text a script or generator owns sits between two markers and is never edited by hand or by a skill:
+**Regions.** Text a script or generator writes sits between two markers, and a skill or the agent never writes inside one:
 
 ```
 <!-- <namespace>:begin id=<id> [v=<version>] [mode=reference|derived] -->
@@ -442,6 +442,7 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
 - Every region has a unique `id` within its file, and a region is found by its id, never by a heading inside it. A heading that appears both inside and outside a region is a defect to resolve, not a reason to insert again.
 - Readers that count headings (the session digest, the bundle builder) ignore region contents.
 - A skill that needs to change generated content changes its source and re-runs the generator; the user's own notes about it go outside the markers.
+- **Who owns the text inside.** Generated sections, maps of content and the other regions of a note belong to their script: the next run rewrites them, a hand edit included. A shared-context provider's block in the user's context is the exception when a context store exists: a human's edit inside it — in `local-context.md` or in a record file — is kept by `ctx provider apply`, which asks only when the provider changed the same block (`context-provider-protocol.md` §12, `context-protocol.md` §5e). Without a store the connect flow's proposal rewrites the provider's blocks as before.
 
 **Layers.** TYPE_FOLDER_MAP folders are the user's layer — the only place skills write. A folder registered as a shared-context provider's local copy is read-only except for the paths the provider declares as the user's overlay (`context-provider-protocol.md` §7).
 

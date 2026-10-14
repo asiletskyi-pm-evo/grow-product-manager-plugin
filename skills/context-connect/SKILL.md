@@ -1,6 +1,6 @@
 ---
 name: context-connect
-version: 0.2.0
+version: 0.3.0
 description: Shared team core — connect, refresh bundle, add MCP provider, enrich your context. Not your Obsidian vault or plugin setup (plugin-configurator), not curated sources (knowledge-library). UA — «онови мій пакет з ядра», «підключи мене до спільного контексту», «збагати мій контекст блоками ядра». EN — "refresh my bundle", "connect me to the team vault".
 ---
 
@@ -27,16 +27,16 @@ The connect run has no judgment points: it copies, proposes and records what the
 
 ## Three rules about the user's context
 
-1. **The context is the user's.** The skill never generates `local-context.md` "from the core" and never overwrites it. The core supplies **blocks** between markers (`<!-- <namespace>:begin id=… -->`); a refresh updates only those.
+1. **The context is the user's.** The skill never generates `local-context.md` "from the core" and never overwrites it. The core supplies **blocks** between markers (`<!-- <namespace>:begin id=… -->`); a refresh updates only those. With a context store the user's edits inside a block are kept, and a block the core changed too is a question.
 2. **A discrepancy is a question, not an edit.** A different e-mail, product, Jira project or team name in the user's context goes to the merge report; the skill asks, and only the answer decides: keep the user's value, take the core's (the core is fixed by its owner), or record an alias. The user's context is presumed right.
-3. **Backup before writing, changelog after.** Before the proposal replaces `local-context.md`, the old file is copied to `~/.grow-pm/backups/`; the proposal already ends with a `Section | Was | Became` table.
+3. **Backup before writing, changelog after.** Before the proposal replaces `local-context.md`, the old file is copied to `~/.grow-pm/backups/`; the proposal already ends with a `Section | Was | Became` table. With a context store the snapshot `ctx` takes before it writes is the backup (`ctx undo`), the plan is the changelog, and a refresh adds no table.
 
 ## Modes
 
 | Mode | Trigger | What happens |
 |---|---|---|
-| **Connect** | first connection to a provider | Steps 0–6 |
-| **Refresh** | «онови мій пакет з ядра» / "refresh my bundle"; a newer core version; the digest marks the provider stale | Steps 0, 3, 4, 6 — the same run without `--force`: new files added, the user's notes kept, the blocks proposed again (usually one confirmation) |
+| **Connect** | first connection to a provider | Steps 0–6; with a context store the blocks go in through `ctx provider apply` and `adopt` (Step 4) |
+| **Refresh** | «онови мій пакет з ядра» / "refresh my bundle"; a newer core version; the digest marks the provider stale | Steps 0, 3, 4, 6 — the same run without `--force`: new files added, the user's notes kept. With a store: `ctx provider plan` → one message about `⚠`, `+`, `?` rows only → `ctx provider apply` (Step 4); without: the blocks proposed again (usually one confirmation) |
 | **Enrich** | only the context blocks, no bundle | Steps 0, 3 (`--propose-only` with the user's context), 4 |
 | **Register an MCP provider** | a provider reachable only as an MCP server (no folder) | Step 0, then `references/connect-steps.md` §7 |
 
@@ -50,26 +50,27 @@ Take the e-mail from the host account, else from the User Profile (`Work Email`,
 One question: "Do you have your own Jira project where you create tasks yourself?" — yes, the key on the team card · yes, another key · no, read only. The answer becomes `--jira-write own|none` and the `jira_write_scope` line of the team block; plugin skills write to Jira only inside that project, through the write gate.
 
 ## Step 3 — bundle and proposal
-Run the builder for real (`references/connect-steps.md` §3): it copies the bundle (in-place: copies nothing), writes the user's focus and to-do notes when absent, and prepares the proposal in `<target>/<plugin_folder>/_System/` — or, when the target is a core that syncs back to others, in a private folder passed as `--proposal-dir`, because the proposal holds the user's whole context: `local-context.proposed.md`, `context-merge-report.md`, `team-context.md`, `provider-registration.proposed.yaml`. Its `CONTEXT_REPORT` line says what was added, updated, kept as reference only, and every discrepancy. Exit 3 (the core, its manifest or role model cannot be used) or exit 4 (a provider block matches a deny pattern, or nested markers) → nothing was written; show the builder's one line — it names the file, key or block — and stop.
+Run the builder for real (`references/connect-steps.md` §3): it copies the bundle (in-place: copies nothing), writes the user's focus and to-do notes when absent, and prepares the proposal in `<target>/<plugin_folder>/_System/` — or, when the target is a core that syncs back to others, in a private folder passed as `--proposal-dir`, because the proposal holds the user's whole context: `local-context.proposed.md`, `context-merge-report.md`, `team-context.md`, `provider-registration.proposed.yaml`. Its `CONTEXT_REPORT` line says what was added, updated, kept as reference only, and every discrepancy. Exit 3 (the core, its manifest or role model cannot be used) or exit 4 (a provider block matches a deny pattern, or nested markers) → nothing was written; show the builder's one line — it names the file, key or block — and stop. With a context store the proposal's `local-context.proposed.md` is not applied (Step 4); the registration it proposes is `provider-registration/2`, the one `ctx provider` reads.
 
 ## Step 4 — discrepancies → questions → apply
 1. One question per discrepancy (keep mine · take the core's · same thing, add an alias); batch them in one message when the host allows.
-2. Show in five lines what will change: blocks added and updated, the provider entry, the changelog.
-3. After "yes": backup, copy the proposal over `~/.grow-pm/local-context.md`, refresh the vault mirror if one exists (`references/connect-steps.md` §4). When the shell cannot reach `~/.grow-pm/`, give the user the one command to run.
-4. A new context (none existed) → after copying, recommend `plugin-configurator` Validate / Update — never start it yourself.
+2. Show in five lines what will change: blocks added and updated, and — without a store — the provider entry and the changelog.
+3. **With a context store** (the digest's `context: records …` line, SHELL available; `references/connect-steps.md` §4a): the provider is registered first (Step 6.1), then the blocks go in through `ctx`. **Refresh:** `ctx provider plan <repo>` → **one** message asking only about `⚠`, `+` and `?` rows, the recommended answer first (`⚠` mine · `+` add · `?` theirs, mine when the core removed the block) → `ctx provider apply <repo> --choose … --add …`. The `~` and `−` rows are never asked, in either case; with no `⚠`, `+` or `?` row the order is the plan in one line → `apply` → the report. **Connect:** after "yes", `ctx provider apply <repo> --add <blocks>`, then `ctx provider adopt <repo> --apply`. Exit 5 → the repository is unavailable (unreachable, or its blocks file is empty, cut or another repository's) and nothing changed — say so. A refresh through the store never stamps `Updated:`, never appends a `### Changelog — <ns>` table and never rewrites the `### Vault Search MCP` bullet.
+4. **Without a store**, after "yes": backup, copy the proposal over `~/.grow-pm/local-context.md`, refresh the vault mirror if one exists (`references/connect-steps.md` §4b). When the shell cannot reach `~/.grow-pm/`, give the user the one command to run.
+5. A new context (none existed) → after copying, recommend `plugin-configurator` Validate / Update — never start it yourself.
 
 ## Step 5 — focus note (five questions, one at a time)
 `references/focus-interview.md`. Write each answer into the focus note right away; link every mission the user names to the provider's mission cards; never invent one.
 
 ## Step 6 — register and finish
-1. Write the registration from the proposed file to `{vault}/{plugin_folder}/_System/providers/<id>.yaml` (no vault: `~/.grow-pm/providers/`), with the provider root as the user's machine sees it (and the mounted path too in a hosted session).
+1. No registration yet → write it from the proposed file to `{vault}/{plugin_folder}/_System/providers/<id>.yaml` (no vault: `~/.grow-pm/providers/`), with the provider root as the user's machine sees it (and the mounted path too in a hosted session); with a store, a first connection writes it before the blocks go in (Step 4). A registration already there is the user's and a Refresh keeps it: only `synced_at` and `source_version` are updated, plus any v2 key the file lacks (a nested one too) — a key that is present is never changed (`endpoint.headers_env`, `products`, `blocks_source`, `home_record`, `status: paused` are the user's: the proposal lacks some and carries a default for the others). A v1 file gets only the two dates. A core-derived key that is present and differs from the proposal (`core_root`, `namespace`, `blocks_file`, `paths`, `endpoint.url`, `endpoint.root`, `rank`) is kept and reported, one line per key, with the replacement offered on a yes; an exit 5 points to it when the core moved. Replacing the whole file by the proposal needs the user's explicit "yes", after the differences are shown (`references/connect-steps.md` §6).
 2. Three entry points in three lines: the provider's dashboard → its rules (`playbook`) → the focus note. One test question answered from the graph through `context-navigator`.
 3. E-mail missing from the provider's registry, or team members missing → one line per person for the provider's owner (`owner_label`): e-mail · name · team · role. Only the owner writes into the core.
 4. The provider's `people_resolver`, when declared: check that the user's e-mail resolves to a registry card.
 
 ## What is forbidden
 - Writing into the provider's core or the provider's copy outside its `writable` paths (`references/context-provider-protocol.md` §7).
-- Overwriting the user's `local-context.md`, focus note or to-do note without an explicit "yes" after the changes are shown.
+- Overwriting the user's `local-context.md`, focus note or to-do note without an explicit "yes" after the changes are shown. The one exception names `local-context.md` only: a `ctx provider apply` run after its plan was shown is snapshot-backed (`ctx undo` takes it back), so a Refresh with no `⚠`, `+` or `?` row applies the `~` and `−` rows and reports them in one message; the focus note, the to-do note and everything else keep the "yes".
 - Copying the owner's personal layer, even when asked for "everything".
 - Inventing a team, a role or a mission; editing the provider's role model or blocks (only the owner's generators do that).
 - Writing an MCP server into the host's configuration — show the entry; the user adds it.
@@ -79,6 +80,7 @@ Run the builder for real (`references/connect-steps.md` §3): it copies the bund
 - Every question offers the recommended answer first.
 - The proposal, the report and the registration always exist before anything is applied.
 - Refresh never re-asks a discrepancy the user already answered with "keep mine" unless the core changed that field again.
+- With a store, the user is asked only about `⚠`, `+` and `?` rows, once; `=`, `~`, `✎`, `−`, `✂` and `·` are said in one line.
 
 ## Skill Chaining
 → `plugin-configurator` (Validate / Update after a new context; the provider row in Validate) · → `context-navigator` (answers from the provider's graph) · → `task-creator` (writes only into the project the Jira write scope names).

@@ -22,13 +22,48 @@
   verify [ID ...] [--stale]     mark records verified today
   validate                      records, ids, parents, card size, edits waiting
   card                          regenerate INDEX.md only
+  repo list [--json]            the repositories (provider registrations) a product draws context blocks
+                                from: kind, products, rank, access, version — reads local files, no network
+  repo status [ID] [--json]     is each repository reachable (an MCP server answers the handshake within 3 s;
+                                a folder is there) and its version on the source against the base — the only
+                                repo command that touches the network: the handshake, then one read of the blocks
+                                file for the version. It exits 0 also when a repository is unreachable
+  provider adopt REPO [--apply] [--json]
+                                a base for each block of REPO that is already in your context (dry run unless
+                                --apply): the blocks the repository publishes at the version you hold are taken
+                                as they are (an edit of yours counts as your edit); another version gets no base.
+                                With --apply it first imports the edits waiting (as every writing command does),
+                                then writes the block state and the card's Repos line — no block text, no record
+  provider plan [REPO] [--product P] [--all] [--json]
+                                one table per repository: what each block is in your context against what the
+                                repository publishes now (= ~ ✎ ⚠ + − ✂ ?), the questions and the records an apply
+                                would rewrite. Without REPO: the repositories of the product P (matched as `read`
+                                matches it), else all of them. --all also lists the blocks a repository skips.
+                                Reads only — no lock, nothing written; an unreachable repository — or one whose
+                                blocks file is empty, cut, foreign or holds none of the blocks you have a base
+                                for — exits 5 (the others still print). CTX_RESULT: with REPO the plan itself
+                                (rows, questions, changes, errors …), without it {repos: [plan …], paused,
+                                search_only, questions, changes}. Without REPO a paused repository is left out,
+                                with one line "призупинено: <id>", and a search-only registration (no
+                                blocks_file, no core folder) with "лише пошук: <id>"; naming one is exit 3
+  provider apply [REPO] [--product P] [--choose BLOCK=theirs|mine|both ...] [--add BLOCK ...] [--json]
+                                one pass per repository: = ~ ✎ − ✂ are applied (your edits stay), ⚠ and ? wait
+                                for --choose, + for --add (it goes to the record holding most of the repository's
+                                blocks, else a new record); the snapshot, the records, the block state, one
+                                journal line, the compile. Nothing moved: only the time of the check, "без змін".
+                                Every repository is read first: one unreachable → exit 5, nothing written.
+                                Exit 2 when an answer is awaited (the rest applied), 4 when only refused blocks
+                                (a broken marker) are left. --choose / --add need REPO when several are in scope.
+                                CTX_RESULT: the plan with applied, decisions, pending, ignored, written, snapshot
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
-edits first, snapshots, writes, journals and compiles. Files are read within a time budget
+edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
+writes only the block state under `.state/blocks/` and the card's Repos line). Files are read within a time budget
 (GROW_PM_CTX_READ_TIMEOUT, default 30 s): a record that does not arrive (iCloud) or is missing
 on disk stops the run before anything is written. The last stdout line is `CTX_RESULT {json}`;
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
-unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists).
+unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists) · 5 a repository is
+unreachable, nothing written (provider commands). `provider apply`: 2 also means answers are awaited.
 Semantics: references/context-protocol.md. Stdlib only.
 """
 import argparse
@@ -36,12 +71,16 @@ import datetime
 import json
 import os
 import sys
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_blocks as cb  # noqa: E402
 import ctx_common as cc  # noqa: E402
+import ctx_mcp as cm  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
+import ctx_repos as crp  # noqa: E402
 import ctx_schema as sc  # noqa: E402
 
 HEADINGS = {"product": "### Product: %s", "team": "### Team: %s", "org": "## Organization: %s",
@@ -56,6 +95,16 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
            "invalidate", "archive", "restore", "verify", "assign"}
 
 
+def writes(a):
+    """Does this run write to the store? Every command of WRITING does, and `provider apply`; `migrate` and `provider
+    adopt` only with --apply."""
+    if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) == "apply"):
+        return True
+    if a.cmd == "migrate" or (a.cmd == "provider" and getattr(a, "action", None) == "adopt"):
+        return getattr(a, "apply", False)
+    return False
+
+
 class Parser(argparse.ArgumentParser):
     def error(self, message):
         raise Usage(message)
@@ -67,7 +116,7 @@ def now():
 
 class Ctx:
     def __init__(self, a):
-        if a.store and (a.cmd in WRITING or (a.cmd == "migrate" and getattr(a, "apply", False))):
+        if a.store and writes(a):
             raise Usage("--store is for read commands only; writing commands use the context's own store")
         self.home = a.home or os.path.expanduser("~")
         found = cc.find_context(a.context, home=self.home)
@@ -260,7 +309,11 @@ def cmd_read(a, c):
         cr.manifest_for(cr.load_manifest(), a.skill)
     except KeyError:
         raise cs.StoreError("no manifest entry for %s — read local-context.md whole" % a.skill)
-    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10])
+    try:
+        repos = crp.load_repos(c.text, c.home)
+    except Exception:  # noqa: BLE001 — the line that names a block's repository is not worth a read
+        repos = []
+    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10], repos=repos)
     sys.stdout.write(text)
     return 0, dict(res, command="read", skill=a.skill, text=text if a.json else None)
 
@@ -447,6 +500,7 @@ def cmd_undo(a, c):
             print("skipped (not a current copy): %s" % p)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
             existed = json.load(f).get("store_existed")
+        reverted = []
         if existed:
             cs.atomic_write(jpath, journal)
             t = now()
@@ -454,16 +508,22 @@ def cmd_undo(a, c):
             # an import's snapshot holds the copies as they were on disk then — already edited; rebuild them
             # from the restored records so the edit is undone and nothing waits to be imported again. A compile's
             # own snapshot (a mirror created or rewritten) is the one case whose copies must stay as restored.
+            # The same import of a record edited in its file (Obsidian) holds the edit in the records too: they
+            # go back to the last compile's text first, or the rebuild would write the edit into the copies again.
             rebuilt = bool({m.get("op") for m in marks[-a.steps:]} - {"compile"})
+            reverted = co.consistent_records(c.store, c.copies) if rebuilt else []
             if rebuilt:
                 co.compile_store(c.store, c.copies, t, c.home, pre)
             print("restored the state before the %s — %s%s"
                   % ("last change" if a.steps == 1 else "%d last changes" % a.steps, target,
                      "; the copies were rebuilt from the records" if rebuilt else ""))
+            if reverted:
+                print("put back to the last compiled text (the edit made in the file is undone): %s" % ", ".join(reverted))
         else:
             co.forget_store(c.home)
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)
-    return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped}
+    return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped,
+               "records_reverted": reverted}
 
 
 def cmd_validate(a, c):
@@ -541,10 +601,342 @@ def cmd_card(a, c):
         c.guard()
         recs = c.store.load()
         stale, archived = co.card_marks(c.store, recs, now()[:10])
-        card = cs.build_card(recs, cs.compile_records(recs), now()[:10], stale=stale, archived=archived)
+        compiled = cs.compile_records(recs)
+        card = cs.build_card(recs, compiled, now()[:10], stale=stale, archived=archived,
+                             repos=co.card_repos(c.store, recs, compiled, c.home))
         cs.atomic_write(c.store.card_path, card)
     print("INDEX.md: %d lines" % card.count("\n"))
     return 0, {"command": "card", "card_lines": card.count("\n")}
+
+
+def _table(rows):
+    """Rows of texts as aligned columns; the first row is the header."""
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    return "\n".join("  ".join(cell.ljust(w) for cell, w in zip(r, widths)).rstrip() for r in rows)
+
+
+NO_REPOS = ("no repositories registered — a registration is {vault}/{plugin folder}/_System/providers/<id>.yaml "
+            "(references/context-provider-protocol.md §3b)")
+
+
+def cmd_repo_list(a, c):
+    skipped = []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    if repos:
+        rows = [("id", "kind", "products", "rank", "access", "blocks", "version", "checked")]
+        for r in repos:      # blocks and checked come from the block state; none is kept yet
+            rows.append((r["id"] + (" (paused)" if r["status"] == "paused" else ""), r["kind"] or "—",
+                         ", ".join(r["products"]) or "all", str(r["rank"]), r["access"] or "—", "—",
+                         r["source_version"] or "—", "—"))
+        print(_table(rows))
+    else:
+        print(NO_REPOS)
+    rows = []
+    for r in repos:
+        warning = crp.namespace_warning(r)
+        if warning:
+            print("warning: %s: %s" % (cb.clip(r["id"], cb.HEADER_CLIP), warning))
+        rows.append(dict(r, namespace_warning=warning))
+    for path, why in skipped:
+        print("unreadable registration: %s (%s)" % (path, why))
+    return 0, {"command": "repo", "action": "list", "repos": rows,
+               "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
+
+
+def _public_url(url):
+    """An endpoint as it may be shown: scheme, host, port and path — no credentials, no query, no fragment."""
+    try:
+        u = urllib.parse.urlsplit(url)
+        return "%s://%s%s" % (u.scheme, u.netloc.rpartition("@")[2], u.path) if u.scheme and u.netloc else ""
+    except ValueError:
+        return ""
+
+
+def _reach(r):
+    """(reachable, reason) of one repository. An MCP repository answers the handshake within 3 s (the header its
+    registration names, if any, comes from the environment); a folder or bundle is there when its core folder is."""
+    ep = r["endpoint"]
+    if r["kind"] == "mcp" or ep["url"]:
+        if not ep["url"]:
+            return False, "no endpoint url in the registration"
+        hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
+        client = cm.McpClient(ep["url"], headers=hdrs)
+        if client.probe():
+            return True, ""
+        hint = "; %s is not set (or not 'Name: value')" % ep["headers_env"] if ep["headers_env"] and not hdrs else ""
+        return False, client.last_error + hint
+    if r["core_root"]:
+        return (True, "") if os.path.isdir(r["core_root"]) else (False, "core folder not found")
+    return False, "no endpoint and no core folder in the registration"
+
+
+def cmd_repo_status(a, c):
+    skipped = []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    if a.id:
+        repos = [r for r in repos if r["id"] == a.id]
+        if not repos:
+            raise Usage("no repository %r is registered — `ctx.py repo list`" % a.id)
+    rows = []
+    for r in repos:
+        ok, why = _reach(r)
+        # the version on the source is what its blocks carry now; the registration's own is the fallback when
+        # the source cannot be read. The base is the version most of the blocks the store holds a base for are at.
+        fetched = crp.fetch(r) if ok else None
+        live = fetched["version"] if fetched else None
+        warning = crp.namespace_warning(r, fetched["namespace"] if fetched else None)
+        base, bad_state = None, None
+        try:
+            base = cb.base_version(cb.load_state(c.store, r["id"]))
+        except cs.StoreError as e:                      # a status must not fail over a state file; it says so
+            bad_state = str(e)
+        rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": _public_url(r["endpoint"]["url"]),
+                     "reachable": ok, "reason": why, "source_version": live or r["source_version"], "base_version": base,
+                     "namespace_warning": warning})
+        if bad_state:
+            rows[-1]["state_error"] = bad_state
+    if rows:
+        for row in rows:
+            where = row["url"] or "—"
+            print("%s  %s  %s" % (row["id"] + (" (paused)" if row["status"] == "paused" else ""), row["kind"] or "—", where))
+            print("  reachable %s" % ("yes" if row["reachable"] else "no (%s)" % row["reason"]))
+            print("  version on source: %s · base: %s" % (row["source_version"] or "—", row["base_version"] or "—"))
+            if row.get("state_error"):
+                print("  block state: %s" % row["state_error"])
+            if row["namespace_warning"]:
+                print("  warning: %s" % row["namespace_warning"])
+    else:
+        print(NO_REPOS)
+    for path, why in skipped:
+        print("unreadable registration: %s (%s)" % (path, why))
+    return 0, {"command": "repo", "action": "status", "repos": rows,
+               "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
+
+
+def cmd_repo(a, c):
+    if a.action == "list":
+        return cmd_repo_list(a, c)
+    if a.action == "status":
+        return cmd_repo_status(a, c)
+    raise Usage("repo takes list or status")
+
+
+def _repository(c, rid):
+    """The registered repository named `rid`; an unknown one, or a search-only registration (it publishes no blocks),
+    is a usage error (exit 3)."""
+    repos = [r for r in crp.load_repos(c.text, c.home) if r["id"] == rid]
+    if not repos:
+        raise Usage("no repository %r is registered — `ctx.py repo list`" % rid)
+    if crp.search_only(repos[0]):
+        raise Usage("%s is a search-only registration (no blocks_file and no core folder): it publishes no blocks for "
+                    "`ctx provider`" % cb.clip(rid, cb.HEADER_CLIP))
+    return repos[0]
+
+
+def _refresh_card(c):
+    """Bring the card's line about the repositories up to date after the state moved. The state is already written by
+    then, so a card that cannot be read or written (an INDEX.md that has not arrived from iCloud, say) is one line for
+    the caller to print after its report — "card not refreshed: <why>" — and never a lost report or another exit
+    code. Returns that line, or None."""
+    try:
+        co.refresh_card_repos(c.store, c.home, now()[:10])
+    except Exception as e:  # noqa: BLE001 — see above
+        return "card not refreshed: %s" % cb.clip(e, cb.NOTE_CLIP)
+    return None
+
+
+def cmd_provider_adopt(a, c):
+    c.need_store()
+    repo = _repository(c, a.repo)
+    fetched = crp.fetch(repo)
+    if fetched["error"]:
+        print("ctx: the repository %s is unreachable — %s" % (repo["id"], fetched["error"]))
+        print("nothing written")
+        return 5, {"command": "provider", "action": "adopt", "repo": repo["id"], "written": False, "error": fetched["error"]}
+    plan = co.plan_sync(c.store, c.copies)
+    pending = sum(co.pending(plan).values()) + len(plan["conflicts"]) + len(plan["missing"])
+    imported, waited = [], 0
+    if a.apply:                                         # like every writing command: the edits waiting go in first, so
+        with co.lock(c.home):                           # the adopt's snapshot holds them and `ctx undo` never takes them back
+            c.guard()
+            pre = c.import_first()
+            imported, waited, pending = pre["changed"] + pre["added"], pending, 0
+            res = cb.adopt(c.store, c.copies, c.home, repo, fetched, now(), True)
+            card_note = _refresh_card(c) if res["written"] else None
+    else:
+        res = cb.adopt(c.store, c.copies, c.home, repo, fetched, now(), False)
+        card_note = None
+    gets = [b for b, o in res["blocks"].items() if o in ("base", "edit")]
+    print("adopt %s — source %s, %d block(s) of %s in your context" % (repo["id"], fetched["source"], len(res["blocks"]),
+                                                                     cb.namespace_of(repo, fetched)))
+    if res["blocks"]:
+        print(_table([("block", "result", "why")] + [(b, o, res["why"][b]) for b, o in res["blocks"].items()]))
+    if res["new"]:
+        print("offered by the repository, not in your context (the plan shows +): " + ", ".join(res["new"]))
+    for x in res["problems"]:
+        print("problem: block %s in %s — %s (left out)" % (x["block"] or "?", x["host"], x["why"]))
+    if pending:
+        print("note: %d change(s) to local-context.md or the records are not imported yet — this dry run does not see them; "
+              "--apply imports them first" % pending)
+    elif a.apply and waited:
+        print("imported first: %d change(s) to local-context.md or the records" % waited)
+    if res["written"]:
+        print("adopted %d block(s) · snapshot %s (back: ctx undo)" % (len(gets), res["snapshot"]))
+    elif a.apply:
+        print("nothing to adopt — no base written")
+    elif gets:
+        print("dry run — nothing written; `ctx provider adopt %s --apply` sets the bases" % repo["id"])
+    else:
+        print("dry run — nothing written, and there is nothing to adopt")
+    if card_note:
+        print(card_note)
+    return 0, dict(res, command="provider", action="adopt", pending=pending, imported=imported)
+
+
+def _product_repos(c, repos, wanted):
+    """The repositories that serve the product `wanted` names (picked among the product records the way `ctx read`
+    picks it), and those that name no product (they serve all). An unknown or ambiguous product is a usage error."""
+    records, _, _ = cr._live_view(c.store, c.copies, now())
+    products = [r for r in records if r["type"] == "product"]
+    prod, _ = cr._pick_product(products, wanted)
+    if prod is None:
+        raise Usage("no single product matches %r — products: %s" % (
+            wanted, ", ".join(p["title"].split(":", 1)[-1].strip() for p in products) or "none"))
+    names = {prod["id"].lower(), prod["title"].strip().lower(), prod["title"].split(":", 1)[-1].strip().lower()}
+    return [r for r in repos if not r["products"] or names & {x.lower() for x in r["products"]}]
+
+
+def _in_scope(c, a):
+    """(repositories, ids of the paused ones, ids of the search-only ones) of a plan or an apply: the one named —
+    paused or not; a search-only one is a usage error — else those of the product --product names (and those serving
+    every product), else all; without a name the paused and the search-only registrations (no blocks_file, no core
+    folder: `crp.search_only`) are left out. Prints the line for an empty scope, one line "призупинено: <id>" per paused
+    repository and one line "лише пошук: <id>" per search-only registration."""
+    if a.repo:
+        return [_repository(c, a.repo)], [], []
+    repos = crp.load_repos(c.text, c.home)
+    if a.product:
+        repos = _product_repos(c, repos, a.product)
+    search = [r["id"] for r in repos if crp.search_only(r)]
+    repos = [r for r in repos if not crp.search_only(r)]
+    paused = [r["id"] for r in repos if r["status"] == "paused"]
+    repos = [r for r in repos if r["status"] != "paused"]
+    if not repos and not paused and not search:
+        print(NO_REPOS if not a.product else "no repository serves the product %r" % a.product)
+    for rid in paused:
+        print("призупинено: %s" % cb.clip(rid, cb.HEADER_CLIP))
+    for rid in search:
+        print("лише пошук: %s" % cb.clip(rid, cb.HEADER_CLIP))
+    return repos, paused, search
+
+
+def cmd_provider_plan(a, c):
+    c.need_store()
+    repos, paused, search = _in_scope(c, a)
+    plans, down = [], 0
+    for k, repo in enumerate(repos):
+        fetched = crp.fetch(repo, include_skipped=a.all)
+        if k or paused or search:
+            print()
+        try:
+            plan = None if fetched["error"] else cb.plan(c.store, c.copies, repo, fetched, now(), all_=a.all)
+        except cb.SourceLost as e:                      # a file that holds none of your based blocks: unavailable, not N "−"
+            fetched = dict(fetched, error=str(e))
+        if fetched["error"]:
+            down += 1
+            why = cb.clip(fetched["error"], cb.NOTE_CLIP)
+            print("%s · недоступний: %s" % (cb.clip(repo["id"], cb.HEADER_CLIP), why))
+            plans.append({"repo": repo["id"], "error": why})
+            continue
+        print(cb.render_plan(plan))
+        plan["namespace_warning"] = crp.namespace_warning(repo, fetched["namespace"])
+        if plan["namespace_warning"]:
+            print("warning: %s" % plan["namespace_warning"])
+        plans.append(plan)
+    rc = 5 if down else 0
+    if a.repo:
+        return rc, dict(plans[0], command="provider", action="plan")
+    return rc, {"command": "provider", "action": "plan", "repos": plans, "paused": paused, "search_only": search,
+                "questions": sum(p.get("questions", 0) for p in plans), "changes": sum(p.get("changes", 0) for p in plans)}
+
+
+def _choices(items):
+    """--choose BLOCK=theirs|mine|both … → {block: answer}; anything else is a usage error."""
+    out = {}
+    for it in items or []:
+        bid, eq, how = it.partition("=")
+        if not eq or not bid or how not in cb.CHOICES:
+            raise Usage("--choose takes BLOCK=theirs|mine|both, not %r" % it)
+        out[bid] = how
+    return out
+
+
+def _applied(res):
+    """The data of one apply: the plan's (rows, versions …) and what the pass did."""
+    out = dict(res["plan"])
+    out.update((k, v) for k, v in res.items() if k != "plan")
+    return out
+
+
+def cmd_provider_apply(a, c):
+    """One pass per repository: every repository is read first, and one that cannot be read stops the run before
+    the lock (exit 5, nothing written); then, under the lock, the edits waiting are imported and each repository is
+    applied (its own snapshot, journal line and compile). Exit 2 when an answer is still awaited (the rest applied),
+    4 when a block was refused (a broken marker) and nothing else changed, else 0."""
+    choose, add = _choices(a.choose), list(a.add or [])
+    c.need_store()
+    repos, paused, search = _in_scope(c, a)
+    if (choose or add) and len(repos) > 1:
+        raise Usage("--choose and --add answer one repository's plan — name it: ctx provider apply <repo> …")
+    fetched = [(repo, crp.fetch(repo)) for repo in repos]
+    down = []
+    for repo, f in fetched:                             # unreachable, or a file that holds none of your based blocks
+        why = f["error"] or cb.source_lost(c.store, c.copies, repo, f, now())
+        if why:
+            down.append({"repo": repo["id"], "error": cb.clip(why, cb.NOTE_CLIP)})
+    if down:
+        for x in down:
+            print("%s · недоступний: %s" % (cb.clip(x["repo"], cb.HEADER_CLIP), x["error"]))
+        print("нічого не записано")
+        res = {"command": "provider", "action": "apply", "unreachable": down, "paused": paused, "search_only": search, "written": []}
+        if a.repo:
+            res.update(repo=a.repo, error=down[0]["error"])
+        return 5, res
+    results, card_note = [], None
+    if fetched:
+        with co.lock(c.home):
+            c.guard()
+            c.import_first()
+            for repo, f in fetched:
+                results.append(cb.apply(c.store, c.copies, c.home, repo, f, choose, add, now()))
+            card_note = _refresh_card(c)
+    for k, res in enumerate(results):
+        if k or paused or search:
+            print()
+        print(cb.render_apply(res))
+    if card_note:
+        print(card_note)
+    if any(r["pending"] for r in results):
+        rc = 2
+    elif any(r["errors"] for r in results) and not any(r["changed"] for r in results):
+        rc = 4
+    else:
+        rc = 0
+    data = [_applied(r) for r in results]
+    if a.repo:
+        return rc, dict(data[0], command="provider", action="apply")
+    return rc, {"command": "provider", "action": "apply", "repos": data, "paused": paused, "search_only": search,
+                "questions": sum(len(r["pending"]) for r in results), "changes": sum(len(r["written"]) for r in results)}
+
+
+def cmd_provider(a, c):
+    if a.action == "adopt":
+        return cmd_provider_adopt(a, c)
+    if a.action == "plan":
+        return cmd_provider_plan(a, c)
+    if a.action == "apply":
+        return cmd_provider_apply(a, c)
+    raise Usage("provider takes adopt, plan or apply")
 
 
 # ---------------------------------------------------------------------- main
@@ -585,6 +977,17 @@ def build_parser():
     sp = sub.add_parser("undo", parents=[common]); sp.add_argument("--steps", type=int, default=1)
     sub.add_parser("validate", parents=[common])
     sub.add_parser("card", parents=[common])
+    rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
+    sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
+    sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
+    pp = sub.add_parser("provider").add_subparsers(dest="action", required=True, parser_class=Parser)
+    sp = pp.add_parser("adopt", parents=[common]); sp.add_argument("repo"); sp.add_argument("--apply", action="store_true")
+    sp.add_argument("--json", action="store_true")
+    sp = pp.add_parser("plan", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--product")
+    sp.add_argument("--all", action="store_true"); sp.add_argument("--json", action="store_true")
+    sp = pp.add_parser("apply", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--product")
+    sp.add_argument("--choose", action="append"); sp.add_argument("--add", action="append")
+    sp.add_argument("--json", action="store_true")
     return p
 
 
@@ -592,7 +995,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify, "assign": cmd_assign}
+            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider}
 
 
 def emit(result, conflict=None):
@@ -622,6 +1025,10 @@ def main(argv=None):
         print("ctx: refused — %s" % e)
         emit({"ok": False, "command": a.cmd, "error": str(e)})
         return 4
+    except cb.SourceLost as e:                          # checked before the lock; here only if the state moved meanwhile
+        print("ctx: the repository is unavailable — %s" % e)
+        emit({"ok": False, "command": a.cmd, "error": str(e)})
+        return 5
     except Usage as e:
         print("ctx: %s" % e)
         emit({"ok": False, "command": a.cmd, "error": str(e)})

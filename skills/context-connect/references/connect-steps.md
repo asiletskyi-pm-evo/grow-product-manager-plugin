@@ -48,7 +48,7 @@ Pass `--skip-blocks <id,id>` with the blocks the user declined (a refresh reads 
 What the builder does:
 - copies the role-filtered part of the core (shared files, the team's files by the role's layers, the manifest), never the owner's personal layer (`exclude`, `personal_overlay`), registry cards with registry fields only;
 - turns links into the owner's personal layer into plain text, adds one note per changed file, prunes the entry note's links to files outside the bundle;
-- writes `team-context.md` and prepares `local-context.proposed.md`, `context-merge-report.md` and `provider-registration.proposed.yaml` in the proposal folder;
+- writes `team-context.md` and prepares `local-context.proposed.md`, `context-merge-report.md` and `provider-registration.proposed.yaml` (schema `provider-registration/2`, §6) in the proposal folder;
 - places blocks: `team` right after the user's own `### Team:` section (or updates it where it is); every other block in one reference section before `## Custom Sections`; Product / Competitors / OKR / CJM / Key Metrics blocks never replace the user's sections (`reference_only` in the report); a block the user moved keeps its place and is updated there;
 - adds the provider to `## Obsidian Vaults` → `### Vault Search MCP`;
 - reports every block as added, updated, unchanged or reference only, and lists blocks the core no longer offers (left where they are); a refresh with nothing new returns your file byte for byte — no changelog, no new date;
@@ -59,15 +59,58 @@ What the builder does:
 
 1. One question per discrepancy from the report (keep mine · take the core's · same thing → alias). Typical: e-mail (another account?), product (the user works on another one → add the provider's as one more), Jira key (fix the card through the owner, or the user's context), team (alias, or another card with `--team`).
 2. Five lines of what changes. Nothing of the user's text disappears.
-3. After "yes":
-   ```
-   mkdir -p ~/.grow-pm/backups/pre-<provider id>-<YYYY-MM-DD>
-   cp ~/.grow-pm/local-context.md ~/.grow-pm/backups/pre-<provider id>-<YYYY-MM-DD>/
-   cp "<target>/<plugin_folder>/_System/local-context.proposed.md" ~/.grow-pm/local-context.md
-   ```
-   Keep the last 5 backups (`references/persistent-storage.md`). Refresh the vault mirror (`{vault}/{plugin_folder}/_System/local-context.md`) when the user keeps one, and compare it with `cmp`.
-   Context store (since v3.11.0, `references/context-protocol.md`): When the session digest shows a `context: records …` line — on a host without the digest (Codex CLI): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source context-connect --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. The proposal then enters the records like any other edit, and `ctx` writes the vault mirror itself — skip the manual copy.
+3. After "yes", by path. A context store exists when the session digest shows a `context: records …` line — on a host without the digest (Codex CLI): when `{storage_root}/_System/context/.state/` exists — and SHELL is available. With a store the provider's blocks go in through `ctx` (§4a) and the builder's `local-context.proposed.md` is **not** copied over the context; without a store, or without a shell, the proposal path (§4b) stays as it was.
 4. Jira accountId shown as "look up by e-mail" → with the user's consent, look it up through the Atlassian connector (read-only) and write it into the profile.
+
+### §4a With a context store (since v3.13.0)
+
+`ctx provider …` names a repository by its registration id, so the provider is registered first (§6 item 1: after the user's "yes" on a first connection; already there on a refresh). Every command below is `python3 "<plugin root>/scripts/ctx.py" …`; `plan` writes nothing, `apply` and `adopt --apply` take a snapshot before they write. The bundle files and the discrepancy questions are the builder's, as in §3 and §4 items 1–2; only where the **blocks** go changes.
+
+**Refresh** — the blocks of a provider the user is already connected to:
+
+1. Read the plan.
+   ```
+   python3 "<plugin root>/scripts/ctx.py" provider plan <repo>
+   ```
+   One row per block, with a sign: `=` no change · `~` the core changed a block you did not touch (apply updates it) · `✎` you edited a block the core did not change (your edit stays) · `⚠` both changed · `+` a block your context does not have · `−` the core dropped a block you did not edit (apply removes it) · `✂` you removed a block (it stays removed) · `?` no base to compare with · `·` not checked (a skipped block, or a team block that cannot be built — the reason follows). `⚠` rows show the lines each side changed; the last line counts the questions and the records an apply would rewrite. Without `<repo>` it covers every registered repository (`--product <name>` limits it to one product's), `--all` lists the skipped blocks too.
+2. Ask **once**, in one message, and only about `⚠`, `+` and `?` rows — the recommended answer first: `⚠` → mine (keep your edit; the core's version of that block is dropped) · `+` → add · `?` with the block still offered → theirs. Other answers: `⚠` → theirs (the core's text) or both (yours, then the core's, marked); `?` → mine or both; `+` → leave it (it is asked again next time; to stop, add its id to the registration's `skip_blocks`). A block the core **removed** (a `⚠` or `?` row whose core text is missing) is different — recommended: mine, which keeps the text as your own without the markers; theirs removes it; both is refused. Say `~`, `✎`, `−` and `✂` rows in one line; they are never asked — whether or not there is a question about other rows. No `⚠`, `+` or `?` row → no question at all: the plan was shown and `apply` is snapshot-backed (`ctx undo` takes it back), so the order is the plan in one line → `apply` → the report, the `~` and `−` rows said in one message.
+3. Apply the answers.
+   ```
+   python3 "<plugin root>/scripts/ctx.py" provider apply <repo> [--choose <block>=theirs|mine|both ...] [--add <block> ...]
+   ```
+   One flag per block. A block with no answer stays a question; the rows that need none are applied anyway. Say what was written and that `ctx undo` takes it back.
+4. Exit codes. `plan` exits 0, or 5 — never 2: it asks nothing itself. `apply`: 0 done, or nothing to do · 2 an answer is still awaited (the rest was applied — ask only about the blocks the output names), or edits waiting to be imported conflict (`CTX_CONFLICT`: show both versions, as for `ctx sync`) · 3 a block named in `--choose` or `--add` is not in the plan, a search-only registration was named, or the call is wrong · 4 a block was refused (its markers are broken) and nothing else changed, or the run itself was refused (a store inside a provider's folder, a busy lock). Both: **exit 5, the repository is unavailable** — the core folder is not here and its server does not answer, or its blocks file is empty, cut, another repository's, or holds none of the blocks the context has a base for (a wrong or stale copy is never read as "the core removed every block"): say so in one line with the reason the output gives, say that nothing changed, and do not retry in a loop. When the core moved — a kept `core_root` or `endpoint` that differs from the proposal (§6 item 1) — point to that line and offer the replacement on a yes.
+
+A refresh through the store **never** stamps `Updated:`, never appends a `### Changelog — <namespace>` table and never rewrites the `### Vault Search MCP` bullet: the snapshot is the backup, the plan is the changelog, and the digest counts the provider's age from the store's last check. A line `warning: registration has no namespace — the core's manifest says <ns>; add …` means a registration without the key: the plan still works because the core's manifest is read. A v1 file is the user's until they say yes — say it in one line and offer, after a yes, to add the `namespace: <ns>` line, or to replace the registration with the v2 file the builder proposes, after showing the differences (§6). A v2 file that lacks only the key gets it from the manifest on the Refresh, silently, like any missing v2 key (§6 item 1). Until the key is there, the card line and the provenance line of `ctx read` do not name the repository.
+
+**Connect** — a first connection, the user's context may already hold some of the provider's blocks:
+
+1. After the user's "yes" on the five lines (§4 item 2): write the registration (§6 item 1). Blocks the user declined are its `skip_blocks`.
+2. Add the blocks the report lists as `added` (`team` among them when listed) — the blocks the user did not decline, one `--add` each. The blocks the report lists as `reference_only` are not added here: they show as `+` in the next plan, and the user decides then:
+   ```
+   python3 "<plugin root>/scripts/ctx.py" provider apply <repo> --add <block> [--add <block> ...]
+   ```
+   Exit 2 is expected when the context already holds blocks of the provider that have no base yet: the next command settles them.
+3. Set the bases of the blocks the context already holds — `provider adopt --apply`:
+   ```
+   python3 "<plugin root>/scripts/ctx.py" provider adopt <repo> --apply
+   ```
+   Without `--apply` it only shows what it would do. A block whose text equals the repository's, or differs only by the user's edits at the same version, gets a base; any other stays a question for the next plan.
+4. Read `provider plan <repo>` once more. All rows `=` or `✎` → connected; anything else is asked as in a Refresh. Exit 5 at any step: the repository is unreachable and that step wrote nothing.
+
+`ctx` only reads the core and the server; it never writes into the core's folder or the provider's copy.
+
+### §4b Without a context store
+
+The proposal replaces the file:
+```
+mkdir -p ~/.grow-pm/backups/pre-<provider id>-<YYYY-MM-DD>
+cp ~/.grow-pm/local-context.md ~/.grow-pm/backups/pre-<provider id>-<YYYY-MM-DD>/
+cp "<target>/<plugin_folder>/_System/local-context.proposed.md" ~/.grow-pm/local-context.md
+```
+Keep the last 5 backups (`references/persistent-storage.md`). Refresh the vault mirror (`{vault}/{plugin_folder}/_System/local-context.md`) when the user keeps one, and compare it with `cmp`.
+
+With a store, a discrepancy answered "take the core's" edits the context itself: after saving it run `python3 "<plugin root>/scripts/ctx.py" sync --source context-connect --reason "<what was saved>"` to bring that edit into the records (exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`; `references/context-protocol.md`). No store or no shell: nothing more.
 
 ## §5 Focus note
 
@@ -75,7 +118,10 @@ What the builder does:
 
 ## §6 Register and finish
 
-1. Copy `provider-registration.proposed.yaml` to `{vault}/{plugin_folder}/_System/providers/<id>.yaml` (no vault: `~/.grow-pm/providers/<id>.yaml`). `paths` lists the provider root as the user's machine sees it; in a hosted session add the mounted spelling too — both are checked by the write boundary. `writable` comes from the manifest's `personal_overlay`.
+1. **No registration for the provider yet:** copy `provider-registration.proposed.yaml` to `{vault}/{plugin_folder}/_System/providers/<id>.yaml` (no vault: `~/.grow-pm/providers/<id>.yaml`). `paths` lists the provider root as the user's machine sees it; in a hosted session add the mounted spelling too — both are checked by the write boundary. `writable` comes from the manifest's `personal_overlay`.
+   **A registration already there is the user's, and a Refresh keeps it.** The proposal is regenerated from the core on every run. Three keys the user finishes by hand are not in it at all — `endpoint.headers_env`, `blocks_source`, `home_record` — and two are in it as defaults that would overwrite theirs: `products: []` and `status: active` (the user may have set `status: paused`). `skip_blocks` is not among them: the run passes the registration's own list (`--skip-blocks`, §3), so the proposal repeats it. A refresh therefore updates only `synced_at` and `source_version`, and — for a v2 file — adds a v2 key the file lacks; it never changes a key that is present. A nested key counts: a missing `endpoint.root` inside an `endpoint:` that is there is a missing key and is added, while an `endpoint.headers_env` that is there stays. A v2 file with no `namespace` gets it from the manifest the same way, silently. A v1 file gets only the two dates until the user says yes (no silent upgrade).
+   **Keys the core decides.** `core_root`, `namespace`, `blocks_file`, `paths`, `endpoint.url`, `endpoint.root` and `rank` come from the core, and a refresh keeps them too when they are present. It compares them with the proposal and reports every one that differs, one line per key — `<key>: yours <value> · the core now says <value>` — and offers the replacement of those keys on a yes (after the core folder moved or the server changed, say). An exit 5 (§4a) points to these lines when the core moved. Replacing the whole file by the proposal happens only on the user's explicit yes, after the differences between the two are shown.
+   The proposal is `provider-registration/2`, the schema `ctx provider` reads: besides the v1 keys it holds `core_root` (the core folder, `--core`), `namespace` and `blocks_file` (from the manifest), `rank` (from the authority: personal 100, team 500, org 1000) and `products: []` (empty = serves every product). When the manifest names a server (`mcp.url`) it adds `endpoint.url`, and `endpoint.root` — the core's folder with a trailing slash — when the core sits inside a vault listed in the user's context (the server serves that vault; pass `--existing-context`, §3, for the builder to see it). A server that needs a header is the user's to finish: `endpoint.headers_env` names the environment variable holding `Name: value`, never the value. An older v1 registration keeps working.
 2. Entry points, a test question through `context-navigator`, lines for the owner, the `people_resolver` check — as in the skill's Step 6.
 3. Project memory, when the host has one: team, role, provider id, target path, core version, date, whether a context existed and what was done with it.
 
@@ -85,4 +131,4 @@ A provider reachable only as a server (no folder on the user's machine):
 1. Read its manifest when it serves one (`vault_get_note` on `_System/provider-manifest.yaml`), else ask for the id and title.
 2. Show the host configuration entry the user adds themselves — a remote server behind a VPN is usually bridged locally, for example `npx -y mcp-remote@latest <url> --transport http-only`. Never edit the host configuration file.
 3. After the user restarts the session, probe with `brain_status` or `vault_list_by_folder("")` (3 s); say plainly when it does not answer (VPN off, server down).
-4. Register it (`kind: mcp`, no `paths`) and add the `### Vault Search MCP` bullet through the same backup-and-changelog apply as §4.
+4. Register it (`kind: mcp`, no `paths`) and add the `### Vault Search MCP` bullet through the same backup-and-changelog apply as §4. With no `blocks_file` (and no core folder) the registration is search-only: `ctx provider plan|apply` leave it out with one line `лише пошук: <id>` and are not stopped by it. When its manifest names a `blocks_file`, put it in the registration with `endpoint.url` and `endpoint.root`, so `ctx provider` merges its blocks (§4a).
