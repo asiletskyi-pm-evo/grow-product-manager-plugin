@@ -633,6 +633,34 @@ with tempfile.TemporaryDirectory() as d:
     check("every reason a team block cannot be built reads 'team block: not available (…)'",
           all(x["team_error"].startswith("team block: not available (") for x in (fbj, fnmod, fbm, fsl)),
           [x["team_error"] for x in (fbj, fnmod, fbm, fsl)])
+    for label, rel in (("the team card", ("Core", "Teams", "team-alpha.md")), ("one people card", ("Core", "People", "a-one.md"))):
+        ev = os.path.join(d, "EvictedCard-" + rel[-1][:-3])
+        shutil.copytree(CORE_FIX, ev)
+        folder = os.path.join(ev, *rel[:-1])
+        os.rename(os.path.join(folder, rel[-1]), os.path.join(folder, "." + rel[-1] + ".icloud"))
+        fe = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [ev], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
+        check("%s evicted by iCloud (only its .icloud placeholder) → the team block unavailable, never a degraded block" % label,
+              fe["source"] == "folder" and fe["blocks"] == f["blocks"] and fe["team"] is None and fe["team_source"] is None
+              and fe["team_error"] == "team block: not available (1 file not downloaded — open the core folder in Finder to download them)", fe)
+        check("…the reason names no file and no path", fe["team_error"] is not None and rel[-1][:-3] not in fe["team_error"]
+              and "EvictedCard" not in fe["team_error"], fe["team_error"])
+    ev2 = os.path.join(d, "EvictedTwo")
+    shutil.copytree(CORE_FIX, ev2)
+    for rel in (("Core", "Teams", "team-beta.md"), ("Core", "People", "b-two.md")):
+        folder = os.path.join(ev2, *rel[:-1])
+        os.rename(os.path.join(folder, rel[-1]), os.path.join(folder, "." + rel[-1] + ".icloud"))
+    fe2 = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [ev2], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
+    check("any placeholder in the team-card or people folder counts (another team's card too): N files",
+          fe2["team"] is None and fe2["team_error"] == "team block: not available (2 files not downloaded — open the core folder in Finder to download them)", fe2)
+    elsewhere = os.path.join(d, "EvictedElsewhere")
+    shutil.copytree(CORE_FIX, elsewhere)
+    mt = os.path.join(elsewhere, "Core", "Meetings")
+    os.rename(os.path.join(mt, "2026-09-01 sync.md"), os.path.join(mt, ".2026-09-01 sync.md.icloud"))
+    open(os.path.join(elsewhere, "Core", "People", "a-one.md.icloud.txt"), "w", encoding="utf-8").write("not a placeholder")
+    fel = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [elsewhere], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha",
+                            "jira_write": "own"}))
+    check("no placeholder where the team block reads (one in another folder, a name that is no placeholder) → the team block as before",
+          fel["team"] == f["team"] and fel["team_error"] is None, fel)
     if hasattr(os, "geteuid") and os.geteuid() != 0:
         noread = os.path.join(d, "NoReadPeopleCore")
         shutil.copytree(CORE_FIX, noread)

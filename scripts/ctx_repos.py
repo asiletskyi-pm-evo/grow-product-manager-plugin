@@ -169,6 +169,26 @@ def _team_why(exc):
     return _unavailable(text)
 
 
+PLACEHOLDER = re.compile(r"^\..+\.icloud$")          # what iCloud leaves of a file it has evicted: `.<name>.icloud`
+
+
+def _not_downloaded(core_root, manifest):
+    """How many files iCloud has evicted where the team block reads: the team-card folder, the people folder and the
+    core's templates folder (when the manifest names one) — each read flat, as `provider_bundle.team_context` reads
+    them. Its builder takes a card that is not there as optional, so an evicted card would give a degraded block
+    that the plan would offer as an update of yours; a count above 0 makes the team block unavailable instead."""
+    folders = {os.path.normpath(os.path.join(core_root, manifest.s(k))) for k in ("team_card_dir", "people_dir", "templates_dir")
+               if manifest.s(k)}
+    count = 0
+    for folder in sorted(folders):
+        try:
+            names = os.listdir(folder)
+        except OSError:
+            continue
+        count += sum(1 for n in names if PLACEHOLDER.match(n))
+    return count
+
+
 def _manifest(core_root):
     """(manifest, why not) of the core's provider manifest as the bundle builder reads it. A manifest that is not there
     (never written, or evicted by iCloud: only its `.icloud` placeholder is), or that cannot be read or parsed, is
@@ -197,7 +217,8 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
     core folder in the registration and the blocks file itself carries the team region (`in_file`: the file offers
     it). Whenever a team was due and cannot be built — no core folder in the registration, a core folder not on this
     machine, a provider manifest that is missing (iCloud evicted it), unreadable or unparsable, a role model or a
-    card that does not arrive or cannot be read, anything unexpected — it is (None, "team block: not available
+    card that does not arrive or cannot be read, a card iCloud has evicted (`_not_downloaded`: the builder would
+    leave it out and give a degraded block), anything unexpected — it is (None, "team block: not available
     (<why>)"): the plan shows "·" and the region is never touched."""
     team, core_root = repo["team"], repo["core_root"]
     if not team:
@@ -215,6 +236,10 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         key = team if team in teams else (team[len("team-"):] if team.startswith("team-") else team)
         if key not in teams:
             return None, None
+        evicted = _not_downloaded(core_root, manifest)
+        if evicted:
+            return None, _unavailable("%d file%s not downloaded — open the core folder in Finder to download them"
+                                      % (evicted, "" if evicted == 1 else "s"))
         block = pb.team_context(core_root, manifest, key, teams[key], model, repo["jira_write"] or "ask")[0]
         return block.rstrip("\n"), None
     except (Exception, SystemExit) as e:

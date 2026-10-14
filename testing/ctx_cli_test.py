@@ -1139,6 +1139,21 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
               and signs_in(r).get("team") == "·" and "team" not in r["applied"]
               and any(l.startswith("·") and "provider manifest" in l for l in out.splitlines()), (rc, out[-500:]))
 
+    with tempfile.TemporaryDirectory() as d:            # one people card of the core evicted by iCloud
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        rc, out, r = apply_run(e, core, "zorg-core")
+        people = os.path.join(core, "Core", "People")
+        os.rename(os.path.join(people, "a-one.md"), os.path.join(people, ".a-one.md.icloud"))
+        team_before = region_in(read(e.ctx), "zorg-core", "team")
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("a people card evicted by iCloud: apply exits 0, the team region byte-identical, its row '·' — never a degraded update",
+              rc == 0 and team_before is not None and region_in(read(e.ctx), "zorg-core", "team") == team_before
+              and signs_in(r).get("team") == "·" and "team" not in r["applied"]
+              and any(l.startswith("·") and "1 file not downloaded" in l for l in out.splitlines()), (rc, out[-500:]))
+
 check("apply never writes into the core folder", core_untouched and all(core_untouched), core_untouched)
 
 
