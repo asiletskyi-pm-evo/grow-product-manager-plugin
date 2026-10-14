@@ -228,8 +228,10 @@ check("dashboard rewritten and pruned", "my focus" in dash and "Missing note" no
       and "[[Core/Teams/_index|Teams]]" in dash, dash)
 check("bundle manifest frontmatter", 'team: "team-alpha"' in man and "role_profile: pm" in man and 'core_version: "0.2"' in man, man)
 check("focus note from default template", "Mission One" in now and "Alex One" in now, now)
-check("registration proposed", "id: zorg-core" in regp and "schema: provider-registration/1" in regp and out in regp
+check("registration proposed", "id: zorg-core" in regp and "schema: provider-registration/2" in regp and out in regp
       and "jira_write: own" in regp, regp)
+check("registration v2 proposed", "schema: provider-registration/2" in regp and "core_root: " in regp
+      and "namespace: zorg-core" in regp and "blocks_file: Core/_System/context-blocks.md" in regp and "rank: 1000" in regp, regp)
 check("bundle result line", res.get("team") == "alpha" and res.get("role") == "pm" and res.get("files", 0) >= 7, res)
 check("team block carries the write scope", "own project" in rd("Core", "_System", "team-context.md").lower(), rd("Core", "_System", "team-context.md"))
 shutil.rmtree(d)
@@ -314,6 +316,107 @@ check("--propose-only resolves team and role and writes nothing without a contex
 rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--dry-run")
 check("--dry-run still works and names its new spelling", rc == 0 and "--propose-only" in o, (rc, o[-300:]))
 shutil.rmtree(d)
+
+# 10 — v3.13.0: the registration proposal is provider-registration/2 (what `ctx provider plan/apply` read)
+import ctx_repos as cr
+
+def read_root(*parts):
+    return open(os.path.join(ROOT, *parts), encoding="utf-8").read()
+
+def proposed_registration(manifest_extra="", manifest_edit=None, vault=None, existing=None):
+    """(parsed registration, core, out, exit code, output) of a --propose-only run on a fresh copy of the Zorg core."""
+    d, core, out = fresh()
+    mf = os.path.join(core, "Core", "_System", "provider-manifest.yaml")
+    text = open(mf, encoding="utf-8").read()
+    if manifest_edit:
+        text = text.replace(*manifest_edit)
+    open(mf, "w", encoding="utf-8").write(text + manifest_extra)
+    ctx = existing or os.path.join(FIX, "existing-context.md")
+    if vault is not None:
+        ctx = os.path.join(d, "vault-context.md")
+        open(ctx, "w", encoding="utf-8").write(open(os.path.join(FIX, "existing-context.md"), encoding="utf-8").read().replace(
+            "/Users/name/Vault", vault.replace("{d}", d).replace("{core}", core)))
+    rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--propose-only", "--existing-context", ctx)
+    path = os.path.join(out, "Core", "_System", "provider-registration.proposed.yaml")
+    reg = cc.read_yaml_subset(open(path, encoding="utf-8").read()) if os.path.isfile(path) else {}
+    return reg, d, core, out, rc, o
+
+reg, d, core, out, rc, o = proposed_registration()
+check("v2 registration, as the reader reads it: schema, identity, rank as a number, core_root, namespace, blocks_file, no products",
+      rc == 0 and reg.get("schema") == "provider-registration/2" and reg.get("id") == "zorg-core" and reg.get("kind") == "bundle"
+      and reg.get("authority") == "org" and reg.get("rank") == 1000 and type(reg.get("rank")) is int
+      and reg.get("core_root") == os.path.abspath(core) and reg.get("namespace") == "zorg-core"
+      and reg.get("blocks_file") == "Core/_System/context-blocks.md" and reg.get("products") == [], (rc, reg))
+check("…the v1 keys are all still there: paths, writable, team, role, jira_write, status, mode, access",
+      reg.get("paths") == [os.path.abspath(out)] and reg.get("writable") == ["Core/Now.md", "Core/TODO*", "Core/_personal/"]
+      and reg.get("team") == "team-alpha" and reg.get("role") == "pm" and reg.get("jira_write") == "ask"
+      and reg.get("status") == "active" and reg.get("mode") == "snapshot" and reg.get("access") == "local"
+      and reg.get("skip_blocks") == [] and reg.get("index") == "" and reg.get("stale_after_days") == 30, reg)
+check("a manifest that names no server gives no endpoint", "endpoint" not in reg, reg)
+rep = cr.normalise(reg)
+check("the repository reader takes it whole: an explicit namespace, the core folder, the blocks file, the rank",
+      rep["namespace_explicit"] is True and rep["namespace"] == "zorg-core" and rep["core_root"] == os.path.abspath(core)
+      and rep["blocks_file"] == "Core/_System/context-blocks.md" and rep["rank"] == 1000 and rep["products"] == []
+      and rep["endpoint"] == {"url": "", "root": "", "headers_env": ""}, rep)
+fch = cr.fetch(rep)
+check("…and a fetch through it finds the core's blocks in the folder, with no warning to add a namespace",
+      fch["source"] == "folder" and fch["namespace"] == "zorg-core" and set(fch["blocks"]) == {"scope", "product", "teams"}
+      and cr.namespace_warning(rep) is None, fch)
+shutil.rmtree(d)
+
+SERVER = 'mcp:\n  url: https://context.zorg.example/mcp\n  transport: mcp-remote --transport http-only\n  access: vpn\n'
+reg, d, core, out, rc, o = proposed_registration(manifest_extra=SERVER)
+check("the manifest names a server: endpoint.url from mcp.url, access from mcp.access, no root outside a vault",
+      rc == 0 and reg.get("endpoint") == {"url": "https://context.zorg.example/mcp"} and reg.get("access") == "vpn"
+      and cr.normalise(reg)["endpoint"] == {"url": "https://context.zorg.example/mcp", "root": "", "headers_env": ""}, reg)
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_extra=SERVER, vault="{d}")
+check("a core nested in a vault of the user's context: endpoint.root is the core's folder in that vault, with the slash",
+      rc == 0 and reg.get("endpoint") == {"url": "https://context.zorg.example/mcp", "root": "core/"}, (rc, reg.get("endpoint"), o[-200:]))
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_extra=SERVER, vault="{core}")
+check("a core that is itself the vault is not nested: no root", rc == 0 and reg.get("endpoint") == {"url": "https://context.zorg.example/mcp"},
+      (rc, reg.get("endpoint")))
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_extra=SERVER, vault="{d}/elsewhere")
+check("a core outside every vault of the context (a sibling folder with a name that starts the same) has no root",
+      rc == 0 and reg.get("endpoint") == {"url": "https://context.zorg.example/mcp"}, (rc, reg.get("endpoint")))
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_extra='mcp:\n  url: "https://context.zorg.example/mcp?v=1#main"\n')
+check("a server address with '#' and '?' survives the registration", reg.get("endpoint") == {"url": "https://context.zorg.example/mcp?v=1#main"}, reg)
+shutil.rmtree(d)
+
+for authority, rank in (("team", 500), ("personal", 100), ("weird", 500)):
+    reg, d, core, out, rc, o = proposed_registration(manifest_edit=("authority: org", "authority: %s" % authority))
+    check("rank follows the authority (%s → %d)" % (authority, rank), rc == 0 and reg.get("rank") == rank and reg.get("authority") == authority, (rc, reg))
+    shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_edit=("namespace: zorg-core", "namespace: zorg-blocks"))
+check("a namespace of its own in the manifest is the registration's", rc == 0 and reg.get("namespace") == "zorg-blocks" and reg.get("id") == "zorg-core", (rc, reg))
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_edit=("blocks_file: Core/_System/context-blocks.md\n", ""))
+check("a manifest with no blocks file: the registration names none", rc == 0 and "blocks_file" not in reg and reg.get("namespace") == "zorg-core", (rc, reg))
+shutil.rmtree(d)
+
+reg, d, core, out, rc, o = proposed_registration(manifest_edit=("namespace: zorg-core\n", ""))
+check("a manifest with no namespace: the registration names the id, as the builder does", rc == 0 and reg.get("namespace") == "zorg-core", (rc, reg))
+shutil.rmtree(d)
+
+# the section a new context gets, and the connect procedure the skill points to
+check("section template says edits are kept", "kept" in read_root("scripts", "provider_templates", "context-section.md"),
+      read_root("scripts", "provider_templates", "context-section.md"))
+steps = read_root("skills", "context-connect", "references", "connect-steps.md")
+skill = read_root("skills", "context-connect", "SKILL.md")
+check("connect-steps uses plan and apply", "ctx.py\" provider plan" in steps and "provider apply" in steps and "provider adopt --apply" in steps, "")
+check("connect-steps: the answers are --choose and --add, an unreachable repository (exit 5) writes nothing, the old path stays for no store",
+      "--choose" in steps and "--add" in steps and "exit 5" in steps and "unreachable" in steps and "provider_bundle.py" in steps, "")
+check("the skill is 0.3.0 and a refresh with a store never stamps Updated or appends a changelog",
+      "version: 0.3.0" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
 
 # 9
 tok_file = os.path.join(ROOT, "testing", "org-tokens.local")

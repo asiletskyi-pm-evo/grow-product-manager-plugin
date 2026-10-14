@@ -25,9 +25,9 @@ import ctx_mcp as cm  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import provider_bundle as pb  # noqa: E402
 
-RANKS = {"personal": 100, "team": 500, "org": 1000}     # a higher rank wins when two repositories disagree
+RANKS = pb.AUTHORITY_RANK                               # a higher rank wins when two repositories disagree; the bundle builder writes the same
 DEFAULT_AUTHORITY = "org"                               # what the bundle builder writes
-FALLBACK_RANK = RANKS["team"]                           # an authority that is none of the three
+FALLBACK_RANK = pb.DEFAULT_RANK                         # an authority that is none of the three
 BLOCK_SOURCES = ("auto", "mcp", "paths")
 ENDPOINT_KEYS = ("url", "root", "headers_env")
 
