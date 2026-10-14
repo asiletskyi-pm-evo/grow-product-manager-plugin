@@ -1552,19 +1552,19 @@ def lacks(text, needed):
 cp_flat = re.sub(r"\s+", " ", read(ROOT, "references", "context-protocol.md"))
 pp_flat = re.sub(r"\s+", " ", read(ROOT, "references", "context-provider-protocol.md"))
 hp_flat = re.sub(r"\s+", " ", read(ROOT, "references", "host-profiles.md"))
-need_cp = ["`repo list", "`repo status", "`provider adopt", "`provider plan", "`provider apply", "5 a repository is unreachable",
+need_cp = ["`repo list", "`repo status", "`provider adopt", "`provider plan", "`provider apply", "5 a repository is unavailable",
            "records_reverted", "a record created in Obsidian and imported is not removed", ".state/blocks/",
            "Human edits in a block are kept", "Agent edits are not written", "One snapshot and one journal line per repository",
            "`ctx undo` takes back the last repository's pass only", "a snapshot with no journal line", "`--json` is accepted and changes nothing",
            "> [<repo-id> · v<version> · станом на <date>]", "⚠ конфлікт: файл і запис різняться — ctx sync", "**Repos:**",
-           "`provider adopt --apply` does not import first and does not compile"]
+           "`provider adopt --apply` imports first like every writing command"]
 check("context-protocol documents repo and provider commands, exit 5, the undo clause, snapshots with .state/blocks, one snapshot per repository",
       not lacks(cp_flat, need_cp), lacks(cp_flat, need_cp))
 need_pp = ["provider-registration/2", "## 12. Blocks and merge", "`core_root`", "`namespace`", "`blocks_file`", "`rank`", "`products`",
            "`endpoint.url`", "`endpoint.root`", "`endpoint.headers_env`", "`blocks_source`", "`home_record`", "`skip_blocks`", "`status`",
            "`base`", "`edit`", "`none`", "`has-base`", "`duplicate`", "`broken marker`", "`nested`",
            "| `=` |", "| `~` |", "| `✎` |", "| `⚠` |", "| `+` |", "| `−` |", "| `✂` |", "| `?` |", "| `·` |",
-           "| 5 | a repository is unreachable, nothing is written |", "`{repo, error}`", "paused",
+           "| 5 | a repository is unreachable, or its blocks file is no source", "`{repo, error}`", "paused",
            "`vault_get_note`, `vault_list_by_folder`, `vault_search`, `brain_status` and `brain_recent_changes`", "check 17",
            "No redirect is followed", "never goes to the network", "`<!-- ctx:both theirs -->`", "detaches", "no journal line",
            "its own snapshot and journal line"]
@@ -1573,6 +1573,42 @@ check("context-provider-protocol: registration v2 key table, §12 with the first
 need_hp = ["Context repositories", "`repo status`", "`vault_get_note`", "never goes to the network"]
 check("host-profiles: the network use of ctx and the host without SHELL", not lacks(hp_flat, need_hp), lacks(hp_flat, need_hp))
 check("ctx_store.Store documents .state/blocks/", ".state/blocks/" in (cs_mod.Store.__doc__ or ""), cs_mod.Store.__doc__)
+
+# --- v3.13.0 final review: the documents say what the fixes do, and no rule about managed regions contradicts §12
+vs = read(ROOT, "references", "vault-schema.md")
+vs_regions = re.sub(r"\s+", " ", vs[vs.index("## Generated regions and layers"):vs.index("## Tag Taxonomy")])
+check("vault-schema: the ban is scoped — a skill or the agent never writes inside a region; a human's edit in a provider's block is kept with a store",
+      "never edited by hand or by a skill" not in vs_regions and "never writes inside one" in vs_regions
+      and "kept by `ctx provider apply`" in vs_regions and "§12" in vs_regions, vs_regions[:700])
+pp_terms = pp_flat[pp_flat.index("## 1. Terms"):pp_flat.index("## 2. Contract")]
+pp_8 = pp_flat[pp_flat.index("## 8. Generated regions"):pp_flat.index("## 9. Provider kit")]
+check("context-provider-protocol §1 and §8: no 'written only by'; a human's edit in a provider block is kept with a store (§12)",
+      "written only by" not in pp_terms + pp_8 and all("§12" in s and "kept" in s and "never writes inside" in s for s in (pp_terms, pp_8)),
+      (pp_terms[-700:], pp_8))
+need_final_pp = ["`plan` never exits 2", "the blocks file holds no <ns> block (empty, cut, or another namespace)",
+                 "the blocks file is cut at block <id>", "holds none of the N blocks you have a base for", "never \"the repository removed every block\"",
+                 "джерело позаду вашої бази (v<theirs> < v<yours>)", "лише пошук: <id>", "search_only: [ids]", "**search-only**",
+                 "imports the edits waiting first", "`imported`", "joined by `; `", "a new `v=` on every block", "half a second"]
+check("context-provider-protocol documents the fixes of the final review (empty/cut/foreign/lost source, a lagging source, search-only, "
+      "adopt imports first, plan never exits 2, the card line, the digest's dates)", not lacks(pp_flat, need_final_pp), lacks(pp_flat, need_final_pp))
+gone_pp = ["a region that is never closed is no region", "Shown in plans", "a new `v=` on the blocks that changed",
+           "A state file that cannot be read or is not valid stops the command", "`adopt` says so (`ctx sync` first, so it sees them)",
+           "one line per registered repository", "| 2 | decisions are waiting (`apply`: the rest was applied)"]
+check("context-provider-protocol: none of the outdated sentences stays", [s for s in gone_pp if s in pp_flat] == [], [s for s in gone_pp if s in pp_flat])
+need_final_cp = ["imports the edits waiting first", "signs: `context-provider-protocol.md` §12.5", "joined by `; `", "half a second",
+                 "лише пошук", "holds none of the blocks you have a base for"]
+gone_cp = ["a skill has no other way into one", "does not import first", "one line `- **Repos:** <id>: <N> блок/блоки/блоків · v<version> · перевірено <date>` per",
+           "inside the same budget", "the plan signs: `context-provider-protocol.md` §12.7"]
+check("context-protocol: adopt imports first, §12.5 for the signs, the card line, the digest's dates, an unavailable source; no overclaim",
+      not lacks(cp_flat, need_final_cp) and [s for s in gone_cp if s in cp_flat] == [],
+      (lacks(cp_flat, need_final_cp), [s for s in gone_cp if s in cp_flat]))
+cst = re.sub(r"\s+", " ", read(ROOT, "skills", "context-connect", "references", "connect-steps.md"))
+skl = re.sub(r"\s+", " ", read(ROOT, "skills", "context-connect", "SKILL.md"))
+check("connect-steps: plan exits 0 or 5 and never 2; apply's codes apart; rank is core-derived only; no confusing skip_blocks aside; §7 search-only",
+      "`plan` exits 0" in cst and "never 2" in cst and "Exit codes of `plan` and `apply`" not in cst and "the rank of the authority" not in cst
+      and "keeps as passed" not in cst and "лише пошук" in cst[cst.index("## §7"):], cst[cst.index("4. Exit codes"):][:600] if "4. Exit codes" in cst else cst[:300])
+check("SKILL.md Step 6.1 says one line per key, as connect-steps does", "one line per key" in skl[skl.index("## Step 6"):skl.index("## What is forbidden")],
+      skl[skl.index("## Step 6"):][:900])
 tp_flat = re.sub(r"\s+", " ", read(ROOT, "testing", "Testing-process.md"))
 check("Testing-process.md carries no host-specific process rule (a scanner on the repository, re-running a time-limit check alone)",
       "scanner on the repository" not in tp_flat and "re-run alone" not in tp_flat and "Every test is run once per release" not in tp_flat,

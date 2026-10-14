@@ -15,7 +15,7 @@ Since v3.10.0; the registration `provider-registration/2` (§3b) and the blocks-
 | **Bundle** | A role-filtered copy of a core folder placed on the user's machine, plus the user's personal overlay notes inside it (§9). |
 | **Snapshot / live** | A provider's `mode`. `snapshot` — content as of a date (`synced_at`); `live` — the server reflects its source continuously. |
 | **Authority** | Whose word wins by default: `org` (policy, metric definitions, team cards), `team`, or `personal`. Facts *about the user* (e-mail, team, own Jira project) default to the user; org policy is annotated, never overridden. |
-| **Managed region** | Text between `<!-- <namespace>:begin id=<id> … -->` and `<!-- <namespace>:end id=<id> -->`, written only by a script or generator (`vault-schema.md` → Generated regions and layers). A provider's context blocks in `local-context.md` are managed regions whose namespace is the provider's. |
+| **Managed region** | Text between `<!-- <namespace>:begin id=<id> … -->` and `<!-- <namespace>:end id=<id> -->`, written by a script or generator; a skill or the agent never writes inside one (`vault-schema.md` → Generated regions and layers). A provider's context blocks in `local-context.md` are managed regions whose namespace is the provider's; with a context store a human's edit inside one is kept (§12). |
 | **Write boundary** | A provider's local folders are read-only for skills and for the agent; only the paths the provider declares as the user's overlay stay writable (§7). |
 
 ---
@@ -175,7 +175,7 @@ status: active                      # active | paused
 | Key | Default | Meaning |
 |---|---|---|
 | `schema`, `id` | required | `id` is kebab-case; it names the repository's state (`.state/blocks/<id>.json`, §12.3) and the journal source `repo:<id>`. |
-| `title` | the `id` | Shown in plans; also the title of the record a first block with no home is put in. |
+| `title` | the `id` | The title of the record a first block with no home is put in (`provider apply --add`, §12.6); plans, the card and `ctx read` name the repository by its `id`. |
 | `kind` | — | `bundle` — a role-filtered copy of a core on this machine; `folder` — the core folder itself (its path is the core); `mcp` — a server only, no `paths`. |
 | `contract`, `authority`, `mode`, `access`, `synced_at`, `source_version`, `stale_after_days`, `index`, `paths`, `writable` | as in v1 | Unchanged: §1, §6, §7. `authority` defaults to `org`. |
 | `core_root` | `paths[0]` for `bundle` and `folder`; none for `mcp` | The core folder on this machine: where the provider manifest, the team card, the people registry and — without a server — the blocks file are read. `~` is expanded. |
@@ -192,7 +192,7 @@ status: active                      # active | paused
 | `team`, `role`, `jira_write` | — | The user's team slug, role and Jira write scope. `team` decides whether the repository's `team` block is built for this user (§12.2). |
 | `status` | `active` | `paused` — left out of `provider plan\|apply` without a repository id; an explicit id still works. |
 
-A user's own index over their vault registers the same way with `kind: mcp`, `authority: personal`, `mode: live`, `access: local`, `index: <path>` and **no `paths`** — the user's vault is never behind the write boundary.
+A user's own index over their vault registers the same way with `kind: mcp`, `authority: personal`, `mode: live`, `access: local`, `index: <path>` and **no `paths`** — the user's vault is never behind the write boundary. Such a registration, like a server registered for search only (`skills/context-connect/references/connect-steps.md` §7), names no `blocks_file` and has no core folder to take one from: it is **search-only** and publishes no blocks — `ctx provider plan|apply` without a repository id leave it out with one line `лише пошук: <id>`, and naming it in `provider adopt|plan|apply` is exit 3 (§12.6).
 
 The registration is the user's file. The connect flow writes it once, and a refresh changes only `synced_at`, `source_version` and any v2 key the file lacks, never one that is present (`skills/context-connect/references/connect-steps.md` §6).
 
@@ -257,7 +257,7 @@ Each probe has a 3-second budget. A provider that does not answer is marked `rea
 
 ## 8. Generated regions
 
-Managed regions — provider blocks in `local-context.md`, generated sections in notes and maps of content — follow one marker grammar and one rule (written only by scripts and generators): `vault-schema.md` → Generated regions and layers. Readers that count or match headings (the SessionStart digest, the bundle builder) ignore text inside managed regions, so a provider block that repeats a `### Team:` or `### Product:` heading never duplicates the user's own.
+Managed regions — provider blocks in `local-context.md`, generated sections in notes and maps of content — follow one marker grammar and one rule: a skill or the agent never writes inside one (`vault-schema.md` → Generated regions and layers). Generated sections and maps of content belong to their script, which rewrites them; a provider's block is the exception when a context store exists — a human's edit inside it is kept by `ctx provider apply` (§12, `context-protocol.md` §5e). Readers that count or match headings (the SessionStart digest, the bundle builder) ignore text inside managed regions, so a provider block that repeats a `### Team:` or `### Product:` heading never duplicates the user's own.
 
 ---
 
@@ -274,7 +274,7 @@ A team that wants its colleagues' plugins to share its context ships a folder (s
 | `Playbook/` | Rules for the agent and the routing note (`playbook`, `routing_hints`). |
 | `_System/provider-templates/` | Optional note templates (§3a `templates_dir`). |
 
-The bundle builder (`scripts/provider_bundle.py`) reads only this layout and the manifest. A new core version is a new `version` in the role model and a new `v=` on the blocks that changed. The user refreshes the bundle and the context blocks in **one pass**: with a context store, the builder refreshes the bundle and `ctx provider plan <repo>` → one message about the rows that need an answer (`⚠`, `+`, `?`) → `ctx provider apply <repo>` (§12); the rows that need none (`~`, `−`) are applied and said in one line, and the user's own edits inside blocks stay. Without a store the proposal replaces the file after one confirmation (`skills/context-connect/references/connect-steps.md` §4b). Either way the registration's `synced_at` and `source_version` move and nothing else of it does (§3b). A provider that serves its core over MCP must answer `vault_get_note` for the blocks file at `endpoint.root` + `blocks_file`; that is the one note the plugin reads from the server (§12.8).
+The bundle builder (`scripts/provider_bundle.py`) reads only this layout and the manifest. A new core version is a new `version` in the role model and a new `v=` on every block (a release stamps it on all of them, whether their words changed or not). The user refreshes the bundle and the context blocks in **one pass**: with a context store, the builder refreshes the bundle and `ctx provider plan <repo>` → one message about the rows that need an answer (`⚠`, `+`, `?`) → `ctx provider apply <repo>` (§12); the rows that need none (`~`, `−`) are applied and said in one line, and the user's own edits inside blocks stay. Without a store the proposal replaces the file after one confirmation (`skills/context-connect/references/connect-steps.md` §4b). Either way the registration's `synced_at` and `source_version` move and nothing else of it does (§3b). A provider that serves its core over MCP must answer `vault_get_note` for the blocks file at `endpoint.root` + `blocks_file`; that is the one note the plugin reads from the server (§12.8).
 
 ---
 
@@ -327,11 +327,13 @@ The reading is strict, so a marker typed into your own text counts: the syntax q
 
 ### 12.2 What the repository publishes
 
-`ctx` reads the repository's blocks file as `blocks_source` says (§3b): from the server — `vault_get_note` on `endpoint.root` + `blocks_file` (§12.8) — or from the core folder, `core_root`/`blocks_file` (a path that leaves the core is refused). The blocks are the regions of the registration's `namespace` in that file, in file order; an id met twice keeps the first, a region that is never closed is no region, and `skip_blocks` are dropped. The repository's version is the `v=` most blocks carry. Under `auto`, a server that does not answer, answers an error or sends a bad answer counts as unavailable for this read and the core folder is tried.
+`ctx` reads the repository's blocks file as `blocks_source` says (§3b): from the server — `vault_get_note` on `endpoint.root` + `blocks_file` (§12.8) — or from the core folder, `core_root`/`blocks_file` (a path that leaves the core is refused). The blocks are the regions of the registration's `namespace` in that file, in file order; an id met twice keeps the first, and `skip_blocks` are dropped. The repository's version is the `v=` most blocks carry. Under `auto`, a server that does not answer, answers an error or sends a bad answer counts as unavailable for this read and the core folder is tried.
+
+**A file that cannot be the repository's blocks is no source.** A file that holds no region of the namespace — empty (a 0-byte save, an iCloud placeholder, a server note whose `content` is `""`), cut before its first block ends, or another repository's file served under the wrong path — reads `the blocks file holds no <ns> block (empty, cut, or another namespace)`; a begin marker of the namespace whose end never follows it reads `the blocks file is cut at block <id>`. From a server both start with `MCP: ` and count as a bad answer, so `auto` tries the core folder. A file that holds **none of the blocks you have a base for** (§12.3), while your context still holds one of them, reads `the blocks file holds none of the N blocks you have a base for (<ids>) — a wrong, stale or cut file, not removals`; your skipped blocks do not count, nor does the `team` block when the core folder builds it (it proves nothing about the file). Each of them makes the repository unavailable (exit 5, nothing written, the plan prints no row), never "the repository removed every block": a genuine removal leaves the other blocks in the file and plans `−` for the one removed. A repository that really retires all its blocks is taken off by hand: remove its regions from your context (the plan then has nothing to remove) and its registration — or set `status: paused` to keep the regions as they are.
 
 **The `team` block** is not read from the file. It is built, as the connect flow builds it, from the core folder alone — the team card, the people registry and the role model — for the `team` and `jira_write` of the registration, whichever source the other blocks came from. It is **not offered** only when that is known: the registration names no team; or the readable role model does not list the team; or the registration names no core folder and the blocks file carries its own `team` region (that region is then the block). A team region you hold is, when the block is not offered, a block the repository removed (§12.5). When a team was due and cannot be built — no core folder in the registration, a core folder that is not on this machine, a provider manifest that is missing, unreadable or unparsable, a role model that is missing, unreadable or has no `teams`, a card or people file that does not arrive, or any file iCloud has evicted (a `.<name>.icloud` placeholder in the team-card, people or templates folder) — the read says `team block: not available (<why>)`; the plan shows the row `·` with that reason and the region you hold is never touched. A block that cannot be built is not "removed".
 
-A repository that cannot be read at all — no answer, an error, a file that does not arrive, a path outside the core — is **unreachable**: its plan says why and `apply` writes nothing (§12.7).
+A repository that cannot be read at all — no answer, an error, a file that does not arrive, a path outside the core, a file that is no source (above) — is **unreachable**: its plan says why and `apply` writes nothing (§12.7).
 
 ### 12.3 State and bases
 
@@ -340,7 +342,7 @@ What the store remembers of a repository lives under `<store>/.state/blocks/`. S
 - `<repo-id>.json` — `checked` (the time of the last check), `source` (`mcp` or `folder`), `version`, and per block: `base_sha` (the hash of the base text), `bases` (the hashes of the last ten bases, the newest last), `v` (the version at the base), `host` (the record that holds the block), `checked`, and `user_removed` (the date you removed the block, else null).
 - `<repo-id>/<sha>.md` — the base texts, named by the SHA-256 of their normalised form. Texts that no block's `bases` refers to any more are pruned together with the history.
 
-The **base** of a block is the repository's text the last time your copy was made equal to it. It is what lets the plan tell who moved: a block whose text is the base, or one of the last ten bases, has not been changed by its holder. A state file that cannot be read or is not valid stops the command (exit 3) and is named; it is never reset silently.
+The **base** of a block is the repository's text the last time your copy was made equal to it. It is what lets the plan tell who moved: a block whose text is the base, or one of the last ten bases, has not been changed by its holder. A state file that cannot be read or is not valid stops `provider adopt|plan|apply` (exit 3) and is named; it is never reset silently. The commands that only describe go on without it: `repo status` names it on its own line, the card leaves out the version and the day it would have given, and `ctx read` the day.
 
 ### 12.4 The first base — `ctx provider adopt`
 
@@ -353,7 +355,7 @@ A context that already holds a repository's blocks (merged by the old proposal p
 | `none` | the repository does not offer the block; another version; or a version nobody knows and the texts differ; or a `team` block that cannot be built | no base; the plan shows `?` and asks |
 | `has-base` | the state already holds a base | left exactly as it is — re-running never hides an edit (an entry with no base, such as the removal mark of a region you put back, gets one and loses the mark) |
 
-An unknown version with different text is never taken for an edit: a false `edit` would later hide a repository update as `✎`. Blocks the repository offers and your context lacks are listed as the `+` rows of the next plan. `adopt --apply` writes the block state (`.state/blocks/**`) — after a snapshot (`adopt`) and with one journal line, `provider-adopt` — and refreshes the card's `Repos` line when it changes; it never writes a record or a compiled copy, and with nothing to adopt it writes nothing at all. If edits to `local-context.md` wait to be imported, `adopt` says so (`ctx sync` first, so it sees them).
+An unknown version with different text is never taken for an edit: a false `edit` would later hide a repository update as `✎`. Blocks the repository offers and your context lacks are listed as the `+` rows of the next plan. `adopt --apply` imports the edits waiting first, as every writing command does — in `local-context.md` or in a record file (a conflict there is exit 2 with `CTX_CONFLICT`, and nothing else is written) — so the adopt's own snapshot holds them and a later `ctx undo --steps N` across the adopt never takes back an edit made before it. Then it writes the block state (`.state/blocks/**`) — after a snapshot (`adopt`) and with one journal line, `provider-adopt` — and refreshes the card's `Repos` line when it changes; it never writes a block's text, and with nothing to adopt it writes no state. The dry run imports nothing: it names the edits waiting, which it does not see.
 
 ### 12.5 The plan — what each block is
 
@@ -370,6 +372,7 @@ An unknown version with different text is never taken for an edit: a false `edit
 | present | absent | yours is the base, or one of the last ten | `−` — the repository removed a block you never changed |
 | present | absent | yours is none of them | `⚠` — the repository removed a block you edited |
 | present | present, different | none | `?` |
+| present | present, different | yours is the base itself, the repository's an older base | `=` — the source lags behind yours (a mirror not updated yet): note `джерело позаду вашої бази (v<theirs> < v<yours>)` |
 | present | present, different | yours is the base (or older) | `~` — only the repository moved |
 | present | present, different | the repository's is the base (or older) | `✎` — only you moved |
 | present | present, different | neither is | `⚠` — both moved |
@@ -378,7 +381,7 @@ An unknown version with different text is never taken for an edit: a false `edit
 
 | Sign | Meaning | `apply` | Asks |
 |---|---|---|---|
-| `=` | no change | nothing in the records; the base becomes the repository's text if it was not | no |
+| `=` | no change — or a source behind your base | nothing in the records; the base becomes the repository's text if it was not — except behind your base: then the base stays, and nothing is written but the time of the check | no |
 | `~` | the repository changed a block you did not touch | the region becomes the repository's text; so does the base | no |
 | `✎` | you changed a block the repository did not | your region stays, so does the base | no |
 | `−` | the repository removed a block you did not edit | the region is removed (its text stays in the snapshot) and the state entry with it | no |
@@ -394,13 +397,13 @@ An unknown version with different text is never taken for an edit: a false `edit
 
 `ctx provider apply [<repo>] [--product P] [--choose BLOCK=theirs|mine|both …] [--add BLOCK …]` is one pass per repository. It acts on what needs no answer and leaves the rest waiting; an answer for a block that needs none is dropped and listed (`не потрібне`); an unknown block in `--choose` or `--add` stops before anything is written (exit 3).
 
-**Scope.** With `<repo>` that repository, paused or not. Without it, the repositories that serve the product `--product` names (matched among the product records as `ctx read` matches it) and those that name none, else all — paused ones left out with one line `призупинено: <id>`. `--choose` and `--add` need `<repo>` when more than one repository is in scope.
+**Scope.** With `<repo>` that repository, paused or not (a search-only registration is exit 3). Without it, the repositories that serve the product `--product` names (matched among the product records as `ctx read` matches it) and those that name none, else all — paused ones left out with one line `призупинено: <id>`, and search-only registrations (§3b: no `blocks_file`, no core folder) with one line `лише пошук: <id>`; neither is unreachable. `--choose` and `--add` need `<repo>` when more than one repository is in scope.
 
 **One repository's pass, in this order:** the plan is made on the records as they are now → a snapshot (`provider-apply`) → the new base texts → the host records (verified today, source `repo:<id>`) → the state → the base texts nobody refers to are pruned → one journal line `{op: provider-apply, source: repo:<id>, from_v, to_v, ids: the records written, decisions, pending, snapshot}` → the compiled copies. A block's text goes into a record only when the repository's text is one well-formed region of that block; otherwise the block is reported as an error and left alone. A new block (`--add`) goes at the end of `home_record`, or of the record that holds most of the repository's blocks (inside its `<namespace>:section` wrapper when it has one), or the custom record already titled as the repository, or — with none of them — a new custom record `## <title>` at the end of the context.
 
 **A pass that changes nothing** except the time of the check (and the service fields `checked` and `host`) writes the state file alone: no snapshot, no journal line, no record; the output is the header and `без змін`.
 
-**Several repositories.** Every repository in scope is read first; if any is unreachable the run stops before the lock (exit 5) and nothing is written (`plan` still prints the reachable ones). Then, under the lock, the edits waiting in `local-context.md` are imported first, as for every writing command (a conflict there is exit 2 with `CTX_CONFLICT`, and nothing else is written), and the repositories are applied one after another. Each takes **its own snapshot and journal line**, so `ctx undo` takes back the last repository's pass only; `ctx undo --steps N` goes back N passes.
+**Several repositories.** Every repository in scope is read first, and its file checked against your bases (§12.2); if any is unreachable or its file is no source, the run stops before the lock (exit 5) and nothing is written (`plan` still prints the others). Then, under the lock, the edits waiting in `local-context.md` are imported first, as for every writing command (a conflict there is exit 2 with `CTX_CONFLICT`, and nothing else is written), and the repositories are applied one after another. Each takes **its own snapshot and journal line**, so `ctx undo` takes back the last repository's pass only; `ctx undo --steps N` goes back N passes.
 
 **A crash.** The order above is the recovery plan. A crash among the base texts leaves orphan texts, which are harmless and pruned later. A crash after the record writes and before the state leaves the records written with the old bases: run `ctx provider plan` again — it reads the records as they are, and at worst a block that was not re-based is asked about again. A crash between the record writes and the journal line leaves a snapshot on disk with no journal line: `ctx undo` follows the journal, so it steps back to the operation before it.
 
@@ -410,28 +413,28 @@ An unknown version with different text is never taken for an edit: a false `edit
 |---|---|---|
 | `ctx repo list` | the registered repositories: kind, products, rank, access, version | nothing; local files only |
 | `ctx repo status [<id>]` | is each repository reachable (a server answers the handshake within 3 s; a core folder is there), and its version on the source against the base | nothing; the only `repo` command that goes to the network |
-| `ctx provider adopt <repo> [--apply]` | the first bases (§12.4) | the block state, and the card's `Repos` line; no record, no compiled copy |
+| `ctx provider adopt <repo> [--apply]` | the first bases (§12.4) | with `--apply`: first the import of the edits waiting (as every writing command), then a snapshot, the block state, its base texts, one journal line and the card's `Repos` line when it changes; never a block's text |
 | `ctx provider plan [<repo>] [--product P] [--all]` | the plan (§12.5) | nothing |
-| `ctx provider apply [<repo>] …` | one pass per repository (§12.6) | the records, the state, the compiled copies |
+| `ctx provider apply [<repo>] …` | one pass per repository (§12.6) | first the import of the edits waiting; then, per repository that changed something, a snapshot, the base texts, the host records, the block state, one journal line, the compiled copies — and the card's `Repos` line when it changes; a pass that changed nothing writes the block state alone (the time of the check) |
 
 **Exit codes of `ctx provider …`:**
 
 | Code | Meaning |
 |---|---|
 | 0 | done, or nothing to change |
-| 2 | decisions are waiting (`apply`: the rest was applied); also, as for every writing command, a conflict among the edits waiting to be imported (`CTX_CONFLICT`, nothing written) |
-| 3 | a bad call or something not found: an unknown repository or block, `both` for a removed block, no store, an unreadable state or a record missing on disk |
+| 2 | `apply` only: decisions are waiting (the rest was applied); also, for `apply` and `adopt --apply` as for every writing command, a conflict among the edits waiting to be imported (`CTX_CONFLICT`, nothing written). `plan` never exits 2: it exits 0, or 5 when a repository is unavailable |
+| 3 | a bad call or something not found: an unknown repository or block, a search-only registration named (§3b), `both` for a removed block, no store, an unreadable state or a record missing on disk |
 | 4 | refused: only refused blocks remain (a broken marker, a repository text that is not one well-formed region), a store inside a provider's folder, a busy lock |
-| 5 | a repository is unreachable, nothing is written |
+| 5 | a repository is unreachable, or its blocks file is no source (§12.2: empty, cut, foreign, or none of your based blocks); nothing is written |
 
 `repo status` and `repo list` exit 0 also when a repository is unreachable (they inform; they are not gates).
 
 **`CTX_RESULT`** (the last stdout line; `--json` is accepted and changes nothing, the line is always there):
 
 - `repo list` — `{repos: [the registrations, normalised, each with `namespace_warning`], unreadable: [{file, reason}]}`; `repo status` — `{repos: [{id, kind, status, url, reachable, reason, source_version, base_version, namespace_warning}], unreadable}` (`url` without credentials, query or fragment).
-- `provider plan <repo>` — the plan itself: `{repo, source, source_label, version, base_version, rows: [{block, sign, host, source, note, diff?}], questions, changes, errors, namespace_warning}`. Without `<repo>`: `{repos: [plan …], paused: [ids], questions, changes}`. A repository that cannot be read appears as `{repo, error}` (and the exit is 5).
-- `provider apply <repo>` — the plan's keys plus `applied` `{block: sign}`, `decisions` `{block: sign or "sign answer"}`, `pending` `[block]`, `ignored`, `changed`, `written` `[record ids]`, `snapshot`, `compiled`; its `errors` also hold the blocks refused at the write. Without `<repo>`: `{repos: [that …], paused, questions: the blocks waiting, changes: the records written}`. Unreachable: `{unreachable: [{repo, error}], paused, written: []}` (with `repo` and `error` when a repository was named).
-- `provider adopt` — `{repo, blocks: {block: outcome}, why, new, problems, written, snapshot, pending}` (`pending` counts the edits of `local-context.md` not imported yet); an unreachable repository: `{repo, written: false, error}`.
+- `provider plan <repo>` — the plan itself: `{repo, source, source_label, version, base_version, rows: [{block, sign, host, source, note, diff?, behind?}], questions, changes, errors, namespace_warning}` (`behind: true` on a `=` whose source lags behind your base). Without `<repo>`: `{repos: [plan …], paused: [ids], search_only: [ids], questions, changes}` — `questions` and `changes` are the sums of the plans'. A repository that cannot be read, or whose file is no source, appears as `{repo, error}` (and the exit is 5).
+- `provider apply <repo>` — the plan's keys plus `applied` `{block: sign}`, `decisions` `{block: sign or "sign answer"}`, `pending` `[block]`, `ignored`, `changed`, `written` `[record ids]`, `snapshot`, `compiled`; its `errors` also hold the blocks refused at the write. Without `<repo>`: `{repos: [that …], paused, search_only, questions: the number of blocks waiting, changes: the number of records written}`. Unreachable: `{unreachable: [{repo, error}], paused, search_only, written: []}` (with `repo` and `error` when a repository was named).
+- `provider adopt` — `{repo, blocks: {block: outcome}, why, new, problems, written, snapshot, pending, imported}` (`pending` counts the edits waiting that a dry run does not see — 0 after `--apply`, which imports them first; `imported` the record ids that import changed or added); an unreachable repository: `{repo, written: false, error}`.
 
 ### 12.8 The MCP client and its allow-list
 
@@ -446,8 +449,8 @@ An unknown version with different text is never taken for an edit: a false `edit
 ### 12.9 Reading blocks
 
 - **`ctx read`** looks for a field or a subsection in your own text first — outside the managed regions — and only then inside the blocks. Every block's text is preceded by `> [<repo-id> · v<version> · станом на <date>]`: the repository whose `namespace` the block carries (the namespace itself when nobody registered it), the block's `v=`, and the day the store last checked that block (left out when it never did). A record whose file and record disagree is headed `⚠ конфлікт: файл і запис різняться — ctx sync`.
-- **The context card** gets one line per registered repository that has blocks in the records: `- **Repos:** <id>: <N> блок/блоки/блоків · v<version> · перевірено <date>` (the version most blocks have a base at; a version or a date nobody knows is left out). `provider apply` and `adopt --apply` refresh it, though no record changed. A team's member count is taken from the `team` block when your own team section has no table.
-- **The SessionStart digest** dates a repository on its `providers:` line by the store's last check when that is later than `synced_at` (§6).
+- **The context card** gets one line about the registered repositories that have blocks in the records, one entry each, joined by `; `: `- **Repos:** <id>: <N> блок/блоки/блоків · v<version> · перевірено <date>; <id>: …` (the version most blocks have a base at; a version or a date nobody knows is left out). `provider apply` and `adopt --apply` refresh it, though no record changed. A team's member count is taken from the `team` block when your own team section has no table.
+- **The SessionStart digest** dates a repository on its `providers:` line by the store's last check when that is later than `synced_at` (§6). The dates are read after the store's facts, with half a second of their own: a block state that does not arrive (iCloud) costs the dates — the line falls back to `synced_at` — never the digest's `context:` line.
 
 ### 12.10 Hosts
 
