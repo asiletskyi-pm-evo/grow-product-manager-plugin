@@ -418,6 +418,35 @@ check("connect-steps: the answers are --choose and --add, an unreachable reposit
 check("the skill is 0.3.0 and a refresh with a store never stamps Updated or appends a changelog",
       "version: 0.3.0" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
 
+# 11 — fix round 1: a refresh keeps a registration the user completed; a removed block recommends keeping the text; the apply carve-out
+# (the builder only proposes the registration — it never writes the file in the user's vault, so the rule lives in the procedure)
+flat = lambda s: re.sub(r"\s+", " ", s)
+steps_f, skill_f = flat(steps), flat(skill)
+reg61 = steps_f[steps_f.index("## §6 Register and finish"):steps_f.index("## §7")]
+step61 = skill_f[skill_f.index("## Step 6"):skill_f.index("## What is forbidden")]
+for label, text in (("connect-steps §6.1", reg61), ("SKILL.md Step 6.1", step61)):
+    check("%s: an existing registration is kept — a refresh updates synced_at and source_version, adds a missing v2 key, never changes a present one"
+          % label, "synced_at" in text and "source_version" in text and "never chang" in text and "headers_env" in text
+          and "products" in text and "blocks_source" in text and "home_record" in text and "paused" in text, text[:500])
+    check("%s: replacing it by the proposal needs the user's explicit yes after the differences are shown" % label,
+          "explicit" in text and "differences" in text, text[:500])
+check("a v1 registration gets only the two dates until the user says yes (no silent upgrade)",
+      "v1" in reg61 and "only the two dates" in reg61, reg61[:600])
+refresh_q = steps_f[steps_f.index("Ask **once**"):steps_f.index("3. Apply the answers")]
+check("a `?` row whose block the core still offers recommends theirs; a block the core removed (`?` or `⚠`) recommends mine",
+      "`?` with the block still offered → theirs" in refresh_q and "removed" in refresh_q and "mine" in refresh_q
+      and "`?` → theirs." not in refresh_q and "recommended: mine" in refresh_q, refresh_q[:700])
+step4 = skill_f[skill_f.index("## Step 4"):skill_f.index("## Step 5")]
+check("SKILL.md Step 4 repeats the split: `?` theirs, mine when the core removed the block",
+      "`?` theirs" in step4 and "mine when the core removed the block" in step4, step4[:900])
+forbid = skill_f[skill_f.index("## What is forbidden"):skill_f.index("## Quality Standards")]
+check("the 'never overwrite local-context.md without a yes' rule has the snapshot-backed apply carve-out",
+      "without an explicit" in forbid and "ctx provider apply" in forbid and "snapshot" in forbid and "ctx undo" in forbid
+      and "`~`" in forbid and "`−`" in forbid and "one message" in forbid, forbid)
+check("connect-steps says the same where it says there is no question: the plan was shown, the snapshot is the gate",
+      "No `⚠`, `+` or `?` row → no question" in steps_f and "snapshot" in steps_f[steps_f.index("No `⚠`, `+` or `?` row"):][:400]
+      and "one message" in steps_f[steps_f.index("No `⚠`, `+` or `?` row"):][:400], steps_f[steps_f.index("No `⚠`"):][:400])
+
 # 9
 tok_file = os.path.join(ROOT, "testing", "org-tokens.local")
 toks = [l.strip() for l in open(tok_file, encoding="utf-8")] if os.path.isfile(tok_file) else []
