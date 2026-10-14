@@ -416,8 +416,10 @@ def adopt(store, copies, home, repo, fetched, now, apply):
     Without `apply` nothing is written. With it, and when some block gets a base: a snapshot (labelled adopt), then
     the base texts, then the state (checked, source and an entry per adopted block: the hash of the base, its
     version, the record holding the region, when it was checked, nothing removed), then the base texts nobody refers
-    to are pruned, then one journal line `provider-adopt`. The records and the compiled copies are never written;
-    the caller holds the lock. A crash after the texts leaves orphan base texts and no state.
+    to are pruned, then one journal line `provider-adopt`. The records and the compiled copies are never written here;
+    the caller holds the lock and has imported the edits waiting first (`ctx provider adopt --apply` does, as every
+    writing command does), so the snapshot holds them and `ctx undo` never takes them back with the adopt. A crash
+    after the texts leaves orphan base texts and no state.
     """
     if fetched.get("error"):
         raise ValueError("adopt needs a repository that was fetched, not one that failed: %s" % fetched["error"])

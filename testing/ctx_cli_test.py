@@ -1520,6 +1520,30 @@ with tempfile.TemporaryDirectory() as d:
     check("…a repository that publishes blocks and does not answer is still exit 5", rc == 5 and "zorg-dead · недоступний" in out
           and "лише пошук: zorg-brain" in out, (rc, out[-500:]))
 
+# --- v3.13.0 final review: adopt --apply imports the edits waiting first, so undo across an adopt keeps an earlier edit
+def journal_ops_of(e):
+    return [json.loads(l)["op"] for l in read(e.store, ".state", "journal.jsonl").splitlines() if l.strip()]
+
+
+for kind in ("a record file edited in Obsidian", "local-context.md edited by hand"):
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, "http://127.0.0.1:9/mcp")
+        run_ok(e, "migrate", "--apply")
+        if kind.startswith("a record"):
+            add_line(os.path.join(e.store, "records", "product.zorg-app.md"), "- obsidian edit")
+        else:
+            edit_both(e, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** PROJ\n- obsidian edit")
+        rc, out, res = run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        check("%s, then adopt --apply: the edit is imported first (record, both copies, nothing waits), then the bases" % kind,
+              rc == 0 and res["written"] is True and "obsidian edit" in e.record("product.zorg-app") and "obsidian edit" in read(e.ctx)
+              and "obsidian edit" in read(e.mirror) and in_sync(e) and journal_ops_of(e)[-2:] == ["sync", "provider-adopt"],
+              (rc, out[-400:], journal_ops_of(e)))
+        run_ok(e, "set", "product.zorg-app", "Jira Project Key", "ZNEW")
+        rc, out, res = run_ok(e, "undo", "--steps", "2")
+        check("…undo --steps 2 takes back the later write and the adopt; the edit made before them stays",
+              rc == 0 and "obsidian edit" in e.record("product.zorg-app") and "obsidian edit" in read(e.ctx)
+              and "ZNEW" not in read(e.ctx) and block_state(e, "zorg-core") is None and in_sync(e), (rc, out[-400:]))
+
 # --- v3.13 Task 12: the protocol documents say what the commands do
 def lacks(text, needed):
     return [s for s in needed if s not in text]

@@ -32,7 +32,8 @@
                                 a base for each block of REPO that is already in your context (dry run unless
                                 --apply): the blocks the repository publishes at the version you hold are taken
                                 as they are (an edit of yours counts as your edit); another version gets no base.
-                                Writes the block state and the card's Repos line — never the records or the compiled copies
+                                With --apply it first imports the edits waiting (as every writing command does),
+                                then writes the block state and the card's Repos line — no block text, no record
   provider plan [REPO] [--product P] [--all] [--json]
                                 one table per repository: what each block is in your context against what the
                                 repository publishes now (= ~ ✎ ⚠ + − ✂ ?), the questions and the records an apply
@@ -56,8 +57,8 @@
                                 CTX_RESULT: the plan with applied, decisions, pending, ignored, written, snapshot
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
-edits first, snapshots, writes, journals and compiles (the exception: `provider adopt --apply` imports
-and compiles nothing — it writes the block state under `.state/blocks/`, and the card's Repos line). Files are read within a time budget
+edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
+writes only the block state under `.state/blocks/` and the card's Repos line). Files are read within a time budget
 (GROW_PM_CTX_READ_TIMEOUT, default 30 s): a record that does not arrive (iCloud) or is missing
 on disk stops the run before anything is written. The last stdout line is `CTX_RESULT {json}`;
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
@@ -754,9 +755,12 @@ def cmd_provider_adopt(a, c):
         return 5, {"command": "provider", "action": "adopt", "repo": repo["id"], "written": False, "error": fetched["error"]}
     plan = co.plan_sync(c.store, c.copies)
     pending = sum(co.pending(plan).values()) + len(plan["conflicts"]) + len(plan["missing"])
-    if a.apply:
-        with co.lock(c.home):
+    imported, waited = [], 0
+    if a.apply:                                         # like every writing command: the edits waiting go in first, so
+        with co.lock(c.home):                           # the adopt's snapshot holds them and `ctx undo` never takes them back
             c.guard()
+            pre = c.import_first()
+            imported, waited, pending = pre["changed"] + pre["added"], pending, 0
             res = cb.adopt(c.store, c.copies, c.home, repo, fetched, now(), True)
             card_note = _refresh_card(c) if res["written"] else None
     else:
@@ -772,7 +776,10 @@ def cmd_provider_adopt(a, c):
     for x in res["problems"]:
         print("problem: block %s in %s — %s (left out)" % (x["block"] or "?", x["host"], x["why"]))
     if pending:
-        print("note: %d change(s) to local-context.md are not imported yet — `ctx sync` first, so adopt sees them" % pending)
+        print("note: %d change(s) to local-context.md or the records are not imported yet — this dry run does not see them; "
+              "--apply imports them first" % pending)
+    elif a.apply and waited:
+        print("imported first: %d change(s) to local-context.md or the records" % waited)
     if res["written"]:
         print("adopted %d block(s) · snapshot %s (back: ctx undo)" % (len(gets), res["snapshot"]))
     elif a.apply:
@@ -783,7 +790,7 @@ def cmd_provider_adopt(a, c):
         print("dry run — nothing written, and there is nothing to adopt")
     if card_note:
         print(card_note)
-    return 0, dict(res, command="provider", action="adopt", pending=pending)
+    return 0, dict(res, command="provider", action="adopt", pending=pending, imported=imported)
 
 
 def _product_repos(c, repos, wanted):
