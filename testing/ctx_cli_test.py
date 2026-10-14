@@ -1573,6 +1573,10 @@ check("context-provider-protocol: registration v2 key table, §12 with the first
 need_hp = ["Context repositories", "`repo status`", "`vault_get_note`", "never goes to the network"]
 check("host-profiles: the network use of ctx and the host without SHELL", not lacks(hp_flat, need_hp), lacks(hp_flat, need_hp))
 check("ctx_store.Store documents .state/blocks/", ".state/blocks/" in (cs_mod.Store.__doc__ or ""), cs_mod.Store.__doc__)
+tp_flat = re.sub(r"\s+", " ", read(ROOT, "testing", "Testing-process.md"))
+check("Testing-process.md carries no host-specific process rule (a scanner on the repository, re-running a time-limit check alone)",
+      "scanner on the repository" not in tp_flat and "re-run alone" not in tp_flat and "Every test is run once per release" not in tp_flat,
+      tp_flat[tp_flat.find("Every test is run"):][:300])
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
