@@ -248,6 +248,18 @@ with tempfile.TemporaryDirectory() as d:
 
 with tempfile.TemporaryDirectory() as d:
     ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
+    real_mod = sys.modules.get("ctx_blocks")
+    sys.modules["ctx_blocks"] = None                      # the module that reads the checks cannot be imported
+    try:
+        out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    finally:
+        sys.modules["ctx_blocks"] = real_mod
+    line = next((l.strip() for l in out.splitlines() if l.strip().startswith("providers:")), "")
+    check("an import that fails costs the days of the checks, not the context line",
+          "  context: records 14 · card " in out and "zorg-core (snapshot, vpn, synced 2026-01-01, stale)" in line, out[-700:])
+
+with tempfile.TemporaryDirectory() as d:
+    ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
     import ctx_store as cs  # noqa: E402
     open(os.path.join(co.store_root_for(open(ctxp, encoding="utf-8").read(), home=os.path.join(d, "home")), ".state", "blocks", "zorg-core.json"), "w").write("{ not json")
     line = providers_line(ctxp)

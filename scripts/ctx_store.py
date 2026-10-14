@@ -621,11 +621,18 @@ def _summary(rec):
     return "—"
 
 
+def blocks_word(n):
+    """The form of "блок" after the number `n`: блок for 1, 21, 101 …; блоки for 2–4, 22–24 …; блоків for the rest and 11–14."""
+    if n % 10 == 1 and n % 100 != 11:
+        return "блок"
+    return "блоки" if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14) else "блоків"
+
+
 def build_card(records, compiled_text, now, stale=(), archived=0, repos=()):
     """INDEX.md: who, onboarding, products, teams, vaults and providers, then one row per record; ≤ CARD_MAX lines.
     `stale` maps a stale record's id to its verified date (its row ends with ⚠ <date>); `archived` counts the
     archived records; `repos` is [{"id", "blocks", "v", "checked"}] — the repositories that put blocks in the
-    records, as ctx_ops.card_repos gives them — and makes one line, `- **Repos:** <id>: <N> блоків · v<v> · перевірено
+    records, as ctx_ops.card_repos gives them — and makes one line, `- **Repos:** <id>: <N> блок(и|ів) · v<v> · перевірено
     <date>; …` (a version or a date nobody knows is left out)."""
     import ctx_schema as sc                    # here: ctx_schema imports this module
     fields = sc.load_fields().get("product", {})
@@ -664,7 +671,7 @@ def build_card(records, compiled_text, now, stale=(), archived=0, repos=()):
     over.append("- **Vaults:** %s · **Providers:** %s" % (vaults, provs))
     if repos:
         over.append("- **Repos:** " + "; ".join(
-            " · ".join(["%s: %d блоків" % (r["id"], r["blocks"])] + (["v%s" % r["v"]] if r.get("v") else [])
+            " · ".join(["%s: %d %s" % (r["id"], r["blocks"], blocks_word(r["blocks"]))] + (["v%s" % r["v"]] if r.get("v") else [])
                        + (["перевірено %s" % r["checked"][:10]] if r.get("checked") else [])) for r in repos))
     if stale:
         over.append("- **Застарілі:** %d — ctx verify --stale або конфігуратор" % len(stale))

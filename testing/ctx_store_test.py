@@ -285,18 +285,24 @@ check("card member count from the team block", "- **Team:** Alpha (A) — 2 memb
 check("no repositories given, no line about them", "Repos" not in plain, plain)
 REPOS = [{"id": "zorg-core", "blocks": 3, "v": "0.4", "checked": "2026-10-20T10:00:00+03:00"}]
 with_repos = cs.build_card(repo_recs, repo_text, now="2026-10-20", repos=REPOS)
-check("card repo line", "- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено 2026-10-20" in with_repos.splitlines(), with_repos)
+check("card repo line", "- **Repos:** zorg-core: 3 блоки · v0.4 · перевірено 2026-10-20" in with_repos.splitlines(), with_repos)
 check("…it sits among the overview lines, after the vaults, and adds nothing else",
-      with_repos.splitlines().index("- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено 2026-10-20")
+      with_repos.splitlines().index("- **Repos:** zorg-core: 3 блоки · v0.4 · перевірено 2026-10-20")
       == with_repos.splitlines().index([l for l in with_repos.splitlines() if l.startswith("- **Vaults:**")][0]) + 1
-      and with_repos.replace("- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено 2026-10-20\n", "") == plain, with_repos)
+      and with_repos.replace("- **Repos:** zorg-core: 3 блоки · v0.4 · перевірено 2026-10-20\n", "") == plain, with_repos)
 two = cs.build_card(repo_recs, repo_text, now="2026-10-20", repos=REPOS + [{"id": "zorg-growth", "blocks": 2, "v": "0.1", "checked": "2026-10-19"}])
 check("two repositories share one line, in the order given",
-      "- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено 2026-10-20; zorg-growth: 2 блоків · v0.1 · перевірено 2026-10-19" in two.splitlines()
+      "- **Repos:** zorg-core: 3 блоки · v0.4 · перевірено 2026-10-20; zorg-growth: 2 блоки · v0.1 · перевірено 2026-10-19" in two.splitlines()
       and two.count("**Repos:**") == 1, two)
 odd = cs.build_card(repo_recs, repo_text, now="2026-10-20", repos=[{"id": "zorg-core", "blocks": 3, "v": None, "checked": None},
                                                                   {"id": "zorg-growth", "blocks": 1, "v": "0.1", "checked": None}])
-check("what is not known is left out of the line", "- **Repos:** zorg-core: 3 блоків; zorg-growth: 1 блоків · v0.1" in odd.splitlines(), odd)
+check("what is not known is left out of the line", "- **Repos:** zorg-core: 3 блоки; zorg-growth: 1 блок · v0.1" in odd.splitlines(), odd)
+def plural_line(n):
+    return cs.build_card(repo_recs, repo_text, now="2026-10-20", repos=[{"id": "zorg-core", "blocks": n, "v": None, "checked": None}])
+words = {1: "блок", 2: "блоки", 3: "блоки", 4: "блоки", 5: "блоків", 10: "блоків", 11: "блоків", 12: "блоків", 13: "блоків", 14: "блоків",
+         15: "блоків", 20: "блоків", 21: "блок", 22: "блоки", 24: "блоки", 25: "блоків", 100: "блоків", 101: "блок", 111: "блоків", 112: "блоків", 122: "блоки"}
+wrong = {n: w for n, w in words.items() if "- **Repos:** zorg-core: %d %s" % (n, w) not in plural_line(n).splitlines()}
+check("card repo line: the Ukrainian plural of блок (1 блок · 2–4 блоки · 5–20 блоків · 21 блок · 11–14 блоків)", not wrong, wrong)
 check("the repositories are the card's only change", cs.build_card(typ, read(FIX, "typical.md"), now="2026-10-20", repos=[]) == golden)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

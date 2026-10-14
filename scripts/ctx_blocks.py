@@ -467,12 +467,13 @@ def clip(text, limit):
 
 
 def base_version(state):
-    """The version most blocks of a repository have a base at: the `v` of the state's entries that hold a base,
-    the first block by id on a tie; None when no block has a base or none of them knows its version. The state's own
+    """The version most blocks of a repository have a base at: the `v` of the state's entries that hold a base
+    (a `v` that is not text, in a hand-edited state, is ignored), the first block by id on a tie; None when no block has a base or none of them knows its version. The state's own
     `version` is not consulted (adopt leaves it unset)."""
     blocks = (state or {}).get("blocks") or {}
     count = collections.Counter(blocks[b]["v"] for b in sorted(blocks)
-                                if (blocks[b].get("base_sha") or blocks[b].get("bases")) and blocks[b].get("v"))
+                                if (blocks[b].get("base_sha") or blocks[b].get("bases")) and isinstance(blocks[b].get("v"), str)
+                                and blocks[b]["v"])
     return count.most_common(1)[0][0] if count else None
 
 

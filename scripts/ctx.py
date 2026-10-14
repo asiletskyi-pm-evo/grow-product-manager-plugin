@@ -705,6 +705,18 @@ def _repository(c, rid):
     return repos[0]
 
 
+def _refresh_card(c):
+    """Bring the card's line about the repositories up to date after the state moved. The state is already written by
+    then, so a card that cannot be read or written (an INDEX.md that has not arrived from iCloud, say) is one line for
+    the caller to print after its report — "card not refreshed: <why>" — and never a lost report or another exit
+    code. Returns that line, or None."""
+    try:
+        co.refresh_card_repos(c.store, c.home, now()[:10])
+    except Exception as e:  # noqa: BLE001 — see above
+        return "card not refreshed: %s" % cb.clip(e, cb.NOTE_CLIP)
+    return None
+
+
 def cmd_provider_adopt(a, c):
     c.need_store()
     repo = _repository(c, a.repo)
@@ -719,10 +731,10 @@ def cmd_provider_adopt(a, c):
         with co.lock(c.home):
             c.guard()
             res = cb.adopt(c.store, c.copies, c.home, repo, fetched, now(), True)
-            if res["written"]:
-                co.refresh_card_repos(c.store, c.home, now()[:10])
+            card_note = _refresh_card(c) if res["written"] else None
     else:
         res = cb.adopt(c.store, c.copies, c.home, repo, fetched, now(), False)
+        card_note = None
     gets = [b for b, o in res["blocks"].items() if o in ("base", "edit")]
     print("adopt %s — source %s, %d block(s) of %s in your context" % (repo["id"], fetched["source"], len(res["blocks"]), repo["namespace"]))
     if res["blocks"]:
@@ -741,6 +753,8 @@ def cmd_provider_adopt(a, c):
         print("dry run — nothing written; `ctx provider adopt %s --apply` sets the bases" % repo["id"])
     else:
         print("dry run — nothing written, and there is nothing to adopt")
+    if card_note:
+        print(card_note)
     return 0, dict(res, command="provider", action="adopt", pending=pending)
 
 
@@ -837,18 +851,20 @@ def cmd_provider_apply(a, c):
         if a.repo:
             res.update(repo=a.repo, error=down[0]["error"])
         return 5, res
-    results = []
+    results, card_note = [], None
     if fetched:
         with co.lock(c.home):
             c.guard()
             c.import_first()
             for repo, f in fetched:
                 results.append(cb.apply(c.store, c.copies, c.home, repo, f, choose, add, now()))
-            co.refresh_card_repos(c.store, c.home, now()[:10])
+            card_note = _refresh_card(c)
     for k, res in enumerate(results):
         if k or paused:
             print()
         print(cb.render_apply(res))
+    if card_note:
+        print(card_note)
     if any(r["pending"] for r in results):
         rc = 2
     elif any(r["errors"] for r in results) and not any(r["changed"] for r in results):

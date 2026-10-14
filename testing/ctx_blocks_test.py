@@ -907,6 +907,9 @@ check("base_version: the version most blocks have a base at; a tie goes to the f
 check("base_version: a block with no base, or with no version, does not count; none at all is None",
       cb.base_version({"blocks": {"a": entry("0.9", base=None), "b": entry("")}}) is None
       and cb.base_version({"blocks": {}}) is None and cb.base_version({}) is None, "")
+check("base_version: a version that is not text (a hand-edited state) does not count and does not raise",
+      cb.base_version({"blocks": {"a": entry(["x"]), "b": entry({"k": 1}), "c": entry(4), "d": entry("0.2")}}) == "0.2"
+      and cb.base_version({"blocks": {"a": entry(["x"]), "b": entry(["y"])}}) is None, "")
 check("base_version: the state's own `version` is not consulted (adopt leaves it unset)",
       cb.base_version({"version": "9.9", "blocks": {"a": entry("0.2")}}) == "0.2", "")
 

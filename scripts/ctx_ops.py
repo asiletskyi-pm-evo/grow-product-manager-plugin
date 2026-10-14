@@ -831,24 +831,28 @@ def card_repos(store, recs, text, home):
     checked the repository (None when never). A repository whose state cannot be read is listed without the last two;
     what a repository's markers or a state carry is cleaned of control characters before it reaches the card.
     Reads only, and never fails: a card line is not worth a compile."""
-    import ctx_blocks as cb                      # here: both import this module
-    import ctx_repos as crp
     try:
+        import ctx_blocks as cb                  # here: both import this module
+        import ctx_repos as crp
         repos = crp.load_repos(text, home or os.path.expanduser("~"))
     except Exception:  # noqa: BLE001 — a registration nobody can read must not stop a compile
         return []
     out = []
     for r in repos:
-        n = len(cb.find_regions(recs, r["namespace"])[0])
-        if not n:
-            continue
         try:
-            state = cb.load_state(store, r["id"])
-        except (cs.StoreError, OSError):
-            state = {}
-        v, checked = cb.base_version(state), state.get("checked")
-        out.append({"id": cb.clip(r["id"], 60), "blocks": n, "v": cb.clip(v, 40) if v else None,
-                    "checked": cb.clip(checked, 40) if isinstance(checked, str) and checked else None})
+            n = len(cb.find_regions(recs, r["namespace"])[0])
+            if not n:
+                continue
+            v = checked = None
+            try:
+                state = cb.load_state(store, r["id"])
+                v, checked = cb.base_version(state), state.get("checked")
+            except Exception:  # noqa: BLE001 — a state nobody can read or make sense of: listed without a version and a day
+                pass
+            out.append({"id": cb.clip(r["id"], 60), "blocks": n, "v": cb.clip(v, 40) if v else None,
+                        "checked": cb.clip(checked, 40) if isinstance(checked, str) and checked else None})
+        except Exception:  # noqa: BLE001 — one repository that cannot be described is left out, the others stay
+            continue
     return out
 
 
@@ -875,15 +879,18 @@ def refresh_card_repos(store, home, today):
 
 def _checked_by_repo(store):
     """{repository id: when it was last checked} from the block states in the store, for the SessionStart digest.
-    Read only, and never fails: what cannot be read is left out."""
-    import ctx_blocks as cb                      # here: it imports this module
-    folder = os.path.join(store.state_dir, "blocks")
+    Read only, and never fails: whatever cannot be read — the folder, a state, the module that reads it — gives
+    no date, and the digest falls back to the registration's own. A store with no block state never imports it."""
     try:
+        folder = os.path.join(store.state_dir, "blocks")
         ids = sorted(n[:-5] for n in os.listdir(folder) if n.endswith(".json"))
-    except OSError:
+        if not ids:
+            return {}
+        import ctx_blocks as cb                  # here: it imports this module
+        got = {rid: cb.last_checked(store.root, rid) for rid in ids}
+        return {rid: when for rid, when in got.items() if when}
+    except Exception:  # noqa: BLE001 — a digest line is not worth the summary
         return {}
-    got = {rid: cb.last_checked(store.root, rid) for rid in ids}
-    return {rid: when for rid, when in got.items() if when}
 
 
 def status_summary(context_path, home=None):

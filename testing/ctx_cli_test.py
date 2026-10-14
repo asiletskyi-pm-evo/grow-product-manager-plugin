@@ -1165,13 +1165,13 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         run_ok(e, "migrate", "--apply")
         card_of = lambda: read(e.store, "INDEX.md")
         check("before any check the card still says how many blocks each repository put in (a registered repository with none is left out)",
-              "- **Repos:** zorg-core: 3 блоків; zorg-growth: 2 блоків\n" in card_of(), card_of()[:600])
+              "- **Repos:** zorg-core: 3 блоки; zorg-growth: 2 блоки\n" in card_of(), card_of()[:600])
         run_ok(e, "provider", "adopt", "zorg-core", "--apply")
         day = block_state(e, "zorg-core")["checked"][:10]
         check("adopt --apply puts the check on the card: no compile follows an adopt, so the card is refreshed",
-              "- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено %s; zorg-growth: 2 блоків\n" % day in card_of(), card_of()[:600])
+              "- **Repos:** zorg-core: 3 блоки · v0.4 · перевірено %s; zorg-growth: 2 блоки\n" % day in card_of(), card_of()[:600])
         run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
-        line = "- **Repos:** zorg-core: 3 блоків · v0.4 · перевірено %s; zorg-growth: 2 блоків · v0.1 · перевірено %s\n" % (day, day)
+        line = "- **Repos:** zorg-core: 3 блоки · v0.4 · перевірено %s; zorg-growth: 2 блоки · v0.1 · перевірено %s\n" % (day, day)
         check("…each repository once, with the version most of its blocks have a base at", line in card_of() and card_of().count("**Repos:**") == 1
               and "Alpha (A) — 2 members" in card_of(), card_of()[:900])
         rc, out, res = run_ok(e, "card")
@@ -1181,10 +1181,89 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         rc, out, r = run_ok(e, "provider", "apply", "zorg-core")
         check("an apply that changes nothing leaves the card alone: the line has not moved", rc == 0 and "без змін" in out
               and os.stat(os.path.join(e.store, "INDEX.md")).st_mtime_ns == mtime, (rc, out[-300:]))
+        state_path = os.path.join(e.store, ".state", "blocks", "zorg-core.json")
+        good_state = read(state_path)
+        hand = json.loads(good_state)
+        hand["blocks"]["scope"]["v"] = ["x"]                            # a hand-edited state: a version that is a list
+        open(state_path, "w", encoding="utf-8").write(json.dumps(hand))
+        rc, out, res = run_ok(e, "card")
+        check("a state with a version that is not text: ctx card still builds, and still lists the repository",
+              rc == 0 and "zorg-core: 3 блоки" in card_of(), (rc, out[-300:], card_of()[:600]))
+        open(state_path, "w", encoding="utf-8").write(good_state)
+        run_ok(e, "card")
         rc, out, res = run_ok(e, "read", "--skill", "hiring-designer")
         check("ctx read puts the repository, the version and the day of the check before a block",
               rc == 0 and "> [zorg-core · v0.2 · станом на %s]\n#### Members" % day in out, (rc, out[-600:]))
         check("…and carries the card with the repositories", line in out, out[:900])
+
+# --- v3.13.0 Task 9 fix: a card that cannot be refreshed costs one line, never the report or the exit code of the command
+import contextlib, io  # noqa: E402
+
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import ctx as ctx_cli  # noqa: E402
+import ctx_ops as ctx_ops_mod  # noqa: E402
+
+
+def in_process(e, *args):
+    """A `ctx` run in this process (so a function can be replaced): (exit code, output, CTX_RESULT)."""
+    saved = os.environ.pop("GROW_PM_CONTEXT_PATH", None)
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = ctx_cli.main(list(args) + ["--home", e.home, "--context", e.ctx])
+    finally:
+        if saved is not None:
+            os.environ["GROW_PM_CONTEXT_PATH"] = saved
+    out = buf.getvalue()
+    last = [l for l in out.splitlines() if l.startswith("CTX_RESULT ")]
+    return rc, out, json.loads(last[-1][len("CTX_RESULT "):]) if last else None
+
+
+def refresh_fails(reason):
+    def boom(*a, **k):
+        raise cs_mod.StoreError(reason)
+    return boom
+
+
+import ctx_store as cs_mod  # noqa: E402
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        blocks_file = os.path.join(core, CORE_BLOCKS)
+        run_ok(e, "migrate", "--apply")
+        real = ctx_ops_mod.refresh_card_repos
+        ctx_ops_mod.refresh_card_repos = refresh_fails("INDEX.md is not available locally (read timeout)")
+        try:
+            rc, out, res = in_process(e, "provider", "adopt", "zorg-core", "--apply")
+        finally:
+            ctx_ops_mod.refresh_card_repos = real
+        check("adopt: a card that cannot be refreshed is one line; the adopt, its report and its exit code stand",
+              rc == 0 and res is not None and res["ok"] is True and res["written"] is True and "adopted 3 block(s)" in out
+              and "card not refreshed: INDEX.md is not available locally (read timeout)" in out.splitlines()
+              and block_state(e, "zorg-core") is not None, (rc, out[-500:]))
+        ctx_ops_mod.refresh_card_repos = refresh_fails("INDEX.md is not available locally (read timeout)")
+        try:
+            rc, out, res = in_process(e, "provider", "apply", "zorg-core")
+            quiet = (rc, out, res)
+            change(blocks_file, SCOPE_04, SCOPE_05)
+            rc, out, res = in_process(e, "provider", "apply", "zorg-core")
+        finally:
+            ctx_ops_mod.refresh_card_repos = real
+        check("apply with nothing to do: 'без змін' and exit 0 stay, with the one line about the card",
+              quiet[0] == 0 and "без змін" in quiet[1] and "card not refreshed: INDEX.md" in quiet[1] and quiet[2]["ok"] is True, quiet[:2])
+        check("apply that wrote records: the report, the exit code and the result are kept, the card line comes after the report",
+              rc == 0 and res is not None and res["ok"] is True and res["changes"] == 1 and "записано: custom.zorg-core-notes" in out
+              and SCOPE_05 in read(e.ctx) and out.index("записано:") < out.index("card not refreshed:"), (rc, out[-600:]))
+        change(blocks_file, SCOPE_05, SCOPE_04.replace("v=0.4", "v=0.6"))
+        ctx_ops_mod.refresh_card_repos = refresh_fails("odd")
+        try:
+            rc, out, res = in_process(e, "provider", "apply", "zorg-core", "--choose", "nosuch=mine")
+        finally:
+            ctx_ops_mod.refresh_card_repos = real
+        check("…and a refused command is still refused: the card line does not turn exit 3 into anything else",
+              rc == 3 and "nosuch" in out and "card not refreshed" not in out, (rc, out[-300:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
