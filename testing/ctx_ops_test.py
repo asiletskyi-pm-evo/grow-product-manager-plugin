@@ -800,5 +800,63 @@ with tempfile.TemporaryDirectory() as d:
     shutil.rmtree(os.path.join(e.store.state_dir, "blocks"))
     check("…no folder of block states is no checks", co.status_summary(e.ctx, home=e.home)["checked"] == {})
 
+# --- v3.13 Task 10: consistent_records — a record edited in its file before a snapshot goes back to the last compile
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "setting.templates.md")
+    before = read(p)
+    open(p, "a", encoding="utf-8", newline="").write("- obsidian edit\n")
+    res = e.sync()                                       # its snapshot: the edited record, the old copies, the old state
+    co.restore(res["snapshot"], e.store, e.copies)
+    check("after restore the record is the edited one while the copies are the last compile",
+          "obsidian edit" in read(p) and "obsidian edit" not in read(e.ctx) and "obsidian edit" not in read(e.mirror))
+    changed = co.consistent_records(e.store, e.copies)
+    check("consistent_records puts the record back to the last compile's section, its frontmatter kept",
+          changed == ["setting.templates"] and read(p) == before, (changed, read(p)[-200:]))
+    check("…a second call finds nothing", co.consistent_records(e.store, e.copies) == [])
+    comp = co.compile_store(e.store, e.copies, NOW, e.home)
+    plan = co.plan_sync(e.store, e.copies)
+    check("…and nothing waits to be imported: the compile writes no copy",
+          comp["written"] == [] and not any(co.pending(plan).values()) and not plan["conflicts"], (comp, co.pending(plan)))
+
+with tempfile.TemporaryDirectory() as d:                 # the frontmatter the file has is kept; only the body goes back
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "setting.templates.md")
+    e.edit(p, "\n---\n", '\naliases: ["obsidian alias"]\n---\n')
+    open(p, "a", encoding="utf-8", newline="").write("- obsidian edit\n")
+    res = e.sync()
+    co.restore(res["snapshot"], e.store, e.copies)
+    co.consistent_records(e.store, e.copies)
+    rec = {r["id"]: r for r in e.store.load()}["setting.templates"]
+    check("a record's own frontmatter (an unknown key, its order) survives; the body is the compiled one",
+          "obsidian edit" not in rec["body"] and "obsidian alias" in rec["extra"] and rec["order"] == 100
+          and rec["sha"] == cs.sha_text(rec["body"]), rec)
+
+with tempfile.TemporaryDirectory() as d:                 # no section of the last compile in copy 0 → the record is left as it is
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    res = e.sync(resolve={"product.zorg-app": "record"})
+    co.restore(res["snapshot"], e.store, e.copies)
+    kept = read(p)
+    check("a record whose last-compile section copy 0 does not hold is left as it is — never guessed",
+          "REC" in kept and "PROJ" not in read(e.ctx) and co.consistent_records(e.store, e.copies) == [] and read(p) == kept)
+
+with tempfile.TemporaryDirectory() as d:                 # a consistent store, a record the state does not know, no home copy
+    e = Env(d); e.migrate()
+    before = tree(e.store.root)
+    check("a store that is consistent changes nothing", co.consistent_records(e.store, e.copies) == [] and tree(e.store.root) == before)
+    e.store.write({"ctx": 1, "id": "custom.zorg-new", "type": "custom", "title": "Zorg New", "parent": None,
+                   "order": 5000, "owner": "user", "source": "obsidian", "modified": NOW, "body": "## Zorg New\n\n- x\n"})
+    before = tree(e.store.root)
+    check("a record the last compile did not know (created in the file) is left as it is",
+          co.consistent_records(e.store, e.copies) == [] and tree(e.store.root) == before)
+    e.edit(os.path.join(e.store.records_dir, "setting.templates.md"), "builtin", "obsidian edit")
+    os.remove(e.copies[0])
+    before = tree(e.store.root)
+    check("no home copy → no section to take, nothing is written",
+          co.consistent_records(e.store, e.copies) == [] and tree(e.store.root) == before)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

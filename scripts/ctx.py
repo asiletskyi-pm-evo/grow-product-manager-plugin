@@ -494,6 +494,7 @@ def cmd_undo(a, c):
             print("skipped (not a current copy): %s" % p)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
             existed = json.load(f).get("store_existed")
+        reverted = []
         if existed:
             cs.atomic_write(jpath, journal)
             t = now()
@@ -501,16 +502,22 @@ def cmd_undo(a, c):
             # an import's snapshot holds the copies as they were on disk then — already edited; rebuild them
             # from the restored records so the edit is undone and nothing waits to be imported again. A compile's
             # own snapshot (a mirror created or rewritten) is the one case whose copies must stay as restored.
+            # The same import of a record edited in its file (Obsidian) holds the edit in the records too: they
+            # go back to the last compile's text first, or the rebuild would write the edit into the copies again.
             rebuilt = bool({m.get("op") for m in marks[-a.steps:]} - {"compile"})
+            reverted = co.consistent_records(c.store, c.copies) if rebuilt else []
             if rebuilt:
                 co.compile_store(c.store, c.copies, t, c.home, pre)
             print("restored the state before the %s — %s%s"
                   % ("last change" if a.steps == 1 else "%d last changes" % a.steps, target,
                      "; the copies were rebuilt from the records" if rebuilt else ""))
+            if reverted:
+                print("put back to the last compiled text (the edit made in the file is undone): %s" % ", ".join(reverted))
         else:
             co.forget_store(c.home)
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)
-    return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped}
+    return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped,
+               "records_reverted": reverted}
 
 
 def cmd_validate(a, c):

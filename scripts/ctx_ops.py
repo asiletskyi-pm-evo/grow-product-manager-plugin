@@ -221,6 +221,28 @@ def restore(snap_dir, store, copies):
     return skipped
 
 
+def consistent_records(store, copies):
+    """After `restore`: a record whose text is not the one the last compile saved a hash for was already edited
+    in its file (Obsidian) when the snapshot was taken — an import's snapshot holds the edit in the records and
+    the previous compile in the copies. Put its body back to the section of the home copy (copy 0) whose hash is
+    the saved one; the frontmatter stays. A record with no such section — no home copy, or the copy was edited
+    too — and a record the last compile did not know are left as they are, never guessed. Returns the ids changed."""
+    saved = store.state().get("records", {})
+    if not saved or not copies or not os.path.isfile(copies[0]):
+        return []
+    off = [r for r in store.load() if r["id"] in saved and cs.sha_text(r["body"]) != saved[r["id"]]]
+    if not off:
+        return []
+    sections = {cs.sha_text(f["text"]): f["text"] for f in cs.split_sections(_read(copies[0]))}
+    changed = []
+    for r in off:
+        text = sections.get(saved[r["id"]])
+        if text is not None:
+            store.write(dict(r, body=text))
+            changed.append(r["id"])
+    return changed
+
+
 # ------------------------------------------------------- store and copies
 def _read(path):
     return cs.read_text(path)

@@ -551,6 +551,91 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, r = run_ok(e, "undo")
     check("undo of a ctx write unchanged", rc == 0 and "Locales:** uk" not in read(e.ctx), out[-300:])
 
+# --- v3.13.0 Task 10: undo after a record edit made in the file (Obsidian) reverts it
+def add_line(path, line):
+    t = read(path)
+    open(path, "w", encoding="utf-8", newline="").write(t + ("" if t.endswith("\n") else "\n") + line + "\n")
+
+
+def in_sync(e):
+    rc, out, r = run_ok(e, "status")
+    return "to import: nothing — in sync" in out and r["conflicts"] == []
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rec_path = os.path.join(e.store, "records", "setting.templates.md")
+    rec_before, ctx_before, mirror_before = read(rec_path), read(e.ctx), read(e.mirror)
+    add_line(rec_path, "- obsidian edit")
+    rc_s, out_s, _ = run_ok(e, "sync")
+    check("setup: sync imports the record edit into both copies",
+          rc_s == 0 and "obsidian edit" in read(e.ctx) and "obsidian edit" in read(e.mirror), (rc_s, out_s[-300:]))
+    rc, out, r = run_ok(e, "undo")
+    check("undo after an Obsidian record edit reverts it", rc == 0 and "obsidian edit" not in e.record("setting.templates")
+          and "obsidian edit" not in read(e.ctx) and "obsidian edit" not in read(e.mirror) and in_sync(e), (rc, out[-400:]))
+    check("…the record, both copies are what they were before the edit, byte for byte",
+          e.record("setting.templates") == rec_before and (read(e.ctx), read(e.mirror)) == (ctx_before, mirror_before),
+          (e.record("setting.templates")[-300:], rc))
+    check("…the edit stays in the pre-undo snapshot", "obsidian edit" in read(r["snapshot"], "records", "setting.templates.md"), r)
+    check("…the result and the message name the record that was put back",
+          r.get("records_reverted") == ["setting.templates"] and "setting.templates" in out, (r, out[-400:]))
+    rc, out, r2 = run_ok(e, "undo")
+    check("undoing that undo brings the edit back, and the store is in sync",
+          rc == 0 and "obsidian edit" in e.record("setting.templates") and "obsidian edit" in read(e.ctx)
+          and r2.get("records_reverted") == [] and in_sync(e), (rc, out[-400:], r2))
+
+with tempfile.TemporaryDirectory() as d:        # two edits, two syncs: one undo takes back the last only
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rec_path = os.path.join(e.store, "records", "setting.templates.md")
+    add_line(rec_path, "- first edit")
+    run_ok(e, "sync")
+    add_line(rec_path, "- second edit")
+    run_ok(e, "sync")
+    rc, out, r = run_ok(e, "undo")
+    check("undo takes back the last Obsidian edit and keeps the earlier one",
+          rc == 0 and "first edit" in e.record("setting.templates") and "second edit" not in e.record("setting.templates")
+          and "first edit" in read(e.ctx) and "second edit" not in read(e.ctx) and in_sync(e), (rc, out[-400:]))
+
+with tempfile.TemporaryDirectory() as d:        # a record edit and a copy edit in one sync
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rec_path = os.path.join(e.store, "records", "setting.templates.md")
+    rec_before, ctx_before = read(rec_path), read(e.ctx)
+    add_line(rec_path, "- obsidian edit")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** EDIT")
+    rc_s, out_s, _ = run_ok(e, "sync")
+    rc, out, r = run_ok(e, "undo")
+    check("undo of a sync that took a record edit and a copy edit reverts both",
+          rc_s == 0 and rc == 0 and e.record("setting.templates") == rec_before and read(e.ctx) == ctx_before
+          and read(e.mirror) == ctx_before and in_sync(e), (rc_s, rc, out[-400:]))
+
+with tempfile.TemporaryDirectory() as d:        # a later ctx write: undo --steps 2 reaches back past it
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rec_path = os.path.join(e.store, "records", "setting.templates.md")
+    rec_before, ctx_before = read(rec_path), read(e.ctx)
+    add_line(rec_path, "- obsidian edit")
+    run_ok(e, "sync")
+    run_ok(e, "set", "product.zorg-app", "Jira Project Key", "NEW")
+    rc, out, r = run_ok(e, "undo", "--steps", "2")
+    check("undo --steps 2 over a ctx write and an Obsidian edit reverts both",
+          rc == 0 and e.record("setting.templates") == rec_before and read(e.ctx) == ctx_before and in_sync(e),
+          (rc, out[-400:]))
+
+with tempfile.TemporaryDirectory() as d:        # frontmatter edited in the same save: only the body is put back
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rec_path = os.path.join(e.store, "records", "setting.templates.md")
+    add_frontmatter(e, "setting.templates", 'aliases: ["obsidian alias"]')
+    add_line(rec_path, "- obsidian edit")
+    run_ok(e, "sync")
+    rc, out, r = run_ok(e, "undo")
+    check("undo puts the body back and keeps the frontmatter the file has",
+          rc == 0 and "obsidian edit" not in e.record("setting.templates") and "obsidian alias" in e.record("setting.templates")
+          and "obsidian edit" not in read(e.ctx) and in_sync(e), (rc, out[-400:], e.record("setting.templates")[:400]))
+
 # --- v3.12.1 final review: undo of a compile snapshot; assign does not verify
 with tempfile.TemporaryDirectory() as d:
     e = Env(d)
@@ -921,6 +1006,8 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         rc, out, r = run_ok(e, "undo")
         check("criterion 9: undo returns records, copies and bases", rc == 0 and read(e.ctx) == ctx_before_apply
               and read(e.mirror) == ctx_before_apply and tree_of(blocks_dir) == bases_before, (rc, out[-300:]))
+        check("criterion 9: …and the records, byte for byte — an undo that rebuilds from records finds nothing to put back",
+              tree_of(records_dir) == recs_before and r.get("records_reverted") == [], (rc, r))
 
         change(blocks_file, SCOPE_05, SCOPE_06)         # the core moved on again; you never took 0.5
         rc, out, r = apply_run(e, core, "zorg-core")
