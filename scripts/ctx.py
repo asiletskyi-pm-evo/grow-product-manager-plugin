@@ -818,13 +818,16 @@ def cmd_provider_plan(a, c):
         fetched = crp.fetch(repo, include_skipped=a.all)
         if k or paused:
             print()
+        try:
+            plan = None if fetched["error"] else cb.plan(c.store, c.copies, repo, fetched, now(), all_=a.all)
+        except cb.SourceLost as e:                      # a file that holds none of your based blocks: unavailable, not N "−"
+            fetched = dict(fetched, error=str(e))
         if fetched["error"]:
             down += 1
             why = cb.clip(fetched["error"], cb.NOTE_CLIP)
             print("%s · недоступний: %s" % (cb.clip(repo["id"], cb.HEADER_CLIP), why))
             plans.append({"repo": repo["id"], "error": why})
             continue
-        plan = cb.plan(c.store, c.copies, repo, fetched, now(), all_=a.all)
         print(cb.render_plan(plan))
         plan["namespace_warning"] = crp.namespace_warning(repo, fetched["namespace"])
         if plan["namespace_warning"]:
@@ -866,7 +869,11 @@ def cmd_provider_apply(a, c):
     if (choose or add) and len(repos) > 1:
         raise Usage("--choose and --add answer one repository's plan — name it: ctx provider apply <repo> …")
     fetched = [(repo, crp.fetch(repo)) for repo in repos]
-    down = [{"repo": repo["id"], "error": cb.clip(f["error"], cb.NOTE_CLIP)} for repo, f in fetched if f["error"]]
+    down = []
+    for repo, f in fetched:                             # unreachable, or a file that holds none of your based blocks
+        why = f["error"] or cb.source_lost(c.store, c.copies, repo, f, now())
+        if why:
+            down.append({"repo": repo["id"], "error": cb.clip(why, cb.NOTE_CLIP)})
     if down:
         for x in down:
             print("%s · недоступний: %s" % (cb.clip(x["repo"], cb.HEADER_CLIP), x["error"]))
@@ -998,6 +1005,10 @@ def main(argv=None):
         print("ctx: refused — %s" % e)
         emit({"ok": False, "command": a.cmd, "error": str(e)})
         return 4
+    except cb.SourceLost as e:                          # checked before the lock; here only if the state moved meanwhile
+        print("ctx: the repository is unavailable — %s" % e)
+        emit({"ok": False, "command": a.cmd, "error": str(e)})
+        return 5
     except Usage as e:
         print("ctx: %s" % e)
         emit({"ok": False, "command": a.cmd, "error": str(e)})

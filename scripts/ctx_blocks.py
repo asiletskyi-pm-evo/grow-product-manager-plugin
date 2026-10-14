@@ -54,8 +54,10 @@ Every write goes through ctx_store.atomic_write / check_target (the write allow-
 kebab-case and nothing else, so it can never name a path outside `.state/blocks/`.
 
 `find_regions` is the strict reading of the user's own records. `ctx_repos._regions` is the lenient reading of
-what a repository publishes (it keeps the first of a repeated id and skips what is never closed); the two differ
-on purpose and share only the marker grammar. Stdlib only.
+what a repository publishes (it keeps the first of a repeated id); the two differ on purpose and share only the
+marker grammar. A published file with no region of the namespace or with a begin never closed is refused before it
+is read (`ctx_repos._unsound`), and one that holds none of the blocks you have a base for is refused by `plan`
+(SourceLost): neither is ever read as "the repository removed every block". Stdlib only.
 """
 import collections
 import copy
@@ -177,6 +179,7 @@ def classify(mine, theirs, st):
       "−"    yours is the base (or an older base): you never changed it, remove it
       "⚠"    yours is no base: you changed it — your edit is not dropped without a question
       "?"  both are present, differ, and there is no base to tell which moved
+      "="  yours is the base and theirs an older base: the source lags behind yours (`behind`) — nothing moves
       "~"  yours is the base (or an older base): the repository moved on, take it
       "✎"  theirs is the base (or an older base): only you changed it, keep it
       "⚠"  neither is a base: both changed
@@ -198,11 +201,26 @@ def classify(mine, theirs, st):
         known.add(st["base_sha"])
     if nt is None:
         return "−" if cs.sha_text(nm) in known else "⚠"
+    if behind(mine, theirs, st):
+        return "="
     if cs.sha_text(nm) in known:
         return "~"
     if cs.sha_text(nt) in known:
         return "✎"
     return "⚠"
+
+
+def behind(mine, theirs, st):
+    """Does the repository offer an older base of a block whose base yours is? A copy of the source that lags (an MCP
+    mirror not updated yet, a folder restored from a backup) would otherwise read as "the repository moved" and an
+    apply would take your block a version back. The plan says "=" with a note and apply writes nothing: the base stays."""
+    if mine is None or theirs is None or not st or not st.get("base_sha"):
+        return False
+    nm, nt = norm(mine), norm(theirs)
+    if nm == nt:
+        return False
+    sm, sh = cs.sha_text(nm), cs.sha_text(nt)
+    return sm == st["base_sha"] and sh != st["base_sha"] and sh in set(st.get("bases") or ())
 
 
 # ------------------------------------------------------------------ the store's memory of a repository
@@ -454,6 +472,7 @@ NOTES = {"=": "без змін", "~": "оновлено з репозиторі�
 REMOVED_NOTES = {"⚠": "репозиторій прибрав блок, а у вас правки — theirs прибере, mine лишить текст як ваш",
                  "?": "репозиторій не має цього блоку, а бази немає — theirs прибере, mine лишить текст як ваш"}
 REMOVED_LINE = "(репозиторій прибрав цей блок)"
+BEHIND_NOTE = "джерело позаду вашої бази"         # a "=" whose source offers an older base of yours (`behind`)
 QUESTIONS = ("⚠", "+", "?")                     # the signs that need an answer
 REWRITES = ("~", "−")                           # the signs an apply without decisions acts on: it rewrites the record that holds the block
 
@@ -568,6 +587,39 @@ def _held(entry, mine):
     return entry if entry and mine is None and entry.get("user_removed") else None
 
 
+class SourceLost(ValueError):
+    """The repository's blocks file holds none of the blocks you have a base for. A wrong file (another product's copy
+    under the same namespace), a stale or a cut one would otherwise read as "the repository removed all of them" and an
+    apply would delete your regions; `plan` and `apply` refuse it and the command line says the repository is
+    unavailable (exit 5), with nothing written."""
+
+
+def _lost(state, mine, fetched, skip):
+    """Why `fetched` is no source for this state (see SourceLost), or None. The blocks you have a base for — your skipped
+    blocks aside, and the `team` block when the core folder builds it (it proves nothing about the file) — must be
+    present in the file at least once; it only matters when you still hold one of them (otherwise nothing would be
+    removed). A genuine removal of some blocks leaves the others in the file."""
+    built = fetched.get("team") is not None or bool(fetched.get("team_error"))
+    in_file = fetched.get("blocks") or {}
+    based = sorted(b for b, e in state["blocks"].items() if (e.get("base_sha") or e.get("bases")) and b not in skip
+                   and not (b == "team" and built))
+    if not any(b in mine for b in based) or any(b in in_file for b in based):
+        return None
+    return ("the blocks file holds none of the %d block%s you have a base for (%s) — a wrong, stale or cut file, "
+            "not removals" % (len(based), "" if len(based) == 1 else "s", ", ".join(based)))
+
+
+def source_lost(store, copies, repo, fetched, now):
+    """`_lost` for a repository as the plan would see it — your records (the live view), the state — without raising:
+    the command line asks it before the lock, so a lost source stops `provider apply` with nothing written. None also
+    for a fetch that failed (that is reported on its own)."""
+    if fetched.get("error"):
+        return None
+    records, _, _ = cr._live_view(store, copies, now)
+    mine = find_regions(records, namespace_of(repo, fetched))[0]
+    return _lost(load_state(store, repo["id"]), mine, fetched, set(repo.get("skip_blocks") or ()))
+
+
 def plan(store, copies, repo, fetched, now, all_=False):
     """The plan of one repository: what each of its blocks is in your context against what the repository publishes
     now (`fetched`, from `ctx_repos.fetch` with no `error`; with `all_` it should have been fetched with
@@ -584,6 +636,9 @@ def plan(store, copies, repo, fetched, now, all_=False):
     for the team block when it could not be built (its reason is the note) — neither is a question or a change.
     `questions` counts the rows "⚠", "+" and "?"; `changes` the records an apply without decisions would rewrite: the
     distinct hosts of the rows "~" and "−". `errors` are `find_regions`' problems (a block with one has no row).
+    A "=" row whose source lags behind your base (`behind`) carries `behind: True` and the note
+    "джерело позаду вашої бази (v<theirs> < v<yours>)". A blocks file that holds none of the blocks you have a base for
+    is no plan at all: SourceLost (see `_lost`).
     Every text a server controls is cleaned of control characters and bounded (HEADER_CLIP, NOTE_CLIP, LINE_CLIP).
     """
     if fetched.get("error"):
@@ -594,6 +649,9 @@ def plan(store, copies, repo, fetched, now, all_=False):
     theirs, where = _theirs(fetched)
     team_error = fetched.get("team_error")
     state = load_state(store, rid)
+    lost = _lost(state, mine, fetched, skip)
+    if lost:
+        raise SourceLost(lost)
     bad = {x["block"] for x in problems if x["block"]}
     ids = [b for b in list(mine) + [b for b in theirs if b not in mine] if b not in bad]
     if team_error and "team" not in ids and "team" not in bad:
@@ -611,9 +669,15 @@ def plan(store, copies, repo, fetched, now, all_=False):
         else:
             if m is None and t is None:
                 continue
-            row["sign"] = classify(m["text"] if m else None, t, _held(entry, m["text"] if m else None))
+            held = _held(entry, m["text"] if m else None)
+            row["sign"] = classify(m["text"] if m else None, t, held)
             row["note"] = REMOVED_NOTES[row["sign"]] if t is None and row["sign"] in REMOVED_NOTES else NOTES[row["sign"]]
-            if row["sign"] == "✂":
+            if row["sign"] == "=" and behind(m["text"] if m else None, t, held):
+                vm, vt = _marker_version(m["text"]), _marker_version(t)
+                row["behind"] = True
+                row["note"] = clip(BEHIND_NOTE + (" (v%s < v%s)" % (clip(vt, HEADER_CLIP), clip(vm, HEADER_CLIP))
+                                                  if vm and vt and vm != vt else ""), NOTE_CLIP)
+            elif row["sign"] == "✂":
                 row["host"] = (entry or {}).get("host")
             elif row["sign"] == "~":
                 vm, vt = _marker_version(m["text"]), _marker_version(t)
@@ -765,8 +829,10 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
     lock and has imported the edits of local-context.md first: with edits still waiting it is refused (co.Refused),
     and nothing is written.
 
-    The signs are `plan`'s — the plan is made here, on the records as they are now — and each is acted on (spec B6):
-      =   nothing in the records; the base becomes the repository's text when it was not
+    The signs are `plan`'s — the plan is made here, on the records as they are now (a lost source, SourceLost, stops
+    it before anything is written) — and each is acted on (spec B6):
+      =   nothing in the records; the base becomes the repository's text when it was not — except when the source lags
+          behind your base (`behind`): then the base stays as it is
       ~   the region becomes the repository's text, and so does the base
       ✎   your region stays, the base too
       −   the region is removed (its text stays in the snapshot), and the block's state entry with it
@@ -858,7 +924,7 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
                 adds.append(bid)
             entry = state["blocks"].setdefault(bid, {"base_sha": None, "bases": [], "v": "", "host": None, "checked": None,
                                                      "user_removed": None})
-            if sign != "✎":
+            if sign != "✎" and not row.get("behind"):       # a source behind your base never moves the base back
                 _rebase(entry, t)
                 rebased[bid] = t
             entry.update(host=m["host"] if m else None, checked=checked, user_removed=None)
@@ -920,12 +986,13 @@ def render_apply(res):
     """The text of an apply: the plan's table (a "⚠" with its three versions under it), then what was not needed,
     what waits and how to answer it, what was written — and the last line `Чекають рішення: N · змінено записів: M`.
     A pass that changed nothing, with nothing waiting, is the header and the one line "без змін" — and under it the
-    blocks that could not be checked ("·", such as a team block whose core folder is not here)."""
+    blocks that could not be checked ("·", such as a team block whose core folder is not here) and those whose source
+    lags behind your base ("=", with its note)."""
     p = res["plan"]
     lines = render_plan(p).splitlines()[:-1]            # the plan's last line speaks of what would change
     if not (res["changed"] or res["pending"] or res["errors"] or res["ignored"]):
-        return "\n".join([lines[0], "без змін"] + ["%s  %s  %s" % (SKIPPED, clip(r["block"], HEADER_CLIP), clip(r["note"], NOTE_CLIP))
-                                                  for r in p["rows"] if r["sign"] == SKIPPED])
+        return "\n".join([lines[0], "без змін"] + ["%s  %s  %s" % (r["sign"], clip(r["block"], HEADER_CLIP), clip(r["note"], NOTE_CLIP))
+                                                  for r in p["rows"] if r["sign"] == SKIPPED or r.get("behind")])
     for x in res["errors"][len(p["errors"]):]:
         lines.append("помилка: %s — %s" % (clip(x["block"] or "?", HEADER_CLIP), clip(x["why"], HEADER_CLIP)))
     for bid, sign in res["ignored"].items():

@@ -412,8 +412,10 @@ with tempfile.TemporaryDirectory() as d:
     check("…the team region is read in the manifest's namespace too", fn["team"] == f["team"]
           and fn["team"].startswith("<!-- zorg-core:begin id=team "), fn["team"])
     fx = cr.fetch(core_repo(id="zorg-context", namespace="zorg-other"))
-    check("an explicit namespace beats the manifest's: the repository finds only its own regions",
-          fx["namespace"] == "zorg-other" and fx["blocks"] == {} and fx["error"] is None, fx)
+    check("an explicit namespace beats the manifest's: the repository finds only its own regions — none here, so the file "
+          "holds no block of it and the read fails (a foreign file is never 'every block removed')",
+          fx["namespace"] == "zorg-other" and fx["blocks"] == {} and fx["source"] is None
+          and fx["error"] == "the blocks file holds no zorg-other block (empty, cut, or another namespace)", fx)
     fx = cr.fetch(core_repo(id="zorg-context", namespace="zorg-context"))
     check("…even when it equals the id", fx["namespace"] == "zorg-context" and fx["blocks"] == {}, fx)
     fe_ns = cr.fetch(core_repo(id="zorg-context", blocks_file="Core/none.md"))
@@ -598,6 +600,22 @@ with tempfile.TemporaryDirectory() as d:
         fake.raw_result = {"content": 5, "isError": False}
         fr = cr.fetch(growth_repo(fake.url))
         check("a server that sends a number as the content → error, not a TypeError", fr["source"] is None and fr["error"], fr)
+    with FakeMcp(tree={GROWTH_PATH: "", "ZorgCore/" + CORE_BLOCKS_FILE: ""}) as fake:
+        fz = cr.fetch(growth_repo(fake.url))
+        check("MCP content \"\" (an empty note) → an error, not a source with no blocks",
+              fz["source"] is None and fz["blocks"] == {}
+              and fz["error"] == "MCP: the blocks file holds no zorg-growth block (empty, cut, or another namespace)", fz)
+        fza = cr.fetch(core_repo(blocks_source="auto", endpoint={"url": fake.url, "root": "ZorgCore/", "headers_env": ""}))
+        check("…under auto an empty note counts as a bad answer: the core folder is read instead",
+              fza["error"] is None and fza["source"] == "folder" and fza["blocks"] == f["blocks"], fza)
+    with FakeMcp(tree={GROWTH_PATH: read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))}) as fake:
+        fw = cr.fetch(growth_repo(fake.url))
+        check("a note served under the wrong path (another repository's blocks) → the same error, nothing offered",
+              fw["source"] is None and fw["blocks"] == {} and "holds no zorg-growth block" in (fw["error"] or ""), fw)
+    with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT[:GROWTH_TEXT.rindex("<!-- zorg-growth:end")]}) as fake:
+        fc = cr.fetch(growth_repo(fake.url))
+        check("a note cut inside its last region → 'cut at block <id>'", fc["source"] is None and fc["blocks"] == {}
+              and fc["error"].startswith("MCP: the blocks file is cut at block "), fc)
 
     # --- a core file that never arrives
     saved = os.environ.get("GROW_PM_CTX_READ_TIMEOUT")
@@ -766,17 +784,37 @@ with tempfile.TemporaryDirectory() as d:
     fnv = folder_with(nov, namespace="zorg-core")
     check("a block with no version still counts; with no version on any, version is None",
           set(fnv["blocks"]) == {"a"} and fnv["version"] is None, fnv)
-    check("namespace defaults to the id: another namespace finds nothing", folder_with(mixed)["blocks"] == {}
-          and folder_with(mixed)["source"] == "folder" and folder_with(mixed)["error"] is None, folder_with(mixed))
+    fns = folder_with(mixed)
+    check("namespace defaults to the id: another namespace finds nothing — a file that holds no block of the repository "
+          "cannot be read as its blocks: an error, no blocks", fns["blocks"] == {} and fns["source"] is None
+          and fns["error"] == "the blocks file holds no zorg-case block (empty, cut, or another namespace)", fns)
     dup = blocks_of(region("zorg-core", "a", "0.1", "first"), region("zorg-core", "a", "0.2", "second"))
     check("an id met twice keeps the first", "first" in folder_with(dup, namespace="zorg-core")["blocks"]["a"], "")
     broken = "<!-- zorg-core:begin id=a v=1 -->\nno end\n\n" + region("zorg-core", "b", "1", "B") + "\n"
-    check("a region that is never closed is no block", set(folder_with(broken, namespace="zorg-core")["blocks"]) == {"b"},
-          folder_with(broken, namespace="zorg-core")["blocks"])
+    fbr = folder_with(broken, namespace="zorg-core")
+    check("a begin marker that is never closed: the file is cut there — an error naming the block, no blocks at all",
+          fbr["blocks"] == {} and fbr["source"] is None and fbr["error"] == "the blocks file is cut at block a", fbr)
     crlf = mixed.replace("\n", "\r\n")
     check("line endings: CRLF gives the same blocks as LF", folder_with(crlf, namespace="zorg-core")["blocks"] == fm_["blocks"], "")
-    check("an empty blocks file is a source with no blocks, not an error", folder_with("", namespace="zorg-core")["blocks"] == {}
-          and folder_with("", namespace="zorg-core")["error"] is None and folder_with("", namespace="zorg-core")["source"] == "folder", "")
+    fempty = folder_with("", namespace="zorg-core")
+    check("an empty blocks file (0 bytes) is no source: an error, never 'the repository removed every block'",
+          fempty["blocks"] == {} and fempty["source"] is None and fempty["version"] is None
+          and fempty["error"] == "the blocks file holds no zorg-core block (empty, cut, or another namespace)", fempty)
+    pristine_core = read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))
+    cut = pristine_core[:pristine_core.index("<!-- zorg-core:end id=teams -->")]
+    fcut = folder_with(cut, namespace="zorg-core")
+    check("a blocks file cut inside its last region → 'cut at block teams', no blocks (the regions before it are not offered alone)",
+          fcut["blocks"] == {} and fcut["source"] is None and fcut["error"] == "the blocks file is cut at block teams", fcut)
+    fother = folder_with(blocks_of(region("zorg-other", "scope", "1", "Not ours")), namespace="zorg-core")
+    check("a file of another namespace only → the same error as an empty one", fother["source"] is None
+          and fother["error"] == "the blocks file holds no zorg-core block (empty, cut, or another namespace)", fother)
+    fsec = folder_with("<!-- zorg-core:section:begin -->\n## Zorg\n<!-- zorg-core:section:end -->\n", namespace="zorg-core")
+    check("…a section wrapper alone is no block either", fsec["source"] is None and "holds no zorg-core block" in (fsec["error"] or ""), fsec)
+    fteam = folder_with(blocks_of(region("zorg-core", "team", "1", "### Team: Alpha")), namespace="zorg-core")
+    check("one region of the namespace is enough (a file that carries only a team region is a source)",
+          fteam["error"] is None and set(fteam["blocks"]) == {"team"}, fteam)
+    fcore_cut = cr.fetch(core_repo())                                 # the fixture core itself is whole
+    check("the fixture core reads whole: no error", fcore_cut["error"] is None and set(fcore_cut["blocks"]) == {"scope", "product", "teams"}, fcore_cut)
     bad = os.path.join(d, "CaseBin")
     os.makedirs(os.path.join(bad, "Core"))
     open(os.path.join(bad, "Core", "blocks.md"), "wb").write(b"\xff\xfe\x00bad")

@@ -93,6 +93,12 @@ check("− when yours is an older base the repository removed", cb.classify(A0, 
 check("~ wins when both texts are known bases: yours is the older one",
       cb.classify(A0, A1, st(A2, bases=[A0, A1, A2])) == "~")
 check("✎ when upstream is back at an older base and you changed it", cb.classify(B, A0, st(A2, bases=[A0, A1, A2])) == "✎")
+check("= when the repository is back at an older base and yours is the base: the source lags, never a step backwards",
+      cb.classify(A2, A0, st(A2, bases=[A0, A1, A2])) == "=" and cb.classify(A1, A0, st(A1, bases=[A0, A1])) == "=")
+check("…behind() says so; it is False for every other case",
+      cb.behind(A2, A0, st(A2, bases=[A0, A1, A2])) and not cb.behind(A2, A2, st(A2, bases=[A0, A1, A2]))
+      and not cb.behind(A0, A1, st(A2, bases=[A0, A1, A2])) and not cb.behind(A0, C, st(A2, bases=[A0, A1, A2]))
+      and not cb.behind(A2, A0, None) and not cb.behind(None, A0, st(A2, bases=[A0, A2])) and not cb.behind(A2, None, st(A2)), "")
 check("⚠ when yours is no known base and neither is theirs", cb.classify(B, C, st(A2, bases=[A0, A1, A2])) == "⚠")
 check("⚠ when the base list is empty", cb.classify(B, C, {"base_sha": cs.sha_text(cb.norm(A)), "bases": [], "user_removed": None}) == "⚠")
 check("~ on the base_sha alone, with no list of bases", cb.classify(A, C, {"base_sha": cs.sha_text(cb.norm(A)), "bases": None}) == "~")
@@ -787,8 +793,8 @@ with tempfile.TemporaryDirectory() as d:                      # you removed it
     check("you removed a block that has a base → '✂' (no question; no record changes)",
           signs_of(p) == {"scope": "=", "teams": "✂", "team": "="} and p["questions"] == 0 and p["changes"] == 0, (signs_of(p), p["questions"]))
     check("…the record it was in is shown", row_of(p, "teams")["host"] == HOST_NOTES, p["rows"])
-    p = plan_of(store, copies, dict(published(store), blocks={}))
-    check("…a block that is gone from both sides is no row at all", "teams" not in signs_of(p), signs_of(p))
+    p = plan_of(store, copies, dict(published(store), blocks={"scope": published(store)["blocks"]["scope"]}))
+    check("…a block that is gone from both sides is no row at all", "teams" not in signs_of(p) and signs_of(p)["scope"] == "=", signs_of(p))
 
 with tempfile.TemporaryDirectory() as d:                      # no state: nothing says who moved
     home, text, copies, store = migrated(d, patch=[EDIT_SCOPE])
@@ -1228,6 +1234,61 @@ with tempfile.TemporaryDirectory() as d:                      # a region with no
     res = apply_of(home, text, copies, store, f, choose={"teams": "mine"})
     check("…mine keeps the text without the markers", "id=teams" not in body_of(store, HOST_NOTES)
           and "### Teams map\n- Alpha, Beta\n" in body_of(store, HOST_NOTES) and "teams" not in signs_of(plan_of(store, copies, f)), res)
+
+# --- v3.13.0 final review: a source that holds none of the blocks you have a base for is not N removals
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    foreign = published(store, blocks={"okr": OKR})                 # the team block is the core folder's: no proof of the file
+    everything = files_under(d)
+    lost = raises(cb.SourceLost, plan_of, store, copies, foreign)
+    check("plan: a blocks file that holds none of the blocks you have a base for → SourceLost (a ValueError), not two '−'",
+          isinstance(lost, cb.SourceLost) and isinstance(lost, ValueError)
+          and "holds none of the 2 blocks you have a base for (scope, teams)" in str(lost), lost)
+    check("…source_lost says the same without raising, and None for a sound source",
+          cb.source_lost(store, copies, SKIPPING, foreign, NOW) == str(lost)
+          and cb.source_lost(store, copies, SKIPPING, published(store), NOW) is None, "")
+    check("…apply never acts on it: SourceLost, nothing written",
+          isinstance(raises(cb.SourceLost, apply_of, home, text, copies, store, foreign), cb.SourceLost) and files_under(d) == everything, "")
+    check("…a team that cannot be built is no proof either", isinstance(raises(
+          cb.SourceLost, plan_of, store, copies, published(store, blocks={"okr": OKR}, team=None, team_error="team block: x")), cb.SourceLost), "")
+    one_kept = published(store, blocks={"teams": published(store)["blocks"]["teams"]})
+    check("one block you have a base for is still published: the other is a genuine removal ('−')",
+          signs_of(plan_of(store, copies, one_kept)) == {"scope": "−", "teams": "=", "team": "="}, signs_of(plan_of(store, copies, one_kept)))
+    file_team = published(store, blocks={"team": published(store)["team"]}, team=None)
+    check("a team region the file carries itself (no core folder) is published by the file: the rest are removals",
+          signs_of(plan_of(store, copies, file_team)) == {"scope": "−", "teams": "−", "team": "="}, signs_of(plan_of(store, copies, file_team)))
+    skip_all = crp.normalise({"id": "zorg-core", "kind": "bundle", "paths": ["/zorg/core"], "team": "team-alpha",
+                              "skip_blocks": ["product", "scope", "teams"]})
+    check("blocks you skip are not asked for: with every other based block skipped nothing is lost",
+          cb.source_lost(store, copies, skip_all, foreign, NOW) is None, "")
+
+# --- v3.13.0 final review: a source behind your base (a lagging copy) is never fast-forwarded backwards
+BEHIND = "джерело позаду вашої бази (v0.4 < v0.5)"
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f_new = published(store)
+    f_new["blocks"]["scope"] = NEW_SCOPE
+    apply_of(home, text, copies, store, f_new)                     # v0.4 → v0.5, the base is v0.5, v0.4 an older base
+    body = body_of(store, HOST_NOTES)
+    state_before = cb.load_state(store, "zorg-core")
+    p = plan_of(store, copies, published(store))                  # the source offers the v0.4 text again
+    row = row_of(p, "scope")
+    check("plan: the source is back at an older base and yours is the base → '=' with the note, no change, no question",
+          row["sign"] == "=" and row["note"] == BEHIND and row.get("behind") is True and p["changes"] == 0 and p["questions"] == 0, row)
+    check("…the rendered row says so", any(l.startswith("=") and "scope" in l and BEHIND in l for l in cb.render_plan(p).splitlines()),
+          cb.render_plan(p))
+    everything = files_under(d)
+    state_path = os.path.join(store.state_dir, "blocks", "zorg-core.json")
+    res = apply_of(home, text, copies, store, published(store, checked="2026-10-21T09:00:00+03:00"))
+    changed = sorted(k for k in set(files_under(d)) | set(everything) if files_under(d).get(k) != everything.get(k))
+    state = cb.load_state(store, "zorg-core")
+    check("apply writes nothing back: your v0.5 region stays, the base stays v0.5, only the time of the check moves",
+          res["changed"] is False and res["written"] == [] and body_of(store, HOST_NOTES) == body and NEW_SCOPE in body
+          and state["blocks"]["scope"]["base_sha"] == state_before["blocks"]["scope"]["base_sha"]
+          and state["blocks"]["scope"]["v"] == "0.5" and changed == [os.path.relpath(state_path, d)], (res["changed"], changed))
+    check("…and its text shows the lagging source", BEHIND in cb.render_apply(res), cb.render_apply(res))
 
 # --- v3.13.0 Task 11: the namespace a plan, an adopt and an apply read your regions in
 check("namespace_of: the fetch's (a registration with no namespace takes the core manifest's), else the registration's",

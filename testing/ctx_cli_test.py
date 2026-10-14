@@ -1428,9 +1428,65 @@ with tempfile.TemporaryDirectory() as d:            # an explicit namespace that
     e = renamed_core(d, "zorg-context", "namespace: zorg-elsewhere\n")
     run_ok(e, "migrate", "--apply")
     rc, out, res = run_ok(e, "provider", "plan", "zorg-context")
-    check("an explicit namespace beats the manifest's: the core's scope and teams blocks are not this repository's, and no warning",
-          rc == 0 and "scope" not in signs_in(res) and "teams" not in signs_in(res) and "namespace" not in out.split("CTX_RESULT")[0],
+    check("an explicit namespace beats the manifest's: the core's scope and teams blocks are not this repository's — its file "
+          "holds no block of it, so the repository is unavailable (exit 5), and no warning",
+          rc == 5 and "rows" not in res and "holds no zorg-elsewhere block" in out and "namespace:" not in out.split("CTX_RESULT")[0],
           (rc, out[-300:]))
+
+# --- v3.13.0 final review: an empty, cut or foreign blocks file is an unavailable repository, never "every block removed"
+def text_of(out):
+    return out.split("CTX_RESULT")[0]
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        blocks_file = os.path.join(core, CORE_BLOCKS)
+        pristine = read(blocks_file)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        held = lambda ns, ids: {b: region_in(read(e.ctx), ns, b) for b in ids}
+        core_regions, growth_regions = held("zorg-core", ("scope", "teams", "team")), held("zorg-growth", ("growth-metrics", "team"))
+        check("setup: the context holds the core's and the growth repository's regions, each with a base",
+              all(core_regions.values()) and all(growth_regions.values())
+              and set(block_state(e, "zorg-core")["blocks"]) == {"scope", "teams", "team"}, (core_regions, growth_regions))
+        for label, text, why in (("an empty (0-byte) blocks file", "", "the blocks file holds no zorg-core block"),
+                                 ("a blocks file cut inside its last region",
+                                  pristine[:pristine.index("<!-- zorg-core:end id=teams -->")], "the blocks file is cut at block teams"),
+                                 ("a blocks file of another namespace", pristine.replace("zorg-core", "zorg-other"),
+                                  "the blocks file holds no zorg-core block"),
+                                 ("a blocks file of this namespace that holds none of the blocks you have a base for", OKR + "\n",
+                                  "holds none of the 2 blocks you have a base for (scope, teams)")):
+            open(blocks_file, "w", encoding="utf-8", newline="").write(text)
+            before = tree_of(e.home, e.vault)
+            rc, out, res = run_ok(e, "provider", "plan", "zorg-core")
+            check("%s: plan exits 5 — the repository is unavailable, with the reason, and no row at all" % label,
+                  rc == 5 and "zorg-core · недоступний: " in text_of(out) and why in text_of(out) and "rows" not in res
+                  and res["ok"] is False, (rc, out[-500:]))
+            rc, out, res = run_ok(e, "provider", "apply", "zorg-core")
+            check("%s: apply exits 5, nothing written, every region intact" % label,
+                  rc == 5 and "нічого не записано" in out and why in text_of(out) and tree_of(e.home, e.vault) == before
+                  and held("zorg-core", ("scope", "teams", "team")) == core_regions, (rc, out[-500:]))
+        open(blocks_file, "w", encoding="utf-8", newline="").write(pristine)
+        fake.tree[GROWTH_PATH] = ""
+        before = tree_of(e.home, e.vault)
+        rc, out, res = run_ok(e, "provider", "plan", "zorg-growth")
+        check("MCP content \"\": plan exits 5 with the reason, no '−' rows", rc == 5 and "rows" not in res
+              and "holds no zorg-growth block" in text_of(out), (rc, out[-400:]))
+        rc, out, res = run_ok(e, "provider", "apply", "zorg-growth")
+        check("…apply exits 5, nothing written, the growth regions intact", rc == 5 and tree_of(e.home, e.vault) == before
+              and held("zorg-growth", ("growth-metrics", "team")) == growth_regions, (rc, out[-400:]))
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT
+        open(blocks_file, "w", encoding="utf-8", newline="").write(pristine.replace(
+            "<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope of work\nThe user works on Zorg App only.\n<!-- zorg-core:end id=scope -->\n\n", ""))
+        rc, out, res = run_ok(e, "provider", "plan", "zorg-core")
+        check("a genuine removal of one block still plans '−' (the others are still published)",
+              rc == 0 and signs_in(res) == {"scope": "−", "teams": "=", "team": "="}, (rc, out[-400:]))
+        rc, out, res = run_ok(e, "provider", "apply", "zorg-core")
+        check("…and apply removes that region alone", rc == 0 and region_in(read(e.ctx), "zorg-core", "scope") is None
+              and held("zorg-core", ("teams", "team")) == {b: core_regions[b] for b in ("teams", "team")}, (rc, out[-400:]))
 
 # --- v3.13 Task 12: the protocol documents say what the commands do
 def lacks(text, needed):

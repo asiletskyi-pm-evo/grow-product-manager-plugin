@@ -298,7 +298,8 @@ def _from_folder(repo, blocks_file):
 
 def _regions(text, namespace):
     """({id: the whole region, markers included, no final newline}, [v= of each]) for the regions of `namespace`
-    in `text`, in file order. An id met twice keeps the first; a region that is never closed is no region."""
+    in `text`, in file order. An id met twice keeps the first; a region that is never closed is no region (`_unsound`
+    refuses such a file before its regions are read)."""
     ns = re.escape(namespace)
     rx = re.compile(r"<!--\s*%s:begin\s+id=([A-Za-z0-9_.-]+)([^>]*)-->.*?<!--\s*%s:end\s+id=\1\s*-->" % (ns, ns), re.S)
     blocks, versions = {}, []
@@ -309,6 +310,21 @@ def _regions(text, namespace):
         v = re.search(r"(?:^|\s)v=([^\s>]+)", mo.group(2))
         versions.append(v.group(1) if v else None)
     return blocks, versions
+
+
+def _unsound(text, namespace):
+    """Why `text` cannot be read as the blocks of `namespace`, or None. A file that holds no region of the namespace —
+    empty (an iCloud placeholder, a 0-byte save, an MCP note with "" as its content), cut before its first block ends,
+    or another repository's file (a wrong path on a server) — and a file with a begin marker of the namespace whose end
+    never follows it (cut inside a block) would otherwise read as "the repository removed those blocks", and an apply
+    would delete your regions without a question. Such a file is no source: the fetch fails and nothing is written."""
+    ns = re.escape(namespace)
+    for mo in re.finditer(r"<!--\s*%s:begin\s+id=([A-Za-z0-9_.-]+)" % ns, text):
+        if not re.compile(r"<!--\s*%s:end\s+id=%s\s*-->" % (ns, re.escape(mo.group(1)))).search(text, mo.end()):
+            return "the blocks file is cut at block %s" % mo.group(1)
+    if not _regions(text, namespace)[0]:
+        return "the blocks file holds no %s block (empty, cut, or another namespace)" % namespace
+    return None
 
 
 def manifest_namespace(repo):
@@ -340,6 +356,9 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
     `blocks_source` decides where from: "mcp" asks the server only; "paths" reads the core folder only; "auto"
     asks the server when it answers the handshake and otherwise reads the core folder. A server that answers an
     error, a bad answer or nothing counts as unavailable for this fetch; under "auto" the folder is then tried.
+    A text that holds no region of the namespace, or a begin marker of it that is never closed, is no source either
+    (`_unsound`: "the blocks file holds no <ns> block (…)", "the blocks file is cut at block <id>"; from the server
+    with "MCP: " before it) — an empty, cut or foreign file must never read as "every block removed".
     `include_skipped` keeps the blocks of `skip_blocks` in `blocks` (the plan's `--all` lists them); by default they
     are dropped.
 
@@ -383,12 +402,18 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
         else:
             if src == "mcp" or (src == "auto" and url):
                 text, why = _from_mcp(repo, blocks_file, client_factory)
+                bad = _unsound(text, out["namespace"]) if text is not None else None
+                if bad:                                 # an empty, cut or foreign note is a bad answer: under auto, the folder
+                    text, why = None, "MCP: " + bad
                 if text is not None:
                     out["source"] = "mcp"
                 else:
                     errors.append(why)
             if text is None and src in ("auto", "paths"):
                 text, why = _from_folder(repo, blocks_file)
+                bad = _unsound(text, out["namespace"]) if text is not None else None
+                if bad:
+                    text, why = None, bad
                 if text is not None:
                     out["source"] = "folder"
                 else:
