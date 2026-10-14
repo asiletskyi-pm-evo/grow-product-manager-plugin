@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.12.1
+**Version:** 3.13.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.13.0** — **Repositories and block merge** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). A product can take context blocks from any number of repositories — a team's or an organisation's shared core reached through its MCP server or its folder — and a refresh is one pass: `ctx provider plan` shows a table (`=` unchanged · `~` updated by the repository · `✎` your edit kept · `⚠` both changed · `+` new · `−` removed · `?` no base yet), `ctx provider apply` writes it, asking only where both sides changed a block. Your edits inside a block are kept; an empty, cut or lagging source never removes or downgrades anything; `ctx undo` takes an apply back with its bases. `ctx read` marks where each block came from and when it was checked.
 
 **New in v3.12.1** — **Your own sections reach the skills again; `ctx undo` after an import is whole** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Since v3.12.0 a skill reads only what `references/context-manifest.yaml` names, and the manifest cannot name your own `##` sections — so they stopped reaching any skill. A custom or setting record now says who reads it (`read_by`, set with `ctx assign <id> all|<skills>` or the configurator's "Who reads custom sections"); unassigned ones are named in `ctx read` and counted in the digest. `ctx undo` after an imported edit or removal now undoes it in `local-context.md` too.
 
@@ -700,8 +702,9 @@ The sixth contour, **Context**, groups `context-connect`, `context-navigator` an
 - **The digest** shows `context: records N · card M lines · in sync` (or the edits waiting) at every session start.
 - **Lean reading** (since v3.12.0) — with a store, a skill's Step 0 runs `ctx read --skill <name>`: the card plus only the fields and subsections its entry in `references/context-manifest.yaml` names, instead of the whole file.
 - **Lifecycle and freshness** (since v3.12.0) — `ctx invalidate` marks a record no longer current, `ctx archive` moves it out of the file, removed records wait 30 days in a trash, `ctx restore` brings any of them back; every record knows when it was last verified, the digest counts stale ones and skills state their facts "as of" that date; `ctx verify` or the configurator's "Review stale records" confirms them.
+- **Repositories and block merge** (since v3.13.0) — registrations v2 (`products`, `rank`, `core_root`, `endpoint`, `namespace`, `blocks_file`) list the repositories a product draws blocks from; `ctx repo list|status`; `ctx provider adopt` records what each block was when the repository last gave it, `plan` compares the three versions, `apply` writes one pass with a snapshot and a journal line; a stdlib MCP client calls only read tools. `references/context-provider-protocol.md` §12.
 - **Your own sections** (since v3.12.1) — a custom or setting record names the skills that read it (`read_by`: `all` or skill names; `ctx assign`, or the Obsidian property); `ctx read` gives it to them whole and names the unassigned ones; the digest counts them (`· N custom unassigned`).
-- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify`, and since v3.12.1 `assign` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
+- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify`, since v3.12.1 `assign`, and since v3.13.0 `repo list|status`, `provider adopt|plan|apply` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
 
 ## Multilingual Artifact Templates
 
@@ -1047,5 +1050,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.12.1  
+**Version:** 3.13.0  
 **Last Updated:** October 2026
