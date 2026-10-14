@@ -95,6 +95,13 @@ def normalise(reg):
     return out
 
 
+def search_only(repo):
+    """Is this registration a search index only — no blocks file named and no core folder to take one from (a server
+    registered for `vault_search`, references/context-provider-protocol.md §3b, or the user's own index)? It publishes
+    no blocks, so `ctx provider` leaves it out of scope instead of calling it unreachable."""
+    return not repo["blocks_file"] and not repo["core_root"]
+
+
 def load_repos(context_text, home, extra_dirs=None, skipped=None):
     """Every registered repository, normalised, in registration order — the vaults' providers folders
     first, then `<home>/.grow-pm/providers` (or `extra_dirs` when given, as in find_registrations;

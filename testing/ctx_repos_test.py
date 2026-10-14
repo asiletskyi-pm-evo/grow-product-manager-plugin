@@ -357,6 +357,14 @@ with tempfile.TemporaryDirectory() as d:
         reg.update(kw)
         return repo_of(reg)
 
+    # --- a search-only registration publishes no blocks
+    brain = repo_of({"id": "zorg-brain", "kind": "mcp", "authority": "personal", "index": "~/x.sqlite",
+                     "endpoint": {"url": "http://127.0.0.1:9/mcp"}})
+    check("search_only: no blocks_file and no core folder (a server for search, or the user's own index)",
+          cr.search_only(brain) and cr.search_only(repo_of({"id": "zorg-index", "kind": "mcp"}))
+          and not cr.search_only(core_repo()) and not cr.search_only(core_repo(blocks_file=""))
+          and not cr.search_only(growth_repo()), "")
+
     # --- the folder
     f = cr.fetch(core_repo())
     check("fetch returns the documented keys",

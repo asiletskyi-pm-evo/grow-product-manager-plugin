@@ -1488,6 +1488,38 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("…and apply removes that region alone", rc == 0 and region_in(read(e.ctx), "zorg-core", "scope") is None
               and held("zorg-core", ("teams", "team")) == {b: core_regions[b] for b in ("teams", "team")}, (rc, out[-400:]))
 
+# --- v3.13.0 final review: a search-only MCP registration (connect-steps §7) is not a block repository
+BRAIN_REG = ("schema: provider-registration/2\nid: zorg-brain\ntitle: Zorg brain (own index)\nkind: mcp\ncontract: vault/v1\n"
+             "authority: personal\nmode: live\naccess: local\nendpoint:\n  url: http://127.0.0.1:9/mcp\n"
+             "index: ~/.zorg-brain/brain.sqlite\nstatus: active\n")
+INDEX_REG = "schema: provider-registration/1\nid: zorg-index\nkind: mcp\nauthority: personal\nmode: live\naccess: local\nindex: ~/x.sqlite\n"
+with tempfile.TemporaryDirectory() as d:
+    e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra=SKIP_PRODUCT)
+    prov = os.path.join(e.home, ".grow-pm", "providers")
+    os.remove(os.path.join(prov, "zorg-growth.yaml"))
+    dead_reg = read(prov, "zorg-dead.yaml")
+    os.remove(os.path.join(prov, "zorg-dead.yaml"))
+    open(os.path.join(prov, "zorg-brain.yaml"), "w", encoding="utf-8").write(BRAIN_REG)
+    open(os.path.join(prov, "zorg-index.yaml"), "w", encoding="utf-8").write(INDEX_REG)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+    for args in (("plan",), ("apply",), ("plan", "--product", "Zorg App"), ("apply", "--product", "Zorg App")):
+        rc, out, res = run_ok(e, "provider", *args)
+        check("bare `provider %s`: a search-only registration is left out with one line, the block repository is served (exit 0)"
+              % " ".join(args), rc == 0 and "лише пошук: zorg-brain" in out and "лише пошук: zorg-index" in out
+              and "zorg-core · джерело: тека" in out and "недоступний" not in out
+              and sorted(res.get("search_only") or []) == ["zorg-brain", "zorg-index"]
+              and [r["repo"] for r in res["repos"]] == ["zorg-core"], (rc, out[-600:]))
+    for args in (("plan", "zorg-brain"), ("apply", "zorg-brain"), ("adopt", "zorg-brain"), ("plan", "zorg-index")):
+        before = tree_of(e.home, e.vault)
+        rc, out, res = run_ok(e, "provider", *args)
+        check("`provider %s` names a search-only registration: exit 3 with the reason, nothing written" % " ".join(args),
+              rc == 3 and "search-only" in out and "no blocks_file" in out and tree_of(e.home, e.vault) == before, (rc, out[-400:]))
+    open(os.path.join(prov, "zorg-dead.yaml"), "w", encoding="utf-8").write(dead_reg)
+    rc, out, res = run_ok(e, "provider", "plan")
+    check("…a repository that publishes blocks and does not answer is still exit 5", rc == 5 and "zorg-dead · недоступний" in out
+          and "лише пошук: zorg-brain" in out, (rc, out[-500:]))
+
 # --- v3.13 Task 12: the protocol documents say what the commands do
 def lacks(text, needed):
     return [s for s in needed if s not in text]

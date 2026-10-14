@@ -38,10 +38,13 @@
                                 repository publishes now (= ~ ✎ ⚠ + − ✂ ?), the questions and the records an apply
                                 would rewrite. Without REPO: the repositories of the product P (matched as `read`
                                 matches it), else all of them. --all also lists the blocks a repository skips.
-                                Reads only — no lock, nothing written; an unreachable repository exits 5 (the
-                                others still print). CTX_RESULT: with REPO the plan itself (rows, questions,
-                                changes, errors …), without it {repos: [plan …], paused, questions, changes}.
-                                Without REPO a paused repository is left out, with one line "призупинено: <id>"
+                                Reads only — no lock, nothing written; an unreachable repository — or one whose
+                                blocks file is empty, cut, foreign or holds none of the blocks you have a base
+                                for — exits 5 (the others still print). CTX_RESULT: with REPO the plan itself
+                                (rows, questions, changes, errors …), without it {repos: [plan …], paused,
+                                search_only, questions, changes}. Without REPO a paused repository is left out,
+                                with one line "призупинено: <id>", and a search-only registration (no
+                                blocks_file, no core folder) with "лише пошук: <id>"; naming one is exit 3
   provider apply [REPO] [--product P] [--choose BLOCK=theirs|mine|both ...] [--add BLOCK ...] [--json]
                                 one pass per repository: = ~ ✎ − ✂ are applied (your edits stay), ⚠ and ? wait
                                 for --choose, + for --add (it goes to the record holding most of the repository's
@@ -718,10 +721,14 @@ def cmd_repo(a, c):
 
 
 def _repository(c, rid):
-    """The registered repository named `rid`; an unknown one is a usage error (exit 3)."""
+    """The registered repository named `rid`; an unknown one, or a search-only registration (it publishes no blocks),
+    is a usage error (exit 3)."""
     repos = [r for r in crp.load_repos(c.text, c.home) if r["id"] == rid]
     if not repos:
         raise Usage("no repository %r is registered — `ctx.py repo list`" % rid)
+    if crp.search_only(repos[0]):
+        raise Usage("%s is a search-only registration (no blocks_file and no core folder): it publishes no blocks for "
+                    "`ctx provider`" % cb.clip(rid, cb.HEADER_CLIP))
     return repos[0]
 
 
@@ -793,30 +800,36 @@ def _product_repos(c, repos, wanted):
 
 
 def _in_scope(c, a):
-    """(repositories, ids of the paused ones) of a plan or an apply: the one named — paused or not — else those of the
-    product --product names (and those serving every product), else all; without a name the paused are left out.
-    Prints the line for an empty scope and one line "призупинено: <id>" per paused repository."""
+    """(repositories, ids of the paused ones, ids of the search-only ones) of a plan or an apply: the one named —
+    paused or not; a search-only one is a usage error — else those of the product --product names (and those serving
+    every product), else all; without a name the paused and the search-only registrations (no blocks_file, no core
+    folder: `crp.search_only`) are left out. Prints the line for an empty scope, one line "призупинено: <id>" per paused
+    repository and one line "лише пошук: <id>" per search-only registration."""
     if a.repo:
-        return [_repository(c, a.repo)], []
+        return [_repository(c, a.repo)], [], []
     repos = crp.load_repos(c.text, c.home)
     if a.product:
         repos = _product_repos(c, repos, a.product)
+    search = [r["id"] for r in repos if crp.search_only(r)]
+    repos = [r for r in repos if not crp.search_only(r)]
     paused = [r["id"] for r in repos if r["status"] == "paused"]
     repos = [r for r in repos if r["status"] != "paused"]
-    if not repos and not paused:
+    if not repos and not paused and not search:
         print(NO_REPOS if not a.product else "no repository serves the product %r" % a.product)
     for rid in paused:
         print("призупинено: %s" % cb.clip(rid, cb.HEADER_CLIP))
-    return repos, paused
+    for rid in search:
+        print("лише пошук: %s" % cb.clip(rid, cb.HEADER_CLIP))
+    return repos, paused, search
 
 
 def cmd_provider_plan(a, c):
     c.need_store()
-    repos, paused = _in_scope(c, a)
+    repos, paused, search = _in_scope(c, a)
     plans, down = [], 0
     for k, repo in enumerate(repos):
         fetched = crp.fetch(repo, include_skipped=a.all)
-        if k or paused:
+        if k or paused or search:
             print()
         try:
             plan = None if fetched["error"] else cb.plan(c.store, c.copies, repo, fetched, now(), all_=a.all)
@@ -836,7 +849,7 @@ def cmd_provider_plan(a, c):
     rc = 5 if down else 0
     if a.repo:
         return rc, dict(plans[0], command="provider", action="plan")
-    return rc, {"command": "provider", "action": "plan", "repos": plans, "paused": paused,
+    return rc, {"command": "provider", "action": "plan", "repos": plans, "paused": paused, "search_only": search,
                 "questions": sum(p.get("questions", 0) for p in plans), "changes": sum(p.get("changes", 0) for p in plans)}
 
 
@@ -865,7 +878,7 @@ def cmd_provider_apply(a, c):
     4 when a block was refused (a broken marker) and nothing else changed, else 0."""
     choose, add = _choices(a.choose), list(a.add or [])
     c.need_store()
-    repos, paused = _in_scope(c, a)
+    repos, paused, search = _in_scope(c, a)
     if (choose or add) and len(repos) > 1:
         raise Usage("--choose and --add answer one repository's plan — name it: ctx provider apply <repo> …")
     fetched = [(repo, crp.fetch(repo)) for repo in repos]
@@ -878,7 +891,7 @@ def cmd_provider_apply(a, c):
         for x in down:
             print("%s · недоступний: %s" % (cb.clip(x["repo"], cb.HEADER_CLIP), x["error"]))
         print("нічого не записано")
-        res = {"command": "provider", "action": "apply", "unreachable": down, "paused": paused, "written": []}
+        res = {"command": "provider", "action": "apply", "unreachable": down, "paused": paused, "search_only": search, "written": []}
         if a.repo:
             res.update(repo=a.repo, error=down[0]["error"])
         return 5, res
@@ -891,7 +904,7 @@ def cmd_provider_apply(a, c):
                 results.append(cb.apply(c.store, c.copies, c.home, repo, f, choose, add, now()))
             card_note = _refresh_card(c)
     for k, res in enumerate(results):
-        if k or paused:
+        if k or paused or search:
             print()
         print(cb.render_apply(res))
     if card_note:
@@ -905,7 +918,7 @@ def cmd_provider_apply(a, c):
     data = [_applied(r) for r in results]
     if a.repo:
         return rc, dict(data[0], command="provider", action="apply")
-    return rc, {"command": "provider", "action": "apply", "repos": data, "paused": paused,
+    return rc, {"command": "provider", "action": "apply", "repos": data, "paused": paused, "search_only": search,
                 "questions": sum(len(r["pending"]) for r in results), "changes": sum(len(r["written"]) for r in results)}
 
 
