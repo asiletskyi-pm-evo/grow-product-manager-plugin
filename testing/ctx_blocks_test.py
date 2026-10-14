@@ -8,7 +8,10 @@ holds them now, and the structure errors: a duplicate id, a broken marker, a nes
 B5 and B6, and the order the rules apply in). One test runs on a real migrated store. The persistent side: a
 repository's block state (`.state/blocks/<repo>.json`) and the base texts (`.state/blocks/<repo>/<sha>.md`) —
 load/save, bases kept to ten, pruning, the write allow-list, refused repository ids and the read-only
-`last_checked`. Semantics: references/context-provider-protocol.md. Stdlib only; run from the repo root.
+`last_checked`. Then `adopt` (the first base of every block already in the records: base / edit / none / has-base),
+`plan` (one table per repository, read only: the signs, the questions, the records an apply would rewrite) and `apply`
+(one pass: your edits stay, an answer for a ⚠ or a ?, --add for a +, the write order, one snapshot and one journal line).
+Semantics: references/context-provider-protocol.md §12. Stdlib only; run from the repo root.
 """
 import json, os, re, shutil, sys, tempfile
 

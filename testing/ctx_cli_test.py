@@ -1432,6 +1432,36 @@ with tempfile.TemporaryDirectory() as d:            # an explicit namespace that
           rc == 0 and "scope" not in signs_in(res) and "teams" not in signs_in(res) and "namespace" not in out.split("CTX_RESULT")[0],
           (rc, out[-300:]))
 
+# --- v3.13 Task 12: the protocol documents say what the commands do
+def lacks(text, needed):
+    return [s for s in needed if s not in text]
+
+
+cp_flat = re.sub(r"\s+", " ", read(ROOT, "references", "context-protocol.md"))
+pp_flat = re.sub(r"\s+", " ", read(ROOT, "references", "context-provider-protocol.md"))
+hp_flat = re.sub(r"\s+", " ", read(ROOT, "references", "host-profiles.md"))
+need_cp = ["`repo list", "`repo status", "`provider adopt", "`provider plan", "`provider apply", "5 a repository is unreachable",
+           "records_reverted", "a record created in Obsidian and imported is not removed", ".state/blocks/",
+           "Human edits in a block are kept", "Agent edits are not written", "One snapshot and one journal line per repository",
+           "`ctx undo` takes back the last repository's pass only", "a snapshot with no journal line", "`--json` is accepted and changes nothing",
+           "> [<repo-id> · v<version> · станом на <date>]", "⚠ конфлікт: файл і запис різняться — ctx sync", "**Repos:**",
+           "`provider adopt --apply` does not import first and does not compile"]
+check("context-protocol documents repo and provider commands, exit 5, the undo clause, snapshots with .state/blocks, one snapshot per repository",
+      not lacks(cp_flat, need_cp), lacks(cp_flat, need_cp))
+need_pp = ["provider-registration/2", "## 12. Blocks and merge", "`core_root`", "`namespace`", "`blocks_file`", "`rank`", "`products`",
+           "`endpoint.url`", "`endpoint.root`", "`endpoint.headers_env`", "`blocks_source`", "`home_record`", "`skip_blocks`", "`status`",
+           "`base`", "`edit`", "`none`", "`has-base`", "`duplicate`", "`broken marker`", "`nested`",
+           "| `=` |", "| `~` |", "| `✎` |", "| `⚠` |", "| `+` |", "| `−` |", "| `✂` |", "| `?` |", "| `·` |",
+           "| 5 | a repository is unreachable, nothing is written |", "`{repo, error}`", "paused",
+           "`vault_get_note`, `vault_list_by_folder`, `vault_search`, `brain_status` and `brain_recent_changes`", "check 17",
+           "No redirect is followed", "never goes to the network", "`<!-- ctx:both theirs -->`", "detaches", "no journal line",
+           "its own snapshot and journal line"]
+check("context-provider-protocol: registration v2 key table, §12 with the first base, signs, exit codes, result shapes, the allow-list",
+      not lacks(pp_flat, need_pp), lacks(pp_flat, need_pp))
+need_hp = ["Context repositories", "`repo status`", "`vault_get_note`", "never goes to the network"]
+check("host-profiles: the network use of ctx and the host without SHELL", not lacks(hp_flat, need_hp), lacks(hp_flat, need_hp))
+check("ctx_store.Store documents .state/blocks/", ".state/blocks/" in (cs_mod.Store.__doc__ or ""), cs_mod.Store.__doc__)
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

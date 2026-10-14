@@ -333,7 +333,9 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 
 
 class Store:
-    """`{root}/records/<id>.md`, `{root}/INDEX.md`, `{root}/.state/{compiled.json, journal.jsonl}`."""
+    """`{root}/records/<id>.md`, `{root}/INDEX.md`, `{root}/.state/{compiled.json, journal.jsonl}` and, since v3.13.0,
+    `{root}/.state/blocks/` — a repository's block state `<repo>.json` and its base texts `<repo>/<sha>.md`
+    (ctx_blocks.py keeps them; a snapshot copies them with the rest of `.state/`)."""
 
     def __init__(self, root):
         self.root = root

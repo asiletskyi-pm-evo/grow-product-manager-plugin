@@ -169,13 +169,14 @@ Static checks prove the tree is consistent; they cannot prove a host still loads
 ## Version Definition of Done
 
 - `bash testing/host-smoke.sh` green on the release machine — both legs, the Codex leg after the release commit — summary line in the release PR (since v3.0.2).
-- `bash testing/validate-consistency.sh`: every check group green.
+- `bash testing/validate-consistency.sh`: every check group green (since v3.13.0 it also keeps the MCP client's allow-list inside the `vault/v1` table and reads every context fixture through `find_regions`).
 - Lint: 0 FAIL (26 checks as of v3.10.0).
 - Seeded-leak test: 27/27 caught (and a new seed for every new check).
 - `python3 testing/session_start_test.py`: every digest case passes (12/12 as of v3.10.0) — it is not in CI, so it runs here.
 - `python3 testing/ctx_common_test.py` (8/8) and `python3 testing/provider_bundle_test.py` (since v3.10.0): the provider helpers and the bundle builder on the fictional fixture core — not in CI, so they run here.
 - `python3 testing/branch_leak_scan.py --base main` (since v3.10.0): clean — no organisation identifier in any line the branch adds or in its commit messages; `python3 testing/branch_leak_scan_test.py` proves the scan fires.
 - `python3 testing/ctx_store_test.py`, `python3 testing/ctx_ops_test.py`, `python3 testing/ctx_read_test.py` (since v3.12.0) and `python3 testing/ctx_cli_test.py` (since v3.11.0): the context store's model, operations and command line on the fictional fixtures in `testing/fixtures/ctx/` — not in CI, so they run here.
+- `python3 testing/ctx_repos_test.py`, `python3 testing/ctx_mcp_test.py` and `python3 testing/ctx_blocks_test.py` (since v3.13.0): the repositories (registration v1 and v2, `fetch`), the stdlib MCP client with its allow-list and `ctx repo status`, and the blocks (`find_regions`, `classify`, the block state, `adopt`, `plan`, `apply`) on the fictional "Zorg" fixtures in `testing/fixtures/ctx-repos/` and the fake MCP server `testing/mcp_fake.py` (127.0.0.1) — not in CI, so they run here. `ctx_cli_test.py` and `provider_bundle_test.py` carry the end-to-end flows and the checks of the protocol documents. Every test is run once per release; on a slow machine (a scanner on the repository) the full set can take well over an hour, and a time-limit check that fails under load is re-run alone before it counts.
 - `python3 testing/write_gate_test.py` (since v3.10.0): every gate case passes — the provider boundary and the Jira/Confluence branch; not in CI, so it runs here.
 - Every example added or touched this version is universal — placeholders, no team signature, language-neutral code blocks, no domain-specific detail.
 - Trigger: ≥ 90 % per group — positive and neighbour rows alike — on each supported host (Claude Code and Codex CLI, live, from a neutral directory; a host not re-run must be named in the release notes).

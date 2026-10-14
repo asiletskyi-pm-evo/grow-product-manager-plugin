@@ -447,6 +447,32 @@ check("connect-steps says the same where it says there is no question: the plan 
       "No `⚠`, `+` or `?` row → no question" in steps_f and "snapshot" in steps_f[steps_f.index("No `⚠`, `+` or `?` row"):][:400]
       and "one message" in steps_f[steps_f.index("No `⚠`, `+` or `?` row"):][:400], steps_f[steps_f.index("No `⚠`"):][:400])
 
+# 12 — the docs pass (Task 12): the residual wording of the re-review of Task 11
+core_keys = ["`core_root`", "`namespace`", "`blocks_file`", "`paths`", "`endpoint.url`", "`endpoint.root`", "`rank`"]
+for label, text in (("connect-steps §6.1", reg61), ("SKILL.md Step 6.1", step61)):
+    check("%s: a kept core-derived key that differs from the proposal is reported in one line and the replacement is offered on a yes; exit 5 points to it"
+          % label, all(k in text for k in core_keys) and "one line" in text and "replacement" in text and "yes" in text and "exit 5" in text,
+          [k for k in core_keys if k not in text])
+    said = ["`products: []`", "`status: active`", "as defaults"] if label.startswith("connect-steps") else ["carries a default for the others"]
+    check("%s: the proposal lacks some user-finished keys and carries defaults for others — no 'never carries' for products or status" % label,
+          all(s in text for s in said) and "never carries" not in text and "always says" not in text, (said, text[:700]))
+check("connect-steps §6.1 and SKILL.md Step 6.1: a nested v2 key that is missing counts as missing",
+      "A nested key counts" in reg61 and "a nested one too" in step61, (reg61[:300], step61[:300]))
+check("connect-steps §6.1: a v2 file with no namespace gets it from the manifest, silently; §4a says the same, and a v1 file asks",
+      "no `namespace` gets it from the manifest the same way, silently" in reg61
+      and "A v2 file that lacks only the key gets it from the manifest on the Refresh, silently" in steps_f
+      and "A v1 file is the user's until they say yes" in steps_f, "")
+check("the carve-out names local-context.md only: the focus note, the to-do note and the rest keep the yes",
+      "names `local-context.md` only" in forbid and "the focus note, the to-do note and everything else keep the \"yes\"" in forbid, forbid)
+check("the order is the plan in one line → apply → the report, and ~ and − are never asked in either case (SKILL.md Step 4 and connect-steps §4a)",
+      "the plan in one line → `apply` → the report" in step4 and "never asked, in either case" in step4
+      and "the plan in one line → `apply` → the report" in steps_f and "whether or not there is a question about other rows" in steps_f,
+      (step4[-500:], refresh_q[-500:]))
+check("exit 5 in connect-steps: the core moved → point to the kept-key line and offer the replacement on a yes",
+      "point to that line and offer the replacement on a yes" in steps_f, "")
+check("connect-steps: the blocks the report lists as reference_only show as + in the next plan; exit 4 also means a refused run",
+      "reference_only" in steps_f and "show as `+` in the next plan" in steps_f and "a store inside a provider's folder, a busy lock" in steps_f, "")
+
 # 9
 tok_file = os.path.join(ROOT, "testing", "org-tokens.local")
 toks = [l.strip() for l in open(tok_file, encoding="utf-8")] if os.path.isfile(tok_file) else []

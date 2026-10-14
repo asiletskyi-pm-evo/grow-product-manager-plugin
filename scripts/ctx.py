@@ -26,12 +26,13 @@
                                 from: kind, products, rank, access, version — reads local files, no network
   repo status [ID] [--json]     is each repository reachable (an MCP server answers the handshake within 3 s;
                                 a folder is there) and its version on the source against the base — the only
-                                repo command that touches the network, and it only handshakes
+                                repo command that touches the network: the handshake, then one read of the blocks
+                                file for the version. It exits 0 also when a repository is unreachable
   provider adopt REPO [--apply] [--json]
                                 a base for each block of REPO that is already in your context (dry run unless
                                 --apply): the blocks the repository publishes at the version you hold are taken
                                 as they are (an edit of yours counts as your edit); another version gets no base.
-                                Writes the block state only — never the records or the compiled copies
+                                Writes the block state and the card's Repos line — never the records or the compiled copies
   provider plan [REPO] [--product P] [--all] [--json]
                                 one table per repository: what each block is in your context against what the
                                 repository publishes now (= ~ ✎ ⚠ + − ✂ ?), the questions and the records an apply
@@ -52,7 +53,8 @@
                                 CTX_RESULT: the plan with applied, decisions, pending, ignored, written, snapshot
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
-edits first, snapshots, writes, journals and compiles. Files are read within a time budget
+edits first, snapshots, writes, journals and compiles (the exception: `provider adopt --apply` imports
+and compiles nothing — it writes the block state under `.state/blocks/`, and the card's Repos line). Files are read within a time budget
 (GROW_PM_CTX_READ_TIMEOUT, default 30 s): a record that does not arrive (iCloud) or is missing
 on disk stops the run before anything is written. The last stdout line is `CTX_RESULT {json}`;
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
