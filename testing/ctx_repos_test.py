@@ -893,5 +893,11 @@ with tempfile.TemporaryDirectory() as d:
           sorted(os.listdir(os.path.join(home, ".grow-pm"))) == ["providers"]
           and sorted(os.listdir(provdir)) == ["zorg-core.yaml", "zorg-growth.yaml"], os.listdir(os.path.join(home, ".grow-pm")))
 
+# --- v3.13.1: text a server sent loses the bidi overrides too, in one place for the blocks and the repositories
+check("server text loses bidi overrides too", cr._clean("x\u202ey\u2069z") == "x y z", repr(cr._clean("x\u202ey\u2069z")))
+check("…and C1 controls, the line and paragraph separators and a BOM", cr._clean("a\x85b\u2028c\u2029d\ufeffe") == "a b c d e",
+      repr(cr._clean("a\x85b\u2028c\u2029d\ufeffe")))
+check("…ordinary text, Cyrillic and a non-breaking space stay", cr._clean("  Зорг\u00a0App  ") == "Зорг\u00a0App", repr(cr._clean("  Зорг\u00a0App  ")))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

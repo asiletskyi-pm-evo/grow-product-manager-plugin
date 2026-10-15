@@ -815,10 +815,10 @@ with tempfile.TemporaryDirectory() as d:
     co.restore(res["snapshot"], e.store, e.copies)
     check("after restore the record is the edited one while the copies are the last compile",
           "obsidian edit" in read(p) and "obsidian edit" not in read(e.ctx) and "obsidian edit" not in read(e.mirror))
-    changed = co.consistent_records(e.store, e.copies)
+    changed, left = co.consistent_records(e.store, e.copies)
     check("consistent_records puts the record back to the last compile's section, its frontmatter kept",
-          changed == ["setting.templates"] and read(p) == before, (changed, read(p)[-200:]))
-    check("…a second call finds nothing", co.consistent_records(e.store, e.copies) == [])
+          changed == ["setting.templates"] and left == [] and read(p) == before, (changed, left, read(p)[-200:]))
+    check("…a second call finds nothing", co.consistent_records(e.store, e.copies) == ([], []))
     comp = co.compile_store(e.store, e.copies, NOW, e.home)
     plan = co.plan_sync(e.store, e.copies)
     check("…and nothing waits to be imported: the compile writes no copy",
@@ -846,22 +846,24 @@ with tempfile.TemporaryDirectory() as d:                 # no section of the las
     co.restore(res["snapshot"], e.store, e.copies)
     kept = read(p)
     check("a record whose last-compile section copy 0 does not hold is left as it is — never guessed",
-          "REC" in kept and "PROJ" not in read(e.ctx) and co.consistent_records(e.store, e.copies) == [] and read(p) == kept)
+          "REC" in kept and "PROJ" not in read(e.ctx) and co.consistent_records(e.store, e.copies)[0] == [] and read(p) == kept)
+    changed, left = co.consistent_records(e.store, e.copies)
+    check("consistent_records names the records it could not put back", changed == [] and left == ["product.zorg-app"], (changed, left))
 
 with tempfile.TemporaryDirectory() as d:                 # a consistent store, a record the state does not know, no home copy
     e = Env(d); e.migrate()
     before = tree(e.store.root)
-    check("a store that is consistent changes nothing", co.consistent_records(e.store, e.copies) == [] and tree(e.store.root) == before)
+    check("a store that is consistent changes nothing", co.consistent_records(e.store, e.copies) == ([], []) and tree(e.store.root) == before)
     e.store.write({"ctx": 1, "id": "custom.zorg-new", "type": "custom", "title": "Zorg New", "parent": None,
                    "order": 5000, "owner": "user", "source": "obsidian", "modified": NOW, "body": "## Zorg New\n\n- x\n"})
     before = tree(e.store.root)
     check("a record the last compile did not know (created in the file) is left as it is",
-          co.consistent_records(e.store, e.copies) == [] and tree(e.store.root) == before)
+          co.consistent_records(e.store, e.copies) == ([], []) and tree(e.store.root) == before)
     e.edit(os.path.join(e.store.records_dir, "setting.templates.md"), "builtin", "obsidian edit")
     os.remove(e.copies[0])
     before = tree(e.store.root)
-    check("no home copy → no section to take, nothing is written",
-          co.consistent_records(e.store, e.copies) == [] and tree(e.store.root) == before)
+    check("no home copy → no section to take, nothing is written, and the edited record is named as not put back",
+          co.consistent_records(e.store, e.copies) == ([], ["setting.templates"]) and tree(e.store.root) == before)
 
 # --- v3.13.1: the summary the digest falls back to when the store is slow to read (a cold start)
 import inspect, re  # noqa: E402

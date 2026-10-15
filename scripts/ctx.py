@@ -15,7 +15,8 @@
   add TYPE TITLE [--parent ID] [--after ID] [--body-file F]   a new product, team, org, setting or custom record
   snapshot [--label L]          a snapshot of the store and both copies
   undo [--steps N]              back to the state before the N-th last change (N from 1); refused while
-                                edits wait to be imported
+                                edits wait to be imported. The records it put back to the last compiled text
+                                are named, and so are those it could not ("not put back …": check them)
   read --skill S [--product P]  the card plus what the skill's manifest entry names (reads only)
   invalidate ID --reason R      mark a record no longer current (it stays, with a status region)
   archive ID [--reason R]       move a record to the archive; restore ID brings it (or a trashed one) back
@@ -49,14 +50,17 @@
                                 search_only, questions, changes}. Without REPO a paused repository is left out,
                                 with one line "призупинено: <id>", and a search-only registration (no
                                 blocks_file, no core folder) with "лише пошук: <id>"; naming one is exit 3
-  provider apply [REPO] [--product P] [--choose BLOCK=theirs|mine|both ...] [--add BLOCK ...] [--json]
+  provider apply [REPO] [--product P] [--choose BLOCK=theirs|mine|both [BLOCK=… …]] [--add BLOCK [BLOCK …]] [--json]
                                 one pass per repository: = ~ ✎ − ✂ are applied (your edits stay), ⚠ and ? wait
                                 for --choose, + for --add (it goes to the record holding most of the repository's
                                 blocks, else a new record); the snapshot, the records, the block state, one
                                 journal line, the compile. Nothing moved: only the time of the check, "без змін".
                                 Every repository is read first: one unreachable → exit 5, nothing written.
                                 Exit 2 when an answer is awaited (the rest applied), 4 when only refused blocks
-                                (a broken marker) are left. --choose / --add need REPO when several are in scope.
+                                (a broken marker) are left. --choose / --add need REPO when several are in scope;
+                                REPO comes first — a word with "=" in its place is exit 3, and the word after the
+                                answers is read as one of them. An answer for a block with a broken marker is not
+                                applied ("не застосовано").
                                 CTX_RESULT: the plan with applied, decisions, pending, ignored, written, snapshot
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
@@ -67,8 +71,9 @@ on disk stops the run before anything is written. A writing command that exits 0
 session digest's summary of the store beside the context (`~/.grow-pm/.ctx-summary.json`, since v3.13.1); a
 summary that cannot be saved never changes the exit code. The last stdout line is `CTX_RESULT {json}`;
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
-unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists) · 5 a repository is
-unreachable, nothing written (provider commands). `provider apply`: 2 also means answers are awaited.
+unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists) ·
+5 a repository is unreachable, or its blocks file is no source (empty, cut, foreign, or none of your based blocks)
+— nothing written (provider commands). `provider apply`: 2 also means answers are awaited.
 Semantics: references/context-protocol.md. Stdlib only.
 """
 import argparse
@@ -505,7 +510,7 @@ def cmd_undo(a, c):
             print("skipped (not a current copy): %s" % p)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
             existed = json.load(f).get("store_existed")
-        reverted = []
+        reverted, kept = [], []
         if existed:
             cs.atomic_write(jpath, journal)
             t = now()
@@ -516,7 +521,7 @@ def cmd_undo(a, c):
             # The same import of a record edited in its file (Obsidian) holds the edit in the records too: they
             # go back to the last compile's text first, or the rebuild would write the edit into the copies again.
             rebuilt = bool({m.get("op") for m in marks[-a.steps:]} - {"compile"})
-            reverted = co.consistent_records(c.store, c.copies) if rebuilt else []
+            reverted, kept = co.consistent_records(c.store, c.copies) if rebuilt else ([], [])
             if rebuilt:
                 co.compile_store(c.store, c.copies, t, c.home, pre)
             print("restored the state before the %s — %s%s"
@@ -524,11 +529,13 @@ def cmd_undo(a, c):
                      "; the copies were rebuilt from the records" if rebuilt else ""))
             if reverted:
                 print("put back to the last compiled text (the edit made in the file is undone): %s" % ", ".join(reverted))
+            if kept:
+                print("not put back (no matching text in local-context.md): %s — check them: ctx get <id>" % ", ".join(kept))
         else:
             co.forget_store(c.home)
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)
     return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped,
-               "records_reverted": reverted}
+               "records_reverted": reverted, "records_not_reverted": kept}
 
 
 def cmd_validate(a, c):
@@ -917,6 +924,9 @@ def cmd_provider_apply(a, c):
     the lock (exit 5, nothing written); then, under the lock, the edits waiting are imported and each repository is
     applied (its own snapshot, journal line and compile). Exit 2 when an answer is still awaited (the rest applied),
     4 when a block was refused (a broken marker) and nothing else changed, else 0."""
+    if a.repo and "=" in a.repo:
+        raise Usage("%r looks like an answer, not a repository — put the repository first: "
+                    "ctx provider apply <repo> --choose BLOCK=… [BLOCK=…]" % a.repo)
     choose, add = _choices(a.choose), list(a.add or [])
     c.need_store()
     repos, paused, search = _in_scope(c, a)
@@ -1020,7 +1030,7 @@ def build_parser():
     sp = pp.add_parser("plan", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--product")
     sp.add_argument("--all", action="store_true"); sp.add_argument("--json", action="store_true")
     sp = pp.add_parser("apply", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--product")
-    sp.add_argument("--choose", action="append"); sp.add_argument("--add", action="append")
+    sp.add_argument("--choose", action="extend", nargs="+"); sp.add_argument("--add", action="extend", nargs="+")
     sp.add_argument("--json", action="store_true")
     return p
 

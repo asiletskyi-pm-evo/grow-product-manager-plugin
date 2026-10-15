@@ -1263,6 +1263,28 @@ with tempfile.TemporaryDirectory() as d:
     check("blocks you skip are not asked for: with every other based block skipped nothing is lost",
           cb.source_lost(store, copies, skip_all, foreign, NOW) is None, "")
 
+# --- v3.13.1: the source-lost message lists only the blocks you hold, and says how to retire them
+region_a, region_c = region("a", "0.1", "- a"), region("c", "0.1", "- c")
+lost_state = {"blocks": {"a": dict(st("- a"), v="0.1", host="custom.x"),
+                         "b": dict(st("- b"), v="0.1", host="custom.x", user_removed="2026-10-01")}}
+why = cb._lost(lost_state, {"a": region_a}, {"blocks": {"c": region_c}}, set())
+check("_lost lists only the blocks you hold, and says how to retire them",
+      "you have a base for (a)" in why and "(a, b)" not in why and "1 block " in why
+      and why.endswith("; if the repository really retired them, remove those regions by hand (context-provider-protocol.md §12.2)"), why)
+check("…a block you removed is no reason: nothing held, nothing lost",
+      cb._lost(lost_state, {}, {"blocks": {"c": region_c}}, set()) is None, "")
+check("…one you still hold that the file has is no loss", cb._lost(lost_state, {"a": region_a}, {"blocks": {"a": region_a}}, set()) is None, "")
+many = {"block-with-a-long-id-%02d" % n: dict(st("- x"), v="0.1", host="custom.x") for n in range(12)}
+why_many = cb._lost({"blocks": many}, {b: region_a for b in many}, {"blocks": {"c": region_c}}, set())
+check("…a long list of blocks is cut, so that the hint survives the clip every caller applies",
+      "12 blocks you have a base for (block-with-a-long-id-00" in why_many and cb.clip(why_many, cb.NOTE_CLIP) == why_many
+      and why_many.endswith("(context-provider-protocol.md §12.2)"), (len(why_many), why_many))
+check("bidi overrides and a BOM are control characters", cb.clip("a\u202eb\ufeffc\u2066d", 80) == "a b c d", repr(cb.clip("a\u202eb\ufeffc\u2066d", 80)))
+check("…and so are the isolates and the C1 range, ordinary text stays",
+      cb.clip("a\u2069b\x9fc\u2028d Зорг", 80) == "a b c d Зорг", repr(cb.clip("a\u2069b\x9fc\u2028d Зорг", 80)))
+import ctx_common as cc_mod  # noqa: E402
+check("cb.CONTROLS is ctx_common's", cb.CONTROLS is cc_mod.CONTROLS, "")
+
 # --- v3.13.0 final review: a source behind your base (a lagging copy) is never fast-forwarded backwards
 BEHIND = "джерело позаду вашої бази (v0.4 < v0.5)"
 with tempfile.TemporaryDirectory() as d:

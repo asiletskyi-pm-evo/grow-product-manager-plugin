@@ -583,7 +583,7 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, r2 = run_ok(e, "undo")
     check("undoing that undo brings the edit back, and the store is in sync",
           rc == 0 and "obsidian edit" in e.record("setting.templates") and "obsidian edit" in read(e.ctx)
-          and r2.get("records_reverted") == [] and in_sync(e), (rc, out[-400:], r2))
+          and r2.get("records_reverted") == [] and r2.get("records_not_reverted") == [] and in_sync(e), (rc, out[-400:], r2))
 
 with tempfile.TemporaryDirectory() as d:        # two edits, two syncs: one undo takes back the last only
     e = Env(d)
@@ -635,6 +635,20 @@ with tempfile.TemporaryDirectory() as d:        # frontmatter edited in the same
     check("undo puts the body back and keeps the frontmatter the file has",
           rc == 0 and "obsidian edit" not in e.record("setting.templates") and "obsidian alias" in e.record("setting.templates")
           and "obsidian edit" not in read(e.ctx) and in_sync(e), (rc, out[-400:], e.record("setting.templates")[:400]))
+
+with tempfile.TemporaryDirectory() as d:        # v3.13.1: a record edited in its file AND the copy edited too: nothing to put back, and undo says so
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rid = "product.zorg-app"
+    e.edit(os.path.join(e.store, "records", rid + ".md"), "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    rc_s, out_s, _ = run_ok(e, "sync", "--resolve", rid + "=record")
+    rc, out, res = run_ok(e, "undo")
+    check("undo names what it could not put back", rc == 0 and rc_s == 0
+          and "not put back (no matching text in local-context.md): %s — check them: ctx get <id>" % rid in out
+          and res.get("records_not_reverted") == [rid], (rc_s, rc, out[-500:], res))
+    check("…and an undo that put every record back says nothing of the kind",
+          run_ok(e, "undo")[2].get("records_not_reverted") == [], "")
 
 # --- v3.12.1 final review: undo of a compile snapshot; assign does not verify
 with tempfile.TemporaryDirectory() as d:
@@ -1039,7 +1053,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("criterion 9: undo returns records, copies and bases", rc == 0 and read(e.ctx) == ctx_before_apply
               and read(e.mirror) == ctx_before_apply and tree_of(blocks_dir) == bases_before, (rc, out[-300:]))
         check("criterion 9: …and the records, byte for byte — an undo that rebuilds from records finds nothing to put back",
-              tree_of(records_dir) == recs_before and r.get("records_reverted") == [], (rc, r))
+              tree_of(records_dir) == recs_before and r.get("records_reverted") == [] and r.get("records_not_reverted") == [], (rc, r))
 
         change(blocks_file, SCOPE_05, SCOPE_06)         # the core moved on again; you never took 0.5
         rc, out, r = apply_run(e, core, "zorg-core")
@@ -1169,6 +1183,43 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
               and any(x["block"] == "teams" and x["why"] == "broken marker" for x in r_b["errors"]), (rc_b, out_b[-400:]))
         check("…here the rest is a change: exit 0, the block applied, the broken one as it was", rc_b == 0 and r_b["applied"]["scope"] == "~"
               and SCOPE_05 in read(e.ctx) and "<!-- zorg-core:end id=teams x -->" in read(e.ctx), (rc_b, out_b[-400:]))
+        # v3.13.1: an answer for a block the plan refuses is reported, not silently dropped
+        ctx_c = read(e.ctx)
+        for flag, args in (("--choose", ("--choose", "teams=mine")), ("--add", ("--add", "teams"))):
+            rc_x, out_x, r_x = apply_run(e, core, "zorg-core", *args)
+            lines_x = out_x.splitlines()
+            said = "не застосовано: --choose/--add teams — у блоку зламані маркери (рядок «помилка» вище)"
+            check("an answer for a block with broken markers is reported, not dropped (%s)" % flag,
+                  said in lines_x and r_x["ignored"].get("teams") == "!"
+                  and [i for i, l in enumerate(lines_x) if l.startswith("помилка: teams")][0] < lines_x.index(said), out_x[-500:])
+            check("…and nothing is written for it (%s)" % flag, rc_x == 4 and read(e.ctx) == ctx_c and r_x["snapshot"] is None, (rc_x, out_x[-300:]))
+
+    with tempfile.TemporaryDirectory() as d:            # v3.13.1: one --choose takes several answers; an answer is no repository
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        blocks_file = os.path.join(core, CORE_BLOCKS)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        edit_both(e, "The user works on Zorg App only.", "The user works on Zorg App only (mine).")
+        edit_both(e, "- Alpha, Beta\n", "- Alpha, Beta (mine)\n")
+        change(blocks_file, SCOPE_04, SCOPE_05)
+        change(blocks_file, "- Alpha, Beta\n<!-- zorg-core:end id=teams -->", "- Alpha, Beta, Gamma\n<!-- zorg-core:end id=teams -->")
+        rc, out, res = apply_run(e, core, "zorg-core", "--choose", "scope=mine", "teams=theirs")
+        check("one --choose takes several answers", rc == 0 and res["decisions"].get("scope") == "⚠ mine"
+              and res["decisions"].get("teams") == "⚠ theirs", (rc, out[-600:]))
+        check("…and each answer is acted on", "(mine)" in region_in(read(e.ctx), "zorg-core", "scope")
+              and "Gamma" in region_in(read(e.ctx), "zorg-core", "teams") and "(mine)" not in region_in(read(e.ctx), "zorg-core", "teams"), read(e.ctx)[-600:])
+        before = journal_len(e)
+        rc, out, res = apply_run(e, core, "--choose", "scope=mine", "zorg-core")
+        check("the repository after --choose is no answer: exit 3, nothing written",
+              rc == 3 and "--choose takes BLOCK=" in out and journal_len(e) == before, (rc, out[-300:]))
+        rc, out, res = apply_run(e, core, "scope=mine")
+        check("an answer in the repository's place: exit 3, it says so",
+              rc == 3 and "'scope=mine' looks like an answer, not a repository — put the repository first: "
+              "ctx provider apply <repo> --choose BLOCK=… [BLOCK=…]" in out and journal_len(e) == before, (rc, out[-300:]))
+        rc, out, res = apply_run(e, core, "zorg-core", "--add", "okr", "other", "--choose", "scope=mine", "teams=mine")
+        check("--add takes several blocks too, and the flags can be repeated: an unknown one is the usual error, nothing written",
+              rc == 3 and "okr" in out and "no block" in out and journal_len(e) == before, (rc, out[-300:]))
 
     with tempfile.TemporaryDirectory() as d:            # a repository whose blocks you never had, and no home record
         gm, gt = region_in(GROWTH_TEXT, "zorg-growth", "growth-metrics"), region_in(GROWTH_TEXT, "zorg-growth", "team")
@@ -1605,6 +1656,23 @@ check("context-provider-protocol: registration v2 key table, §12 with the first
 need_hp = ["Context repositories", "`repo status`", "`vault_get_note`", "never goes to the network"]
 check("host-profiles: the network use of ctx and the host without SHELL", not lacks(hp_flat, need_hp), lacks(hp_flat, need_hp))
 check("ctx_store.Store documents .state/blocks/", ".state/blocks/" in (cs_mod.Store.__doc__ or ""), cs_mod.Store.__doc__)
+
+# --- v3.13.1: the usage (the head of ctx.py) and the protocols say what the answers, undo and the exit 5 do
+import ast  # noqa: E402
+ctx_usage = re.sub(r"\s+", " ", ast.get_docstring(ast.parse(read(CTX))) or "")
+check("ctx usage names both readings of exit 5",
+      "5 a repository is unreachable, or its blocks file is no source (empty, cut, foreign, or none of your based blocks) "
+      "— nothing written (provider commands)" in ctx_usage, ctx_usage[-700:])
+check("ctx usage shows several answers per --choose and several blocks per --add",
+      "provider apply [REPO] [--product P] [--choose BLOCK=theirs|mine|both [BLOCK=… …]] [--add BLOCK [BLOCK …]] [--json]" in ctx_usage, ctx_usage[:3000])
+need_1301 = {
+    "context-protocol": (cp_flat, ["records_not_reverted", "not put back (no matching text in local-context.md): <ids> — check them: ctx get <id>"]),
+    "context-provider-protocol": (pp_flat, ["[--choose BLOCK=theirs|mine|both [BLOCK=… …]] [--add BLOCK [BLOCK …]]",
+                                            "retired every block you hold", "remove those regions by hand (context-provider-protocol.md §12.2)",
+                                            "не застосовано", "looks like an answer, not a repository"]),
+}
+for doc_name, (flat, needed) in need_1301.items():
+    check("%s says what v3.13.1 changed" % doc_name, not lacks(flat, needed), lacks(flat, needed))
 
 # --- v3.13.0 final review: the documents say what the fixes do, and no rule about managed regions contradicts §12
 vs = read(ROOT, "references", "vault-schema.md")

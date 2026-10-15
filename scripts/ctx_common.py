@@ -27,6 +27,11 @@ import unicodedata
 
 N = lambda s: unicodedata.normalize("NFC", s or "")
 
+# Characters that are never printed as they came from a server: C0 and C1 controls, the line and paragraph
+# separators, the bidirectional overrides and isolates (they reorder the text around them) and the byte-order mark.
+# A run of them becomes one space (ctx_blocks.clip, ctx_repos._clean).
+CONTROLS = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]+")
+
 # Ukrainian → Latin, shared by slugify() and the bundle builder's name matching.
 TRANSLIT = {"а": "a", "б": "b", "в": "v", "г": "h", "ґ": "g", "д": "d", "е": "e", "є": "ie", "ж": "zh", "з": "z",
             "и": "y", "і": "i", "ї": "i", "й": "i", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p",

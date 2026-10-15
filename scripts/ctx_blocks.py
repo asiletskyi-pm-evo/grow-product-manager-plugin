@@ -69,6 +69,7 @@ import sys
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_common as cc  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_store as cs  # noqa: E402
@@ -466,7 +467,7 @@ def adopt(store, copies, home, repo, fetched, now, apply):
 # ------------------------------------------------------------------ plan
 SKIPPED = "·"                                   # not a decision: a block the registration skips, or a team block that cannot be built
 HEADER_CLIP, NOTE_CLIP, LINE_CLIP, DIFF_LINES = 80, 300, 120, 3
-CONTROLS = re.compile(r"[\x00-\x1f\x7f-\x9f  ]+")
+CONTROLS = cc.CONTROLS                  # one definition for what is printed from a server (ctx_common)
 MARKER_LINE = re.compile(r"^\s*<!--\s*[^\s:>]+:(?:begin|end)(?![A-Za-z0-9_:.])[^>]*-->\s*$")
 NOTES = {"=": "без змін", "~": "оновлено з репозиторію", "✎": "лишаються ваші правки", "⚠": "змінили обидва — потрібне рішення",
          "+": "новий блок у репозиторії", "−": "репозиторій прибрав блок", "✂": "ви прибрали блок",
@@ -480,9 +481,10 @@ REWRITES = ("~", "−")                           # the signs an apply without d
 
 
 def clip(text, limit):
-    """`text` as one line that is safe to print: every run of control characters becomes one space, the ends are
-    trimmed, and at most `limit` characters stay (the last is "…" when it was cut). Whatever a server sent goes
-    through here before it is printed."""
+    """`text` as one line that is safe to print: every run of control characters (C0 and C1, the line and paragraph
+    separators, bidi overrides and isolates, a BOM — `cc.CONTROLS`) becomes one space, the ends are trimmed, and at
+    most `limit` characters stay (the last is "…" when it was cut). Whatever a server sent goes through here before
+    it is printed."""
     one = CONTROLS.sub(" ", "" if text is None else str(text)).strip()
     return one if len(one) <= limit else one[:limit - 1].rstrip() + "…"
 
@@ -607,15 +609,20 @@ def _lost(state, mine, fetched, skip):
     """Why `fetched` is no source for this state (see SourceLost), or None. The blocks you have a base for — your skipped
     blocks aside, and the `team` block when the core folder builds it (it proves nothing about the file) — must be
     present in the file at least once; it only matters when you still hold one of them (otherwise nothing would be
-    removed). A genuine removal of some blocks leaves the others in the file."""
+    removed). A genuine removal of some blocks leaves the others in the file. The message counts and names only the
+    blocks you still hold (one you removed yourself is no part of the problem) and ends with how to retire them
+    when the repository really did."""
     built = fetched.get("team") is not None or bool(fetched.get("team_error"))
     in_file = fetched.get("blocks") or {}
     based = sorted(b for b, e in state["blocks"].items() if (e.get("base_sha") or e.get("bases")) and b not in skip
                    and not (b == "team" and built))
-    if not any(b in mine for b in based) or any(b in in_file for b in based):
+    held = [b for b in based if b in mine]
+    if not held or any(b in in_file for b in based):
         return None
     return ("the blocks file holds none of the %d block%s you have a base for (%s) — a wrong, stale or cut file, "
-            "not removals" % (len(based), "" if len(based) == 1 else "s", ", ".join(based)))
+            "not removals; if the repository really retired them, remove those regions by hand "
+            "(context-provider-protocol.md §12.2)"          # the ids are bounded so that the hint survives a clip to NOTE_CLIP
+            % (len(held), "" if len(held) == 1 else "s", clip(", ".join(held), HEADER_CLIP)))
 
 
 def source_lost(store, copies, repo, fetched, now):
@@ -867,7 +874,8 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
     nothing but the time of the check writes the state file alone: no snapshot, no journal line, no record.
 
     A `choose` value that is not an answer, or a block in `choose` / `add` that the plan does not have → ValueError
-    before anything is written; an answer for a block that needs none is left out and listed in `ignored`.
+    before anything is written; an answer for a block that needs none is left out and listed in `ignored` with its
+    sign — and one for a block the plan refuses (broken markers: it is in `errors`, not in the rows) with "!".
 
     Returns {"repo", "plan", "applied": {block: sign}, "decisions", "pending": [block], "ignored": {block: sign},
     "errors", "changed": bool, "written": [record ids], "snapshot": folder or None, "compiled": [copies]}.
@@ -896,6 +904,9 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
     checked, today = fetched.get("checked") or now, now[:10]
     edits, rebased, adds = {}, {}, []
     applied, decisions, pending, ignored, refused = {}, {}, [], {}, []
+    broken = {x["block"] for x in p["errors"] if x["block"]} - {r["block"] for r in p["rows"]}
+    for bid in sorted((set(choose) | set(add)) & broken):
+        ignored[bid] = "!"                              # an answer for a block with broken markers: not applied, and said so
     for row in p["rows"]:
         bid, sign = row["block"], row["sign"]
         how, wanted = choose.get(bid), bid in add
@@ -1005,7 +1016,10 @@ def render_apply(res):
     for x in res["errors"][len(p["errors"]):]:
         lines.append("помилка: %s — %s" % (clip(x["block"] or "?", HEADER_CLIP), clip(x["why"], HEADER_CLIP)))
     for bid, sign in res["ignored"].items():
-        lines.append("не потрібне: --choose/--add %s — знак %s" % (clip(bid, HEADER_CLIP), sign))
+        if sign == "!":
+            lines.append("не застосовано: --choose/--add %s — у блоку зламані маркери (рядок «помилка» вище)" % clip(bid, HEADER_CLIP))
+        else:
+            lines.append("не потрібне: --choose/--add %s — знак %s" % (clip(bid, HEADER_CLIP), sign))
     signs = {r["block"]: r["sign"] for r in p["rows"]}
     gone = {r["block"] for r in p["rows"] if r["source"] is None and r["sign"] in ("⚠", "?")}
     for bid in res["pending"]:

@@ -133,8 +133,8 @@ def _stamp(now):
 
 
 def _clean(text):
-    """A message that came from a server, on one line: control characters gone, length bounded."""
-    return re.sub(r"[\x00-\x1f\x7f]+", " ", str(text)).strip()[:MAX_ERROR]
+    """A message that came from a server, on one line: control characters (bidi overrides too) gone, length bounded."""
+    return cc.CONTROLS.sub(" ", str(text)).strip()[:MAX_ERROR]
 
 
 def _lf(text):

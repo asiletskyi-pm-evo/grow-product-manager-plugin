@@ -227,21 +227,26 @@ def consistent_records(store, copies):
     in its file (Obsidian) when the snapshot was taken — an import's snapshot holds the edit in the records and
     the previous compile in the copies. Put its body back to the section of the home copy (copy 0) whose hash is
     the saved one; the frontmatter stays. A record with no such section — no home copy, or the copy was edited
-    too — and a record the last compile did not know are left as they are, never guessed. Returns the ids changed."""
+    too — is left as it is, never guessed; so is a record the last compile did not know (it is not "off": nothing
+    says what it was). Returns (the ids changed, the ids left as they were although their text is not the saved one)."""
     saved = store.state().get("records", {})
-    if not saved or not copies or not os.path.isfile(copies[0]):
-        return []
+    if not saved:
+        return [], []
     off = [r for r in store.load() if r["id"] in saved and cs.sha_text(r["body"]) != saved[r["id"]]]
     if not off:
-        return []
+        return [], []
+    if not copies or not os.path.isfile(copies[0]):
+        return [], [r["id"] for r in off]
     sections = {cs.sha_text(f["text"]): f["text"] for f in cs.split_sections(_read(copies[0]))}
-    changed = []
+    changed, left = [], []
     for r in off:
         text = sections.get(saved[r["id"]])
         if text is not None:
             store.write(dict(r, body=text))
             changed.append(r["id"])
-    return changed
+        else:
+            left.append(r["id"])
+    return changed, left
 
 
 # ------------------------------------------------------- store and copies
