@@ -2,11 +2,12 @@
 """Grow PM — operations on the context store (since v3.11.0).
 
 Everything here that writes takes a snapshot first and leaves a journal line after.
-Semantics: references/context-protocol.md. Used by the `ctx` command line and, read-only,
-by the SessionStart digest.
+Semantics: references/context-protocol.md. Used by the `ctx` command line and by the SessionStart
+digest, which reads the store and writes nothing but its own summary.
 
 - lock                       one writer at a time (~/.grow-pm/.ctx.lock, stale after 120 s)
 - snapshot / rotate / restore  ~/.grow-pm/snapshots/ — outside any vault
+- save_summary / load_summary  ~/.grow-pm/.ctx-summary.json — the digest's line on a cold start (since v3.13.1)
 
 Stdlib only.
 """
@@ -943,3 +944,72 @@ def status_summary(context_path, home=None, checked=True):
         return None
     facts["checked"] = checked_by_repo(store.root) if checked else {}   # last, and never the reason the facts are lost
     return facts
+
+
+# ------------------------------------------- the digest's summary, saved (since v3.13.1)
+SUMMARY_FILE = ".ctx-summary.json"
+SUMMARY_MAX_AGE_DAYS = 7
+SUMMARY_COUNTS = ("records", "card_lines", "pending", "conflicts")    # what the digest's context line prints
+_SUMMARY_READ_S = 0.5                                                # the cache is a small local file
+
+
+def summary_cache_path(context_path):
+    """`<folder>/.ctx-summary.json` for a context file in a `.grow-pm` folder (~/.grow-pm, or that folder connected to a
+    hosted session); None anywhere else, so a folder of the user's own is never written to."""
+    try:
+        folder = os.path.dirname(os.path.abspath(context_path))
+    except Exception:  # noqa: BLE001 — not a path
+        return None
+    return os.path.join(folder, SUMMARY_FILE) if os.path.basename(folder) == ".grow-pm" else None
+
+
+def _moment(when):
+    """`when` — ISO text, a datetime, or None for the present moment — as a datetime with an offset."""
+    if when is None:
+        return datetime.datetime.now().astimezone()
+    t = when if isinstance(when, datetime.datetime) else datetime.datetime.fromisoformat(str(when).replace("Z", "+00:00"))
+    return t if t.tzinfo else t.astimezone()
+
+
+def save_summary(context_path, facts, now=None):
+    """Save `status_summary`'s facts beside the context file, for a session start that cannot count them in time:
+    `{"schema": 1, "context": <its real path>, "at": <when, to the second, with the offset>, "facts": facts}`, written
+    atomically. True when written; False, with nothing written, when the context has no cache path or the facts are no
+    summary (None, not a dict, `unavailable`, no `records`). Never raises."""
+    try:
+        path = summary_cache_path(context_path)
+        if not path or not isinstance(facts, dict) or facts.get("unavailable") or "records" not in facts:
+            return False
+        at = now if isinstance(now, str) else _moment(now).isoformat(timespec="seconds")
+        data = {"schema": 1, "context": os.path.realpath(context_path), "at": at, "facts": facts}
+        cs.atomic_write(path, json.dumps(data, ensure_ascii=False, sort_keys=True) + "\n")
+        return True
+    except Exception:  # noqa: BLE001 — a cache is never worth a failure
+        return False
+
+
+def load_summary(context_path, now=None):
+    """The facts `save_summary` saved for this context file, plus `cached_at` (its `at`); None when there is no such
+    file, it cannot be read (in half a second) or is not JSON, its schema is not 1, it was saved for another context
+    file, it is older than SUMMARY_MAX_AGE_DAYS (or dated more than a day ahead — its age is unknown), or a count the
+    digest prints is missing or not a number. Never raises."""
+    try:
+        path = summary_cache_path(context_path)
+        if not path or not os.path.isfile(path):
+            return None
+        data = json.loads(cs.read_text(path, timeout=_SUMMARY_READ_S))
+        facts = data.get("facts") if isinstance(data, dict) else None
+        if not isinstance(facts, dict) or data.get("schema") != 1 or data.get("context") != os.path.realpath(context_path):
+            return None
+        at = data.get("at")
+        if not isinstance(at, str) or not re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", at):
+            return None
+        age = _moment(now) - _moment(at)
+        if age > datetime.timedelta(days=SUMMARY_MAX_AGE_DAYS) or age < -datetime.timedelta(days=1):
+            return None
+        counts = SUMMARY_COUNTS + tuple(k for k in ("stale", "unassigned") if facts.get(k) is not None)
+        if facts.get("unavailable") or not all(type(facts.get(k)) is int for k in counts):
+            return None
+        return dict(facts, checked=facts.get("checked") if isinstance(facts.get("checked"), dict) else {}, cached_at=at)
+    except Exception:  # noqa: BLE001 — a cache that cannot be used is no cache
+        return None

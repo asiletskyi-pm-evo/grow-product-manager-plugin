@@ -1646,6 +1646,49 @@ check("Testing-process.md carries no host-specific process rule (a scanner on th
       "scanner on the repository" not in tp_flat and "re-run alone" not in tp_flat and "Every test is run once per release" not in tp_flat,
       tp_flat[tp_flat.find("Every test is run"):][:300])
 
+# --- v3.13.1: a writing command saves the digest's summary next to the context; a reading one does not
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    cache = os.path.join(e.home, ".grow-pm", ".ctx-summary.json")
+    rc, out, res = run_ok(e, "sync")
+    check("a writing command without a store saves no summary", rc == 0 and not os.path.exists(cache), (rc, out[-300:]))
+    run_ok(e, "migrate", "--apply")
+    check("migrate --apply saves the summary too", os.path.isfile(cache))
+    if os.path.exists(cache):
+        os.remove(cache)
+    e.edit(e.ctx, "- **Cadence:** daily", "- **Cadence:** weekly")
+    rc, out, res = run_ok(e, "sync")
+    records_now = len([n for n in os.listdir(os.path.join(e.store, "records")) if n.endswith(".md")])
+    saved = json.load(open(cache, encoding="utf-8")) if os.path.isfile(cache) else {}
+    check("a writing command saves the summary next to the context", rc == 0 and saved.get("facts", {}).get("records") == records_now,
+          (rc, out[-300:]))
+    check("…for this context, after the import: nothing waits", saved.get("schema") == 1 and saved.get("context") == os.path.realpath(e.ctx)
+          and saved["facts"]["pending"] == 0 and saved["facts"]["conflicts"] == 0 and records_now == 14, saved)
+    if os.path.exists(cache):
+        os.remove(cache)
+    rc, out, res = run_ok(e, "read", "--skill", "focus-advisor")
+    check("a reading command writes no summary", not os.path.exists(cache), (rc, out[-300:]))
+    rc, out, res = run_ok(e, "set", "product.no-such", "Jira Project Key", "X")
+    check("a writing command that fails writes no summary", rc != 0 and not os.path.exists(cache), (rc, out[-300:]))
+    os.makedirs(cache)                                  # the summary cannot be saved: the command's own result stands
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "SUM")
+    check("a summary that cannot be saved never changes the exit code", rc == 0 and res and res.get("ok") is True
+          and os.path.isdir(cache) and "- **Jira Project Key:** SUM" in read(e.ctx), (rc, out[-300:]))
+    os.rmdir(cache)
+    env = dict(os.environ); env.pop("GROW_PM_CONTEXT_PATH", None)
+    p = subprocess.run([sys.executable, CTX, "sync", "--home", e.home, "--context", e.mirror],
+                       capture_output=True, text=True, env=env, timeout=120)
+    written = [os.path.join(dp, n) for r in (e.home, e.vault) for dp, _, fn in os.walk(r) for n in fn if n == ".ctx-summary.json"]
+    check("a context outside .grow-pm (the vault's copy): the command runs, no summary anywhere", p.returncode == 0 and written == [],
+          (p.returncode, written, p.stdout[-300:]))
+
+cp_1 = cp_flat[cp_flat.index("## 1. Where things live"):cp_flat.index("## 2. Records")]
+cp_7 = cp_flat[cp_flat.index("## 7. The session digest"):cp_flat.index("## 8. Snapshots")]
+need_7 = ["· cached YYYY-MM-DD HH:MM", "two seconds", "older than 7 days", "every writing `ctx` command", "never goes to the network",
+          "`~/.grow-pm/.ctx-summary.json`", "not available locally (still downloading?)"]
+check("context-protocol §1 names the summary file and §7 the cached line, its age limit, who writes it, no network",
+      "`~/.grow-pm/.ctx-summary.json`" in cp_1 and not lacks(cp_7, need_7), (cp_1[-600:], lacks(cp_7, need_7)))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

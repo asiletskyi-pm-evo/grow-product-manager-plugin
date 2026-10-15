@@ -103,13 +103,17 @@ def search_only(repo):
     return not repo["blocks_file"] and not repo["core_root"]
 
 
-def load_repos(context_text, home, extra_dirs=None, skipped=None):
+REG_READ_TIMEOUT_S = 3.0                                # seconds one registration may take to read (an iCloud download)
+
+
+def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S):
     """Every registered repository, normalised, in registration order — the vaults' providers folders
     first, then `<home>/.grow-pm/providers` (or `extra_dirs` when given, as in find_registrations;
     the home is never taken from the environment). An id seen twice keeps the first. Unreadable
-    registrations are left out and, when `skipped` is a list, appended to it as (path, reason)."""
+    registrations — and, since v3.13.1, one not read within `timeout` seconds — are left out and, when
+    `skipped` is a list, appended to it as (path, reason)."""
     dirs = [os.path.join(home, ".grow-pm", "providers")] if extra_dirs is None else list(extra_dirs)
-    regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped)
+    regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped, timeout=timeout)
     return [normalise(r) for r in regs]
 
 

@@ -12,6 +12,8 @@ Design rules (see references/harness-map.md → hooks):
   URLs, ids, emails or tokens. Skills still parse the file themselves (0c–0j).
 - Environment-agnostic. The user's home is a sandbox in hosted sessions; the
   context arrives through a connected folder mounted under $HOME/mnt/<name>/.
+- One file written, no network. The store's summary is saved beside a context that
+  lies in a `.grow-pm` folder (`.ctx-summary.json`, since v3.13.1); nothing else.
 """
 import datetime
 import glob
@@ -31,6 +33,7 @@ except Exception:
     cc = None
 
 MAX_LINES = 25
+REG_READ_S = 1.0     # seconds one provider registration may take to read (an iCloud download); ctx allows 3
 ROLE_ENUM = {"pm", "head_of_product", "cpo", "product_designer", "product_analyst",
              "ux_researcher", "eng_lead", "business_owner", "other"}  # == references/role-profiles.md §2
 
@@ -132,11 +135,12 @@ def providers_info(text, extra_dirs=None, skipped=None, checked=None):
     """[(id, label)], provider roots and the bundle facts — header-level only.
     Registrations that cannot be read land in `skipped` as (path, reason). `checked` is {provider id: when the
     context store last checked it}: a day newer than the registration's `synced_at` is the day shown, and the
-    one `stale` is counted from (since v3.13.0)."""
+    one `stale` is counted from (since v3.13.0). Each registration is read within REG_READ_S seconds (since v3.13.1): one
+    that does not arrive (iCloud) lands in `skipped` as not available locally, and never holds the session start."""
     if cc is None:
         return [], [], None
     entries = cc.vault_entries(text)
-    regs = cc.find_registrations(entries, extra_dirs=extra_dirs, skipped=skipped)
+    regs = cc.find_registrations(entries, extra_dirs=extra_dirs, skipped=skipped, timeout=REG_READ_S)
     by_id, order = {}, []
     for b in cc.vault_search_bullets(text):
         by_id[b["id"]] = {"mode": b["mode"], "access": b["access"], "index": b["index"]}; order.append(b["id"])
@@ -196,7 +200,11 @@ def _store_summary(path, budget_s=2.0, dates_s=0.5):
     The days the repositories were last checked (since v3.13.0, `checked`) are read after the summary, in the
     same thread, and waited for at most `dates_s` more: a block state that does not arrive (an iCloud-evicted
     `.state/blocks/<repo>.json`) or fails costs the days — the providers line falls back to `synced_at` —
-    never the context line."""
+    never the context line.
+    Since v3.13.1 a summary counted in time is saved beside the context (`ctx_ops.save_summary`, with its days), and
+    a count that misses the budget — a cold start: iCloud, an antivirus scan — gives the one saved last instead
+    (`ctx_ops.load_summary`: at most 7 days old, with `cached_at`; its days are the saved ones). A count that comes
+    back empty in time (no store, an error) is the answer: no line, the cache is not used."""
     try:
         import ctx_ops
     except Exception:
@@ -214,12 +222,14 @@ def _store_summary(path, budget_s=2.0, dates_s=0.5):
     t = threading.Thread(target=work, daemon=True)
     t.start()
     if not facts_in.wait(budget_s):
-        return None
+        return ctx_ops.load_summary(path)
     s = box.get("s")
     if not s or s.get("unavailable"):
         return s
     t.join(dates_s)
-    return dict(s, checked=box.get("checked") or {})
+    s = dict(s, checked=box.get("checked") or {})
+    ctx_ops.save_summary(path, s)
+    return s
 
 
 def parse(path, extra_dirs=None):
@@ -317,6 +327,8 @@ def digest(path, facts, searched, version):
             tail += " · %d stale" % s["stale"]
         if s.get("unassigned"):
             tail += " · %d custom unassigned" % s["unassigned"]
+        if s.get("cached_at"):                     # since v3.13.1: the summary saved last, on a cold start
+            tail += " · cached %s" % s["cached_at"][:16].replace("T", " ")
         lines.append("  context: records %d · card %d lines · %s" % (s["records"], s["card_lines"], tail))
     if s and not s.get("unavailable"):
         lines.append(

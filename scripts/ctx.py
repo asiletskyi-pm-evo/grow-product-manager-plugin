@@ -63,7 +63,9 @@ Every writing command takes the lock, refuses a store inside a provider's folder
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
 writes only the block state under `.state/blocks/` and the card's Repos line). Files are read within a time budget
 (GROW_PM_CTX_READ_TIMEOUT, default 30 s): a record that does not arrive (iCloud) or is missing
-on disk stops the run before anything is written. The last stdout line is `CTX_RESULT {json}`;
+on disk stops the run before anything is written. A writing command that exits 0 then saves the
+session digest's summary of the store beside the context (`~/.grow-pm/.ctx-summary.json`, since v3.13.1); a
+summary that cannot be saved never changes the exit code. The last stdout line is `CTX_RESULT {json}`;
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
 unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists) · 5 a repository is
 unreachable, nothing written (provider commands). `provider apply`: 2 also means answers are awaited.
@@ -1047,6 +1049,11 @@ def main(argv=None):
         c = Ctx(a)
         with cs.guard_roots(co.allowed_roots(c.home, c.text)):
             rc, res = COMMANDS[a.cmd](a, c)
+            if rc == 0 and writes(a):                   # since v3.13.1: the summary the digest shows on a cold start
+                try:
+                    co.save_summary(c.context, co.status_summary(c.context, home=c.home))
+                except Exception:  # noqa: BLE001 — a cache never changes the command's result
+                    pass
         emit(dict(res, ok=rc == 0))
         return rc
     except co.Conflict as e:

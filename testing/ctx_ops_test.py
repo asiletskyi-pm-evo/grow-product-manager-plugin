@@ -863,5 +863,71 @@ with tempfile.TemporaryDirectory() as d:                 # a consistent store, a
     check("no home copy → no section to take, nothing is written",
           co.consistent_records(e.store, e.copies) == [] and tree(e.store.root) == before)
 
+# --- v3.13.1: the summary the digest falls back to when the store is slow to read (a cold start)
+import inspect, re  # noqa: E402
+import ctx_repos as crp  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d); e.migrate()
+    facts = co.status_summary(e.ctx, home=e.home)
+    cache = co.summary_cache_path(e.ctx)
+    check("the cache lives next to the context in .grow-pm", co.SUMMARY_FILE == ".ctx-summary.json" and co.SUMMARY_MAX_AGE_DAYS == 7
+          and cache == os.path.join(e.home, ".grow-pm", ".ctx-summary.json"), cache)
+    check("save + load: the facts come back with cached_at", co.save_summary(e.ctx, facts, now="2026-10-15T10:42:00+03:00")
+          and co.load_summary(e.ctx, now="2026-10-16T09:00:00+03:00")["records"] == facts["records"]
+          and co.load_summary(e.ctx, now="2026-10-16T09:00:00+03:00")["cached_at"] == "2026-10-15T10:42:00+03:00",
+          co.load_summary(e.ctx, now="2026-10-16T09:00:00+03:00"))
+    saved = json.load(open(cache, encoding="utf-8"))
+    check("…the file: schema 1, the context's real path, the time to the second with its offset, the facts",
+          saved["schema"] == 1 and saved["context"] == os.path.realpath(e.ctx) and saved["at"] == "2026-10-15T10:42:00+03:00"
+          and saved["facts"]["records"] == 14 and saved["facts"]["card_lines"] == facts["card_lines"], saved)
+    check("…seven days old is still used", co.load_summary(e.ctx, now="2026-10-22T10:42:00+03:00") is not None)
+    check("…older than 7 days → None", co.load_summary(e.ctx, now="2026-10-23T10:43:00+03:00") is None)
+    check("…dated more than a day ahead of the clock → None (its age is unknown)", co.load_summary(e.ctx, now="2026-10-13T10:00:00+03:00") is None)
+    other = os.path.join(d, "other", ".grow-pm", "local-context.md")
+    os.makedirs(os.path.dirname(other))
+    open(other, "w", encoding="utf-8", newline="").write(e.text)
+    shutil.copyfile(cache, co.summary_cache_path(other))           # the same file, beside another context
+    check("…another context file → None", co.load_summary(other, now="2026-10-16T09:00:00+03:00") is None)
+    check("unavailable or None facts are not saved", not co.save_summary(e.ctx, {"unavailable": "/x"}) and not co.save_summary(e.ctx, None)
+          and not co.save_summary(e.ctx, {"card_lines": 3}) and json.load(open(cache, encoding="utf-8")) == saved)
+    for name, bad in [("another schema", dict(saved, schema=2)),
+                      ("facts without conflicts", dict(saved, facts={k: v for k, v in saved["facts"].items() if k != "conflicts"})),
+                      ("a count that is not a number", dict(saved, facts=dict(saved["facts"], records="14"))),
+                      ("a time that is not a time", dict(saved, at="yesterday"))]:
+        open(cache, "w", encoding="utf-8").write(json.dumps(bad))
+        check("a cache with %s → None, no exception" % name, co.load_summary(e.ctx, now="2026-10-16T09:00:00+03:00") is None)
+    open(co.summary_cache_path(e.ctx), "w").write("{not json")
+    check("a cache that is not JSON → None, no exception", co.load_summary(e.ctx) is None)
+    os.remove(cache)
+    check("no cache → None", co.load_summary(e.ctx) is None)
+    check("save without a time: the present moment to the second, with its offset; load without one uses it",
+          co.save_summary(e.ctx, facts) and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}",
+                                                         json.load(open(cache, encoding="utf-8"))["at"])
+          and co.load_summary(e.ctx)["records"] == 14, open(cache, encoding="utf-8").read()[:300])
+    check("a context outside .grow-pm has no cache path and saves nothing",
+          co.summary_cache_path(os.path.join(d, "mnt", "ctx", "local-context.md")) is None
+          and not co.save_summary(os.path.join(d, "mnt", "ctx", "local-context.md"), facts)
+          and not os.path.exists(os.path.join(d, "mnt")))
+
+with tempfile.TemporaryDirectory() as d:                 # registrations are read within a time budget: 3 s in ctx
+    prov = os.path.join(d, "providers"); os.makedirs(prov)
+    open(os.path.join(prov, "zorg-a.yaml"), "w", encoding="utf-8").write("schema: provider-registration/2\nid: zorg-a\nkind: folder\n")
+    fifo = os.path.join(prov, "zorg-b.yaml"); os.mkfifo(fifo)   # its read waits for a writer that never comes, like an evicted file
+    skipped, t0 = [], time.time()
+    try:
+        repos = crp.load_repos("", d, extra_dirs=[prov], skipped=skipped, timeout=0.3)
+    finally:
+        took = time.time() - t0
+        try:
+            os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+    check("load_repos: a registration that never arrives is skipped within its budget, the other is read",
+          [r["id"] for r in repos] == ["zorg-a"] and any("not available locally" in why for _, why in skipped) and took < 1.5,
+          (repos, skipped, took))
+    check("…the budget is 3 s by default", crp.REG_READ_TIMEOUT_S == 3.0
+          and inspect.signature(crp.load_repos).parameters["timeout"].default == crp.REG_READ_TIMEOUT_S)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
