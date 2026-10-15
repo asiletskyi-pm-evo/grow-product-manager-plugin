@@ -931,5 +931,100 @@ with tempfile.TemporaryDirectory() as d:                 # registrations are rea
     check("…the budget is 3 s by default", crp.REG_READ_TIMEOUT_S == 3.0
           and inspect.signature(crp.load_repos).parameters["timeout"].default == crp.REG_READ_TIMEOUT_S)
 
+
+# --- v3.13.1 final review: one budgeted count for the hook and ctx; saved days kept; a skipped registration keeps the card's line
+def release(fifo):
+    """Let every reader thread waiting on the FIFO out of open()."""
+    for _ in range(3):
+        try:
+            os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+        time.sleep(0.05)
+
+
+def saved_checked(path):
+    return (json.load(open(path, encoding="utf-8")).get("facts") or {}).get("checked") if os.path.isfile(path) else None
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    save_state(e, "zorg-core", NOW, {"scope": "0.4"})
+    cache = co.summary_cache_path(e.ctx)
+    check("the budgets of the count: 2 s for the facts, half a second more for the days",
+          co.SUMMARY_FACTS_S == 2.0 and co.SUMMARY_DATES_S == 0.5
+          and inspect.signature(co.summary_in_time).parameters["facts_s"].default == co.SUMMARY_FACTS_S
+          and inspect.signature(co.summary_in_time).parameters["dates_s"].default == co.SUMMARY_DATES_S)
+    s = co.summary_in_time(e.ctx, home=e.home)
+    check("summary_in_time: counted in time — the facts with the days of the checks, saved beside the context",
+          s and s["records"] == 7 and s["checked"] == {"zorg-core": NOW} and saved_checked(cache) == {"zorg-core": NOW}, (s, saved_checked(cache)))
+    facts = dict(s)
+    check("save_summary: facts without days keep the days saved before for this context",
+          co.save_summary(e.ctx, dict(facts, checked={})) and saved_checked(cache) == {"zorg-core": NOW}, saved_checked(cache))
+    check("…facts with days replace them", co.save_summary(e.ctx, dict(facts, checked={"zorg-growth": NOW}))
+          and saved_checked(cache) == {"zorg-growth": NOW}, saved_checked(cache))
+    data = json.load(open(cache, encoding="utf-8"))
+    open(cache, "w", encoding="utf-8").write(json.dumps(dict(data, context=os.path.join(d, "other.md"))))
+    check("…the days of a summary saved for another context file are not taken",
+          co.save_summary(e.ctx, dict(facts, checked={})) and saved_checked(cache) == {}, saved_checked(cache))
+    open(cache, "w", encoding="utf-8").write("{not json")
+    check("…a saved summary that is not JSON is no days, no exception", co.save_summary(e.ctx, dict(facts, checked={}))
+          and saved_checked(cache) == {}, saved_checked(cache))
+    co.save_summary(e.ctx, dict(facts, checked={"zorg-core": NOW}))
+    state = os.path.join(e.store.state_dir, "blocks", "zorg-core.json")
+    os.remove(state)
+    os.mkfifo(state)                                     # its read waits for a writer that never comes, like an evicted file
+    try:
+        t0 = time.time(); s = co.summary_in_time(e.ctx, home=e.home); took = time.time() - t0
+    finally:
+        release(state)
+    check("a block state that never arrives: the facts in time, the days missed — and the days saved before stay",
+          s and s["records"] == 7 and s["checked"] == {} and saved_checked(cache) == {"zorg-core": NOW} and took < 2.0, (s, took, saved_checked(cache)))
+    os.remove(state)
+    before = read(cache)
+    rec = os.path.join(e.store.records_dir, sorted(os.listdir(e.store.records_dir))[0])
+    os.remove(rec)
+    os.mkfifo(rec)                                       # the facts themselves do not arrive: a cold start
+    try:
+        t0 = time.time(); missed = co.summary_in_time(e.ctx, home=e.home, facts_s=0.3, dates_s=0.1); took = time.time() - t0
+        cached = co.summary_in_time(e.ctx, home=e.home, cached=True, facts_s=0.3, dates_s=0.1)
+    finally:
+        release(rec)
+    check("a count that misses its budget: None and nothing saved — the summary saved before stands",
+          missed is None and read(cache) == before and took < 1.5, (missed, took))
+    check("…with cached: the summary saved before, marked with when", cached and cached["records"] == 7 and cached.get("cached_at")
+          and read(cache) == before, cached)
+
+with tempfile.TemporaryDirectory() as d:                 # a registration skipped (the 3 s budget): the card keeps its Repos line
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    register(e, "zorg-core"); register(e, "zorg-growth", "mcp")
+    save_state(e, "zorg-core", NOW, {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+    save_state(e, "zorg-growth", NOW, {"growth-metrics": "0.1"})
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** PROJ2")
+    e.sync()
+    line = lambda: next((l for l in read(e.store.card_path).splitlines() if l.startswith(co.REPOS_LINE)), None)
+    kept = line()
+    check("the card names both repositories", kept == "- **Repos:** zorg-core: 3 блоки · v0.4 · перевірено 2026-10-20; zorg-growth: 2 блоки · v0.1 · перевірено 2026-10-20", kept)
+    growth = os.path.join(e.home, ".grow-pm", "providers", "zorg-growth.yaml")
+    os.remove(growth)
+    os.mkfifo(growth)                                    # the registration does not arrive (iCloud) within its 3 s
+    save_state(e, "zorg-core", "2026-10-25T09:00:00+03:00", {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+    try:
+        e.edit(e.ctx, "- **Jira Project Key:** PROJ2", "- **Jira Project Key:** PROJ3")
+        e.sync()
+        after_compile = line()
+        check("a compile with a registration skipped keeps the card's Repos line as it was (not rebuilt from the partial list)",
+              after_compile == kept and "PROJ3" in read(e.store.card_path), (after_compile, read(e.store.card_path)[:400]))
+        skipped = []
+        refreshed = co.refresh_card_repos(e.store, e.home, "2026-10-25", skipped=skipped)
+        after_refresh = line()
+        listed = co.card_repos(e.store, e.store.load(), e.text, e.home)
+    finally:
+        release(growth)
+    check("refresh_card_repos with a registration skipped: False, the card not touched, the registration named",
+          refreshed is False and after_refresh == kept and [p for p, _ in skipped] == [growth]
+          and "not available locally" in skipped[0][1], (refreshed, after_refresh, skipped))
+    check("card_repos with a registration skipped: None — the list is not known", listed is None, listed)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

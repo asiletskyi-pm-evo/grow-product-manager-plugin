@@ -7,6 +7,8 @@ digest, which reads the store and writes nothing but its own summary.
 
 - lock                       one writer at a time (~/.grow-pm/.ctx.lock, stale after 120 s)
 - snapshot / rotate / restore  ~/.grow-pm/snapshots/ — outside any vault
+- summary_in_time            the store's summary counted within a time budget and saved (the digest and every
+                             writing `ctx` command; since v3.13.1)
 - save_summary / load_summary  ~/.grow-pm/.ctx-summary.json — the digest's line on a cold start (since v3.13.1)
 
 Stdlib only.
@@ -19,6 +21,7 @@ import os
 import re
 import shutil
 import sys
+import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -311,7 +314,7 @@ def compile_store(store, copies, now, home, snap=None):
         snap = snapshot(store, copies, home, "compile")
     for p in written:
         cs.atomic_write(p, text)
-    card = cs.build_card(recs, text, now[:10], stale=stale, archived=archived, repos=card_repos(store, recs, text, home))
+    card = store_card(store, recs, text, now[:10], home, stale=stale, archived=archived)
     if not os.path.isfile(store.card_path) or _read(store.card_path) != card:
         cs.atomic_write(store.card_path, card)
     new["compiled_at"] = now
@@ -362,7 +365,7 @@ def migrate(context_path, store_root, copies, home, apply, now):
     state["stale"] = []
     store.save_state(state)
     note_store(home, store_root)
-    cs.atomic_write(store.card_path, cs.build_card(written, text, now[:10], repos=card_repos(store, written, text, home)))
+    cs.atomic_write(store.card_path, store_card(store, written, text, now[:10], home))
     store.journal({"ts": now, "op": "migrate", "ids": [r["id"] for r in written], "source": "migrate",
                    "reason": "", "snapshot": snap})
     report.update(applied=True, snapshot=snap)
@@ -853,18 +856,25 @@ def card_marks(store, recs, today, state=None):
     return ({r["id"]: sc.verified_of(r, st) for r in recs if sc.is_stale(r, st, today)}, len(store.archived()))
 
 
-def card_repos(store, recs, text, home):
+def card_repos(store, recs, text, home, skipped=None):
     """[{"id", "blocks", "v", "checked"}] for the card, in registration order: each registered repository that has
     blocks in `recs` — how many, the version most of them have a base at (None when none has) and when the store last
     checked the repository (None when never). A repository whose state cannot be read is listed without the last two;
     what a repository's markers or a state carry is cleaned of control characters before it reaches the card.
-    Reads only, and never fails: a card line is not worth a compile."""
+    A registration that could not be read (not there within its 3 s — iCloud —, or broken) makes the list partial:
+    None then — the card keeps the line it has (`store_card`) — and, when `skipped` is a list, it gets the (path,
+    reason) pairs (since v3.13.1). Reads only, and never fails: a card line is not worth a compile."""
+    missed = []
     try:
         import ctx_blocks as cb                  # here: both import this module
         import ctx_repos as crp
-        repos = crp.load_repos(text, home or os.path.expanduser("~"))
+        repos = crp.load_repos(text, home or os.path.expanduser("~"), skipped=missed)
     except Exception:  # noqa: BLE001 — a registration nobody can read must not stop a compile
         return []
+    if missed:
+        if skipped is not None:
+            skipped.extend(missed)
+        return None
     out = []
     for r in repos:
         try:
@@ -887,19 +897,42 @@ def card_repos(store, recs, text, home):
 REPOS_LINE = "- **Repos:**"
 
 
-def refresh_card_repos(store, home, today):
+def _repos_line(card):
+    return next((l for l in card.splitlines() if l.startswith(REPOS_LINE)), None)
+
+
+def store_card(store, recs, text, today, home, stale=(), archived=0, skipped=None):
+    """The card (`cs.build_card`) with the line about the repositories from `card_repos` — or, when a registration
+    could not be read (the list would be partial; `skipped` gets the pairs), the line the card on disk has, kept as it
+    is (none when there is no card, no line or it cannot be read). Since v3.13.1."""
+    repos = card_repos(store, recs, text, home, skipped=skipped)
+    kept = None
+    if repos is None:
+        try:
+            kept = _repos_line(_read(store.card_path)) if os.path.isfile(store.card_path) else None
+        except Exception:  # noqa: BLE001 — a card line is not worth a compile
+            kept = None
+    return cs.build_card(recs, text, today, stale=stale, archived=archived, repos=repos or (), repos_line=kept)
+
+
+def refresh_card_repos(store, home, today, skipped=None):
     """Rewrite the card when its line about the repositories is not what the store says now. A check or an adopt
     moves a repository's state without touching a record, so no compile follows and the line would stay as it was.
-    Everything else on the card is as `ctx card` makes it; a card that is not there is left for the next compile.
-    Returns True when the card was written."""
+    Everything else on the card is as `ctx card` makes it; a card that is not there is left for the next compile, and
+    so is a card while a registration cannot be read (False; the (path, reason) pairs go to `skipped` when it is a
+    list — the caller says "card not refreshed"). Returns True when the card was written."""
     if not os.path.isfile(store.card_path):
         return False
     recs = store.load()
     text = cs.compile_records(recs)
     stale, archived = card_marks(store, recs, today)
-    card = cs.build_card(recs, text, today, stale=stale, archived=archived, repos=card_repos(store, recs, text, home))
-    line = lambda c: next((l for l in c.splitlines() if l.startswith(REPOS_LINE)), None)
-    if line(card) == line(_read(store.card_path)):
+    missed = []
+    card = store_card(store, recs, text, today, home, stale, archived, skipped=missed)
+    if missed:
+        if skipped is not None:
+            skipped.extend(missed)
+        return False
+    if _repos_line(card) == _repos_line(_read(store.card_path)):
         return False
     cs.atomic_write(store.card_path, card)
     return True
@@ -909,8 +942,8 @@ def checked_by_repo(store_root):
     """{repository id: when it was last checked} from the block states in the store at `store_root`, for the
     SessionStart digest. Read only, and never fails: whatever cannot be read — the folder, a state, the module that
     reads it — gives no date, and the digest falls back to the registration's own. A store with no block state never
-    imports it. A state iCloud has evicted is read within the store's time budget (30 s), so the digest calls this
-    after the store's facts, on a budget of its own (scripts/session_start.py `_store_summary`)."""
+    imports it. A state iCloud has evicted is read within the store's time budget (30 s), so `summary_in_time` calls
+    this after the store's facts, on a budget of its own (SUMMARY_DATES_S)."""
     try:
         store = cs.Store(store_root)
         folder = os.path.join(store.state_dir, "blocks")
@@ -956,6 +989,8 @@ SUMMARY_FILE = ".ctx-summary.json"
 SUMMARY_MAX_AGE_DAYS = 7
 SUMMARY_COUNTS = ("records", "card_lines", "pending", "conflicts")    # what the digest's context line prints
 _SUMMARY_READ_S = 0.5                                                # the cache is a small local file
+SUMMARY_FACTS_S = 2.0       # seconds the store's facts may take to count — the digest's live count, and ctx's after a write
+SUMMARY_DATES_S = 0.5       # and the days of the last checks after them
 
 
 def summary_cache_path(context_path):
@@ -976,21 +1011,78 @@ def _moment(when):
     return t if t.tzinfo else t.astimezone()
 
 
+def _saved_checked(path, context_real):
+    """The days of the last checks the summary saved at `path` holds for this context file; {} when there are none, the
+    file is for another context file, or it cannot be read."""
+    try:
+        if not os.path.isfile(path):
+            return {}
+        data = json.loads(cs.read_text(path, timeout=_SUMMARY_READ_S))
+        checked = data["facts"].get("checked") if data.get("context") == context_real else None
+        return dict(checked) if isinstance(checked, dict) else {}
+    except Exception:  # noqa: BLE001 — a cache that cannot be read has no days
+        return {}
+
+
 def save_summary(context_path, facts, now=None):
     """Save `status_summary`'s facts beside the context file, for a session start that cannot count them in time:
     `{"schema": 1, "context": <its real path>, "at": <when, to the second, with the offset>, "facts": facts}`, written
-    atomically. True when written; False, with nothing written, when the context has no cache path or the facts are no
-    summary (None, not a dict, `unavailable`, no `records`). Never raises."""
+    atomically. Facts whose days of the last checks (`checked`) are empty — the days missed their budget — keep the
+    days the summary saved before for the same context file (since v3.13.1). True when written; False, with nothing
+    written, when the context has no cache path or the facts are no summary (None, not a dict, `unavailable`, no
+    `records`). Never raises."""
     try:
         path = summary_cache_path(context_path)
         if not path or not isinstance(facts, dict) or facts.get("unavailable") or "records" not in facts:
             return False
+        real = os.path.realpath(context_path)
+        if not facts.get("checked"):
+            kept = _saved_checked(path, real)
+            if kept:
+                facts = dict(facts, checked=kept)
         at = now if isinstance(now, str) else _moment(now).isoformat(timespec="seconds")
-        data = {"schema": 1, "context": os.path.realpath(context_path), "at": at, "facts": facts}
+        data = {"schema": 1, "context": real, "at": at, "facts": facts}
         cs.atomic_write(path, json.dumps(data, ensure_ascii=False, sort_keys=True) + "\n")
         return True
     except Exception:  # noqa: BLE001 — a cache is never worth a failure
         return False
+
+
+def summary_in_time(context_path, home=None, cached=False, facts_s=SUMMARY_FACTS_S, dates_s=SUMMARY_DATES_S):
+    """The store's summary counted within a time budget, and saved — one helper for the SessionStart digest and for
+    every writing `ctx` command after its run, so an iCloud download or an antivirus scan never holds either.
+    `status_summary` counts the facts in a daemon thread, waited for at most `facts_s` seconds; the days of the last
+    checks (`checked_by_repo`) follow in the same thread, waited for at most `dates_s` more — a block state that does not
+    arrive costs the days ({} — `save_summary` then keeps the ones saved before), never the facts.
+    Facts counted in time are saved beside the context (`save_summary`) and returned. A count that comes back None or
+    `unavailable` in time is the answer: returned as it is, nothing saved, the cache not used. A count that misses
+    `facts_s` saves nothing — the summary saved before stands — and gives None, or with `cached` that summary
+    (`load_summary`, marked with `cached_at`). Never raises; holds its caller `facts_s` + `dates_s` seconds at most, and
+    the saved summary is read within half a second more."""
+    box, facts_in = {}, threading.Event()
+
+    def work():
+        try:
+            box["s"] = status_summary(context_path, home=home, checked=False)
+        finally:
+            facts_in.set()
+        if box.get("s") and box["s"].get("store"):
+            box["checked"] = checked_by_repo(box["s"]["store"])
+
+    try:
+        t = threading.Thread(target=work, daemon=True)
+        t.start()
+        if not facts_in.wait(facts_s):
+            return load_summary(context_path) if cached else None
+        s = box.get("s")
+        if not s or s.get("unavailable"):
+            return s
+        t.join(dates_s)
+        s = dict(s, checked=box.get("checked") or {})
+        save_summary(context_path, s)
+        return s
+    except Exception:  # noqa: BLE001 — a summary is never worth a failure
+        return None
 
 
 def load_summary(context_path, now=None):

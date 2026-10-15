@@ -242,6 +242,17 @@ with tempfile.TemporaryDirectory() as d:
     check("a rank of ten digits or more falls back to the authority's, never raises",
           cr._rank("9" * 5000, "org") == cr.RANKS["org"] and cr._rank("1234567890", "team") == cr.RANKS["team"]
           and cr._rank("123456789", "org") == 123456789 and cr._rank(" -42 ", "org") == -42)
+    check("an unquoted rank (an int) is held to nine digits too: a longer one falls back to the authority's",
+          cr._rank(1234567890, "team") == cr.RANKS["team"] and cr._rank(-1234567890, "org") == cr.RANKS["org"]
+          and cr._rank(10 ** 5000, "personal") == cr.RANKS["personal"]
+          and cr._rank(999999999, "org") == 999999999 and cr._rank(-999999999, "org") == -999999999 and cr._rank(250, "org") == 250)
+    e.reg("g-long", "id: g-long\nkind: mcp\nauthority: team\nrank: 1234567890\n")
+    check("…and so read from a registration: an unquoted 10-digit rank falls back",
+          {x["id"]: x["rank"] for x in e.repos()}.get("g-long") == 500, {x["id"]: x["rank"] for x in e.repos()})
+    pp_rank = next((l for l in open(os.path.join(ROOT, "references", "context-provider-protocol.md"), encoding="utf-8")
+                    if l.startswith("| `rank` |")), "")
+    check("context-provider-protocol's rank row states the nine-digit limit",
+          "at most nine digits; a longer one falls back to the authority's" in pp_rank, pp_rank)
     check("based_count: the blocks that have a base, those you removed not counted",
           cb.based_count({"blocks": {"a": {"base_sha": "x"}, "b": {"bases": ["y"]}, "c": {"base_sha": "z", "user_removed": "2026-10-01"},
                                      "d": {"base_sha": None, "bases": []}}}) == 2

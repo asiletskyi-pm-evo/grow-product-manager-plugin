@@ -46,7 +46,7 @@ def _list(v):
 
 def _rank(v, authority):
     """The explicit rank when it is a whole number of at most nine digits (quoted or not), else the authority's."""
-    if isinstance(v, int) and not isinstance(v, bool):
+    if isinstance(v, int) and not isinstance(v, bool) and abs(v) < 10 ** 9:     # unquoted: held to nine digits too
         return v
     # not isdigit(): "²" passes it, int() rejects it; at most nine digits: int() of a longer text can raise (the digit limit)
     if isinstance(v, str) and re.fullmatch(r"-?[0-9]{1,9}", v.strip()):

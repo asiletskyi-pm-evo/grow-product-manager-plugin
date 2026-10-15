@@ -352,6 +352,33 @@ with tempfile.TemporaryDirectory() as d:                  # a summary that comes
     check("a live summary that fails in time: no context line, the cache is not used", os.path.isfile(cache)
           and "  context:" not in out and "cached" not in out, out[-500:])
 
+import inspect  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:                  # v3.13.1 final review: a warm start whose days miss keeps the saved days
+    ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
+    cache = co.summary_cache_path(ctxp)
+    ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")                 # warm, with the days: they are saved
+    first = json.load(open(cache, encoding="utf-8")) if os.path.isfile(cache) else {}
+    state = os.path.join(co.store_root_for(open(ctxp, encoding="utf-8").read(), home=os.path.join(d, "home")), ".state", "blocks", "zorg-core.json")
+    os.remove(state)
+    os.mkfifo(state)                                      # the days do not arrive within their half second; the facts do
+    try:
+        s = ss._store_summary(ctxp)
+    finally:
+        release(state)
+    second = json.load(open(cache, encoding="utf-8")) if os.path.isfile(cache) else {}
+    check("a warm start whose days miss: the facts are live, and the days saved before stay in the cache",
+          s and s["records"] == 14 and "cached_at" not in s and s["checked"] == {}
+          and (first.get("facts") or {}).get("checked", {}).get("zorg-core", "").startswith(TODAY.isoformat())
+          and (second.get("facts") or {}).get("checked") == first["facts"]["checked"], str((s, first.get("facts"), second.get("facts"))))
+    check("the hook counts through the one budgeted helper of ctx_ops (2 s for the facts, half a second for the days)",
+          "ctx_ops.summary_in_time(" in inspect.getsource(ss._store_summary) and "threading" not in inspect.getsource(ss._store_summary)
+          and inspect.signature(ss._store_summary).parameters["budget_s"].default == 2.0
+          and inspect.signature(ss._store_summary).parameters["dates_s"].default == 0.5, inspect.getsource(ss._store_summary)[-600:])
+    rule = next((b for b in re.sub(r"\s+", " ", ss.__doc__).split(" - ") if ".ctx-summary.json" in b), "")
+    check("the hook's design rule on writes names both: the summary beside the context and the CLAUDE_ENV_FILE append",
+          "CLAUDE_ENV_FILE" in rule and "nothing else" not in rule, rule)
+
 # a context outside .grow-pm (a connected folder): the digest works as before and writes nothing beside it
 with tempfile.TemporaryDirectory() as d:
     ctxp = with_checked(d, "2026-01-01", None)

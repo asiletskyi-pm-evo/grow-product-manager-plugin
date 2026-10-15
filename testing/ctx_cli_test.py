@@ -1757,6 +1757,138 @@ need_7 = ["· cached YYYY-MM-DD HH:MM", "two seconds", "older than 7 days", "eve
 check("context-protocol §1 names the summary file and §7 the cached line, its age limit, who writes it, no network",
       "`~/.grow-pm/.ctx-summary.json`" in cp_1 and not lacks(cp_7, need_7), (cp_1[-600:], lacks(cp_7, need_7)))
 
+# --- v3.13.1 final review: the summary after a write is counted on the digest's budget; a skipped registration is
+# never silent; an answer that names a repository; the cache in the linked layout
+NOT_LOCAL = "not available locally (still downloading?)"
+
+
+def unblock(fifo):
+    """Let a reader waiting on the FIFO out of open() (a reader left in this process, or none)."""
+    for _ in range(3):
+        try:
+            os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+        time.sleep(0.05)
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    t0 = time.time(); rc0, _, _ = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "BASE"); base = time.time() - t0
+    blocks = os.path.join(e.store, ".state", "blocks")
+    os.makedirs(blocks, exist_ok=True)
+    fifo = os.path.join(blocks, "zorg-slow.json")
+    os.mkfifo(fifo)                                     # a block state iCloud has evicted: its read waits for a download
+    try:
+        t0 = time.time(); rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "FIFO"); took = time.time() - t0
+    finally:
+        unblock(fifo)
+        os.remove(fifo)
+    saved = json.load(open(os.path.join(e.home, ".grow-pm", ".ctx-summary.json"), encoding="utf-8"))
+    check("a block state that never arrives does not hold a writing command: exit 0 within the summary's budget (2 s + 0.5 s) and a margin",
+          rc0 == 0 and rc == 0 and res and res.get("ok") is True and took < base + 2.5 + 3.0, (rc, round(took, 2), round(base, 2), out[-300:]))
+    check("…and the summary is still saved, its facts counted after the write", saved["facts"]["records"] == 14 and saved["facts"]["pending"] == 0, saved)
+
+with tempfile.TemporaryDirectory() as d:                 # the home copy is a link into the vault's mirror (one copy)
+    e = Env(d)
+    os.remove(e.ctx)
+    os.symlink(e.mirror, e.ctx)
+    run_ok(e, "migrate", "--apply")
+    cache = os.path.join(e.home, ".grow-pm", ".ctx-summary.json")
+    if os.path.exists(cache):
+        os.remove(cache)
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "LINK")
+    check("the linked layout: a writing command saves the summary beside the link, in ~/.grow-pm",
+          rc == 0 and os.path.islink(e.ctx) and os.path.isfile(cache) and not os.path.exists(os.path.join(os.path.dirname(e.mirror), ".ctx-summary.json")),
+          (rc, os.listdir(os.path.dirname(e.ctx)), out[-300:]))
+    via_link = ctx_ops_mod.load_summary(e.ctx)
+    via_real_home = ctx_ops_mod.load_summary(os.path.join(os.path.realpath(e.home), ".grow-pm", "local-context.md"))
+    check("…and load_summary finds it through either spelling of the link (the home as given, the home resolved)",
+          via_link and via_real_home and via_link["records"] == via_real_home["records"] == 14
+          and json.load(open(cache, encoding="utf-8"))["context"] == os.path.realpath(e.mirror), (via_link, via_real_home))
+
+with tempfile.TemporaryDirectory() as d:                 # a registration the 3 s budget skipped is named, never silent
+    e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra=SKIP_PRODUCT)
+    prov = os.path.join(e.home, ".grow-pm", "providers")
+    os.remove(os.path.join(prov, "zorg-growth.yaml"))
+    os.remove(os.path.join(prov, "zorg-dead.yaml"))
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+    rc_plain, out_plain, _ = run_ok(e, "provider", "plan")
+    card_line = lambda: next((l for l in read(e.store, "INDEX.md").splitlines() if l.startswith("- **Repos:**")), None)
+    line_before = card_line()
+    slow = os.path.join(prov, "zorg-slow.yaml")
+    os.mkfifo(slow)                                     # a registration iCloud has evicted: it does not arrive within 3 s
+    said = "unreadable registration: %s (%s)" % (slow, NOT_LOCAL)
+    try:
+        rc, out, res = run_ok(e, "provider", "plan")
+        check("plan without REPO names the registration it could not read, as repo list does; the exit code of the readable one stands",
+              rc_plain == 0 and rc == 0 and said in out.splitlines() and "zorg-core · джерело: тека" in out
+              and res.get("unreadable") == [{"file": slow, "reason": NOT_LOCAL}] and [r["repo"] for r in res["repos"]] == ["zorg-core"],
+              (rc_plain, rc, out[-600:], res and res.get("unreadable")))
+        rc, out, res = run_ok(e, "provider", "apply", "zorg-slow")
+        check("apply naming a registration that could not be read: exit 3, and it says it may still be downloading",
+              rc == 3 and "no repository 'zorg-slow' is registered — `ctx.py repo list` — a registration could not be read: %s (%s); "
+              "it may still be downloading" % (slow, NOT_LOCAL) in out, (rc, out[-500:]))
+    finally:
+        unblock(slow)
+        os.remove(slow)
+    # a bare apply under the lock also checks the provider boundary, which still reads registrations without a time limit
+    # (v3.14): the apply paths are shown with a registration that cannot be read at once
+    broken = os.path.join(prov, "zorg-broken.yaml")
+    open(broken, "w", encoding="utf-8").write("id: zorg-broken\nendpoint:\n  nested:\n    deeper: 1\n")
+    rc, out, res = run_ok(e, "provider", "apply")
+    why = ((res or {}).get("unreadable") or [{}])[0].get("reason") or "?"
+    check("apply without REPO names a registration it could not read, in the output and the result; the readable one is applied (exit 0)",
+          rc == 0 and "unreadable registration: %s (%s)" % (broken, why) in out.splitlines() and why != "?"
+          and res["unreadable"] == [{"file": broken, "reason": why}] and [r["repo"] for r in res["repos"]] == ["zorg-core"], (rc, out[-600:]))
+    rc, out, res = run_ok(e, "provider", "apply", "zorg-core")
+    check("…and the card keeps its Repos line, with one line saying why it was not refreshed",
+          rc == 0 and card_line() == line_before and line_before
+          and "card not refreshed: a registration could not be read: %s (%s)" % (broken, why) in out.splitlines(), (rc, out[-500:], card_line()))
+    state_file = os.path.join(e.store, ".state", "blocks", "zorg-core.json")
+    st = json.loads(read(state_file))
+    st["checked"] = "2026-01-01T10:00:00+03:00"                         # a line rebuilt now would say another day
+    open(state_file, "w", encoding="utf-8").write(json.dumps(st))
+    rc, out, res = run_ok(e, "card")
+    check("`ctx card` with a registration skipped keeps the Repos line too (not rebuilt)", rc == 0 and card_line() == line_before
+          and "перевірено 2026-01-01" not in (card_line() or ""), (rc, out[-300:], card_line()))
+    os.remove(broken)
+    rc, out, res = run_ok(e, "card")
+    check("…and with every registration read, `ctx card` rebuilds it", rc == 0 and "zorg-core: 3 блоки · v0.4 · перевірено 2026-01-01" in (card_line() or ""),
+          (rc, card_line()))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # an answer or a block that names a repository
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra="status: paused\n")
+        os.remove(os.path.join(e.home, ".grow-pm", "providers", "zorg-dead.yaml"))
+        run_ok(e, "migrate", "--apply")
+        e.edit(e.ctx, "- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJW\n")      # an edit waiting to be imported
+        waiting, journal, asked = read(e.ctx), journal_len(e), len(fake.seen)
+        for args, said in (
+                (("--add", "okr", "zorg-core"), "'zorg-core' is a repository, not a block — put the repository first: "
+                                                "ctx provider apply <repo> --add BLOCK [BLOCK …]"),
+                (("--add", "growth-metrics", "zorg-growth"), "'zorg-growth' is a repository, not a block — put the repository first: "
+                                                             "ctx provider apply <repo> --add BLOCK [BLOCK …]"),
+                (("--choose", "zorg-growth=theirs"), "'zorg-growth' is a repository, not a block — put the repository first: "
+                                                     "ctx provider apply <repo> --choose BLOCK=…")):
+            rc, out, res = run_ok(e, "provider", "apply", *args)
+            check("`provider apply %s`: exit 3 before anything — the message, journal unchanged, the edit still waiting, no request"
+                  % " ".join(args), rc == 3 and said in out and journal_len(e) == journal and read(e.ctx) == waiting
+                  and len(fake.seen) == asked, (rc, out[-400:], journal_len(e) - journal, len(fake.seen) - asked))
+
+cp_7 = re.sub(r"\s+", " ", read(ROOT, "references", "context-protocol.md"))
+cp_7 = cp_7[cp_7.index("## 7. The session digest"):cp_7.index("## 8. Snapshots")]
+need_7b = ["`repo list`", "`repo status`", "`provider adopt|plan|apply`", "`read`", "the card's `Repos` line",
+           "unreadable registration: <path> (<reason>)", "it may still be downloading", "card not refreshed:"]
+check("context-protocol §7 names the ctx paths that read registrations within three seconds and what each says of one skipped",
+      not lacks(cp_7, need_7b) and "the `ctx` commands that list repositories: three" not in cp_7, lacks(cp_7, need_7b))
+mcp_doc = re.sub(r"\s+", " ", ast.get_docstring(ast.parse(read(ROOT, "testing", "ctx_mcp_test.py"))) or "")
+check("ctx_mcp_test's docstring says what repo status shows now (no fallback to the registration's version)",
+      "registration's own as the fallback" not in mcp_doc and "registration_version" in mcp_doc, mcp_doc[-500:])
+check("repo list tests the state error by `is not None`", "if error is not None:" in read(CTX), "")
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

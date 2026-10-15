@@ -630,12 +630,13 @@ def blocks_word(n):
     return "блоки" if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14) else "блоків"
 
 
-def build_card(records, compiled_text, now, stale=(), archived=0, repos=()):
+def build_card(records, compiled_text, now, stale=(), archived=0, repos=(), repos_line=None):
     """INDEX.md: who, onboarding, products, teams, vaults and providers, then one row per record; ≤ CARD_MAX lines.
     `stale` maps a stale record's id to its verified date (its row ends with ⚠ <date>); `archived` counts the
     archived records; `repos` is [{"id", "blocks", "v", "checked"}] — the repositories that put blocks in the
     records, as ctx_ops.card_repos gives them — and makes one line, `- **Repos:** <id>: <N> блок(и|ів) · v<v> · перевірено
-    <date>; …` (a version or a date nobody knows is left out)."""
+    <date>; …` (a version or a date nobody knows is left out). `repos_line`, when given, is that line as it is — the
+    one the card had, kept while a registration cannot be read (ctx_ops.store_card, since v3.13.1)."""
     import ctx_schema as sc                    # here: ctx_schema imports this module
     fields = sc.load_fields().get("product", {})
     stale = stale if isinstance(stale, dict) else {i: "" for i in stale}
@@ -671,7 +672,9 @@ def build_card(records, compiled_text, now, stale=(), archived=0, repos=()):
     vaults = ", ".join("%s (%s)" % (f or os.path.basename(p), m or "auto") for p, f, m in cc.vault_modes(compiled_text)) or "—"
     provs = ", ".join(b["id"] for b in cc.vault_search_bullets(compiled_text)) or "—"
     over.append("- **Vaults:** %s · **Providers:** %s" % (vaults, provs))
-    if repos:
+    if repos_line:
+        over.append(repos_line)
+    elif repos:
         over.append("- **Repos:** " + "; ".join(
             " · ".join(["%s: %d %s" % (r["id"], r["blocks"], blocks_word(r["blocks"]))] + (["v%s" % r["v"]] if r.get("v") else [])
                        + (["перевірено %s" % r["checked"][:10]] if r.get("checked") else [])) for r in repos))

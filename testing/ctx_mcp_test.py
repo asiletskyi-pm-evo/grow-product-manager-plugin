@@ -6,8 +6,9 @@ thread; JSON and SSE answers, a session id, recorded requests). Covers the hands
 answer formats, the session id going back, the allow-list refusing before any request, errors (isError,
 JSON-RPC error, HTTP status, timeout, dropped connection) and retries on network errors only, no redirects
 and no secrets in messages, `headers_from_env`, and the command: reachable yes / no for an MCP repository
-and for a folder, the header from the environment, the version on the source (what its blocks carry now, the
-registration's own as the fallback). No real server, no real data.
+and for a folder, the header from the environment, the version on the source (`source_version`: what its blocks
+carry now, None when they were not read — the registration's own goes in `registration_version`, never in its
+place). No real server, no real data.
 Semantics: references/context-provider-protocol.md. Stdlib only; run from the repo root.
 """
 import json, os, socket, subprocess, sys, tempfile, threading, time, traceback

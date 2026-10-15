@@ -12,8 +12,10 @@ Design rules (see references/harness-map.md → hooks):
   URLs, ids, emails or tokens. Skills still parse the file themselves (0c–0j).
 - Environment-agnostic. The user's home is a sandbox in hosted sessions; the
   context arrives through a connected folder mounted under $HOME/mnt/<name>/.
-- One file written, no network. The store's summary is saved beside a context that
-  lies in a `.grow-pm` folder (`.ctx-summary.json`, since v3.13.1); nothing else.
+- No network, and two writes only: the store's summary beside a context that lies in a
+  `.grow-pm` folder (`.ctx-summary.json`, since v3.13.1), and the two `export` lines
+  (GROW_PM_CONTEXT_PATH, GROW_PM_PROVIDER_PATHS) appended to the file CLAUDE_ENV_FILE
+  names, when the host sets it.
 """
 import datetime
 import glob
@@ -23,7 +25,6 @@ import re
 import shlex
 import sqlite3
 import sys
-import threading
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -195,41 +196,20 @@ def providers_info(text, extra_dirs=None, skipped=None, checked=None):
 
 
 def _store_summary(path, budget_s=2.0, dates_s=0.5):
-    """The context store's summary (since v3.11.0), read in a thread with a time budget so an
-    iCloud download can never hold the session start; any failure → None (no line).
-    The days the repositories were last checked (since v3.13.0, `checked`) are read after the summary, in the
-    same thread, and waited for at most `dates_s` more: a block state that does not arrive (an iCloud-evicted
-    `.state/blocks/<repo>.json`) or fails costs the days — the providers line falls back to `synced_at` —
-    never the context line.
-    Since v3.13.1 a summary counted in time is saved beside the context (`ctx_ops.save_summary`, with its days), and
-    a count that misses the budget — a cold start: iCloud, an antivirus scan — gives the one saved last instead
-    (`ctx_ops.load_summary`: at most 7 days old, with `cached_at`; its days are the saved ones). A count that comes
-    back empty in time (no store, an error) is the answer: no line, the cache is not used."""
+    """The context store's summary (since v3.11.0), counted within a time budget so an iCloud download can never hold
+    the session start; any failure → None (no line). Since v3.13.1 one helper does it for the digest and for `ctx`
+    (`ctx_ops.summary_in_time`): the facts within `budget_s`, then the days the repositories were last checked
+    (`checked`, since v3.13.0) within `dates_s` more — a block state that does not arrive (an iCloud-evicted
+    `.state/blocks/<repo>.json`) costs the days, never the context line; the providers line falls back to `synced_at`,
+    and the cache keeps the days saved before. A summary counted in time is saved beside the context; a count that
+    misses the budget — a cold start: iCloud, an antivirus scan — gives the one saved last instead (at most 7 days old,
+    with `cached_at`; its days are the saved ones). A count that comes back empty in time (no store, an error) is the
+    answer: no line, the cache is not used."""
     try:
         import ctx_ops
+        return ctx_ops.summary_in_time(path, cached=True, facts_s=budget_s, dates_s=dates_s)
     except Exception:
         return None
-    box, facts_in = {}, threading.Event()
-
-    def work():
-        try:
-            box["s"] = ctx_ops.status_summary(path, checked=False)
-        finally:
-            facts_in.set()
-        if box.get("s") and box["s"].get("store"):
-            box["checked"] = ctx_ops.checked_by_repo(box["s"]["store"])
-
-    t = threading.Thread(target=work, daemon=True)
-    t.start()
-    if not facts_in.wait(budget_s):
-        return ctx_ops.load_summary(path)
-    s = box.get("s")
-    if not s or s.get("unavailable"):
-        return s
-    t.join(dates_s)
-    s = dict(s, checked=box.get("checked") or {})
-    ctx_ops.save_summary(path, s)
-    return s
 
 
 def parse(path, extra_dirs=None):
