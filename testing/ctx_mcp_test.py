@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 sys.path.insert(0, os.path.join(ROOT, "testing"))
 os.environ["NO_PROXY"] = "127.0.0.1,localhost"          # the fake is local; a proxy in the environment must not see it
 os.environ["no_proxy"] = "127.0.0.1,localhost"
+import ctx as ctxmain  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 from ctx_mcp import McpClient, McpError, McpRefused  # noqa: E402
 from mcp_fake import BLOCKS, FakeMcp  # noqa: E402
@@ -503,26 +504,55 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=ROOTED, require_headers={"
     check("the dead one says why, in the same line", "reachable no (" in dd and "refused" in dd.lower(), dd)
     check("version on source vs base: the version its blocks carry now, the base is a dash until blocks are kept",
           "version on source: 0.1" in g and "growth 1.4" not in g and "base" in g and "—" in g.splitlines()[-1], g)
-    check("…the registration's version is the fallback when the source cannot be read (a dead server, an empty core folder)",
-          "version on source: growth 1.4" in dd and "version on source: core 0.2, bundle 0.4.0" in cc_, (dd, cc_))
+    check("…a version the source was not read for is never shown as the source's (a dead server, an empty core folder): '—'",
+          "version on source: — · base:" in dd and "version on source: — · base:" in cc_
+          and "growth 1.4" not in dd and "core 0.2" not in cc_, (dd, cc_))
+    check("…a dead server says only that it is unreachable; a core folder that is there but holds no blocks says why on its own line",
+          "  blocks file: " not in dd and "  blocks file: " in cc_, (dd, cc_))
     check("each line names the kind and the endpoint without credentials", "mcp" in g.splitlines()[0] and fake.url in g.splitlines()[0]
           and "bundle" in cc_.splitlines()[0], g)
     check("CTX_RESULT is last and carries the verdicts", out.splitlines()[-1].startswith("CTX_RESULT ") and res["command"] == "repo"
           and res["action"] == "status" and res["ok"] is True
           and {r["id"]: r["reachable"] for r in res["repos"]} == {"zorg-core": True, "zorg-growth": True, "zorg-dead": False}, res)
     by_id = {r["id"]: r for r in res["repos"]}
-    check("…with the reason, the registration's version and an empty base",
-          all(k in by_id["zorg-growth"] for k in ("id", "kind", "status", "url", "reachable", "reason", "source_version", "base_version"))
+    check("…with the reason, the version read from the source (None when it was not read), the registration's own and an empty base",
+          all(k in by_id["zorg-growth"] for k in ("id", "kind", "status", "url", "reachable", "reason", "source_version",
+                                                  "registration_version", "base_version"))
           and by_id["zorg-dead"]["reason"] and by_id["zorg-growth"]["source_version"] == "0.1"
-          and by_id["zorg-dead"]["source_version"] == "growth 1.4" and by_id["zorg-core"]["source_version"] == "core 0.2, bundle 0.4.0"
+          and by_id["zorg-dead"]["source_version"] is None and by_id["zorg-dead"]["registration_version"] == "growth 1.4"
+          and by_id["zorg-core"]["source_version"] is None and by_id["zorg-core"]["registration_version"] == "core 0.2, bundle 0.4.0"
+          and by_id["zorg-growth"]["registration_version"] == "growth 1.4"
           and by_id["zorg-growth"]["base_version"] is None and by_id["zorg-growth"]["reason"] == "", res["repos"])
+    check("…fetch_error only where the repository answers and its blocks could not be read",
+          "fetch_error" not in by_id["zorg-growth"] and "fetch_error" not in by_id["zorg-dead"]
+          and by_id["zorg-core"]["fetch_error"], res["repos"])
     check("a dead port does not stall the command", took < 8, took)
+
+    class Noisy:                                        # a server whose error text is long and holds control characters
+        last_error = "MCP: boom\x1b[31m\nline two " + "x" * 500
+
+        def __init__(self, *a, **k):
+            pass
+
+        def probe(self):
+            return False
+
+    real_client, cm.McpClient = cm.McpClient, Noisy
+    try:
+        ok_, why_ = ctxmain._reach({"kind": "mcp", "endpoint": {"url": "http://127.0.0.1:9/mcp", "headers_env": "", "root": ""},
+                                    "core_root": ""})
+    finally:
+        cm.McpClient = real_client
+    check("the reason a repository is unreachable is one clean line of at most 300 characters",
+          ok_ is False and len(why_) <= 300 and why_.endswith("…") and "\x1b" not in why_ and "\n" not in why_, why_)
 
     e.reg("zorg-lost", MCP_V2.format(id="zorg-lost", url=fake.url).replace('root: "ZorgGrowth/"', 'root: "Elsewhere/"'))
     rc, out, res = e.run("repo", "status", "zorg-lost", **good)
     gl = block(out, "zorg-lost")
-    check("a server that answers the handshake but not for the blocks file: reachable, and the registration's version stands",
-          rc == 0 and "reachable yes" in gl and "version on source: growth 1.4" in gl, gl)
+    check("a server that answers the handshake but not for the blocks file: reachable, no version on the source, the reason on its own line",
+          rc == 0 and "reachable yes" in gl and "version on source: — · base:" in gl and "growth 1.4" not in gl
+          and "  blocks file: " in gl and res["repos"][0]["source_version"] is None
+          and res["repos"][0]["registration_version"] == "growth 1.4" and res["repos"][0]["fetch_error"], (gl, res["repos"]))
     os.remove(os.path.join(e.providers, "zorg-lost.yaml"))
 
     rc, out, res = e.run("repo", "status", "zorg-growth", "--json", **good)

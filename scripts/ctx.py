@@ -23,11 +23,14 @@
   validate                      records, ids, parents, card size, edits waiting
   card                          regenerate INDEX.md only
   repo list [--json]            the repositories (provider registrations) a product draws context blocks
-                                from: kind, products, rank, access, version — reads local files, no network
+                                from: kind, products, rank, access and, from the block state, how many blocks you
+                                hold a base for, their base version and the day of the last check ("—" before
+                                `provider adopt`, "!" when the state cannot be read) — local files, no network
   repo status [ID] [--json]     is each repository reachable (an MCP server answers the handshake within 3 s;
                                 a folder is there) and its version on the source against the base — the only
                                 repo command that touches the network: the handshake, then one read of the blocks
-                                file for the version. It exits 0 also when a repository is unreachable
+                                file for the version ("—" and the reason on a "blocks file:" line when it could
+                                not be read). It exits 0 also when a repository is unreachable
   provider adopt REPO [--apply] [--json]
                                 a base for each block of REPO that is already in your context (dry run unless
                                 --apply): the blocks the repository publishes at the version you hold are taken
@@ -619,24 +622,48 @@ NO_REPOS = ("no repositories registered — a registration is {vault}/{plugin fo
             "(references/context-provider-protocol.md §3b)")
 
 
+def _list_state(c, rid):
+    """(blocks, version, checked, error) of one repository for `repo list`, read from its block state — local files,
+    no lock, nothing written. No store, or no state file, gives (None, None, None, None); a state that cannot be read
+    gives an error text (a list must not fail over a state file; it says so)."""
+    if not c.store.exists():
+        return None, None, None, None
+    try:
+        state = cb.load_state(c.store, rid)
+    except cs.StoreError as e:
+        return None, None, None, cb.clip(e, cb.NOTE_CLIP)
+    checked = state.get("checked")
+    return (cb.based_count(state) or None, cb.base_version(state),
+            checked[:10] if isinstance(checked, str) and checked else None, None)
+
+
 def cmd_repo_list(a, c):
     skipped = []
     repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    rows, bad = [], []
+    for r in repos:
+        blocks, version, checked, error = _list_state(c, r["id"])
+        rows.append(dict(r, blocks=blocks, base_version=version, checked=checked))
+        if error:
+            rows[-1]["state_error"] = error
+            bad.append((r["id"], error))
     if repos:
-        rows = [("id", "kind", "products", "rank", "access", "blocks", "version", "checked")]
-        for r in repos:      # blocks and checked come from the block state; none is kept yet
-            rows.append((r["id"] + (" (paused)" if r["status"] == "paused" else ""), r["kind"] or "—",
-                         ", ".join(r["products"]) or "all", str(r["rank"]), r["access"] or "—", "—",
-                         r["source_version"] or "—", "—"))
-        print(_table(rows))
+        table = [("id", "kind", "products", "rank", "access", "blocks", "version", "checked")]
+        for r in rows:
+            cells = ("!", "!", "!") if r.get("state_error") else (
+                str(r["blocks"]) if r["blocks"] else "—", r["base_version"] or "—", r["checked"] or "—")
+            table.append((r["id"] + (" (paused)" if r["status"] == "paused" else ""), r["kind"] or "—",
+                          ", ".join(r["products"]) or "all", str(r["rank"]), r["access"] or "—") + cells)
+        print(_table(table))
     else:
         print(NO_REPOS)
-    rows = []
-    for r in repos:
+    for rid, error in bad:
+        print("block state unreadable: %s (%s)" % (cb.clip(rid, cb.HEADER_CLIP), error))
+    for r in rows:
         warning = crp.namespace_warning(r)
         if warning:
             print("warning: %s: %s" % (cb.clip(r["id"], cb.HEADER_CLIP), warning))
-        rows.append(dict(r, namespace_warning=warning))
+        r["namespace_warning"] = warning
     for path, why in skipped:
         print("unreadable registration: %s (%s)" % (path, why))
     return 0, {"command": "repo", "action": "list", "repos": rows,
@@ -664,7 +691,7 @@ def _reach(r):
         if client.probe():
             return True, ""
         hint = "; %s is not set (or not 'Name: value')" % ep["headers_env"] if ep["headers_env"] and not hdrs else ""
-        return False, client.last_error + hint
+        return False, cb.clip(client.last_error + hint, cb.NOTE_CLIP)
     if r["core_root"]:
         return (True, "") if os.path.isdir(r["core_root"]) else (False, "core folder not found")
     return False, "no endpoint and no core folder in the registration"
@@ -680,10 +707,11 @@ def cmd_repo_status(a, c):
     rows = []
     for r in repos:
         ok, why = _reach(r)
-        # the version on the source is what its blocks carry now; the registration's own is the fallback when
-        # the source cannot be read. The base is the version most of the blocks the store holds a base for are at.
+        # the version on the source is what its blocks carry now, and only that: when the source was not read there is
+        # none (the registration's own version, a note from whoever wrote it, goes in its own key and is never shown as
+        # the source's). The base is the version most of the blocks the store holds a base for are at.
         fetched = crp.fetch(r) if ok else None
-        live = fetched["version"] if fetched else None
+        live = fetched["version"] if fetched and not fetched.get("error") else None
         warning = crp.namespace_warning(r, fetched["namespace"] if fetched else None)
         base, bad_state = None, None
         try:
@@ -691,8 +719,10 @@ def cmd_repo_status(a, c):
         except cs.StoreError as e:                      # a status must not fail over a state file; it says so
             bad_state = str(e)
         rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": _public_url(r["endpoint"]["url"]),
-                     "reachable": ok, "reason": why, "source_version": live or r["source_version"], "base_version": base,
-                     "namespace_warning": warning})
+                     "reachable": ok, "reason": why, "source_version": live,
+                     "registration_version": r["source_version"], "base_version": base, "namespace_warning": warning})
+        if fetched and fetched.get("error"):             # the server answers, the blocks could not be read
+            rows[-1]["fetch_error"] = cb.clip(fetched["error"], cb.NOTE_CLIP)
         if bad_state:
             rows[-1]["state_error"] = bad_state
     if rows:
@@ -701,6 +731,8 @@ def cmd_repo_status(a, c):
             print("%s  %s  %s" % (row["id"] + (" (paused)" if row["status"] == "paused" else ""), row["kind"] or "—", where))
             print("  reachable %s" % ("yes" if row["reachable"] else "no (%s)" % row["reason"]))
             print("  version on source: %s · base: %s" % (row["source_version"] or "—", row["base_version"] or "—"))
+            if row.get("fetch_error"):
+                print("  blocks file: %s" % row["fetch_error"])
             if row.get("state_error"):
                 print("  block state: %s" % row["state_error"])
             if row["namespace_warning"]:

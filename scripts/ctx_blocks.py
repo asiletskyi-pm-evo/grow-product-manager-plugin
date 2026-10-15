@@ -498,6 +498,13 @@ def base_version(state):
     return count.most_common(1)[0][0] if count else None
 
 
+def based_count(state):
+    """How many blocks of a repository the store holds a base for: the entries of the state with a `base_sha` or
+    `bases`, those you removed (`user_removed`) not counted."""
+    blocks = (state or {}).get("blocks") or {}
+    return sum(1 for e in blocks.values() if (e.get("base_sha") or e.get("bases")) and not e.get("user_removed"))
+
+
 def _body_lines(text):
     """The normalised lines of a region, without its two marker lines: the version is in the marker, and what the plan
     shows are the words."""

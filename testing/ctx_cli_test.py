@@ -7,7 +7,7 @@ codes (0 ok, 2 conflict, 3 bad input / no store / unreadable, 4 refused) and the
 (import before write, snapshot, lock, managed regions, the provider boundary).
 Semantics: references/context-protocol.md. Stdlib only; run from the repo root.
 """
-import json, os, re, shutil, stat, subprocess, sys, tempfile, time
+import datetime, json, os, re, shutil, stat, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "testing"))
@@ -737,7 +737,29 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("…and the state is in the snapshot's successor, not in the snapshot taken before it",
               not os.path.isdir(os.path.join(last_journal(e)["snapshot"], "state", "blocks")), "")
 
+        n = len([o for o in res["blocks"].values() if o in ("base", "edit")])
+        today = datetime.date.today().isoformat()
         state_file = read(blocks_dir, "zorg-core.json")
+        everything, seen_before = tree_of(e.home, e.vault), len(fake.seen)
+        rc, out, res = run_ok(e, "repo", "list")
+        row = {r["id"]: r for r in res["repos"]}
+        check("repo list: blocks, version and checked come from the block state",
+              rc == 0 and row["zorg-core"]["blocks"] == n and row["zorg-core"]["base_version"] == "0.4"
+              and (row["zorg-core"]["checked"] or "")[:10] == today
+              and re.search(r"^zorg-core\s.*\s%d\s+0\.4\s+%s\s*$" % (n, today), out, re.M), (rc, out))
+        check("…a repository never adopted: '—' in all three, None in the data",
+              row["zorg-dead"]["blocks"] is None and row["zorg-dead"]["base_version"] is None and row["zorg-dead"]["checked"] is None
+              and re.search(r"^zorg-dead\s.*—\s+—\s+—\s*$", out, re.M), out)
+        check("…and it stays offline and writes nothing: no request to a server, not a byte in the home or the vault",
+              len(fake.seen) == seen_before and tree_of(e.home, e.vault) == everything, (len(fake.seen), seen_before))
+        open(os.path.join(blocks_dir, "zorg-core.json"), "w", encoding="utf-8", newline="").write("{")
+        rc, out, res = run_ok(e, "repo", "list")
+        check("a block state that is not JSON: '!' in its row, one line under the table, exit 0",
+              rc == 0 and "block state unreadable: zorg-core (" in out
+              and [r for r in res["repos"] if r["id"] == "zorg-core"][0].get("state_error")
+              and re.search(r"^zorg-core\s.*\s!\s+!\s+!\s*$", out, re.M)
+              and re.search(r"^zorg-dead\s.*—\s+—\s+—\s*$", out, re.M), (rc, out))
+        open(os.path.join(blocks_dir, "zorg-core.json"), "w", encoding="utf-8", newline="").write(state_file)
         n_lines = len(read(e.store, ".state", "journal.jsonl").splitlines())
         rc, out, res = run_ok(e, "provider", "adopt", "zorg-core", "--apply")
         check("adopt again: every block already has a base, and nothing changes", rc == 0 and "already has a base" in out
@@ -910,6 +932,16 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
               and set(signs_in(res).values()) == {"="}, (rc, out[-400:]))
         check("plan never wrote anything: not the store, the home, the vault or the core", untouched and all(untouched), untouched)
 
+
+with FakeMcp(tree={}) as bare:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, bare.url)
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "repo", "status", "zorg-growth")
+        check("reachable, blocks file not read: no version on the source, the reason on its own line",
+              rc == 0 and "version on source: — · base:" in out and "  blocks file: " in out
+              and res["repos"][0]["source_version"] is None and res["repos"][0]["fetch_error"]
+              and "registration_version" in res["repos"][0], (rc, out))
 
 # --- v3.13.0: ctx provider apply — one pass, your edits kept, one question per conflicting block
 SCOPE_04 = "<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope of work\nThe user works on Zorg App only."
