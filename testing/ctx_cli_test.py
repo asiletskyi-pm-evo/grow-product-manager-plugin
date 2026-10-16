@@ -2815,6 +2815,159 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a report that cannot 
               and "daily buyers" in read(e.ctx) and "Ядро оновило 1 блок у zorg-growth, конфліктів 0 (лишено твоє)" in out
               and "звіт:" not in out and block_state(e, "zorg-growth")["sync_result"]["report"] is None, (rc, r0, out[-400:]))
 
+# --- v3.14.0 Task 6: undoing a sync pass is final until the core publishes something new in those blocks (spec §5.4)
+def core_metrics_v(v, text):
+    return G_METRICS.replace("v=0.1", "v=" + v).replace("weekly active shoppers", text)
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the brief's story: applied → undone → not repeated → the core's new text goes in
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        old_scope = region_in(read(e.ctx), "zorg-growth", "growth-metrics")
+        v2 = core_metrics_v("0.2", "weekly buyers")
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, v2)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)         # the core changed the block: applied
+        check("a pass applied the core's text", rc == 0 and region_in(read(e.ctx), "zorg-growth", "growth-metrics") == v2
+              and last_journal(e)["op"] == "provider-sync", (rc, out[-300:]))
+        rc, out, res = run_ok(e, "undo")
+        check("undo of a sync pass: back, and the text remembered as rejected",
+              rc == 0 and region_in(read(e.ctx), "zorg-growth", "growth-metrics") == old_scope
+              and res["rejected"] == {"zorg-growth": ["growth-metrics"]} and res["rejected_failed"] == {}, (rc, out[-400:], res))
+        check("…its output names the repository and the blocks that will not be applied",
+              "не застосовуватиметься, доки ядро не змінить блок: zorg-growth: growth-metrics" in out.splitlines(), out[-400:])
+        st = block_state(e, "zorg-growth")
+        check("…written after the restore: the state is the one before the pass (its base, its check) with the core's text hash in `rejected`",
+              st["rejected"] == {"growth-metrics": [sha_of(v2)]} and st["blocks"]["growth-metrics"]["v"] == "0.1"
+              and st["checked"] != DAY1, st)
+        j, snaps = journal_len(e), snapshot_names(e)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2)
+        r0 = res["results"][0]
+        check("the next day's sync does not re-apply it: your text stays, the block is named as rejected, nothing written",
+              rc == 0 and region_in(read(e.ctx), "zorg-growth", "growth-metrics") == old_scope and "growth-metrics" in r0["rejected"]
+              and r0["updated"] == 0 and journal_len(e) == j and snapshot_names(e) == snaps and "Ядро оновило" not in out, (rc, r0, out[-300:]))
+        rc, out, res = run_ok(e, "provider", "plan", "zorg-growth")
+        row = {x["block"]: x for x in res["rows"]}["growth-metrics"]
+        check("…`plan` marks it: rejected, with the note",
+              row.get("rejected") is True and "відкинуто вами — не застосовується, доки ядро не змінить блок" in row["note"], row)
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, core_metrics_v("0.3", "weekly paying buyers"))   # something new in that block
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2_PLUS_2H)
+        check("a new text in that block is applied again", rc == 0 and "weekly paying buyers" in region_in(read(e.ctx), "zorg-growth", "growth-metrics")
+              and res["results"][0]["updated"] == 1 and res["results"][0]["rejected"] == [], (rc, res["results"][0], out[-300:]))
+        check("…the old rejection stays in the state (it is only a hash), the new text is not in it",
+              block_state(e, "zorg-growth")["rejected"] == {"growth-metrics": [sha_of(v2)]})
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # --steps 3 across two passes and a manual apply; an earlier rejection stays
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        older = core_metrics_v("0.15", "weekly signed-up buyers")
+        reject(e, "zorg-growth", {"growth-metrics": older})                    # an earlier undo left this
+        v2 = core_metrics_v("0.2", "weekly buyers")
+        team2 = G_TEAM.replace("v=0.1", "v=0.2").replace("- **Growth squad:** Alpha", "- **Growth squad:** Alpha Prime")
+        fake.tree[GROWTH_PATH] = growth_blocks(v2, G_TEAM)
+        run_ok(e, "provider", "sync", "--now", DAY1)                           # pass 1 takes growth-metrics
+        fake.tree[GROWTH_PATH] = growth_blocks(v2, team2)
+        run_ok(e, "provider", "sync", "--now", DAY1_PLUS_1H)                   # pass 2 takes team
+        team3 = team2.replace("v=0.2", "v=0.3").replace("Alpha Prime", "Alpha Prime Two")
+        fake.tree[GROWTH_PATH] = growth_blocks(v2, team3)
+        rc, out, res = run_ok(e, "provider", "apply", "zorg-growth")           # a manual apply: not a sync pass
+        check("a manual apply took the third text of team (op provider-apply)", rc == 0 and last_journal(e)["op"] == "provider-apply"
+              and last_journal(e)["taken"] == {"team": sha_of(team3)}, (rc, out[-300:]))
+        rc, out, res = run_ok(e, "undo", "--steps", "3")
+        check("--steps 3 takes back both sync passes and the apply: the blocks the passes took are remembered, once each, per repository",
+              rc == 0 and res["rejected"] == {"zorg-growth": ["growth-metrics", "team"]}
+              and "не застосовуватиметься, доки ядро не змінить блок: zorg-growth: growth-metrics, team" in out.splitlines()
+              and region_in(read(e.ctx), "zorg-growth", "team") == G_TEAM, (rc, out[-400:], res.get("rejected")))
+        check("…the texts: the earlier rejection kept, the pass's added after it (oldest first); team has the pass's, not the apply's",
+              block_state(e, "zorg-growth")["rejected"] == {"growth-metrics": [sha_of(older), sha_of(v2)], "team": [sha_of(team2)]},
+              block_state(e, "zorg-growth").get("rejected"))
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2)
+        r0 = res["results"][0]
+        check("…the sync holds the metrics text, and applies team's third text (new in that block: not among the rejected)",
+              region_in(read(e.ctx), "zorg-growth", "growth-metrics") == G_METRICS and r0["rejected"] == ["growth-metrics"]
+              and region_in(read(e.ctx), "zorg-growth", "team") == team3, (r0, out[-300:]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a manual apply is not a sync pass: undoing it remembers nothing
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, core_metrics_v("0.2", "weekly buyers"))
+        before = block_state(e, "zorg-growth")
+        rc, out, res = run_ok(e, "provider", "apply", "zorg-growth")
+        rc2, out2, res2 = run_ok(e, "undo")
+        check("undoing a provider-apply: rejected {}, no line about the sync, the state as it was (no `rejected`)",
+              rc == 0 and rc2 == 0 and res2["rejected"] == {} and "не застосовуватиметься" not in out2
+              and block_state(e, "zorg-growth") == before and "rejected" not in block_state(e, "zorg-growth"), (rc, rc2, out2[-300:]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a block the core removed: undoing that pass remembers "removed"
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        fake.tree[GROWTH_PATH] = growth_blocks(G_METRICS, G_TEAM, G_OKR)
+        run_ok(e, "provider", "sync", "--now", DAY1)                           # the core's new block is added (a base for it)
+        added = region_in(read(e.ctx), "zorg-growth", "growth-okr") == G_OKR
+        fake.tree[GROWTH_PATH] = growth_blocks(G_METRICS, G_TEAM)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1_PLUS_1H)    # …and removed again, a lone removal
+        removed_ok = region_in(read(e.ctx), "zorg-growth", "growth-okr") is None and last_journal(e)["taken"] == {"growth-okr": "removed"}
+        rc, out, res = run_ok(e, "undo")
+        check("a removal undone is remembered as removed: the region is back, rejected growth-okr ['removed']",
+              added and removed_ok and region_in(read(e.ctx), "zorg-growth", "growth-okr") == G_OKR
+              and res["rejected"] == {"zorg-growth": ["growth-okr"]}
+              and block_state(e, "zorg-growth")["rejected"] == {"growth-okr": ["removed"]}, (added, removed_ok, rc, out[-300:]))
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2)
+        check("…and the next sync does not remove it again", region_in(read(e.ctx), "zorg-growth", "growth-okr") == G_OKR
+              and res["results"][0]["rejected"] == ["growth-okr"] and res["results"][0]["removed"] == 0, (res["results"][0], out[-300:]))
+
+with tempfile.TemporaryDirectory() as d:                 # an undo with no sync pass in it says nothing of the kind
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "set", "product.zorg-app", "Jira Project Key", "NEW")
+    rc, out, res = run_ok(e, "undo")
+    check("an ordinary undo: rejected {}, no line about the sync, no state file written",
+          rc == 0 and res["rejected"] == {} and res["rejected_failed"] == {} and "не застосовуватиметься" not in out
+          and not os.path.isdir(os.path.join(e.store, ".state", "blocks")), (rc, out[-300:], res))
+
+SHA_X = "a" * 64
+check("sync_rejections: only provider-sync lines with a well-formed source and hashes count; the rest is skipped",
+      ctx_cli.sync_rejections([
+          {"op": "provider-sync", "source": "repo:zorg-growth", "taken": {"b1": SHA_X, "b2": "removed"}},
+          {"op": "provider-apply", "source": "repo:zorg-growth", "taken": {"b3": SHA_X}},
+          {"op": "provider-sync", "source": "repo:zorg-growth"},                                # an older line: no `taken`
+          {"op": "provider-sync", "source": "repo:zorg-growth", "taken": None},
+          {"op": "provider-sync", "source": "repo:Bad Id", "taken": {"b4": SHA_X}},
+          {"op": "provider-sync", "source": "undo", "taken": {"b5": SHA_X}},
+          {"op": "provider-sync", "source": 7, "taken": {"b6": SHA_X}},
+          {"op": "provider-sync", "source": "repo:zorg-core", "taken": {"b7": "not-a-hash", "b8": 5, "b9": SHA_X}},
+          {"op": "provider-sync", "source": "repo:zorg-growth", "taken": {"b1": "b" * 64}},
+          {"op": "sync", "source": "ctx-sync"}])
+      == {"zorg-growth": {"b1": [SHA_X, "b" * 64], "b2": ["removed"]}, "zorg-core": {"b9": [SHA_X]}}, "")
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the state cannot take the memory: the undo stands, and says the sync may apply the text again
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, core_metrics_v("0.2", "weekly buyers"))
+        run_ok(e, "provider", "sync", "--now", DAY1)
+        snap = last_journal(e)["snapshot"]
+        open(os.path.join(snap, "state", "blocks", "zorg-growth.json"), "w", encoding="utf-8").write("{not json")
+        rc, out, res = run_ok(e, "undo")
+        check("a state that cannot be read: the undo is done (exit 0), nothing is remembered, and the output says so",
+              rc == 0 and region_in(read(e.ctx), "zorg-growth", "growth-metrics") == G_METRICS and res["rejected"] == {}
+              and list(res["rejected_failed"]) == ["zorg-growth"]
+              and any(l.startswith("не вдалося запам'ятати відкинуте в zorg-growth:") and "наступний синк може застосувати це знову" in l
+                      for l in out.splitlines()) and "не застосовуватиметься" not in out, (rc, out[-500:], res.get("rejected_failed")))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

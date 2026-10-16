@@ -16,7 +16,14 @@
   snapshot [--label L]          a snapshot of the store and both copies
   undo [--steps N]              back to the state before the N-th last change (N from 1); refused while
                                 edits wait to be imported. The records it put back to the last compiled text
-                                are named, and so are those it could not ("not put back …": check them)
+                                are named, and so are those it could not ("not put back …": check them).
+                                Undoing a sync pass (journal op provider-sync) is final until the core changes
+                                those blocks: for each block the pass took, the core's text (its hash, or "removed")
+                                goes into the repository's block state as rejected — written after the restore — and
+                                no sync applies it again, nor does `provider apply` unless told --choose BLOCK=theirs
+                                ("не застосовуватиметься, доки ядро не змінить блок: <repo>: <blocks>"). CTX_RESULT:
+                                rejected {repo: [blocks]}, rejected_failed {repo: why} (a state that could not take
+                                it: the undo stands, and says the sync may apply the text again)
   read --skill S [--product P]  the card plus what the skill's manifest entry names (reads only)
   invalidate ID --reason R      mark a record no longer current (it stays, with a status region)
   archive ID [--reason R]       move a record to the archive; restore ID brings it (or a trashed one) back
@@ -509,6 +516,46 @@ def cmd_snapshot(a, c):
     return 0, {"command": "snapshot", "snapshot": path}
 
 
+def sync_rejections(marks):
+    """What undoing these journal changes (`marks`, oldest first) makes the sync remember as rejected (spec v3.14 §5.4):
+    {repo: {block: [sha | "removed", …]}}, the texts in the order the passes took them. Only a `provider-sync` line counts —
+    a manual `provider apply` or any other change does not — and only through its `taken`; an older line has none. A line
+    whose source is not `repo:<id>` of a repository id, or a block or text that is not what `taken` holds (a block id and
+    a hash, or "removed"), is skipped: a hand-edited journal never stops an undo."""
+    out = {}
+    for m in marks:
+        source, taken = m.get("source"), m.get("taken")
+        if m.get("op") != sy.OP or not isinstance(source, str) or not source.startswith("repo:") or not isinstance(taken, dict):
+            continue
+        repo = source[len("repo:"):]
+        if not cb.REPO_ID.fullmatch(repo):
+            continue
+        for bid, sha in taken.items():
+            if isinstance(sha, str) and (sha == cb.REMOVED or cb.SHA.fullmatch(sha)):
+                out.setdefault(repo, {}).setdefault(bid, []).append(sha)
+    return out
+
+
+def remember_rejected(store, rejections):
+    """Write `rejections` ({repo: {block: [text, …]}}, from `sync_rejections`) into the repositories' block states, after the
+    newest rejected texts of each block (`cb.save_state` keeps the last ten, each once). Returns ({repo: [blocks]} saved,
+    {repo: why} for a state that could not be read or written — the others are saved all the same)."""
+    saved, failed = {}, {}
+    for repo in sorted(rejections):
+        try:
+            state = cb.load_state(store, repo)
+            rejected = {b: list(seq) for b, seq in (state.get("rejected") or {}).items()}
+            for bid, texts in rejections[repo].items():
+                rejected[bid] = rejected.get(bid, []) + texts
+            state["rejected"] = rejected
+            cb.save_state(store, repo, state)
+        except (cs.StoreError, OSError) as e:
+            failed[repo] = str(e)
+            continue
+        saved[repo] = sorted(rejections[repo])
+    return saved, failed
+
+
 def cmd_undo(a, c):
     if a.steps < 1:
         raise Usage("--steps takes a whole number from 1")
@@ -526,6 +573,7 @@ def cmd_undo(a, c):
         target = marks[-a.steps]["snapshot"]
         if not os.path.isdir(target):
             raise cs.StoreError("the snapshot %s is gone (rotated)" % target)
+        rejections = sync_rejections(marks[-a.steps:])      # the sync passes this undo takes back: what they took is not applied again
         jpath = os.path.join(c.store.state_dir, "journal.jsonl")
         journal = co._read(jpath)
         pre = co.snapshot(c.store, c.copies, c.home, "pre-undo")
@@ -534,11 +582,14 @@ def cmd_undo(a, c):
             print("skipped (not a current copy): %s" % p)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
             existed = json.load(f).get("store_existed")
-        reverted, kept = [], []
+        reverted, kept, rejected, rejected_failed = [], [], {}, {}
         if existed:
             cs.atomic_write(jpath, journal)
             t = now()
             c.store.journal({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre})
+            # a sync pass taken back stays taken back: the core's texts it applied are remembered as rejected in the
+            # block state — after the restore, which brought that state back to what it was before the pass
+            rejected, rejected_failed = remember_rejected(c.store, rejections)
             # an import's snapshot holds the copies as they were on disk then — already edited; rebuild them
             # from the restored records so the edit is undone and nothing waits to be imported again. A compile's
             # own snapshot (a mirror created or rewritten) is the one case whose copies must stay as restored.
@@ -555,11 +606,16 @@ def cmd_undo(a, c):
                 print("put back to the last compiled text (the edit made in the file is undone): %s" % ", ".join(reverted))
             if kept:
                 print("not put back (no matching text in local-context.md): %s — check them: ctx get <id>" % ", ".join(kept))
+            for repo, blocks in rejected.items():
+                print("не застосовуватиметься, доки ядро не змінить блок: %s: %s" % (repo, ", ".join(blocks)))
+            for repo, why in rejected_failed.items():
+                print("не вдалося запам'ятати відкинуте в %s: %s — наступний синк може застосувати це знову" % (repo, why))
         else:
             co.forget_store(c.home)
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)
     return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped,
-               "records_reverted": reverted, "records_not_reverted": kept}
+               "records_reverted": reverted, "records_not_reverted": kept, "rejected": rejected,
+               "rejected_failed": rejected_failed}
 
 
 def cmd_validate(a, c):
