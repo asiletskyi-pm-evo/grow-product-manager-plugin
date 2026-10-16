@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.13.1
+**Version:** 3.14.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.14.0** — **The core reaches your context by itself, once a day** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Turn it on per repository (`sync: daily`, asked once by context-connect) and the first skill of the day runs `ctx provider sync --if-due`: blocks you did not edit are updated, a block you and the core both changed keeps your text unless the core marks it `policy=rule`, new blocks are added, more than one removal at once is held, a text you undid is never applied again and a copy of the core that lags behind takes nothing — within 20 seconds, never waiting on a lock. Every decision is explained in a report in `_System/context/sync/` with both texts of a conflict and the way back, and the session digest shows a `repos:` line.
 
 **New in v3.13.1** — **`repo list` tells the truth; the digest keeps its context line on a cold start** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx repo list` shows the blocks you hold, the version of your bases and the last check from the block state. On a cold session start (iCloud, an antivirus scan) the digest shows the store's summary saved last, marked `· cached`, instead of dropping the `context:` line — so skills still read through `ctx read`. `ctx provider apply` takes several answers per `--choose`/`--add`, refuses a repository given as an answer before anything is written, and `ctx undo` names what it could not put back.
 
@@ -706,7 +708,7 @@ The sixth contour, **Context**, groups `context-connect`, `context-navigator` an
 - **Lifecycle and freshness** (since v3.12.0) — `ctx invalidate` marks a record no longer current, `ctx archive` moves it out of the file, removed records wait 30 days in a trash, `ctx restore` brings any of them back; every record knows when it was last verified, the digest counts stale ones and skills state their facts "as of" that date; `ctx verify` or the configurator's "Review stale records" confirms them.
 - **Repositories and block merge** (since v3.13.0) — registrations v2 (`products`, `rank`, `core_root`, `endpoint`, `namespace`, `blocks_file`) list the repositories a product draws blocks from; `ctx repo list|status`; `ctx provider adopt` records what each block was when the repository last gave it, `plan` compares the three versions, `apply` writes one pass with a snapshot and a journal line; a stdlib MCP client calls only read tools. `references/context-provider-protocol.md` §12.
 - **Your own sections** (since v3.12.1) — a custom or setting record names the skills that read it (`read_by`: `all` or skill names; `ctx assign`, or the Obsidian property); `ctx read` gives it to them whole and names the unassigned ones; the digest counts them (`· N custom unassigned`).
-- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify`, since v3.12.1 `assign`, and since v3.13.0 `repo list|status`, `provider adopt|plan|apply` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
+- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify`, since v3.12.1 `assign`, since v3.13.0 `repo list|status`, `provider adopt|plan|apply`, and since v3.14.0 `provider sync` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
 
 ## Multilingual Artifact Templates
 
@@ -1052,5 +1054,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.13.1  
+**Version:** 3.14.0  
 **Last Updated:** October 2026
