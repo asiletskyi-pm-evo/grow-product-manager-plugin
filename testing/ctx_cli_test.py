@@ -2055,6 +2055,7 @@ try:
               [r["repo"] for r in res["results"]] == ["zorg-growth"] and block_state(e, "zorg-core") == core_before
               and block_state(e, "zorg-dead") is None, res.get("results"))
         r0 = res["results"][0]
+        check("…a run that went ahead says nothing of skipping", "skipped" not in res, res)
         check("…the result: changed, 1 updated, every key of the contract", set(r0) == SYNC_KEYS and r0["outcome"] == "changed"
               and r0["updated"] == 1 and r0["added"] == 0 and r0["removed"] == 0 and r0["at"] == DAY1 and r0["report"] is None
               and r0["snapshot"] and os.path.isdir(r0["snapshot"]), r0)
@@ -2102,6 +2103,12 @@ try:
         check("--now that is no ISO time: exit 3", rc == 3 and "--now" in out, (rc, out[-300:]))
         rc, out, res = run_ok(e, "provider", "sync", "--store", e.store)
         check("--store is refused: the sync is a writing command", rc == 3 and "--store is for read commands only" in out, (rc, out[-300:]))
+        with open(os.path.join(e.home, ".grow-pm", "providers", "zorg-growth.yaml"), "a", encoding="utf-8") as f:
+            f.write("status: paused\n")
+        growth_state = block_state(e, "zorg-growth")
+        rc, out, res = run_ok(e, "provider", "sync", "zorg-growth", "--now", DAY2_PLUS_2H)
+        check("naming a paused repository (sync: daily, status: paused): exit 3, nothing synced",
+              rc == 3 and "paused" in out and block_state(e, "zorg-growth") == growth_state, (rc, out[-300:]))
 finally:
     fake.close()
 
@@ -2128,6 +2135,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the lock, a guard tha
               rc == 0 and res["synced"] == [] and res["results"] == [] and journal_len(e) == j and read(e.ctx) == ctx_text
               and read(e.store, ".state", "blocks", "zorg-growth.json") == state and len(fake.seen) == seen and took < 10,
               (rc, round(took, 2), out[-400:]))
+        check("…and CTX_RESULT says why: skipped busy", res.get("skipped") == "busy", res)
 
         real_guard = ctx_cli.Ctx.guard
 
@@ -2142,6 +2150,8 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the lock, a guard tha
         check("a guard that refuses (a registration still downloading) is a busy lock: nothing synced, nothing recorded, exit 0",
               rc == 0 and res["synced"] == [] and journal_len(e) == j and read(e.store, ".state", "blocks", "zorg-growth.json") == state
               and len(fake.seen) == seen, (rc, out[-400:]))
+        check("…and CTX_RESULT says why: skipped guard: <why>",
+              res.get("skipped") == "guard: a registration could not be read: zorg-x.yaml — the provider boundary cannot be checked", res)
 
         e.edit(e.ctx, "- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ-HOME\n")
         e.edit(e.mirror, "- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ-VAULT\n")
@@ -2247,22 +2257,28 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the hard bound: a fet
         release = threading.Event()
         real_fetch, real_budget = crp_mod.fetch, sy_mod.BUDGET_S
 
+        hung = []
+        real_min = sy_mod.APPLY_MIN_S
+
         def hanging_fetch(repo, **kw):                   # zorg-core first (registration order): a DNS lookup that never returns
             if repo["id"] == "zorg-core":
+                hung.append(repo["id"])
                 release.wait(60)
             return real_fetch(repo, **kw)
 
-        crp_mod.fetch, sy_mod.BUDGET_S = hanging_fetch, 2.0
+        # a 2 s budget (1 s of work after the reserve): the 3 s floor for a plan is lowered so that the fetch starts at all
+        crp_mod.fetch, sy_mod.BUDGET_S, sy_mod.APPLY_MIN_S = hanging_fetch, 2.0, 0.5
         try:
             t0 = time.time()
             rc, out, res = in_process(e, "provider", "sync", "--now", DAY1)
             took = time.time() - t0
         finally:
-            crp_mod.fetch, sy_mod.BUDGET_S = real_fetch, real_budget
+            crp_mod.fetch, sy_mod.BUDGET_S, sy_mod.APPLY_MIN_S = real_fetch, real_budget, real_min
             release.set()
         outcomes = {r["repo"]: r["outcome"] for r in (res or {}).get("results") or []}
         check("a fetch that never returns: timeout within the budget, and the repository after it times out too (no time left)",
-              rc == 0 and outcomes == {"zorg-core": "timeout", "zorg-growth": "timeout"} and took < 2.0 + 3.0, (rc, round(took, 2), outcomes))
+              rc == 0 and outcomes == {"zorg-core": "timeout", "zorg-growth": "timeout"} and hung == ["zorg-core"] and took < 8,
+              (rc, round(took, 2), outcomes, hung))
         st = block_state(e, "zorg-core") or {}
         check("…the attempt is recorded (retry in an hour), the check is not", st.get("sync_attempt") == DAY1
               and st.get("checked") == (core_state or {}).get("checked") and st.get("sync_result", {}).get("outcome") == "timeout"
@@ -2271,7 +2287,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the hard bound: a fet
         def deadline_fetch(repo, **kw):                  # the client gave up at the deadline: its error says so
             if repo["id"] == "zorg-growth":
                 return {"source": None, "version": None, "blocks": {}, "namespace": repo["namespace"], "team": None, "team_source": None,
-                        "team_error": None, "error": "MCP: " + cm_mod.DEADLINE, "checked": kw.get("now")}
+                        "team_error": None, "error": "MCP: " + cm_mod.DEADLINE, "unsound": None, "checked": kw.get("now")}
             return real_fetch(repo, **kw)
 
         crp_mod.fetch = deadline_fetch
@@ -2282,6 +2298,125 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the hard bound: a fet
         outcomes = {r["repo"]: r["outcome"] for r in (res or {}).get("results") or []}
         check("a fetch error that says the deadline was reached is a timeout, not unreachable; the other repository is synced",
               rc == 0 and outcomes.get("zorg-growth") == "timeout" and outcomes.get("zorg-core") in ("changed", "no-changes"), (rc, outcomes))
+
+# --- v3.14.0 Task 4 fix round 1: a broken source, the due check under the lock, the 3 s floor, the error outcome
+DAY1_PLUS_2H = "2026-10-16T11:00:00+03:00"
+DAY1_PLUS_25H = "2026-10-17T10:00:00+03:00"
+
+with tempfile.TemporaryDirectory() as d:                 # an empty or cut blocks file in the core folder: broken, a check
+    e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra="sync: daily\n")
+    blocks_file = os.path.join(d, "ZorgCore", CORE_BLOCKS)
+    pristine = read(blocks_file)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+    for label, text, said in (("an empty blocks file", "", "holds no zorg-core block"),
+                              ("a blocks file cut inside a block", pristine[:pristine.index("<!-- zorg-core:end id=teams -->")],
+                               "cut at block teams")):
+        checked_at(e, "zorg-core", DAY0)
+        open(blocks_file, "w", encoding="utf-8", newline="").write(text)
+        j, ctx_text = journal_len(e), read(e.ctx)
+        rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1)
+        r0 = ((res or {}).get("results") or [{}])[0]
+        st = block_state(e, "zorg-core")
+        check("%s: broken — a successful check (checked = now), the reason says why, nothing written" % label,
+              rc == 0 and r0.get("outcome") == "broken" and said in (r0.get("reason") or "") and st["checked"] == DAY1
+              and st["sync_attempt"] == DAY1 and st["sync_result"]["outcome"] == "broken" and journal_len(e) == j and read(e.ctx) == ctx_text
+              and "Ядро оновило" not in out, (rc, r0, out[-300:]))
+        check("…not due 2 h later (a broken source is not retried every hour)",
+              run_ok(e, "provider", "sync", "--if-due", "--now", DAY1_PLUS_2H)[2]["synced"] == [])
+        rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1_PLUS_25H)
+        check("…due again 25 h later", res["synced"] == ["zorg-core"] and res["results"][0]["outcome"] == "broken", res)
+    open(blocks_file, "w", encoding="utf-8", newline="").write(pristine)
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # two sessions: the due check is made again under the lock
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        checked_at(e, "zorg-growth", DAY0)
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, G_METRICS.replace("v=0.1", "v=0.2").replace("weekly", "daily"))
+        c = ctx_cli.Ctx(ctx_cli.build_parser().parse_args(["provider", "sync", "--home", e.home, "--context", e.ctx]))
+        picked = sy_mod.pick_due(c.store, [r for r in crp_mod.load_repos(c.text, c.home) if r["sync"] == "daily"], DAY1)
+        rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1)      # the other session, between our check and our lock
+        state, j, seen = read(e.store, ".state", "blocks", "zorg-growth.json"), journal_len(e), len(fake.seen)
+        with cs_mod.guard_roots(ctx_ops_mod.allowed_roots(c.home, c.text)):
+            again = sy_mod.run(c, picked, DAY1, time.monotonic() + 20, only_due=True)
+        check("--if-due was due before the lock; the other session synced meanwhile: under the lock it is not due — [], no second pass",
+              [r["id"] for r in picked] == ["zorg-growth"] and res["results"][0]["outcome"] == "changed" and again == []
+              and read(e.store, ".state", "blocks", "zorg-growth.json") == state and journal_len(e) == j and len(fake.seen) == seen,
+              (picked and [r["id"] for r in picked], again))
+        check("…its sync_result stays the first pass's (changed), not overwritten by no-changes",
+              block_state(e, "zorg-growth")["sync_result"]["outcome"] == "changed")
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the 3 s floor, and the error outcome (a pass, the import)
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra="sync: daily\n")
+        set_sync(e, "zorg-growth", "daily")
+        blocks_file = os.path.join(d, "ZorgCore", CORE_BLOCKS)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        change(blocks_file, SCOPE_04, SCOPE_05)          # an apply would write
+        check("the floor is 3 s: no plan and no write start with less of the budget left", sy_mod.APPLY_MIN_S == 3)
+        fetched = []
+
+        def slow_fetch(repo, **kw):                      # a fetch that answers, but late: less than 3 s of the budget is left
+            fetched.append(repo["id"])
+            time.sleep(2.5)
+            return real_fetch(repo, **kw)
+
+        records, j, core_state = tree_of(os.path.join(e.store, "records")), journal_len(e), block_state(e, "zorg-core")
+        real_fetch, real_budget = crp_mod.fetch, sy_mod.BUDGET_S
+        crp_mod.fetch, sy_mod.BUDGET_S = slow_fetch, 6.0
+        try:
+            rc, out, res = in_process(e, "provider", "sync", "zorg-core", "--now", DAY1)
+        finally:
+            crp_mod.fetch, sy_mod.BUDGET_S = real_fetch, real_budget
+        r0 = ((res or {}).get("results") or [{}])[0]
+        st = block_state(e, "zorg-core")
+        check("a fetch that leaves less than 3 s: timeout, nothing planned or written (records, journal, the check)",
+              rc == 0 and fetched == ["zorg-core"] and r0.get("outcome") == "timeout" and "nothing written" in (r0.get("reason") or "")
+              and tree_of(os.path.join(e.store, "records")) == records and journal_len(e) == j and st["checked"] == core_state["checked"]
+              and st["sync_attempt"] == DAY1, (rc, fetched, r0))
+
+        real_plan = cb_mod.plan
+
+        def failing_plan(store, copies, repo, fetched, now, all_=False):
+            if repo["id"] == "zorg-core":
+                raise RuntimeError("boom in the plan")
+            return real_plan(store, copies, repo, fetched, now, all_=all_)
+
+        cb_mod.plan = failing_plan
+        try:
+            rc, out, res = in_process(e, "provider", "sync", "--now", DAY1)
+        finally:
+            cb_mod.plan = real_plan
+        by = {r["repo"]: r for r in (res or {}).get("results") or []}
+        st = block_state(e, "zorg-core")
+        check("an unexpected failure in a pass: outcome error with its message, the attempt recorded, the check unchanged",
+              rc == 0 and by.get("zorg-core", {}).get("outcome") == "error" and by["zorg-core"]["reason"] == "boom in the plan"
+              and st["checked"] == core_state["checked"] and st["sync_attempt"] == DAY1 and st["sync_result"]["outcome"] == "error"
+              and tree_of(os.path.join(e.store, "records")) == records, (rc, by))
+        check("…and the next repository is synced all the same", by.get("zorg-growth", {}).get("outcome") in ("changed", "no-changes"), by)
+
+        real_import = ctx_cli.Ctx.import_first
+
+        def failing_import(self):
+            raise cs_mod.StoreError("not available locally: product.zorg-app.md did not load within 0.4 s")
+
+        ctx_cli.Ctx.import_first = failing_import
+        try:
+            rc, out, res = in_process(e, "provider", "sync", "--now", DAY2)
+        finally:
+            ctx_cli.Ctx.import_first = real_import
+        outcomes = {r["repo"]: r["outcome"] for r in (res or {}).get("results") or []}
+        reasons = {r["repo"]: r["reason"] for r in (res or {}).get("results") or []}
+        check("an import that fails for the store (not a conflict): error, reason store: <message>, records unchanged",
+              rc == 0 and outcomes == {"zorg-core": "error", "zorg-growth": "error"}
+              and reasons["zorg-core"].startswith("store: not available locally: product.zorg-app.md")
+              and tree_of(os.path.join(e.store, "records")) == records and block_state(e, "zorg-core")["sync_attempt"] == DAY2
+              and block_state(e, "zorg-core")["checked"] == core_state["checked"], (rc, outcomes, reasons))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

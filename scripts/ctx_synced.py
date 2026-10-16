@@ -11,9 +11,10 @@ answers come from one place:
 - due       is a repository due: `sync: daily`, not paused, a day since its last successful check (`checked`) and an hour
             since a failed attempt after it (`sync_attempt`); a time more than a day ahead is another clock's — unknown
 - pick_due  the repositories that are due, read from their block states without the lock and without the network
-- run       the pass over the repositories given: the lock (busy → nothing, at once), the guard, the import of the edits
-            waiting, then each repository — fetched in a helper thread held to the budget, planned, decided, applied
-            (op "provider-sync") — and its result written into its block state (`sync_result`, `sync_attempt`)
+- run       the pass over the repositories given: the lock (busy → nothing, at once), the due check again under it, the
+            guard, the import of the edits waiting, then each repository — fetched in a helper thread held to the budget,
+            planned, decided, applied (op "provider-sync") — and its result written into its block state (`sync_result`,
+            `sync_attempt`)
 - sentence  the one line a skill repeats at the end of its answer when a pass changed something
 
 `decide` reads nothing and writes nothing: the plan is `ctx_blocks.plan`'s, the repository's texts are
@@ -29,12 +30,18 @@ answers come from one place:
 5. "+" is added
 6. "=", "~", "✎", a lone "−", "✂", "·": nothing — `apply` acts by itself
 
-The outcome of a repository's pass (§4.3, §6): "changed" (the pass wrote: a snapshot and a journal line), "no-changes"
-(only the time of the check moved), "held" (more than one removal held — a successful check all the same), "broken"
-(the blocks file holds none of your based blocks, or something of the store failed — see `run`), "unreachable" (the
-fetch failed; retried in an hour), "timeout" (the budget ran out before or during the pass, or the client gave up at
-its deadline; retried in an hour), "import-conflict" (the edits waiting in local-context.md could not be imported;
-nothing is written to the records).
+The outcome of a repository's pass (§4.3, §6):
+- "changed"          the pass wrote: a snapshot and a journal line
+- "no-changes"       only the time of the check moved
+- "held"             more than one removal held — a successful check all the same
+- "broken"           the source answered with no source: every source tried gave an empty, cut or foreign blocks file
+                     (`fetch`'s `unsound`), or the file holds none of your based blocks — a successful check: next in a day
+- "unreachable"      the fetch failed otherwise (no answer, a server error); retried in an hour
+- "timeout"          the budget ran out before or during the pass, the client gave up at its deadline, or less than
+                     APPLY_MIN_S was left for the plan and the write; retried in an hour, nothing written
+- "import-conflict"  the edits waiting in local-context.md need a decision (`ctx sync`); nothing written to the records
+- "error"            something failed unexpectedly — the store (a record missing or not downloaded: "store: <why>"), or
+                     anything else (its message); retried in an hour
 
 Stdlib only.
 """
@@ -111,8 +118,10 @@ AHEAD = datetime.timedelta(days=1)              # a time further ahead than this
 BUDGET_S = 20.0                                 # the whole sync, every repository together
 RESERVE_S = 1.0                                 # the last second of it is kept for writing down what happened
 RECORD_S = 0.5                                  # the least a result's write waits for the block state (a small local file)
+APPLY_MIN_S = 3.0                               # no fetch, plan or write starts with less of the budget left: records written
+                                                # without their journal line would make `ctx undo` take back the wrong change
 DUE_READ_S = 2.0                                # the block states --if-due reads, all of them together
-OUTCOMES = ("changed", "no-changes", "unreachable", "broken", "held", "import-conflict", "timeout")
+OUTCOMES = ("changed", "no-changes", "unreachable", "broken", "held", "import-conflict", "timeout", "error")
 RESULT_KEYS = ("at", "outcome", "updated", "added", "removed", "kept_yours", "took_rule", "awaiting", "held", "rejected",
                "reason", "report", "snapshot")
 MOVED = ("changed", "no-changes", "held", "broken")     # the outcomes of a successful check: the state's `checked` moved
@@ -239,19 +248,26 @@ def _counts(res, theirs):
 
 def _pass(c, repo, now, until):
     """(result, the apply's result or None, did the check succeed without an apply) of one repository, by `until`.
-    The block state is read first (one that cannot be read stops the pass before the network); then the fetch; a fetch
-    error is "timeout" when it says the deadline was reached, else "unreachable"; a blocks file that holds none of your
-    based blocks is "broken"; else plan → decide → apply, which writes the state's `checked` itself. Store reads run
-    within what is left of the budget."""
+    The block state is read first (one that cannot be read stops the pass before the network); then the fetch. A fetch
+    that is late, or whose error says the deadline was reached, is "timeout"; one where every source answered an
+    empty, cut or foreign text (`unsound`) is "broken"; any other fetch error is "unreachable". Less than APPLY_MIN_S
+    left then is "timeout" with nothing planned or written. A blocks file that holds none of your based blocks is
+    "broken"; else plan → decide → apply, which writes the state's `checked` itself. Store reads run within what is
+    left of the budget."""
     rid = repo["id"]
     with cs.read_budget(_left(until)):
         cb.load_state(c.store, rid)
     fetched, late, why = _fetch_within(repo, now, until)
     error = why if fetched is None else fetched.get("error")
-    if late or (error and cm.DEADLINE in error):
+    if late:
         return _result(now, "timeout", error), None, False
+    if error and fetched is not None and fetched.get("unsound"):
+        return _result(now, "broken", fetched["unsound"]), None, True
     if error:
-        return _result(now, "unreachable", error), None, False
+        return _result(now, "timeout" if cm.DEADLINE in error else "unreachable", error), None, False
+    if _left(until) < APPLY_MIN_S:
+        return _result(now, "timeout", "less than %g s of the sync's %g s budget left after the fetch — nothing planned, "
+                                       "nothing written" % (APPLY_MIN_S, BUDGET_S)), None, False
     with cs.read_budget(_left(until)):
         lost = cb.source_lost(c.store, c.copies, repo, fetched, now)
         if lost:
@@ -287,63 +303,82 @@ def _record(store, rid, result, checked, deadline):
     return True
 
 
-def _import_failed(e):
-    """The reason of an import that did not go through: the records it disagrees on, and `ctx sync` first."""
-    if isinstance(e, co.Conflict):
-        ids = [x.get("id") for x in (e.payload.get("conflicts") or []) if isinstance(x, dict) and x.get("id")]
-        what = ", ".join(ids) if ids else ("removals to confirm" if e.payload.get("suspicious_removal") else str(e))
-        what = "the edits waiting to be imported need a decision (%s)" % what
-    else:
-        what = "the edits waiting could not be imported (%s)" % (str(e) or type(e).__name__)
-    return "%s — `ctx sync` first" % cb.clip(what, cb.NOTE_CLIP - 20)
+def _conflict_reason(e):
+    """The reason of an import that needs a decision (co.Conflict): the records it disagrees on, and `ctx sync` first."""
+    ids = [x.get("id") for x in (e.payload.get("conflicts") or []) if isinstance(x, dict) and x.get("id")]
+    what = ", ".join(ids) if ids else ("removals to confirm" if e.payload.get("suspicious_removal") else str(e))
+    return "%s — `ctx sync` first" % cb.clip("the edits waiting to be imported need a decision (%s)" % what, cb.NOTE_CLIP - 20)
 
 
-def run(c, repos, now, deadline):
+def _failure(e):
+    """The reason of an unexpected failure: "store: <message>" for the store's own (a record missing or not downloaded),
+    else the message (or the kind of the exception when it has none)."""
+    said = str(e) or type(e).__name__
+    return "store: " + said if isinstance(e, cs.StoreError) else said
+
+
+def run(c, repos, now, deadline, only_due=False, skipped=None):
     """One sync pass over `repos` (repository dicts, `sync: daily`) at `now` (ISO text), by `deadline` (a time.monotonic()
     moment; the command gives BUDGET_S). `c` is the command line's context (`ctx.Ctx`: store, copies, home, guard,
     import_first). Returns one result per repository — `public`'s keys and `apply` (the apply's result, its plan with the
     rows, or None), for the report — and writes each into the repository's block state (`sync_result`, `sync_attempt`).
 
-    1. The lock: held by another session (co.Busy) → [] at once, nothing written — so is a guard that refuses (a
-       registration still downloading: the provider boundary cannot be checked).
-    2. The edits waiting in local-context.md are imported first, as by every writing command; when they cannot be (a
-       conflict for `ctx sync`), every repository is "import-conflict" and nothing is written to the records.
-    3. Each repository in turn, while the budget lasts (its last RESERVE_S kept for the writing down): `_pass`. The
-       budget gone before a repository, or during its pass, is "timeout"; a failure of the store in a pass is "broken"
-       with its reason (the check does not move: retried in an hour). One repository's failure never stops the next.
-    4. The card's line about the repositories, when a check moved and time is left."""
+    1. The lock: held by another session (co.Busy) → [] at once, nothing written — and so is a guard that refuses (a
+       registration still downloading: the provider boundary cannot be checked). When `skipped` is a list it gets why:
+       "busy", or "guard: <why>".
+    2. With `only_due` (the command's --if-due, whose choice was made before the lock) the repositories are checked
+       again under the lock, from their states as they are now: another session that synced them meanwhile leaves
+       none due, and [] is returned — no second pass, no second result over the first one.
+    3. The edits waiting in local-context.md are imported first, as by every writing command. A conflict for `ctx sync`
+       makes every repository "import-conflict"; any other failure (the store: a record missing or not downloaded)
+       "error" ("store: <why>"). Nothing is written to the records then.
+    4. Each repository in turn, while the budget lasts (its last RESERVE_S kept for the writing down): `_pass`. Less
+       than APPLY_MIN_S left before a repository is "timeout" (not started); an unexpected failure in a pass is
+       "error" with its message (the check does not move: retried in an hour). One repository's failure never stops
+       the next.
+    5. The card's line about the repositories, when a check moved and time is left."""
     stack = contextlib.ExitStack()
     try:
         stack.enter_context(co.lock(c.home))
     except (co.Busy, OSError):
+        if skipped is not None:
+            skipped.append("busy")
         return []
     with stack:
+        if only_due:
+            repos = pick_due(c.store, repos, now)
+            if not repos:
+                return []
         try:
             c.guard()
-        except (co.Refused, cs.PathRefused, cs.StoreError, OSError):
+        except (co.Refused, cs.PathRefused, cs.StoreError, OSError) as e:
+            if skipped is not None:
+                skipped.append("guard: " + cb.clip(str(e) or type(e).__name__, cb.NOTE_CLIP))
             return []
         until = deadline - RESERVE_S
         failed = None
         try:
             with cs.read_budget(_left(until)):
                 c.import_first()
+        except co.Conflict as e:
+            failed = _result(now, "import-conflict", _conflict_reason(e))
         except Exception as e:  # noqa: BLE001 — an import that cannot go through stops the writing, never the skill
-            failed = _result(now, "timeout" if not isinstance(e, co.Conflict) and _left(until) <= 0 else "import-conflict",
-                             _import_failed(e))
+            failed = _result(now, "error", _failure(e))
         results = []
         for repo in repos:
             rid, res, checked = repo["id"], None, False
             if failed:
                 result = dict(failed)
-            elif _left(until) <= 0:
-                result = _result(now, "timeout", "the sync's %g s budget ran out before this repository" % BUDGET_S)
+            elif _left(until) < APPLY_MIN_S:
+                result = _result(now, "timeout", "less than %g s of the sync's %g s budget left before this repository — not "
+                                                 "started" % (APPLY_MIN_S, BUDGET_S))
             else:
                 try:
                     result, res, checked = _pass(c, repo, now, until)
                 except cb.SourceLost as e:          # the state moved between the check and the plan
                     result, checked = _result(now, "broken", str(e)), True
                 except Exception as e:  # noqa: BLE001 — one repository's failure never stops the next (§6.4)
-                    result = _result(now, "timeout" if _left(until) <= 0 else "broken", str(e) or type(e).__name__)
+                    result = _result(now, "error", _failure(e))
             _record(c.store, rid, result, now if checked else None, deadline)
             results.append(dict(result, repo=rid, apply=res))
         if any(r["outcome"] in MOVED for r in results) and _left(deadline) > 0:

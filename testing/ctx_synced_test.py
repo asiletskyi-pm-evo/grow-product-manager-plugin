@@ -188,7 +188,8 @@ def ahead(**kw):
 
 
 check("the numbers of the spec: 24 h from the last successful check, 1 h after a failed attempt, a 20 s budget",
-      sy.DUE_AFTER == datetime.timedelta(hours=24) and sy.RETRY_AFTER == datetime.timedelta(hours=1) and sy.BUDGET_S == 20)
+      sy.DUE_AFTER == datetime.timedelta(hours=24) and sy.RETRY_AFTER == datetime.timedelta(hours=1) and sy.BUDGET_S == 20
+      and sy.APPLY_MIN_S == 3)
 check("never checked, never tried: due", sy.due(DAILY, {}, NOW) is True)
 check("an empty state (load_state's shape, checked None) is due", sy.due(DAILY, {"checked": None, "blocks": {}}, NOW) is True)
 check("checked 23 h ago: not due", sy.due(DAILY, {"checked": ago(hours=23)}, NOW) is False)
@@ -230,7 +231,7 @@ check("with a report: ' — звіт: <path from the storage root>'",
       == "Ядро оновило 1 блок у zorg-growth, конфліктів 0 (лишено твоє) — звіт: _System/context/sync/2026-10-17.md")
 check("the result's keys are the contract's", sy.RESULT_KEYS == ("at", "outcome", "updated", "added", "removed", "kept_yours", "took_rule",
                                                                  "awaiting", "held", "rejected", "reason", "report", "snapshot"))
-check("the outcomes are the contract's", set(sy.OUTCOMES) == {"changed", "no-changes", "unreachable", "broken", "held", "import-conflict", "timeout"})
+check("the outcomes are the contract's (and error, since fix round 1)", set(sy.OUTCOMES) == {"changed", "no-changes", "unreachable", "broken", "held", "import-conflict", "timeout", "error"})
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

@@ -73,8 +73,12 @@
                                 ? left waiting, a text you rejected by undoing a pass held. --if-due first keeps only the
                                 repositories due — a day after their last successful check, an hour after a failed
                                 attempt — reading their block state alone (no lock, no network); none → only CTX_RESULT.
-                                The lock held by another session: nothing, at once. The edits waiting are imported first
-                                (a conflict: import-conflict, nothing written). 20 s for every repository together.
+                                The lock held by another session: nothing, at once (skipped: busy; a guard that refuses:
+                                skipped: guard: <why>); --if-due checks again under the lock. The edits waiting are
+                                imported first (a conflict: import-conflict, nothing written). 20 s for every repository
+                                together; no plan or write starts with less than 3 s left. Outcomes: changed, no-changes,
+                                held, broken (an empty, cut or foreign blocks file — retried in a day), unreachable,
+                                timeout, import-conflict, error (retried in an hour).
                                 One line per repository the pass changed: «Ядро оновило N блоків у <repo>, конфліктів K
                                 (лишено твоє)». Exit 0 whatever happened (3: bad usage). CTX_RESULT: synced (ids),
                                 results [{repo, at, outcome, updated, added, removed, kept_yours, took_rule, awaiting, held,
@@ -1009,9 +1013,10 @@ def _sync_now(text):
 def cmd_provider_sync(a, c):
     """The daily sync (ctx_synced): the repositories with `sync: daily` — REPO names one of them — not paused, not
     search-only; with --if-due only those due, read from their block state without the lock or the network (none →
-    nothing printed, only CTX_RESULT). Then `sy.run` within BUDGET_S, and one sentence per repository whose pass changed a
-    block or decided a conflict. Exit 0 whatever the repositories did; a usage error (an unknown REPO, one without
-    `sync: daily`, a paused one, a bad --now) is exit 3."""
+    nothing printed, only CTX_RESULT). Then `sy.run` within BUDGET_S — with --if-due it checks again under the lock — and
+    one sentence per repository whose pass changed a block or decided a conflict. A run that did nothing because of the
+    lock or the guard says so in CTX_RESULT: skipped "busy" | "guard: <why>". Exit 0 whatever the repositories did; a
+    usage error (an unknown REPO, one without `sync: daily`, a paused one, a bad --now) is exit 3."""
     deadline = time.monotonic() + sy.BUDGET_S
     at = _sync_now(a.now)
     quiet = {"command": "provider", "action": "sync", "synced": []}
@@ -1037,11 +1042,15 @@ def cmd_provider_sync(a, c):
         print("nothing to sync — no repository has `sync: daily` in its registration (context-connect turns it on)")
     if not repos:
         return 0, quiet
-    results = sy.run(c, repos, at, deadline)
+    skipped = []
+    results = sy.run(c, repos, at, deadline, only_due=a.if_due, skipped=skipped)
     for r in results:
         if sy.news(r):
             print(sy.sentence(r))
-    return 0, dict(quiet, synced=[r["repo"] for r in results], results=[sy.public(r) for r in results])
+    out = dict(quiet, synced=[r["repo"] for r in results], results=[sy.public(r) for r in results])
+    if skipped:
+        out["skipped"] = skipped[0]
+    return 0, out
 
 
 def cmd_provider(a, c):

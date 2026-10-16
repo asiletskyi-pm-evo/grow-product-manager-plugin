@@ -410,7 +410,11 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     error, a bad answer or nothing counts as unavailable for this fetch; under "auto" the folder is then tried.
     A text that holds no region of the namespace, or a begin marker of it that is never closed, is no source either
     (`_unsound`: "the blocks file holds no <ns> block (…)", "the blocks file is cut at block <id>"; from the server
-    with "MCP: " before it) — an empty, cut or foreign file must never read as "every block removed".
+    with "MCP: " before it) — an empty, cut or foreign file must never read as "every block removed". When every source
+    tried answered such a text (since v3.14), `unsound` says so too — the same words as `error` — so the daily sync can
+    tell a broken source (checked, retried in a day) from one that did not answer (retried in an hour): under "auto" a
+    server that did not answer and a folder copy that is cut is no `unsound`, and neither is a server error or a note
+    with no text content.
     `include_skipped` keeps the blocks of `skip_blocks` in `blocks` (the plan's `--all` lists them); by default they
     are dropped.
 
@@ -430,7 +434,8 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks (unless `include_skipped`),
     namespace: the marker namespace the blocks were read in (set even when `error` is),
     team: the team region or None, team_source: "folder"|None, team_error: why the team region could not be built, or None,
-    error: why no blocks came, or None, checked: ISO time}.
+    error: why no blocks came, or None, unsound: `error` when every source tried gave an empty, cut or foreign text, else
+    None, checked: ISO time}.
     The team region is built from the core folder alone (the card, the people, the role model), whichever
     source the blocks came from, and only once the blocks have arrived: when `error` is set, team, team_source
     and team_error are all empty. `team` None with `team_error` None means the repository offers no team
@@ -440,7 +445,7 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     a missing core folder or provider manifest is a reason, never "not offered".
     """
     out = {"source": None, "version": None, "blocks": {}, "namespace": repo["namespace"], "team": None, "team_source": None,
-           "team_error": None, "error": None, "checked": _stamp(now)}
+           "team_error": None, "error": None, "unsound": None, "checked": _stamp(now)}
     src, core_root, url = repo["blocks_source"], repo["core_root"], repo["endpoint"]["url"]
     explicit = repo.get("namespace_explicit", True)         # a repository built by hand has no flag: its namespace is meant
     with _bounded_reads(), cs.read_budget(None if deadline is None else deadline - time.monotonic()):
@@ -453,13 +458,15 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
         if not explicit and manifest is not None:
             out["namespace"] = _s(manifest.get("namespace")) or out["namespace"]
 
-        text, errors = None, []
+        text, errors, unanswered = None, [], False         # unanswered: a source tried gave no text at all
         if src == "auto" and not url and not core_root:
             errors.append("the registration has neither an endpoint url nor a core folder")
+            unanswered = True
         else:
             if src == "mcp" or (src == "auto" and url):
                 text, why = _from_mcp(repo, blocks_file, client_factory, deadline)
                 bad = _unsound(text, out["namespace"]) if text is not None else None
+                unanswered = unanswered or text is None
                 if bad:                                 # an empty, cut or foreign note is a bad answer: under auto, the folder
                     text, why = None, "MCP: " + bad
                 if text is not None:
@@ -469,6 +476,7 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
             if text is None and src in ("auto", "paths"):
                 text, why = _from_folder(repo, blocks_file)
                 bad = _unsound(text, out["namespace"]) if text is not None else None
+                unanswered = unanswered or text is None
                 if bad:
                     text, why = None, bad
                 if text is not None:
@@ -481,6 +489,7 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
             out["team_source"] = "folder" if out["team"] is not None else None
     if text is None:
         out["error"] = "; ".join(errors)
+        out["unsound"] = out["error"] if errors and not unanswered else None
         return out
     counts = collections.Counter(v for v in versions if v)
     out["version"] = counts.most_common(1)[0][0] if counts else None

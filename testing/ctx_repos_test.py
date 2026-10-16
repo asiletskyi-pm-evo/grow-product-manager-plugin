@@ -412,8 +412,9 @@ with tempfile.TemporaryDirectory() as d:
     # --- the folder
     f = cr.fetch(core_repo())
     check("fetch returns the documented keys",
-          set(f) == {"source", "version", "blocks", "namespace", "team", "team_source", "team_error", "error", "checked"}, sorted(f))
-    check("…a clean fetch has no error and no team error", f["error"] is None and f["team_error"] is None, f)
+          set(f) == {"source", "version", "blocks", "namespace", "team", "team_source", "team_error", "error", "unsound", "checked"}, sorted(f))
+    check("…a clean fetch has no error, no team error and is not unsound", f["error"] is None and f["team_error"] is None
+          and f["unsound"] is None, f)
     check("folder source: the blocks of the core's blocks file and nothing else",
           f["source"] == "folder" and set(f["blocks"]) == {"scope", "product", "teams"} and f["error"] is None, f)
     scope = f["blocks"].get("scope", "")
@@ -651,18 +652,21 @@ with tempfile.TemporaryDirectory() as d:
             frb = cr.fetch(core_repo(blocks_source="auto", endpoint={"url": fake.url, "root": "", "headers_env": ""}))
             check("%s → error, not a crash; auto → folder" % label, fr["source"] is None and fr["error"]
                   and frb["source"] == "folder" and frb["blocks"] == f["blocks"], (fr, frb))
+            check("…a server error is no unsound text (the sync: unreachable, not broken)", fr["unsound"] is None, fr)
     with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         fake.raw_result = {"content": 5, "isError": False}
         fr = cr.fetch(growth_repo(fake.url))
         check("a server that sends a number as the content → error, not a TypeError", fr["source"] is None and fr["error"], fr)
+        check("…the note has no text content: no unsound text either", fr["unsound"] is None, fr)
     with FakeMcp(tree={GROWTH_PATH: "", "ZorgCore/" + CORE_BLOCKS_FILE: ""}) as fake:
         fz = cr.fetch(growth_repo(fake.url))
         check("MCP content \"\" (an empty note) → an error, not a source with no blocks",
               fz["source"] is None and fz["blocks"] == {}
               and fz["error"] == "MCP: the blocks file holds no zorg-growth block (empty, cut, or another namespace)", fz)
+        check("…and is unsound, in the words of the error (since v3.14: the sync calls the source broken)", fz["unsound"] == fz["error"], fz)
         fza = cr.fetch(core_repo(blocks_source="auto", endpoint={"url": fake.url, "root": "ZorgCore/", "headers_env": ""}))
         check("…under auto an empty note counts as a bad answer: the core folder is read instead",
-              fza["error"] is None and fza["source"] == "folder" and fza["blocks"] == f["blocks"], fza)
+              fza["error"] is None and fza["source"] == "folder" and fza["blocks"] == f["blocks"] and fza["unsound"] is None, fza)
     with FakeMcp(tree={GROWTH_PATH: read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))}) as fake:
         fw = cr.fetch(growth_repo(fake.url))
         check("a note served under the wrong path (another repository's blocks) → the same error, nothing offered",
@@ -671,6 +675,23 @@ with tempfile.TemporaryDirectory() as d:
         fc = cr.fetch(growth_repo(fake.url))
         check("a note cut inside its last region → 'cut at block <id>'", fc["source"] is None and fc["blocks"] == {}
               and fc["error"].startswith("MCP: the blocks file is cut at block "), fc)
+        check("…unsound, and so is a note of another repository", fc["unsound"] == fc["error"] and fw["unsound"] == fw["error"], (fc, fw))
+        cut_core = os.path.join(d, "CutCore")
+        shutil.copytree(CORE_FIX, cut_core)
+        pristine_blocks = read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))
+        open(os.path.join(cut_core, CORE_BLOCKS_FILE), "w", encoding="utf-8", newline="").write(
+            pristine_blocks[:pristine_blocks.index("<!-- zorg-core:end id=teams -->")])
+        auto_cut = lambda url: cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [cut_core], "blocks_file": CORE_BLOCKS_FILE,
+                                                "blocks_source": "auto", "endpoint": {"url": url, "root": ""}}))
+        fake.tree[CORE_BLOCKS_FILE] = GROWTH_TEXT     # the server serves another repository's note; the folder copy is cut
+        both = auto_cut(fake.url)
+        check("auto: the server's note unsound and the folder copy cut → unsound (every source tried answered a bad text)",
+              both["source"] is None and both["unsound"] == both["error"] and "MCP: " in both["error"]
+              and "cut at block teams" in both["error"], both)
+    down_cut = auto_cut("http://127.0.0.1:9/mcp")
+    check("auto: the server does not answer and the folder copy is cut → an error, not unsound (the sync: unreachable)",
+          down_cut["source"] is None and down_cut["error"] and "cut at block teams" in down_cut["error"] and down_cut["unsound"] is None,
+          down_cut)
 
     # --- a core file that never arrives
     saved = os.environ.get("GROW_PM_CTX_READ_TIMEOUT")
@@ -1018,11 +1039,17 @@ with tempfile.TemporaryDirectory() as d:
     check("an empty blocks file (0 bytes) is no source: an error, never 'the repository removed every block'",
           fempty["blocks"] == {} and fempty["source"] is None and fempty["version"] is None
           and fempty["error"] == "the blocks file holds no zorg-core block (empty, cut, or another namespace)", fempty)
+    check("…unsound: the folder answered, with a text that is no source", fempty["unsound"] == fempty["error"], fempty)
+    fgone = cr.fetch(repo_of({"id": "zorg-case", "kind": "folder", "paths": [d], "blocks_file": "Core/no-such-blocks.md"}))
+    check("…a blocks file that is not there is an error and no unsound text (nothing answered)",
+          fgone["error"] and "not found" in fgone["error"] and fgone["unsound"] is None, fgone)
     pristine_core = read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))
     cut = pristine_core[:pristine_core.index("<!-- zorg-core:end id=teams -->")]
     fcut = folder_with(cut, namespace="zorg-core")
     check("a blocks file cut inside its last region → 'cut at block teams', no blocks (the regions before it are not offered alone)",
           fcut["blocks"] == {} and fcut["source"] is None and fcut["error"] == "the blocks file is cut at block teams", fcut)
+    check("…unsound, as are a file of another namespace and a begin marker never closed",
+          fcut["unsound"] == fcut["error"] and fbr["unsound"] == fbr["error"] and fns["unsound"] == fns["error"], (fcut, fbr, fns))
     fother = folder_with(blocks_of(region("zorg-other", "scope", "1", "Not ours")), namespace="zorg-core")
     check("a file of another namespace only → the same error as an empty one", fother["source"] is None
           and fother["error"] == "the blocks file holds no zorg-core block (empty, cut, or another namespace)", fother)
