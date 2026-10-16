@@ -459,6 +459,19 @@ hostile = one(res("error", reason="bad\n\x1b[31mred\r\n‮evil " + "z" * 300))
 check("…a reason is one line without control characters or bidi overrides", hostile and "\n" not in hostile and "\x1b" not in hostile
       and "‮" not in hostile and len(hostile) < 140, repr(hostile))
 check("an outcome the digest does not know (a newer plugin wrote it) gives no line", one(res("from-the-future")) is None)
+# final review: a source that lags behind your bases is never a silent «no changes»
+LAG = "⚠ source behind — nothing taken"
+check("final review: a pass that held the blocks of a lagging source — the mark right after the synced date, before the other parts",
+      one(res("no-changes", held_behind=["scope", "teams"])) == "  repos: zorg-core · synced 2026-10-16 · %s · no changes" % LAG,
+      one(res("no-changes", held_behind=["scope", "teams"])))
+check("…with its report and a ? still waiting (the awaits count stays)",
+      one(res("no-changes", held_behind=["scope", "teams"], awaiting=["teams"], report=REPORT))
+      == "  repos: zorg-core · synced 2026-10-16 · %s · no changes · report %s · 1 block(s) awaits a decision" % (LAG, REPORT))
+check("…a pass that changed something besides: the mark before the counts",
+      one(res("changed", updated=1, held_behind=["a"])) == "  repos: zorg-core · synced 2026-10-16 · %s · 1 updated" % LAG)
+check("…held_behind empty, not a list, or absent (a v3.13 state, an older cache): no mark",
+      one(res("no-changes", held_behind=[])) == one(res("no-changes", held_behind="scope")) == one(res("no-changes"))
+      == "  repos: zorg-core · synced 2026-10-16 · no changes")
 
 for line_ in ("", "sync: off\n", "sync: weekly\n", "sync: yes\n", "sync: true\n", "sync:\n"):
     check("a registration with %r (not daily) gets no part, whatever its old result says" % (line_.strip() or "no key"),

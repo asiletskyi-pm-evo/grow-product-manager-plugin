@@ -2015,8 +2015,8 @@ G_METRICS = ("<!-- zorg-growth:begin id=growth-metrics v=0.1 -->\n#### Growth me
              "<!-- zorg-growth:end id=growth-metrics -->")
 G_TEAM = "<!-- zorg-growth:begin id=team v=0.1 -->\n### Team: Alpha (growth view)\n- **Growth squad:** Alpha\n<!-- zorg-growth:end id=team -->"
 G_OKR = "<!-- zorg-growth:begin id=growth-okr v=0.2 -->\n#### Growth OKR\n- double weekly buyers\n<!-- zorg-growth:end id=growth-okr -->"
-SYNC_KEYS = {"repo", "at", "outcome", "updated", "added", "removed", "kept_yours", "took_rule", "awaiting", "held", "rejected", "reason",
-             "report", "snapshot"}
+SYNC_KEYS = {"repo", "at", "outcome", "updated", "added", "removed", "kept_yours", "took_rule", "awaiting", "held", "held_behind", "rejected",
+             "reason", "report", "snapshot"}
 assert G_METRICS in GROWTH_TEXT and G_TEAM in GROWTH_TEXT
 
 
@@ -2525,9 +2525,9 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # one pass: ⚠ kept yo
               (rc, r0, out[-500:]))
         check("…a file with frontmatter (type system, kind context-sync, date, repos) and the title `# Синк контексту — YYYY-MM-DD`",
               rep.startswith("---\ntype: system\nkind: context-sync\ndate: 2026-10-16\nrepos: [zorg-growth]\n---\n\n# Синк контексту — 2026-10-16\n\n"), rep[:300])
-        check("…the section: `## <id> · HH:MM · джерело <label> · ядро v<v> · база v<a> → v<b>` (the version the pass moved the bases to)",
-              re.search(r"^## zorg-growth · 09:00 · джерело MCP \(127\.0\.0\.1\) · ядро v\S+ · база v0\.1 → v0\.2$", rep, re.M)
-              or re.search(r"^## zorg-growth · 09:00 · джерело .+ · ядро v.+ · база v.+ → v.+$", rep, re.M), rep[:400])
+        check("…the section: `## <id> · HH:MM · джерело <label> · ядро v<v> · база v<a> → v<b>` (the version the pass moved the bases to), "
+              "each version as code",
+              re.search(r"^## zorg-growth · 09:00 · джерело .+ · ядро v`[^`\s]+` · база v`0\.1` → v`0\.2`$", rep, re.M), rep[:400])
         check("…three rows: ⚠ kept yours, ~ updated, + added — each in the cascade's words, with the record it is in",
               len(rows) == 3 and "| Блок | Знак | Рішення | Чому | Запис |" in rep
               and "`growth-metrics`" in rows[0] and "⚠" in rows[0] and "змінили обидва → лишено твоє: блок не є правилом ядра" in rows[0]
@@ -2535,7 +2535,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # one pass: ⚠ kept yo
               and "`growth-okr`" in rows[2] and "новий блок у ядрі → додано" in rows[2] and "`%s`" % okr_host in rows[2], rows)
         check("…the conflict: its own part with BOTH texts (yours as you wrote it, the core's as it is now)",
               "### Конфлікт: `growth-metrics` — лишено твоє" in rep and "weekly active shoppers (mine)" in rep and "weekly buyers" in rep
-              and "Твій текст (v0.1)" in rep and "Текст ядра (v0.2)" in rep, rep)
+              and "Твій текст (v`0.1`)" in rep and "Текст ядра (v`0.2`)" in rep, rep)
         check("…the command that takes the core's text, ready, and the way back with the snapshot folder as the last line",
               "Взяти текст ядра: ctx provider apply zorg-growth --choose growth-metrics=theirs" in rep.splitlines()
               and rep.rstrip("\n").splitlines()[-1] == "Відкотити цей прохід: ctx undo (знімок %s)" % r0["snapshot"], rep[-400:])
@@ -3260,6 +3260,179 @@ check("fix round 1: every pass that WRITES (not every pass); a retry no sooner t
       "the report's command and last line as the code prints them",
       all(not lacks(text, needed) for text, needed in need_f1) and all(not [s for s in bad if s in text] for text, bad in gone_f1),
       ([lacks(text, needed) for text, needed in need_f1], [[s for s in bad if s in text] for text, bad in gone_f1]))
+
+# --- v3.14.0 final review: the write starts only with its floor left; a lagging source is visible; the card's registrations on
+# the sync's deadline
+import session_start as ss_mod  # noqa: E402
+SCOPE_06 = SCOPE_05.replace("v=0.5", "v=0.6").replace("Zorg App and Zorg Lite.", "Zorg App, Zorg Lite and Zorg Pro.")
+
+
+def sync_ctx(e):
+    """The command line's context of a `provider sync` run in this process, for sy_mod.run with a deadline of the test's own."""
+    return ctx_cli.Ctx(ctx_cli.build_parser().parse_args(["provider", "sync", "--home", e.home, "--context", e.ctx]))
+
+
+def run_by(c, repos, now, deadline):
+    with cs_mod.guard_roots(ctx_ops_mod.allowed_roots(c.home, c.text)):
+        return sy_mod.run(c, repos, now, deadline)
+
+
+def first_plan_until(moment):
+    """cb_mod.plan whose first call — the pass's own plan (the apply plans again) — returns at the time.monotonic() `moment`."""
+    calls, real = [], cb_mod.plan
+
+    def plan(store, copies, repo, fetched, now, all_=False):
+        calls.append(repo["id"])
+        if len(calls) == 1:
+            time.sleep(max(0.0, moment - time.monotonic()))
+        return real(store, copies, repo, fetched, now, all_=all_)
+    return plan
+
+
+def repos_card_line(e):
+    return next((l for l in read(e.store, "INDEX.md").splitlines() if l.startswith("- **Repos:**")), None)
+
+
+with tempfile.TemporaryDirectory() as d:                 # Important 1: no write without its floor, and the write keeps its floor
+    e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra="sync: daily\n")
+    blocks_file = os.path.join(d, "ZorgCore", CORE_BLOCKS)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+    change(blocks_file, SCOPE_04, SCOPE_05)              # an apply would write
+    c = sync_ctx(e)
+    repos = [r for r in crp_mod.load_repos(c.text, c.home) if r["id"] == "zorg-core"]
+    records, j, before = tree_of(os.path.join(e.store, "records")), journal_len(e), block_state(e, "zorg-core")
+    real_plan, real_apply, budgets = cb_mod.plan, cb_mod.apply, []
+
+    def watched_apply(*args, **kw):
+        budgets.append(cs_mod.read_timeout())            # the time the apply has for its reads, as it starts
+        return real_apply(*args, **kw)
+
+    deadline = time.monotonic() + 8
+    cb_mod.plan, cb_mod.apply = first_plan_until(deadline - sy_mod.RESERVE_S - 2.0), watched_apply   # the plan leaves 2 s
+    try:
+        out = run_by(c, repos, DAY1, deadline)
+    finally:
+        cb_mod.plan, cb_mod.apply = real_plan, real_apply
+    r0, st = (out or [{}])[0], block_state(e, "zorg-core")
+    check("final review: a plan that leaves less than 3 s of the work time: timeout before the write — no apply; records, journal, "
+          "bases and the check unchanged; the reason says nothing was written",
+          r0.get("outcome") == "timeout" and budgets == [] and "nothing written" in (r0.get("reason") or "")
+          and tree_of(os.path.join(e.store, "records")) == records and journal_len(e) == j
+          and st["checked"] == before["checked"] and st["blocks"] == before["blocks"] and st["sync_attempt"] == DAY1, (r0, budgets))
+    deadline = time.monotonic() + 8
+    cb_mod.plan, cb_mod.apply = first_plan_until(deadline - sy_mod.RESERVE_S - 3.6), watched_apply   # …and one that leaves 3.6 s
+    try:
+        out = run_by(c, repos, DAY2, deadline)
+    finally:
+        cb_mod.plan, cb_mod.apply = real_plan, real_apply
+    r0, jl = (out or [{}])[0], last_journal(e)
+    check("…a plan that leaves the floor: the write starts with at least 3 s for its reads and completes — the record, its journal "
+          "line (provider-sync, the pass's snapshot), the check",
+          r0.get("outcome") == "changed" and len(budgets) == 1 and budgets[0] >= sy_mod.APPLY_MIN_S - 0.1
+          and jl["op"] == "provider-sync" and jl["snapshot"] == r0.get("snapshot") and journal_len(e) == j + 1
+          and region_in(read(e.ctx), "zorg-core", "scope").startswith(SCOPE_05) and block_state(e, "zorg-core")["checked"] == DAY2,
+          (r0, budgets, jl))
+
+with tempfile.TemporaryDirectory() as d:                 # Important 3: the card's registrations are read on the sync's deadline
+    e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra="sync: daily\n")
+    blocks_file = os.path.join(d, "ZorgCore", CORE_BLOCKS)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+    line_before = repos_card_line(e)
+    c = sync_ctx(e)
+    repos = [r for r in crp_mod.load_repos(c.text, c.home) if r["id"] == "zorg-core"]
+    slows = [os.path.join(e.home, ".grow-pm", "providers", "zorg-evicted%d.yaml" % k) for k in range(2)]
+    real_guard = c.guard
+
+    def guard_then_evict():                              # the guard has read every registration; then iCloud evicts two
+        real_guard()
+        for s in slows:
+            os.mkfifo(s)
+
+    def released():
+        for s in slows:
+            if os.path.exists(s):
+                unblock(s)
+                os.remove(s)
+
+    change(blocks_file, SCOPE_04, SCOPE_05)              # the pass writes: a compile, and the card with it
+    c.guard = guard_then_evict
+    deadline = time.monotonic() + 10
+    try:
+        out = run_by(c, repos, DAY1, deadline)
+        late = time.monotonic() - deadline
+    finally:
+        released()
+    r0 = (out or [{}])[0]
+    check("final review: two registrations evicted during a writing pass — the run returns by its deadline (before the fix the card "
+          "build and the card refresh took 6 s each on top), the pass is written with its journal line, the card keeps its Repos line",
+          r0.get("outcome") == "changed" and late < 1.0 and last_journal(e)["op"] == "provider-sync"
+          and line_before and repos_card_line(e) == line_before, (r0.get("outcome"), round(late, 2), line_before, repos_card_line(e)))
+    change(blocks_file, SCOPE_05, SCOPE_06)
+    real_min, real_plan = sy_mod.APPLY_MIN_S, cb_mod.plan
+    deadline = time.monotonic() + 8
+    sy_mod.APPLY_MIN_S = 0.5                             # the floor lowered, so that the write may start with 1.5 s left
+    cb_mod.plan = first_plan_until(deadline - sy_mod.RESERVE_S - 1.5)
+    try:
+        out = run_by(c, repos, DAY2, deadline)
+        late = time.monotonic() - deadline
+    finally:
+        sy_mod.APPLY_MIN_S, cb_mod.plan = real_min, real_plan
+        released()
+    r0 = (out or [{}])[0]
+    check("…a write that starts late: the card it builds reads the registrations on the write's budget, not on a fresh 6 s — the "
+          "run returns by its deadline, the pass is written, the card keeps its Repos line",
+          r0.get("outcome") == "changed" and late < 1.0 and "Zorg Pro" in (region_in(read(e.ctx), "zorg-core", "scope") or "")
+          and repos_card_line(e) == line_before, (r0.get("outcome"), round(late, 2), repos_card_line(e)))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # Important 2: a lagging source is visible — the digest, the report once, the ?
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        fake.tree[GROWTH_PATH] = growth_blocks(core_metrics_v("0.2", "weekly buyers"), G_TEAM)
+        run_ok(e, "provider", "sync", "--now", DAY1)                           # your base of growth-metrics is v0.2 now
+        unbase(e, "zorg-growth", "team")                                        # team has no base: the plan cannot tell who moved
+        old_team = G_TEAM.replace("- **Growth squad:** Alpha", "- **Growth squad:** Alpha Old")
+        fake.tree[GROWTH_PATH] = growth_blocks(core_metrics_v("0.1", "weekly visitors"), old_team)   # a mirror not refreshed yet
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2)
+        r0 = (res or {}).get("results", [{}])[0]
+        st = block_state(e, "zorg-growth")
+        rep = report_of(e, "2026-10-17") or ""
+        part = ss_mod._sync_part("zorg-growth", st.get("sync_result"), st.get("checked"))
+        check("final review: a lagging pass — held_behind in the result and the state, a ? on it still awaits a decision, nothing taken",
+              rc == 0 and r0.get("outcome") == "no-changes" and sorted(r0.get("held_behind") or []) == ["growth-metrics", "team"]
+              and r0.get("awaiting") == ["team"] and sorted((st.get("sync_result") or {}).get("held_behind") or []) == ["growth-metrics", "team"]
+              and "Alpha Old" not in read(e.ctx) and "weekly visitors" not in read(e.ctx), (rc, r0))
+        check("…the digest says the source is behind (not a plain «no changes»), names the report and keeps the awaits count",
+              part == "zorg-growth · synced 2026-10-17 · ⚠ source behind — nothing taken · no changes · report "
+                      "_System/context/sync/2026-10-17.md · 1 block(s) awaits a decision", part)
+        check("…the report has one part for the lag: «Джерело позаду вашої бази» naming both blocks, nothing to undo",
+              r0.get("report") == "_System/context/sync/2026-10-17.md" and rep.count("\n## zorg-growth · ") == 1
+              and rep.count("### Джерело позаду вашої бази") == 1 and "- `growth-metrics`" in rep and "- `team`" in rep
+              and rep.rstrip("\n").splitlines()[-1] == "Знімка цього проходу немає: відкочувати нічого.", (r0.get("report"), rep))
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2_PLUS_2H)
+        r1 = (res or {}).get("results", [{}])[0]
+        check("…a second pass over the same lagging copy (the same held set): no second part, and the state keeps the mark",
+              rc == 0 and r1.get("outcome") == "no-changes" and r1.get("report") is None and (report_of(e, "2026-10-17") or "") == rep
+              and sorted((block_state(e, "zorg-growth").get("sync_result") or {}).get("held_behind") or []) == ["growth-metrics", "team"],
+              (r1, (report_of(e, "2026-10-17") or "")[-300:]))
+
+# the documents say what the code does now
+pp_fr, cp_fr, lcp_fr = doc("references", "context-provider-protocol.md"), doc("references", "context-protocol.md"), \
+    doc("references", "local-context-protocol.md")
+sec11_fr = between(pp_fr, "### 12.11 ", "### 12.12 ") if "### 12.12 " in pp_fr else pp_fr[pp_fr.find("### 12.11 "):]
+need_fr = [(sec11_fr, ["no fetch, plan or write begins with less than 3 s of the work time left, and a write, once begun, has at least "
+                       "those 3 s for its reads", "`held_behind`", "Джерело позаду вашої бази", "the same blocks held behind"]),
+           (pp_fr, ["kept_yours, took_rule, awaiting, held, held_behind, rejected, reason, report, snapshot"]),
+           (cp_fr, ["⚠ source behind — nothing taken"]),
+           (lcp_fr, ["usually milliseconds; up to a few seconds while a registration is still downloading"])]
+gone_fr = [(lcp_fr, ["for most runs it costs milliseconds"])]
+check("final review: §12.11 (the floor, held_behind, the lag's report part once), §12.7's result keys, the digest's lag mark and step 0c's cost",
+      all(not lacks(text, needed) for text, needed in need_fr) and all(not [x for x in bad if x in text] for text, bad in gone_fr),
+      ([lacks(text, needed) for text, needed in need_fr], [[x for x in bad if x in text] for text, bad in gone_fr]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

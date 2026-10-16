@@ -531,6 +531,22 @@ err = raises(lambda: c._rpc("tools/call", {"name": "brain_status"}, 1, 0), McpEr
 check("…and an answer with no id is no answer to the request", err is not None and str(err).startswith("no response with id "),
       repr(err))
 
+# final review: a server that echoes the request's id as a string is answered; a bool or another text is not
+c = McpClient("http://127.0.0.1:9/mcp")
+c._send = lambda msg, timeout, retries: ({}, "application/json", b'{"jsonrpc":"2.0","id":"1","result":{"x":1}}')
+got = raises(lambda: c._rpc("tools/call", {"name": "brain_status"}, 1, 0), McpError)
+c = McpClient("http://127.0.0.1:9/mcp")
+c._send = lambda msg, timeout, retries: ({}, "application/json", b'{"jsonrpc":"2.0","id":"1","result":{"x":1}}')
+check("final review: the id 1 echoed as the string '1' is the answer", got is None and c._rpc("tools/call", {"name": "brain_status"}, 1, 0)[0] == {"x": 1},
+      repr(got))
+for other in (b'"01"', b'" 1"', b'"1.0"', b'"true"', b'true', b'1.0', b'"2"'):
+    c = McpClient("http://127.0.0.1:9/mcp")
+    c._send = lambda msg, timeout, retries, other=other: ({}, "application/json", b'{"jsonrpc":"2.0","id":' + other + b',"result":{"x":1}}')
+    err = raises(lambda: c._rpc("tools/call", {"name": "brain_status"}, 1, 0), McpError)
+    check("…the id %s is not the id 1" % other.decode(), err is not None and str(err).startswith("no response with id "), repr(err))
+check("…_same_id: an int or the same text, never a bool", cm._same_id(1, 1) and cm._same_id("1", 1) and not cm._same_id(True, 1)
+      and not cm._same_id("True", 1) and not cm._same_id(None, 1) and not cm._same_id([1], 1))
+
 
 # --- ctx repo status
 CORE_V1 = """schema: provider-registration/1

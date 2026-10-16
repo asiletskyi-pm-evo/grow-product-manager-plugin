@@ -302,7 +302,7 @@ def _count(value):
 
 
 def _items(value):
-    """How many blocks a list of the state names (kept_yours, awaiting, held); anything but a list is 0."""
+    """How many blocks a list of the state names (kept_yours, awaiting, held, held_behind); anything but a list is 0."""
     return len(value) if isinstance(value, list) else 0
 
 
@@ -310,7 +310,9 @@ def _sync_part(rid, result, checked):
     """What the repos line says of one repository — `<id> · …` — from its last `sync_result` (the block state's, or the
     summary's) and the day it was last checked (`checked`, an ISO text or None); None when there is nothing to say: no result,
     one that is not an object, or an outcome of a newer plugin than this hook. The formats are spec §8's, and every text
-    that came from a state or a server goes through `clip` (a line is one line)."""
+    that came from a state or a server goes through `clip` (a line is one line). A pass that held blocks because the
+    source lags behind your bases (`held_behind`, a non-empty list; a result written before the key existed has none)
+    says `⚠ source behind — nothing taken` right after its synced date."""
     if not isinstance(result, dict) or cc is None:
         return None
     outcome = result.get("outcome")
@@ -322,6 +324,8 @@ def _sync_part(rid, result, checked):
     awaits = _items(result.get("awaiting"))
     if outcome in ("changed", "no-changes"):
         bits = [synced]
+        if _items(result.get("held_behind")):     # a lagging source held what it offered: never a silent «no changes»
+            bits.append("⚠ source behind — nothing taken")
         changed = _count(result.get("updated")) + _count(result.get("added")) + _count(result.get("removed"))
         kept = _items(result.get("kept_yours"))
         if outcome == "no-changes":

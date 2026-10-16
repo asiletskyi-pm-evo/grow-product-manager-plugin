@@ -114,17 +114,22 @@ REG_READ_TIMEOUT_S = cc.BOUNDARY_READ_S                 # seconds one registrati
 REG_READ_DEADLINE_S = cc.BOUNDARY_DEADLINE_S            # …and all of them together (since v3.14): 6 — the boundary's budget
 
 
-def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S):
+def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S, deadline=None):
     """Every registered repository, normalised, in registration order — the vaults' providers folders
     first, then `<home>/.grow-pm/providers` (or `extra_dirs` when given, as in find_registrations;
     the home is never taken from the environment). An id seen twice keeps the first. Unreadable
     registrations — and, since v3.13.1, one not read within `timeout` seconds, since v3.14 also one not
     reached before REG_READ_DEADLINE_S for all of them has passed — are left out and, when `skipped`
-    is a list, appended to it as (path, reason). `timeout` None reads every file as it comes."""
+    is a list, appended to it as (path, reason). `timeout` None reads every file as it comes.
+    `deadline` (since v3.14.0; a time.monotonic() moment, None for none) is the caller's — the daily sync's: the reads
+    end by it too, each within what is left of it, and once it has passed no file is opened (each is skipped as not
+    read in time)."""
     dirs = [os.path.join(home, ".grow-pm", "providers")] if extra_dirs is None else list(extra_dirs)
-    deadline = None if timeout is None else time.monotonic() + REG_READ_DEADLINE_S
+    ends = None if timeout is None else time.monotonic() + REG_READ_DEADLINE_S
+    if deadline is not None:
+        ends = deadline if ends is None else min(ends, deadline)
     regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped, timeout=timeout,
-                                 deadline=deadline)
+                                 deadline=ends)
     return [normalise(r) for r in regs]
 
 

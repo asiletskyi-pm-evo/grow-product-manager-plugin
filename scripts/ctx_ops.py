@@ -877,19 +877,29 @@ def card_marks(store, recs, today, state=None):
     return ({r["id"]: sc.verified_of(r, st) for r in recs if sc.is_stale(r, st, today)}, len(store.archived()))
 
 
-def card_repos(store, recs, text, home, skipped=None):
+CARD_RESERVE_S = 1.0    # inside a read budget the card's registrations are read by this long before it ends: the card's own
+                        # reads that follow them keep it
+
+
+def card_repos(store, recs, text, home, skipped=None, deadline=None):
     """[{"id", "blocks", "v", "checked"}] for the card, in registration order: each registered repository that has
     blocks in `recs` — how many, the version most of them have a base at (None when none has) and when the store last
     checked the repository (None when never). A repository whose state cannot be read is listed without the last two;
     what a repository's markers or a state carry is cleaned of control characters before it reaches the card.
     A registration that could not be read (not there within its 3 s — iCloud —, or broken) makes the list partial:
     None then — the card keeps the line it has (`store_card`) — and, when `skipped` is a list, it gets the (path,
-    reason) pairs (since v3.13.1). Reads only, and never fails: a card line is not worth a compile."""
+    reason) pairs (since v3.13.1). Reads only, and never fails: a card line is not worth a compile.
+    The registrations are read by `deadline` (a time.monotonic() moment) when one is given and — since v3.14.0, the daily
+    sync's write and its card refresh — by CARD_RESERVE_S before the end of this thread's `cs.read_budget` when one is
+    in force: never on a fresh 6 s of their own past the sync's budget."""
     missed = []
+    ends = cs.budget_until()
+    if ends is not None:
+        deadline = ends - CARD_RESERVE_S if deadline is None else min(deadline, ends - CARD_RESERVE_S)
     try:
         import ctx_blocks as cb                  # here: both import this module
         import ctx_repos as crp
-        repos = crp.load_repos(text, home or os.path.expanduser("~"), skipped=missed)
+        repos = crp.load_repos(text, home or os.path.expanduser("~"), skipped=missed, deadline=deadline)
     except Exception:  # noqa: BLE001 — a registration nobody can read must not stop a compile
         return []
     if missed:
@@ -922,11 +932,12 @@ def _repos_line(card):
     return next((l for l in card.splitlines() if l.startswith(REPOS_LINE)), None)
 
 
-def store_card(store, recs, text, today, home, stale=(), archived=0, skipped=None):
-    """The card (`cs.build_card`) with the line about the repositories from `card_repos` — or, when a registration
-    could not be read (the list would be partial; `skipped` gets the pairs), the line the card on disk has, kept as it
-    is (none when there is no card, no line or it cannot be read). Since v3.13.1."""
-    repos = card_repos(store, recs, text, home, skipped=skipped)
+def store_card(store, recs, text, today, home, stale=(), archived=0, skipped=None, deadline=None):
+    """The card (`cs.build_card`) with the line about the repositories from `card_repos` (its registrations read by
+    `deadline`, when given) — or, when a registration could not be read (the list would be partial; `skipped` gets the
+    pairs), the line the card on disk has, kept as it is (none when there is no card, no line or it cannot be read).
+    Since v3.13.1."""
+    repos = card_repos(store, recs, text, home, skipped=skipped, deadline=deadline)
     kept = None
     if repos is None:
         try:
@@ -936,19 +947,21 @@ def store_card(store, recs, text, today, home, stale=(), archived=0, skipped=Non
     return cs.build_card(recs, text, today, stale=stale, archived=archived, repos=repos or (), repos_line=kept)
 
 
-def refresh_card_repos(store, home, today, skipped=None):
+def refresh_card_repos(store, home, today, skipped=None, deadline=None):
     """Rewrite the card when its line about the repositories is not what the store says now. A check or an adopt
     moves a repository's state without touching a record, so no compile follows and the line would stay as it was.
     Everything else on the card is as `ctx card` makes it; a card that is not there is left for the next compile, and
     so is a card while a registration cannot be read (False; the (path, reason) pairs go to `skipped` when it is a
-    list — the caller says "card not refreshed"). Returns True when the card was written."""
+    list — the caller says "card not refreshed"). `deadline` (a time.monotonic() moment; the daily sync's, since
+    v3.14.0) bounds the registration reads: one not read by it keeps the card as it is. Returns True when the card was
+    written."""
     if not os.path.isfile(store.card_path):
         return False
     recs = store.load()
     text = cs.compile_records(recs)
     stale, archived = card_marks(store, recs, today)
     missed = []
-    card = store_card(store, recs, text, today, home, stale, archived, skipped=missed)
+    card = store_card(store, recs, text, today, home, stale, archived, skipped=missed, deadline=deadline)
     if missed:
         if skipped is not None:
             skipped.extend(missed)
@@ -971,7 +984,7 @@ def states_by_repo(store_root):
     that reads it — gives neither a day nor a result for that repository (or for any, when the folder or the module is
     gone), and the digest falls back to the registration's own day. A store with no block state never imports the module.
     A day is the state's `checked` when it is a text; a result is the state's `sync_result` when it is an object with an
-    outcome (ctx_synced.RESULT_KEYS: at, outcome, updated, added, removed, kept_yours, took_rule, awaiting, held, rejected,
+    outcome (ctx_synced.RESULT_KEYS: at, outcome, updated, added, removed, kept_yours, took_rule, awaiting, held, held_behind, rejected,
     reason, report, snapshot). Whether a repository still syncs is the registration's word (`sync: daily`), not the
     state's — the caller keeps the results of those that do. A state that does not arrive in time costs `summary_in_time`
     the days and the results together (SUMMARY_DATES_S)."""

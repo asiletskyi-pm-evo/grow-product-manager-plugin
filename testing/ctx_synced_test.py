@@ -248,8 +248,9 @@ check("updated, added and removed count together; the plural is cs.blocks_word's
 check("with a report: ' — звіт: <path from the storage root>'",
       sy.sentence(dict(R, report="_System/context/sync/2026-10-17.md"))
       == "Ядро оновило 1 блок у zorg-growth, конфліктів 0 (лишено твоє) — звіт: _System/context/sync/2026-10-17.md")
-check("the result's keys are the contract's", sy.RESULT_KEYS == ("at", "outcome", "updated", "added", "removed", "kept_yours", "took_rule",
-                                                                 "awaiting", "held", "rejected", "reason", "report", "snapshot"))
+check("the result's keys are the contract's (held_behind since the final review)",
+      sy.RESULT_KEYS == ("at", "outcome", "updated", "added", "removed", "kept_yours", "took_rule", "awaiting", "held", "held_behind",
+                         "rejected", "reason", "report", "snapshot"), sy.RESULT_KEYS)
 check("the outcomes are the contract's (and error, since fix round 1)", set(sy.OUTCOMES) == {"changed", "no-changes", "unreachable", "broken", "held", "import-conflict", "timeout", "error"})
 
 # ------------------------------------------------------------------ the report (Task 5, spec §7): the pure part
@@ -308,8 +309,8 @@ SEC_LINES = SEC.splitlines()
 
 check("the report's numbers: 90 days, 40 lines a side; the folder from the storage root",
       sy.REPORT_DAYS == 90 and sy.REPORT_LINES == 40 and sy.REPORT_DIR == "_System/context/sync")
-check("a section opens with `## <id> · HH:MM · джерело <label> · ядро v<v> · база v<a> → v<b>`",
-      SEC_LINES[0] == "## zorg-growth · 09:00 · джерело MCP (zorg.example) · ядро v0.2 · база v0.1 → v0.2", SEC_LINES[0])
+check("a section opens with `## <id> · HH:MM · джерело <label> · ядро v<v> · база v<a> → v<b>` — each version as code (final review)",
+      SEC_LINES[0] == "## zorg-growth · 09:00 · джерело MCP (zorg.example) · ядро v`0.2` · база v`0.1` → v`0.2`", SEC_LINES[0])
 check("…the table has the columns Блок, Знак, Рішення, Чому, Запис in this order",
       "| Блок | Знак | Рішення | Чому | Запис |" in SEC_LINES, SEC)
 table = [l for l in SEC_LINES if l.startswith("| `")]
@@ -326,7 +327,7 @@ check("…a summary of the pass above the table", "Оновлено 1 · дод�
 check("a conflict kept yours has its own part, with BOTH texts in full", "### Конфлікт: `growth-metrics`" in SEC
       and "weekly active shoppers (mine)" in SEC and "weekly buyers" in SEC and "Твій текст" in SEC and "Текст ядра" in SEC, SEC)
 check("…the markers of the regions are not in the shown text, their versions are in the captions",
-      "<!-- zorg-growth:begin" not in SEC and "Твій текст (v0.1)" in SEC and "Текст ядра (v0.2)" in SEC, SEC)
+      "<!-- zorg-growth:begin" not in SEC and "Твій текст (v`0.1`)" in SEC and "Текст ядра (v`0.2`)" in SEC, SEC)
 check("…the plan's three lines of difference (what the core says, what you wrote, what both said before)",
       "Ядро тепер каже: - **North star:** weekly buyers" in SEC and "Ви писали: - **North star:** weekly active shoppers (mine)" in SEC
       and "Раніше обидва казали" in SEC, SEC)
@@ -415,7 +416,7 @@ check("a lagging pass: its rows say «утримано · джерело поз�
 # nothing known beyond the plan: no texts, no hosts, no apply
 bare = sy.render_section(result_of(updated=1), applied(plan_of(row("a", "~", host=None)), {"a": "~"}), None, None, None)
 check("no texts, no hosts and no base version known: the section is still whole (— for what is unknown)",
-      "база v0.1 → v—" in bare and "| `a` | ~ | текст ядра |" in bare and bare.splitlines()[-1].startswith("Відкотити цей прохід"), bare)
+      "база v`0.1` → v—" in bare and "| `a` | ~ | текст ядра |" in bare and bare.splitlines()[-1].startswith("Відкотити цей прохід"), bare)
 empty = sy.render_section(result_of(), applied(plan_of(row("a", "="), row("b", "✎")), {"a": "=", "b": "✎"}))
 check("a pass that moved only bases (nothing to list): a line says so, not an empty table", "Тексти не змінились" in empty
       and "| Блок |" not in empty, empty)
@@ -671,6 +672,75 @@ with tempfile.TemporaryDirectory() as d:                     # a symlinked repor
         guarded = sy.prune_reports(store, home, AT)
     check("…and a report that is itself a link to a file outside the guarded roots is refused before it is read",
           guarded == [] and os.path.exists(secret) and trash_files(home) == [], (guarded, trash_files(home)))
+
+# ------------------------------------------------------------------ final review: what a server sent is code, versions and reasons too
+EVIL = "[x](http://evil.example)"
+EVIL_P = plan_of(row("growth-metrics", "⚠", diff=DIFF), version=EVIL, base_version=EVIL)
+evil = sy.render_section(result_of(kept_yours=["growth-metrics"]), applied(EVIL_P, {"growth-metrics": "⚠ mine"}),
+                         {"mine": {"growth-metrics": reg("zorg-growth", "growth-metrics", EVIL, "mine")},
+                          "theirs": {"growth-metrics": reg("zorg-growth", "growth-metrics", EVIL, "theirs")}}, None, EVIL)
+outside = re.sub(r"`[^`\n]*`", "", evil)
+check("final review: versions in the heading (the core's, the bases' before and after) and in a side's caption are code — none renders as a link",
+      "](http" not in outside and evil.splitlines()[0].count("v`%s`" % EVIL) == 3 and "Твій текст (v`%s`)" % EVIL in evil
+      and "Текст ядра (v`%s`)" % EVIL in evil, evil[:700])
+for outcome, said in (("broken", "### Джерело ядра не прийнято"), ("import-conflict", "### Спершу `ctx sync`"),
+                      ("error", "### Несподівана помилка"), ("timeout", "### Прохід не завершено")):
+    part = sy.render_section(result_of(outcome, snapshot=None, reason="see " + EVIL + " — `ctx sync` first"), None)
+    check("…and a reason is code too (%s): «Причина: `…`», a backtick in it made a quote" % outcome,
+          said in part and "Причина: `see %s — 'ctx sync' first`" % EVIL in part and "](http" not in re.sub(r"`[^`\n]*`", "", part), part)
+
+# ------------------------------------------------------------------ final review: an old report goes to the trash by a rename, unread
+with tempfile.TemporaryDirectory() as d:
+    store, home = cs.Store(os.path.join(d, "Notes", "_System", "context")), os.path.join(d, "home")
+    os.makedirs(os.path.join(home, ".grow-pm"))
+    day, path = old_report(store, 100, "never read\n")
+    reads, real_read = [], cs.read_text
+
+    def counting_read(p, *a, **k):
+        reads.append(p)
+        return real_read(p, *a, **k)
+
+    cs.read_text = counting_read
+    try:
+        gone = sy.prune_reports(store, home, AT)
+    finally:
+        cs.read_text = real_read
+    check("final review: on one volume an old report is renamed into the trash without being read (an evicted one costs no download)",
+          gone == [day + ".md"] and path not in reads and not os.path.exists(path) and len(trash_files(home)) == 1
+          and open(os.path.join(co.trash_root(home), trash_files(home)[0]), encoding="utf-8").read() == "never read\n", (gone, reads))
+
+# ------------------------------------------------------------------ final review (whole branch): a lagging source is visible
+check("final review: a result has held_behind, [] by default", sy._result(AT, "no-changes").get("held_behind") == [])
+d = decide(PL(("q", "?"), ("r", "?"), ("a", "~")), T(q=PLAIN, r=RULE, a=PLAIN))
+check("final review: a ? of a lagging plan is held as behind — and, unless the core marks it a rule, it still awaits a decision",
+      d == dict(EMPTY, hold=["q", "r", "a"], held_behind=["q", "r", "a"], awaiting=["q"]), d)
+d = decide(PL(("q", "?")), T())
+check("…a ? of a block the lagging copy lacks awaits too (an absent text is no rule)",
+      d == dict(EMPTY, hold=["q"], held_behind=["q"], awaiting=["q"]), d)
+LAG_R = result_of("no-changes", held_behind=["a", "q"], snapshot=None)
+check("a no-changes pass that held the blocks of a lagging source is reported; with nothing held it is not",
+      sy.reported(LAG_R) and not sy.reported(result_of("no-changes", held_behind=[], snapshot=None)))
+check("…a result without held_behind (a v3.13 state, an older cache) is read as none held",
+      not sy.reported(result_of("no-changes", snapshot=None)) and sy.new_behind({"outcome": "no-changes"}, result_of("no-changes")) == [])
+check("new_behind: the held set when the last result did not hold the same one (in any order); [] when it did",
+      sy.new_behind(None, LAG_R) == ["a", "q"] and sy.new_behind({"held_behind": ["q", "a"]}, LAG_R) == []
+      and sy.new_behind({"held_behind": ["a"]}, LAG_R) == ["a", "q"] and sy.new_behind({"held_behind": 3}, LAG_R) == ["a", "q"]
+      and sy.new_behind("x", LAG_R) == ["a", "q"])
+check("…the same held set on the next pass is a repeat, so the part «Джерело позаду вашої бази» is written once per new lag; "
+      "a new set, a first lag or an older state is not",
+      sy.repeats({"outcome": "no-changes", "held_behind": ["q", "a"], "awaiting": []}, LAG_R)
+      and not sy.repeats({"outcome": "no-changes", "held_behind": ["a"], "awaiting": []}, LAG_R)
+      and not sy.repeats({"outcome": "no-changes", "awaiting": []}, LAG_R)
+      and not sy.repeats({"outcome": "no-changes", "held_behind": [], "awaiting": []}, LAG_R))
+check("…a new ? waiting beside the same lag is news all the same",
+      not sy.repeats({"outcome": "no-changes", "held_behind": ["a", "q"], "awaiting": []}, dict(LAG_R, awaiting=["q"])))
+lagn = sy.render_section(dict(LAG_R, awaiting=["q"]), applied(LAG_P, {"e": "="}, held={"a": "~", "q": "?"}, snapshot=None), None, None, "0.1",
+                         only=["a", "q"])
+check("the part of a lagging pass that changed nothing: its held rows, the section «Джерело позаду вашої бази», the count of the "
+      "blocks that wait (1, not the 2 rows), nothing to undo",
+      "### Джерело позаду вашої бази" in lagn and "- `a`" in lagn and "- `q`" in lagn
+      and "Прохід нічого не змінив; блоків, що чекають твого рішення: 1." in lagn
+      and lagn.splitlines()[-1] == "Знімка цього проходу немає: відкочувати нічого.", lagn)
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

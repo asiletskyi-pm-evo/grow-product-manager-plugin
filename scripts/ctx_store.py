@@ -294,6 +294,12 @@ def read_timeout():
     return own if until is None else min(own, max(0.0, until - time.monotonic()))
 
 
+def budget_until():
+    """The time.monotonic() moment the innermost `read_budget` of this thread ends, or None outside one (since v3.14.0:
+    the card reads its registrations by it inside the daily sync, `ctx_ops.card_repos`)."""
+    return getattr(_BUDGET, "until", None)
+
+
 @contextlib.contextmanager
 def read_budget(seconds):
     """A time budget for every read in the block that asks `read_timeout()` (read_text, Store._texts …): `seconds`

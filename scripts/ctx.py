@@ -88,13 +88,14 @@
                                 taken: lock: <why>; a guard that refuses: guard: <why>); --if-due checks again under the
                                 lock. The edits waiting are imported first (a conflict: import-conflict, nothing
                                 written). 20 s for every repository together, the last 1 s kept for writing down the
-                                results; no fetch, plan or write starts with less than 3 s left before that. Outcomes:
+                                results; no fetch, plan or write starts with less than 3 s left before that, and a
+                                write once begun has those 3 s for its reads. Outcomes:
                                 changed, no-changes, held, broken (an empty, cut or foreign blocks file — retried in a
                                 day), unreachable, timeout, import-conflict, error (retried in an hour).
                                 One line per repository the pass changed: «Ядро оновило N блоків у <repo>, конфліктів K
                                 (лишено твоє)». Exit 0 whatever happened (3: bad usage). CTX_RESULT: synced (ids),
                                 results [{repo, at, outcome, updated, added, removed, kept_yours, took_rule, awaiting, held,
-                                rejected, reason, report, snapshot}] — the same as the block state's sync_result
+                                held_behind, rejected, reason, report, snapshot}] — the same as the block state's sync_result
 
 Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
 registration is not read in time — 3 s each, 6 s for all: the boundary cannot be checked, exit 4), imports direct

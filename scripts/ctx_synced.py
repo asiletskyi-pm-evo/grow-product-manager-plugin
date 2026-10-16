@@ -7,7 +7,7 @@ answers come from one place:
 
 - decide    the plan's rows in, the pass's answers out: `choose` (block → "mine" | "theirs", exactly what `apply`
             takes), `add` (the "+" blocks), `hold` (the blocks `apply` must not touch), and the names the report and
-            the digest speak in — `held_removals`, `awaiting`, `rejected`, `kept_yours`, `took_rule`
+            the digest speak in — `held_removals`, `held_behind`, `awaiting`, `rejected`, `kept_yours`, `took_rule`
 - due       is a repository due: `sync: daily`, not paused, a day since its last successful check (`checked`) and an hour
             since a failed attempt after it (`sync_attempt`); a time more than a day ahead is another clock's — unknown
 - pick_due  the repositories that are due, read from their block states without the lock and without the network
@@ -27,7 +27,8 @@ answers come from one place:
 
 1. a text you rejected by undoing a sync pass (`rejected: True`) is held, whatever else it is — a rule included
 1a. a plan whose source lags behind your bases (`lagging`, since v3.14.0) holds every other row that would change a block
-   (~ + − ⚠ ?), a rule included: nothing is taken from a copy older than what you hold
+   (~ + − ⚠ ?), a rule included: nothing is taken from a copy older than what you hold — and a "?" so held that is no core
+   rule still awaits your decision (`awaiting`), as it would from a current copy
 2. more than one block the repository removed in a pass (a "−", or a "⚠" / "?" whose repository text is None) is held,
    none of them goes through; a rejected row is held already and is not counted
 3. "⚠" takes the repository's text when it is a core rule (`ctx_blocks.is_rule`, read from the begin marker of the
@@ -44,15 +45,16 @@ The outcome of a repository's pass (§4.3, §6):
                      (`fetch`'s `unsound`), or the file holds none of your based blocks — a successful check: next in a day
 - "unreachable"      the fetch failed otherwise (no answer, a server error); retried in an hour
 - "timeout"          the budget ran out before or during the pass, the client gave up at its deadline, or less than
-                     APPLY_MIN_S was left for the plan and the write; retried in an hour, nothing written
+                     APPLY_MIN_S was left before the fetch, the plan or the write; retried in an hour, nothing written
 - "import-conflict"  the edits waiting in local-context.md need a decision (`ctx sync`); nothing written to the records
 - "error"            something failed unexpectedly — the store (a record missing or not downloaded: "store: <why>"), a
                      fetch that raised (a bug, never blamed on the network), or anything else (its message); retried in
                      an hour
 
 A pass over a source that lags behind your bases (the plan's `lagging`) holds every block it would have changed
-(`decide` 1a): it writes no record, and its reason says the source is behind — "no-changes" (or "changed" when only the
-block state moved), a successful check.
+(`decide` 1a): it writes no record, its reason says the source is behind and `held_behind` names the blocks — "no-changes"
+(or "changed" when only the block state moved), a successful check. It is never silent: the report names a new set of
+blocks held behind once (`reported`, `repeats`), and the digest marks the repository "⚠ source behind — nothing taken".
 
 Stdlib only.
 """
@@ -92,7 +94,8 @@ def decide(plan, theirs):
     `choose`, `add` and `hold`. Whether a block is a core rule is read from the repository's text (`theirs`), never from
     the row. A plan that says its source lags (`lagging`, since v3.14.0: `ctx_blocks.source_lags`) holds every row that
     would change something ("~", "+", "−", "⚠", "?") — `held_behind`, a rule included, a rejected one still `rejected`:
-    a copy older than your bases never takes a block back to an older text, never removes or re-adds one."""
+    a copy older than your bases never takes a block back to an older text, never removes or re-adds one. A "?" so held
+    that is no core rule is in `awaiting` too: a person's question all the same, which the digest goes on counting."""
     theirs = theirs or {}
     rows = _rows(plan)
     behind = isinstance(plan, dict) and bool(plan.get("lagging"))
@@ -110,6 +113,8 @@ def decide(plan, theirs):
         elif behind and sign in CHANGES:
             out["hold"].append(bid)
             out["held_behind"].append(bid)
+            if sign == "?" and not cb.is_rule(text):    # held, and still a question for you: the digest counts it
+                out["awaiting"].append(bid)
         elif bid in guarded:
             out["hold"].append(bid)
             out["held_removals"].append(bid)
@@ -139,12 +144,14 @@ AHEAD = datetime.timedelta(days=1)              # a time further ahead than this
 BUDGET_S = 20.0                                 # the whole sync, every repository together
 RESERVE_S = 1.0                                 # the last second of it is kept for writing down what happened
 RECORD_S = 0.5                                  # the least a result's write waits for the block state (a small local file)
-APPLY_MIN_S = 3.0                               # no fetch, plan or write starts with less of the budget left: records written
-                                                # without their journal line would make `ctx undo` take back the wrong change
+APPLY_MIN_S = 3.0                               # no fetch, plan or write starts with less of the budget left, and a write once
+                                                # begun has at least this for its reads: records written without their journal
+                                                # line would make `ctx undo` take back the wrong change
+CARD_MIN_S = 1.0                                # the card's Repos line is refreshed at the end only with this much of it left
 DUE_READ_S = 2.0                                # the block states --if-due reads, all of them together
 OUTCOMES = ("changed", "no-changes", "unreachable", "broken", "held", "import-conflict", "timeout", "error")
-RESULT_KEYS = ("at", "outcome", "updated", "added", "removed", "kept_yours", "took_rule", "awaiting", "held", "rejected",
-               "reason", "report", "snapshot")
+RESULT_KEYS = ("at", "outcome", "updated", "added", "removed", "kept_yours", "took_rule", "awaiting", "held", "held_behind",
+               "rejected", "reason", "report", "snapshot")
 MOVED = ("changed", "no-changes", "held", "broken")     # the outcomes of a successful check: the state's `checked` moved
 
 
@@ -215,9 +222,11 @@ def _left(until):
 
 
 def _result(now, outcome, reason=None, **fields):
-    """A repository's result as the state keeps it (`sync_result`): every key of RESULT_KEYS."""
+    """A repository's result as the state keeps it (`sync_result`): every key of RESULT_KEYS. `held_behind` (since the
+    v3.14.0 final review) is absent from a result written before it — read as none held."""
     out = {"at": now, "outcome": outcome, "updated": 0, "added": 0, "removed": 0, "kept_yours": [], "took_rule": [],
-           "awaiting": [], "held": [], "rejected": [], "reason": cb.clip(reason, cb.NOTE_CLIP) if reason else None,
+           "awaiting": [], "held": [], "held_behind": [], "rejected": [],
+           "reason": cb.clip(reason, cb.NOTE_CLIP) if reason else None,
            "report": None, "snapshot": None}
     out.update(fields)
     return out
@@ -286,9 +295,12 @@ def _pass(c, repo, now, until, facts=None):
     that is late, or whose error says the deadline was reached, is "timeout"; one that raised is "error" (a bug: fetch
     never raises — never blamed on the network); one where every source answered an empty, cut or foreign text
     (`unsound`) is "broken"; any other fetch error is "unreachable". Less than APPLY_MIN_S left of the work time then
-    (`until`: the budget less its last RESERVE_S) is "timeout" with nothing planned or written. A blocks file that holds none of your based blocks is
-    "broken"; else plan → decide → apply, which writes the state's `checked` itself. Store reads run within what is
-    left of the budget. `facts`, when a dict, gets what the report needs and only the pass has in hand before the write:
+    (`until`: the budget less its last RESERVE_S) is "timeout" with nothing planned or written. A blocks file that holds
+    none of your based blocks is "broken"; else plan → decide, and less than APPLY_MIN_S left after them is "timeout"
+    with nothing written; else apply, which writes the state's `checked` itself. Store reads run within what is left of
+    the budget — the apply's within no less than APPLY_MIN_S, so a write once begun never runs out of time for its
+    reads between its records and its journal line (and the card it compiles reads the registrations on that budget,
+    `co.card_repos`). `facts`, when a dict, gets what the report needs and only the pass has in hand before the write:
     `_conflicts`' full texts."""
     rid = repo["id"]
     with cs.read_budget(_left(until)):
@@ -315,6 +327,9 @@ def _pass(c, repo, now, until, facts=None):
         answers = decide(plan, theirs)
         if facts is not None:
             facts.update(_conflicts(c.store, repo, fetched, plan, theirs))
+    if _left(until) < APPLY_MIN_S:                  # the plan took the time: no write starts without its floor
+        return _result(now, "timeout", _short("after the plan — nothing written")), None, False
+    with cs.read_budget(max(_left(until), APPLY_MIN_S)):     # …and a write once begun keeps the floor for its reads
         res = cb.apply(c.store, c.copies, c.home, repo, fetched, answers["choose"], answers["add"], now, op=OP,
                        hold=answers["hold"])
     gone, lag = answers["held_removals"], answers["held_behind"]
@@ -326,8 +341,8 @@ def _pass(c, repo, now, until, facts=None):
         reason = ("the source is behind your bases (a copy older than the blocks you hold) — %d block%s not taken, nothing "
                   "written to your records; `ctx provider plan %s` shows them" % (len(lag), "" if len(lag) == 1 else "s", shown))
     return _result(now, outcome, reason, snapshot=res["snapshot"], kept_yours=answers["kept_yours"],
-                   took_rule=answers["took_rule"], awaiting=answers["awaiting"], held=gone, rejected=answers["rejected"],
-                   **_counts(res, theirs)), res, False
+                   took_rule=answers["took_rule"], awaiting=answers["awaiting"], held=gone, held_behind=lag,
+                   rejected=answers["rejected"], **_counts(res, theirs)), res, False
 
 
 def _short(when):
@@ -387,9 +402,12 @@ VERSION_MOVE = re.compile(r"\(v[^()]* → v[^()]*\)")
 def reported(result):
     """Does a pass with this outcome write a part of the report? Those that changed something, kept a safeguard on or
     failed in a way the person should see — and a pass that changed nothing but left a block waiting for a decision (a "?":
-    `awaiting`), which §5.1 says the report names; whether that block is a new one is `repeats`' question. A pass that only
-    moved the time of the check, or could not reach the server, leaves nothing to read."""
-    return result["outcome"] in REPORTED or (result["outcome"] == "no-changes" and bool(result["awaiting"]))
+    `awaiting`), which §5.1 says the report names, or held blocks because its source lags behind your bases
+    (`held_behind`: a lasting lag must not look like a quiet success); whether either is new is `repeats`' question. A pass
+    that only moved the time of the check, or could not reach the server, leaves nothing to read. A result without
+    `held_behind` (written before it existed) holds none."""
+    return result["outcome"] in REPORTED or (result["outcome"] == "no-changes"
+                                             and bool(result["awaiting"] or result.get("held_behind")))
 
 
 def new_waiting(prev, result):
@@ -401,13 +419,26 @@ def new_waiting(prev, result):
     return [b for b in result["awaiting"] if b not in seen]
 
 
+def new_behind(prev, result):
+    """The blocks `result` held because its source lags behind your bases (`held_behind`), when the previous
+    `sync_result` (`prev`) did not hold the same set (in any order) — [] when it did, or when none is held. Like a
+    safeguard: a lag is told once, and again only when the set changes. A `prev` that is not what the state keeps, or
+    one written before `held_behind` existed, held none: the set is new."""
+    lag = [str(b) for b in (result.get("held_behind") or [])]
+    seen = prev.get("held_behind") if isinstance(prev, dict) else None
+    if not lag or (isinstance(seen, list) and sorted(map(str, seen)) == sorted(lag)):
+        return []
+    return lag
+
+
 def repeats(prev, result):
     """Is `result` news that the report already told (§6.6, §5.1)? Never when a block waits that the previous `sync_result`
-    (`prev`) did not have waiting (`new_waiting`). A pass that changed nothing then (`no-changes`) with every waiting block
-    named before is a repeat. A safeguard going off again is one when `prev` has the same outcome, the same set of blocks held
-    and the same reason, and this pass wrote nothing else (no snapshot): the report says it once, and the digest goes on
-    showing the mark. Only the outcomes in REPEATS repeat. A `prev` that is not what the state keeps is no repeat."""
-    if not isinstance(prev, dict) or new_waiting(prev, result):
+    (`prev`) did not have waiting (`new_waiting`), nor when a lagging source holds a set of blocks it did not hold
+    (`new_behind`). A pass that changed nothing then (`no-changes`) with every waiting block named before and the same set
+    held behind is a repeat. A safeguard going off again is one when `prev` has the same outcome, the same set of blocks
+    held and the same reason, and this pass wrote nothing else (no snapshot): the report says it once, and the digest goes
+    on showing the mark. Only the outcomes in REPEATS repeat. A `prev` that is not what the state keeps is no repeat."""
+    if not isinstance(prev, dict) or new_waiting(prev, result) or new_behind(prev, result):
         return False
     if result["outcome"] == "no-changes":
         return True
@@ -425,8 +456,15 @@ def _lines_word(n):
     return "рядки" if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14) else "рядків"
 
 
-def _code(text):
-    return "`%s`" % cb.clip(text, cb.HEADER_CLIP).replace("`", "'")
+def _code(text, limit=cb.HEADER_CLIP):
+    """`text` as inline code, one line of at most `limit` characters, a backtick in it made a quote: what a server sent
+    (a block id, a version, a reason) never renders as Markdown or a live link in Obsidian."""
+    return "`%s`" % cb.clip(text, limit).replace("`", "'")
+
+
+def _ver(value):
+    """A version for a heading: as code, or "—" when there is none."""
+    return _code(value) if value and value != "—" else "—"
 
 
 def _cell(text):
@@ -456,7 +494,7 @@ def _side(caption, text, where):
     REPORT_LINES lines — and, when there are more, `… ще N рядків — <where>`."""
     lines = _text_lines(text)
     version = cb._marker_version(text)
-    out = ["%s%s:" % (caption, " (v%s)" % cb.clip(version, cb.HEADER_CLIP) if version else ""), ""]
+    out = ["%s%s:" % (caption, " (v%s)" % _code(version) if version else ""), ""]
     out += _fenced(lines[:REPORT_LINES] or ["(порожньо)"])
     if len(lines) > REPORT_LINES:
         left = len(lines) - REPORT_LINES
@@ -544,8 +582,9 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None, 
     nothing names just the blocks that began to wait for a decision).
 
     The heading is `## <id> · HH:MM · джерело <label> · ядро v<v> · база v<a> → v<b>` (only `## <id> · HH:MM` with no
-    plan). Then the table `| Блок | Знак | Рішення | Чому | Запис |` — a row for every block the repository offered
-    something for (~ + − ⚠ ?), in the cascade's words; the part of every ⚠ and ? with both texts (REPORT_LINES lines each)
+    plan); each version — and the reason of a pass with no plan — is inline code (`_code`), as every text a server sent.
+    Then the table `| Блок | Знак | Рішення | Чому | Запис |` — a row for every block the repository offered something
+    for (~ + − ⚠ ?), in the cascade's words; the part of every ⚠ and ? with both texts (REPORT_LINES lines each)
     and the command that takes the core's; what the safeguard held and what to do; what a source behind your bases held
     (since v3.14.0); the texts you rejected before; and the last line, the way back (`Відкотити цей прохід: ctx undo
     (знімок <folder>)`) or that there is none — or, for an unexpected failure that may have written before it failed, that the snapshot is unknown and `ctx status` shows the journal."""
@@ -555,14 +594,15 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None, 
     head = "## %s · %s" % (rid, at[11:16] if len(at) >= 16 else "—")
     if plan:
         head += " · джерело %s · ядро v%s · база v%s → v%s" % (cb.clip(plan["source_label"], cb.HEADER_CLIP),
-                                                              plan["version"] or "—", plan["base_version"], cb.clip(base_after or "—", cb.HEADER_CLIP))
+                                                              _ver(plan["version"]), _ver(plan["base_version"]), _ver(base_after))
     blocks = [[head]]
-    outcome, reason = result["outcome"], cb.clip(result.get("reason") or "—", cb.NOTE_CLIP)
+    outcome, reason = result["outcome"], _code(result.get("reason") or "—", cb.NOTE_CLIP)
     if plan and outcome in ("changed", "held", "no-changes"):
         rows = [r for r in plan["rows"] if r["sign"] in cb.OFFERS and (only is None or r["block"] in only)]
         verdicts = {r["block"]: _verdict(r, apply, result) for r in rows}
         if outcome == "no-changes":
-            summary = "Прохід нічого не змінив; блоків, що чекають твого рішення: %d." % len(rows)
+            summary = "Прохід нічого не змінив; блоків, що чекають твого рішення: %d." % len(
+                [r for r in rows if r["block"] in result["awaiting"]])
         else:
             summary = ("Оновлено %d · додано %d · прибрано %d · лишено твоє %d · чекає рішення %d"
                        % (result["updated"], result["added"], result["removed"], len(result["kept_yours"]), len(result["awaiting"])))
@@ -686,14 +726,14 @@ def _trash_path(home, name, when):
 def _move_to_trash(home, name, path, when):
     """Move the report `path` to the trash so that it is never left in both places. The target is checked first — a path
     that leads outside the guarded roots (a symlinked folder), or is itself a link, is neither read nor moved. On one volume
-    it is a single rename. Across volumes (the vault is not always where ~/.grow-pm is) the copy is written first and the
-    original removed after; an original that cannot be removed takes its copy back out of the trash, so the next sync does
-    not find a second one. Raises what failed (OSError, StoreError, PathRefused, UnicodeDecodeError); the original is then
-    where it was."""
+    it is a single rename, and the report is not read (an old report iCloud has evicted costs no download). Across volumes
+    (the vault is not always where ~/.grow-pm is) it is read then, the copy is written first and the original removed
+    after; an original that cannot be removed takes its copy back out of the trash, so the next sync does not find a
+    second one. Raises what failed (OSError, StoreError, PathRefused, UnicodeDecodeError); the original is then where it
+    was."""
     cs.check_target(path)
     if os.path.islink(path) or os.path.islink(os.path.dirname(path)):
         raise cs.PathRefused("%s is a link: a report is not moved through one" % path)
-    text = cs.read_text(path)
     target = _trash_path(home, name, when)
     cs.check_target(target)
     os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -703,7 +743,7 @@ def _move_to_trash(home, name, path, when):
     except OSError as e:
         if e.errno != errno.EXDEV:
             raise
-    cs.atomic_write(target, text)
+    cs.atomic_write(target, cs.read_text(path))
     try:
         os.remove(path)
     except OSError:
@@ -751,7 +791,8 @@ def _write_report(c, result, apply, facts, deadline):
     or it is news already told — a safeguard going off again as before, a block still waiting that the last pass named
     (`repeats`, from the state's `sync_result` as the last pass left it — read here, before `_record` replaces it). What the render needs of the state the pass left (the record a "+" went
     into, the version the bases stand at) is read after the write, within what is left of the budget; what cannot be read
-    is shown as unknown."""
+    is shown as unknown. A pass that changed nothing names only what is new: the blocks that began to wait and a new
+    set held behind a lagging source."""
     if not reported(result):
         return None
     rid = result["repo"]
@@ -767,7 +808,7 @@ def _write_report(c, result, apply, facts, deadline):
                 return None
             hosts = {b: e.get("host") for b, e in state["blocks"].items()}
             base_after = cb.base_version(state)
-        only = new_waiting(prev, result) if result["outcome"] == "no-changes" else None
+        only = (new_waiting(prev, result) + new_behind(prev, result)) if result["outcome"] == "no-changes" else None
         section = render_section(result, apply, facts, hosts, base_after, only)
         return write_report(c.store, result["at"][:10], section, rid)
 
@@ -796,7 +837,8 @@ def run(c, repos, now, deadline, only_due=False, skipped=None):
        again with the same set and reason (`repeats`) — and its path is the result's `report`, in the state's
        `sync_result` too. A report that cannot be written is said in the result's `reason`; the pass stands. At the
        start, the reports older than 90 days go to the trash (`prune_reports`).
-    6. The card's line about the repositories, when a check moved and time is left."""
+    6. The card's line about the repositories, when a check moved and at least CARD_MIN_S of the budget is left: its
+       registrations are read by the deadline (`co.refresh_card_repos`); one not read in time keeps the line the card has."""
     stack = contextlib.ExitStack()
     try:
         stack.enter_context(co.lock(c.home))
@@ -854,10 +896,10 @@ def run(c, repos, now, deadline, only_due=False, skipped=None):
                 result["reason"] = cb.clip("%s; %s" % (result["reason"], said) if result["reason"] else said, cb.NOTE_CLIP)
             _record(c.store, rid, result, now if checked else None, deadline)
             results.append(dict(result, repo=rid, apply=res))
-        if any(r["outcome"] in MOVED for r in results) and _left(deadline) > 0:
+        if any(r["outcome"] in MOVED for r in results) and _left(deadline) >= CARD_MIN_S:
             try:                                    # the card's Repos line says when each repository was checked
                 with cs.read_budget(_left(deadline)):
-                    co.refresh_card_repos(c.store, c.home, now[:10])
+                    co.refresh_card_repos(c.store, c.home, now[:10], deadline=deadline)
             except Exception:  # noqa: BLE001 — a card line is not worth a sync's result
                 pass
         return results

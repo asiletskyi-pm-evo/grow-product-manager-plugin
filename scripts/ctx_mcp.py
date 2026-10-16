@@ -121,8 +121,13 @@ def _check_message(message):
 
 
 def _same_id(value, rid):
-    """Is `value` the request id `rid`? An int, not a bool (`true == 1` in Python) and not a text."""
-    return isinstance(value, int) and not isinstance(value, bool) and value == rid
+    """Is `value` the request id `rid`? The same int, not a bool (`true == 1` in Python) — or the same number written as a
+    text (`"1"`: a server that echoes ids as strings), never another spelling of it."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value == rid
+    return isinstance(value, str) and value == str(rid)
 
 
 def _reason(exc):

@@ -166,10 +166,11 @@ With a store, the SessionStart digest adds one read-only line: `context: records
 **The `repos:` line (since v3.14.0).** For the repositories whose registration says `sync: daily` and is not paused, the digest adds, right after the `context:` line, one line with the last result of their daily sync (§12.11 of the provider protocol), read from the block state with the days of the last checks — on their half second — or, on a cold start, from the saved summary, which carries the results too. Parts are joined by `; `, at most three, the rest `+N`; a part with a zero is left out; a repository whose sync was switched off or is paused shows nothing, and with no `sync: daily` repository there is no line. The one text that comes from outside is the reason of a broken source or an error, with its control characters stripped and clipped to 80 characters.
 - `  repos: <id> · synced <YYYY-MM-DD> · <U> updated · <K> conflicts kept yours · report <path from the storage root>` — a pass that changed blocks (`<U>` = updated + added + removed; `<K>` the conflicts where your text was kept; `1 conflict kept yours` in the singular); a day with a report but no change still names the report
 - `  repos: <id> · synced <YYYY-MM-DD> · no changes`
+- `  repos: <id> · synced <YYYY-MM-DD> · ⚠ source behind — nothing taken · no changes` — a pass over a copy older than your bases (`held_behind`): nothing of it was taken, and the mark stays as long as the copy lags (the report names the blocks once); the mark comes right after the date in a `changed` part too
 - `  repos: <id> · unreachable since <YYYY-MM-DD> (VPN?)` — the day of the last successful check
 - `  repos: <id> · ⚠ <N> removals held — ctx provider plan <id>`
 - `  repos: <id> · sync timed out <YYYY-MM-DD>`, `· ⚠ source broken — <reason>`, `· ⚠ edits to import first — ctx sync`, `· ⚠ sync error — <reason>`
-- any of them ends with `· <N> block(s) awaits a decision` when a `?` waits
+- any of them ends with `· <N> block(s) awaits a decision` when a `?` waits — a `?` held because the source lags counts too
 
 The digest's `Skills:` line names `ctx provider sync --if-due` before `ctx read`, and asks the skill to repeat any line it prints that starts `Ядро оновило` at the end of its answer — the line for a skill that takes the short path through the digest (Step 0c of `local-context-protocol.md` is the same instruction for a host without the digest).
 
