@@ -9,7 +9,9 @@ Also exports GROW_PM_CONTEXT_PATH for later Bash calls via CLAUDE_ENV_FILE.
 Design rules (see references/harness-map.md → hooks):
 - Fail open. Any exception → exit 0, no output. A hook must never block a session.
 - Header only. The digest carries paths, versions, names and flags — never
-  URLs, ids, emails or tokens. Skills still parse the file themselves (0c–0j).
+  URLs, ids, emails or tokens. The one exception is the `repos:` line (since v3.14.0): when a repository's
+  sync failed it carries up to 80 characters of the reason — a server's or an exception's text, with the
+  control characters stripped. Skills still parse the file themselves (0c–0j).
 - Environment-agnostic. The user's home is a sandbox in hosted sessions; the
   context arrives through a connected folder mounted under $HOME/mnt/<name>/.
 - No network, and two writes only: the store's summary beside a context that lies in a
@@ -139,13 +141,24 @@ def _sync_daily(value):
     return isinstance(value, str) and value.strip().lower() == "daily"
 
 
+def _sync_active(reg):
+    """Does the raw registration `reg` take part in the daily sync (since v3.14.0)? `sync: daily` (`_sync_daily`) and not
+    paused — as `ctx_synced.due` decides it from `ctx_repos.normalise`'s reading: the status is the trimmed text of the key
+    (nothing, a list or a mapping is empty, which is active), and only exactly "paused" pauses (`Paused` does not). A
+    paused repository keeps an old result in its state, which the repos line must not show."""
+    status = reg.get("status")
+    status = "" if status is None or isinstance(status, (list, dict)) else str(status).strip()
+    return _sync_daily(reg.get("sync")) and status != "paused"
+
+
 def providers_info(text, extra_dirs=None, skipped=None, checked=None, daily=None):
     """[(id, label)], provider roots and the bundle facts — header-level only.
     Registrations that cannot be read land in `skipped` as (path, reason). `checked` is {provider id: when the
     context store last checked it}: a day newer than the registration's `synced_at` is the day shown, and the
     one `stale` is counted from (since v3.13.0). Each registration is read within REG_READ_S seconds (since v3.13.1): one
     that does not arrive (iCloud) lands in `skipped` as not available locally, and never holds the session start. `daily`,
-    when a list, gets the ids of the registrations that say `sync: daily`, in the providers' order (since v3.14.0)."""
+    when a list, gets the ids of the registrations that say `sync: daily` and are not paused (`_sync_active`), in the
+    providers' order (since v3.14.0)."""
     if cc is None:
         return [], [], None
     entries = cc.vault_entries(text)
@@ -160,7 +173,7 @@ def providers_info(text, extra_dirs=None, skipped=None, checked=None, daily=None
             if r.get(k):
                 e[k] = str(r[k])
         e["synced"] = str(r.get("synced_at") or "")
-        if daily is not None and _sync_daily(r.get("sync")) and str(r["id"]) not in daily:
+        if daily is not None and _sync_active(r) and str(r["id"]) not in daily:
             daily.append(str(r["id"]))
         e["stale_after"] = int(r.get("stale_after_days") or 30) if str(r.get("stale_after_days") or "30").isdigit() else 30
     labels = []
@@ -338,8 +351,8 @@ def _sync_part(rid, result, checked):
 
 def _repos_line(daily, sync, checked):
     """`  repos: <part>; <part>; <part>; +N` (since v3.14.0): the last result of the daily sync of each repository the
-    registrations switch on (`daily`: their ids in order — a repository whose sync was switched off keeps an old result in
-    its state, which is not shown), at most REPOS_SHOWN parts and the count of the rest. None when no repository has
+    registrations switch on (`daily`: their ids in order; a repository whose sync was switched off, or is paused, keeps an
+    old result in its state, which is not shown), at most REPOS_SHOWN parts and the count of the rest. None when no repository has
     anything to say. `sync` and `checked` are the summary's ({id: sync_result}, {id: when it was last checked})."""
     sync, checked = sync if isinstance(sync, dict) else {}, checked if isinstance(checked, dict) else {}
     parts = []

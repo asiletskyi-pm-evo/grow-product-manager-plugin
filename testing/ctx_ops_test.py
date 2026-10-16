@@ -1125,5 +1125,60 @@ with tempfile.TemporaryDirectory() as d:
           (s, took, saved_sync(cache)))
 
 
+# --- v3.14.0 Task 7 fix round: one read of each block state, one read of the cache (the hook's budget on a slow store)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    put_sync(e, "zorg-core", sync_result("changed", updated=1))
+    put_sync(e, "zorg-growth", sync_result("unreachable"), checked="2026-10-19T08:00:00+03:00")
+    reads = {}
+    real_load = cb.load_state
+
+    def counting(store, rid):
+        reads[rid] = reads.get(rid, 0) + 1
+        return real_load(store, rid)
+
+    cb.load_state = counting
+    try:
+        s = co.summary_in_time(e.ctx, home=e.home)
+    finally:
+        cb.load_state = real_load
+    check("summary_in_time reads each block state once, for the days and the results together",
+          reads == {"zorg-core": 1, "zorg-growth": 1} and s and s["checked"] == {"zorg-core": NOW, "zorg-growth": "2026-10-19T08:00:00+03:00"}
+          and sorted(s["sync"]) == ["zorg-core", "zorg-growth"], (reads, s))
+    check("checked_by_repo and sync_by_repo stay public, each from the same pass",
+          co.checked_by_repo(e.store.root) == s["checked"] and co.sync_by_repo(e.store.root) == s["sync"])
+    reads.clear()
+    cb.load_state = counting
+    try:
+        co.checked_by_repo(e.store.root); co.sync_by_repo(e.store.root)
+    finally:
+        cb.load_state = real_load
+    check("…and each reads a state once", reads == {"zorg-core": 2, "zorg-growth": 2}, reads)
+    cache = co.summary_cache_path(e.ctx)
+    real_read = cs.read_text
+    cache_reads = []
+
+    def counting_read(path, *a, **k):
+        if path == cache:
+            cache_reads.append(path)
+        return real_read(path, *a, **k)
+
+    cs.read_text = counting_read
+    try:
+        facts = dict(s, checked={}, sync={})
+        co.save_summary(e.ctx, facts)
+    finally:
+        cs.read_text = real_read
+    check("save_summary reads the saved summary once for both the days and the results it keeps",
+          len(cache_reads) == 1 and saved_sync(cache) == s["sync"]
+          and (json.load(open(cache, encoding="utf-8"))["facts"]["checked"]) == s["checked"], (len(cache_reads), saved_sync(cache)))
+    cache_reads.clear()
+    cs.read_text = counting_read
+    try:
+        co.save_summary(e.ctx, dict(s))                     # nothing to keep: the saved summary is not read at all
+    finally:
+        cs.read_text = real_read
+    check("…and not at all when the facts have both", cache_reads == [], len(cache_reads))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

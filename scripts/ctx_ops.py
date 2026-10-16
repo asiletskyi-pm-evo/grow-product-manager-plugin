@@ -10,7 +10,7 @@ digest, which reads the store and writes nothing but its own summary.
 - summary_in_time            the store's summary counted within a time budget and saved (the digest and every
                              writing `ctx` command; since v3.13.1)
 - save_summary / load_summary  ~/.grow-pm/.ctx-summary.json — the digest's line on a cold start (since v3.13.1); since v3.14.0
-                             it holds the days of the last checks and the daily sync's results too (`sync_by_repo`)
+                             it holds the days of the last checks and the daily sync's results too (`states_by_repo`)
 
 Stdlib only.
 """
@@ -939,63 +939,62 @@ def refresh_card_repos(store, home, today, skipped=None):
     return True
 
 
-def checked_by_repo(store_root):
-    """{repository id: when it was last checked} from the block states in the store at `store_root`, for the
-    SessionStart digest. Read only, and never fails: whatever cannot be read — the folder, a state, the module that
-    reads it — gives no date, and the digest falls back to the registration's own. A store with no block state never
-    imports it. A state iCloud has evicted is read within the store's time budget (30 s), so `summary_in_time` calls
-    this after the store's facts, on a budget of its own (SUMMARY_DATES_S)."""
-    try:
-        store = cs.Store(store_root)
-        folder = os.path.join(store.state_dir, "blocks")
-        ids = sorted(n[:-5] for n in os.listdir(folder) if n.endswith(".json"))
-        if not ids:
-            return {}
-        import ctx_blocks as cb                  # here: it imports this module
-        got = {rid: cb.last_checked(store.root, rid) for rid in ids}
-        return {rid: when for rid, when in got.items() if when}
-    except Exception:  # noqa: BLE001 — a digest line is not worth the summary
-        return {}
-
-
 def _is_sync_result(value):
     """Is `value` a sync_result as the block state keeps it — an object with an outcome (a text)?"""
     return isinstance(value, dict) and isinstance(value.get("outcome"), str) and bool(value["outcome"])
 
 
-def sync_by_repo(store_root):
-    """{repository id: its `sync_result`} from the block states in the store at `store_root` (ctx_synced.RESULT_KEYS: at,
-    outcome, updated, added, removed, kept_yours, took_rule, awaiting, held, rejected, reason, report, snapshot), for the
-    SessionStart digest's `repos:` line (since v3.14.0). Read only, and never fails: a state that cannot be read, has no
-    result or holds one that is not an object with an outcome is left out, and so is everything when the folder or the
-    module that reads the states is not there. Whether a repository still syncs is the registration's word (`sync: daily`),
-    not the state's — the caller keeps the results of those that do. Like `checked_by_repo`, it reads on the budget of the
-    days of the last checks (SUMMARY_DATES_S), after them, in the same thread."""
+def states_by_repo(store_root):
+    """({repository id: when it was last checked}, {repository id: its `sync_result`}) from the block states in the store at
+    `store_root`, for the SessionStart digest — one read of each state for both (since v3.14.0: on a store iCloud has
+    evicted a state is a download). Read only, and never fails: whatever cannot be read — the folder, a state, the module
+    that reads it — gives neither a day nor a result for that repository (or for any, when the folder or the module is
+    gone), and the digest falls back to the registration's own day. A store with no block state never imports the module.
+    A day is the state's `checked` when it is a text; a result is the state's `sync_result` when it is an object with an
+    outcome (ctx_synced.RESULT_KEYS: at, outcome, updated, added, removed, kept_yours, took_rule, awaiting, held, rejected,
+    reason, report, snapshot). Whether a repository still syncs is the registration's word (`sync: daily`), not the
+    state's — the caller keeps the results of those that do. A state that does not arrive in time costs `summary_in_time`
+    the days and the results together (SUMMARY_DATES_S)."""
     try:
         store = cs.Store(store_root)
         folder = os.path.join(store.state_dir, "blocks")
         ids = sorted(n[:-5] for n in os.listdir(folder) if n.endswith(".json"))
         if not ids:
-            return {}
+            return {}, {}
         import ctx_blocks as cb                  # here: it imports this module
     except Exception:  # noqa: BLE001 — a digest line is not worth the summary
-        return {}
-    out = {}
+        return {}, {}
+    checked, synced = {}, {}
     for rid in ids:
         try:
-            result = cb.load_state(store, rid).get("sync_result")
+            state = cb.load_state(store, rid)
         except Exception:  # noqa: BLE001 — one state that does not read is that repository's line only
             continue
-        if _is_sync_result(result):
-            out[rid] = result
-    return out
+        if isinstance(state.get("checked"), str) and state["checked"]:
+            checked[rid] = state["checked"]
+        if _is_sync_result(state.get("sync_result")):
+            synced[rid] = state["sync_result"]
+    return checked, synced
+
+
+def checked_by_repo(store_root):
+    """{repository id: when it was last checked} — the first half of `states_by_repo` (a state with no check is left out).
+    Read only, and never fails."""
+    return states_by_repo(store_root)[0]
+
+
+def sync_by_repo(store_root):
+    """{repository id: its `sync_result`} — the second half of `states_by_repo`, for the digest's `repos:` line (since
+    v3.14.0; a state with no result, or one that is not an object with an outcome, is left out). Read only, and never
+    fails."""
+    return states_by_repo(store_root)[1]
 
 
 def status_summary(context_path, home=None, checked=True):
     """{records, card_lines, pending, conflicts, stale, unassigned, checked, sync, store} for the SessionStart digest
     (`checked`: {repository id: when the store last checked it}, `sync`: {repository id: the last result of its daily sync},
     both read last — with `checked` False they are {} and the caller reads them on its own budget from `store`, the store
-    root, with `checked_by_repo` and `sync_by_repo`); {unavailable: root} when
+    root, with `states_by_repo`); {unavailable: root} when
     the store used before cannot be reached; None without a store or on any error. Reads only. The home
     defaults to the one the context file lives in (~/.grow-pm/local-context.md)."""
     try:
@@ -1015,8 +1014,7 @@ def status_summary(context_path, home=None, checked=True):
                  "unassigned": len(cs.unassigned_ids(recs)), "unavailable": None, "store": store.root}
     except Exception:
         return None
-    facts["checked"] = checked_by_repo(store.root) if checked else {}   # last, and never the reason the facts are lost
-    facts["sync"] = sync_by_repo(store.root) if checked else {}
+    facts["checked"], facts["sync"] = states_by_repo(store.root) if checked else ({}, {})   # last, and never the reason the facts are lost
     return facts
 
 
@@ -1047,17 +1045,22 @@ def _moment(when):
     return t if t.tzinfo else t.astimezone()
 
 
-def _saved_facts(path, context_real, key):
-    """The `key` ("checked": the days of the last checks; "sync": the daily sync's results) of the facts the summary saved at
-    `path` holds for this context file; {} when there are none, the file is for another context file, or it cannot be read."""
+def _saved_facts(path, context_real, *keys):
+    """{key: that part of the facts} of the summary saved at `path`, read once, for each of `keys` ("checked": the days of the
+    last checks; "sync": the daily sync's results); a part is {} when there is none, the file is for another context file,
+    or it cannot be read."""
+    out = {key: {} for key in keys}
     try:
         if not os.path.isfile(path):
-            return {}
+            return out
         data = json.loads(cs.read_text(path, timeout=_SUMMARY_READ_S))
-        kept = data["facts"].get(key) if data.get("context") == context_real else None
-        return dict(kept) if isinstance(kept, dict) else {}
+        if data.get("context") == context_real:
+            for key in keys:
+                kept = data["facts"].get(key)
+                out[key] = dict(kept) if isinstance(kept, dict) else {}
     except Exception:  # noqa: BLE001 — a cache that cannot be read has nothing to keep
-        return {}
+        pass
+    return out
 
 
 def save_summary(context_path, facts, now=None):
@@ -1073,11 +1076,10 @@ def save_summary(context_path, facts, now=None):
         if not path or not isinstance(facts, dict) or facts.get("unavailable") or "records" not in facts:
             return False
         real = os.path.realpath(context_path)
-        for key in ("checked", "sync"):
-            if not facts.get(key):
-                kept = _saved_facts(path, real, key)
-                if kept:
-                    facts = dict(facts, **{key: kept})
+        lost = [key for key in ("checked", "sync") if not facts.get(key)]
+        if lost:                                         # one read of the saved summary for all it may keep
+            kept = {key: part for key, part in _saved_facts(path, real, *lost).items() if part}
+            facts = dict(facts, **kept)
         at = now if isinstance(now, str) else _moment(now).isoformat(timespec="seconds")
         data = {"schema": 1, "context": real, "at": at, "facts": facts}
         cs.atomic_write(path, json.dumps(data, ensure_ascii=False, sort_keys=True) + "\n")
@@ -1090,8 +1092,8 @@ def summary_in_time(context_path, home=None, cached=False, facts_s=SUMMARY_FACTS
     """The store's summary counted within a time budget, and saved — one helper for the SessionStart digest and for
     every writing `ctx` command after its run, so an iCloud download or an antivirus scan never holds either.
     `status_summary` counts the facts in a daemon thread, waited for at most `facts_s` seconds; the days of the last
-    checks (`checked_by_repo`) follow in the same thread, and the results of the daily sync (`sync_by_repo`, since v3.14.0)
-    after them, waited for at most `dates_s` more together — a block state that does not arrive costs the days and the
+    checks and the results of the daily sync (`states_by_repo`, since v3.14.0: one read of each block state for both)
+    follow in the same thread, waited for at most `dates_s` more — a block state that does not arrive costs the days and the
     results ({} — `save_summary` then keeps the ones saved before), never the facts.
     Facts counted in time are saved beside the context (`save_summary`) and returned. A count that comes back None or
     `unavailable` in time is the answer: returned as it is, nothing saved, the cache not used. A count that misses
@@ -1106,8 +1108,7 @@ def summary_in_time(context_path, home=None, cached=False, facts_s=SUMMARY_FACTS
         finally:
             facts_in.set()
         if box.get("s") and box["s"].get("store"):
-            box["checked"] = checked_by_repo(box["s"]["store"])
-            box["sync"] = sync_by_repo(box["s"]["store"])
+            box["checked"], box["sync"] = states_by_repo(box["s"]["store"])      # one read of each state
 
     try:
         t = threading.Thread(target=work, daemon=True)

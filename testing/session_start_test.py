@@ -394,16 +394,18 @@ def res(outcome, **fields):
 
 def repos_world(d, repos):
     """A migrated store whose registrations are `repos`: [(id, the registration's sync line, its sync_result or None,
-    the day of its last successful check or None)]; the registration of with_checked is replaced."""
+    the day of its last successful check or None[, its status, "active" when not given])]; the registration of
+    with_checked is replaced."""
     ctxp = with_checked(d, "2026-01-01", None)
     home, vault = os.path.join(d, "home"), os.path.join(d, "vault")
     prov = os.path.join(vault, "Notes", "_System", "providers")
     root = co.store_root_for(open(ctxp, encoding="utf-8").read(), home=home)
     os.remove(os.path.join(prov, "zorg-core.yaml"))
     with cs.guard_roots([home, vault]):
-        for rid, sync_line, result, checked in repos:
+        for rid, sync_line, result, checked, *status in repos:
             open(os.path.join(prov, rid + ".yaml"), "w").write(
-                (REG % (os.path.join(d, "Core-" + rid), "2026-01-01")).replace("id: zorg-core", "id: " + rid) + sync_line)
+                (REG % (os.path.join(d, "Core-" + rid), "2026-01-01")).replace("id: zorg-core", "id: " + rid)
+                .replace("status: active", "status: %s" % (status[0] if status else "active")) + sync_line)
             if result is not None or checked:
                 state = {"checked": checked and checked + "T10:00:00+03:00", "source": "folder", "version": "0.4", "blocks": {}}
                 if result is not None:
@@ -418,10 +420,10 @@ def repos_of(ctxp):
     return next((l for l in out.splitlines() if l.startswith("  repos:")), None), out
 
 
-def one(result, checked="2026-10-16", sync_line="sync: daily\n"):
+def one(result, checked="2026-10-16", sync_line="sync: daily\n", status="active"):
     """The repos line of one repository, zorg-core, with `result`."""
     with tempfile.TemporaryDirectory() as d:
-        return repos_of(repos_world(d, [("zorg-core", sync_line, result, checked)]))[0]
+        return repos_of(repos_world(d, [("zorg-core", sync_line, result, checked, status)]))[0]
 
 
 REPORT = "_System/context/sync/2026-10-16.md"
@@ -467,14 +469,29 @@ for value in ("daily", "Daily", " DAILY ", "off", "weekly", "", "daily\n", True,
     check("the hook's reading of `sync: %r` is ctx_repos.normalise's" % (value,),
           ss._sync_daily(value) == (crp.normalise({"id": "zorg-core", "sync": value})["sync"] == crp.SYNC_DAILY))
 
+check("a PAUSED registration with sync: daily gets no part, whatever its old result says",
+      one(res("unreachable"), checked="2026-10-14", status="paused") is None
+      and one(res("changed", updated=2, report=REPORT), status="paused") is None)
+check("…`Paused` is not paused (ctx_synced.due compares exactly): it is a part", one(res("no-changes"), status="Paused") is not None
+      and one(res("no-changes"), status="active") is not None)
+for value in ("paused", "Paused", " paused ", "PAUSED", "active", "", None, ["paused"], {"p": 1}, True, 1, "paused\n"):
+    reg = {"id": "zorg-core", "sync": "daily", "status": value}
+    repo = crp.normalise(reg)
+    check("the hook's reading of `status: %r` with sync: daily is ctx_repos.normalise + ctx_synced.due's" % (value,),
+          ss._sync_active(reg) == (repo["sync"] == crp.SYNC_DAILY and repo["status"] != "paused"))
+check("…a registration with no status key is active", ss._sync_active({"id": "x", "sync": "daily"}) is True
+      and ss._sync_active({"id": "x", "sync": "off"}) is False)
+
 with tempfile.TemporaryDirectory() as d:
     ctxp = repos_world(d, [("zorg-core", "sync: daily\n", res("changed", updated=2, report=REPORT), "2026-10-16"),
                            ("zorg-growth", "sync: daily\n", res("unreachable"), "2026-10-14"),
+                           ("zorg-paused", "sync: daily\n", res("changed", updated=5), "2026-10-16", "paused"),
                            ("zorg-idle", "sync: daily\n", None, "2026-10-14"),                  # daily, never synced: no part
                            ("zorg-off", "", res("changed", updated=9), "2026-10-16")])         # switched off: its old result is not shown
     line, out = repos_of(ctxp)
     check("several repositories: one line, joined by '; ', registration order; one without a result or without sync: daily is left out",
-          line == "  repos: zorg-core · synced 2026-10-16 · 2 updated · report " + REPORT + "; zorg-growth · unreachable since 2026-10-14 (VPN?)", line)
+          line == "  repos: zorg-core · synced 2026-10-16 · 2 updated · report " + REPORT + "; zorg-growth · unreachable since 2026-10-14 (VPN?)"
+          and "zorg-paused" not in line, line)
     check("…the line sits after the context line and before Skills", [l.split(":")[0].strip() for l in out.splitlines()
           if l.startswith(("  context:", "  repos:", "Skills:"))] == ["context", "repos", "Skills"], out[-900:])
 
@@ -553,6 +570,11 @@ with tempfile.TemporaryDirectory() as d:                  # a state that never a
     took = time.time() - t0
     check("a block state that never arrives: no repos line, the context line is there, within the budget",
           line is None and "  context: records 14 · card " in out and took < 4, (line, took))
+
+rule = re.sub(r"\s+", " ", ss.__doc__)
+check("the module docstring says the repos line is the one place a reason may travel (up to 80 characters, control characters stripped)",
+      "never URLs, ids, emails or tokens" in rule and "repos:" in rule[rule.index("never URLs"):rule.index("never URLs") + 400]
+      and "80 characters" in rule and "control characters" in rule, rule[rule.find("Header only"):][:500])
 
 # a context outside .grow-pm (a connected folder): the digest works as before and writes nothing beside it
 with tempfile.TemporaryDirectory() as d:
