@@ -692,6 +692,22 @@ with tempfile.TemporaryDirectory() as d:
     check("auto: the server does not answer and the folder copy is cut → an error, not unsound (the sync: unreachable)",
           down_cut["source"] is None and down_cut["error"] and "cut at block teams" in down_cut["error"] and down_cut["unsound"] is None,
           down_cut)
+    # the MCP-only shape (connect-steps: kind mcp, no paths, blocks_source left to auto): no core folder is no source at all
+    solo = lambda url: cr.fetch(repo_of({"id": "zorg-growth", "kind": "mcp", "blocks_file": GROWTH_FILE,
+                                         "endpoint": {"url": url, "root": "ZorgGrowth/"}}))
+    check("(the endpoint-only registration reads as auto with no core folder)", repo_of({"id": "zorg-growth", "kind": "mcp",
+          "endpoint": {"url": "http://x/mcp"}})["blocks_source"] == "auto" and repo_of({"id": "zorg-growth", "kind": "mcp"})["core_root"] == "")
+    for label, note in (("an empty note", ""), ("a note cut inside a block", GROWTH_TEXT[:GROWTH_TEXT.rindex("<!-- zorg-growth:end")])):
+        with FakeMcp(tree={GROWTH_PATH: note}) as fake:
+            fs = solo(fake.url)
+        check("auto, an endpoint and no core folder, %s → unsound, the words of the error (the sync: broken)" % label,
+              fs["source"] is None and fs["error"] and fs["error"].startswith("MCP: the blocks file ") and fs["unsound"] == fs["error"], fs)
+    fsd = solo("http://127.0.0.1:9/mcp")
+    check("…and a server that does not answer, with no core folder, is no unsound text (the sync: unreachable)",
+          fsd["source"] is None and fsd["error"] and fsd["unsound"] is None, fsd)
+    fsp = cr.fetch(repo_of({"id": "zorg-case", "kind": "folder", "blocks_source": "paths", "blocks_file": "Core/blocks.md"}))
+    check("…but blocks_source paths with no core folder is a source that did not answer: an error, not unsound",
+          fsp["error"] and "no core folder" in fsp["error"] and fsp["unsound"] is None, fsp)
 
     # --- a core file that never arrives
     saved = os.environ.get("GROW_PM_CTX_READ_TIMEOUT")

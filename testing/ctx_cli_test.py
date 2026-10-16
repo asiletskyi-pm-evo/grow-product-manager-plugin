@@ -2377,6 +2377,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the 3 s floor, and th
         st = block_state(e, "zorg-core")
         check("a fetch that leaves less than 3 s: timeout, nothing planned or written (records, journal, the check)",
               rc == 0 and fetched == ["zorg-core"] and r0.get("outcome") == "timeout" and "nothing written" in (r0.get("reason") or "")
+              and "once its last 1 s, kept for writing down the results, is set aside" in (r0.get("reason") or "")
               and tree_of(os.path.join(e.store, "records")) == records and journal_len(e) == j and st["checked"] == core_state["checked"]
               and st["sync_attempt"] == DAY1, (rc, fetched, r0))
 
@@ -2417,6 +2418,58 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the 3 s floor, and th
               and reasons["zorg-core"].startswith("store: not available locally: product.zorg-app.md")
               and tree_of(os.path.join(e.store, "records")) == records and block_state(e, "zorg-core")["sync_attempt"] == DAY2
               and block_state(e, "zorg-core")["checked"] == core_state["checked"], (rc, outcomes, reasons))
+
+# --- v3.14.0 Task 4 fix round 2: an endpoint-only registration's bad note is broken; a lock that cannot be taken; a fetch that raises
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        reg = os.path.join(e.home, ".grow-pm", "providers", "zorg-growth.yaml")
+        text = read(reg)
+        assert "blocks_source: mcp\n" in text
+        open(reg, "w", encoding="utf-8").write(text.replace("blocks_source: mcp\n", "") + "sync: daily\n")   # connect-steps' shape
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        checked_at(e, "zorg-growth", DAY0)
+        fake.tree[GROWTH_PATH] = ""                      # the server serves an empty note
+        j, ctx_text = journal_len(e), read(e.ctx)
+        rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1)
+        r0 = ((res or {}).get("results") or [{}])[0]
+        st = block_state(e, "zorg-growth")
+        check("an endpoint-only registration (auto, no core folder) whose server serves an empty note: broken, checked moves",
+              rc == 0 and r0.get("outcome") == "broken" and "holds no zorg-growth block" in (r0.get("reason") or "")
+              and st["checked"] == DAY1 and st["sync_attempt"] == DAY1 and journal_len(e) == j and read(e.ctx) == ctx_text, (rc, r0))
+        check("…not due 2 h later", run_ok(e, "provider", "sync", "--if-due", "--now", DAY1_PLUS_2H)[2]["synced"] == [])
+
+        real_lock = ctx_ops_mod.lock
+
+        def unwritable_lock(home, stale_s=120):
+            raise PermissionError(13, "Permission denied", os.path.join(home, ".grow-pm", ".ctx.lock"))
+
+        ctx_ops_mod.lock = unwritable_lock
+        try:
+            rc, out, res = in_process(e, "provider", "sync", "--now", DAY2)
+        finally:
+            ctx_ops_mod.lock = real_lock
+        check("a lock that cannot be taken (~/.grow-pm not writable) is not 'busy': skipped lock: <why>, nothing synced, exit 0",
+              rc == 0 and res["synced"] == [] and (res.get("skipped") or "").startswith("lock: ") and "Permission denied" in res["skipped"]
+              and block_state(e, "zorg-growth")["sync_attempt"] == DAY1, res)
+
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT
+        real_fetch = crp_mod.fetch
+
+        def raising_fetch(repo, **kw):                   # fetch is documented never to raise: one that does is a bug, not a VPN
+            raise ValueError("a bug in the fetch")
+
+        crp_mod.fetch = raising_fetch
+        try:
+            rc, out, res = in_process(e, "provider", "sync", "--now", DAY2)
+        finally:
+            crp_mod.fetch = real_fetch
+        r0 = ((res or {}).get("results") or [{}])[0]
+        st = block_state(e, "zorg-growth")
+        check("a fetch that raises: error (not unreachable) with its message, the attempt recorded, the check unchanged",
+              rc == 0 and r0.get("outcome") == "error" and "ValueError: a bug in the fetch" in (r0.get("reason") or "")
+              and st["checked"] == DAY1 and st["sync_attempt"] == DAY2, (rc, r0))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

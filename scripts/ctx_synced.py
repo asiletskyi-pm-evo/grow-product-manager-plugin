@@ -40,8 +40,9 @@ The outcome of a repository's pass (§4.3, §6):
 - "timeout"          the budget ran out before or during the pass, the client gave up at its deadline, or less than
                      APPLY_MIN_S was left for the plan and the write; retried in an hour, nothing written
 - "import-conflict"  the edits waiting in local-context.md need a decision (`ctx sync`); nothing written to the records
-- "error"            something failed unexpectedly — the store (a record missing or not downloaded: "store: <why>"), or
-                     anything else (its message); retried in an hour
+- "error"            something failed unexpectedly — the store (a record missing or not downloaded: "store: <why>"), a
+                     fetch that raised (a bug, never blamed on the network), or anything else (its message); retried in
+                     an hour
 
 Stdlib only.
 """
@@ -208,10 +209,10 @@ def public(result):
 
 
 def _fetch_within(repo, now, until):
-    """(fetched, late, why) of one repository. The fetch runs in a daemon thread joined against what is left until
+    """(fetched, late, raised) of one repository. The fetch runs in a daemon thread joined against what is left until
     `until`, and the client keeps `until` as its deadline: a DNS lookup that hangs (VPN off) or a server that trickles
     costs the budget and no more (late True; the thread is left behind — it only reads, and the command ends soon).
-    A fetch that raised is (None, False, why)."""
+    A fetch that raised (it is documented never to: a bug) is (None, False, the exception)."""
     box = {}
 
     def work():
@@ -224,10 +225,8 @@ def _fetch_within(repo, now, until):
     worker.start()
     worker.join(_left(until))
     if worker.is_alive():
-        return None, True, "no answer within the sync's %g s budget" % BUDGET_S
-    if "error" in box:
-        return None, False, "the fetch failed unexpectedly (%s)" % type(box["error"]).__name__
-    return box["fetched"], False, None
+        return None, True, None
+    return box.get("fetched"), False, box.get("error")
 
 
 def _counts(res, theirs):
@@ -249,25 +248,28 @@ def _counts(res, theirs):
 def _pass(c, repo, now, until):
     """(result, the apply's result or None, did the check succeed without an apply) of one repository, by `until`.
     The block state is read first (one that cannot be read stops the pass before the network); then the fetch. A fetch
-    that is late, or whose error says the deadline was reached, is "timeout"; one where every source answered an
-    empty, cut or foreign text (`unsound`) is "broken"; any other fetch error is "unreachable". Less than APPLY_MIN_S
-    left then is "timeout" with nothing planned or written. A blocks file that holds none of your based blocks is
+    that is late, or whose error says the deadline was reached, is "timeout"; one that raised is "error" (a bug: fetch
+    never raises — never blamed on the network); one where every source answered an empty, cut or foreign text
+    (`unsound`) is "broken"; any other fetch error is "unreachable". Less than APPLY_MIN_S left of the work time then
+    (`until`: the budget less its last RESERVE_S) is "timeout" with nothing planned or written. A blocks file that holds none of your based blocks is
     "broken"; else plan → decide → apply, which writes the state's `checked` itself. Store reads run within what is
     left of the budget."""
     rid = repo["id"]
     with cs.read_budget(_left(until)):
         cb.load_state(c.store, rid)
-    fetched, late, why = _fetch_within(repo, now, until)
-    error = why if fetched is None else fetched.get("error")
+    fetched, late, raised = _fetch_within(repo, now, until)
     if late:
-        return _result(now, "timeout", error), None, False
-    if error and fetched is not None and fetched.get("unsound"):
+        return _result(now, "timeout", "no answer within the sync's %g s budget" % BUDGET_S), None, False
+    if raised is not None:
+        return _result(now, "error", "the fetch failed unexpectedly — %s: %s"
+                       % (type(raised).__name__, str(raised) or "no message")), None, False
+    error = fetched.get("error")
+    if error and fetched.get("unsound"):
         return _result(now, "broken", fetched["unsound"]), None, True
     if error:
         return _result(now, "timeout" if cm.DEADLINE in error else "unreachable", error), None, False
     if _left(until) < APPLY_MIN_S:
-        return _result(now, "timeout", "less than %g s of the sync's %g s budget left after the fetch — nothing planned, "
-                                       "nothing written" % (APPLY_MIN_S, BUDGET_S)), None, False
+        return _result(now, "timeout", _short("after the fetch — nothing planned, nothing written")), None, False
     with cs.read_budget(_left(until)):
         lost = cb.source_lost(c.store, c.copies, repo, fetched, now)
         if lost:
@@ -284,6 +286,13 @@ def _pass(c, repo, now, until):
     return _result(now, outcome, reason, snapshot=res["snapshot"], kept_yours=answers["kept_yours"],
                    took_rule=answers["took_rule"], awaiting=answers["awaiting"], held=gone, rejected=answers["rejected"],
                    **_counts(res, theirs)), res, False
+
+
+def _short(when):
+    """The reason of the floor: what is actually checked — the work time left (`until`), which is the budget less its
+    last RESERVE_S — against APPLY_MIN_S."""
+    return ("less than %g s left of the sync's %g s budget once its last %g s, kept for writing down the results, is set "
+            "aside, %s" % (APPLY_MIN_S, BUDGET_S, RESERVE_S, when))
 
 
 def _record(store, rid, result, checked, deadline):
@@ -323,9 +332,9 @@ def run(c, repos, now, deadline, only_due=False, skipped=None):
     import_first). Returns one result per repository — `public`'s keys and `apply` (the apply's result, its plan with the
     rows, or None), for the report — and writes each into the repository's block state (`sync_result`, `sync_attempt`).
 
-    1. The lock: held by another session (co.Busy) → [] at once, nothing written — and so is a guard that refuses (a
-       registration still downloading: the provider boundary cannot be checked). When `skipped` is a list it gets why:
-       "busy", or "guard: <why>".
+    1. The lock: held by another session (co.Busy) → [] at once, nothing written — and so is a lock that cannot be taken
+       at all (OSError) and a guard that refuses (a registration still downloading: the provider boundary cannot be
+       checked). When `skipped` is a list it gets why: "busy", "lock: <why>" or "guard: <why>".
     2. With `only_due` (the command's --if-due, whose choice was made before the lock) the repositories are checked
        again under the lock, from their states as they are now: another session that synced them meanwhile leaves
        none due, and [] is returned — no second pass, no second result over the first one.
@@ -340,9 +349,13 @@ def run(c, repos, now, deadline, only_due=False, skipped=None):
     stack = contextlib.ExitStack()
     try:
         stack.enter_context(co.lock(c.home))
-    except (co.Busy, OSError):
+    except co.Busy:
         if skipped is not None:
             skipped.append("busy")
+        return []
+    except OSError as e:                            # ~/.grow-pm not writable, say: no lock can be taken — not another session
+        if skipped is not None:
+            skipped.append("lock: " + cb.clip(str(e) or type(e).__name__, cb.NOTE_CLIP))
         return []
     with stack:
         if only_due:
@@ -370,8 +383,7 @@ def run(c, repos, now, deadline, only_due=False, skipped=None):
             if failed:
                 result = dict(failed)
             elif _left(until) < APPLY_MIN_S:
-                result = _result(now, "timeout", "less than %g s of the sync's %g s budget left before this repository — not "
-                                                 "started" % (APPLY_MIN_S, BUDGET_S))
+                result = _result(now, "timeout", _short("before this repository — not started"))
             else:
                 try:
                     result, res, checked = _pass(c, repo, now, until)

@@ -414,7 +414,8 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     tried answered such a text (since v3.14), `unsound` says so too — the same words as `error` — so the daily sync can
     tell a broken source (checked, retried in a day) from one that did not answer (retried in an hour): under "auto" a
     server that did not answer and a folder copy that is cut is no `unsound`, and neither is a server error or a note
-    with no text content.
+    with no text content. Under "auto" a registration with no core folder (an endpoint only) has no folder to try: its
+    server's bad note alone makes it `unsound`.
     `include_skipped` keeps the blocks of `skip_blocks` in `blocks` (the plan's `--all` lists them); by default they
     are dropped.
 
@@ -476,7 +477,8 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
             if text is None and src in ("auto", "paths"):
                 text, why = _from_folder(repo, blocks_file)
                 bad = _unsound(text, out["namespace"]) if text is not None else None
-                unanswered = unanswered or text is None
+                # under auto a registration with no core folder (the MCP-only shape) has no second source to answer
+                unanswered = unanswered or (text is None and (src == "paths" or bool(core_root)))
                 if bad:
                     text, why = None, bad
                 if text is not None:

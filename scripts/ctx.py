@@ -73,12 +73,13 @@
                                 ? left waiting, a text you rejected by undoing a pass held. --if-due first keeps only the
                                 repositories due — a day after their last successful check, an hour after a failed
                                 attempt — reading their block state alone (no lock, no network); none → only CTX_RESULT.
-                                The lock held by another session: nothing, at once (skipped: busy; a guard that refuses:
-                                skipped: guard: <why>); --if-due checks again under the lock. The edits waiting are
-                                imported first (a conflict: import-conflict, nothing written). 20 s for every repository
-                                together; no plan or write starts with less than 3 s left. Outcomes: changed, no-changes,
-                                held, broken (an empty, cut or foreign blocks file — retried in a day), unreachable,
-                                timeout, import-conflict, error (retried in an hour).
+                                The lock held by another session: nothing, at once (skipped: busy; a lock that cannot be
+                                taken: lock: <why>; a guard that refuses: guard: <why>); --if-due checks again under the
+                                lock. The edits waiting are imported first (a conflict: import-conflict, nothing
+                                written). 20 s for every repository together, the last 1 s kept for writing down the
+                                results; no fetch, plan or write starts with less than 3 s left before that. Outcomes:
+                                changed, no-changes, held, broken (an empty, cut or foreign blocks file — retried in a
+                                day), unreachable, timeout, import-conflict, error (retried in an hour).
                                 One line per repository the pass changed: «Ядро оновило N блоків у <repo>, конфліктів K
                                 (лишено твоє)». Exit 0 whatever happened (3: bad usage). CTX_RESULT: synced (ids),
                                 results [{repo, at, outcome, updated, added, removed, kept_yours, took_rule, awaiting, held,
@@ -1015,7 +1016,7 @@ def cmd_provider_sync(a, c):
     search-only; with --if-due only those due, read from their block state without the lock or the network (none →
     nothing printed, only CTX_RESULT). Then `sy.run` within BUDGET_S — with --if-due it checks again under the lock — and
     one sentence per repository whose pass changed a block or decided a conflict. A run that did nothing because of the
-    lock or the guard says so in CTX_RESULT: skipped "busy" | "guard: <why>". Exit 0 whatever the repositories did; a
+    lock or the guard says so in CTX_RESULT: skipped "busy" | "lock: <why>" | "guard: <why>". Exit 0 whatever the repositories did; a
     usage error (an unknown REPO, one without `sync: daily`, a paused one, a bad --now) is exit 3."""
     deadline = time.monotonic() + sy.BUDGET_S
     at = _sync_now(a.now)
