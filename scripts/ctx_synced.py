@@ -16,6 +16,10 @@ answers come from one place:
             planned, decided, applied (op "provider-sync") — and its result written into its block state (`sync_result`,
             `sync_attempt`)
 - sentence  the one line a skill repeats at the end of its answer when a pass changed something
+- the report `{storage_root}/_System/context/sync/YYYY-MM-DD.md` (spec §7), written into the vault for the person to read:
+            render_section (one repository's part: the table of decisions in the cascade's words, both texts of every
+            conflict, the way back), render_report / write_report (the day's file: frontmatter, title, parts appended),
+            prune_reports (older than 90 days into ~/.grow-pm/trash/), reported / repeats (which passes write a part)
 
 `decide` reads nothing and writes nothing: the plan is `ctx_blocks.plan`'s, the repository's texts are
 `{block: text}` from `ctx_blocks._theirs(fetched)[0]` (a block the repository removed is absent). Rules, in this order
@@ -49,6 +53,7 @@ Stdlib only.
 import contextlib
 import datetime
 import os
+import re
 import sys
 import threading
 import time
@@ -245,7 +250,22 @@ def _counts(res, theirs):
     return out
 
 
-def _pass(c, repo, now, until):
+def _conflicts(store, repo, fetched, plan, theirs):
+    """The full texts of the blocks the plan asks about ("⚠" and "?", but not a text you rejected): {"mine": {block: your
+    region}, "theirs": {block: the repository's region, None when it removed the block}}. Taken before the write, because a
+    rule overwrites yours and the report shows it. Yours that cannot be read is left out (the report says where to look)."""
+    asked = [r["block"] for r in _rows(plan) if r["sign"] in QUESTIONS and not r.get("rejected")]
+    out = {"mine": {}, "theirs": {b: theirs.get(b) for b in asked}}
+    if asked:
+        try:
+            regions = cb.find_regions(store.load(), cb.namespace_of(repo, fetched))[0]
+            out["mine"] = {b: regions[b]["text"] for b in asked if b in regions}
+        except (cs.StoreError, OSError, ValueError):
+            pass
+    return out
+
+
+def _pass(c, repo, now, until, facts=None):
     """(result, the apply's result or None, did the check succeed without an apply) of one repository, by `until`.
     The block state is read first (one that cannot be read stops the pass before the network); then the fetch. A fetch
     that is late, or whose error says the deadline was reached, is "timeout"; one that raised is "error" (a bug: fetch
@@ -253,7 +273,8 @@ def _pass(c, repo, now, until):
     (`unsound`) is "broken"; any other fetch error is "unreachable". Less than APPLY_MIN_S left of the work time then
     (`until`: the budget less its last RESERVE_S) is "timeout" with nothing planned or written. A blocks file that holds none of your based blocks is
     "broken"; else plan → decide → apply, which writes the state's `checked` itself. Store reads run within what is
-    left of the budget."""
+    left of the budget. `facts`, when a dict, gets what the report needs and only the pass has in hand before the write:
+    `_conflicts`' full texts."""
     rid = repo["id"]
     with cs.read_budget(_left(until)):
         cb.load_state(c.store, rid)
@@ -275,7 +296,10 @@ def _pass(c, repo, now, until):
         if lost:
             return _result(now, "broken", lost), None, True
         theirs = cb._theirs(fetched)[0]
-        answers = decide(cb.plan(c.store, c.copies, repo, fetched, now), theirs)
+        plan = cb.plan(c.store, c.copies, repo, fetched, now)
+        answers = decide(plan, theirs)
+        if facts is not None:
+            facts.update(_conflicts(c.store, repo, fetched, plan, theirs))
         res = cb.apply(c.store, c.copies, c.home, repo, fetched, answers["choose"], answers["add"], now, op=OP,
                        hold=answers["hold"])
     gone = answers["held_removals"]
@@ -326,6 +350,339 @@ def _failure(e):
     return "store: " + said if isinstance(e, cs.StoreError) else said
 
 
+# ------------------------------------------------------------------ the report (spec §6.6, §7)
+REPORT_DIR = "_System/context/sync"             # from the storage root: where a result's `report` points, in the vault
+REPORT_DAYS = 90                                # a report older than this is moved to ~/.grow-pm/trash/
+REPORT_LINES = 40                               # lines of a conflict's text shown for each side
+REPORTED = ("changed", "held", "broken", "import-conflict", "error")   # the outcomes that write a part of the report
+REPEATS = ("held", "broken", "import-conflict", "error")               # …and write none again for the same set and reason (§6.6)
+PRUNE_S = 1.0                                   # the most the clearing of old reports takes of the budget
+DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+REPORT_FILE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
+SECTION_REPO = re.compile(r"^##[ \t]+(\S+)[ \t]+·", re.M)
+FRONT = re.compile(r"\A---\n(.*?\n)---\n", re.S)
+REPOS_LINE = re.compile(r"^repos: \[(.*)\]$", re.M)
+VERSION_MOVE = re.compile(r"\(v[^()]* → v[^()]*\)")
+
+
+def reported(result):
+    """Does a pass with this outcome write a part of the report? Only those that changed something, kept a safeguard on or
+    failed in a way the person should see; a pass that only moved the time of the check, or could not reach the server,
+    leaves nothing to read."""
+    return result["outcome"] in REPORTED
+
+
+def repeats(prev, result):
+    """Is `result` a safeguard going off again as it did last time (§6.6)? The previous `sync_result` (`prev`) has the same
+    outcome, the same set of blocks held and the same reason, and this pass wrote nothing else (no snapshot): then the
+    report says it once, and the digest goes on showing the mark. Only the outcomes in REPEATS can repeat. A `prev` that
+    is not what the state keeps is no repeat."""
+    if result["outcome"] not in REPEATS or result.get("snapshot") or not isinstance(prev, dict):
+        return False
+    held = prev.get("held")
+    return (prev.get("outcome") == result["outcome"] and isinstance(held, list) and sorted(map(str, held)) == sorted(result["held"])
+            and prev.get("reason") == result["reason"])
+
+
+def _lines_word(n):
+    """The form of "рядок" after the number `n` (as cs.blocks_word does for "блок")."""
+    if n % 10 == 1 and n % 100 != 11:
+        return "рядок"
+    return "рядки" if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14) else "рядків"
+
+
+def _code(text):
+    return "`%s`" % cb.clip(text, cb.HEADER_CLIP).replace("`", "'")
+
+
+def _cell(text):
+    return cb.clip(text, cb.NOTE_CLIP).replace("|", "\\|")
+
+
+def _text_lines(text):
+    """The lines of a region without its two marker lines, with every control character a server may have sent made a space."""
+    return [cb.CONTROLS.sub(" ", line).rstrip() for line in cb._body_lines(text)]
+
+
+def _fenced(lines):
+    """`lines` as a fenced code block whose fence is longer than any run of backticks in them: what a server sent is code
+    in the report, never Markdown or a link that comes alive in Obsidian."""
+    longest = max([len(m) for line in lines for m in re.findall(r"`+", line)] or [0])
+    fence = "`" * max(3, longest + 1)
+    return [fence] + list(lines) + [fence]
+
+
+def _side(caption, text, where):
+    """One side of a conflict: its caption (with the version in the begin marker), the text in a fence — the first
+    REPORT_LINES lines — and, when there are more, `… ще N рядків — <where>`."""
+    lines = _text_lines(text)
+    version = cb._marker_version(text)
+    out = ["%s%s:" % (caption, " (v%s)" % cb.clip(version, cb.HEADER_CLIP) if version else ""), ""]
+    out += _fenced(lines[:REPORT_LINES] or ["(порожньо)"])
+    if len(lines) > REPORT_LINES:
+        left = len(lines) - REPORT_LINES
+        out += ["", "… ще %d %s — %s" % (left, _lines_word(left), where)]
+    return out
+
+
+def _verdict(row, apply, result):
+    """(decision, why, kind) of one row of the plan that offers something, in the cascade's own words (§5.1, §5.2, §6.1).
+    `kind` is what became of the block: "rejected", "held", "mine", "theirs", "added", "removed", "taken" (a "~"),
+    "waits" or "refused"."""
+    bid, sign, gone = row["block"], row["sign"], row.get("source") is None
+    if row.get("rejected") or bid in result["rejected"]:
+        return "утримано", "відкинуто вами раніше", "rejected"
+    if bid in result["held"]:
+        n = len(result["held"])
+        return "не прибрано", "запобіжник: ядро прибрало %d %s — не прибрано" % (n, cs.blocks_word(n)), "held"
+    decided = (apply.get("decisions") or {}).get(bid)
+    if decided is None:
+        if bid in (apply.get("pending") or ()):
+            return ("чекає рішення", "%s → лишається твій текст, база не зсувається; блок чекає твого рішення"
+                    % ("ядро прибрало блок, а бази немає" if gone else "бази немає, тексти різні"), "waits")
+        return "не застосовано", "текст ядра не прийнято: у блоці зіпсовані маркери", "refused"
+    how = decided.partition(" ")[2]
+    if sign == "+":
+        return "додано", "новий блок у ядрі → додано", "added"
+    if sign == "−":
+        return "прибрано", "ядро прибрало блок, ти його не правив → прибрано (текст лишається у знімку)", "removed"
+    if sign == "~":
+        moved = VERSION_MOVE.search(row.get("note") or "")
+        return "текст ядра", "змінило лише ядро → текст ядра" + (" " + moved.group(0) if moved else ""), "taken"
+    first = "змінили обидва" if sign == "⚠" else "бази немає, тексти різні"
+    if how == "theirs":
+        return "текст ядра", "%s → правило ядра → текст ядра" % first, "theirs"
+    if gone:
+        return "лишено твоє", "ядро прибрало блок, а ти його правив → лишено твоє: маркери ядра знято", "mine"
+    return "лишено твоє", "змінили обидва → лишено твоє: блок не є правилом ядра", "mine"
+
+
+def _take(row, rid):
+    """The line that takes the repository's side of a block with one command."""
+    label = "Прибрати блок, як у ядра" if row.get("source") is None else "Взяти текст ядра"
+    return "%s: ctx provider apply %s --choose %s=theirs" % (label, cb.clip(rid, cb.HEADER_CLIP), row["block"])
+
+
+def _conflict(row, kind, apply, texts, rid, record):
+    """The part of a "⚠" or a "?": what was done and why, the plan's lines of difference, BOTH texts and the commands."""
+    bid, snapshot = row["block"], cb.clip(apply.get("snapshot") or "", 1000)
+    gone = row.get("source") is None
+    title = {"mine": "лишено твоє", "theirs": "правило ядра, взято текст ядра", "waits": "чекає рішення"}.get(kind, "не застосовано")
+    where = "у записі %s" % _code(record) if record else "у записі"
+    said = {"mine": ("Ядро прибрало блок; твій текст лишився %s як твій, без маркерів ядра." % where) if gone else
+                    ("Твій текст лишився %s. Базою стала версія ядра, тож наступний синк про цей блок не питає." % where),
+            "theirs": "Блок — правило ядра, тож %s тепер текст ядра. %s" % (where, ("Твій текст збережено у знімку %s і показано нижче." % snapshot)
+                                                                        if snapshot else "Твій текст показано нижче."),
+            "waits": "%s лишається твій текст, база не зсунулась: блок чекає твого рішення." % where.capitalize()}.get(kind, "")
+    out = ["### Конфлікт: %s — %s" % (_code(bid), title), ""] + ([said, ""] if said else [])
+    if row.get("diff"):
+        out += ["Що змінилось відносно бази:", ""] + _fenced([line[4:] for line in cb._detail_lines(row["diff"])]) + [""]
+    mine, theirs = (texts or {}).get("mine") or {}, (texts or {}).get("theirs") or {}
+    mine_where = "повністю у знімку %s" % snapshot if snapshot else "повністю у записі %s" % (record or "—")
+    out += _side("Твій текст", mine[bid], mine_where) if bid in mine else ["Твій текст: недоступний під час звіту%s." %
+                                                                         (" — шукай у знімку %s" % snapshot if snapshot else "")]
+    out.append("")
+    if theirs.get(bid) is not None:
+        out += _side("Текст ядра", theirs[bid], "повністю у джерелі ядра")
+    else:
+        out.append("Ядро прибрало цей блок." if gone else "Текст ядра: недоступний під час звіту.")
+    if kind == "mine" and not gone:
+        out += ["", _take(row, rid)]
+    elif kind == "waits":
+        out += ["", _take(row, rid), "", "Лишити своє: ctx provider apply %s --choose %s=mine" % (cb.clip(rid, cb.HEADER_CLIP), bid)]
+    return out
+
+
+def render_section(result, apply=None, texts=None, hosts=None, base_after=None):
+    """One repository's part of the day's report (spec §7), Markdown for Obsidian, no trailing newline.
+
+    `result` is a pass's result (`run`'s: `public` keys and `repo`); `apply` the apply's result with its `plan` (None for
+    a pass that never planned: broken, import-conflict, error); `texts` the full texts taken before the write
+    (`_conflicts`); `hosts` {block: record} read after it (a "+" has no record in the plan); `base_after` the version the
+    bases stood at after the pass.
+
+    The heading is `## <id> · HH:MM · джерело <label> · ядро v<v> · база v<a> → v<b>` (only `## <id> · HH:MM` with no
+    plan). Then the table `| Блок | Знак | Рішення | Чому | Запис |` — a row for every block the repository offered
+    something for (~ + − ⚠ ?), in the cascade's words; the part of every ⚠ and ? with both texts (REPORT_LINES lines each)
+    and the command that takes the core's; what the safeguard held and what to do; the texts you rejected before; and the
+    last line, the way back (`Відкотити цей прохід: ctx undo (знімок <folder>)`) or that there is none."""
+    rid = cb.clip(result["repo"], cb.HEADER_CLIP)
+    at = result.get("at") or ""
+    plan = (apply or {}).get("plan")
+    head = "## %s · %s" % (rid, at[11:16] if len(at) >= 16 else "—")
+    if plan:
+        head += " · джерело %s · ядро v%s · база v%s → v%s" % (cb.clip(plan["source_label"], cb.HEADER_CLIP),
+                                                              plan["version"] or "—", plan["base_version"], cb.clip(base_after or "—", cb.HEADER_CLIP))
+    blocks = [[head]]
+    outcome, reason = result["outcome"], cb.clip(result.get("reason") or "—", cb.NOTE_CLIP)
+    if plan and outcome in ("changed", "held"):
+        rows = [r for r in plan["rows"] if r["sign"] in cb.OFFERS]
+        verdicts = {r["block"]: _verdict(r, apply, result) for r in rows}
+        summary = ("Оновлено %d · додано %d · прибрано %d · лишено твоє %d · чекає рішення %d"
+                   % (result["updated"], result["added"], result["removed"], len(result["kept_yours"]), len(result["awaiting"])))
+        if result["held"]:
+            summary += " · не прибрано %d" % len(result["held"])
+        blocks.append([summary])
+        if rows:
+            table = ["| Блок | Знак | Рішення | Чому | Запис |", "|---|---|---|---|---|"]
+            for r in rows:
+                record = r.get("host") or (hosts or {}).get(r["block"])
+                table.append("| %s | %s | %s | %s | %s |" % (_code(r["block"]), r["sign"], _cell(verdicts[r["block"]][0]),
+                                                           _cell(verdicts[r["block"]][1]), _code(record) if record else "—"))
+            blocks.append(table)
+        else:
+            blocks.append(["Тексти не змінились: пройшло лише оновлення бази порівняння."])
+        for r in rows:
+            kind = verdicts[r["block"]][2]
+            if r["sign"] in QUESTIONS and kind not in ("rejected", "held"):
+                blocks.append(_conflict(r, kind, apply, texts, result["repo"], r.get("host") or (hosts or {}).get(r["block"])))
+        if result["held"]:
+            n = len(result["held"])
+            blocks.append(["### Не застосовано: ядро прибрало %d %s" % (n, cs.blocks_word(n)), "",
+                           "За один прохід ядро прибрало більше одного блоку, який ти тримаєш, тож жодного не прибрано; решту знаків "
+                           "застосовано як зазвичай.", ""] + ["- %s" % _code(b) for b in result["held"]])
+            blocks.append(["Подивитись: ctx provider plan %s" % rid])
+            blocks.append(["Прибрати руками: ctx provider apply %s" % rid])
+        back = [r for r in rows if verdicts[r["block"]][2] == "rejected"]
+        if back:
+            blocks.append(["### Відкинуто вами раніше", "", "Ці тексти ядра не застосовуються, доки ядро не змінить блок:"] + [""] +
+                          ["- %s" % _code(r["block"]) for r in back])
+            blocks.extend([_take(r, result["repo"])] for r in back)
+    elif outcome == "broken":
+        blocks.append(["### Джерело ядра не прийнято", "", "Причина: %s" % reason])
+        blocks.append(["Репозиторій пропущено: нічого не записано. Перевірку зараховано, наступна — через добу."])
+    elif outcome == "import-conflict":
+        blocks.append(["### Спершу `ctx sync`", "", "Причина: %s" % reason])
+        blocks.append(["У local-context.md є правки, які потребують рішення, тому синк нічого не записав: спершу `ctx sync`, "
+                       "потім синк пройде сам."])
+    else:
+        blocks.append(["### Несподівана помилка" if outcome == "error" else "### Прохід не завершено", "", "Причина: %s" % reason])
+        blocks.append(["Прохід не завершено; нова спроба — не раніше ніж за годину."])
+    snapshot = (apply or {}).get("snapshot") or result.get("snapshot")
+    blocks.append(["Відкотити цей прохід: ctx undo (знімок %s)" % cb.clip(snapshot, 1000) if snapshot
+                   else "Знімка цього проходу немає: відкочувати нічого."])
+    return "\n\n".join("\n".join(b) for b in blocks)
+
+
+def _section_repo(text):
+    """The repository a part of the report is about: the id in its `## <id> · …` heading, or None."""
+    found = SECTION_REPO.search(text or "")
+    return found.group(1) if found else None
+
+
+def render_report(date, sections):
+    """The text of a day's report: the frontmatter (`type: system`, `kind: context-sync`, `date`, `repos`), the title
+    `# Синк контексту — YYYY-MM-DD` and the parts, a blank line between. `sections` are part texts — the repository named
+    by the heading — or (repository id, text) pairs; a repository is listed once."""
+    if not isinstance(date, str) or not DATE.match(date):
+        raise ValueError("a report is named for a day, YYYY-MM-DD, not %r" % (date,))
+    ids, parts = [], []
+    for item in sections:
+        rid, text = item if isinstance(item, tuple) else (_section_repo(item), item)
+        if rid and rid not in ids:
+            ids.append(rid)
+        parts.append(text.strip("\n"))
+    return ("---\ntype: system\nkind: context-sync\ndate: %s\nrepos: [%s]\n---\n\n# Синк контексту — %s\n%s"
+            % (date, ", ".join(ids), date, "".join("\n%s\n" % part for part in parts)))
+
+
+def _with_repo(text, rid):
+    """`text` (a report) with `rid` added to the `repos:` list of its frontmatter; unchanged when it has no such list
+    (a file you rewrote by hand) or already names it."""
+    front = FRONT.match(text)
+    line = REPOS_LINE.search(front.group(1)) if front and rid else None
+    if not line:
+        return text
+    ids = [x.strip() for x in line.group(1).split(",") if x.strip()]
+    if rid in ids:
+        return text
+    body = front.group(1)[:line.start()] + "repos: [%s]" % ", ".join(ids + [rid]) + front.group(1)[line.end():]
+    return "---\n" + body + "---\n" + text[front.end():]
+
+
+def write_report(store, date, section_text, repo=None):
+    """Put a part into the day's report `{store}/sync/<date>.md`: a new file (frontmatter, title, the part) or, when the
+    day has one, the part appended and the repository added to `repos` — whatever else the file holds is kept. Atomic.
+    Returns the path from the storage root, `_System/context/sync/<date>.md`. `repo` names the repository (else the
+    part's heading does). A date that is no date → ValueError; a file that cannot be read in time → StoreError."""
+    if not isinstance(date, str) or not DATE.match(date):
+        raise ValueError("a report is named for a day, YYYY-MM-DD, not %r" % (date,))
+    rid = repo or _section_repo(section_text)
+    path = os.path.join(store.sync_dir, date + ".md")
+    if os.path.isfile(path):
+        text = _with_repo(cs.read_text(path), rid).rstrip("\n") + "\n\n" + section_text.strip("\n") + "\n"
+    else:
+        text = render_report(date, [(rid, section_text)])
+    cs.atomic_write(path, text)
+    return "%s/%s.md" % (REPORT_DIR, date)
+
+
+def _put_in_trash(home, name, text, when):
+    """A file that is no record into ~/.grow-pm/trash/<time>-<name>.md, where the trash's own purge finds it (30 days)."""
+    root = co.trash_root(home)
+    base = when.astimezone().strftime("%Y%m%dT%H%M%S") + "-" + name
+    path, k = os.path.join(root, base + ".md"), 2
+    while os.path.exists(path):
+        path, k = os.path.join(root, "%s-%d.md" % (base, k)), k + 1
+    cs.atomic_write(path, text)
+    return path
+
+
+def prune_reports(store, home, now):
+    """Move the reports older than REPORT_DAYS days (by the day in the name) from `{store}/sync/` to ~/.grow-pm/trash/,
+    where they stay another 30 days. Only `YYYY-MM-DD.md` files are touched — a note of yours in that folder is not. A
+    report that cannot be read or moved is left for the next time. Returns the names moved; a `now` that is no time, or a
+    folder that is not there, moves nothing."""
+    when, gone = instant(now), []
+    try:
+        names = sorted(os.listdir(store.sync_dir))
+    except OSError:
+        return gone
+    if when is None:
+        return gone
+    for name in names:
+        found = REPORT_FILE.match(name)
+        try:
+            age = (when.date() - datetime.date.fromisoformat(found.group(1))).days if found else 0
+        except ValueError:
+            continue
+        if age <= REPORT_DAYS:
+            continue
+        path = os.path.join(store.sync_dir, name)
+        try:
+            _put_in_trash(home, "sync-report-" + found.group(1), cs.read_text(path), when)
+            cs.check_target(path)
+            os.remove(path)
+        except (OSError, UnicodeDecodeError, cs.StoreError, cs.PathRefused):
+            continue
+        gone.append(name)
+    return gone
+
+
+def _write_report(c, result, apply, facts, deadline):
+    """The path of the part this pass wrote into the day's report, or None: the pass is not one that writes (`reported`),
+    or it is a safeguard going off again as before (`repeats`, from the state's `sync_result` as the last pass left it —
+    read here, before `_record` replaces it). What the render needs of the state the pass left (the record a "+" went
+    into, the version the bases stand at) is read after the write, within what is left of the budget; what cannot be read
+    is shown as unknown."""
+    if not reported(result):
+        return None
+    rid = result["repo"]
+    hosts, base_after = {}, None
+    with cs.read_budget(max(RECORD_S, _left(deadline))):
+        try:
+            state = cb.load_state(c.store, rid)
+        except (cs.StoreError, OSError, ValueError):
+            state = None
+        if state is not None:
+            if repeats(state.get("sync_result"), result):
+                return None
+            hosts = {b: e.get("host") for b, e in state["blocks"].items()}
+            base_after = cb.base_version(state)
+        section = render_section(result, apply, facts, hosts, base_after)
+        return write_report(c.store, result["at"][:10], section, rid)
+
+
 def run(c, repos, now, deadline, only_due=False, skipped=None):
     """One sync pass over `repos` (repository dicts, `sync: daily`) at `now` (ISO text), by `deadline` (a time.monotonic()
     moment; the command gives BUDGET_S). `c` is the command line's context (`ctx.Ctx`: store, copies, home, guard,
@@ -345,7 +702,12 @@ def run(c, repos, now, deadline, only_due=False, skipped=None):
        than APPLY_MIN_S left before a repository is "timeout" (not started); an unexpected failure in a pass is
        "error" with its message (the check does not move: retried in an hour). One repository's failure never stops
        the next.
-    5. The card's line about the repositories, when a check moved and time is left."""
+    5. The report (spec §7): a pass that changed something, kept a safeguard on or failed in a way worth reading
+       (`reported`) puts its part into `{storage_root}/_System/context/sync/<day>.md` — unless it is a safeguard going off
+       again with the same set and reason (`repeats`) — and its path is the result's `report`, in the state's
+       `sync_result` too. A report that cannot be written is said in the result's `reason`; the pass stands. At the
+       start, the reports older than 90 days go to the trash (`prune_reports`).
+    6. The card's line about the repositories, when a check moved and time is left."""
     stack = contextlib.ExitStack()
     try:
         stack.enter_context(co.lock(c.home))
@@ -377,20 +739,30 @@ def run(c, repos, now, deadline, only_due=False, skipped=None):
             failed = _result(now, "import-conflict", _conflict_reason(e))
         except Exception as e:  # noqa: BLE001 — an import that cannot go through stops the writing, never the skill
             failed = _result(now, "error", _failure(e))
+        try:                                        # reports older than 90 days go to the trash; never a reason to stop
+            with cs.read_budget(min(PRUNE_S, _left(until))):
+                prune_reports(c.store, c.home, now)
+        except Exception:  # noqa: BLE001
+            pass
         results = []
         for repo in repos:
-            rid, res, checked = repo["id"], None, False
+            rid, res, checked, facts = repo["id"], None, False, {}
             if failed:
                 result = dict(failed)
             elif _left(until) < APPLY_MIN_S:
                 result = _result(now, "timeout", _short("before this repository — not started"))
             else:
                 try:
-                    result, res, checked = _pass(c, repo, now, until)
+                    result, res, checked = _pass(c, repo, now, until, facts)
                 except cb.SourceLost as e:          # the state moved between the check and the plan
                     result, checked = _result(now, "broken", str(e)), True
                 except Exception as e:  # noqa: BLE001 — one repository's failure never stops the next (§6.4)
                     result = _result(now, "error", _failure(e))
+            try:                                    # the report first: the result written into the state names it
+                result["report"] = _write_report(c, dict(result, repo=rid), res, facts, deadline)
+            except Exception as e:  # noqa: BLE001 — a report that cannot be written never hides what the pass did
+                said = "звіт не записано: %s" % (str(e) or type(e).__name__)
+                result["reason"] = cb.clip("%s; %s" % (result["reason"], said) if result["reason"] else said, cb.NOTE_CLIP)
             _record(c.store, rid, result, now if checked else None, deadline)
             results.append(dict(result, repo=rid, apply=res))
         if any(r["outcome"] in MOVED for r in results) and _left(deadline) > 0:

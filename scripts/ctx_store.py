@@ -354,10 +354,13 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 class Store:
     """`{root}/records/<id>.md`, `{root}/INDEX.md`, `{root}/.state/{compiled.json, journal.jsonl}` and, since v3.13.0,
     `{root}/.state/blocks/` — a repository's block state `<repo>.json` and its base texts `<repo>/<sha>.md`
-    (ctx_blocks.py keeps them; a snapshot copies them with the rest of `.state/`)."""
+    (ctx_blocks.py keeps them; a snapshot copies them with the rest of `.state/`). Since v3.14.0 `{root}/sync/` holds
+    the daily sync's reports, `YYYY-MM-DD.md` (ctx_synced.py writes them for the user to read in the vault): not records,
+    so `stray_files` and `validate` never look there, and not part of a snapshot, so `ctx undo` leaves them."""
 
     def __init__(self, root):
         self.root = root
+        self.sync_dir = os.path.join(root, "sync")
         self.records_dir = os.path.join(root, "records")
         self.state_dir = os.path.join(root, ".state")
         self.card_path = os.path.join(root, "INDEX.md")

@@ -2057,7 +2057,8 @@ try:
         r0 = res["results"][0]
         check("…a run that went ahead says nothing of skipping", "skipped" not in res, res)
         check("…the result: changed, 1 updated, every key of the contract", set(r0) == SYNC_KEYS and r0["outcome"] == "changed"
-              and r0["updated"] == 1 and r0["added"] == 0 and r0["removed"] == 0 and r0["at"] == DAY1 and r0["report"] is None
+              and r0["updated"] == 1 and r0["added"] == 0 and r0["removed"] == 0 and r0["at"] == DAY1
+              and r0["report"] == "_System/context/sync/2026-10-16.md"
               and r0["snapshot"] and os.path.isdir(r0["snapshot"]), r0)
         check("…the region is the core's text in both copies; one journal line, op provider-sync, naming the text taken",
               region_in(read(e.ctx), "zorg-growth", "growth-metrics") == new_metrics
@@ -2470,6 +2471,283 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("a fetch that raises: error (not unreachable) with its message, the attempt recorded, the check unchanged",
               rc == 0 and r0.get("outcome") == "error" and "ValueError: a bug in the fetch" in (r0.get("reason") or "")
               and st["checked"] == DAY1 and st["sync_attempt"] == DAY2, (rc, r0))
+
+# --- v3.14.0 Task 5: the sync's report — every decision, both texts of a conflict, how to take it back
+def report_of(e, day):
+    path = os.path.join(e.store, "sync", day + ".md")
+    return read(path) if os.path.isfile(path) else None
+
+
+def unbase(e, repo, bid):
+    """Forget the base of one block (a block of a context that came from somewhere else): the plan shows a '?' for it."""
+    path = os.path.join(e.store, ".state", "blocks", repo + ".json")
+    state = json.loads(read(path))
+    state["blocks"][bid]["base_sha"], state["blocks"][bid]["bases"] = None, []
+    open(path, "w", encoding="utf-8").write(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n")
+
+
+def table_rows(text):
+    return [l for l in text.splitlines() if l.startswith("| `")]
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # one pass: ⚠ kept yours, ~ updated, + added — then a second the same day
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        edit_both(e, "- **North star:** weekly active shoppers\n", "- **North star:** weekly active shoppers (mine)\n")
+        core_metrics = G_METRICS.replace("v=0.1", "v=0.2").replace("weekly active shoppers", "weekly buyers")
+        core_team = G_TEAM.replace("v=0.1", "v=0.2").replace("- **Growth squad:** Alpha", "- **Growth squad:** Alpha Prime")
+        fake.tree[GROWTH_PATH] = growth_blocks(core_metrics, core_team, G_OKR)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+        r0 = (res or {}).get("results", [{}])[0]
+        rep = report_of(e, "2026-10-16") or ""
+        rows = table_rows(rep)
+        okr_host = block_state(e, "zorg-growth")["blocks"]["growth-okr"]["host"]
+        check("the pass writes the day's report in the vault: its path is in the result, in the state's sync_result and in the sentence",
+              rc == 0 and r0.get("report") == "_System/context/sync/2026-10-16.md" and rep
+              and block_state(e, "zorg-growth")["sync_result"]["report"] == r0["report"]
+              and "Ядро оновило 2 блоки у zorg-growth, конфліктів 1 (лишено твоє) — звіт: _System/context/sync/2026-10-16.md" in out,
+              (rc, r0, out[-500:]))
+        check("…a file with frontmatter (type system, kind context-sync, date, repos) and the title `# Синк контексту — YYYY-MM-DD`",
+              rep.startswith("---\ntype: system\nkind: context-sync\ndate: 2026-10-16\nrepos: [zorg-growth]\n---\n\n# Синк контексту — 2026-10-16\n\n"), rep[:300])
+        check("…the section: `## <id> · HH:MM · джерело <label> · ядро v<v> · база v<a> → v<b>` (the version the pass moved the bases to)",
+              re.search(r"^## zorg-growth · 09:00 · джерело MCP \(127\.0\.0\.1\) · ядро v\S+ · база v0\.1 → v0\.2$", rep, re.M)
+              or re.search(r"^## zorg-growth · 09:00 · джерело .+ · ядро v.+ · база v.+ → v.+$", rep, re.M), rep[:400])
+        check("…three rows: ⚠ kept yours, ~ updated, + added — each in the cascade's words, with the record it is in",
+              len(rows) == 3 and "| Блок | Знак | Рішення | Чому | Запис |" in rep
+              and "`growth-metrics`" in rows[0] and "⚠" in rows[0] and "змінили обидва → лишено твоє: блок не є правилом ядра" in rows[0]
+              and "`team`" in rows[1] and "~" in rows[1] and "текст ядра" in rows[1]
+              and "`growth-okr`" in rows[2] and "новий блок у ядрі → додано" in rows[2] and "`%s`" % okr_host in rows[2], rows)
+        check("…the conflict: its own part with BOTH texts (yours as you wrote it, the core's as it is now)",
+              "### Конфлікт: `growth-metrics` — лишено твоє" in rep and "weekly active shoppers (mine)" in rep and "weekly buyers" in rep
+              and "Твій текст (v0.1)" in rep and "Текст ядра (v0.2)" in rep, rep)
+        check("…the command that takes the core's text, ready, and the way back with the snapshot folder as the last line",
+              "Взяти текст ядра: ctx provider apply zorg-growth --choose growth-metrics=theirs" in rep.splitlines()
+              and rep.rstrip("\n").splitlines()[-1] == "Відкотити цей прохід: ctx undo (знімок %s)" % r0["snapshot"], rep[-400:])
+        check("…the command works: it takes the core's text for the ✎ the next plan shows",
+              run_ok(e, "provider", "apply", "zorg-growth", "--choose", "growth-metrics=theirs")[0] == 0
+              and region_in(read(e.ctx), "zorg-growth", "growth-metrics") == core_metrics, region_in(read(e.ctx), "zorg-growth", "growth-metrics"))
+        check("a snapshot of the pass does not hold the report (it is in the vault, not in the store's state)",
+              not any("2026-10-16.md" in n for _, _, fs in os.walk(r0["snapshot"]) for n in fs), r0["snapshot"])
+        rc, out, res = run_ok(e, "status")
+        check("`ctx status` does not list the report folder as a stray file", rc == 0 and res["stray"] == [] and "stray file" not in out, (res or {}).get("stray"))
+        rc, out, res = run_ok(e, "validate")
+        check("…nor does `ctx validate`: no warning or error names the folder or a stray file",
+              not any("stray" in w or "2026-10-16.md" in w or "sync/" in w for w in res["warnings"] + res["errors"]), res)
+        # the same day again: a second part of the same file
+        before = rep
+        core_team2 = core_team.replace("v=0.2", "v=0.3").replace("Alpha Prime", "Alpha Prime Two")
+        fake.tree[GROWTH_PATH] = growth_blocks(core_metrics, core_team2, G_OKR)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1_PLUS_1H)
+        r1 = (res or {}).get("results", [{}])[0]
+        rep2 = report_of(e, "2026-10-16") or ""
+        check("a second pass the same day appends a second part to the same file: the first part untouched, repos not doubled",
+              r1.get("outcome") == "changed" and r1.get("report") == "_System/context/sync/2026-10-16.md"
+              and rep2.startswith(before.rstrip("\n")) and rep2.count("\n## zorg-growth · ") == 2 and "## zorg-growth · 10:00 ·" in rep2
+              and rep2.count("repos: [zorg-growth]") == 1 and len(table_rows(rep2)) == 4, (r1, rep2[-600:]))
+        j, snaps = journal_len(e), snapshot_names(e)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2)
+        check("a pass with no change writes no report: no file for the day, no report in the result or in the sentence",
+              res["results"][0]["outcome"] == "no-changes" and res["results"][0]["report"] is None and report_of(e, "2026-10-17") is None
+              and "звіт" not in out and os.listdir(os.path.join(e.store, "sync")) == ["2026-10-16.md"], (res["results"], out[-300:]))
+        check("…and the sync_result of that pass names no report", block_state(e, "zorg-growth")["sync_result"]["report"] is None)
+        rc, out, res = run_ok(e, "undo")
+        check("`ctx undo` takes the records back and leaves the report where it is (it says how it was taken)",
+              rc == 0 and report_of(e, "2026-10-16") is not None, (rc, out[-300:]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # 100 lines on each side: 40 shown, then «… ще 60 рядків»
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        edit_both(e, "- **North star:** weekly active shoppers\n", "".join("- mine %d\n" % i for i in range(1, 100)))
+        long_core = G_METRICS.replace("v=0.1", "v=0.2").replace("- **North star:** weekly active shoppers\n",
+                                                               "".join("- core %d\n" % i for i in range(1, 100)))
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, long_core)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+        r0 = (res or {}).get("results", [{}])[0]
+        rep = report_of(e, "2026-10-16") or ""
+        check("a conflict whose texts are 100 lines each: 40 lines of each shown, line 41 not",
+              r0.get("kept_yours") == ["growth-metrics"] and "- mine 39" in rep and "- mine 40" not in rep and "- core 39" in rep
+              and "- core 40" not in rep, (r0, rep[-500:]))
+        check("…`… ще 60 рядків` for each side: yours whole in the snapshot, the core's at the core",
+              rep.count("… ще 60 рядків") == 2 and "… ще 60 рядків — повністю у знімку %s" % r0["snapshot"] in rep
+              and "… ще 60 рядків — повністю у джерелі ядра" in rep, rep[-700:])
+        snap_rec = [read(r0["snapshot"], "records", n) for n in os.listdir(os.path.join(r0["snapshot"], "records"))]
+        check("…and it is true: the snapshot holds your whole text", any("- mine 99" in t for t in snap_rec))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # two repositories one day; a core rule overwrites yours; a ? waits
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra="sync: daily\n")
+        set_sync(e, "zorg-growth", "daily")
+        blocks_file = os.path.join(d, "ZorgCore", CORE_BLOCKS)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        edit_both(e, "The user works on Zorg App only.\n", "The user works on Zorg App, my way.\n")
+        edit_both(e, "- Alpha, Beta\n", "- Alpha, Beta (my teams)\n")
+        unbase(e, "zorg-core", "teams")
+        change(blocks_file, SCOPE_04, "<!-- zorg-core:begin id=scope v=0.5 policy=rule -->\n### Scope of work\nThe user works on Zorg App and Zorg Lite.")
+        change(blocks_file, "- Alpha, Beta\n<!-- zorg-core:end id=teams -->", "- Alpha, Beta, Gamma\n<!-- zorg-core:end id=teams -->")
+        fake.tree[GROWTH_PATH] = growth_blocks(G_METRICS, G_TEAM.replace("v=0.1", "v=0.2").replace("Alpha", "Alpha Prime"))
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+        by = {r["repo"]: r for r in (res or {}).get("results", [])}
+        rep = report_of(e, "2026-10-16") or ""
+        check("two repositories synced the same day: one file, the parts in registration order, both in `repos`",
+              rc == 0 and by["zorg-core"]["outcome"] == "changed" and by["zorg-growth"]["outcome"] == "changed"
+              and "repos: [zorg-core, zorg-growth]" in rep and rep.index("\n## zorg-core · ") < rep.index("\n## zorg-growth · ")
+              and by["zorg-core"]["report"] == by["zorg-growth"]["report"] == "_System/context/sync/2026-10-16.md", (by, rep[:300]))
+        check("a ⚠ of a core rule: the core's text won — and the report holds the text you wrote, which the record no longer does",
+              by["zorg-core"]["took_rule"] == ["scope"] and "my way" not in read(e.ctx)
+              and "правило ядра → текст ядра" in rep and "The user works on Zorg App, my way." in rep
+              and "The user works on Zorg App and Zorg Lite." in rep and "### Конфлікт: `scope` — правило ядра, взято текст ядра" in rep, rep[:1800])
+        check("…a ? waits: yours stays in the record, the report names the block once with both texts and both commands",
+              by["zorg-core"]["awaiting"] == ["teams"] and "(my teams)" in read(e.ctx) and rep.count("### Конфлікт: `teams`") == 1
+              and "- Alpha, Beta (my teams)" in rep and "- Alpha, Beta, Gamma" in rep
+              and "Взяти текст ядра: ctx provider apply zorg-core --choose teams=theirs" in rep
+              and "Лишити своє: ctx provider apply zorg-core --choose teams=mine" in rep, rep)
+        check("…the table row of the ? says it waits", any("`teams`" in r and "?" in r and "чекає рішення" in r for r in table_rows(rep)), table_rows(rep))
+        check("…the core part ends with its own way back; the growth part has its own",
+              rep.count("Відкотити цей прохід: ctx undo (знімок ") == 2, rep[-300:])
+
+with tempfile.TemporaryDirectory() as d:                 # the safeguard: held is reported once; a new set is reported again; old reports go
+    e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra="sync: daily\n")
+    core = os.path.join(d, "ZorgCore")
+    blocks_file = os.path.join(core, CORE_BLOCKS)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+    checked_at(e, "zorg-core", DAY0)
+    today = datetime.date(2026, 10, 16)
+    old91, old89 = [(today - datetime.timedelta(days=k)).isoformat() for k in (91, 89)]
+    os.makedirs(os.path.join(e.store, "sync"))
+    for day in (old91, old89):
+        open(os.path.join(e.store, "sync", day + ".md"), "w", encoding="utf-8").write("an old report of %s\n" % day)
+    open(os.path.join(e.store, "sync", "my-notes.md"), "w", encoding="utf-8").write("not a report\n")
+    rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1)
+    trash = os.path.join(e.home, ".grow-pm", "trash")
+    moved = [n for n in (os.listdir(trash) if os.path.isdir(trash) else []) if old91 in n]
+    check("a report 91 days old goes to ~/.grow-pm/trash/ at the start of a sync, one 89 days old stays, a note of yours is not touched",
+          rc == 0 and len(moved) == 1 and read(trash, moved[0]) == "an old report of %s\n" % old91
+          and not os.path.exists(os.path.join(e.store, "sync", old91 + ".md")) and os.path.exists(os.path.join(e.store, "sync", old89 + ".md"))
+          and os.path.exists(os.path.join(e.store, "sync", "my-notes.md")), (rc, moved, os.listdir(os.path.join(e.store, "sync"))))
+    rc, out, res = run_ok(e, "list", "--trash")
+    check("…the trash listing copes with a file that is no record", rc == 0, (rc, out[-300:]))
+    pristine = read(blocks_file)
+    open(blocks_file, "w", encoding="utf-8", newline="").write(
+        pristine.replace(region_in(pristine, "zorg-core", "scope") + "\n\n", "").replace(region_in(pristine, "zorg-core", "teams"), ""))
+    rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY2)
+    r0 = (res or {}).get("results", [{}])[0]
+    rep = report_of(e, "2026-10-17") or ""
+    check("two blocks the core removed: outcome held, and a report says so — the blocks, the table, what to do",
+          r0.get("outcome") == "held" and r0.get("report") == "_System/context/sync/2026-10-17.md"
+          and "### Не застосовано: ядро прибрало 2 блоки" in rep and "- `scope`" in rep and "- `teams`" in rep
+          and "запобіжник: ядро прибрало 2 блоки — не прибрано" in rep
+          and "Подивитись: ctx provider plan zorg-core" in rep and "Прибрати руками: ctx provider apply zorg-core" in rep
+          and rep.rstrip("\n").splitlines()[-1] == "Знімка цього проходу немає: відкочувати нічого.", (r0, rep))
+    check("…held with nothing else written has no snapshot to point at", r0.get("snapshot") is None)
+    rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2_PLUS_2H)
+    r1 = (res or {}).get("results", [{}])[0]
+    check("the same safeguard going off again (same set, same reason): no part added; the result says no report",
+          r1.get("outcome") == "held" and r1.get("report") is None and read(e.store, "sync", "2026-10-17.md") == rep, (r1, read(e.store, "sync", "2026-10-17.md")[-400:]))
+    rc, out, res = run_ok(e, "provider", "sync", "--now", "2026-10-18T09:00:00+03:00")
+    check("…not the next day either: no file for the day", res["results"][0]["outcome"] == "held" and res["results"][0]["report"] is None
+          and report_of(e, "2026-10-18") is None, res["results"])
+    check("…and the state still says held (the digest keeps its mark)", block_state(e, "zorg-core")["sync_result"]["outcome"] == "held"
+          and block_state(e, "zorg-core")["sync_result"]["held"] == ["scope", "teams"])
+    open(blocks_file, "w", encoding="utf-8", newline="").write(
+        pristine.replace(region_in(pristine, "zorg-core", "product") + "\n\n", "").replace(region_in(pristine, "zorg-core", "teams"), ""))
+    rc, out, res = run_ok(e, "provider", "sync", "--now", "2026-10-19T09:00:00+03:00")
+    r2 = (res or {}).get("results", [{}])[0]
+    rep3 = report_of(e, "2026-10-19") or ""
+    check("a new set of blocks (product and teams, not scope and teams) is reported again",
+          r2.get("outcome") == "held" and sorted(r2.get("held") or []) == ["product", "teams"] and r2.get("report") == "_System/context/sync/2026-10-19.md"
+          and "- `product`" in rep3 and "- `teams`" in rep3, (r2, rep3[:300]))
+
+with tempfile.TemporaryDirectory() as d:                 # broken, an import that needs ctx sync, an unexpected failure — each once
+    e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra="sync: daily\n")
+    blocks_file = os.path.join(d, "ZorgCore", CORE_BLOCKS)
+    pristine = read(blocks_file)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+    checked_at(e, "zorg-core", DAY0)
+    open(blocks_file, "w", encoding="utf-8", newline="").write("")
+    rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1)
+    r0 = (res or {}).get("results", [{}])[0]
+    rep = report_of(e, "2026-10-16") or ""
+    check("a broken source: a part with the reason, nothing written, the next check a day away",
+          r0.get("outcome") == "broken" and r0.get("report") == "_System/context/sync/2026-10-16.md"
+          and "## zorg-core · 09:00\n" in rep and "### Джерело ядра не прийнято" in rep and "holds no zorg-core block" in rep
+          and "Знімка цього проходу немає" in rep and "Ядро оновило" not in out, (r0, rep))
+    rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1_PLUS_25H)
+    check("…the same break the next day: no new part", res["results"][0]["outcome"] == "broken" and res["results"][0]["report"] is None
+          and report_of(e, "2026-10-17") is None, res["results"])
+    open(blocks_file, "w", encoding="utf-8", newline="").write(pristine)
+    run_ok(e, "provider", "sync", "--now", "2026-10-17T12:00:00+03:00")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ-HOME\n")
+    e.edit(e.mirror, "- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ-VAULT\n")
+    rc, out, res = run_ok(e, "provider", "sync", "--now", "2026-10-18T09:00:00+03:00")
+    r1 = (res or {}).get("results", [{}])[0]
+    rep = report_of(e, "2026-10-18") or ""
+    check("an import that needs a decision: a part that says «спершу `ctx sync`», nothing written",
+          r1.get("outcome") == "import-conflict" and r1.get("report") == "_System/context/sync/2026-10-18.md"
+          and "### Спершу `ctx sync`" in rep and "Знімка цього проходу немає" in rep, (r1, rep))
+    rc, out, res = run_ok(e, "provider", "sync", "--now", "2026-10-18T10:30:00+03:00")
+    check("…asked again an hour later with the same conflict: no second part", res["results"][0]["outcome"] == "import-conflict"
+          and res["results"][0]["report"] is None and read(e.store, "sync", "2026-10-18.md") == rep, res["results"])
+    e.edit(e.mirror, "PROJ-VAULT", "PROJ-HOME")
+    real_plan = cb_mod.plan
+
+    def failing_plan2(store, copies, repo, fetched, now, all_=False):
+        raise RuntimeError("boom in the plan")
+
+    cb_mod.plan = failing_plan2
+    try:
+        rc, out, res = in_process(e, "provider", "sync", "--now", "2026-10-19T09:00:00+03:00")
+        rc2, out2, res2 = in_process(e, "provider", "sync", "--now", "2026-10-19T11:00:00+03:00")
+    finally:
+        cb_mod.plan = real_plan
+    r2 = (res or {}).get("results", [{}])[0]
+    rep = report_of(e, "2026-10-19") or ""
+    check("an unexpected failure: a part with the reason; the same failure two hours later adds none",
+          r2.get("outcome") == "error" and r2.get("report") == "_System/context/sync/2026-10-19.md" and "### Несподівана помилка" in rep
+          and "boom in the plan" in rep and res2["results"][0]["outcome"] == "error" and res2["results"][0]["report"] is None
+          and rep.count("\n## zorg-core · ") == 1, (r2, rep, res2["results"]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a text you rejected by undoing a pass is held, and the report says how to take it
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        core_team = G_TEAM.replace("v=0.1", "v=0.2").replace("- **Growth squad:** Alpha", "- **Growth squad:** Alpha Prime")
+        fake.tree[GROWTH_PATH] = growth_blocks(G_METRICS, core_team, G_OKR)
+        reject(e, "zorg-growth", {"team": core_team})
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+        r0 = (res or {}).get("results", [{}])[0]
+        rep = report_of(e, "2026-10-16") or ""
+        check("a text rejected by an earlier undo is held (the + goes through): «утримано», «відкинуто вами раніше», and the way to take it",
+              r0.get("outcome") == "changed" and r0.get("rejected") == ["team"] and r0.get("added") == 1
+              and any("`team`" in r and "утримано" in r and "відкинуто вами раніше" in r for r in table_rows(rep))
+              and "Взяти текст ядра: ctx provider apply zorg-growth --choose team=theirs" in rep.splitlines()
+              and "Alpha Prime" not in read(e.ctx), (r0, rep))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a report that cannot be written does not undo or hide the pass
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        open(os.path.join(e.store, "sync"), "w", encoding="utf-8").write("a file where the folder should be\n")
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, G_METRICS.replace("v=0.1", "v=0.2").replace("weekly active shoppers", "daily buyers"))
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+        r0 = (res or {}).get("results", [{}])[0]
+        check("the vault will not take the report: the pass stands (changed, written), the reason says the report was not written",
+              rc == 0 and r0.get("outcome") == "changed" and r0.get("report") is None and "звіт не записано" in (r0.get("reason") or "")
+              and "daily buyers" in read(e.ctx) and "Ядро оновило 1 блок у zorg-growth, конфліктів 0 (лишено твоє)" in out
+              and "звіт:" not in out and block_state(e, "zorg-growth")["sync_result"]["report"] is None, (rc, r0, out[-400:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
