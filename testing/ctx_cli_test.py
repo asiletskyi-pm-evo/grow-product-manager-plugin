@@ -7,7 +7,7 @@ codes (0 ok, 2 conflict, 3 bad input / no store / unreadable, 4 refused) and the
 (import before write, snapshot, lock, managed regions, the provider boundary).
 Semantics: references/context-protocol.md. Stdlib only; run from the repo root.
 """
-import json, os, re, shutil, stat, subprocess, sys, tempfile, time
+import datetime, json, os, re, shutil, stat, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "testing"))
@@ -583,7 +583,7 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, r2 = run_ok(e, "undo")
     check("undoing that undo brings the edit back, and the store is in sync",
           rc == 0 and "obsidian edit" in e.record("setting.templates") and "obsidian edit" in read(e.ctx)
-          and r2.get("records_reverted") == [] and in_sync(e), (rc, out[-400:], r2))
+          and r2.get("records_reverted") == [] and r2.get("records_not_reverted") == [] and in_sync(e), (rc, out[-400:], r2))
 
 with tempfile.TemporaryDirectory() as d:        # two edits, two syncs: one undo takes back the last only
     e = Env(d)
@@ -635,6 +635,20 @@ with tempfile.TemporaryDirectory() as d:        # frontmatter edited in the same
     check("undo puts the body back and keeps the frontmatter the file has",
           rc == 0 and "obsidian edit" not in e.record("setting.templates") and "obsidian alias" in e.record("setting.templates")
           and "obsidian edit" not in read(e.ctx) and in_sync(e), (rc, out[-400:], e.record("setting.templates")[:400]))
+
+with tempfile.TemporaryDirectory() as d:        # v3.13.1: a record edited in its file AND the copy edited too: nothing to put back, and undo says so
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rid = "product.zorg-app"
+    e.edit(os.path.join(e.store, "records", rid + ".md"), "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    rc_s, out_s, _ = run_ok(e, "sync", "--resolve", rid + "=record")
+    rc, out, res = run_ok(e, "undo")
+    check("undo names what it could not put back", rc == 0 and rc_s == 0
+          and "not put back (no matching text in local-context.md): %s — check them: ctx get <id>" % rid in out
+          and res.get("records_not_reverted") == [rid], (rc_s, rc, out[-500:], res))
+    check("…and an undo that put every record back says nothing of the kind",
+          run_ok(e, "undo")[2].get("records_not_reverted") == [], "")
 
 # --- v3.12.1 final review: undo of a compile snapshot; assign does not verify
 with tempfile.TemporaryDirectory() as d:
@@ -737,7 +751,29 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("…and the state is in the snapshot's successor, not in the snapshot taken before it",
               not os.path.isdir(os.path.join(last_journal(e)["snapshot"], "state", "blocks")), "")
 
+        n = len([o for o in res["blocks"].values() if o in ("base", "edit")])
+        today = datetime.date.today().isoformat()
         state_file = read(blocks_dir, "zorg-core.json")
+        everything, seen_before = tree_of(e.home, e.vault), len(fake.seen)
+        rc, out, res = run_ok(e, "repo", "list")
+        row = {r["id"]: r for r in res["repos"]}
+        check("repo list: blocks, version and checked come from the block state",
+              rc == 0 and row["zorg-core"]["blocks"] == n and row["zorg-core"]["base_version"] == "0.4"
+              and (row["zorg-core"]["checked"] or "")[:10] == today
+              and re.search(r"^zorg-core\s.*\s%d\s+0\.4\s+%s\s*$" % (n, today), out, re.M), (rc, out))
+        check("…a repository never adopted: '—' in all three, None in the data",
+              row["zorg-dead"]["blocks"] is None and row["zorg-dead"]["base_version"] is None and row["zorg-dead"]["checked"] is None
+              and re.search(r"^zorg-dead\s.*—\s+—\s+—\s*$", out, re.M), out)
+        check("…and it stays offline and writes nothing: no request to a server, not a byte in the home or the vault",
+              len(fake.seen) == seen_before and tree_of(e.home, e.vault) == everything, (len(fake.seen), seen_before))
+        open(os.path.join(blocks_dir, "zorg-core.json"), "w", encoding="utf-8", newline="").write("{")
+        rc, out, res = run_ok(e, "repo", "list")
+        check("a block state that is not JSON: '!' in its row, one line under the table, exit 0",
+              rc == 0 and "block state unreadable: zorg-core (" in out
+              and [r for r in res["repos"] if r["id"] == "zorg-core"][0].get("state_error")
+              and re.search(r"^zorg-core\s.*\s!\s+!\s+!\s*$", out, re.M)
+              and re.search(r"^zorg-dead\s.*—\s+—\s+—\s*$", out, re.M), (rc, out))
+        open(os.path.join(blocks_dir, "zorg-core.json"), "w", encoding="utf-8", newline="").write(state_file)
         n_lines = len(read(e.store, ".state", "journal.jsonl").splitlines())
         rc, out, res = run_ok(e, "provider", "adopt", "zorg-core", "--apply")
         check("adopt again: every block already has a base, and nothing changes", rc == 0 and "already has a base" in out
@@ -911,6 +947,16 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("plan never wrote anything: not the store, the home, the vault or the core", untouched and all(untouched), untouched)
 
 
+with FakeMcp(tree={}) as bare:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, bare.url)
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "repo", "status", "zorg-growth")
+        check("reachable, blocks file not read: no version on the source, the reason on its own line",
+              rc == 0 and "version on source: — · base:" in out and "  blocks file: " in out
+              and res["repos"][0]["source_version"] is None and res["repos"][0]["fetch_error"]
+              and "registration_version" in res["repos"][0], (rc, out))
+
 # --- v3.13.0: ctx provider apply — one pass, your edits kept, one question per conflicting block
 SCOPE_04 = "<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope of work\nThe user works on Zorg App only."
 SCOPE_05 = "<!-- zorg-core:begin id=scope v=0.5 -->\n### Scope of work\nThe user works on Zorg App and Zorg Lite."
@@ -1007,7 +1053,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("criterion 9: undo returns records, copies and bases", rc == 0 and read(e.ctx) == ctx_before_apply
               and read(e.mirror) == ctx_before_apply and tree_of(blocks_dir) == bases_before, (rc, out[-300:]))
         check("criterion 9: …and the records, byte for byte — an undo that rebuilds from records finds nothing to put back",
-              tree_of(records_dir) == recs_before and r.get("records_reverted") == [], (rc, r))
+              tree_of(records_dir) == recs_before and r.get("records_reverted") == [] and r.get("records_not_reverted") == [], (rc, r))
 
         change(blocks_file, SCOPE_05, SCOPE_06)         # the core moved on again; you never took 0.5
         rc, out, r = apply_run(e, core, "zorg-core")
@@ -1137,6 +1183,43 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
               and any(x["block"] == "teams" and x["why"] == "broken marker" for x in r_b["errors"]), (rc_b, out_b[-400:]))
         check("…here the rest is a change: exit 0, the block applied, the broken one as it was", rc_b == 0 and r_b["applied"]["scope"] == "~"
               and SCOPE_05 in read(e.ctx) and "<!-- zorg-core:end id=teams x -->" in read(e.ctx), (rc_b, out_b[-400:]))
+        # v3.13.1: an answer for a block the plan refuses is reported, not silently dropped
+        ctx_c = read(e.ctx)
+        for flag, args in (("--choose", ("--choose", "teams=mine")), ("--add", ("--add", "teams"))):
+            rc_x, out_x, r_x = apply_run(e, core, "zorg-core", *args)
+            lines_x = out_x.splitlines()
+            said = "не застосовано: --choose/--add teams — у блоку зламані маркери (рядок «помилка» вище)"
+            check("an answer for a block with broken markers is reported, not dropped (%s)" % flag,
+                  said in lines_x and r_x["ignored"].get("teams") == "!"
+                  and [i for i, l in enumerate(lines_x) if l.startswith("помилка: teams")][0] < lines_x.index(said), out_x[-500:])
+            check("…and nothing is written for it (%s)" % flag, rc_x == 4 and read(e.ctx) == ctx_c and r_x["snapshot"] is None, (rc_x, out_x[-300:]))
+
+    with tempfile.TemporaryDirectory() as d:            # v3.13.1: one --choose takes several answers; an answer is no repository
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        blocks_file = os.path.join(core, CORE_BLOCKS)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        edit_both(e, "The user works on Zorg App only.", "The user works on Zorg App only (mine).")
+        edit_both(e, "- Alpha, Beta\n", "- Alpha, Beta (mine)\n")
+        change(blocks_file, SCOPE_04, SCOPE_05)
+        change(blocks_file, "- Alpha, Beta\n<!-- zorg-core:end id=teams -->", "- Alpha, Beta, Gamma\n<!-- zorg-core:end id=teams -->")
+        rc, out, res = apply_run(e, core, "zorg-core", "--choose", "scope=mine", "teams=theirs")
+        check("one --choose takes several answers", rc == 0 and res["decisions"].get("scope") == "⚠ mine"
+              and res["decisions"].get("teams") == "⚠ theirs", (rc, out[-600:]))
+        check("…and each answer is acted on", "(mine)" in region_in(read(e.ctx), "zorg-core", "scope")
+              and "Gamma" in region_in(read(e.ctx), "zorg-core", "teams") and "(mine)" not in region_in(read(e.ctx), "zorg-core", "teams"), read(e.ctx)[-600:])
+        before = journal_len(e)
+        rc, out, res = apply_run(e, core, "--choose", "scope=mine", "zorg-core")
+        check("the repository after --choose is no answer: exit 3, nothing written",
+              rc == 3 and "--choose takes BLOCK=" in out and journal_len(e) == before, (rc, out[-300:]))
+        rc, out, res = apply_run(e, core, "scope=mine")
+        check("an answer in the repository's place: exit 3, it says so",
+              rc == 3 and "'scope=mine' looks like an answer, not a repository — put the repository first: "
+              "ctx provider apply <repo> --choose BLOCK=… [BLOCK=…]" in out and journal_len(e) == before, (rc, out[-300:]))
+        rc, out, res = apply_run(e, core, "zorg-core", "--add", "okr", "other", "--choose", "scope=mine", "teams=mine")
+        check("--add takes several blocks too, and the flags can be repeated: an unknown one is the usual error, nothing written",
+              rc == 3 and "okr" in out and "no block" in out and journal_len(e) == before, (rc, out[-300:]))
 
     with tempfile.TemporaryDirectory() as d:            # a repository whose blocks you never had, and no home record
         gm, gt = region_in(GROWTH_TEXT, "zorg-growth", "growth-metrics"), region_in(GROWTH_TEXT, "zorg-growth", "team")
@@ -1574,6 +1657,23 @@ need_hp = ["Context repositories", "`repo status`", "`vault_get_note`", "never g
 check("host-profiles: the network use of ctx and the host without SHELL", not lacks(hp_flat, need_hp), lacks(hp_flat, need_hp))
 check("ctx_store.Store documents .state/blocks/", ".state/blocks/" in (cs_mod.Store.__doc__ or ""), cs_mod.Store.__doc__)
 
+# --- v3.13.1: the usage (the head of ctx.py) and the protocols say what the answers, undo and the exit 5 do
+import ast  # noqa: E402
+ctx_usage = re.sub(r"\s+", " ", ast.get_docstring(ast.parse(read(CTX))) or "")
+check("ctx usage names both readings of exit 5",
+      "5 a repository is unreachable, or its blocks file is no source (empty, cut, foreign, or none of your based blocks) "
+      "— nothing written (provider commands)" in ctx_usage, ctx_usage[-700:])
+check("ctx usage shows several answers per --choose and several blocks per --add",
+      "provider apply [REPO] [--product P] [--choose BLOCK=theirs|mine|both [BLOCK=… …]] [--add BLOCK [BLOCK …]] [--json]" in ctx_usage, ctx_usage[:3000])
+need_1301 = {
+    "context-protocol": (cp_flat, ["records_not_reverted", "not put back (no matching text in local-context.md): <ids> — check them: ctx get <id>"]),
+    "context-provider-protocol": (pp_flat, ["[--choose BLOCK=theirs|mine|both [BLOCK=… …]] [--add BLOCK [BLOCK …]]",
+                                            "retired every block you hold", "remove those regions by hand (context-provider-protocol.md §12.2)",
+                                            "не застосовано", "looks like an answer, not a repository"]),
+}
+for doc_name, (flat, needed) in need_1301.items():
+    check("%s says what v3.13.1 changed" % doc_name, not lacks(flat, needed), lacks(flat, needed))
+
 # --- v3.13.0 final review: the documents say what the fixes do, and no rule about managed regions contradicts §12
 vs = read(ROOT, "references", "vault-schema.md")
 vs_regions = re.sub(r"\s+", " ", vs[vs.index("## Generated regions and layers"):vs.index("## Tag Taxonomy")])
@@ -1613,6 +1713,181 @@ tp_flat = re.sub(r"\s+", " ", read(ROOT, "testing", "Testing-process.md"))
 check("Testing-process.md carries no host-specific process rule (a scanner on the repository, re-running a time-limit check alone)",
       "scanner on the repository" not in tp_flat and "re-run alone" not in tp_flat and "Every test is run once per release" not in tp_flat,
       tp_flat[tp_flat.find("Every test is run"):][:300])
+
+# --- v3.13.1: a writing command saves the digest's summary next to the context; a reading one does not
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    cache = os.path.join(e.home, ".grow-pm", ".ctx-summary.json")
+    rc, out, res = run_ok(e, "sync")
+    check("a writing command without a store saves no summary", rc == 0 and not os.path.exists(cache), (rc, out[-300:]))
+    run_ok(e, "migrate", "--apply")
+    check("migrate --apply saves the summary too", os.path.isfile(cache))
+    if os.path.exists(cache):
+        os.remove(cache)
+    e.edit(e.ctx, "- **Cadence:** daily", "- **Cadence:** weekly")
+    rc, out, res = run_ok(e, "sync")
+    records_now = len([n for n in os.listdir(os.path.join(e.store, "records")) if n.endswith(".md")])
+    saved = json.load(open(cache, encoding="utf-8")) if os.path.isfile(cache) else {}
+    check("a writing command saves the summary next to the context", rc == 0 and saved.get("facts", {}).get("records") == records_now,
+          (rc, out[-300:]))
+    check("…for this context, after the import: nothing waits", saved.get("schema") == 1 and saved.get("context") == os.path.realpath(e.ctx)
+          and saved["facts"]["pending"] == 0 and saved["facts"]["conflicts"] == 0 and records_now == 14, saved)
+    if os.path.exists(cache):
+        os.remove(cache)
+    rc, out, res = run_ok(e, "read", "--skill", "focus-advisor")
+    check("a reading command writes no summary", not os.path.exists(cache), (rc, out[-300:]))
+    rc, out, res = run_ok(e, "set", "product.no-such", "Jira Project Key", "X")
+    check("a writing command that fails writes no summary", rc != 0 and not os.path.exists(cache), (rc, out[-300:]))
+    os.makedirs(cache)                                  # the summary cannot be saved: the command's own result stands
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "SUM")
+    check("a summary that cannot be saved never changes the exit code", rc == 0 and res and res.get("ok") is True
+          and os.path.isdir(cache) and "- **Jira Project Key:** SUM" in read(e.ctx), (rc, out[-300:]))
+    os.rmdir(cache)
+    env = dict(os.environ); env.pop("GROW_PM_CONTEXT_PATH", None)
+    p = subprocess.run([sys.executable, CTX, "sync", "--home", e.home, "--context", e.mirror],
+                       capture_output=True, text=True, env=env, timeout=120)
+    written = [os.path.join(dp, n) for r in (e.home, e.vault) for dp, _, fn in os.walk(r) for n in fn if n == ".ctx-summary.json"]
+    check("a context outside .grow-pm (the vault's copy): the command runs, no summary anywhere", p.returncode == 0 and written == [],
+          (p.returncode, written, p.stdout[-300:]))
+
+cp_1 = cp_flat[cp_flat.index("## 1. Where things live"):cp_flat.index("## 2. Records")]
+cp_7 = cp_flat[cp_flat.index("## 7. The session digest"):cp_flat.index("## 8. Snapshots")]
+need_7 = ["· cached YYYY-MM-DD HH:MM", "two seconds", "older than 7 days", "every writing `ctx` command", "never goes to the network",
+          "`~/.grow-pm/.ctx-summary.json`", "not available locally (still downloading?)"]
+check("context-protocol §1 names the summary file and §7 the cached line, its age limit, who writes it, no network",
+      "`~/.grow-pm/.ctx-summary.json`" in cp_1 and not lacks(cp_7, need_7), (cp_1[-600:], lacks(cp_7, need_7)))
+
+# --- v3.13.1 final review: the summary after a write is counted on the digest's budget; a skipped registration is
+# never silent; an answer that names a repository; the cache in the linked layout
+NOT_LOCAL = "not available locally (still downloading?)"
+
+
+def unblock(fifo):
+    """Let a reader waiting on the FIFO out of open() (a reader left in this process, or none)."""
+    for _ in range(3):
+        try:
+            os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+        time.sleep(0.05)
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    t0 = time.time(); rc0, _, _ = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "BASE"); base = time.time() - t0
+    blocks = os.path.join(e.store, ".state", "blocks")
+    os.makedirs(blocks, exist_ok=True)
+    fifo = os.path.join(blocks, "zorg-slow.json")
+    os.mkfifo(fifo)                                     # a block state iCloud has evicted: its read waits for a download
+    try:
+        t0 = time.time(); rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "FIFO"); took = time.time() - t0
+    finally:
+        unblock(fifo)
+        os.remove(fifo)
+    saved = json.load(open(os.path.join(e.home, ".grow-pm", ".ctx-summary.json"), encoding="utf-8"))
+    check("a block state that never arrives does not hold a writing command: exit 0 within the summary's budget (2 s + 0.5 s) and a margin",
+          rc0 == 0 and rc == 0 and res and res.get("ok") is True and took < base + 2.5 + 3.0, (rc, round(took, 2), round(base, 2), out[-300:]))
+    check("…and the summary is still saved, its facts counted after the write", saved["facts"]["records"] == 14 and saved["facts"]["pending"] == 0, saved)
+
+with tempfile.TemporaryDirectory() as d:                 # the home copy is a link into the vault's mirror (one copy)
+    e = Env(d)
+    os.remove(e.ctx)
+    os.symlink(e.mirror, e.ctx)
+    run_ok(e, "migrate", "--apply")
+    cache = os.path.join(e.home, ".grow-pm", ".ctx-summary.json")
+    if os.path.exists(cache):
+        os.remove(cache)
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "LINK")
+    check("the linked layout: a writing command saves the summary beside the link, in ~/.grow-pm",
+          rc == 0 and os.path.islink(e.ctx) and os.path.isfile(cache) and not os.path.exists(os.path.join(os.path.dirname(e.mirror), ".ctx-summary.json")),
+          (rc, os.listdir(os.path.dirname(e.ctx)), out[-300:]))
+    via_link = ctx_ops_mod.load_summary(e.ctx)
+    via_real_home = ctx_ops_mod.load_summary(os.path.join(os.path.realpath(e.home), ".grow-pm", "local-context.md"))
+    check("…and load_summary finds it through either spelling of the link (the home as given, the home resolved)",
+          via_link and via_real_home and via_link["records"] == via_real_home["records"] == 14
+          and json.load(open(cache, encoding="utf-8"))["context"] == os.path.realpath(e.mirror), (via_link, via_real_home))
+
+with tempfile.TemporaryDirectory() as d:                 # a registration the 3 s budget skipped is named, never silent
+    e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra=SKIP_PRODUCT)
+    prov = os.path.join(e.home, ".grow-pm", "providers")
+    os.remove(os.path.join(prov, "zorg-growth.yaml"))
+    os.remove(os.path.join(prov, "zorg-dead.yaml"))
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+    rc_plain, out_plain, _ = run_ok(e, "provider", "plan")
+    card_line = lambda: next((l for l in read(e.store, "INDEX.md").splitlines() if l.startswith("- **Repos:**")), None)
+    line_before = card_line()
+    slow = os.path.join(prov, "zorg-slow.yaml")
+    os.mkfifo(slow)                                     # a registration iCloud has evicted: it does not arrive within 3 s
+    said = "unreadable registration: %s (%s)" % (slow, NOT_LOCAL)
+    try:
+        rc, out, res = run_ok(e, "provider", "plan")
+        check("plan without REPO names the registration it could not read, as repo list does; the exit code of the readable one stands",
+              rc_plain == 0 and rc == 0 and said in out.splitlines() and "zorg-core · джерело: тека" in out
+              and res.get("unreadable") == [{"file": slow, "reason": NOT_LOCAL}] and [r["repo"] for r in res["repos"]] == ["zorg-core"],
+              (rc_plain, rc, out[-600:], res and res.get("unreadable")))
+        rc, out, res = run_ok(e, "provider", "apply", "zorg-slow")
+        check("apply naming a registration that could not be read: exit 3, and it says it may still be downloading",
+              rc == 3 and "no repository 'zorg-slow' is registered — `ctx.py repo list` — a registration could not be read: %s (%s); "
+              "it may still be downloading" % (slow, NOT_LOCAL) in out, (rc, out[-500:]))
+    finally:
+        unblock(slow)
+        os.remove(slow)
+    # a bare apply under the lock also checks the provider boundary, which still reads registrations without a time limit
+    # (v3.14): the apply paths are shown with a registration that cannot be read at once
+    broken = os.path.join(prov, "zorg-broken.yaml")
+    open(broken, "w", encoding="utf-8").write("id: zorg-broken\nendpoint:\n  nested:\n    deeper: 1\n")
+    rc, out, res = run_ok(e, "provider", "apply")
+    why = ((res or {}).get("unreadable") or [{}])[0].get("reason") or "?"
+    check("apply without REPO names a registration it could not read, in the output and the result; the readable one is applied (exit 0)",
+          rc == 0 and "unreadable registration: %s (%s)" % (broken, why) in out.splitlines() and why != "?"
+          and res["unreadable"] == [{"file": broken, "reason": why}] and [r["repo"] for r in res["repos"]] == ["zorg-core"], (rc, out[-600:]))
+    rc, out, res = run_ok(e, "provider", "apply", "zorg-core")
+    check("…and the card keeps its Repos line, with one line saying why it was not refreshed",
+          rc == 0 and card_line() == line_before and line_before
+          and "card not refreshed: a registration could not be read: %s (%s)" % (broken, why) in out.splitlines(), (rc, out[-500:], card_line()))
+    state_file = os.path.join(e.store, ".state", "blocks", "zorg-core.json")
+    st = json.loads(read(state_file))
+    st["checked"] = "2026-01-01T10:00:00+03:00"                         # a line rebuilt now would say another day
+    open(state_file, "w", encoding="utf-8").write(json.dumps(st))
+    rc, out, res = run_ok(e, "card")
+    check("`ctx card` with a registration skipped keeps the Repos line too (not rebuilt)", rc == 0 and card_line() == line_before
+          and "перевірено 2026-01-01" not in (card_line() or ""), (rc, out[-300:], card_line()))
+    os.remove(broken)
+    rc, out, res = run_ok(e, "card")
+    check("…and with every registration read, `ctx card` rebuilds it", rc == 0 and "zorg-core: 3 блоки · v0.4 · перевірено 2026-01-01" in (card_line() or ""),
+          (rc, card_line()))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # an answer or a block that names a repository
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra="status: paused\n")
+        os.remove(os.path.join(e.home, ".grow-pm", "providers", "zorg-dead.yaml"))
+        run_ok(e, "migrate", "--apply")
+        e.edit(e.ctx, "- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJW\n")      # an edit waiting to be imported
+        waiting, journal, asked = read(e.ctx), journal_len(e), len(fake.seen)
+        for args, said in (
+                (("--add", "okr", "zorg-core"), "'zorg-core' is a repository, not a block — put the repository first: "
+                                                "ctx provider apply <repo> --add BLOCK [BLOCK …]"),
+                (("--add", "growth-metrics", "zorg-growth"), "'zorg-growth' is a repository, not a block — put the repository first: "
+                                                             "ctx provider apply <repo> --add BLOCK [BLOCK …]"),
+                (("--choose", "zorg-growth=theirs"), "'zorg-growth' is a repository, not a block — put the repository first: "
+                                                     "ctx provider apply <repo> --choose BLOCK=…")):
+            rc, out, res = run_ok(e, "provider", "apply", *args)
+            check("`provider apply %s`: exit 3 before anything — the message, journal unchanged, the edit still waiting, no request"
+                  % " ".join(args), rc == 3 and said in out and journal_len(e) == journal and read(e.ctx) == waiting
+                  and len(fake.seen) == asked, (rc, out[-400:], journal_len(e) - journal, len(fake.seen) - asked))
+
+cp_7 = re.sub(r"\s+", " ", read(ROOT, "references", "context-protocol.md"))
+cp_7 = cp_7[cp_7.index("## 7. The session digest"):cp_7.index("## 8. Snapshots")]
+need_7b = ["`repo list`", "`repo status`", "`provider adopt|plan|apply`", "`read`", "the card's `Repos` line",
+           "unreadable registration: <path> (<reason>)", "it may still be downloading", "card not refreshed:"]
+check("context-protocol §7 names the ctx paths that read registrations within three seconds and what each says of one skipped",
+      not lacks(cp_7, need_7b) and "the `ctx` commands that list repositories: three" not in cp_7, lacks(cp_7, need_7b))
+mcp_doc = re.sub(r"\s+", " ", ast.get_docstring(ast.parse(read(ROOT, "testing", "ctx_mcp_test.py"))) or "")
+check("ctx_mcp_test's docstring says what repo status shows now (no fallback to the registration's version)",
+      "registration's own as the fallback" not in mcp_doc and "registration_version" in mcp_doc, mcp_doc[-500:])
+check("repo list tests the state error by `is not None`", "if error is not None:" in read(CTX), "")
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

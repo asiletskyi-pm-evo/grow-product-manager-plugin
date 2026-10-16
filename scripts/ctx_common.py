@@ -22,9 +22,15 @@ import glob
 import json
 import os
 import re
+import threading
 import unicodedata
 
 N = lambda s: unicodedata.normalize("NFC", s or "")
+
+# Characters that are never printed as they came from a server: C0 and C1 controls, the line and paragraph
+# separators, the bidirectional overrides and isolates (they reorder the text around them) and the byte-order mark.
+# A run of them becomes one space (ctx_blocks.clip, ctx_repos._clean).
+CONTROLS = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]+")
 
 # Ukrainian → Latin, shared by slugify() and the bundle builder's name matching.
 TRANSLIT = {"а": "a", "б": "b", "в": "v", "г": "h", "ґ": "g", "д": "d", "е": "e", "є": "ie", "ж": "zh", "з": "z",
@@ -341,11 +347,45 @@ def vault_search_bullets(context_text):
 
 
 # ----------------------------------------------------------- registrations
-def find_registrations(entries, extra_dirs=None, skipped=None):
+NOT_LOCAL = "not available locally (still downloading?)"
+
+
+class _Late(Exception):
+    """A file that was not read within its time budget."""
+
+
+def _read_within(path, timeout):
+    """The file's text; with `timeout`, read in a daemon thread — an iCloud-evicted file blocks in open() until it
+    downloads — and not there within `timeout` seconds → _Late. OSError and UnicodeDecodeError come back as they are."""
+    if timeout is None:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    box = {}
+
+    def work():
+        try:
+            with open(path, encoding="utf-8") as f:
+                box["text"] = f.read()
+        except Exception as e:  # noqa: BLE001 — handed back to the caller below
+            box["error"] = e
+
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    t.join(max(timeout, 0.01))
+    if t.is_alive():
+        raise _Late(path)
+    if "error" in box:
+        raise box["error"]
+    return box["text"]
+
+
+def find_registrations(entries, extra_dirs=None, skipped=None, timeout=None):
     """Read `{vault}/{plugin_folder}/_System/providers/*.yaml` for every vault entry,
     plus `~/.grow-pm/providers/*.yaml` (or `extra_dirs` when given). Unreadable or
     invalid files are skipped — and listed as (path, reason) in `skipped` when a list
-    is given. Returns dicts with normalised `paths`, `writable`."""
+    is given. With `timeout` (seconds, since v3.13.1) each file is read in a daemon thread,
+    and one not read within it is skipped as `not available locally (still downloading?)`.
+    Returns dicts with normalised `paths`, `writable`."""
     dirs = [os.path.join(v, f, "_System", "providers") for v, f in entries]
     dirs += [os.path.expanduser("~/.grow-pm/providers")] if extra_dirs is None else list(extra_dirs)
     regs, seen = [], set()
@@ -353,7 +393,9 @@ def find_registrations(entries, extra_dirs=None, skipped=None):
         for p in sorted(glob.glob(os.path.join(d, "*.yaml"))):
             why = None
             try:
-                r = read_yaml_subset(open(p, encoding="utf-8").read())
+                r = read_yaml_subset(_read_within(p, timeout))
+            except _Late:
+                why = NOT_LOCAL
             except UnicodeDecodeError:
                 why = "not UTF-8 text"
             except ValueError as e:

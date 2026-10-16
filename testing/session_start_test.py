@@ -291,5 +291,103 @@ with tempfile.TemporaryDirectory() as d:                  # the days still come 
     check("the summary carries the days of the checks as before", s and s.get("checked", {}).get("zorg-core", "").startswith(TODAY.isoformat())
           and s["records"] == 14, s)
 
+# --- v3.13.1: a cold start (a store slow to read) keeps the context line from the summary saved last time
+import json  # noqa: E402
+
+CACHED_LINE = r"^  context: records 14 · card \d+ lines · .* · cached \d{4}-\d{2}-\d{2} \d{2}:\d{2}$"
+
+
+def release(fifo):
+    """Let every reader thread waiting on the FIFO out of open()."""
+    for _ in range(3):
+        try:
+            os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+        time.sleep(0.05)
+
+
+with tempfile.TemporaryDirectory() as d:
+    ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
+    cache = co.summary_cache_path(ctxp)
+    out1 = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")          # warm: writes the cache
+    check("a live summary in time writes the cache", os.path.isfile(cache) and "· cached" not in out1
+          and "  context: records 14 · card " in out1, out1[-700:])
+    saved = json.load(open(cache, encoding="utf-8")) if os.path.isfile(cache) else {}
+    check("…with the days of the checks", (saved.get("facts", {}).get("checked") or {}).get("zorg-core", "").startswith(TODAY.isoformat()), saved)
+    root = co.store_root_for(open(ctxp, encoding="utf-8").read(), home=os.path.join(d, "home"))
+    rec = os.path.join(root, "records", sorted(os.listdir(os.path.join(root, "records")))[0])
+    os.remove(rec)
+    os.mkfifo(rec)                                        # its read waits for a writer that never comes, like an evicted file
+    try:
+        t0 = time.time(); out2 = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test"); took = time.time() - t0
+        check("a cold store: the cached line, marked, and the ctx read instruction kept",
+              re.search(CACHED_LINE, out2, re.M) and 'ctx.py" read --skill' in out2 and OLD_HINT not in out2 and took < 4, (took, out2[-700:]))
+        line = next((l.strip() for l in out2.splitlines() if l.strip().startswith("providers:")), "")
+        check("…the providers line takes the day of the last check from the cache", "zorg-core (snapshot, vpn, synced %s)" % TODAY.isoformat() in line, line)
+        for name, bad in [("not JSON", "{not json"),
+                          ("older than 7 days", json.dumps(dict(saved, at=(datetime.datetime.now().astimezone() - datetime.timedelta(days=8)).isoformat(timespec="seconds")))),
+                          ("without a count", json.dumps(dict(saved, facts={k: v for k, v in saved.get("facts", {}).items() if k != "records"})))]:
+            open(cache, "w", encoding="utf-8").write(bad)
+            out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+            check("…a cache %s and a cold store: no context line, the digest as without a store" % name,
+                  "  context:" not in out and OLD_HINT in out and "FOUND at" in out, out[-500:])
+        os.remove(cache)                                  # no cache, the FIFO stays
+        out3 = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+        check("…no cache and a cold store: no context line, as before", "  context:" not in out3 and OLD_HINT in out3, out3[-500:])
+        check("…and a cold store writes no cache", not os.path.exists(cache))
+    finally:
+        release(rec)
+
+with tempfile.TemporaryDirectory() as d:                  # a summary that comes back None in time is not replaced by the cache
+    ctxp = with_checked(d, "2026-01-01", None)
+    ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    cache = co.summary_cache_path(ctxp)
+    root = co.store_root_for(open(ctxp, encoding="utf-8").read(), home=os.path.join(d, "home"))
+    os.chmod(os.path.join(root, "records"), 0o300)       # the records cannot be listed: the live summary fails at once
+    try:
+        out = ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")
+    finally:
+        os.chmod(os.path.join(root, "records"), 0o700)
+    check("a live summary that fails in time: no context line, the cache is not used", os.path.isfile(cache)
+          and "  context:" not in out and "cached" not in out, out[-500:])
+
+import inspect  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:                  # v3.13.1 final review: a warm start whose days miss keeps the saved days
+    ctxp = with_checked(d, "2026-01-01", TODAY.isoformat())
+    cache = co.summary_cache_path(ctxp)
+    ss.digest(ctxp, ss.parse(ctxp, extra_dirs=[]), [], "test")                 # warm, with the days: they are saved
+    first = json.load(open(cache, encoding="utf-8")) if os.path.isfile(cache) else {}
+    state = os.path.join(co.store_root_for(open(ctxp, encoding="utf-8").read(), home=os.path.join(d, "home")), ".state", "blocks", "zorg-core.json")
+    os.remove(state)
+    os.mkfifo(state)                                      # the days do not arrive within their half second; the facts do
+    try:
+        s = ss._store_summary(ctxp)
+    finally:
+        release(state)
+    second = json.load(open(cache, encoding="utf-8")) if os.path.isfile(cache) else {}
+    check("a warm start whose days miss: the facts are live, and the days saved before stay in the cache",
+          s and s["records"] == 14 and "cached_at" not in s and s["checked"] == {}
+          and (first.get("facts") or {}).get("checked", {}).get("zorg-core", "").startswith(TODAY.isoformat())
+          and (second.get("facts") or {}).get("checked") == first["facts"]["checked"], str((s, first.get("facts"), second.get("facts"))))
+    check("the hook counts through the one budgeted helper of ctx_ops (2 s for the facts, half a second for the days)",
+          "ctx_ops.summary_in_time(" in inspect.getsource(ss._store_summary) and "threading" not in inspect.getsource(ss._store_summary)
+          and inspect.signature(ss._store_summary).parameters["budget_s"].default == 2.0
+          and inspect.signature(ss._store_summary).parameters["dates_s"].default == 0.5, inspect.getsource(ss._store_summary)[-600:])
+    rule = next((b for b in re.sub(r"\s+", " ", ss.__doc__).split(" - ") if ".ctx-summary.json" in b), "")
+    check("the hook's design rule on writes names both: the summary beside the context and the CLAUDE_ENV_FILE append",
+          "CLAUDE_ENV_FILE" in rule and "nothing else" not in rule, rule)
+
+# a context outside .grow-pm (a connected folder): the digest works as before and writes nothing beside it
+with tempfile.TemporaryDirectory() as d:
+    ctxp = with_checked(d, "2026-01-01", None)
+    moved = os.path.join(d, "mnt", "zorg", "local-context.md")
+    os.makedirs(os.path.dirname(moved))
+    os.rename(ctxp, moved)
+    out = ss.digest(moved, ss.parse(moved, extra_dirs=[]), [], "test")
+    check("a context outside .grow-pm: nothing written beside it", os.listdir(os.path.dirname(moved)) == ["local-context.md"]
+          and "FOUND at" in out, (os.listdir(os.path.dirname(moved)), out[-400:]))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

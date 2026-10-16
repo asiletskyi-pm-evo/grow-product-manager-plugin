@@ -12,6 +12,32 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.13.1 (2026-10-15)
+
+**`ctx repo list` tells the truth; the digest keeps its context line on a cold start.** Two findings after v3.13.0 went live on a real store: `ctx repo list` showed `—` in its "blocks" and "checked" columns and the registration's own version in "version"; and on a cold session start (iCloud downloads, an antivirus scan) the store's summary took about 17 s against the digest's 2 s, so the `context:` line — and with it the instruction to read through `ctx read` — disappeared and skills fell back to reading the whole `local-context.md`. With them, the deferred v3.13 minors a user meets.
+
+PATCH: fixes and messages; no new command, no skill changed.
+
+### Fixed
+
+- **`ctx repo list`** — "blocks" (the blocks you hold a base for), "version" (the version of your bases) and "checked" (the last check) come from the block state; `—` without a store or a base; a state file that cannot be read shows `!` and one line `block state unreadable: <id> (<reason>)`, exit 0. `CTX_RESULT` rows add `blocks`, `base_version`, `checked` and, on a bad state, `state_error`.
+- **`ctx repo status`** — `source_version` is only what the source gives now (otherwise `—`); the registration's own is `registration_version`, and a reachable source whose blocks file could not be read adds `fetch_error` and the line `  blocks file: <reason>`. An unreachable reason is cleaned and clipped to one line.
+- **The digest on a cold start** — the store's summary is saved to `~/.grow-pm/.ctx-summary.json` by every live count that comes in time and by every writing `ctx` command that exits 0 (counted on the digest's own budget, so a slow store holds a command's result for at most two and a half seconds and saves nothing). When the live count misses its two seconds, the digest shows the saved summary marked `· cached YYYY-MM-DD HH:MM` and still tells skills to run `ctx read`. A summary older than 7 days, saved for another context file, or not readable is never used; nothing is written for a context outside `~/.grow-pm`; a live count that fails in time is never replaced by the cache; days of the last checks that miss their half second keep the days saved before.
+- **Registrations within a time budget** — each is read within 1 s in the hook and 3 s in `ctx`. One still downloading (iCloud) is named: `unreadable registration: <path> (<reason>)` in `repo list`, `repo status` and `provider plan|apply` without a repository; "— a registration could not be read …; it may still be downloading" when `provider adopt|plan|apply` cannot find the repository it names; and the card keeps its `Repos` line rather than rebuild it from a partial list.
+- **`ctx provider apply`** — `--choose a=mine b=theirs` and `--add x y` take several answers; an answer given in the repository's place, or a repository given as a block, is exit 3 before anything is fetched or written; an answer for a block whose markers are broken is reported (`не застосовано: --choose/--add <id> — у блоку зламані маркери …`, `ignored` value `"!"`) instead of being dropped.
+- **`ctx undo`** names the records it could not put back to the last compiled text (`records_not_reverted`).
+- **Messages** — an unavailable source lists only the blocks you still hold and says how to retire them by hand (`context-provider-protocol.md` §12.2); the usage text names both readings of exit 5; bidi overrides and the byte-order mark are stripped from server text like other control characters; a `rank` longer than nine digits, quoted or not, falls back to the authority's.
+- Tests: `ctx_cli_test.py` 299, `ctx_blocks_test.py` 261, `ctx_repos_test.py` 171, `ctx_mcp_test.py` 135, `ctx_ops_test.py` 134, `session_start_test.py` 49, `ctx_common_test.py` 17 checks — each new check failed before its code. A whole-branch review found five more defects (the summary after a write read every block state on the 30 s budget; a skipped registration was silent in provider scope and the card; a repository given as `--add` reached the lock; an unquoted rank bypassed the cap; a linked `~/.grow-pm/local-context.md` never refreshed the summary) — each fixed with a check that failed first.
+
+### Backwards compatibility
+
+- `repo status`'s `source_version` no longer falls back to the registration's version — that value is now `registration_version`. Every other `CTX_RESULT` change adds keys.
+- `--choose a=x --choose b=y` works as before. `ctx provider apply --add BLOCK REPO` (the repository last) used to work and is now refused with a hint — put the repository first.
+- A new file, `~/.grow-pm/.ctx-summary.json` (counts only, no context text), rebuilt on its own; deleting it is safe.
+- No skill renamed, no description changed: routing is as in v3.13.0.
+
+---
+
 ## v3.13.0 (2026-10-14)
 
 **Repositories and block merge** (Context Core, phase 3 — first release). A product can now take context blocks from any number of repositories — a team's or an organisation's shared core, reached through its MCP server or its folder — and a refresh is one pass instead of a regenerated file: `ctx provider plan` shows what changed, `ctx provider apply` writes it, and a question comes only where both the repository and you changed the same block. Verified on a copy of a real context against a real core over MCP and from its folder: every block matched byte for byte and both sources gave the same plan.

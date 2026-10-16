@@ -45,10 +45,11 @@ def _list(v):
 
 
 def _rank(v, authority):
-    """The explicit rank when it is a whole number (quoted or not), else the authority's."""
-    if isinstance(v, int) and not isinstance(v, bool):
+    """The explicit rank when it is a whole number of at most nine digits (quoted or not), else the authority's."""
+    if isinstance(v, int) and not isinstance(v, bool) and abs(v) < 10 ** 9:     # unquoted: held to nine digits too
         return v
-    if isinstance(v, str) and re.fullmatch(r"-?[0-9]+", v.strip()):    # not isdigit(): "²" passes it, int() rejects it
+    # not isdigit(): "²" passes it, int() rejects it; at most nine digits: int() of a longer text can raise (the digit limit)
+    if isinstance(v, str) and re.fullmatch(r"-?[0-9]{1,9}", v.strip()):
         return int(v.strip())
     return RANKS.get(authority, FALLBACK_RANK)
 
@@ -102,13 +103,17 @@ def search_only(repo):
     return not repo["blocks_file"] and not repo["core_root"]
 
 
-def load_repos(context_text, home, extra_dirs=None, skipped=None):
+REG_READ_TIMEOUT_S = 3.0                                # seconds one registration may take to read (an iCloud download)
+
+
+def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S):
     """Every registered repository, normalised, in registration order — the vaults' providers folders
     first, then `<home>/.grow-pm/providers` (or `extra_dirs` when given, as in find_registrations;
     the home is never taken from the environment). An id seen twice keeps the first. Unreadable
-    registrations are left out and, when `skipped` is a list, appended to it as (path, reason)."""
+    registrations — and, since v3.13.1, one not read within `timeout` seconds — are left out and, when
+    `skipped` is a list, appended to it as (path, reason)."""
     dirs = [os.path.join(home, ".grow-pm", "providers")] if extra_dirs is None else list(extra_dirs)
-    regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped)
+    regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped, timeout=timeout)
     return [normalise(r) for r in regs]
 
 
@@ -128,8 +133,8 @@ def _stamp(now):
 
 
 def _clean(text):
-    """A message that came from a server, on one line: control characters gone, length bounded."""
-    return re.sub(r"[\x00-\x1f\x7f]+", " ", str(text)).strip()[:MAX_ERROR]
+    """A message that came from a server, on one line: control characters (bidi overrides too) gone, length bounded."""
+    return cc.CONTROLS.sub(" ", str(text)).strip()[:MAX_ERROR]
 
 
 def _lf(text):

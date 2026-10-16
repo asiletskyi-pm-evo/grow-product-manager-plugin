@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.13.0
+**Version:** 3.13.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.13.1** — **`repo list` tells the truth; the digest keeps its context line on a cold start** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx repo list` shows the blocks you hold, the version of your bases and the last check from the block state. On a cold session start (iCloud, an antivirus scan) the digest shows the store's summary saved last, marked `· cached`, instead of dropping the `context:` line — so skills still read through `ctx read`. `ctx provider apply` takes several answers per `--choose`/`--add`, refuses a repository given as an answer before anything is written, and `ctx undo` names what it could not put back.
 
 **New in v3.13.0** — **Repositories and block merge** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). A product can take context blocks from any number of repositories — a team's or an organisation's shared core reached through its MCP server or its folder — and a refresh is one pass: `ctx provider plan` shows a table (`=` unchanged · `~` updated by the repository · `✎` your edit kept · `⚠` both changed · `+` new · `−` removed · `?` no base yet), `ctx provider apply` writes it, asking only where both sides changed a block. Your edits inside a block are kept; an empty, cut or lagging source never removes or downgrades anything; `ctx undo` takes an apply back with its bases. `ctx read` marks where each block came from and when it was checked.
 
@@ -1050,5 +1052,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.13.0  
+**Version:** 3.13.1  
 **Last Updated:** October 2026

@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(ROOT, "testing"))
 os.environ["NO_PROXY"] = "127.0.0.1,localhost"          # the fake is local; a proxy in the environment must not see it
 os.environ["no_proxy"] = "127.0.0.1,localhost"
 import ctx as ctxmain  # noqa: E402
+import ctx_blocks as cb  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_repos as cr  # noqa: E402
 from mcp_fake import FakeMcp  # noqa: E402
@@ -169,12 +170,17 @@ with tempfile.TemporaryDirectory() as d:
     check("the table has the columns and the dash for what has no state yet",
           all(h in out.splitlines()[0] for h in ("id", "kind", "products", "rank", "access", "blocks", "version", "checked"))
           and "—" in out, out)
+    check("repo list without a store: the columns are '—'", rc == 0 and all(r["blocks"] is None for r in res["repos"]), out)
     rowc = [l for l in out.splitlines() if l.startswith("zorg-core")][0]
     rowg = [l for l in out.splitlines() if l.startswith("zorg-growth")][0]
-    check("a row: kind, products (all / the list), rank, access, registration version",
-          "bundle" in rowc and "all" in rowc and "1000" in rowc and "vpn" in rowc and "core 0.2" in rowc
-          and "mcp" in rowg and "product.zorg-app" in rowg and "500" in rowg and "open" in rowg and "growth 1.4" in rowg,
-          (rowc, rowg))
+    check("a row: kind, products (all / the list), rank, access; blocks, version and checked are '—' while no block state is kept",
+          "bundle" in rowc and "all" in rowc and "1000" in rowc and "vpn" in rowc
+          and "mcp" in rowg and "product.zorg-app" in rowg and "500" in rowg and "open" in rowg
+          and re.search(r"—\s+—\s+—\s*$", rowc) and re.search(r"—\s+—\s+—\s*$", rowg)
+          and "core 0.2" not in rowc and "growth 1.4" not in rowg, (rowc, rowg))
+    check("…the registration's own version stays in the data, not in the version column",
+          res["repos"][0]["source_version"] == "core 0.2, bundle 0.4.0" and res["repos"][1]["source_version"] == "growth 1.4"
+          and all(r["base_version"] is None and r["checked"] is None and "state_error" not in r for r in res["repos"]), res["repos"])
     check("CTX_RESULT is last and carries command and action", out.splitlines()[-1].startswith("CTX_RESULT ")
           and res["command"] == "repo" and res["action"] == "list" and res["ok"] is True, res)
     rc, out, res = e.run("repo", "list", "--json")
@@ -233,6 +239,24 @@ with tempfile.TemporaryDirectory() as d:
           and ranks.get("g-float") == 1000, ranks)
     check("a rank that only looks like a number (--5, a superscript digit) falls back, and `repo list` survives it",
           ranks.get("g-dashes") == 1000 and ranks.get("g-super") == 100 and ranks.get("g-super-quoted") == 500, ranks)
+    check("a rank of ten digits or more falls back to the authority's, never raises",
+          cr._rank("9" * 5000, "org") == cr.RANKS["org"] and cr._rank("1234567890", "team") == cr.RANKS["team"]
+          and cr._rank("123456789", "org") == 123456789 and cr._rank(" -42 ", "org") == -42)
+    check("an unquoted rank (an int) is held to nine digits too: a longer one falls back to the authority's",
+          cr._rank(1234567890, "team") == cr.RANKS["team"] and cr._rank(-1234567890, "org") == cr.RANKS["org"]
+          and cr._rank(10 ** 5000, "personal") == cr.RANKS["personal"]
+          and cr._rank(999999999, "org") == 999999999 and cr._rank(-999999999, "org") == -999999999 and cr._rank(250, "org") == 250)
+    e.reg("g-long", "id: g-long\nkind: mcp\nauthority: team\nrank: 1234567890\n")
+    check("…and so read from a registration: an unquoted 10-digit rank falls back",
+          {x["id"]: x["rank"] for x in e.repos()}.get("g-long") == 500, {x["id"]: x["rank"] for x in e.repos()})
+    pp_rank = next((l for l in open(os.path.join(ROOT, "references", "context-provider-protocol.md"), encoding="utf-8")
+                    if l.startswith("| `rank` |")), "")
+    check("context-provider-protocol's rank row states the nine-digit limit",
+          "at most nine digits; a longer one falls back to the authority's" in pp_rank, pp_rank)
+    check("based_count: the blocks that have a base, those you removed not counted",
+          cb.based_count({"blocks": {"a": {"base_sha": "x"}, "b": {"bases": ["y"]}, "c": {"base_sha": "z", "user_removed": "2026-10-01"},
+                                     "d": {"base_sha": None, "bases": []}}}) == 2
+          and cb.based_count({}) == 0 and cb.based_count(None) == 0)
     rc, out, res = e.run("repo", "list")
     check("…a hand-edited rank never fails the command", rc == 0 and res is not None and res["ok"] is True
           and {x["id"]: x["rank"] for x in res["repos"]}.get("g-dashes") == 1000, (rc, out[-300:]))
@@ -879,6 +903,12 @@ with tempfile.TemporaryDirectory() as d:
     check("…and the home holds only the registrations the test put there",
           sorted(os.listdir(os.path.join(home, ".grow-pm"))) == ["providers"]
           and sorted(os.listdir(provdir)) == ["zorg-core.yaml", "zorg-growth.yaml"], os.listdir(os.path.join(home, ".grow-pm")))
+
+# --- v3.13.1: text a server sent loses the bidi overrides too, in one place for the blocks and the repositories
+check("server text loses bidi overrides too", cr._clean("x\u202ey\u2069z") == "x y z", repr(cr._clean("x\u202ey\u2069z")))
+check("…and C1 controls, the line and paragraph separators and a BOM", cr._clean("a\x85b\u2028c\u2029d\ufeffe") == "a b c d e",
+      repr(cr._clean("a\x85b\u2028c\u2029d\ufeffe")))
+check("…ordinary text, Cyrillic and a non-breaking space stay", cr._clean("  Зорг\u00a0App  ") == "Зорг\u00a0App", repr(cr._clean("  Зорг\u00a0App  ")))
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

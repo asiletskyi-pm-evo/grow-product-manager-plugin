@@ -15,7 +15,8 @@
   add TYPE TITLE [--parent ID] [--after ID] [--body-file F]   a new product, team, org, setting or custom record
   snapshot [--label L]          a snapshot of the store and both copies
   undo [--steps N]              back to the state before the N-th last change (N from 1); refused while
-                                edits wait to be imported
+                                edits wait to be imported. The records it put back to the last compiled text
+                                are named, and so are those it could not ("not put back …": check them)
   read --skill S [--product P]  the card plus what the skill's manifest entry names (reads only)
   invalidate ID --reason R      mark a record no longer current (it stays, with a status region)
   archive ID [--reason R]       move a record to the archive; restore ID brings it (or a trashed one) back
@@ -23,11 +24,14 @@
   validate                      records, ids, parents, card size, edits waiting
   card                          regenerate INDEX.md only
   repo list [--json]            the repositories (provider registrations) a product draws context blocks
-                                from: kind, products, rank, access, version — reads local files, no network
+                                from: kind, products, rank, access and, from the block state, how many blocks you
+                                hold a base for, their base version and the day of the last check ("—" before
+                                `provider adopt`, "!" when the state cannot be read) — local files, no network
   repo status [ID] [--json]     is each repository reachable (an MCP server answers the handshake within 3 s;
                                 a folder is there) and its version on the source against the base — the only
                                 repo command that touches the network: the handshake, then one read of the blocks
-                                file for the version. It exits 0 also when a repository is unreachable
+                                file for the version ("—" and the reason on a "blocks file:" line when it could
+                                not be read). It exits 0 also when a repository is unreachable
   provider adopt REPO [--apply] [--json]
                                 a base for each block of REPO that is already in your context (dry run unless
                                 --apply): the blocks the repository publishes at the version you hold are taken
@@ -46,24 +50,31 @@
                                 search_only, questions, changes}. Without REPO a paused repository is left out,
                                 with one line "призупинено: <id>", and a search-only registration (no
                                 blocks_file, no core folder) with "лише пошук: <id>"; naming one is exit 3
-  provider apply [REPO] [--product P] [--choose BLOCK=theirs|mine|both ...] [--add BLOCK ...] [--json]
+  provider apply [REPO] [--product P] [--choose BLOCK=theirs|mine|both [BLOCK=… …]] [--add BLOCK [BLOCK …]] [--json]
                                 one pass per repository: = ~ ✎ − ✂ are applied (your edits stay), ⚠ and ? wait
                                 for --choose, + for --add (it goes to the record holding most of the repository's
                                 blocks, else a new record); the snapshot, the records, the block state, one
                                 journal line, the compile. Nothing moved: only the time of the check, "без змін".
                                 Every repository is read first: one unreachable → exit 5, nothing written.
                                 Exit 2 when an answer is awaited (the rest applied), 4 when only refused blocks
-                                (a broken marker) are left. --choose / --add need REPO when several are in scope.
+                                (a broken marker) are left. --choose / --add need REPO when several are in scope;
+                                REPO comes first — a word with "=" in its place is exit 3, and the word after the
+                                answers is read as one of them. An answer for a block with a broken marker is not
+                                applied ("не застосовано").
                                 CTX_RESULT: the plan with applied, decisions, pending, ignored, written, snapshot
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
 writes only the block state under `.state/blocks/` and the card's Repos line). Files are read within a time budget
 (GROW_PM_CTX_READ_TIMEOUT, default 30 s): a record that does not arrive (iCloud) or is missing
-on disk stops the run before anything is written. The last stdout line is `CTX_RESULT {json}`;
+on disk stops the run before anything is written. A writing command that exits 0 then saves the
+session digest's summary of the store beside the context (`~/.grow-pm/.ctx-summary.json`, since v3.13.1), counted
+on the digest's own budget (2 s, then 0.5 s for the days of the last checks; a count that misses it saves nothing);
+a summary that cannot be saved never changes the exit code. The last stdout line is `CTX_RESULT {json}`;
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
-unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists) · 5 a repository is
-unreachable, nothing written (provider commands). `provider apply`: 2 also means answers are awaited.
+unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists) ·
+5 a repository is unreachable, or its blocks file is no source (empty, cut, foreign, or none of your based blocks)
+— nothing written (provider commands). `provider apply`: 2 also means answers are awaited.
 Semantics: references/context-protocol.md. Stdlib only.
 """
 import argparse
@@ -123,6 +134,7 @@ class Ctx:
         if not found:
             raise cs.StoreError("no such file: %s (--context)" % a.context if a.context else
                                 "no local-context.md found (GROW_PM_CONTEXT_PATH, ~/.grow-pm)")
+        self.found = found                       # as found, links not followed: the digest's summary is kept beside it
         self.context = os.path.realpath(found)
         self.text = co._read(self.context)
         self.store = cs.Store(a.store or co.store_root_for(self.text, self.home))
@@ -500,7 +512,7 @@ def cmd_undo(a, c):
             print("skipped (not a current copy): %s" % p)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
             existed = json.load(f).get("store_existed")
-        reverted = []
+        reverted, kept = [], []
         if existed:
             cs.atomic_write(jpath, journal)
             t = now()
@@ -511,7 +523,7 @@ def cmd_undo(a, c):
             # The same import of a record edited in its file (Obsidian) holds the edit in the records too: they
             # go back to the last compile's text first, or the rebuild would write the edit into the copies again.
             rebuilt = bool({m.get("op") for m in marks[-a.steps:]} - {"compile"})
-            reverted = co.consistent_records(c.store, c.copies) if rebuilt else []
+            reverted, kept = co.consistent_records(c.store, c.copies) if rebuilt else ([], [])
             if rebuilt:
                 co.compile_store(c.store, c.copies, t, c.home, pre)
             print("restored the state before the %s — %s%s"
@@ -519,11 +531,13 @@ def cmd_undo(a, c):
                      "; the copies were rebuilt from the records" if rebuilt else ""))
             if reverted:
                 print("put back to the last compiled text (the edit made in the file is undone): %s" % ", ".join(reverted))
+            if kept:
+                print("not put back (no matching text in local-context.md): %s — check them: ctx get <id>" % ", ".join(kept))
         else:
             co.forget_store(c.home)
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)
     return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped,
-               "records_reverted": reverted}
+               "records_reverted": reverted, "records_not_reverted": kept}
 
 
 def cmd_validate(a, c):
@@ -602,8 +616,7 @@ def cmd_card(a, c):
         recs = c.store.load()
         stale, archived = co.card_marks(c.store, recs, now()[:10])
         compiled = cs.compile_records(recs)
-        card = cs.build_card(recs, compiled, now()[:10], stale=stale, archived=archived,
-                             repos=co.card_repos(c.store, recs, compiled, c.home))
+        card = co.store_card(c.store, recs, compiled, now()[:10], c.home, stale=stale, archived=archived)
         cs.atomic_write(c.store.card_path, card)
     print("INDEX.md: %d lines" % card.count("\n"))
     return 0, {"command": "card", "card_lines": card.count("\n")}
@@ -619,24 +632,48 @@ NO_REPOS = ("no repositories registered — a registration is {vault}/{plugin fo
             "(references/context-provider-protocol.md §3b)")
 
 
+def _list_state(c, rid):
+    """(blocks, version, checked, error) of one repository for `repo list`, read from its block state — local files,
+    no lock, nothing written. No store, or no state file, gives (None, None, None, None); a state that cannot be read
+    gives an error text (a list must not fail over a state file; it says so)."""
+    if not c.store.exists():
+        return None, None, None, None
+    try:
+        state = cb.load_state(c.store, rid)
+    except cs.StoreError as e:
+        return None, None, None, cb.clip(e, cb.NOTE_CLIP)
+    checked = state.get("checked")
+    return (cb.based_count(state) or None, cb.base_version(state),
+            checked[:10] if isinstance(checked, str) and checked else None, None)
+
+
 def cmd_repo_list(a, c):
     skipped = []
     repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    rows, bad = [], []
+    for r in repos:
+        blocks, version, checked, error = _list_state(c, r["id"])
+        rows.append(dict(r, blocks=blocks, base_version=version, checked=checked))
+        if error is not None:
+            rows[-1]["state_error"] = error
+            bad.append((r["id"], error))
     if repos:
-        rows = [("id", "kind", "products", "rank", "access", "blocks", "version", "checked")]
-        for r in repos:      # blocks and checked come from the block state; none is kept yet
-            rows.append((r["id"] + (" (paused)" if r["status"] == "paused" else ""), r["kind"] or "—",
-                         ", ".join(r["products"]) or "all", str(r["rank"]), r["access"] or "—", "—",
-                         r["source_version"] or "—", "—"))
-        print(_table(rows))
+        table = [("id", "kind", "products", "rank", "access", "blocks", "version", "checked")]
+        for r in rows:
+            cells = ("!", "!", "!") if r.get("state_error") else (
+                str(r["blocks"]) if r["blocks"] else "—", r["base_version"] or "—", r["checked"] or "—")
+            table.append((r["id"] + (" (paused)" if r["status"] == "paused" else ""), r["kind"] or "—",
+                          ", ".join(r["products"]) or "all", str(r["rank"]), r["access"] or "—") + cells)
+        print(_table(table))
     else:
         print(NO_REPOS)
-    rows = []
-    for r in repos:
+    for rid, error in bad:
+        print("block state unreadable: %s (%s)" % (cb.clip(rid, cb.HEADER_CLIP), error))
+    for r in rows:
         warning = crp.namespace_warning(r)
         if warning:
             print("warning: %s: %s" % (cb.clip(r["id"], cb.HEADER_CLIP), warning))
-        rows.append(dict(r, namespace_warning=warning))
+        r["namespace_warning"] = warning
     for path, why in skipped:
         print("unreadable registration: %s (%s)" % (path, why))
     return 0, {"command": "repo", "action": "list", "repos": rows,
@@ -664,7 +701,7 @@ def _reach(r):
         if client.probe():
             return True, ""
         hint = "; %s is not set (or not 'Name: value')" % ep["headers_env"] if ep["headers_env"] and not hdrs else ""
-        return False, client.last_error + hint
+        return False, cb.clip(client.last_error + hint, cb.NOTE_CLIP)
     if r["core_root"]:
         return (True, "") if os.path.isdir(r["core_root"]) else (False, "core folder not found")
     return False, "no endpoint and no core folder in the registration"
@@ -680,10 +717,11 @@ def cmd_repo_status(a, c):
     rows = []
     for r in repos:
         ok, why = _reach(r)
-        # the version on the source is what its blocks carry now; the registration's own is the fallback when
-        # the source cannot be read. The base is the version most of the blocks the store holds a base for are at.
+        # the version on the source is what its blocks carry now, and only that: when the source was not read there is
+        # none (the registration's own version, a note from whoever wrote it, goes in its own key and is never shown as
+        # the source's). The base is the version most of the blocks the store holds a base for are at.
         fetched = crp.fetch(r) if ok else None
-        live = fetched["version"] if fetched else None
+        live = fetched["version"] if fetched and not fetched.get("error") else None
         warning = crp.namespace_warning(r, fetched["namespace"] if fetched else None)
         base, bad_state = None, None
         try:
@@ -691,8 +729,10 @@ def cmd_repo_status(a, c):
         except cs.StoreError as e:                      # a status must not fail over a state file; it says so
             bad_state = str(e)
         rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": _public_url(r["endpoint"]["url"]),
-                     "reachable": ok, "reason": why, "source_version": live or r["source_version"], "base_version": base,
-                     "namespace_warning": warning})
+                     "reachable": ok, "reason": why, "source_version": live,
+                     "registration_version": r["source_version"], "base_version": base, "namespace_warning": warning})
+        if fetched and fetched.get("error"):             # the server answers, the blocks could not be read
+            rows[-1]["fetch_error"] = cb.clip(fetched["error"], cb.NOTE_CLIP)
         if bad_state:
             rows[-1]["state_error"] = bad_state
     if rows:
@@ -701,6 +741,8 @@ def cmd_repo_status(a, c):
             print("%s  %s  %s" % (row["id"] + (" (paused)" if row["status"] == "paused" else ""), row["kind"] or "—", where))
             print("  reachable %s" % ("yes" if row["reachable"] else "no (%s)" % row["reason"]))
             print("  version on source: %s · base: %s" % (row["source_version"] or "—", row["base_version"] or "—"))
+            if row.get("fetch_error"):
+                print("  blocks file: %s" % row["fetch_error"])
             if row.get("state_error"):
                 print("  block state: %s" % row["state_error"])
             if row["namespace_warning"]:
@@ -721,12 +763,20 @@ def cmd_repo(a, c):
     raise Usage("repo takes list or status")
 
 
+def _unread(skipped):
+    """The registrations that could not be read, as `<path> (<reason>)`, for a message."""
+    return "; ".join("%s (%s)" % (p, why) for p, why in skipped)
+
+
 def _repository(c, rid):
     """The registered repository named `rid`; an unknown one, or a search-only registration (it publishes no blocks),
-    is a usage error (exit 3)."""
-    repos = [r for r in crp.load_repos(c.text, c.home) if r["id"] == rid]
+    is a usage error (exit 3). Unknown while a registration could not be read (since v3.13.1): the message names it —
+    it may be that one, still downloading."""
+    skipped = []
+    repos = [r for r in crp.load_repos(c.text, c.home, skipped=skipped) if r["id"] == rid]
     if not repos:
-        raise Usage("no repository %r is registered — `ctx.py repo list`" % rid)
+        raise Usage("no repository %r is registered — `ctx.py repo list`" % rid + (
+            " — a registration could not be read: %s; it may still be downloading" % _unread(skipped) if skipped else ""))
     if crp.search_only(repos[0]):
         raise Usage("%s is a search-only registration (no blocks_file and no core folder): it publishes no blocks for "
                     "`ctx provider`" % cb.clip(rid, cb.HEADER_CLIP))
@@ -737,11 +787,15 @@ def _refresh_card(c):
     """Bring the card's line about the repositories up to date after the state moved. The state is already written by
     then, so a card that cannot be read or written (an INDEX.md that has not arrived from iCloud, say) is one line for
     the caller to print after its report — "card not refreshed: <why>" — and never a lost report or another exit
-    code. Returns that line, or None."""
+    code. A registration that could not be read leaves the card's line as it is, with the same line naming it (since
+    v3.13.1). Returns that line, or None."""
+    skipped = []
     try:
-        co.refresh_card_repos(c.store, c.home, now()[:10])
+        co.refresh_card_repos(c.store, c.home, now()[:10], skipped=skipped)
     except Exception as e:  # noqa: BLE001 — see above
         return "card not refreshed: %s" % cb.clip(e, cb.NOTE_CLIP)
+    if skipped:
+        return "card not refreshed: a registration could not be read: %s" % _unread(skipped)
     return None
 
 
@@ -806,15 +860,19 @@ def _product_repos(c, repos, wanted):
     return [r for r in repos if not r["products"] or names & {x.lower() for x in r["products"]}]
 
 
-def _in_scope(c, a):
+def _in_scope(c, a, skipped):
     """(repositories, ids of the paused ones, ids of the search-only ones) of a plan or an apply: the one named —
     paused or not; a search-only one is a usage error — else those of the product --product names (and those serving
     every product), else all; without a name the paused and the search-only registrations (no blocks_file, no core
     folder: `crp.search_only`) are left out. Prints the line for an empty scope, one line "призупинено: <id>" per paused
-    repository and one line "лише пошук: <id>" per search-only registration."""
+    repository and one line "лише пошук: <id>" per search-only registration; without a name, also one line
+    "unreadable registration: <path> (<reason>)" per registration that could not be read — not there within its 3 s
+    (iCloud), or broken — as `repo list` prints it, the pair appended to `skipped` (since v3.13.1)."""
     if a.repo:
         return [_repository(c, a.repo)], [], []
-    repos = crp.load_repos(c.text, c.home)
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    for path, why in skipped:
+        print("unreadable registration: %s (%s)" % (path, why))
     if a.product:
         repos = _product_repos(c, repos, a.product)
     search = [r["id"] for r in repos if crp.search_only(r)]
@@ -832,11 +890,12 @@ def _in_scope(c, a):
 
 def cmd_provider_plan(a, c):
     c.need_store()
-    repos, paused, search = _in_scope(c, a)
+    skipped = []
+    repos, paused, search = _in_scope(c, a, skipped)
     plans, down = [], 0
     for k, repo in enumerate(repos):
         fetched = crp.fetch(repo, include_skipped=a.all)
-        if k or paused or search:
+        if k or paused or search or skipped:
             print()
         try:
             plan = None if fetched["error"] else cb.plan(c.store, c.copies, repo, fetched, now(), all_=a.all)
@@ -857,7 +916,8 @@ def cmd_provider_plan(a, c):
     if a.repo:
         return rc, dict(plans[0], command="provider", action="plan")
     return rc, {"command": "provider", "action": "plan", "repos": plans, "paused": paused, "search_only": search,
-                "questions": sum(p.get("questions", 0) for p in plans), "changes": sum(p.get("changes", 0) for p in plans)}
+                "questions": sum(p.get("questions", 0) for p in plans), "changes": sum(p.get("changes", 0) for p in plans),
+                "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
 
 
 def _choices(items):
@@ -883,9 +943,20 @@ def cmd_provider_apply(a, c):
     the lock (exit 5, nothing written); then, under the lock, the edits waiting are imported and each repository is
     applied (its own snapshot, journal line and compile). Exit 2 when an answer is still awaited (the rest applied),
     4 when a block was refused (a broken marker) and nothing else changed, else 0."""
+    if a.repo and "=" in a.repo:
+        raise Usage("%r looks like an answer, not a repository — put the repository first: "
+                    "ctx provider apply <repo> --choose BLOCK=… [BLOCK=…]" % a.repo)
     choose, add = _choices(a.choose), list(a.add or [])
     c.need_store()
-    repos, paused, search = _in_scope(c, a)
+    skipped = []
+    repos, paused, search = _in_scope(c, a, skipped)
+    if not a.repo:                                      # `--add okr zorg-core`: the repository read as one more block
+        ids = {r["id"] for r in repos} | set(paused) | set(search)
+        for flag, words in (("--add BLOCK [BLOCK …]", add), ("--choose BLOCK=…", list(choose))):
+            named = next((w for w in words if w in ids), None)
+            if named is not None:
+                raise Usage("%r is a repository, not a block — put the repository first: ctx provider apply <repo> %s"
+                            % (named, flag))
     if (choose or add) and len(repos) > 1:
         raise Usage("--choose and --add answer one repository's plan — name it: ctx provider apply <repo> …")
     fetched = [(repo, crp.fetch(repo)) for repo in repos]
@@ -898,7 +969,8 @@ def cmd_provider_apply(a, c):
         for x in down:
             print("%s · недоступний: %s" % (cb.clip(x["repo"], cb.HEADER_CLIP), x["error"]))
         print("нічого не записано")
-        res = {"command": "provider", "action": "apply", "unreachable": down, "paused": paused, "search_only": search, "written": []}
+        res = {"command": "provider", "action": "apply", "unreachable": down, "paused": paused, "search_only": search, "written": [],
+               "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
         if a.repo:
             res.update(repo=a.repo, error=down[0]["error"])
         return 5, res
@@ -911,7 +983,7 @@ def cmd_provider_apply(a, c):
                 results.append(cb.apply(c.store, c.copies, c.home, repo, f, choose, add, now()))
             card_note = _refresh_card(c)
     for k, res in enumerate(results):
-        if k or paused or search:
+        if k or paused or search or skipped:
             print()
         print(cb.render_apply(res))
     if card_note:
@@ -926,7 +998,8 @@ def cmd_provider_apply(a, c):
     if a.repo:
         return rc, dict(data[0], command="provider", action="apply")
     return rc, {"command": "provider", "action": "apply", "repos": data, "paused": paused, "search_only": search,
-                "questions": sum(len(r["pending"]) for r in results), "changes": sum(len(r["written"]) for r in results)}
+                "questions": sum(len(r["pending"]) for r in results), "changes": sum(len(r["written"]) for r in results),
+                "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
 
 
 def cmd_provider(a, c):
@@ -986,7 +1059,7 @@ def build_parser():
     sp = pp.add_parser("plan", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--product")
     sp.add_argument("--all", action="store_true"); sp.add_argument("--json", action="store_true")
     sp = pp.add_parser("apply", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--product")
-    sp.add_argument("--choose", action="append"); sp.add_argument("--add", action="append")
+    sp.add_argument("--choose", action="extend", nargs="+"); sp.add_argument("--add", action="extend", nargs="+")
     sp.add_argument("--json", action="store_true")
     return p
 
@@ -1015,6 +1088,11 @@ def main(argv=None):
         c = Ctx(a)
         with cs.guard_roots(co.allowed_roots(c.home, c.text)):
             rc, res = COMMANDS[a.cmd](a, c)
+            if rc == 0 and writes(a):                   # since v3.13.1: the summary the digest shows on a cold start,
+                try:                                    # on the digest's budget; a miss saves nothing
+                    co.summary_in_time(c.found, home=c.home)
+                except Exception:  # noqa: BLE001 — a cache never changes the command's result
+                    pass
         emit(dict(res, ok=rc == 0))
         return rc
     except co.Conflict as e:

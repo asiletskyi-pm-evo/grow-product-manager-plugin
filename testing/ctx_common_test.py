@@ -119,6 +119,26 @@ def _():
         assert cc.boundary_hit(os.path.join(core, "Core", "_personal", "x", "y.md"), regs) is None
         assert cc.boundary_hit(os.path.join(d, "Notes", "Meetings", "m.md"), regs) is None
 
+@case("a registration that never arrives is skipped within the timeout, the other is read")
+def _():
+    import time
+    with tempfile.TemporaryDirectory() as d:
+        prov = os.path.join(d, "providers"); os.makedirs(prov)
+        open(os.path.join(prov, "zorg-a.yaml"), "w").write("schema: provider-registration/1\nid: zorg-a\nkind: bundle\n")
+        fifo = os.path.join(prov, "zorg-b.yaml"); os.mkfifo(fifo)   # its read waits for a writer that never comes (iCloud)
+        skipped, t0 = [], time.time()
+        try:
+            regs = cc.find_registrations([], extra_dirs=[prov], skipped=skipped, timeout=0.3)
+        finally:
+            took = time.time() - t0
+            try:                                                    # let the reader thread out of open()
+                os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+            except OSError:
+                pass
+        assert [r["id"] for r in regs] == ["zorg-a"] and any("not available locally" in why for _, why in skipped) \
+            and took < 1.5, (regs, skipped, took)
+        assert skipped == [(fifo, "not available locally (still downloading?)")], skipped
+
 @case("is_under is component-wise")
 def _():
     assert not cc.is_under("/v/Zorg_X-notes/x.md", ["/v/Zorg_X"])
