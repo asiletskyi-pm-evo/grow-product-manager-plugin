@@ -132,12 +132,20 @@ def _day(text):
         return None
 
 
-def providers_info(text, extra_dirs=None, skipped=None, checked=None):
+def _sync_daily(value):
+    """Does a registration's raw `sync` value switch the daily sync on (since v3.14.0)? Exactly as `ctx_repos.normalise`
+    reads it — a text that is "daily" in any case, trimmed; anything else, and no key, is off. Not imported from there: the
+    hook stays light."""
+    return isinstance(value, str) and value.strip().lower() == "daily"
+
+
+def providers_info(text, extra_dirs=None, skipped=None, checked=None, daily=None):
     """[(id, label)], provider roots and the bundle facts — header-level only.
     Registrations that cannot be read land in `skipped` as (path, reason). `checked` is {provider id: when the
     context store last checked it}: a day newer than the registration's `synced_at` is the day shown, and the
     one `stale` is counted from (since v3.13.0). Each registration is read within REG_READ_S seconds (since v3.13.1): one
-    that does not arrive (iCloud) lands in `skipped` as not available locally, and never holds the session start."""
+    that does not arrive (iCloud) lands in `skipped` as not available locally, and never holds the session start. `daily`,
+    when a list, gets the ids of the registrations that say `sync: daily`, in the providers' order (since v3.14.0)."""
     if cc is None:
         return [], [], None
     entries = cc.vault_entries(text)
@@ -152,6 +160,8 @@ def providers_info(text, extra_dirs=None, skipped=None, checked=None):
             if r.get(k):
                 e[k] = str(r[k])
         e["synced"] = str(r.get("synced_at") or "")
+        if daily is not None and _sync_daily(r.get("sync")) and str(r["id"]) not in daily:
+            daily.append(str(r["id"]))
         e["stale_after"] = int(r.get("stale_after_days") or 30) if str(r.get("stale_after_days") or "30").isdigit() else 30
     labels = []
     for pid in order:
@@ -199,9 +209,10 @@ def _store_summary(path, budget_s=2.0, dates_s=0.5):
     """The context store's summary (since v3.11.0), counted within a time budget so an iCloud download can never hold
     the session start; any failure → None (no line). Since v3.13.1 one helper does it for the digest and for `ctx`
     (`ctx_ops.summary_in_time`): the facts within `budget_s`, then the days the repositories were last checked
-    (`checked`, since v3.13.0) within `dates_s` more — a block state that does not arrive (an iCloud-evicted
-    `.state/blocks/<repo>.json`) costs the days, never the context line; the providers line falls back to `synced_at`,
-    and the cache keeps the days saved before. A summary counted in time is saved beside the context; a count that
+    (`checked`, since v3.13.0) and the results of the daily sync (`sync`, since v3.14.0: the repos line) within `dates_s`
+    more — a block state that does not arrive (an iCloud-evicted `.state/blocks/<repo>.json`) costs the days and the
+    results, never the context line; the providers line falls back to `synced_at`, the repos line is left out, and the
+    cache keeps the days and the results saved before. A summary counted in time is saved beside the context; a count that
     misses the budget — a cold start: iCloud, an antivirus scan — gives the one saved last instead (at most 7 days old,
     with `cached_at`; its days are the saved ones). A count that comes back empty in time (no store, an error) is the
     answer: no line, the cache is not used."""
@@ -252,14 +263,97 @@ def parse(path, extra_dirs=None):
     facts["vault_section"] = bool(vault) or bool(cc and cc.vault_entries(text))  # table format too (v3.10.0)
     facts["unreadable_registrations"] = []
     facts["context_store"] = _store_summary(path)   # first: the providers line takes the days of the last checks from it
+    facts["daily_sync"] = []                        # the registrations with `sync: daily`: the repos line shows only those
     try:
         facts["providers"], facts["provider_roots"], facts["bundle"] = providers_info(
-            text, extra_dirs, facts["unreadable_registrations"], (facts["context_store"] or {}).get("checked"))
+            text, extra_dirs, facts["unreadable_registrations"], (facts["context_store"] or {}).get("checked"),
+            daily=facts["daily_sync"])
     except Exception:
         facts["providers"], facts["provider_roots"], facts["bundle"] = [], [], None
     facts["cjm_section"] = bool(re.search(r"^## CJM Configuration\s*\n(?:.*\n){1,6}?.*(?:stages|funnel|template)", text, re.M | re.I))
     facts["terminology_section"] = bool(re.search(r"^### Terminology & Style", text, re.M))
     return facts
+
+
+REPOS_SHOWN = 3      # repositories the repos line names; the rest is "+N"
+REASON_CLIP = 80     # characters of a reason (a broken source, an error) the repos line carries
+
+
+def _count(value):
+    """A count the state keeps (updated, added, removed): a whole number of 0 or more; anything else is 0."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
+def _items(value):
+    """How many blocks a list of the state names (kept_yours, awaiting, held); anything but a list is 0."""
+    return len(value) if isinstance(value, list) else 0
+
+
+def _sync_part(rid, result, checked):
+    """What the repos line says of one repository — `<id> · …` — from its last `sync_result` (the block state's, or the
+    summary's) and the day it was last checked (`checked`, an ISO text or None); None when there is nothing to say: no result,
+    one that is not an object, or an outcome of a newer plugin than this hook. The formats are spec §8's, and every text
+    that came from a state or a server goes through `clip` (a line is one line)."""
+    if not isinstance(result, dict) or cc is None:
+        return None
+    outcome = result.get("outcome")
+    shown = cc.clip(rid, 64)
+    attempt = _day(result.get("at"))             # the pass's own day
+    since = _day(checked)                        # the last successful check
+    day = attempt or since
+    synced = "synced %s" % day.isoformat() if day else "synced"
+    awaits = _items(result.get("awaiting"))
+    if outcome in ("changed", "no-changes"):
+        bits = [synced]
+        changed = _count(result.get("updated")) + _count(result.get("added")) + _count(result.get("removed"))
+        kept = _items(result.get("kept_yours"))
+        if outcome == "no-changes":
+            bits.append("no changes")
+        if changed:
+            bits.append("%d updated" % changed)
+        if kept:
+            bits.append("%d conflict%s kept yours" % (kept, "" if kept == 1 else "s"))
+        report = result.get("report")
+        if isinstance(report, str) and cc.clip(report, 200):
+            bits.append("report %s" % cc.clip(report, 200))
+    elif outcome == "held":
+        held = _items(result.get("held"))
+        bits = ["⚠ %sremovals held — ctx provider plan %s" % ("%d " % held if held else "", shown)]
+    elif outcome == "unreachable":
+        bits = ["unreachable since %s (VPN?)" % since.isoformat() if since else "unreachable (VPN?)"]
+    elif outcome == "timeout":
+        bits = ["sync timed out %s" % attempt.isoformat() if attempt else "sync timed out"]
+    elif outcome in ("broken", "error"):
+        reason = cc.clip(result.get("reason") if isinstance(result.get("reason"), str) else "", REASON_CLIP)
+        head = "⚠ source broken" if outcome == "broken" else "⚠ sync error"
+        bits = [head + (" — %s" % reason if reason else "")]
+    elif outcome == "import-conflict":
+        bits = ["⚠ edits to import first — ctx sync"]
+    else:
+        return None
+    if awaits:
+        bits.append("%d block(s) awaits a decision" % awaits)
+    return " · ".join([shown] + bits)
+
+
+def _repos_line(daily, sync, checked):
+    """`  repos: <part>; <part>; <part>; +N` (since v3.14.0): the last result of the daily sync of each repository the
+    registrations switch on (`daily`: their ids in order — a repository whose sync was switched off keeps an old result in
+    its state, which is not shown), at most REPOS_SHOWN parts and the count of the rest. None when no repository has
+    anything to say. `sync` and `checked` are the summary's ({id: sync_result}, {id: when it was last checked})."""
+    sync, checked = sync if isinstance(sync, dict) else {}, checked if isinstance(checked, dict) else {}
+    parts = []
+    for rid in daily or []:
+        try:
+            part = _sync_part(rid, sync.get(rid), checked.get(rid))
+        except Exception:  # noqa: BLE001 — one state of the wrong kind is that repository's part only
+            part = None
+        if part:
+            parts.append(part)
+    if not parts:
+        return None
+    shown = parts[:REPOS_SHOWN] + (["+%d" % (len(parts) - REPOS_SHOWN)] if len(parts) > REPOS_SHOWN else [])
+    return "  repos: " + "; ".join(shown)
 
 
 def digest(path, facts, searched, version):
@@ -310,9 +404,17 @@ def digest(path, facts, searched, version):
         if s.get("cached_at"):                     # since v3.13.1: the summary saved last, on a cold start
             tail += " · cached %s" % s["cached_at"][:16].replace("T", " ")
         lines.append("  context: records %d · card %d lines · %s" % (s["records"], s["card_lines"], tail))
+        try:                                       # since v3.14.0: the daily sync's result per repository — a state never fails the digest
+            repos = _repos_line(facts.get("daily_sync"), s.get("sync"), s.get("checked"))
+        except Exception:  # noqa: BLE001
+            repos = None
+        if repos:
+            lines.append(repos)
     if s and not s.get("unavailable"):
         lines.append(
-            "Skills: take this path for Step 0a of references/local-context-protocol.md and skip the "
+            'Skills: run python3 "<plugin root>/scripts/ctx.py" provider sync --if-due (repeat any line it prints that starts '
+            "«Ядро оновило» at the end of your answer), then "
+            "take this path for Step 0a of references/local-context-protocol.md and skip the "
             "location search. A context store exists: where a skill says to read local-context.md (Step 0c), "
             'run python3 "<plugin root>/scripts/ctx.py" read --skill <your name> --product "<the product the '
             'request names>" (no --product when it names none) and use its output instead of reading '

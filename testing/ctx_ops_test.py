@@ -1026,5 +1026,104 @@ with tempfile.TemporaryDirectory() as d:                 # a registration skippe
           and "not available locally" in skipped[0][1], (refreshed, after_refresh, skipped))
     check("card_repos with a registration skipped: None — the list is not known", listed is None, listed)
 
+# --- v3.14.0 Task 7: the result of the daily sync, for the digest's repos line (sync_by_repo; cached with the summary)
+def sync_result(outcome, **fields):
+    """A sync_result as ctx_synced keeps it in the block state: every key of RESULT_KEYS."""
+    out = {"at": "2026-10-20T10:05:00+03:00", "outcome": outcome, "updated": 0, "added": 0, "removed": 0, "kept_yours": [],
+           "took_rule": [], "awaiting": [], "held": [], "rejected": [], "reason": None, "report": None, "snapshot": None}
+    out.update(fields)
+    return out
+
+
+def put_sync(env, rid, result, checked=NOW):
+    """The block state of `rid` with `result` as its sync_result (and its attempt)."""
+    with cs.guard_roots(co.allowed_roots(env.home, env.text)):
+        try:
+            state = cb.load_state(env.store, rid)
+        except cs.StoreError:
+            state = {}
+        state.update({"checked": checked, "source": "folder", "version": "0.4", "blocks": state.get("blocks") or {},
+                      "sync_attempt": result["at"], "sync_result": result})
+        cb.save_state(env.store, rid, state)
+
+
+def saved_sync(path):
+    return (json.load(open(path, encoding="utf-8")).get("facts") or {}).get("sync") if os.path.isfile(path) else None
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    check("sync_by_repo: no block state, no results", co.sync_by_repo(e.store.root) == {}, co.sync_by_repo(e.store.root))
+    changed = sync_result("changed", updated=2, kept_yours=["scope"], report="_System/context/sync/2026-10-20.md")
+    gone = sync_result("unreachable", reason="no answer")
+    put_sync(e, "zorg-core", changed)
+    put_sync(e, "zorg-growth", gone)
+    save_state(e, "zorg-idle", NOW, {"scope": "0.4"})                     # checked, never synced: a state with no sync_result
+    check("sync_by_repo: the sync_result of every repository that has one, as the state keeps it; a state without one is left out",
+          co.sync_by_repo(e.store.root) == {"zorg-core": changed, "zorg-growth": gone}, co.sync_by_repo(e.store.root))
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-growth.json"), "w").write("{ not json")
+    check("…a state that cannot be read is skipped, the others stay",
+          co.sync_by_repo(e.store.root) == {"zorg-core": changed}, co.sync_by_repo(e.store.root))
+    with cs.guard_roots(co.allowed_roots(e.home, e.text)):
+        for name, bad in [("that is a list", ["changed"]), ("that is a text", "changed"), ("that is a number", 7),
+                          ("without an outcome", {"at": NOW}), ("whose outcome is not a text", {"outcome": 3})]:
+            state = cb.load_state(e.store, "zorg-core")
+            state["sync_result"] = bad
+            cs.atomic_write(os.path.join(e.store.state_dir, "blocks", "zorg-core.json"), json.dumps(state))
+            check("…a sync_result %s is left out" % name, co.sync_by_repo(e.store.root) == {}, co.sync_by_repo(e.store.root))
+    check("sync_by_repo never fails: a store root that is not there is no results", co.sync_by_repo(os.path.join(d, "nowhere")) == {}, "")
+    real_mod = sys.modules.get("ctx_blocks")
+    sys.modules["ctx_blocks"] = None                                      # an import that fails
+    try:
+        got = co.sync_by_repo(e.store.root)
+    finally:
+        sys.modules["ctx_blocks"] = real_mod
+    check("…a module that cannot be imported is no results, no exception", got == {}, got)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    changed = sync_result("changed", updated=2, kept_yours=["scope"], report="_System/context/sync/2026-10-20.md")
+    put_sync(e, "zorg-core", changed)
+    cache = co.summary_cache_path(e.ctx)
+    s = co.summary_in_time(e.ctx, home=e.home)
+    check("summary_in_time: the results of the sync come with the days, in the same budget, and are saved in the cache",
+          s and s["sync"] == {"zorg-core": changed} and s["checked"] == {"zorg-core": NOW}
+          and saved_sync(cache) == {"zorg-core": changed}, (s, saved_sync(cache)))
+    loaded = co.load_summary(e.ctx)
+    check("load_summary: the results of the sync come back from the cache", loaded and loaded["sync"] == {"zorg-core": changed}, loaded)
+    data = json.load(open(cache, encoding="utf-8"))
+    old = dict(data, facts={k: v for k, v in data["facts"].items() if k != "sync"})
+    open(cache, "w", encoding="utf-8").write(json.dumps(old))
+    loaded = co.load_summary(e.ctx)
+    check("…a cache of v3.13.1, which has no sync, still loads: sync is {}",
+          loaded and loaded["records"] == 7 and loaded["sync"] == {}, loaded)
+    for name, bad in [("a list", [1]), ("a text", "changed"), ("null", None)]:
+        open(cache, "w", encoding="utf-8").write(json.dumps(dict(data, facts=dict(data["facts"], sync=bad))))
+        loaded = co.load_summary(e.ctx)
+        check("…a sync that is %s is {}, the rest of the cache stays" % name, loaded and loaded["records"] == 7 and loaded["sync"] == {}, loaded)
+    open(cache, "w", encoding="utf-8").write(json.dumps(dict(data, facts=dict(data["facts"], sync={"zorg-core": changed, "zorg-bad": "x", "": {"outcome": "changed"}}))))
+    loaded = co.load_summary(e.ctx)
+    check("…a result that is not an object is dropped, the others stay", loaded and loaded["sync"] == {"zorg-core": changed}, loaded)
+    facts = dict(s)
+    co.save_summary(e.ctx, dict(facts, sync={"zorg-core": changed}))
+    check("save_summary: facts without results keep the results saved before for this context (as the days)",
+          co.save_summary(e.ctx, dict(facts, sync={})) and saved_sync(cache) == {"zorg-core": changed}, saved_sync(cache))
+    other = sync_result("no-changes")
+    check("…facts with results replace them", co.save_summary(e.ctx, dict(facts, sync={"zorg-growth": other}))
+          and saved_sync(cache) == {"zorg-growth": other}, saved_sync(cache))
+    check("…facts with no key at all (an old caller) keep them too",
+          co.save_summary(e.ctx, {k: v for k, v in facts.items() if k != "sync"}) and saved_sync(cache) == {"zorg-growth": other}, saved_sync(cache))
+    state = os.path.join(e.store.state_dir, "blocks", "zorg-core.json")
+    os.remove(state)
+    os.mkfifo(state)                                     # a state that never arrives: the days and the results miss their half second
+    try:
+        t0 = time.time(); s = co.summary_in_time(e.ctx, home=e.home); took = time.time() - t0
+    finally:
+        release(state)
+    check("a block state that never arrives: the facts in time, the days and the results missed — and the results saved before stay",
+          s and s["records"] == 7 and s["checked"] == {} and s["sync"] == {} and saved_sync(cache) == {"zorg-growth": other} and took < 2.0,
+          (s, took, saved_sync(cache)))
+
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
