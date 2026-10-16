@@ -3160,6 +3160,75 @@ with tempfile.TemporaryDirectory() as d:                 # repo status: the hint
           rc == 0 and by_status == 0 and len(built) > 0 and res["repos"][0]["source_version"] == "0.4"
           and "version on source: 0.4 · base: —" in out, (rc, by_status, len(built), out[-400:]))
 
+# --- v3.14.0 Task 10: the protocols, step 0c and context-connect 0.4.0 say what the daily sync does (doc pins)
+def doc(*parts):
+    return re.sub(r"\s+", " ", read(ROOT, *parts))
+
+
+def between(text, start, end):
+    """The part of `text` from `start` up to `end` ("" when `start` is not there)."""
+    i = text.find(start)
+    return text[i:text.index(end, i + len(start))] if i >= 0 and end in text[i + len(start):] else (text[i:] if i >= 0 else "")
+
+
+lcp3 = doc("references", "local-context-protocol.md")
+cp3 = doc("references", "context-protocol.md")
+pp3 = doc("references", "context-provider-protocol.md")
+cst3 = doc("skills", "context-connect", "references", "connect-steps.md")
+skl3 = doc("skills", "context-connect", "SKILL.md")
+
+# step 0c: the sync first, then the read; the one sentence at the end of the answer; the skill never waits on it
+s0c = between(lcp3, "### 0c.", "### 0d.")
+need_0c = ["provider sync --if-due", "Ядро оновило <N> блоків у <repo>, конфліктів <K> (лишено твоє) — звіт: <path>", "before `ctx read`",
+           "never stops the skill", "as the last line of its answer", "`sync: daily`", "a host without hooks"]
+check("step 0c runs `provider sync --if-due` before `ctx read`, repeats «Ядро оновило …» at the end, and a failed sync never stops the skill",
+      not lacks(s0c, need_0c) and 0 <= s0c.find("provider sync --if-due") < s0c.find("scripts/ctx.py\" read --skill"), lacks(s0c, need_0c))
+
+# context-protocol: the sync/ folder, the command, the repos: line, the bounded reads, undoing a pass
+need_cp = ["├── sync/", "`provider sync [REPO] [--if-due] [--now ISO]`", "exits 0 whatever the repositories did", "`skipped`",
+           "lock: <why>", "guard: <why>", "repos: <id> · synced <YYYY-MM-DD>", "no changes", "unreachable since <YYYY-MM-DD> (VPN?)",
+           "⚠ <N> removals held — ctx provider plan <id>", "<N> block(s) awaits a decision", "sync timed out <YYYY-MM-DD>",
+           "⚠ source broken — <reason>", "⚠ sync error — <reason>", "⚠ edits to import first — ctx sync", "`+N`",
+           "names `ctx provider sync --if-due` before `ctx read`", "three seconds each and six for all of them",
+           "two seconds for all of them", "`provider-sync`", "`taken`", "`rejected_failed`",
+           "prefer `ctx provider apply <repo> --choose <block>=theirs` to `ctx undo`", "v3.18"]
+check("context-protocol documents the sync/ folder, `provider sync`, the repos: line, the shared read deadlines and undoing a sync pass",
+      not lacks(cp3, need_cp) and "├── sync/" in cp3[:cp3.index("- **Compiled copies:**")], lacks(cp3, need_cp))
+
+# context-provider-protocol: the sync key (§3b), the owner's line (§12.2), §12.11 with every sign of the table
+sec11 = between(pp3, "### 12.11 ", "### 12.12 ") if "### 12.12 " in pp3 else pp3[pp3.find("### 12.11 "):] if "### 12.11 " in pp3 else ""
+signs = ["=", "~", "✎", "⚠", "?", "+", "−", "✂", "·"]
+need_sec11 = ["`ctx provider sync [REPO] [--if-due] [--now ISO]`", "`sync: daily`", "24 h", "an hour", "20 s", "3 s", "`policy=rule`",
+              "more than one", "`changed`", "`no-changes`", "`unreachable`", "`broken`", "`held`", "`import-conflict`", "`timeout`", "`error`",
+              "_System/context/sync/YYYY-MM-DD.md", "Взяти текст ядра: ctx provider apply <repo> --choose <block>=theirs",
+              "Відкотити цей прохід: ctx undo (знімок <folder>)", "# Синк контексту — YYYY-MM-DD", "40 lines", "500 characters", "90 days",
+              "prefer `ctx provider apply <repo> --choose <block>=theirs` to `ctx undo`", "`sync_result`", "`sync_attempt`",
+              "Ядро оновило", "never waits", "the first skill of the day"]
+check("context-provider-protocol §12.11 exists with a row for every sign, the outcomes, the safeguards, the report, the way back and the --choose advice",
+      sec11 != "" and not lacks(sec11, need_sec11) and all(("| `%s` |" % s) in sec11 for s in signs),
+      (sec11[:80], lacks(sec11, need_sec11), [s for s in signs if ("| `%s` |" % s) not in sec11]))
+need_pp3 = ["sync: off # off | daily", "| `sync` | `off` |", "One key is the exception, and only by your own word: `sync`",
+            "`.yaml`/`.json`", "`ctx provider adopt|plan|apply|sync`", "`sync_result`"]
+check("context-provider-protocol: the `sync` key and its carve-out in §3b, the owner's line in §12.2, the network list of §12.8",
+      not lacks(pp3, need_pp3), lacks(pp3, need_pp3))
+
+# connect-steps and the skill: the question about the daily sync, the `?` rows first, the carve-out, several answers per --choose
+i_q, i_first = cst3.find("the daily sync question"), cst3.find("Settle every `?`")
+need_cst = ["`sync: daily`", "`sync: off`", "except `sync`", "`--choose <block>=theirs|mine|both [<block>=… …]`",
+            "One `--choose` takes several answers", "ctx provider sync <repo>"]
+check("connect-steps asks about `sync: daily` once, settles every `?` before it, carves `sync` out of the kept-keys rule and shows several answers per --choose",
+      not lacks(cst3, need_cst) and 0 <= i_first < i_q, (lacks(cst3, need_cst), i_first, i_q))
+need_skl = ["version: 0.4.0", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
+check("the skill is 0.4.0 and asks the daily-sync question only on the user's own yes", not lacks(skl3, need_skl), lacks(skl3, need_skl))
+
+# the registry: one case per area, above v3.13.1
+tc = read(ROOT, "testing", "test-cases.md")
+ids3140 = ["TC-ctx-3140-%s" % k for k in ("apply", "decide", "mcp", "sync", "report", "undo", "digest", "reads", "state", "docs")]
+head3140 = "## Release v3.14.0 — daily core sync (added 2026-10-16)"
+check("test-cases.md has the v3.14.0 section above v3.13.1 with one TC-ctx-3140-* row per area",
+      head3140 in tc and 0 <= tc.index(head3140) < tc.index("## Release v3.13.1") and not [i for i in ids3140 if "**%s**" % i not in tc],
+      [i for i in ids3140 if "**%s**" % i not in tc])
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

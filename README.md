@@ -592,7 +592,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 **Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
 
 
-### 32. Context Connect (v0.3.0) — NEW in v3.10.0
+### 32. Context Connect (v0.4.0) — NEW in v3.10.0
 
 **Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
 
@@ -640,7 +640,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Hiring Designer | v0.2.1 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
 | Offboarding Guide | v0.2.1 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.1 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
-| Context Connect | v0.3.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
+| Context Connect | v0.4.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
 | Context Navigator | v0.1.1 | Answer from the shared core through the provider's rules and graph, with note paths and snapshot dates |
 
 ---
