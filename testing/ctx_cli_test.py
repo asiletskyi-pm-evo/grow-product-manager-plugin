@@ -3229,6 +3229,38 @@ check("test-cases.md has the v3.14.0 section above v3.13.1 with one TC-ctx-3140-
       head3140 in tc and 0 <= tc.index(head3140) < tc.index("## Release v3.13.1") and not [i for i in ids3140 if "**%s**" % i not in tc],
       [i for i in ids3140 if "**%s**" % i not in tc])
 
+# Task 10, fix round 1: the sentences say only what the code does (a pass that writes, a retry no sooner than an hour, a rule decides a `?`)
+cp_f1, pp_f1, cst_f1, skl_f1, lcp_f1 = doc("references", "context-protocol.md"), doc("references", "context-provider-protocol.md"), \
+    doc("skills", "context-connect", "references", "connect-steps.md"), doc("skills", "context-connect", "SKILL.md"), \
+    doc("references", "local-context-protocol.md")
+sec11_f1 = between(pp_f1, "### 12.11 ", "### 12.12 ") if "### 12.12 " in pp_f1 else pp_f1[pp_f1.find("### 12.11 "):]
+need_f1 = [
+    (cp_f1, ["Every pass that changes something has a snapshot and a journal line (`provider-sync`)",
+             "a `?` is left waiting unless the block is a rule (then the core's text)", "prints only the `CTX_RESULT` line",
+             "but not under one where the core removed the block"]),
+    (sec11_f1, ["every pass that changes something can be taken back (`ctx undo`) and is explained in a report",
+                "prints only the `CTX_RESULT` line", "not under a `⚠` of a block the core removed",
+                "Знімка цього проходу немає: відкочувати нічого."]),
+    (pp_f1, ["unless your blocks note carries a `team` region itself", "The proposal a refresh builds carries no `sync`"]),
+    (cst_f1, ["every pass that changes something has a snapshot", "tried again at the first skill start an hour or more later",
+              "unless the block is a core rule (`policy=rule`", "unless the core marked the block a rule (`policy=rule`)",
+              "The proposal a refresh builds carries no `sync`", "An explicit request to turn the daily sync on or off comes here whatever the key says",
+              "turning it off needs no `?` settling and no question", "`context-provider-protocol.md` §12.11"]),
+    (skl_f1, ["the sync leaves a `?` waiting (unless the block is a core rule)", "turning it off needs no `?` settling and no question",
+              "`references/context-provider-protocol.md` §12.11"]),
+    (lcp_f1, ["prints only its `CTX_RESULT` line"]),
+]
+gone_f1 = [(cp_f1, ["Every pass has a snapshot", "never decided", "prints nothing when none is"]),
+           (sec11_f1, ["every pass can be taken back", "prints nothing and writes nothing", "who has only your server gets `·` (not available) for it, never"]),
+           (cst_f1, ["tried again within the hour", "the sync never decides it", "every pass has a snapshot,", "(the proposal carries none)"]),
+           (skl_f1, ["a `?` is never decided by the sync", "removes at most one block"]),
+           (lcp_f1, ["costs milliseconds and prints nothing"]),
+           (pp_f1, ["a refresh neither adds nor changes it (the proposal carries none)"])]
+check("fix round 1: every pass that WRITES (not every pass); a retry no sooner than an hour; a rule decides a `?`; --if-due prints only CTX_RESULT; "
+      "the report's command and last line as the code prints them",
+      all(not lacks(text, needed) for text, needed in need_f1) and all(not [s for s in bad if s in text] for text, bad in gone_f1),
+      ([lacks(text, needed) for text, needed in need_f1], [[s for s in bad if s in text] for text, bad in gone_f1]))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
