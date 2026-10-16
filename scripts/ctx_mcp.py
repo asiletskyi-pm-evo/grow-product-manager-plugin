@@ -108,8 +108,11 @@ def header_problem(var):
 
 
 def _check_message(message):
-    """The allow-list at the transport: a `tools/call` whose tool is not in ALLOWED → McpRefused (no request)."""
-    if not isinstance(message, dict) or message.get("method") != "tools/call":
+    """The allow-list at the transport: a message that is not one JSON-RPC object (a batch could carry any call) and a
+    `tools/call` whose tool is not in ALLOWED → McpRefused (no request)."""
+    if not isinstance(message, dict):
+        raise McpRefused("only a single JSON-RPC message is sent, not %s" % type(message).__name__)
+    if message.get("method") != "tools/call":
         return
     params = message.get("params")
     name = params.get("name") if isinstance(params, dict) else None

@@ -474,9 +474,9 @@ with FakeMcp(delay=3) as fake:
           err is not None and took < 2.0 and calls(fake) <= 2, (repr(err), took, calls(fake)))
 
 # --- v3.14: the handshake — initialize and the notification each within probe_timeout of their own
-with FakeMcp(delays={"initialize": 0.6, "notifications/initialized": 0.6}) as fake:
-    c = McpClient(fake.url, probe_timeout=1.0)
-    check("a slow but healthy server (0.6 s per handshake step, probe_timeout 1 s): the probe succeeds",
+with FakeMcp(delays={"initialize": 0.8, "notifications/initialized": 0.8}) as fake:
+    c = McpClient(fake.url, probe_timeout=1.5)
+    check("a slow but healthy server (0.8 s per handshake step, probe_timeout 1.5 s): the probe succeeds",
           c.probe() is True and fake.methods() == ["initialize", "notifications/initialized"], (c.last_error, fake.methods()))
 with FakeMcp(delays={"initialize": 1.5}) as fake:
     c = McpClient(fake.url, probe_timeout=0.5, call_timeout=30, retries=0)
@@ -496,8 +496,14 @@ with FakeMcp() as fake:
                raises(lambda: c._rpc("tools/call", {}, 1, 0), McpError),
                raises(lambda: c._rpc("tools/call", ["vault_get_note"], 1, 0), McpError),
                raises(lambda: c._send({"jsonrpc": "2.0", "id": 99, "method": "tools/call",
-                                       "params": {"name": "brain_write", "arguments": {}}}, 1, 0), McpError)]
-    check("a tool outside ALLOWED is refused at the transport (_rpc, _send), with nothing sent",
+                                       "params": {"name": "brain_write", "arguments": {}}}, 1, 0), McpError),
+               raises(lambda: c._send([{"jsonrpc": "2.0", "id": 98, "method": "tools/call",
+                                        "params": {"name": "vault_write_note", "arguments": {"path": "a"}}}], 1, 0), McpError),
+               raises(lambda: c._send([{"jsonrpc": "2.0", "id": 97, "method": "tools/call",
+                                        "params": {"name": "vault_get_note", "arguments": {"path": "a"}}}], 1, 0), McpError),
+               raises(lambda: c._send("tools/call", 1, 0), McpError)]
+    check("a tool outside ALLOWED is refused at the transport (_rpc, _send), and so is a batch (a list) or anything not one "
+          "JSON-RPC object, whatever it holds — with nothing sent",
           all(type(e) is McpRefused for e in refused) and len(fake.seen) == before,
           ([type(e).__name__ for e in refused], fake.methods()[before:]))
     got, _ = c._rpc("tools/call", {"name": "vault_get_note", "arguments": {"path": BLOCKS_PATH}}, 5, 0)
@@ -674,7 +680,7 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=ROOTED, require_headers={"
         def probe(self):
             return False
 
-    # v3.14: reach lives in ctx_repos and gives the reason as the client said it; `repo status` clips it where it prints
+    # v3.14: reach lives in ctx_repos and still gives the reason clipped (cc.clip); `repo status` clipping again is harmless
     e.reg("zorg-noisy", MCP_V2.format(id="zorg-noisy", url="http://127.0.0.1:9/mcp"))
     real_client, cm.McpClient = cm.McpClient, Noisy
     buf, saved_ctx = io.StringIO(), os.environ.pop("GROW_PM_CONTEXT_PATH", None)
@@ -692,8 +698,9 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=ROOTED, require_headers={"
     check("the reason a repository is unreachable is one clean line of at most 300 characters",
           rc_ == 0 and len(why_) <= 300 and why_.endswith("…") and "\x1b" not in why_ and "\n" not in why_
           and "\x1b" not in block(buf.getvalue(), "zorg-noisy"), why_)
-    check("…while crp.reach gives the client's reason as it is (the clip is where it is printed)",
-          raw_ok is False and raw_why == Noisy.last_error, raw_why)
+    check("…and crp.reach itself gives it as one clean line of at most 300 characters (as _reach did since v3.13.1)",
+          raw_ok is False and len(raw_why) <= 300 and raw_why.endswith("…") and "\x1b" not in raw_why and "\n" not in raw_why
+          and raw_why.startswith("MCP: boom"), raw_why)
     check("v3.14: _reach and _public_url left ctx.py for ctx_repos", not hasattr(ctxmain, "_reach")
           and not hasattr(ctxmain, "_public_url") and callable(crp.reach) and callable(crp.public_url), "")
     os.remove(os.path.join(e.providers, "zorg-noisy.yaml"))

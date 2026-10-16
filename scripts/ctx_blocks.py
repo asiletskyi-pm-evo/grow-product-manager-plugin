@@ -514,13 +514,7 @@ REWRITES = ("~", "−")                           # the signs an apply without d
 OFFERS = ("~", "+", "−", "⚠", "?")              # the signs whose row offers the repository's text (or its removal) — a rejection can apply
 
 
-def clip(text, limit):
-    """`text` as one line that is safe to print: every run of control characters (C0 and C1, the line and paragraph
-    separators, bidi overrides and isolates, a BOM — `cc.CONTROLS`) becomes one space, the ends are trimmed, and at
-    most `limit` characters stay (the last is "…" when it was cut). Whatever a server sent goes through here before
-    it is printed."""
-    one = CONTROLS.sub(" ", "" if text is None else str(text)).strip()
-    return one if len(one) <= limit else one[:limit - 1].rstrip() + "…"
+clip = cc.clip                          # one line, safe to print, at most `limit` characters (since v3.14 in ctx_common)
 
 
 def base_version(state):

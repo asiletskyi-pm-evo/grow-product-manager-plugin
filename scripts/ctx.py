@@ -692,7 +692,7 @@ def cmd_repo_status(a, c):
     rows = []
     for r in repos:
         ok, why = crp.reach(r)
-        why = cb.clip(why, cb.NOTE_CLIP)                # what a server said, as one safe line
+        why = cb.clip(why, cb.NOTE_CLIP)                # reach clips already; kept, harmless (clip is idempotent)
         # the version on the source is what its blocks carry now, and only that: when the source was not read there is
         # none (the registration's own version, a note from whoever wrote it, goes in its own key and is never shown as
         # the source's). The base is the version most of the blocks the store holds a base for are at.

@@ -22,6 +22,7 @@ os.environ["NO_PROXY"] = "127.0.0.1,localhost"          # the fake is local; a p
 os.environ["no_proxy"] = "127.0.0.1,localhost"
 import ctx as ctxmain  # noqa: E402
 import ctx_blocks as cb  # noqa: E402
+import ctx_common as cc  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_repos as cr  # noqa: E402
 import ctx_store as cs  # noqa: E402
@@ -795,6 +796,25 @@ with tempfile.TemporaryDirectory() as d:
     check("…an mcp one without a url, and one with neither, say so",
           cr.reach(repo_of({"id": "zorg-bare", "kind": "mcp"})) == (False, "no endpoint url in the registration")
           and cr.reach(repo_of({"id": "zorg-none", "kind": "folder"})) == (False, "no endpoint and no core folder in the registration"), "")
+    class StubClient:                                   # a server's words on a failed handshake: ESC, newlines, bidi, a BOM, length
+        last_error = "\x1b[31mred\nline2\u202e\ufeff " + "y" * 500
+
+        def __init__(self, *a, **k):
+            pass
+
+        def probe(self):
+            return False
+
+    real_client, cm.McpClient = cm.McpClient, StubClient
+    try:
+        ok_s, why_s = cr.reach(growth_repo("http://127.0.0.1:9/mcp"))
+    finally:
+        cm.McpClient = real_client
+    check("reach keeps v3.13.1's reason: one clean line of at most 300 characters, '…' when cut",
+          ok_s is False and len(why_s) <= 300 and why_s.endswith("…") and why_s.startswith("[31mred line2 ")
+          and not cc.CONTROLS.search(why_s), repr(why_s[:60]))
+    check("…cb.clip is ctx_common's clip, and clipping twice changes nothing", cb.clip is cc.clip
+          and cc.clip(why_s, 300) == why_s, "")
     with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("…a server that answers the handshake is reachable", cr.reach(growth_repo(fake.url)) == (True, ""), fake.methods())
         n0 = len(fake.seen)

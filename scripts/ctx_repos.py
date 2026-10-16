@@ -382,8 +382,8 @@ def public_url(url):
 def reach(repo, deadline=None):
     """(reachable, reason) of one repository. An MCP repository answers the handshake within 3 s a step (the header its
     registration names, if any, comes from the environment; the client keeps `deadline`, a time.monotonic() moment);
-    a folder or bundle is there when its core folder is. The reason is the client's, as it said it — a caller that
-    prints it clips it (ctx.py: cb.clip(…, cb.NOTE_CLIP))."""
+    a folder or bundle is there when its core folder is. The reason is one line safe to print, at most MAX_ERROR
+    characters, "…" when cut (`cc.clip`, as since v3.13.1): what a server said loses its control characters."""
     ep = repo["endpoint"]
     if repo["kind"] == "mcp" or ep["url"]:
         if not ep["url"]:
@@ -392,7 +392,7 @@ def reach(repo, deadline=None):
         client = cm.McpClient(ep["url"], headers=hdrs, deadline=deadline)
         if client.probe():
             return True, ""
-        return False, client.last_error + _header_hint(ep, hdrs)
+        return False, cc.clip(client.last_error + _header_hint(ep, hdrs), MAX_ERROR)
     if repo["core_root"]:
         return (True, "") if os.path.isdir(repo["core_root"]) else (False, "core folder not found")
     return False, "no endpoint and no core folder in the registration"
