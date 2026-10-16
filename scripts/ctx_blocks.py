@@ -761,6 +761,20 @@ def plan(store, copies, repo, fetched, now, all_=False):
             "errors": [dict(x) for x in problems if all_ or x["block"] not in skip]}
 
 
+def unknown_blocks(p, choose, add):
+    """The blocks `choose` ({block: answer}) and `add` name that plan `p` does not have — neither a row (a rejected one
+    is a row: theirs or --add takes it) nor a block with a structure error — sorted. `apply` refuses them before it
+    writes; `ctx provider apply` asks it before the lock (since v3.14), of a plan made on the same fetch, so that a
+    wrong block imports nothing."""
+    known = {r["block"] for r in p["rows"]} | {x["block"] for x in p["errors"] if x["block"]}
+    return sorted(b for b in set(choose or {}) | set(add or ()) if b not in known)
+
+
+def no_block(blocks, rid):
+    """The message for blocks `unknown_blocks` found."""
+    return "no block %s in the plan of %s — `ctx provider plan %s` lists them" % (", ".join(blocks), rid, rid)
+
+
 def held_rejected(p, choose, add):
     """The blocks a manual `ctx provider apply` holds, in plan order: the rows of plan `p` that offer a text you rejected
     by undoing a sync pass (`rejected: True`; spec v3.14 §5.4, "do not repeat") — unless this pass takes it: `choose`
@@ -966,10 +980,9 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
         raise co.Refused("changes to local-context.md or to the records wait to be imported — `ctx sync` first, then apply")
     rid, ns = repo["id"], namespace_of(repo, fetched)
     p = plan(store, copies, repo, fetched, now)
-    known = {r["block"] for r in p["rows"]} | {x["block"] for x in p["errors"] if x["block"]}
-    unknown = sorted(b for b in set(choose) | set(add) | hold if b not in known)
+    unknown = unknown_blocks(p, choose, set(add) | hold)
     if unknown:
-        raise ValueError("no block %s in the plan of %s — `ctx provider plan %s` lists them" % (", ".join(unknown), rid, rid))
+        raise ValueError(no_block(unknown, rid))
     records = store.load()
     by_id = {r["id"]: r for r in records}
     mine = find_regions(records, ns)[0]

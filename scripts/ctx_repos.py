@@ -112,16 +112,20 @@ def search_only(repo):
 
 
 REG_READ_TIMEOUT_S = 3.0                                # seconds one registration may take to read (an iCloud download)
+REG_READ_DEADLINE_S = 6.0                               # …and all of them together (since v3.14)
 
 
 def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S):
     """Every registered repository, normalised, in registration order — the vaults' providers folders
     first, then `<home>/.grow-pm/providers` (or `extra_dirs` when given, as in find_registrations;
     the home is never taken from the environment). An id seen twice keeps the first. Unreadable
-    registrations — and, since v3.13.1, one not read within `timeout` seconds — are left out and, when
-    `skipped` is a list, appended to it as (path, reason)."""
+    registrations — and, since v3.13.1, one not read within `timeout` seconds, since v3.14 also one not
+    reached before REG_READ_DEADLINE_S for all of them has passed — are left out and, when `skipped`
+    is a list, appended to it as (path, reason). `timeout` None reads every file as it comes."""
     dirs = [os.path.join(home, ".grow-pm", "providers")] if extra_dirs is None else list(extra_dirs)
-    regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped, timeout=timeout)
+    deadline = None if timeout is None else time.monotonic() + REG_READ_DEADLINE_S
+    regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped, timeout=timeout,
+                                 deadline=deadline)
     return [normalise(r) for r in regs]
 
 
@@ -402,7 +406,7 @@ def reach(repo, deadline=None):
     return False, "no endpoint and no core folder in the registration"
 
 
-def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, deadline=None):
+def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, deadline=None, team=True):
     """A repository's blocks ("theirs") — read only, nothing is written anywhere.
 
     `blocks_source` decides where from: "mcp" asks the server only; "paths" reads the core folder only; "auto"
@@ -430,6 +434,9 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     every request gets what is left, none is made once it has passed (the error then says "deadline reached") — and
     the core folder is read within `cs.read_budget` of what is left, so a file iCloud never delivers costs that, not
     the store's own 30 s. `client_factory` is called as (url, headers=…, deadline=…).
+    `team` False (since v3.14; `repo status`, which wants the source's version alone) never builds the team region: the
+    blocks file is read and nothing else — the core's manifest only when it names the blocks file or the namespace —
+    and team, team_source, team_error stay empty.
 
     Returns {source: "mcp"|"folder"|None, version: the v= most blocks carry (the first met on a tie; counted
     before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks (unless `include_skipped`),
@@ -452,7 +459,7 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     with _bounded_reads(), cs.read_budget(None if deadline is None else deadline - time.monotonic()):
         blocks_file = repo["blocks_file"]
         manifest, manifest_why = None, None
-        if core_root and os.path.isdir(core_root) and (repo["team"] or not blocks_file or not explicit):
+        if core_root and os.path.isdir(core_root) and ((team and repo["team"]) or not blocks_file or not explicit):
             manifest, manifest_why = _manifest(core_root)
         if not blocks_file and manifest is not None:
             blocks_file = manifest.s("blocks_file")
@@ -487,8 +494,9 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
                     errors.append(why)
         if text is not None:                            # the team is only worth building for a fetch that succeeded
             blocks, versions = _regions(text, out["namespace"])
-            out["team"], out["team_error"] = _team_block(repo, manifest, manifest_why, in_file="team" in blocks)
-            out["team_source"] = "folder" if out["team"] is not None else None
+            if team:
+                out["team"], out["team_error"] = _team_block(repo, manifest, manifest_why, in_file="team" in blocks)
+                out["team_source"] = "folder" if out["team"] is not None else None
     if text is None:
         out["error"] = "; ".join(errors)
         out["unsound"] = out["error"] if errors and not unanswered else None

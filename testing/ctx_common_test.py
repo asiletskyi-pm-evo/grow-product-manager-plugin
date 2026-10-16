@@ -139,6 +139,42 @@ def _():
             and took < 1.5, (regs, skipped, took)
         assert skipped == [(fifo, "not available locally (still downloading?)")], skipped
 
+@case("v3.14: one deadline for every registration — three that never arrive cost the deadline, not three timeouts")
+def _():
+    import time
+    with tempfile.TemporaryDirectory() as d:
+        prov = os.path.join(d, "providers"); os.makedirs(prov)
+        open(os.path.join(prov, "zorg-a.yaml"), "w").write("schema: provider-registration/1\nid: zorg-a\nkind: bundle\n")
+        fifos = [os.path.join(prov, "zorg-%s.yaml" % x) for x in "bcd"]
+        for f in fifos:
+            os.mkfifo(f)                                            # three registrations iCloud has evicted
+        skipped, t0 = [], time.time()
+        try:
+            regs = cc.find_registrations([], extra_dirs=[prov], skipped=skipped, timeout=3.0, deadline=time.monotonic() + 1)
+        finally:
+            took = time.time() - t0
+            for f in fifos:
+                try:
+                    os.close(os.open(f, os.O_WRONLY | os.O_NONBLOCK))
+                except OSError:
+                    pass
+        assert [r["id"] for r in regs] == ["zorg-a"], regs
+        assert skipped == [(f, cc.NOT_LOCAL) for f in fifos], skipped
+        assert took < 2, took
+        skipped = []                                                # a deadline already passed: nothing is opened at all
+        regs = cc.find_registrations([], extra_dirs=[prov], skipped=skipped, deadline=time.monotonic() - 1)
+        assert regs == [] and skipped == [(os.path.join(prov, "zorg-a.yaml"), cc.NOT_LOCAL)] + [(f, cc.NOT_LOCAL) for f in fifos], skipped
+
+@case("v3.14: the provider boundary reads registrations on 3 s each and 6 s for all, and names those not read")
+def _():
+    assert (cc.BOUNDARY_READ_S, cc.BOUNDARY_DEADLINE_S) == (3.0, 6.0)
+    with tempfile.TemporaryDirectory() as d:
+        prov = os.path.join(d, "providers"); os.makedirs(prov)
+        open(os.path.join(prov, "zorg-a.yaml"), "w").write("schema: provider-registration/1\nid: zorg-a\nkind: bundle\n")
+        open(os.path.join(prov, "zorg-broken.yaml"), "w").write("id: x\na:\n  b:\n    c: d\n")
+        regs, late = cc.boundary_registrations([], extra_dirs=[prov])
+        assert [r["id"] for r in regs] == ["zorg-a"] and late == [], (regs, late)   # a broken file is no registration, not "late"
+
 @case("is_under is component-wise")
 def _():
     assert not cc.is_under("/v/Zorg_X-notes/x.md", ["/v/Zorg_X"])

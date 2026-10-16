@@ -10,7 +10,7 @@ provider_bundle.py (bundle builder). Semantics: references/context-provider-prot
 - strip_managed_regions  blank out <!-- <ns>:begin … --> … <!-- <ns>:end … --> regions,
                       keeping line numbers, so headings inside them are never counted.
 - vault_entries / vault_search_bullets  the two local-context.md sections providers use.
-- find_registrations / provider_roots / boundary_hit / is_under  the write boundary.
+- find_registrations / boundary_registrations / provider_roots / boundary_hit / is_under  the write boundary.
 - slugify / vault_modes / storage_root / find_context / managed_spans  the context store
                       (since v3.11.0, references/context-protocol.md).
 
@@ -23,6 +23,7 @@ import json
 import os
 import re
 import threading
+import time
 import unicodedata
 
 N = lambda s: unicodedata.normalize("NFC", s or "")
@@ -389,21 +390,29 @@ def _read_within(path, timeout):
     return box["text"]
 
 
-def find_registrations(entries, extra_dirs=None, skipped=None, timeout=None):
+def find_registrations(entries, extra_dirs=None, skipped=None, timeout=None, deadline=None):
     """Read `{vault}/{plugin_folder}/_System/providers/*.yaml` for every vault entry,
     plus `~/.grow-pm/providers/*.yaml` (or `extra_dirs` when given). Unreadable or
     invalid files are skipped — and listed as (path, reason) in `skipped` when a list
     is given. With `timeout` (seconds, since v3.13.1) each file is read in a daemon thread,
     and one not read within it is skipped as `not available locally (still downloading?)`.
+    `deadline` (since v3.14; a time.monotonic() moment) is one for all the files: each is read
+    within min(`timeout`, what is left), and once it has passed the rest are not opened at all —
+    each is skipped with the same reason. Without either, a file is read as it comes (no thread).
     Returns dicts with normalised `paths`, `writable`."""
     dirs = [os.path.join(v, f, "_System", "providers") for v, f in entries]
     dirs += [os.path.expanduser("~/.grow-pm/providers")] if extra_dirs is None else list(extra_dirs)
     regs, seen = [], set()
     for d in dirs:
         for p in sorted(glob.glob(os.path.join(d, "*.yaml"))):
-            why = None
+            why, limit, left = None, timeout, None
+            if deadline is not None:
+                left = deadline - time.monotonic()
+                limit = left if limit is None else min(limit, left)
             try:
-                r = read_yaml_subset(_read_within(p, timeout))
+                if left is not None and left <= 0:        # the deadline has passed: not opened at all
+                    raise _Late(p)
+                r = read_yaml_subset(_read_within(p, limit))
             except _Late:
                 why = NOT_LOCAL
             except UnicodeDecodeError:
@@ -430,6 +439,22 @@ def find_registrations(entries, extra_dirs=None, skipped=None, timeout=None):
             r["_file"] = p
             regs.append(r)
     return regs
+
+
+BOUNDARY_READ_S = 3.0          # seconds one registration may take to read for the provider boundary (an iCloud download)
+BOUNDARY_DEADLINE_S = 6.0      # …and all of them together
+
+
+def boundary_registrations(entries, extra_dirs=None):
+    """(registrations, [paths of those not read in time]) for the provider boundary — `ctx`'s guard and the write gate
+    (since v3.14): each file within BOUNDARY_READ_S, all of them within BOUNDARY_DEADLINE_S. A registration not read in
+    time may be the one whose folder holds the target, so the caller cannot call the target free: the guard refuses, the
+    gate asks. A file that was read and is no registration (broken, no id) or cannot be opened at all is left out as
+    before — it never names a folder."""
+    skipped = []
+    regs = find_registrations(entries, extra_dirs=extra_dirs, skipped=skipped, timeout=BOUNDARY_READ_S,
+                              deadline=time.monotonic() + BOUNDARY_DEADLINE_S)
+    return regs, [p for p, why in skipped if why == NOT_LOCAL]
 
 
 def provider_roots(regs):

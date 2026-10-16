@@ -2968,6 +2968,148 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the state cannot take
               and any(l.startswith("не вдалося запам'ятати відкинуте в zorg-growth:") and "наступний синк може застосувати це знову" in l
                       for l in out.splitlines()) and "не застосовуватиметься" not in out, (rc, out[-500:], res.get("rejected_failed")))
 
+# --- v3.14.0 Task 8: registrations read on a shared deadline everywhere; unknown blocks refused before the lock; repo status
+# without the team build
+import ctx_repos as crp_mod  # noqa: E402
+
+BOUNDARY_SAID = ("a registration could not be read: %s — the provider boundary cannot be checked; "
+                 "try again when it has downloaded")
+
+
+def bounded(e, timeout, *args):
+    """`e.run(*args)` that gives up after `timeout` seconds: (None, "still running …", None) then — a run that waits on a
+    registration forever fails its check instead of holding the test."""
+    rc, out = raw(e, list(args) + ["--home", e.home, "--context", e.ctx], timeout=timeout)
+    last = [l for l in out.splitlines() if l.startswith("CTX_RESULT ")]
+    return rc, out, json.loads(last[-1][len("CTX_RESULT "):]) if last else {}
+
+with tempfile.TemporaryDirectory() as d:                 # a writing command: the guard cannot check the boundary, so it refuses
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    prov = os.path.join(e.home, ".grow-pm", "providers")
+    os.makedirs(prov)
+    slow = os.path.join(prov, "zorg-slow.yaml")
+    os.mkfifo(slow)                                     # a registration iCloud has evicted: it does not arrive within 3 s
+    records, ctx_text, mirror_text, j = tree_of(os.path.join(e.store, "records")), read(e.ctx), read(e.mirror), journal_len(e)
+    try:
+        t0 = time.time(); rc, out, res = bounded(e, 30, "set", "product.zorg-app", "Jira Project Key", "SLOW"); took = time.time() - t0
+    finally:
+        unblock(slow)
+        os.remove(slow)
+    check("`ctx set` with a registration not read in time: exit 4, 'could not be read', nothing written — within 3 s and a margin",
+          rc == 4 and BOUNDARY_SAID % slow in out and tree_of(os.path.join(e.store, "records")) == records
+          and read(e.ctx) == ctx_text and read(e.mirror) == mirror_text and journal_len(e) == j and took < 9,
+          (rc, round(took, 2), out[-400:]))
+    rc, out, res = run_ok(e, "set", "product.zorg-app", "Jira Project Key", "SLOW")
+    check("…and without it the same command goes through", rc == 0 and "- **Jira Project Key:** SLOW" in read(e.ctx), (rc, out[-300:]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the daily sync: a real registration still downloading, the guard refuses
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, G_METRICS.replace("v=0.1", "v=0.2"))
+        j, ctx_text, seen = journal_len(e), read(e.ctx), len(fake.seen)
+        state = read(e.store, ".state", "blocks", "zorg-growth.json")
+        slow = os.path.join(e.home, ".grow-pm", "providers", "zorg-slow.yaml")
+        os.mkfifo(slow)
+        try:
+            t0 = time.time(); rc, out, res = bounded(e, 40, "provider", "sync", "--now", DAY1); took = time.time() - t0
+        finally:
+            unblock(slow)
+            os.remove(slow)
+        check("the daily sync with a registration iCloud has not downloaded: the guard refuses — nothing synced, nothing recorded, "
+              "no request, exit 0, within the budget",
+              rc == 0 and res.get("synced") == [] and journal_len(e) == j and read(e.ctx) == ctx_text
+              and read(e.store, ".state", "blocks", "zorg-growth.json") == state and len(fake.seen) == seen and took < 20,
+              (rc, round(took, 2), out[-400:]))
+        check("…and CTX_RESULT says why: skipped guard: <why>",
+              res.get("skipped") == "guard: " + cb_mod.clip(BOUNDARY_SAID % slow, cb_mod.NOTE_CLIP), res)
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # an unknown block is refused before the lock: nothing is imported
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        e.edit(e.ctx, "- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJW\n")      # an edit waiting to be imported
+        records, j, snaps = tree_of(os.path.join(e.store, "records")), journal_len(e), snapshot_names(e)
+        state = read(e.store, ".state", "blocks", "zorg-core.json")
+        for args in (("--add", "nosuch"), ("--choose", "nosuch=theirs"), ("--add", "scope", "nosuch")):
+            rc, out, res = apply_run(e, core, "zorg-core", *args)
+            check("`provider apply zorg-core %s` with an edit waiting: exit 3 before the lock — no import, no snapshot, no journal line"
+                  % " ".join(args), rc == 3 and "no block nosuch in the plan of zorg-core — `ctx provider plan zorg-core` lists them" in out
+                  and tree_of(os.path.join(e.store, "records")) == records and journal_len(e) == j and snapshot_names(e) == snaps
+                  and read(e.store, ".state", "blocks", "zorg-core.json") == state, (rc, out[-400:]))
+        rc, out, res = run_ok(e, "status")
+        check("…the edit still waits to be imported", rc == 0 and sum(res["pending"].values()) > 0 and "PROJW" in read(e.ctx)
+              and "PROJW" not in e.record("product.zorg-app"), (rc, out[-300:]))
+        rc, out, res = apply_run(e, core, "zorg-core", "--add", "scope")
+        check("…a known block passes the check: the apply runs (the edit imported first), the answer not needed for an '='",
+              rc == 0 and res["ignored"] == {"scope": "="} and "PROJW" in e.record("product.zorg-app"), (rc, out[-400:]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # --product: a repository outside the product is still a repository
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, patch=[("### Product: Zorg App\n", "### Product: Other\n\n- **Jira Project Key:** OTH\n\n"
+                                                                     "### Product: Zorg App\n")],
+                      core_extra="products:\n  - Zorg App\n")
+        run_ok(e, "migrate", "--apply")
+        e.edit(e.ctx, "- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJW\n")
+        records, j, asked = tree_of(os.path.join(e.store, "records")), journal_len(e), len(fake.seen)
+        for args, flag in ((("--add", "okr", "zorg-core"), "--add BLOCK [BLOCK …]"), (("--choose", "zorg-core=theirs"), "--choose BLOCK=…")):
+            rc, out, res = run_ok(e, "provider", "apply", "--product", "Other", *args)
+            check("`provider apply --product Other %s` (zorg-core serves Zorg App only): exit 3, it is a repository — nothing "
+                  "imported, no request" % " ".join(args),
+                  rc == 3 and "'zorg-core' is a repository, not a block — put the repository first: ctx provider apply <repo> %s" % flag in out
+                  and tree_of(os.path.join(e.store, "records")) == records and journal_len(e) == j and len(fake.seen) == asked,
+                  (rc, out[-400:]))
+
+with tempfile.TemporaryDirectory() as d:                 # repo status: the hint, and the version without the team build
+    e = repos_env(d, "http://127.0.0.1:9/mcp")
+    run_ok(e, "migrate", "--apply")
+    slow = os.path.join(e.home, ".grow-pm", "providers", "zorg-slow.yaml")
+    os.mkfifo(slow)
+    try:
+        rc, out, res = run_ok(e, "repo", "status", "nosuch")
+    finally:
+        unblock(slow)
+        os.remove(slow)
+    check("repo status of an unknown id while a registration was not read: exit 3, and it may still be downloading",
+          rc == 3 and "no repository 'nosuch' is registered — `ctx.py repo list` — a registration could not be read: %s (%s); "
+          "it may still be downloading" % (slow, NOT_LOCAL) in out, (rc, out[-500:]))
+    rc, out, res = run_ok(e, "repo", "status", "nosuch")
+    check("…and with every registration read, no hint", rc == 3 and "no repository 'nosuch' is registered — `ctx.py repo list`" in out
+          and "may still be downloading" not in out, (rc, out[-300:]))
+    slows = [os.path.join(e.home, ".grow-pm", "providers", "zorg-slow%d.yaml" % k) for k in range(3)]
+    for s in slows:
+        os.mkfifo(s)
+    try:
+        t0 = time.time(); rc, out, res = bounded(e, 30, "repo", "list"); took = time.time() - t0
+    finally:
+        for s in slows:
+            unblock(s)
+            os.remove(s)
+    check("repo list with three registrations that never arrive: one 6 s deadline for all of them (not 3 × 3 s), each named",
+          rc == 0 and took < 8.5 and all("unreadable registration: %s (%s)" % (s, NOT_LOCAL) in out.splitlines() for s in slows)
+          and [r["id"] for r in res["repos"]] == ["zorg-core", "zorg-dead", "zorg-growth"], (rc, round(took, 2), out[-600:]))
+    built, real_team = [], crp_mod.pb.team_context
+
+    def counting_team(*args, **kw):
+        built.append(1)
+        return real_team(*args, **kw)
+
+    crp_mod.pb.team_context = counting_team
+    try:
+        rc, out, res = in_process(e, "repo", "status", "zorg-core")
+        by_status = len(built)
+        in_process(e, "provider", "plan", "zorg-core")
+    finally:
+        crp_mod.pb.team_context = real_team
+    check("repo status reads the source's version from the blocks file alone: the team block is not built (it is for a plan)",
+          rc == 0 and by_status == 0 and len(built) > 0 and res["repos"][0]["source_version"] == "0.4"
+          and "version on source: 0.4 · base: —" in out, (rc, by_status, len(built), out[-400:]))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

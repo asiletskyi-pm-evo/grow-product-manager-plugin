@@ -83,6 +83,27 @@ with tempfile.TemporaryDirectory() as d:
     out = run({"HOME": home, "PATH": os.environ.get("PATH", ""), "CLAUDE_PLUGIN_DATA": pdata},
               {"tool_name": "Write", "tool_input": {"file_path": os.path.join(core, "Core", "Teams", "w.md")}})
     check("hosted session: context in a connected folder still guards", '"permissionDecision": "ask"' in out, out)
+    # since v3.14: a registration iCloud has not downloaded — the boundary cannot be checked, so the gate asks
+    import time
+    slow = os.path.join(regdir, "zorg-slow.yaml"); os.mkfifo(slow)
+    try:
+        t0 = time.time()
+        try:
+            out = run(env, {"tool_name": "Write", "tool_input": {"file_path": os.path.join(vault, "Notes", "Meetings", "m.md")}})
+        except subprocess.TimeoutExpired:
+            out = "the gate still waits for the registration after 20 s"
+        took = time.time() - t0
+    finally:
+        try:
+            os.close(os.open(slow, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+        os.remove(slow)
+    check("a registration that is not read in time: the gate asks (the boundary cannot be checked), within its 6 s and a margin",
+          '"permissionDecision": "ask"' in out and "could not be read" in out and "zorg-slow.yaml" in out and took < 9.5,
+          (round(took, 2), out))
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": os.path.join(vault, "Notes", "Meetings", "m.md")}})
+    check("…and once it is read again, an own path passes silently", out == "", out)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
