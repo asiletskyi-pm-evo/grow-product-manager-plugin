@@ -27,6 +27,7 @@ import re
 import shlex
 import sqlite3
 import sys
+import time
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -37,6 +38,7 @@ except Exception:
 
 MAX_LINES = 25
 REG_READ_S = 1.0     # seconds one provider registration may take to read (an iCloud download); ctx allows 3
+REG_DEADLINE_S = 2.0  # …and all of them together (since v3.14): N evicted files never cost N seconds of the hook
 ROLE_ENUM = {"pm", "head_of_product", "cpo", "product_designer", "product_analyst",
              "ux_researcher", "eng_lead", "business_owner", "other"}  # == references/role-profiles.md §2
 
@@ -155,14 +157,16 @@ def providers_info(text, extra_dirs=None, skipped=None, checked=None, daily=None
     """[(id, label)], provider roots and the bundle facts — header-level only.
     Registrations that cannot be read land in `skipped` as (path, reason). `checked` is {provider id: when the
     context store last checked it}: a day newer than the registration's `synced_at` is the day shown, and the
-    one `stale` is counted from (since v3.13.0). Each registration is read within REG_READ_S seconds (since v3.13.1): one
-    that does not arrive (iCloud) lands in `skipped` as not available locally, and never holds the session start. `daily`,
+    one `stale` is counted from (since v3.13.0). Each registration is read within REG_READ_S seconds (since v3.13.1), and
+    all of them within REG_DEADLINE_S (since v3.14): one that does not arrive (iCloud), or is not reached before that,
+    lands in `skipped` as not available locally, and never holds the session start. `daily`,
     when a list, gets the ids of the registrations that say `sync: daily` and are not paused (`_sync_active`), in the
     providers' order (since v3.14.0)."""
     if cc is None:
         return [], [], None
     entries = cc.vault_entries(text)
-    regs = cc.find_registrations(entries, extra_dirs=extra_dirs, skipped=skipped, timeout=REG_READ_S)
+    regs = cc.find_registrations(entries, extra_dirs=extra_dirs, skipped=skipped, timeout=REG_READ_S,
+                                 deadline=time.monotonic() + REG_DEADLINE_S)
     by_id, order = {}, []
     for b in cc.vault_search_bullets(text):
         by_id[b["id"]] = {"mode": b["mode"], "access": b["access"], "index": b["index"]}; order.append(b["id"])

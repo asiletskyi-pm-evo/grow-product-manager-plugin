@@ -2977,8 +2977,8 @@ BOUNDARY_SAID = ("a registration could not be read: %s — the provider boundary
 
 
 def bounded(e, timeout, *args):
-    """`e.run(*args)` that gives up after `timeout` seconds: (None, "still running …", None) then — a run that waits on a
-    registration forever fails its check instead of holding the test."""
+    """`e.run(*args)` that gives up after `timeout` seconds: (None, "still running after N s", {}) then — a run that waits
+    on a registration forever fails its check instead of holding the test. A run with no CTX_RESULT line gives {} too."""
     rc, out = raw(e, list(args) + ["--home", e.home, "--context", e.ctx], timeout=timeout)
     last = [l for l in out.splitlines() if l.startswith("CTX_RESULT ")]
     return rc, out, json.loads(last[-1][len("CTX_RESULT "):]) if last else {}
@@ -3071,7 +3071,7 @@ with tempfile.TemporaryDirectory() as d:                 # repo status: the hint
     slow = os.path.join(e.home, ".grow-pm", "providers", "zorg-slow.yaml")
     os.mkfifo(slow)
     try:
-        rc, out, res = run_ok(e, "repo", "status", "nosuch")
+        rc, out, res = bounded(e, 30, "repo", "status", "nosuch")
     finally:
         unblock(slow)
         os.remove(slow)
@@ -3081,7 +3081,7 @@ with tempfile.TemporaryDirectory() as d:                 # repo status: the hint
     rc, out, res = run_ok(e, "repo", "status", "nosuch")
     check("…and with every registration read, no hint", rc == 3 and "no repository 'nosuch' is registered — `ctx.py repo list`" in out
           and "may still be downloading" not in out, (rc, out[-300:]))
-    slows = [os.path.join(e.home, ".grow-pm", "providers", "zorg-slow%d.yaml" % k) for k in range(3)]
+    slows = [os.path.join(e.home, ".grow-pm", "providers", "zorg-slow%d.yaml" % k) for k in range(5)]   # 15 s without the deadline
     for s in slows:
         os.mkfifo(s)
     try:
@@ -3090,8 +3090,8 @@ with tempfile.TemporaryDirectory() as d:                 # repo status: the hint
         for s in slows:
             unblock(s)
             os.remove(s)
-    check("repo list with three registrations that never arrive: one 6 s deadline for all of them (not 3 × 3 s), each named",
-          rc == 0 and took < 8.5 and all("unreadable registration: %s (%s)" % (s, NOT_LOCAL) in out.splitlines() for s in slows)
+    check("repo list with five registrations that never arrive: one 6 s deadline for all of them (not 5 × 3 s), each named",
+          rc == 0 and took < 10 and all("unreadable registration: %s (%s)" % (s, NOT_LOCAL) in out.splitlines() for s in slows)
           and [r["id"] for r in res["repos"]] == ["zorg-core", "zorg-dead", "zorg-growth"], (rc, round(took, 2), out[-600:]))
     built, real_team = [], crp_mod.pb.team_context
 

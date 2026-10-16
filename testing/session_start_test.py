@@ -586,5 +586,30 @@ with tempfile.TemporaryDirectory() as d:
     check("a context outside .grow-pm: nothing written beside it", os.listdir(os.path.dirname(moved)) == ["local-context.md"]
           and "FOUND at" in out, (os.listdir(os.path.dirname(moved)), out[-400:]))
 
+# --- v3.14.0 Task 8: the registrations share one deadline in the hook too (1 s each, 2 s for all)
+NOT_LOCAL = "not available locally (still downloading?)"
+with tempfile.TemporaryDirectory() as d:
+    prov = os.path.join(d, "providers"); os.makedirs(prov)
+    slow = [os.path.join(prov, "zorg-slow%d.yaml" % k) for k in range(5)]     # five: 5 s without the deadline, 2 s with it
+    for f in slow:
+        os.mkfifo(f)                                      # registrations iCloud has evicted: their reads never end
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(example); path = f.name
+    try:
+        t0 = time.time()
+        facts = ss.parse(path, extra_dirs=[prov])
+        out = ss.digest(path, facts, [], "test")
+        took = time.time() - t0
+    finally:
+        os.unlink(path)
+        for f in slow:
+            release(f)
+    line = next((l.strip() for l in out.splitlines() if l.strip().startswith("provider registration unreadable:")), "")
+    check("registrations that never arrive cost one 2 s deadline for all of them, not 1 s each: the digest in time",
+          (ss.REG_READ_S, getattr(ss, "REG_DEADLINE_S", None)) == (1.0, 2.0) and took < 3.5 and "providers:" in out, "%.2f s" % took)
+    check("…each is named as not available locally (the digest line names the first three, as for any unreadable one)",
+          facts["unreadable_registrations"] == [(f, NOT_LOCAL) for f in slow]
+          and all("%s (%s)" % (os.path.basename(f), NOT_LOCAL) in line for f in slow[:3]), line)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

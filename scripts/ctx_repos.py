@@ -111,8 +111,8 @@ def search_only(repo):
     return not repo["blocks_file"] and not repo["core_root"]
 
 
-REG_READ_TIMEOUT_S = 3.0                                # seconds one registration may take to read (an iCloud download)
-REG_READ_DEADLINE_S = 6.0                               # …and all of them together (since v3.14)
+REG_READ_TIMEOUT_S = cc.BOUNDARY_READ_S                 # seconds one registration may take to read (an iCloud download): 3
+REG_READ_DEADLINE_S = cc.BOUNDARY_DEADLINE_S            # …and all of them together (since v3.14): 6 — the boundary's budget
 
 
 def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S):
