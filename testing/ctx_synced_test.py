@@ -54,7 +54,8 @@ def T(**blocks):
     return dict(blocks)
 
 
-EMPTY = {"choose": {}, "add": [], "hold": [], "held_removals": [], "awaiting": [], "rejected": [], "kept_yours": [], "took_rule": []}
+EMPTY = {"choose": {}, "add": [], "hold": [], "held_removals": [], "held_behind": [], "awaiting": [], "rejected": [], "kept_yours": [],
+         "took_rule": []}
 
 # ------------------------------------------------------------------ the shape
 d = decide(P(), T())
@@ -138,6 +139,24 @@ check("…two removals that are not rejected are held beside a rejected one; hol
 d = decide(P(("a", "−"), ("b", "−")), T())
 check("a block held as a removal is never also chosen, added or awaiting",
       d["choose"] == {} and d["add"] == [] and d["awaiting"] == [], d)
+
+# ------------------------------------------------------------------ v3.14.0 Task 9: a source that lags behind your bases
+def PL(*rows):
+    """A plan whose source lags (`lagging: True`, ctx_blocks.source_lags)."""
+    return dict(P(*rows), lagging=True)
+
+
+d = decide(PL(("a", "~"), ("n", "+"), ("r", "−"), ("c", "⚠"), ("q", "?"), ("e", "="), ("m", "✎"), ("x", "✂"), ("s", "·")),
+           T(a=PLAIN, n=PLAIN, c=RULE, q=RULE, e=PLAIN, m=PLAIN, x=PLAIN))
+check("a lagging plan: every row that would change a block (~ + − ⚠ ?) is held — a rule included — and named held_behind",
+      d == dict(EMPTY, hold=["a", "n", "r", "c", "q"], held_behind=["a", "n", "r", "c", "q"]), d)
+d = decide(PL(("a", "−"), ("b", "−"), ("c", "~", True)), T(c=PLAIN))
+check("…removals of a lagging copy are held as behind, not as a §6.1 removal; a rejected row stays rejected",
+      d == dict(EMPTY, hold=["a", "b", "c"], held_behind=["a", "b"], rejected=["c"]), d)
+check("…a plan that does not lag (or says nothing) acts row by row as before",
+      decide(dict(P(("a", "⚠"), ("n", "+")), lagging=False), T(a=PLAIN, n=PLAIN)) == dict(EMPTY, choose={"a": "mine"}, kept_yours=["a"], add=["n"])
+      and decide(P(("a", "⚠"), ("n", "+")), T(a=PLAIN, n=PLAIN)) == dict(EMPTY, choose={"a": "mine"}, kept_yours=["a"], add=["n"]), "")
+check("…a bare list of rows carries no lagging mark: row by row", decide([dict(block="n", sign="+")], T(n=PLAIN)) == dict(EMPTY, add=["n"]), "")
 d = decide(P(("a", "−"), ("b", "⚠"), ("c", "⚠")), T(b=PLAIN, c=RULE))
 check("the guard counts removals only: two ⚠ with a repository text beside one − are all decided as usual",
       d["held_removals"] == [] and d["choose"] == {"b": "mine", "c": "theirs"}, d)
@@ -158,7 +177,7 @@ plan = P(("eq", "="), ("new", "~"), ("mine", "✎"), ("both", "⚠"), ("law", "�
 tx = T(eq=PLAIN, new=PLAIN, mine=PLAIN, both=PLAIN, law=RULE, q=PLAIN, qlaw=RULE, add=PLAIN, again=PLAIN)
 d = decide(plan, tx)
 check("every sign at once", d == {"choose": {"both": "mine", "law": "theirs", "qlaw": "theirs"}, "add": ["add"], "hold": ["again"],
-                                  "held_removals": [], "awaiting": ["q"], "rejected": ["again"], "kept_yours": ["both"],
+                                  "held_removals": [], "held_behind": [], "awaiting": ["q"], "rejected": ["again"], "kept_yours": ["both"],
                                   "took_rule": ["law", "qlaw"]}, d)
 check("hold only names rows of the plan", set(d["hold"]) <= {r["block"] for r in plan["rows"]}
       and set(d["add"]) <= {r["block"] for r in plan["rows"]})
@@ -382,6 +401,16 @@ rej = sy.render_section(result_of(added=1, rejected=["a"]), applied(REJ_P, {"b":
 check("a rejected text: «відкинуто вами раніше», held, and the way to take it",
       any("`a`" in l and "утримано" in l and "відкинуто вами раніше" in l for l in rej.splitlines() if l.startswith("| `"))
       and "Взяти текст ядра: ctx provider apply zorg-growth --choose a=theirs" in rej, rej)
+
+# v3.14.0 Task 9: a source that lags behind your bases — every change held, said so; no conflict part for a held ?
+LAG_P = plan_of(row("a", "~"), row("q", "?"), row("e", "="), lagging=True)
+lag = sy.render_section(result_of(reason="the source is behind your bases (a copy older than the blocks you hold) — 2 blocks "
+                                          "not taken, nothing written to your records; `ctx provider plan zorg-growth` shows them"),
+                        applied(LAG_P, {"e": "="}, held={"a": "~", "q": "?"}))
+check("a lagging pass: its rows say «утримано · джерело позаду», a part names them, and no conflict part is written",
+      all(any(("`%s`" % b) in l and "утримано" in l and "джерело позаду вашої бази" in l for l in lag.splitlines() if l.startswith("| `"))
+          for b in ("a", "q")) and "### Джерело позаду вашої бази" in lag and "- `a`" in lag and "- `q`" in lag
+      and "### Конфлікт" not in lag, lag)
 
 # nothing known beyond the plan: no texts, no hosts, no apply
 bare = sy.render_section(result_of(updated=1), applied(plan_of(row("a", "~", host=None)), {"a": "~"}), None, None, None)

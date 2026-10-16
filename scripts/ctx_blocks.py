@@ -180,12 +180,12 @@ def find_regions(records, ns):
     return {k: v for k, v in found.items() if k not in bad}, errors
 
 
-def classify(mine, theirs, st, version=None):
+def classify(mine, theirs, st, lagging=False):
     """The plan's sign for one block. `mine` / `theirs`: the region text on either side, or None when absent.
     `st`: what the state remembers of the block, {"base_sha", "bases", "v", "user_removed"}, or None when there is no
-    base. `bases` holds hashes of recent versions (never their text); a hash is cs.sha_text(norm(text)). `version`
-    (since v3.14.0): the version of a source's copy that lags — `plan` passes it only when the copy's version (the `v=`
-    most of its blocks carry) is older than the one most of your bases are at; None otherwise.
+    base. `bases` holds hashes of recent versions (never their text); a hash is cs.sha_text(norm(text)). `lagging`
+    (since v3.14.0): the source's copy is known to lag behind your bases (`source_lags`: a block it carries is at an
+    older `v=` than your base of it, and none at a newer one) — `plan` says so for the whole copy.
 
     The rules apply in this order:
       "="  both are present and equal once normalised (even with no base)
@@ -193,7 +193,7 @@ def classify(mine, theirs, st, version=None):
       "✂"  yours is absent and there is a base: you removed it (flagged or not)
       the repository's is absent and yours is there — the repository removed the block:
       "?"    there is no base: nothing says yours is the repository's text
-      unless the source's copy is older than your base (`behind`): a copy made before the block came cannot remove it
+      unless the source's copy lags (`lagging`, `behind`): a copy older than your bases cannot tell a removal
       "="    …yours is the base (or an older base): nothing moves
       "✎"    …you changed it: your edit stays, nothing moves
       "−"    yours is the base (or an older base): you never changed it, remove it
@@ -220,7 +220,7 @@ def classify(mine, theirs, st, version=None):
     if st.get("base_sha"):
         known.add(st["base_sha"])
     if nt is None:
-        if behind(mine, None, st, version):
+        if behind(mine, None, st, lagging):
             return "=" if cs.sha_text(nm) in known else "✎"
         return "−" if cs.sha_text(nm) in known else "⚠"
     if behind(mine, theirs, st):
@@ -252,25 +252,43 @@ def _older(a, b):
     return ka is not None and kb is not None and ka < kb
 
 
-def behind(mine, theirs, st, version=None):
+def behind(mine, theirs, st, lagging=False):
     """Does the source lag behind your base of a block? A copy of the source that lags (an MCP mirror not updated yet,
     a folder restored from a backup) would otherwise read as "the repository moved" — an apply would take your block a
     version back, or remove a block the copy does not have yet. Two cases:
       - it offers an older base of a block whose base yours is;
-      - it does not offer the block (`theirs` None) and its `version` — given only for a copy that lags (see
-        `classify`) — is older than the version of your base (the state's `v`), since v3.14.0: a block added after that
-        copy was made is not in it, which is no removal.
+      - it does not offer a block you hold a base for, and the copy as a whole is known to lag (`lagging`, see
+        `source_lags`), since v3.14.0: a block added after that copy was made is not in it, which is no removal.
     The plan says "=" with a note ("✎" for a block you edited that the copy lacks) and apply writes nothing: the base
     stays."""
     if mine is None or not st or not st.get("base_sha"):
         return False
     if theirs is None:
-        return _older(version, st.get("v"))
+        return bool(lagging)
     nm, nt = norm(mine), norm(theirs)
     if nm == nt:
         return False
     sm, sh = cs.sha_text(nm), cs.sha_text(nt)
     return sm == st["base_sha"] and sh != st["base_sha"] and sh in set(st.get("bases") or ())
+
+
+def source_lags(state, fetched, skip=()):
+    """Does the source's copy lag behind your bases — on positive evidence only (since v3.14.0)? Among the blocks the
+    copy's blocks file carries (`fetched["blocks"]`; neither a skipped block nor a team block the core folder builds, on
+    either side), at least one is at an older `v=` than your base of it (the state's `v`), and none is at a newer one.
+    Blocks with no base, with the same version, or with a version that does not order (`_version_key`) say nothing. A
+    core whose blocks carry their own versions is never "behind" for a block it removed while the others stay: the
+    evidence is in the blocks it still carries."""
+    built = fetched.get("team") is not None or bool(fetched.get("team_error"))
+    older = newer = False
+    for bid, text in (fetched.get("blocks") or {}).items():
+        entry = (state.get("blocks") or {}).get(bid)
+        if bid in skip or (bid == "team" and built) or not entry or not (entry.get("base_sha") or entry.get("bases")):
+            continue
+        theirs_v, yours_v = _marker_version(text), entry.get("v")
+        older = older or _older(theirs_v, yours_v)
+        newer = newer or _older(yours_v, theirs_v)
+    return older and not newer
 
 
 # ------------------------------------------------------------------ the store's memory of a repository
@@ -734,7 +752,7 @@ def plan(store, copies, repo, fetched, now, all_=False):
 
     Returns {"repo", "source" ("mcp" | "folder"), "source_label", "version" (the repository's), "base_version" ("—" when no
     block has a base), "rows": [{"block", "sign", "host", "source", "note", "diff"?, "behind"?, "rejected"?, "rule"?}],
-    "questions", "changes", "errors"}.
+    "questions", "changes", "errors", "lagging"}.
 
     The rows are the blocks in your records (the pending edits of local-context.md count: the live view) followed by
     those only the repository offers; a block absent on both sides is none. `host` is the record that holds your
@@ -746,10 +764,11 @@ def plan(store, copies, repo, fetched, now, all_=False):
     distinct hosts of the rows "~" and "−" — a `rejected` row counts in neither, since apply holds it. `errors` are
     `find_regions`' problems (a block with one has no row).
     A "=" row whose source lags behind your base (`behind`) carries `behind: True` and the note
-    "джерело позаду вашої бази (v<theirs> < v<yours>)" — since v3.14.0 also a block the source's copy lacks while that
-    copy lags: its version (`fetched["version"]`) is older than the one most of your bases are at (`base_version`) and
-    than your base of the block — "=", or "✎" when you edited it, never "−" or "⚠". (A core whose blocks carry their
-    own versions keeps its version where most blocks are: removing one block of a newer version is still "−".)
+    "джерело позаду вашої бази (v<theirs> < v<yours>)". `lagging` (since v3.14.0) says the whole copy lags behind your
+    bases, on positive evidence (`source_lags`: a block it carries is at an older `v=` than your base of it, none at a
+    newer one); then a block you hold a base for that the copy lacks is "=" with the note "джерело позаду вашої бази"
+    ("✎" when you edited it), never "−" or "⚠". The daily sync holds every row that would change something on such a
+    plan (ctx_synced.decide); a manual apply acts row by row.
     A row that offers the repository's text or its removal ("~", "+", "−", "⚠", "?") whose offer (`offered`: the hash
     of the text, or "removed") is among the state's `rejected` for the block carries `rejected: True` and the note
     "відкинуто вами — не застосовується, доки ядро не змінить блок"; the sign stays `classify`'s. A row whose
@@ -773,7 +792,7 @@ def plan(store, copies, repo, fetched, now, all_=False):
     if team_error and "team" not in ids and "team" not in bad:
         ids.append("team")
     rows, version = [], fetched.get("version")
-    lagging = version if _older(version, base_version(state)) else None   # the copy is older than most of your bases
+    lagging = source_lags(state, fetched, skip)          # positive evidence in the blocks the copy carries
     for bid in ids:
         m, t, entry = mine.get(bid), theirs.get(bid), state["blocks"].get(bid)
         row = {"block": bid, "sign": SKIPPED, "host": m["host"] if m else None, "source": where.get(bid), "note": ""}
@@ -791,8 +810,7 @@ def plan(store, copies, repo, fetched, now, all_=False):
             lags = row["sign"] in ("=", "✎") and behind(m["text"] if m else None, t, held, lagging)
             row["note"] = REMOVED_NOTES[row["sign"]] if t is None and row["sign"] in REMOVED_NOTES else NOTES[row["sign"]]
             if lags:                                     # the copy lags: its text is an older base, or it lacks the block
-                vm, vt = ((_marker_version(m["text"]), _marker_version(t)) if t is not None
-                          else ((held or {}).get("v") or "", lagging or ""))
+                vm, vt = (_marker_version(m["text"]), _marker_version(t)) if t is not None else ("", "")
                 row["behind"] = True
                 row["note"] = clip(BEHIND_NOTE + (" (v%s < v%s)" % (clip(vt, HEADER_CLIP), clip(vm, HEADER_CLIP))
                                                   if vm and vt and vm != vt else ""), NOTE_CLIP)
@@ -820,7 +838,7 @@ def plan(store, copies, repo, fetched, now, all_=False):
             "base_version": clip(base_version(state) or "—", HEADER_CLIP), "rows": rows,
             "questions": sum(1 for r in open_rows if r["sign"] in QUESTIONS),
             "changes": len({r["host"] for r in open_rows if r["sign"] in REWRITES and r["host"]}),
-            "errors": [dict(x) for x in problems if all_ or x["block"] not in skip]}
+            "errors": [dict(x) for x in problems if all_ or x["block"] not in skip], "lagging": lagging}
 
 
 def unknown_blocks(p, choose, add):

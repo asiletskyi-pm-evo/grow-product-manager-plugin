@@ -26,6 +26,8 @@ answers come from one place:
 (§5.1, §5.2, §6.1):
 
 1. a text you rejected by undoing a sync pass (`rejected: True`) is held, whatever else it is — a rule included
+1a. a plan whose source lags behind your bases (`lagging`, since v3.14.0) holds every other row that would change a block
+   (~ + − ⚠ ?), a rule included: nothing is taken from a copy older than what you hold
 2. more than one block the repository removed in a pass (a "−", or a "⚠" / "?" whose repository text is None) is held,
    none of them goes through; a rejected row is held already and is not counted
 3. "⚠" takes the repository's text when it is a core rule (`ctx_blocks.is_rule`, read from the begin marker of the
@@ -48,6 +50,10 @@ The outcome of a repository's pass (§4.3, §6):
                      fetch that raised (a bug, never blamed on the network), or anything else (its message); retried in
                      an hour
 
+A pass over a source that lags behind your bases (the plan's `lagging`) holds every block it would have changed
+(`decide` 1a): it writes no record, and its reason says the source is behind — "no-changes" (or "changed" when only the
+block state moved), a successful check.
+
 Stdlib only.
 """
 import contextlib
@@ -68,6 +74,7 @@ import ctx_store as cs  # noqa: E402
 
 MINE, THEIRS = "mine", "theirs"
 QUESTIONS = ("⚠", "?")                              # the signs that need an answer when apply is not told one
+CHANGES = ("~", "+", "−", "⚠", "?")                 # the signs whose row would change a block: a lagging copy holds them all
 
 
 def _rows(plan):
@@ -80,15 +87,19 @@ def decide(plan, theirs):
     block absent from it (or None). Nothing is read or written, and nothing passed in is changed.
 
     Returns {"choose": {block: "mine" | "theirs"}, "add": [block], "hold": [block], "held_removals": [block],
-    "awaiting": [block], "rejected": [block], "kept_yours": [block], "took_rule": [block]} — the lists in plan order.
-    `hold` names only blocks that are rows of the plan, and no block is in more than one of `choose`, `add` and
-    `hold`. Whether a block is a core rule is read from the repository's text (`theirs`), never from the row."""
+    "held_behind": [block], "awaiting": [block], "rejected": [block], "kept_yours": [block], "took_rule": [block]} — the
+    lists in plan order. `hold` names only blocks that are rows of the plan, and no block is in more than one of
+    `choose`, `add` and `hold`. Whether a block is a core rule is read from the repository's text (`theirs`), never from
+    the row. A plan that says its source lags (`lagging`, since v3.14.0: `ctx_blocks.source_lags`) holds every row that
+    would change something ("~", "+", "−", "⚠", "?") — `held_behind`, a rule included, a rejected one still `rejected`:
+    a copy older than your bases never takes a block back to an older text, never removes or re-adds one."""
     theirs = theirs or {}
     rows = _rows(plan)
-    removed = [r["block"] for r in rows if not r.get("rejected")
+    behind = isinstance(plan, dict) and bool(plan.get("lagging"))
+    removed = [r["block"] for r in rows if not r.get("rejected") and not behind
                and (r["sign"] == "−" or (r["sign"] in QUESTIONS and theirs.get(r["block"]) is None))]
     guarded = set(removed) if len(removed) > 1 else set()          # §6.1: the repository removed more than one block
-    out = {"choose": {}, "add": [], "hold": [], "held_removals": [], "awaiting": [], "rejected": [],
+    out = {"choose": {}, "add": [], "hold": [], "held_removals": [], "held_behind": [], "awaiting": [], "rejected": [],
            "kept_yours": [], "took_rule": []}
     for row in rows:
         bid, sign = row["block"], row["sign"]
@@ -96,6 +107,9 @@ def decide(plan, theirs):
         if row.get("rejected"):
             out["hold"].append(bid)
             out["rejected"].append(bid)
+        elif behind and sign in CHANGES:
+            out["hold"].append(bid)
+            out["held_behind"].append(bid)
         elif bid in guarded:
             out["hold"].append(bid)
             out["held_removals"].append(bid)
@@ -303,11 +317,14 @@ def _pass(c, repo, now, until, facts=None):
             facts.update(_conflicts(c.store, repo, fetched, plan, theirs))
         res = cb.apply(c.store, c.copies, c.home, repo, fetched, answers["choose"], answers["add"], now, op=OP,
                        hold=answers["hold"])
-    gone = answers["held_removals"]
+    gone, lag = answers["held_removals"], answers["held_behind"]
     outcome = "held" if gone else ("changed" if res["changed"] else "no-changes")
     shown = cb.clip(rid, cb.HEADER_CLIP)
     reason = ("the core removed %d blocks you hold — none removed (§6.1); `ctx provider plan %s` shows them, "
               "`ctx provider apply %s` removes them" % (len(gone), shown, shown)) if gone else None
+    if plan.get("lagging"):                         # a copy older than your bases: nothing of it was taken
+        reason = ("the source is behind your bases (a copy older than the blocks you hold) — %d block%s not taken, nothing "
+                  "written to your records; `ctx provider plan %s` shows them" % (len(lag), "" if len(lag) == 1 else "s", shown))
     return _result(now, outcome, reason, snapshot=res["snapshot"], kept_yours=answers["kept_yours"],
                    took_rule=answers["took_rule"], awaiting=answers["awaiting"], held=gone, rejected=answers["rejected"],
                    **_counts(res, theirs)), res, False
@@ -449,14 +466,16 @@ def _side(caption, text, where):
 
 def _verdict(row, apply, result):
     """(decision, why, kind) of one row of the plan that offers something, in the cascade's own words (§5.1, §5.2, §6.1).
-    `kind` is what became of the block: "rejected", "held", "mine", "theirs", "added", "removed", "taken" (a "~"),
-    "waits" or "refused"."""
+    `kind` is what became of the block: "rejected", "held", "lagging" (held: the source lags behind your bases), "mine",
+    "theirs", "added", "removed", "taken" (a "~"), "waits" or "refused"."""
     bid, sign, gone = row["block"], row["sign"], row.get("source") is None
     if row.get("rejected") or bid in result["rejected"]:
         return "утримано", "відкинуто вами раніше", "rejected"
     if bid in result["held"]:
         n = len(result["held"])
         return "не прибрано", "запобіжник: ядро прибрало %d %s — не прибрано" % (n, cs.blocks_word(n)), "held"
+    if (apply.get("plan") or {}).get("lagging") and bid in (apply.get("held") or {}):
+        return "утримано", "джерело позаду вашої бази — з нього нічого не взято", "lagging"
     decided = (apply.get("decisions") or {}).get(bid)
     if decided is None:
         if bid in (apply.get("pending") or ()):
@@ -527,9 +546,9 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None, 
     The heading is `## <id> · HH:MM · джерело <label> · ядро v<v> · база v<a> → v<b>` (only `## <id> · HH:MM` with no
     plan). Then the table `| Блок | Знак | Рішення | Чому | Запис |` — a row for every block the repository offered
     something for (~ + − ⚠ ?), in the cascade's words; the part of every ⚠ and ? with both texts (REPORT_LINES lines each)
-    and the command that takes the core's; what the safeguard held and what to do; the texts you rejected before; and the
-    last line, the way back (`Відкотити цей прохід: ctx undo (знімок <folder>)`) or that there is none — or, for an
-    unexpected failure that may have written before it failed, that the snapshot is unknown and `ctx status` shows the journal."""
+    and the command that takes the core's; what the safeguard held and what to do; what a source behind your bases held
+    (since v3.14.0); the texts you rejected before; and the last line, the way back (`Відкотити цей прохід: ctx undo
+    (знімок <folder>)`) or that there is none — or, for an unexpected failure that may have written before it failed, that the snapshot is unknown and `ctx status` shows the journal."""
     rid = cb.clip(result["repo"], cb.HEADER_CLIP)
     at = result.get("at") or ""
     plan = (apply or {}).get("plan")
@@ -561,7 +580,7 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None, 
             blocks.append(["Тексти не змінились: пройшло лише оновлення бази порівняння."])
         for r in rows:
             kind = verdicts[r["block"]][2]
-            if r["sign"] in QUESTIONS and kind not in ("rejected", "held"):
+            if r["sign"] in QUESTIONS and kind not in ("rejected", "held", "lagging"):
                 blocks.append(_conflict(r, kind, apply, texts, result["repo"], r.get("host") or (hosts or {}).get(r["block"])))
         if result["held"]:
             n = len(result["held"])
@@ -570,6 +589,11 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None, 
                            "застосовано як зазвичай.", ""] + ["- %s" % _code(b) for b in result["held"]])
             blocks.append(["Подивитись: ctx provider plan %s" % rid])
             blocks.append(["Прибрати руками: ctx provider apply %s" % rid])
+        lagged = [r["block"] for r in rows if verdicts[r["block"]][2] == "lagging"]
+        if lagged:
+            blocks.append(["### Джерело позаду вашої бази", "",
+                           "Копія ядра старша за твої бази, тож синк нічого з неї не взяв: блоки, які вона змінила б, утримано. "
+                           "Наступний синк перевірить знову.", ""] + ["- %s" % _code(b) for b in lagged])
         back = [r for r in rows if verdicts[r["block"]][2] == "rejected"]
         if back:
             blocks.append(["### Відкинуто вами раніше", "", "Ці тексти ядра не застосовуються, доки ядро не змінить блок:"] + [""] +

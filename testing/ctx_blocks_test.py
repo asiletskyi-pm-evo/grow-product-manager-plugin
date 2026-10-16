@@ -1595,26 +1595,48 @@ check("…a block of ordinary length carries no note", "note" not in cb._differe
 
 # --- v3.14.0 Task 9: a copy of the source that lags lacks the newest blocks — that is behind, never a removal
 A2V = dict(st(A2), v="0.3")
-check("classify: the source does not offer a block and its version is older than your base's → '=' (the copy lags)",
-      cb.classify(A2, None, A2V, version="0.2") == "=" and cb.behind(A2, None, A2V, "0.2"), "")
-check("…the same version, a newer one, or none known → '−' as before (the core removed it)",
-      cb.classify(A2, None, A2V, version="0.3") == "−" and cb.classify(A2, None, A2V, version="0.4") == "−"
-      and cb.classify(A2, None, A2V) == "−" and cb.classify(A2, None, st(A2), version="0.2") == "−"
-      and not cb.behind(A2, None, A2V, "0.3") and not cb.behind(A2, None, A2V, None), "")
-check("…versions compare as numbers: 0.9 is older than 0.10, 1.0 is 1, dates in order; a word is no version",
-      cb.classify(A2, None, dict(A2V, v="0.10"), version="0.9") == "="
-      and cb.classify(A2, None, dict(A2V, v="1"), version="1.0") == "−"
-      and cb.classify(A2, None, dict(A2V, v="2026-10-15"), version="2026-10-01") == "="
-      and cb.classify(A2, None, A2V, version="beta") == "−" and cb.classify(A2, None, dict(A2V, v="next"), version="0.1") == "−"
-      and cb.classify(A2, None, A2V, version="0." + "9" * 40) == "−", "")
+check("classify: the source does not offer a block you hold a base for, and its copy lags → '=' (behind)",
+      cb.classify(A2, None, A2V, lagging=True) == "=" and cb.behind(A2, None, A2V, True), "")
+check("…a copy that is not known to lag → '−' as before (the core removed it); no base → '?' either way",
+      cb.classify(A2, None, A2V) == "−" and cb.classify(A2, None, A2V, lagging=False) == "−" and not cb.behind(A2, None, A2V, False)
+      and cb.classify(A2, None, None, lagging=True) == "?", "")
 check("…a block you edited that a lagging copy lacks keeps your edit: '✎', never '⚠' (the sync would detach it)",
-      cb.classify(B, None, dict(st(A), v="0.3"), version="0.2") == "✎" and cb.classify(B, None, dict(st(A), v="0.3"), version="0.3") == "⚠", "")
-check("…and with the source's text there the version plays no part",
-      cb.classify(A2, A0, dict(st(A2, bases=[A0, A1, A2]), v="0.3"), version="0.9") == "="
-      and cb.classify(A0, A1, dict(st(A0), v="0.1"), version="0.0") == "~", "")
+      cb.classify(B, None, dict(st(A), v="0.3"), lagging=True) == "✎" and cb.classify(B, None, dict(st(A), v="0.3")) == "⚠", "")
+check("…and with the source's text there, lagging plays no part: a text you never held is still '~' row by row",
+      cb.classify(A2, A0, dict(st(A2, bases=[A0, A1, A2]), v="0.3"), lagging=True) == "="
+      and cb.classify(A2, C, A2V, lagging=True) == "~", "")
+
+
+def lag_state(**vs):
+    """A state whose blocks hold a base at the given versions (block → v)."""
+    return {"blocks": {b: dict(st(region(b, v, b)), v=v) for b, v in vs.items()}}
+
+
+def lag_copy(**vs):
+    return {"blocks": {b: region(b, v, b + " text") for b, v in vs.items()}}
+
+
+check("source_lags: one block the copy carries is at an older v= than your base of it, none newer → the copy lags",
+      cb.source_lags(lag_state(scope="0.5", teams="0.4"), lag_copy(scope="0.4", teams="0.4")) is True, "")
+check("…one older and one newer → no evidence of a lag (a core whose blocks carry their own versions)",
+      cb.source_lags(lag_state(scope="0.5", teams="0.4"), lag_copy(scope="0.4", teams="0.5")) is False, "")
+check("…the same versions, versions that do not order, blocks with no base, a block only one side has → no lag",
+      not cb.source_lags(lag_state(scope="0.5"), lag_copy(scope="0.5"))
+      and not cb.source_lags(lag_state(scope="next"), lag_copy(scope="0.1"))
+      and not cb.source_lags({"blocks": {"scope": {"base_sha": None, "bases": [], "v": "0.5"}}}, lag_copy(scope="0.4"))
+      and not cb.source_lags(lag_state(okr="0.5"), lag_copy(scope="0.4")), "")
+check("…versions compare as numbers: 0.9 is older than 0.10, 1.0 is 1, dates in order",
+      cb.source_lags(lag_state(scope="0.10"), lag_copy(scope="0.9")) and not cb.source_lags(lag_state(scope="1"), lag_copy(scope="1.0"))
+      and cb.source_lags(lag_state(scope="2026-10-15"), lag_copy(scope="2026-10-01"))
+      and not cb.source_lags(lag_state(scope="0.5"), lag_copy(scope="0." + "9" * 40)), "")
+check("…a skipped block counts on neither side, nor does a team block the core folder builds",
+      not cb.source_lags(lag_state(product="0.5", scope="0.4"), lag_copy(product="0.4", scope="0.4"), {"product"})
+      and cb.source_lags(lag_state(product="0.5", scope="0.4"), lag_copy(product="0.4", scope="0.4"))
+      and not cb.source_lags(lag_state(team="0.5"), dict(lag_copy(team="0.4"), team="built from the folder"))
+      and cb.source_lags(lag_state(product="0.4", scope="0.5"), lag_copy(product="0.9", scope="0.4"), {"product"}), "")
 
 OKR_05 = region("okr", "0.5", "### OKR\n- grow, the 0.5 way")
-LAG = "джерело позаду вашої бази (v0.4 < v0.5)"
+LAG = "джерело позаду вашої бази"
 
 
 def release_05(store, **over):
@@ -1635,11 +1657,22 @@ with tempfile.TemporaryDirectory() as d:
     check("plan: a lagging copy (v0.4) lacks the block your base has at v0.5 → '=' «джерело позаду», no change, no question",
           cb.base_version(state_before) == "0.5" and state_before["blocks"]["okr"]["v"] == "0.5" and row["sign"] == "="
           and row["note"] == LAG and row.get("behind") is True and p["changes"] == 0 and p["questions"] == 0
-          and signs_of(p) == {"scope": "=", "teams": "=", "team": "=", "okr": "="}, (signs_of(p), row))
+          and signs_of(p) == {"scope": "=", "teams": "=", "team": "=", "okr": "="} and p["lagging"] is True, (signs_of(p), row))
+    check("…the plan of the current copy is not lagging", plan_of(store, copies, release_05(store))["lagging"] is False, "")
     import ctx_synced as sy  # noqa: E402
     d_lag = sy.decide(p, cb._theirs(published(store))[0])
     check("…the daily sync's cascade leaves it alone: no removal held, nothing chosen",
           "okr" not in d_lag["held_removals"] and "okr" not in d_lag["choose"] and "okr" not in d_lag["hold"], d_lag)
+    rollback = published(store)
+    rollback["blocks"]["teams"] = region("teams", "0.4", "### Teams map\n- Alpha only (a wording you never held)")
+    p_rb = plan_of(store, copies, rollback)
+    d_rb = sy.decide(p_rb, cb._theirs(rollback)[0])
+    teams_before = body_of(store, HOST_NOTES)
+    res_rb = apply_of(home, text, copies, store, rollback, choose=d_rb["choose"], add=d_rb["add"], hold=d_rb["hold"])
+    check("a lagging copy offering an older text you never held: '~' row by row in the plan, but the sync holds it — "
+          "the region keeps your v0.5 text", p_rb["lagging"] is True and signs_of(p_rb)["teams"] == "~"
+          and d_rb["hold"] == ["teams"] and d_rb["held_behind"] == ["teams"] and res_rb["held"] == {"teams": "~"}
+          and NEW_TEAMS in body_of(store, HOST_NOTES) and body_of(store, HOST_NOTES) == teams_before, (signs_of(p_rb), d_rb))
     res = apply_of(home, text, copies, store, published(store, checked=LATER))
     check("apply writes nothing: your v0.5 region and its base stay, only the time of the check moves",
           res["changed"] is False and res["written"] == [] and body_of(store, okr_host) == body and OKR_05 in body
@@ -1671,9 +1704,40 @@ with tempfile.TemporaryDirectory() as d:                      # a core whose blo
     f_okr["blocks"]["okr"] = OKR_05                               # one new block at v0.5, the others stay at v0.4
     apply_of(home, text, copies, store, f_okr, add=["okr"])
     p = plan_of(store, copies, published(store))                  # …and it is gone again: the source's version is still v0.4
-    check("a core whose blocks carry their own versions: removing the one at v0.5 while most stay at v0.4 is '−' — "
-          "the copy is no older than most of your bases", cb.base_version(cb.load_state(store, "zorg-core")) == "0.4"
-          and signs_of(p)["okr"] == "−" and not row_of(p, "okr").get("behind"), signs_of(p))
+    check("a core whose blocks carry their own versions: removing the one at v0.5 while the others stay at v0.4 is '−' — "
+          "the blocks the copy still carries are at your bases' versions", signs_of(p)["okr"] == "−"
+          and not row_of(p, "okr").get("behind") and p["lagging"] is False, signs_of(p))
+
+
+def majority(f):
+    """The version `fetch` gives a blocks file: the v= most of its blocks carry, skipped ones counted (as fetch counts)."""
+    import collections
+    count = collections.Counter(cb._marker_version(t) for t in f["blocks"].values() if cb._marker_version(t))
+    return count.most_common(1)[0][0] if count else None
+
+
+SCOPE5 = region("scope", "0.5", "### Scope of work\nThe user works on Zorg App and Lite.")
+with tempfile.TemporaryDirectory() as d:                      # the review's probe: one block bumped, one added, then one removed
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f1 = published(store)
+    f1["blocks"].update(scope=SCOPE5, okr=OKR_05)                 # scope → v0.5, a new okr at v0.5; teams, product stay v0.4
+    f1["version"] = majority(f1)
+    apply_of(home, text, copies, store, f1, add=["okr"])
+    f2 = published(store)
+    f2["blocks"].update(scope=SCOPE5)                             # the core removes okr; its majority is v0.4 (product counted)
+    f2["version"] = majority(f2)
+    p = plan_of(store, copies, f2)
+    d2 = sy.decide(p, cb._theirs(f2)[0])
+    check("probe: base v0.5 by majority, the core removes okr while scope stays v0.5 and teams v0.4 → okr '−', not '='; "
+          "no lag; the sync removes it (a lone removal)", cb.base_version(cb.load_state(store, "zorg-core")) == "0.5"
+          and f2["version"] == "0.4" and signs_of(p)["okr"] == "−" and not row_of(p, "okr").get("behind") and p["lagging"] is False
+          and d2["hold"] == [] and d2["held_behind"] == [], (signs_of(p), row_of(p, "okr"), d2))
+    f3 = published(store)                                         # a copy from before scope moved: scope v0.4, no okr
+    p3 = plan_of(store, copies, f3)
+    check("…and a true lagging copy — scope older than your base, none newer — is behind: okr '=', the plan lagging",
+          p3["lagging"] is True and signs_of(p3)["okr"] == "=" and row_of(p3, "okr").get("behind") is True
+          and signs_of(p3)["scope"] == "=", signs_of(p3))
 
 # --- v3.14.0 Task 9: a team block that cannot be built from what the core has is '·', the region you hold untouched
 TEAM_GAP = "team block: not available (team card not found)"

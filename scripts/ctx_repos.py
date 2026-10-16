@@ -164,20 +164,25 @@ class _Gap(Exception):
     """A file the team block cannot do without is not there or cannot be read; the message is the reason."""
 
 
+NOT_YET = " — not downloaded yet"                 # after a card that did not arrive within the budget (cs.StoreError)
+
+
 def _team_reader(card, pdir):
     """`_read_bounded` for the team build: the team card or a person card that cannot be read (not there by now, not
     UTF-8, no permission, not arrived within the budget) is a _Gap — "team card cannot be read", "a person card
-    cannot be read: <its name>"; any other file's failure comes back as it is."""
+    cannot be read: <its name>", with NOT_YET after it when the time budget ran out (iCloud still downloading it); any
+    other file's failure comes back as it is."""
     card, pdir = os.path.normpath(card), os.path.normpath(pdir)
 
     def read(path):
         try:
             return _read_bounded(path)
-        except Exception:
+        except Exception as e:
+            late = NOT_YET if isinstance(e, cs.StoreError) else ""
             if os.path.normpath(path) == card:
-                raise _Gap("team card cannot be read")
+                raise _Gap("team card cannot be read" + late)
             if os.path.normpath(os.path.dirname(path)) == pdir:
-                raise _Gap("a person card cannot be read: %s" % os.path.basename(path))
+                raise _Gap("a person card cannot be read: %s%s" % (os.path.basename(path), late))
             raise
     return read
 
@@ -261,7 +266,8 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
     no Jira, no members) that the daily sync would apply as an unattended "~". Since v3.14.0 neither is built: the
     reasons are "team card not found" (no card file, or its folder is not there or cannot be listed), "team card cannot
     be read", "people folder not found" and "a person card cannot be read: <its name>" (any card of the people
-    folder the builder reads — one that is not UTF-8, not readable or not arrived within the budget)."""
+    folder the builder reads — one that is not UTF-8 or not readable; " — not downloaded yet" after a card that did not
+    arrive within the budget)."""
     team, core_root = repo["team"], repo["core_root"]
     if not team:
         return None, None

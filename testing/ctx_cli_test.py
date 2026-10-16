@@ -2940,6 +2940,43 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a block the core remo
         check("…and the next sync does not remove it again", region_in(read(e.ctx), "zorg-growth", "growth-okr") == G_OKR
               and res["results"][0]["rejected"] == ["growth-okr"] and res["results"][0]["removed"] == 0, (res["results"][0], out[-300:]))
 
+def e_journal(e):
+    return [json.loads(l) for l in read(e.store, ".state", "journal.jsonl").strip().splitlines() if l.strip()]
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # v3.14.0 Task 9: a copy that lags behind your bases is never taken
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        v2 = core_metrics_v("0.2", "weekly buyers")
+        fake.tree[GROWTH_PATH] = growth_blocks(v2, G_TEAM)
+        run_ok(e, "provider", "sync", "--now", DAY1)                           # your base of growth-metrics is now v0.2
+        took_v2 = region_in(read(e.ctx), "zorg-growth", "growth-metrics") == v2
+        before, n_journal = read(e.ctx), len(e_journal(e))
+        older = core_metrics_v("0.1", "weekly visitors")                         # a v0.1 wording you never held: a "~" back
+        fake.tree[GROWTH_PATH] = growth_blocks(older, G_TEAM)                   # …from a mirror not updated yet
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2)
+        r0 = res["results"][0]
+        check("a lagging copy offering an older text for a block your base has at v0.2: the sync takes nothing — the "
+              "region, the copies and the journal's record writes stay; the reason says the source is behind",
+              took_v2 and rc == 0 and read(e.ctx) == before and region_in(read(e.ctx), "zorg-growth", "growth-metrics") == v2
+              and r0["outcome"] in ("no-changes", "changed") and r0["updated"] == 0 and r0["removed"] == 0
+              and not any(j.get("ids") for j in e_journal(e)[n_journal:])
+              and (r0["reason"] or "").startswith("the source is behind your bases") and "1 block not taken" in r0["reason"]
+              and "Ядро оновило" not in out, (r0, out[-300:]))
+        rc, out, res = run_ok(e, "provider", "plan", "zorg-growth")
+        check("…a manual plan still shows the row as it is ('~'), for a person to decide",
+              rc == 0 and any(l.startswith("~") and "growth-metrics" in l for l in out.splitlines()), out[-400:])
+        v3 = core_metrics_v("0.3", "weekly loyal buyers")
+        fake.tree[GROWTH_PATH] = growth_blocks(v3, G_TEAM)                      # the current copy: newer than your base
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2_PLUS_2H)
+        r0 = res["results"][0]
+        check("…a current copy is unaffected: the sync takes its v0.3 text as usual",
+              rc == 0 and region_in(read(e.ctx), "zorg-growth", "growth-metrics") == v3 and r0["updated"] == 1
+              and not (r0["reason"] or "").startswith("the source is behind"), (r0, out[-300:]))
+
 with tempfile.TemporaryDirectory() as d:                 # an undo with no sync pass in it says nothing of the kind
     e = Env(d)
     run_ok(e, "migrate", "--apply")

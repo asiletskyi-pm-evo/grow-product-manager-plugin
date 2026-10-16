@@ -743,8 +743,9 @@ with tempfile.TemporaryDirectory() as d:
     check("a people card that never arrives → no team block within the budget, the blocks stay",
           fsl["source"] == "folder" and fsl["blocks"] == f["blocks"] and fsl["team"] is None and fsl["team_source"] is None
           and fsl["error"] is None and time.time() - t0 < 5, (fsl, time.time() - t0))
-    check("…and the team error says why: a person card cannot be read, which one, nothing else (since v3.14)",
-          fsl["team_error"] == "team block: not available (a person card cannot be read: zz-slow.md)", fsl["team_error"])
+    check("…and the team error says why: a person card cannot be read, which one, that it is not downloaded yet (since v3.14)",
+          fsl["team_error"] == "team block: not available (a person card cannot be read: zz-slow.md — not downloaded yet)",
+          fsl["team_error"])
     try:
         os.close(os.open(pipe, os.O_WRONLY | os.O_NONBLOCK))
     except OSError:
