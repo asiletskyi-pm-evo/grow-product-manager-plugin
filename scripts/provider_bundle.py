@@ -72,12 +72,12 @@ AUTHORITY_RANK = {"personal": 100, "team": 500, "org": 1000}    # the rank a reg
 DEFAULT_RANK = AUTHORITY_RANK["team"]                           # an authority that is none of the three
 
 
-READ = None     # a caller that must not hang on a file iCloud has not downloaded (ctx_repos.fetch) sets a reader here: path -> text
-
-
-def rd(p):
-    if READ is not None:
-        return READ(p)
+def rd(p, read=None):
+    """The text of `p`. `read` (path -> text) is the caller's own reader — ctx_repos.fetch passes one that cannot hang
+    on a file iCloud has not downloaded; since v3.14.0 it is a parameter, never a module variable, as the daily sync
+    fetches in helper threads. None: the file is opened here, as the bundle builder always has."""
+    if read is not None:
+        return read(p)
     with open(p, encoding="utf-8") as f:
         return f.read()
 
@@ -112,24 +112,33 @@ class Manifest(dict):
         return default if v in (None, "", []) else v
 
 
-def load_manifest(core, path=None):
+def read_manifest(core, path=None, read=None):
+    """(manifest, None), or (None, why) in the words `load_manifest` prints — with nothing printed and no exit, so a
+    caller in a helper thread (the daily sync's fetch, since v3.14.0) never has to swap the process's stdout. The file
+    is read through `read` (see `rd`)."""
     cands = [path] if path else [os.path.join(core, "_System", "provider-manifest.yaml")] + \
         sorted(glob.glob(os.path.join(core, "*", "_System", "provider-manifest.yaml")))
     for p in cands:
         if p and os.path.isfile(p):
             try:
-                m = Manifest(cc.read_yaml_subset(rd(p)))
+                m = Manifest(cc.read_yaml_subset(rd(p, read)))
             except (ValueError, UnicodeDecodeError) as e:
-                sys.stdout.write("provider manifest %s: %s\n" % (p, e)); sys.exit(3)
+                return None, "provider manifest %s: %s" % (p, e)
             m["_path"] = os.path.relpath(os.path.abspath(p), os.path.abspath(core))
             pf = m.s("plugin_folder", ".")
             m.setdefault("namespace", m.get("id"))
             for k, sub in (("team_card_dir", "Teams"), ("people_dir", "People")):
                 if not m.get(k):
                     m[k] = os.path.normpath(os.path.join(pf, sub))
-            return m
-    sys.stdout.write("no provider manifest under %s (expected _System/provider-manifest.yaml)\n" % core)
-    sys.exit(3)
+            return m, None
+    return None, "no provider manifest under %s (expected _System/provider-manifest.yaml)" % core
+
+
+def load_manifest(core, path=None):
+    m, why = read_manifest(core, path)
+    if m is None:
+        sys.stdout.write(why + "\n"); sys.exit(3)
+    return m
 
 
 def check_patterns(m):
@@ -144,10 +153,10 @@ def check_patterns(m):
                 sys.stdout.write("provider manifest key %s: bad regular expression %r (%s)\n" % (key, pat, e)); sys.exit(3)
 
 
-def template(m, core, name, values):
+def template(m, core, name, values, read=None):
     tdir = m.s("templates_dir")
     p = os.path.join(core, tdir, name) if tdir else ""
-    text = rd(p) if p and os.path.isfile(p) else rd(os.path.join(BUILTIN_TEMPLATES, name))
+    text = rd(p, read) if p and os.path.isfile(p) else rd(os.path.join(BUILTIN_TEMPLATES, name), read)
     for k, v in values.items():
         text = text.replace("{{%s}}" % k, str(v))
     return text
@@ -350,9 +359,22 @@ def stamp_updated(t, today, ns):
 
 
 # ------------------------------------------------------------- team block
-def team_context(core, m, team, tb, J, jira_write):
-    card = os.path.join(core, m.s("team_card_dir"), "team-%s.md" % team)
-    front, _ = split_fm(rd(card)) if os.path.isfile(card) else ("", "")
+def team_card_path(core, m, team):
+    """Where the core keeps the card of `team` (its key: `alpha`, not `team-alpha`)."""
+    return os.path.join(core, m.s("team_card_dir"), "team-%s.md" % team)
+
+
+def people_path(core, m):
+    """The core's people folder: one card per person, read flat."""
+    return os.path.join(core, m.s("people_dir"))
+
+
+def team_context(core, m, team, tb, J, jira_write, read=None):
+    """(the team region, the Jira keys, the members, the title, the canonical name) of `team`, from its card, the people
+    and the team-block template. Every file is read through `read` (see `rd`). A card or a people folder that is not
+    there is taken as optional — the bundle builder's way; ctx_repos refuses such a block before it calls this."""
+    card = team_card_path(core, m, team)
+    front, _ = split_fm(rd(card, read)) if os.path.isfile(card) else ("", "")
     fields = m.get("card_fields") or {}
     title = fget(front, "title") or tb.get("title") or team
     canonical = fget(front, "canonical") or title.split(" — ")[0]
@@ -363,11 +385,11 @@ def team_context(core, m, team, tb, J, jira_write):
         or re.findall(r"\b([A-Z]{2,10})\b", jira)[:1]
     tf = re.search(r"Team\s*=\s*([^·]+)", jira)
     members = []
-    pdir = os.path.join(core, m.s("people_dir"))
+    pdir = people_path(core, m)
     for p in sorted(os.listdir(pdir)) if os.path.isdir(pdir) else []:
         if not p.endswith(".md") or p.startswith("_"):
             continue
-        pf, _ = split_fm(rd(os.path.join(pdir, p)))
+        pf, _ = split_fm(rd(os.path.join(pdir, p), read))
         if re.search(r"(?<![\w-])team-%s(?![\w-])" % re.escape(team), fget(pf, "team")) and fget(pf, "status") != "former":
             members.append(dict(name=fget(pf, "name"), email=fget(pf, "email"), role=fget(pf, "role"),
                                 pos=fget(pf, "position"), head=fget(pf, "is_head") == "true", slug=p[:-3],
@@ -391,7 +413,7 @@ def team_context(core, m, team, tb, J, jira_write):
         "JIRA_TEAM_FIELD": tf.group(1).strip() if tf else "_not set_",
         "JIRA_WRITE_SCOPE": labels.get(jira_write, labels["ask"]).replace("{KEY}", key0),
         "MISSIONS": wikilist(tb.get("missions", [])), "MODULES": wikilist(tb.get("modules", [])),
-        "METRICS": wikilist(tb.get("metrics", [])), "PEOPLE_DIR": m.s("people_dir"), "MEMBERS_ROWS": "\n".join(rows)})
+        "METRICS": wikilist(tb.get("metrics", [])), "PEOPLE_DIR": m.s("people_dir"), "MEMBERS_ROWS": "\n".join(rows)}, read)
     return block.rstrip("\n") + "\n", keys, members, title, canonical
 
 

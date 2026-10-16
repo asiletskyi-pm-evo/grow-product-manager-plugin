@@ -12,6 +12,39 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.14.0 (2026-10-16)
+
+**The core reaches your context by itself, once a day.** Until now a change in a team's or an organisation's core reached `local-context.md` only when someone ran «онови мій пакет з ядра». Now a repository can be synced daily: the first skill of the day runs `ctx provider sync --if-due` at step 0c, and the sync decides every block by the cascade agreed in phase 3 — yours wins unless the core marks the block as a rule — writes through the same snapshot-and-journal path as `provider apply`, and explains every decision in a report. It is opt-in per repository (D6: the write boundary is asked once).
+
+MINOR: a new command, a new registration key, a step 0c change, context-connect 0.4.0.
+
+### Added
+
+- **`ctx provider sync [REPO] [--if-due] [--now ISO]`** — one unattended pass per repository with `sync: daily` (a registration without the key, or paused, is never synced). Due 24 h after the last successful check; an hour after a failed attempt (unreachable, out of time). A 20 s budget for the whole run, each fetch in a helper thread (a hanging DNS lookup on a VPN-off day costs the budget, never the skill); no fetch, plan or write begins with less than 3 s left; a busy lock, or a registration still downloading, skips the run with nothing written. The edits waiting in `local-context.md` are imported first. Outcomes: `changed`, `no-changes`, `unreachable`, `broken`, `held`, `import-conflict`, `timeout`, `error`; `CTX_RESULT` carries `synced`, `results` and, when nothing ran, `skipped`. A pass that changed something prints one sentence for the skill to repeat: «Ядро оновило N блоків у <repo>, конфліктів K (лишено твоє) — звіт: …».
+- **The cascade, unattended** (`ctx_synced.decide`): a block only the core changed is updated; one you changed stays yours; one you both changed keeps your text and moves the base, unless the core's text carries `policy=rule`; a block with no base waits (unless a rule); a new block is added; one removal is applied, more than one at once are held; a text you undid is never applied; a copy of the core that lags behind (positive evidence: a block older than your base of it, none newer) takes nothing.
+- **The sync report** `{storage_root}/_System/context/sync/YYYY-MM-DD.md` — written only when a pass changed something, decided a conflict, met a new waiting block, a lagging source or a safeguard; per repository a table of blocks with the sign, the decision and why, both texts of every conflict (40 lines and 500 characters a line per side), the command to take the core's text instead, and how to take the pass back. A repeated safeguard writes nothing new; reports older than 90 days go to the plugin's trash.
+- **"Не повторювати"** — `ctx undo` of a sync pass remembers the core texts it had taken (the journal's `taken`) and the sync never applies them again until the core publishes something new in that block; `ctx provider apply --choose <block>=theirs` takes one block (also on a `✎` row and on a rejected row).
+- **The digest's `repos:` line** — `synced <date>` with updates, conflicts kept yours and the report; `no changes`; `unreachable since <date> (VPN?)`; `⚠ N removals held`; `⚠ source behind — nothing taken`; `N block(s) awaits a decision`; `sync timed out`, `⚠ source broken`, `⚠ edits to import first`, `⚠ sync error` — from the state only, within the hook's budget, and in the v3.13.1 summary cache. The `Skills:` line names `provider sync --if-due` before `ctx read`.
+- **context-connect 0.4.0** — after connecting or refreshing a repository it asks once whether to turn the daily sync on (`sync: daily` / `sync: off`), after settling every block without a base; a refresh never changes the `sync` key on its own.
+
+### Changed
+
+- **Step 0c** (`references/local-context-protocol.md`) runs `ctx provider sync --if-due` before `ctx read` on every host with a shell — Codex included, which loads no hooks.
+- **Registrations are read on a shared deadline everywhere**: 3 s a file and 6 s for all in `ctx` (a writing command refuses, exit 4, while one has not downloaded, since the provider boundary cannot be checked; the write gate asks), 1 s and 2 s in the hook; `--choose`/`--add` that name no block of the plan are refused before the lock; `repo status` reads only the blocks file's version.
+- **The MCP client** keeps a deadline, checks the allow-list at the transport (a batch is refused), takes a reply by its id and refuses unsafe header names.
+- **The team block is never built from missing inputs** — a missing or unreadable team card, People folder or person card makes it unavailable (`·`, "not downloaded yet" for an iCloud timeout) instead of a silently thinner block; the bundle builder's global reader is gone.
+- **State hygiene** — repository ids up to 64 characters, stale `.tmp` files cleaned (also in `sync/`), diffs capped at 2000 lines, `undo` falls back to the mirror when the home copy was edited.
+- Tests: `ctx_cli_test.py` 471, `ctx_blocks_test.py` 341, `ctx_repos_test.py` 222, `ctx_mcp_test.py` 180, `ctx_synced_test.py` 177 (new), `ctx_ops_test.py` 169, `session_start_test.py` 126 checks — each new check failed before its code. Every task had its own review, and a whole-branch review found three more defects (the write could start with no budget left; a lasting lag read as "no changes"; the card's registration reads ran outside the sync's deadline) — each fixed with a check that failed first. Acceptance on a scratch copy of the author's real context and core: update, kept edit, conflict kept yours, report, undo byte for byte, the undone text held the next day.
+
+### Backwards compatibility
+
+- Nothing syncs until a registration says `sync: daily`; a v3.13 store, state and summary cache load as they are.
+- `CTX_RESULT` changes only add keys (`held`, `taken` in the journal, `rejected`, `records_not_reverted` stays). `--choose X=theirs` on a `✎` row used to be "не потрібне" and now takes the core's text.
+- A writing command now refuses (exit 4) while a provider registration has not downloaded from iCloud — before, it could hang on it.
+- No skill renamed; context-connect's description gains the daily-sync phrases.
+
+---
+
 ## v3.13.1 (2026-10-15)
 
 **`ctx repo list` tells the truth; the digest keeps its context line on a cold start.** Two findings after v3.13.0 went live on a real store: `ctx repo list` showed `—` in its "blocks" and "checked" columns and the registration's own version in "version"; and on a cold session start (iCloud downloads, an antivirus scan) the store's summary took about 17 s against the digest's 2 s, so the `context:` line — and with it the instruction to read through `ctx read` — disappeared and skills fell back to reading the whole `local-context.md`. With them, the deferred v3.13 minors a user meets.

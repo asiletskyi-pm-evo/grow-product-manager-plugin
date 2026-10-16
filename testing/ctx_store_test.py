@@ -177,6 +177,69 @@ with tempfile.TemporaryDirectory() as d:
     check("a file that does not arrive in time is a StoreError naming it", "product.zorg-slow.md" in err
           and "not available locally" in err and took < 3, (err, took))
 
+# --- v3.14.0 Task 9: read_bytes — the same time budget for a file that is not text; remove_stale_tmp
+with tempfile.TemporaryDirectory() as d:
+    raw = bytes(range(256)) + b"\r\n\xff\xfe"
+    p = os.path.join(d, "pasted.png")
+    open(p, "wb").write(raw)
+    check("read_bytes gives the bytes as they are, whether or not they are UTF-8 text", cs.read_bytes(p) == raw, "")
+    fifo = os.path.join(d, "never.png")
+    os.mkfifo(fifo)
+    t0 = time.time()
+    try:
+        cs.read_bytes(fifo, timeout=0.5); err = ""
+    except cs.StoreError as e:
+        err = str(e)
+    took = time.time() - t0
+    try:
+        os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+    except OSError:
+        pass
+    check("…and a file that does not arrive in time is the same StoreError, naming it",
+          "never.png" in err and "not available locally" in err and took < 3, (err, took))
+    with cs.read_budget(0.3):
+        t0 = time.time()
+        try:
+            cs.read_bytes(os.path.join(d, "absent.png")); missing = None
+        except FileNotFoundError as e:
+            missing = e
+    check("…a file that is not there is FileNotFoundError, as with read_text", isinstance(missing, FileNotFoundError), missing)
+
+with tempfile.TemporaryDirectory() as d:
+    folder = os.path.join(d, "blocks")
+    os.makedirs(os.path.join(folder, "zorg-core"))
+    day_old, hour_old = time.time() - 25 * 3600, time.time() - 3600
+    made = {".zorg-core.json.tmp": day_old, ".2026-10-01.md.tmp": day_old, ".fresh.json.tmp": hour_old,
+            "zorg-core.json": day_old, ".DS_Store": day_old, "plain.tmp": day_old}
+    for name, t in made.items():
+        open(os.path.join(folder, name), "w", encoding="utf-8").write("x")
+        os.utime(os.path.join(folder, name), (t, t))
+    os.makedirs(os.path.join(folder, ".a-folder.tmp"))
+    os.utime(os.path.join(folder, ".a-folder.tmp"), (day_old, day_old))
+    outside = os.path.join(d, "outside.txt")
+    open(outside, "w", encoding="utf-8").write("keep")
+    os.symlink(outside, os.path.join(folder, ".link.tmp"))
+    os.utime(os.path.join(folder, ".link.tmp"), (day_old, day_old), follow_symlinks=False)
+    nested = os.path.join(folder, "zorg-core", ".deep.md.tmp")
+    open(nested, "w", encoding="utf-8").write("x")
+    os.utime(nested, (day_old, day_old))
+    gone = cs.remove_stale_tmp(folder)
+    left = sorted(os.listdir(folder))
+    check("remove_stale_tmp: the hidden temp files of atomic_write older than 24 h go, a fresh one stays",
+          gone == [".2026-10-01.md.tmp", ".zorg-core.json.tmp"] and ".fresh.json.tmp" in left, (gone, left))
+    check("…nothing else: not a file without the hidden .<name>.tmp shape, not a folder, not a link (nor what it points to), "
+          "not a subfolder's files", {"zorg-core.json", ".DS_Store", "plain.tmp", ".a-folder.tmp", ".link.tmp"} <= set(left)
+          and open(outside, encoding="utf-8").read() == "keep" and os.path.isfile(nested), left)
+    check("…a folder that is not there is nothing to do", cs.remove_stale_tmp(os.path.join(d, "none")) == [], "")
+    old = os.path.join(folder, ".again.tmp")
+    open(old, "w", encoding="utf-8").write("x")
+    os.utime(old, (day_old, day_old))
+    with cs.guard_roots([os.path.join(d, "elsewhere")]):
+        refused = cs.remove_stale_tmp(folder)
+    check("…and outside the guarded roots nothing is removed, and nothing raises", refused == [] and os.path.isfile(old), refused)
+    os.symlink(folder, os.path.join(d, "linked"))
+    check("…a folder that is a link is not entered", cs.remove_stale_tmp(os.path.join(d, "linked")) == [] and os.path.isfile(old), "")
+
 # --- v3.12: field schema
 import ctx_schema as sc  # noqa: E402
 

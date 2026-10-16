@@ -9,7 +9,8 @@ digest, which reads the store and writes nothing but its own summary.
 - snapshot / rotate / restore  ~/.grow-pm/snapshots/ — outside any vault
 - summary_in_time            the store's summary counted within a time budget and saved (the digest and every
                              writing `ctx` command; since v3.13.1)
-- save_summary / load_summary  ~/.grow-pm/.ctx-summary.json — the digest's line on a cold start (since v3.13.1)
+- save_summary / load_summary  ~/.grow-pm/.ctx-summary.json — the digest's line on a cold start (since v3.13.1); since v3.14.0
+                             it holds the days of the last checks and the daily sync's results too (`states_by_repo`)
 
 Stdlib only.
 """
@@ -95,7 +96,9 @@ SNAP_RE = re.compile(r"^(\d{8}T\d{6})")
 
 def _files(folder, prefix):
     """{prefix + relative path: bytes} of the files under `folder`, subfolders too (the block bases live in
-    `state/blocks/<repo>/`). A hidden name — a file or a folder — and a linked folder are skipped."""
+    `state/blocks/<repo>/`). A hidden name — a file or a folder — and a linked folder are skipped. Each file is read
+    through cs.read_bytes (since v3.14.0): a file iCloud has not downloaded costs the time budget, not a hang — as
+    bytes, so a file that is not text (an attachment next to a record) is copied as it is."""
     out = {}
     if os.path.isdir(folder):
         for name in sorted(os.listdir(folder)):
@@ -103,8 +106,7 @@ def _files(folder, prefix):
             if name.startswith("."):
                 continue
             if os.path.isfile(p):
-                with open(p, "rb") as f:
-                    out[prefix + name] = f.read()
+                out[prefix + name] = cs.read_bytes(p)
             elif os.path.isdir(p) and not os.path.islink(p):
                 out.update(_files(p, prefix + name + "/"))
     return out
@@ -112,23 +114,25 @@ def _files(folder, prefix):
 
 def snapshot(store, copies, home, label):
     """Copy the store and the compiled copies to ~/.grow-pm/snapshots/<time>-<label>/; an identical
-    newest snapshot is reused. Returns the snapshot folder."""
+    newest snapshot is reused. Returns the snapshot folder. Every file is read within one time budget (`cs.read_timeout`,
+    or what is left of the caller's `cs.read_budget`): one that does not arrive → StoreError before anything is written."""
     root = os.path.join(_grow(home), "snapshots")
     os.makedirs(root, exist_ok=True)
-    files = _files(store.records_dir, "records/")
-    files.update(_files(store.state_dir, "state/"))
-    if os.path.isdir(store.archive_dir):
-        for year in sorted(os.listdir(store.archive_dir)):
-            files.update(_files(os.path.join(store.archive_dir, year), "archive/%s/" % year))
-    if os.path.isfile(store.card_path):
-        files["INDEX.md"] = open(store.card_path, "rb").read()
-    existed = os.path.isdir(store.records_dir) or os.path.isdir(store.state_dir)
-    cps = []
-    for n, path in enumerate(copies):
-        rel = "copies/%d.md" % n
-        if os.path.isfile(path):
-            files[rel] = open(path, "rb").read()
-        cps.append({"path": path, "file": rel, "existed": os.path.isfile(path)})
+    with cs.read_budget(cs.read_timeout()):
+        files = _files(store.records_dir, "records/")
+        files.update(_files(store.state_dir, "state/"))
+        if os.path.isdir(store.archive_dir):
+            for year in sorted(os.listdir(store.archive_dir)):
+                files.update(_files(os.path.join(store.archive_dir, year), "archive/%s/" % year))
+        if os.path.isfile(store.card_path):
+            files["INDEX.md"] = cs.read_bytes(store.card_path)
+        existed = os.path.isdir(store.records_dir) or os.path.isdir(store.state_dir)
+        cps = []
+        for n, path in enumerate(copies):
+            rel = "copies/%d.md" % n
+            if os.path.isfile(path):
+                files[rel] = cs.read_bytes(path)
+            cps.append({"path": path, "file": rel, "existed": os.path.isfile(path)})
     h = hashlib.sha256()
     for rel in sorted(files):
         h.update(rel.encode("utf-8") + b"\0" + files[rel] + b"\0")
@@ -228,22 +232,39 @@ def restore(snap_dir, store, copies):
 def consistent_records(store, copies):
     """After `restore`: a record whose text is not the one the last compile saved a hash for was already edited
     in its file (Obsidian) when the snapshot was taken — an import's snapshot holds the edit in the records and
-    the previous compile in the copies. Put its body back to the section of the home copy (copy 0) whose hash is
-    the saved one; the frontmatter stays. A record with no such section — no home copy, or the copy was edited
-    too — is left as it is, never guessed; so is a record the last compile did not know (it is not "off": nothing
-    says what it was). Returns (the ids changed, the ids left as they were although their text is not the saved one)."""
+    the previous compile in the copies. Put its body back to the section whose hash is the saved one: of the home
+    copy (copy 0) first, then — since v3.14.0 — of the other copies in order (the vault mirror still holds it when
+    the edit was made in copy 0); the frontmatter stays. A record with no such section in any copy — no copy there,
+    or every copy edited too — is left as it is, never guessed; so is a record the last compile did not know (it is
+    not "off": nothing says what it was). A later copy is read only while a record is still unmatched, and one that
+    cannot be read (not there in time, not UTF-8) is passed over. Returns (the ids changed, the ids left as they
+    were although their text is not the saved one)."""
     saved = store.state().get("records", {})
     if not saved:
         return [], []
     off = [r for r in store.load() if r["id"] in saved and cs.sha_text(r["body"]) != saved[r["id"]]]
     if not off:
         return [], []
-    if not copies or not os.path.isfile(copies[0]):
-        return [], [r["id"] for r in off]
-    sections = {cs.sha_text(f["text"]): f["text"] for f in cs.split_sections(_read(copies[0]))}
+    found = {}
+    for n, path in enumerate(copies or []):
+        wanted = {saved[r["id"]] for r in off} - set(found)
+        if not wanted:
+            break
+        if not os.path.isfile(path):
+            continue
+        try:
+            text = _read(path)
+        except (OSError, UnicodeDecodeError, cs.StoreError):
+            if n == 0:                                  # the home copy: as before, its failure is the caller's
+                raise
+            continue
+        for f in cs.split_sections(text):
+            h = cs.sha_text(f["text"])
+            if h in wanted and h not in found:
+                found[h] = f["text"]
     changed, left = [], []
     for r in off:
-        text = sections.get(saved[r["id"]])
+        text = found.get(saved[r["id"]])
         if text is not None:
             store.write(dict(r, body=text))
             changed.append(r["id"])
@@ -856,19 +877,29 @@ def card_marks(store, recs, today, state=None):
     return ({r["id"]: sc.verified_of(r, st) for r in recs if sc.is_stale(r, st, today)}, len(store.archived()))
 
 
-def card_repos(store, recs, text, home, skipped=None):
+CARD_RESERVE_S = 1.0    # inside a read budget the card's registrations are read by this long before it ends: the card's own
+                        # reads that follow them keep it
+
+
+def card_repos(store, recs, text, home, skipped=None, deadline=None):
     """[{"id", "blocks", "v", "checked"}] for the card, in registration order: each registered repository that has
     blocks in `recs` — how many, the version most of them have a base at (None when none has) and when the store last
     checked the repository (None when never). A repository whose state cannot be read is listed without the last two;
     what a repository's markers or a state carry is cleaned of control characters before it reaches the card.
     A registration that could not be read (not there within its 3 s — iCloud —, or broken) makes the list partial:
     None then — the card keeps the line it has (`store_card`) — and, when `skipped` is a list, it gets the (path,
-    reason) pairs (since v3.13.1). Reads only, and never fails: a card line is not worth a compile."""
+    reason) pairs (since v3.13.1). Reads only, and never fails: a card line is not worth a compile.
+    The registrations are read by `deadline` (a time.monotonic() moment) when one is given and — since v3.14.0, the daily
+    sync's write and its card refresh — by CARD_RESERVE_S before the end of this thread's `cs.read_budget` when one is
+    in force: never on a fresh 6 s of their own past the sync's budget."""
     missed = []
+    ends = cs.budget_until()
+    if ends is not None:
+        deadline = ends - CARD_RESERVE_S if deadline is None else min(deadline, ends - CARD_RESERVE_S)
     try:
         import ctx_blocks as cb                  # here: both import this module
         import ctx_repos as crp
-        repos = crp.load_repos(text, home or os.path.expanduser("~"), skipped=missed)
+        repos = crp.load_repos(text, home or os.path.expanduser("~"), skipped=missed, deadline=deadline)
     except Exception:  # noqa: BLE001 — a registration nobody can read must not stop a compile
         return []
     if missed:
@@ -901,11 +932,12 @@ def _repos_line(card):
     return next((l for l in card.splitlines() if l.startswith(REPOS_LINE)), None)
 
 
-def store_card(store, recs, text, today, home, stale=(), archived=0, skipped=None):
-    """The card (`cs.build_card`) with the line about the repositories from `card_repos` — or, when a registration
-    could not be read (the list would be partial; `skipped` gets the pairs), the line the card on disk has, kept as it
-    is (none when there is no card, no line or it cannot be read). Since v3.13.1."""
-    repos = card_repos(store, recs, text, home, skipped=skipped)
+def store_card(store, recs, text, today, home, stale=(), archived=0, skipped=None, deadline=None):
+    """The card (`cs.build_card`) with the line about the repositories from `card_repos` (its registrations read by
+    `deadline`, when given) — or, when a registration could not be read (the list would be partial; `skipped` gets the
+    pairs), the line the card on disk has, kept as it is (none when there is no card, no line or it cannot be read).
+    Since v3.13.1."""
+    repos = card_repos(store, recs, text, home, skipped=skipped, deadline=deadline)
     kept = None
     if repos is None:
         try:
@@ -915,19 +947,21 @@ def store_card(store, recs, text, today, home, stale=(), archived=0, skipped=Non
     return cs.build_card(recs, text, today, stale=stale, archived=archived, repos=repos or (), repos_line=kept)
 
 
-def refresh_card_repos(store, home, today, skipped=None):
+def refresh_card_repos(store, home, today, skipped=None, deadline=None):
     """Rewrite the card when its line about the repositories is not what the store says now. A check or an adopt
     moves a repository's state without touching a record, so no compile follows and the line would stay as it was.
     Everything else on the card is as `ctx card` makes it; a card that is not there is left for the next compile, and
     so is a card while a registration cannot be read (False; the (path, reason) pairs go to `skipped` when it is a
-    list — the caller says "card not refreshed"). Returns True when the card was written."""
+    list — the caller says "card not refreshed"). `deadline` (a time.monotonic() moment; the daily sync's, since
+    v3.14.0) bounds the registration reads: one not read by it keeps the card as it is. Returns True when the card was
+    written."""
     if not os.path.isfile(store.card_path):
         return False
     recs = store.load()
     text = cs.compile_records(recs)
     stale, archived = card_marks(store, recs, today)
     missed = []
-    card = store_card(store, recs, text, today, home, stale, archived, skipped=missed)
+    card = store_card(store, recs, text, today, home, stale, archived, skipped=missed, deadline=deadline)
     if missed:
         if skipped is not None:
             skipped.extend(missed)
@@ -938,29 +972,62 @@ def refresh_card_repos(store, home, today, skipped=None):
     return True
 
 
-def checked_by_repo(store_root):
-    """{repository id: when it was last checked} from the block states in the store at `store_root`, for the
-    SessionStart digest. Read only, and never fails: whatever cannot be read — the folder, a state, the module that
-    reads it — gives no date, and the digest falls back to the registration's own. A store with no block state never
-    imports it. A state iCloud has evicted is read within the store's time budget (30 s), so `summary_in_time` calls
-    this after the store's facts, on a budget of its own (SUMMARY_DATES_S)."""
+def _is_sync_result(value):
+    """Is `value` a sync_result as the block state keeps it — an object with an outcome (a text)?"""
+    return isinstance(value, dict) and isinstance(value.get("outcome"), str) and bool(value["outcome"])
+
+
+def states_by_repo(store_root):
+    """({repository id: when it was last checked}, {repository id: its `sync_result`}) from the block states in the store at
+    `store_root`, for the SessionStart digest — one read of each state for both (since v3.14.0: on a store iCloud has
+    evicted a state is a download). Read only, and never fails: whatever cannot be read — the folder, a state, the module
+    that reads it — gives neither a day nor a result for that repository (or for any, when the folder or the module is
+    gone), and the digest falls back to the registration's own day. A store with no block state never imports the module.
+    A day is the state's `checked` when it is a text; a result is the state's `sync_result` when it is an object with an
+    outcome (ctx_synced.RESULT_KEYS: at, outcome, updated, added, removed, kept_yours, took_rule, awaiting, held, held_behind, rejected,
+    reason, report, snapshot). Whether a repository still syncs is the registration's word (`sync: daily`), not the
+    state's — the caller keeps the results of those that do. A state that does not arrive in time costs `summary_in_time`
+    the days and the results together (SUMMARY_DATES_S)."""
     try:
         store = cs.Store(store_root)
         folder = os.path.join(store.state_dir, "blocks")
         ids = sorted(n[:-5] for n in os.listdir(folder) if n.endswith(".json"))
         if not ids:
-            return {}
+            return {}, {}
         import ctx_blocks as cb                  # here: it imports this module
-        got = {rid: cb.last_checked(store.root, rid) for rid in ids}
-        return {rid: when for rid, when in got.items() if when}
     except Exception:  # noqa: BLE001 — a digest line is not worth the summary
-        return {}
+        return {}, {}
+    checked, synced = {}, {}
+    for rid in ids:
+        try:
+            state = cb.load_state(store, rid)
+        except Exception:  # noqa: BLE001 — one state that does not read is that repository's line only
+            continue
+        if isinstance(state.get("checked"), str) and state["checked"]:
+            checked[rid] = state["checked"]
+        if _is_sync_result(state.get("sync_result")):
+            synced[rid] = state["sync_result"]
+    return checked, synced
+
+
+def checked_by_repo(store_root):
+    """{repository id: when it was last checked} — the first half of `states_by_repo` (a state with no check is left out).
+    Read only, and never fails."""
+    return states_by_repo(store_root)[0]
+
+
+def sync_by_repo(store_root):
+    """{repository id: its `sync_result`} — the second half of `states_by_repo`, for the digest's `repos:` line (since
+    v3.14.0; a state with no result, or one that is not an object with an outcome, is left out). Read only, and never
+    fails."""
+    return states_by_repo(store_root)[1]
 
 
 def status_summary(context_path, home=None, checked=True):
-    """{records, card_lines, pending, conflicts, stale, unassigned, checked, store} for the SessionStart digest
-    (`checked`: {repository id: when the store last checked it}, read last — with `checked` False it is {} and the
-    caller reads it on its own budget from `store`, the store root, with `checked_by_repo`); {unavailable: root} when
+    """{records, card_lines, pending, conflicts, stale, unassigned, checked, sync, store} for the SessionStart digest
+    (`checked`: {repository id: when the store last checked it}, `sync`: {repository id: the last result of its daily sync},
+    both read last — with `checked` False they are {} and the caller reads them on its own budget from `store`, the store
+    root, with `states_by_repo`); {unavailable: root} when
     the store used before cannot be reached; None without a store or on any error. Reads only. The home
     defaults to the one the context file lives in (~/.grow-pm/local-context.md)."""
     try:
@@ -980,7 +1047,7 @@ def status_summary(context_path, home=None, checked=True):
                  "unassigned": len(cs.unassigned_ids(recs)), "unavailable": None, "store": store.root}
     except Exception:
         return None
-    facts["checked"] = checked_by_repo(store.root) if checked else {}   # last, and never the reason the facts are lost
+    facts["checked"], facts["sync"] = states_by_repo(store.root) if checked else ({}, {})   # last, and never the reason the facts are lost
     return facts
 
 
@@ -1011,24 +1078,30 @@ def _moment(when):
     return t if t.tzinfo else t.astimezone()
 
 
-def _saved_checked(path, context_real):
-    """The days of the last checks the summary saved at `path` holds for this context file; {} when there are none, the
-    file is for another context file, or it cannot be read."""
+def _saved_facts(path, context_real, *keys):
+    """{key: that part of the facts} of the summary saved at `path`, read once, for each of `keys` ("checked": the days of the
+    last checks; "sync": the daily sync's results); a part is {} when there is none, the file is for another context file,
+    or it cannot be read."""
+    out = {key: {} for key in keys}
     try:
         if not os.path.isfile(path):
-            return {}
+            return out
         data = json.loads(cs.read_text(path, timeout=_SUMMARY_READ_S))
-        checked = data["facts"].get("checked") if data.get("context") == context_real else None
-        return dict(checked) if isinstance(checked, dict) else {}
-    except Exception:  # noqa: BLE001 — a cache that cannot be read has no days
-        return {}
+        if data.get("context") == context_real:
+            for key in keys:
+                kept = data["facts"].get(key)
+                out[key] = dict(kept) if isinstance(kept, dict) else {}
+    except Exception:  # noqa: BLE001 — a cache that cannot be read has nothing to keep
+        pass
+    return out
 
 
 def save_summary(context_path, facts, now=None):
     """Save `status_summary`'s facts beside the context file, for a session start that cannot count them in time:
     `{"schema": 1, "context": <its real path>, "at": <when, to the second, with the offset>, "facts": facts}`, written
     atomically. Facts whose days of the last checks (`checked`) are empty — the days missed their budget — keep the
-    days the summary saved before for the same context file (since v3.13.1). True when written; False, with nothing
+    days the summary saved before for the same context file (since v3.13.1); so do facts whose sync results (`sync`, since
+    v3.14.0) are empty or absent. True when written; False, with nothing
     written, when the context has no cache path or the facts are no summary (None, not a dict, `unavailable`, no
     `records`). Never raises."""
     try:
@@ -1036,10 +1109,10 @@ def save_summary(context_path, facts, now=None):
         if not path or not isinstance(facts, dict) or facts.get("unavailable") or "records" not in facts:
             return False
         real = os.path.realpath(context_path)
-        if not facts.get("checked"):
-            kept = _saved_checked(path, real)
-            if kept:
-                facts = dict(facts, checked=kept)
+        lost = [key for key in ("checked", "sync") if not facts.get(key)]
+        if lost:                                         # one read of the saved summary for all it may keep
+            kept = {key: part for key, part in _saved_facts(path, real, *lost).items() if part}
+            facts = dict(facts, **kept)
         at = now if isinstance(now, str) else _moment(now).isoformat(timespec="seconds")
         data = {"schema": 1, "context": real, "at": at, "facts": facts}
         cs.atomic_write(path, json.dumps(data, ensure_ascii=False, sort_keys=True) + "\n")
@@ -1052,8 +1125,9 @@ def summary_in_time(context_path, home=None, cached=False, facts_s=SUMMARY_FACTS
     """The store's summary counted within a time budget, and saved — one helper for the SessionStart digest and for
     every writing `ctx` command after its run, so an iCloud download or an antivirus scan never holds either.
     `status_summary` counts the facts in a daemon thread, waited for at most `facts_s` seconds; the days of the last
-    checks (`checked_by_repo`) follow in the same thread, waited for at most `dates_s` more — a block state that does not
-    arrive costs the days ({} — `save_summary` then keeps the ones saved before), never the facts.
+    checks and the results of the daily sync (`states_by_repo`, since v3.14.0: one read of each block state for both)
+    follow in the same thread, waited for at most `dates_s` more — a block state that does not arrive costs the days and the
+    results ({} — `save_summary` then keeps the ones saved before), never the facts.
     Facts counted in time are saved beside the context (`save_summary`) and returned. A count that comes back None or
     `unavailable` in time is the answer: returned as it is, nothing saved, the cache not used. A count that misses
     `facts_s` saves nothing — the summary saved before stands — and gives None, or with `cached` that summary
@@ -1067,7 +1141,7 @@ def summary_in_time(context_path, home=None, cached=False, facts_s=SUMMARY_FACTS
         finally:
             facts_in.set()
         if box.get("s") and box["s"].get("store"):
-            box["checked"] = checked_by_repo(box["s"]["store"])
+            box["checked"], box["sync"] = states_by_repo(box["s"]["store"])      # one read of each state
 
     try:
         t = threading.Thread(target=work, daemon=True)
@@ -1078,7 +1152,7 @@ def summary_in_time(context_path, home=None, cached=False, facts_s=SUMMARY_FACTS
         if not s or s.get("unavailable"):
             return s
         t.join(dates_s)
-        s = dict(s, checked=box.get("checked") or {})
+        s = dict(s, checked=box.get("checked") or {}, sync=box.get("sync") or {})
         save_summary(context_path, s)
         return s
     except Exception:  # noqa: BLE001 — a summary is never worth a failure
@@ -1089,7 +1163,8 @@ def load_summary(context_path, now=None):
     """The facts `save_summary` saved for this context file, plus `cached_at` (its `at`); None when there is no such
     file, it cannot be read (in half a second) or is not JSON, its schema is not 1, it was saved for another context
     file, it is older than SUMMARY_MAX_AGE_DAYS (or dated more than a day ahead — its age is unknown), or a count the
-    digest prints is missing or not a number. Never raises."""
+    digest prints is missing or not a number. `sync` (since v3.14.0) is optional: a cache without it, or with one that is
+    not an object, gives {}, and a result in it that is not an object with an outcome is dropped. Never raises."""
     try:
         path = summary_cache_path(context_path)
         if not path or not os.path.isfile(path):
@@ -1107,6 +1182,8 @@ def load_summary(context_path, now=None):
         counts = SUMMARY_COUNTS + tuple(k for k in ("stale", "unassigned") if facts.get(k) is not None)
         if facts.get("unavailable") or not all(type(facts.get(k)) is int for k in counts):
             return None
-        return dict(facts, checked=facts.get("checked") if isinstance(facts.get("checked"), dict) else {}, cached_at=at)
+        synced = facts.get("sync") if isinstance(facts.get("sync"), dict) else {}
+        return dict(facts, checked=facts.get("checked") if isinstance(facts.get("checked"), dict) else {},
+                    sync={k: v for k, v in synced.items() if isinstance(k, str) and k and _is_sync_result(v)}, cached_at=at)
     except Exception:  # noqa: BLE001 — a cache that cannot be used is no cache
         return None

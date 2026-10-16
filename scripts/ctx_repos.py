@@ -8,16 +8,17 @@ references/context-provider-protocol.md §3b). `load_repos` reads them through
 that fetches blocks never branches on the schema version.
 
 `fetch` reads a repository's blocks ("theirs") from its MCP server or from its core folder; the registrations
-themselves are read from local files only. Nothing is ever written. Stdlib only.
+themselves are read from local files only. `reach` says whether a repository answers, `public_url` how its endpoint
+may be shown (both moved here from ctx.py in v3.14). Nothing is ever written. Stdlib only.
 """
 import collections
-import contextlib
 import datetime
-import io
 import json
 import os
 import re
 import sys
+import time
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
@@ -54,8 +55,13 @@ def _rank(v, authority):
     return RANKS.get(authority, FALLBACK_RANK)
 
 
+SYNC_DAILY, SYNC_OFF = "daily", "off"
+
+
 def normalise(reg):
-    """A registration as read by `find_registrations` → the repository dict (schema v1 or v2)."""
+    """A registration as read by `find_registrations` → the repository dict (schema v1 or v2). `sync` (since v3.14) is
+    "daily" only when the registration says `sync: daily` (any case); anything else, and no key, is "off" — the daily
+    sync writes without asking, so it is switched on per repository, by an explicit word (the D6 write boundary)."""
     out = dict(reg)                                     # access, mode, contract, index, source_version, writable …
     rid = _s(reg.get("id"))
     authority = _s(reg.get("authority")) or DEFAULT_AUTHORITY
@@ -88,6 +94,7 @@ def normalise(reg):
         "role": _s(reg.get("role")),
         "jira_write": _s(reg.get("jira_write")),
         "status": _s(reg.get("status")) or "active",
+        "sync": SYNC_DAILY if isinstance(reg.get("sync"), str) and reg["sync"].strip().lower() == SYNC_DAILY else SYNC_OFF,
         "synced_at": _s(reg.get("synced_at")),
         "access": _s(reg.get("access")),
         "source_version": _s(reg.get("source_version")),
@@ -103,17 +110,26 @@ def search_only(repo):
     return not repo["blocks_file"] and not repo["core_root"]
 
 
-REG_READ_TIMEOUT_S = 3.0                                # seconds one registration may take to read (an iCloud download)
+REG_READ_TIMEOUT_S = cc.BOUNDARY_READ_S                 # seconds one registration may take to read (an iCloud download): 3
+REG_READ_DEADLINE_S = cc.BOUNDARY_DEADLINE_S            # …and all of them together (since v3.14): 6 — the boundary's budget
 
 
-def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S):
+def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S, deadline=None):
     """Every registered repository, normalised, in registration order — the vaults' providers folders
     first, then `<home>/.grow-pm/providers` (or `extra_dirs` when given, as in find_registrations;
     the home is never taken from the environment). An id seen twice keeps the first. Unreadable
-    registrations — and, since v3.13.1, one not read within `timeout` seconds — are left out and, when
-    `skipped` is a list, appended to it as (path, reason)."""
+    registrations — and, since v3.13.1, one not read within `timeout` seconds, since v3.14 also one not
+    reached before REG_READ_DEADLINE_S for all of them has passed — are left out and, when `skipped`
+    is a list, appended to it as (path, reason). `timeout` None reads every file as it comes.
+    `deadline` (since v3.14.0; a time.monotonic() moment, None for none) is the caller's — the daily sync's: the reads
+    end by it too, each within what is left of it, and once it has passed no file is opened (each is skipped as not
+    read in time)."""
     dirs = [os.path.join(home, ".grow-pm", "providers")] if extra_dirs is None else list(extra_dirs)
-    regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped, timeout=timeout)
+    ends = None if timeout is None else time.monotonic() + REG_READ_DEADLINE_S
+    if deadline is not None:
+        ends = deadline if ends is None else min(ends, deadline)
+    regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped, timeout=timeout,
+                                 deadline=ends)
     return [normalise(r) for r in regs]
 
 
@@ -143,18 +159,37 @@ def _lf(text):
 
 def _read_bounded(path):
     """The text of a file the way `provider_bundle.rd` gives it (universal newlines), but through the store's
-    reader: a file iCloud has not downloaded costs the time budget, not a hang."""
+    reader: a file iCloud has not downloaded costs the time budget, not a hang. Every read of the core goes through
+    it, passed to provider_bundle as its `read` (since v3.14.0 a parameter: a module-wide reader swapped in and out
+    by one thread would leave another's reads unbounded — the daily sync fetches in helper threads)."""
     return _lf(cs.read_text(path))
 
 
-@contextlib.contextmanager
-def _bounded_reads():
-    prev = pb.READ
-    pb.READ = _read_bounded
-    try:
-        yield
-    finally:
-        pb.READ = prev
+class _Gap(Exception):
+    """A file the team block cannot do without is not there or cannot be read; the message is the reason."""
+
+
+NOT_YET = " — not downloaded yet"                 # after a card that did not arrive within the budget (cs.StoreError)
+
+
+def _team_reader(card, pdir):
+    """`_read_bounded` for the team build: the team card or a person card that cannot be read (not there by now, not
+    UTF-8, no permission, not arrived within the budget) is a _Gap — "team card cannot be read", "a person card
+    cannot be read: <its name>", with NOT_YET after it when the time budget ran out (iCloud still downloading it); any
+    other file's failure comes back as it is."""
+    card, pdir = os.path.normpath(card), os.path.normpath(pdir)
+
+    def read(path):
+        try:
+            return _read_bounded(path)
+        except Exception as e:
+            late = NOT_YET if isinstance(e, cs.StoreError) else ""
+            if os.path.normpath(path) == card:
+                raise _Gap("team card cannot be read" + late)
+            if os.path.normpath(os.path.dirname(path)) == pdir:
+                raise _Gap("a person card cannot be read: %s%s" % (os.path.basename(path), late))
+            raise
+    return read
 
 
 def _unavailable(why):
@@ -205,20 +240,19 @@ def _not_downloaded(core_root, manifest):
 def _manifest(core_root):
     """(manifest, why not) of the core's provider manifest as the bundle builder reads it. A manifest that is not there
     (never written, or evicted by iCloud: only its `.icloud` placeholder is), or that cannot be read or parsed, is
-    (None, reason) — the reason in the words of `_unavailable`, with no path. The builder's `sys.exit(3)` and its
-    message on stdout are not ours: neither leaves this function."""
-    buf = io.StringIO()
+    (None, reason) — the reason in the words of `_unavailable`, with no path. It reads through `pb.read_manifest`, which
+    neither prints nor exits: the process's stdout is never swapped, so a fetch the daily sync left behind in its helper
+    thread cannot take the command's own output (since v3.14; before, `load_manifest` ran under redirect_stdout)."""
     try:
-        with contextlib.redirect_stdout(buf):
-            return pb.load_manifest(core_root), None
-    except SystemExit:
-        said = buf.getvalue().strip()
-        if said.startswith("no provider manifest"):
-            return None, _unavailable("no provider manifest in the core")
-        detail = said.split("provider-manifest.yaml: ", 1)[1] if "provider-manifest.yaml: " in said else ""
-        return None, _unavailable("the provider manifest cannot be parsed" + (": " + detail if detail else ""))
+        manifest, said = pb.read_manifest(core_root, read=_read_bounded)
     except Exception as e:
         return None, _team_why(e)
+    if manifest is not None:
+        return manifest, None
+    if said.startswith("no provider manifest"):
+        return None, _unavailable("no provider manifest in the core")
+    detail = said.split("provider-manifest.yaml: ", 1)[1] if "provider-manifest.yaml: " in said else ""
+    return None, _unavailable("the provider manifest cannot be parsed" + (": " + detail if detail else ""))
 
 
 def _team_block(repo, manifest, manifest_why, in_file=False):
@@ -229,10 +263,16 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
     known: the registration names no team; or the role model was read and does not list the team; or there is no
     core folder in the registration and the blocks file itself carries the team region (`in_file`: the file offers
     it). Whenever a team was due and cannot be built — no core folder in the registration, a core folder not on this
-    machine, a provider manifest that is missing (iCloud evicted it), unreadable or unparsable, a role model or a
-    card that does not arrive or cannot be read, a card iCloud has evicted (`_not_downloaded`: the builder would
-    leave it out and give a degraded block), anything unexpected — it is (None, "team block: not available
-    (<why>)"): the plan shows "·" and the region is never touched."""
+    machine, a provider manifest that is missing (iCloud evicted it), unreadable or unparsable, a role model that
+    does not arrive or cannot be read, a card iCloud has evicted (`_not_downloaded`), anything unexpected — it is
+    (None, "team block: not available (<why>)"): the plan shows "·" and the region is never touched.
+
+    The builder takes a missing card and a missing people folder as optional and would give a degraded block (no head,
+    no Jira, no members) that the daily sync would apply as an unattended "~". Since v3.14.0 neither is built: the
+    reasons are "team card not found" (no card file, or its folder is not there or cannot be listed), "team card cannot
+    be read", "people folder not found" and "a person card cannot be read: <its name>" (any card of the people
+    folder the builder reads — one that is not UTF-8 or not readable; " — not downloaded yet" after a card that did not
+    arrive within the budget)."""
     team, core_root = repo["team"], repo["core_root"]
     if not team:
         return None, None
@@ -244,7 +284,7 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         return None, manifest_why or _unavailable("no provider manifest in the core")
     try:
         bundles = manifest.s("bundles_file") or os.path.join(manifest.s("plugin_folder", "."), "_System", "access-bundles.json")
-        model = json.loads(pb.rd(os.path.join(core_root, bundles)))
+        model = json.loads(_read_bounded(os.path.join(core_root, bundles)))
         teams = model["teams"]
         key = team if team in teams else (team[len("team-"):] if team.startswith("team-") else team)
         if key not in teams:
@@ -253,14 +293,27 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         if evicted:
             return None, _unavailable("%d file%s not downloaded — open the core folder in Finder to download them"
                                       % (evicted, "" if evicted == 1 else "s"))
-        block = pb.team_context(core_root, manifest, key, teams[key], model, repo["jira_write"] or "ask")[0]
+        card, pdir = pb.team_card_path(core_root, manifest, key), pb.people_path(core_root, manifest)
+        if not os.path.isfile(card):
+            return None, _unavailable("team card not found")
+        if not os.path.isdir(pdir):
+            return None, _unavailable("people folder not found")
+        block = pb.team_context(core_root, manifest, key, teams[key], model, repo["jira_write"] or "ask",
+                                read=_team_reader(card, pdir))[0]
         return block.rstrip("\n"), None
+    except _Gap as e:
+        return None, _unavailable(str(e))
     except (Exception, SystemExit) as e:
         return None, _team_why(e)
 
 
-def _from_mcp(repo, blocks_file, client_factory):
-    """(text, None) of the blocks file as the server serves it, or (None, why not)."""
+def _header_hint(ep, hdrs):
+    """"; <why the variable gives no header>" when the registration names one and it gave none, else ""."""
+    return "; " + cm.header_problem(ep["headers_env"]) if ep["headers_env"] and not hdrs else ""
+
+
+def _from_mcp(repo, blocks_file, client_factory, deadline=None):
+    """(text, None) of the blocks file as the server serves it, or (None, why not). The client keeps `deadline`."""
     ep = repo["endpoint"]
     if not ep["url"]:
         return None, "no endpoint url in the registration"
@@ -268,9 +321,9 @@ def _from_mcp(repo, blocks_file, client_factory):
         return None, "the registration names no blocks_file"
     hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
     try:
-        client = client_factory(ep["url"], headers=hdrs)
+        client = client_factory(ep["url"], headers=hdrs, deadline=deadline)
         if not client.probe():
-            hint = "; %s is not set (or not 'Name: value')" % ep["headers_env"] if ep["headers_env"] and not hdrs else ""
+            hint = _header_hint(ep, hdrs)
             return None, "MCP unreachable: %s%s" % (_clean(getattr(client, "last_error", "") or "no answer"), hint)
         note = client.call(NOTE_TOOL, {"path": ep["root"] + blocks_file})      # Ruling P1: plain concatenation
     except cm.McpError as e:
@@ -345,8 +398,7 @@ def manifest_namespace(repo):
     root = repo["core_root"]
     if repo.get("namespace_explicit", True) or not root or not os.path.isdir(root):
         return None
-    with _bounded_reads():
-        manifest, _ = _manifest(root)
+    manifest, _ = _manifest(root)
     return (_s(manifest.get("namespace")) or None) if manifest is not None else None
 
 
@@ -362,7 +414,35 @@ def namespace_warning(repo, namespace=None):
     return "registration has no namespace \u2014 the core's manifest says %s; add `namespace: %s`" % (ns, ns)
 
 
-def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
+def public_url(url):
+    """An endpoint as it may be shown: scheme, host, port and path — no credentials, no query, no fragment."""
+    try:
+        u = urllib.parse.urlsplit(url)
+        return "%s://%s%s" % (u.scheme, u.netloc.rpartition("@")[2], u.path) if u.scheme and u.netloc else ""
+    except ValueError:
+        return ""
+
+
+def reach(repo, deadline=None):
+    """(reachable, reason) of one repository. An MCP repository answers the handshake within 3 s a step (the header its
+    registration names, if any, comes from the environment; the client keeps `deadline`, a time.monotonic() moment);
+    a folder or bundle is there when its core folder is. The reason is one line safe to print, at most MAX_ERROR
+    characters, "…" when cut (`cc.clip`, as since v3.13.1): what a server said loses its control characters."""
+    ep = repo["endpoint"]
+    if repo["kind"] == "mcp" or ep["url"]:
+        if not ep["url"]:
+            return False, "no endpoint url in the registration"
+        hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
+        client = cm.McpClient(ep["url"], headers=hdrs, deadline=deadline)
+        if client.probe():
+            return True, ""
+        return False, cc.clip(client.last_error + _header_hint(ep, hdrs), MAX_ERROR)
+    if repo["core_root"]:
+        return (True, "") if os.path.isdir(repo["core_root"]) else (False, "core folder not found")
+    return False, "no endpoint and no core folder in the registration"
+
+
+def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, deadline=None, team=True):
     """A repository's blocks ("theirs") — read only, nothing is written anywhere.
 
     `blocks_source` decides where from: "mcp" asks the server only; "paths" reads the core folder only; "auto"
@@ -370,7 +450,12 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
     error, a bad answer or nothing counts as unavailable for this fetch; under "auto" the folder is then tried.
     A text that holds no region of the namespace, or a begin marker of it that is never closed, is no source either
     (`_unsound`: "the blocks file holds no <ns> block (…)", "the blocks file is cut at block <id>"; from the server
-    with "MCP: " before it) — an empty, cut or foreign file must never read as "every block removed".
+    with "MCP: " before it) — an empty, cut or foreign file must never read as "every block removed". When every source
+    tried answered such a text (since v3.14), `unsound` says so too — the same words as `error` — so the daily sync can
+    tell a broken source (checked, retried in a day) from one that did not answer (retried in an hour): under "auto" a
+    server that did not answer and a folder copy that is cut is no `unsound`, and neither is a server error or a note
+    with no text content. Under "auto" a registration with no core folder (an endpoint only) has no folder to try: its
+    server's bad note alone makes it `unsound`.
     `include_skipped` keeps the blocks of `skip_blocks` in `blocks` (the plan's `--all` lists them); by default they
     are dropped.
 
@@ -381,11 +466,20 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
     manifest that cannot be read, leaves the stand-in. Files are read through ctx_store.read_text (the iCloud time
     budget).
 
+    `deadline` (since v3.14; a time.monotonic() moment, None for none) bounds the whole fetch: the client keeps it —
+    every request gets what is left, none is made once it has passed (the error then says "deadline reached") — and
+    the core folder is read within `cs.read_budget` of what is left, so a file iCloud never delivers costs that, not
+    the store's own 30 s. `client_factory` is called as (url, headers=…, deadline=…).
+    `team` False (since v3.14; `repo status`, which wants the source's version alone) never builds the team region: the
+    blocks file is read and nothing else — the core's manifest only when it names the blocks file or the namespace —
+    and team, team_source, team_error stay empty.
+
     Returns {source: "mcp"|"folder"|None, version: the v= most blocks carry (the first met on a tie; counted
     before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks (unless `include_skipped`),
     namespace: the marker namespace the blocks were read in (set even when `error` is),
     team: the team region or None, team_source: "folder"|None, team_error: why the team region could not be built, or None,
-    error: why no blocks came, or None, checked: ISO time}.
+    error: why no blocks came, or None, unsound: `error` when every source tried gave an empty, cut or foreign text, else
+    None, checked: ISO time}.
     The team region is built from the core folder alone (the card, the people, the role model), whichever
     source the blocks came from, and only once the blocks have arrived: when `error` is set, team, team_source
     and team_error are all empty. `team` None with `team_error` None means the repository offers no team
@@ -395,26 +489,28 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
     a missing core folder or provider manifest is a reason, never "not offered".
     """
     out = {"source": None, "version": None, "blocks": {}, "namespace": repo["namespace"], "team": None, "team_source": None,
-           "team_error": None, "error": None, "checked": _stamp(now)}
+           "team_error": None, "error": None, "unsound": None, "checked": _stamp(now)}
     src, core_root, url = repo["blocks_source"], repo["core_root"], repo["endpoint"]["url"]
     explicit = repo.get("namespace_explicit", True)         # a repository built by hand has no flag: its namespace is meant
-    with _bounded_reads():
+    with cs.read_budget(None if deadline is None else deadline - time.monotonic()):
         blocks_file = repo["blocks_file"]
         manifest, manifest_why = None, None
-        if core_root and os.path.isdir(core_root) and (repo["team"] or not blocks_file or not explicit):
+        if core_root and os.path.isdir(core_root) and ((team and repo["team"]) or not blocks_file or not explicit):
             manifest, manifest_why = _manifest(core_root)
         if not blocks_file and manifest is not None:
             blocks_file = manifest.s("blocks_file")
         if not explicit and manifest is not None:
             out["namespace"] = _s(manifest.get("namespace")) or out["namespace"]
 
-        text, errors = None, []
+        text, errors, unanswered = None, [], False         # unanswered: a source tried gave no text at all
         if src == "auto" and not url and not core_root:
             errors.append("the registration has neither an endpoint url nor a core folder")
+            unanswered = True
         else:
             if src == "mcp" or (src == "auto" and url):
-                text, why = _from_mcp(repo, blocks_file, client_factory)
+                text, why = _from_mcp(repo, blocks_file, client_factory, deadline)
                 bad = _unsound(text, out["namespace"]) if text is not None else None
+                unanswered = unanswered or text is None
                 if bad:                                 # an empty, cut or foreign note is a bad answer: under auto, the folder
                     text, why = None, "MCP: " + bad
                 if text is not None:
@@ -424,6 +520,8 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
             if text is None and src in ("auto", "paths"):
                 text, why = _from_folder(repo, blocks_file)
                 bad = _unsound(text, out["namespace"]) if text is not None else None
+                # under auto a registration with no core folder (the MCP-only shape) has no second source to answer
+                unanswered = unanswered or (text is None and (src == "paths" or bool(core_root)))
                 if bad:
                     text, why = None, bad
                 if text is not None:
@@ -432,10 +530,12 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
                     errors.append(why)
         if text is not None:                            # the team is only worth building for a fetch that succeeded
             blocks, versions = _regions(text, out["namespace"])
-            out["team"], out["team_error"] = _team_block(repo, manifest, manifest_why, in_file="team" in blocks)
-            out["team_source"] = "folder" if out["team"] is not None else None
+            if team:
+                out["team"], out["team_error"] = _team_block(repo, manifest, manifest_why, in_file="team" in blocks)
+                out["team_source"] = "folder" if out["team"] is not None else None
     if text is None:
         out["error"] = "; ".join(errors)
+        out["unsound"] = out["error"] if errors and not unanswered else None
         return out
     counts = collections.Counter(v for v in versions if v)
     out["version"] = counts.most_common(1)[0][0] if counts else None

@@ -22,7 +22,9 @@ require_headers {name: value} (401 otherwise); drop N (-1 = all) tools/call conn
 without an answer; delay seconds before answering a tools/call; fail_status answers tools/call with that
 HTTP status; redirect_to answers every POST with a redirect (redirect_status, 307) to that URL; rpc_error answers a tools/call with a
 JSON-RPC error object; raw_result answers every tools/call with that object as the whole `result`
-(for a server that sends something the protocol does not allow, such as a number for `content`). Stdlib only.
+(for a server that sends something the protocol does not allow, such as a number for `content`);
+delays {method: seconds} pauses before answering that method — `initialize` and `notifications/initialized`
+too (since v3.14: a slow but healthy handshake). Stdlib only.
 """
 import json
 import threading
@@ -100,6 +102,8 @@ class _Handler(BaseHTTPRequestHandler):
         if method != "initialize" and self.headers.get("Mcp-Session-Id") != SESSION_ID:
             return self._reply(400, b"no session", "text/plain")
         rid = msg.get("id") if isinstance(msg, dict) else None
+        if fake.delays.get(method):
+            time.sleep(fake.delays[method])
         if method == "initialize":
             return self._rpc({"jsonrpc": "2.0", "id": rid, "result": {
                 "protocolVersion": PROTOCOL_VERSION, "capabilities": {"tools": {}},
@@ -132,7 +136,7 @@ class _Handler(BaseHTTPRequestHandler):
 class FakeMcp:
     def __init__(self, mode="json", tree=None, require_headers=None, drop=0, delay=0.0, fail_status=0,
                  redirect_to="", redirect_status=307, rpc_error="", sse_noise=True, sse_after=False, sse_junk=False,
-                 raw_result=None):
+                 raw_result=None, delays=None):
         self.mode = mode
         self.tree = dict(DEFAULT_TREE if tree is None else tree)
         self.require_headers = dict(require_headers or {})
@@ -140,6 +144,7 @@ class FakeMcp:
         self.redirect_to, self.redirect_status = redirect_to, redirect_status
         self.rpc_error, self.sse_noise, self.sse_after, self.sse_junk = rpc_error, sse_noise, sse_after, sse_junk
         self.raw_result = raw_result
+        self.delays = dict(delays or {})
         self.handlers = {"vault_get_note": self._get_note}
         self.seen = []
         self._lock = threading.Lock()

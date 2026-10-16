@@ -3,15 +3,17 @@
 
 The registrations of the fictional "Zorg" (zorg-core: a v1 bundle folder; zorg-growth: a v2 MCP repository)
 on a temp HOME and a temp vault, written as `{vault}/Notes/_System/providers/<id>.yaml`. Covers the
-normalised keys and their defaults (rank by authority, core_root, namespace, blocks_source, products),
+normalised keys and their defaults (rank by authority, core_root, namespace, blocks_source, products; since v3.14 `sync`),
 the order and dedupe of registrations, the real HOME never being read, and the command: the table, the
 `CTX_RESULT` line, a paused repository, an unreadable registration. Then `fetch` — a repository's blocks
 ("theirs") from the fake MCP server (testing/mcp_fake.py, 127.0.0.1) or from the core folder, the team
 block from the folder, the fallback order of blocks_source, errors (a dead server, a server's error, a file
-that never arrives, a bad answer), skip_blocks, the most common version, and that nothing is written.
+that never arrives, a bad answer), skip_blocks, the most common version, and that nothing is written. Since v3.14:
+`cs.read_budget`, `fetch(…, deadline=)` against a slow server and a file that never arrives, and `reach` / `public_url`
+(moved from ctx.py); a fetch never swaps the process's stdout (it may run in the daily sync's helper thread).
 Semantics: references/context-provider-protocol.md §3b. Stdlib only; run from the repo root.
 """
-import contextlib, datetime, hashlib, io, json, os, re, shutil, socket, stat, subprocess, sys, tempfile, time
+import contextlib, datetime, hashlib, io, json, os, re, shutil, socket, stat, subprocess, sys, tempfile, threading, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -20,9 +22,12 @@ os.environ["NO_PROXY"] = "127.0.0.1,localhost"          # the fake is local; a p
 os.environ["no_proxy"] = "127.0.0.1,localhost"
 import ctx as ctxmain  # noqa: E402
 import ctx_blocks as cb  # noqa: E402
+import ctx_common as cc  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_repos as cr  # noqa: E402
+import ctx_store as cs  # noqa: E402
 from mcp_fake import FakeMcp  # noqa: E402
+import provider_bundle as pb_mod  # noqa: E402
 
 cm.McpClient.BACKOFF = 0.0                                # no pause between retries in tests
 
@@ -154,6 +159,21 @@ with tempfile.TemporaryDirectory() as d:
     check("v1 has no endpoint: empty url, root and headers_env, no home record",
           r.get("endpoint") == {"url": "", "root": "", "headers_env": ""} and r.get("home_record") == ""
           and r.get("blocks_file") == "", r)
+    # --- v3.14.0: the daily sync is switched on per registration (the D6 write boundary): `sync: daily`, else off
+    check("a registration without the sync key is off (v1 and v2 alike)", r.get("sync") == "off" and g.get("sync") == "off",
+          (r.get("sync"), g.get("sync")))
+    sync_of = lambda v: cr.normalise({"id": "x", "sync": v})["sync"]
+    check("sync: daily is daily; off, any other word, a boolean, a number, a list or nothing is off",
+          sync_of("daily") == "daily" and sync_of(" Daily ") == "daily" and sync_of("off") == "off" and sync_of("weekly") == "off"
+          and sync_of(True) == "off" and sync_of(1) == "off" and sync_of(["daily"]) == "off" and sync_of("") == "off"
+          and sync_of(None) == "off", [sync_of(v) for v in ("daily", " Daily ", "off", "weekly", True, 1, ["daily"], "", None)])
+    e.reg("zorg-core", CORE_V1 + "sync: daily\n")
+    e.reg("zorg-growth", GROWTH_V2 + "sync: off\n")
+    by_sync = {x["id"]: x.get("sync") for x in e.repos()}
+    check("…and as read from a registration file: v1 with sync: daily, v2 with sync: off",
+          by_sync == {"zorg-core": "daily", "zorg-growth": "off"}, by_sync)
+    e.reg("zorg-core", CORE_V1)
+    e.reg("zorg-growth", GROWTH_V2)
     check("v2 keys are read", g.get("endpoint", {}).get("url") == "http://127.0.0.1:9/mcp"
           and g.get("endpoint", {}).get("root") == "ZorgGrowth/"
           and g.get("blocks_file") == "Growth/_System/context-blocks.md" and g.get("rank") == 500
@@ -392,8 +412,9 @@ with tempfile.TemporaryDirectory() as d:
     # --- the folder
     f = cr.fetch(core_repo())
     check("fetch returns the documented keys",
-          set(f) == {"source", "version", "blocks", "namespace", "team", "team_source", "team_error", "error", "checked"}, sorted(f))
-    check("…a clean fetch has no error and no team error", f["error"] is None and f["team_error"] is None, f)
+          set(f) == {"source", "version", "blocks", "namespace", "team", "team_source", "team_error", "error", "unsound", "checked"}, sorted(f))
+    check("…a clean fetch has no error, no team error and is not unsound", f["error"] is None and f["team_error"] is None
+          and f["unsound"] is None, f)
     check("folder source: the blocks of the core's blocks file and nothing else",
           f["source"] == "folder" and set(f["blocks"]) == {"scope", "product", "teams"} and f["error"] is None, f)
     scope = f["blocks"].get("scope", "")
@@ -540,12 +561,15 @@ with tempfile.TemporaryDirectory() as d:
 
         seen = []
 
-        def factory(url, headers=None):
-            seen.append((url, headers))
-            return cm.McpClient(url, headers=headers, probe_timeout=2.0, retries=0)
+        def factory(url, headers=None, deadline=None):
+            seen.append((url, headers, deadline))
+            return cm.McpClient(url, headers=headers, probe_timeout=2.0, retries=0, deadline=deadline)
 
         cr.fetch(growth_repo(fake.url), client_factory=factory)
-        check("client_factory is called with the endpoint url and the (empty) headers", seen == [(fake.url, {})], seen)
+        check("client_factory is called with the endpoint url, the (empty) headers and no deadline", seen == [(fake.url, {}, None)], seen)
+        until = time.monotonic() + 60
+        fdl = cr.fetch(growth_repo(fake.url), client_factory=factory, deadline=until)
+        check("v3.14: fetch passes its deadline to the client", seen[-1] == (fake.url, {}, until) and fdl["source"] == "mcp", (seen, fdl))
 
     with FakeMcp(tree={"ZorgCore/" + CORE_BLOCKS_FILE: read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))}) as fake:
         fnc = cr.fetch(repo_of({"id": "zorg-core", "kind": "mcp", "blocks_file": CORE_BLOCKS_FILE, "blocks_source": "mcp",
@@ -628,18 +652,21 @@ with tempfile.TemporaryDirectory() as d:
             frb = cr.fetch(core_repo(blocks_source="auto", endpoint={"url": fake.url, "root": "", "headers_env": ""}))
             check("%s → error, not a crash; auto → folder" % label, fr["source"] is None and fr["error"]
                   and frb["source"] == "folder" and frb["blocks"] == f["blocks"], (fr, frb))
+            check("…a server error is no unsound text (the sync: unreachable, not broken)", fr["unsound"] is None, fr)
     with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         fake.raw_result = {"content": 5, "isError": False}
         fr = cr.fetch(growth_repo(fake.url))
         check("a server that sends a number as the content → error, not a TypeError", fr["source"] is None and fr["error"], fr)
+        check("…the note has no text content: no unsound text either", fr["unsound"] is None, fr)
     with FakeMcp(tree={GROWTH_PATH: "", "ZorgCore/" + CORE_BLOCKS_FILE: ""}) as fake:
         fz = cr.fetch(growth_repo(fake.url))
         check("MCP content \"\" (an empty note) → an error, not a source with no blocks",
               fz["source"] is None and fz["blocks"] == {}
               and fz["error"] == "MCP: the blocks file holds no zorg-growth block (empty, cut, or another namespace)", fz)
+        check("…and is unsound, in the words of the error (since v3.14: the sync calls the source broken)", fz["unsound"] == fz["error"], fz)
         fza = cr.fetch(core_repo(blocks_source="auto", endpoint={"url": fake.url, "root": "ZorgCore/", "headers_env": ""}))
         check("…under auto an empty note counts as a bad answer: the core folder is read instead",
-              fza["error"] is None and fza["source"] == "folder" and fza["blocks"] == f["blocks"], fza)
+              fza["error"] is None and fza["source"] == "folder" and fza["blocks"] == f["blocks"] and fza["unsound"] is None, fza)
     with FakeMcp(tree={GROWTH_PATH: read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))}) as fake:
         fw = cr.fetch(growth_repo(fake.url))
         check("a note served under the wrong path (another repository's blocks) → the same error, nothing offered",
@@ -648,6 +675,39 @@ with tempfile.TemporaryDirectory() as d:
         fc = cr.fetch(growth_repo(fake.url))
         check("a note cut inside its last region → 'cut at block <id>'", fc["source"] is None and fc["blocks"] == {}
               and fc["error"].startswith("MCP: the blocks file is cut at block "), fc)
+        check("…unsound, and so is a note of another repository", fc["unsound"] == fc["error"] and fw["unsound"] == fw["error"], (fc, fw))
+        cut_core = os.path.join(d, "CutCore")
+        shutil.copytree(CORE_FIX, cut_core)
+        pristine_blocks = read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))
+        open(os.path.join(cut_core, CORE_BLOCKS_FILE), "w", encoding="utf-8", newline="").write(
+            pristine_blocks[:pristine_blocks.index("<!-- zorg-core:end id=teams -->")])
+        auto_cut = lambda url: cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [cut_core], "blocks_file": CORE_BLOCKS_FILE,
+                                                "blocks_source": "auto", "endpoint": {"url": url, "root": ""}}))
+        fake.tree[CORE_BLOCKS_FILE] = GROWTH_TEXT     # the server serves another repository's note; the folder copy is cut
+        both = auto_cut(fake.url)
+        check("auto: the server's note unsound and the folder copy cut → unsound (every source tried answered a bad text)",
+              both["source"] is None and both["unsound"] == both["error"] and "MCP: " in both["error"]
+              and "cut at block teams" in both["error"], both)
+    down_cut = auto_cut("http://127.0.0.1:9/mcp")
+    check("auto: the server does not answer and the folder copy is cut → an error, not unsound (the sync: unreachable)",
+          down_cut["source"] is None and down_cut["error"] and "cut at block teams" in down_cut["error"] and down_cut["unsound"] is None,
+          down_cut)
+    # the MCP-only shape (connect-steps: kind mcp, no paths, blocks_source left to auto): no core folder is no source at all
+    solo = lambda url: cr.fetch(repo_of({"id": "zorg-growth", "kind": "mcp", "blocks_file": GROWTH_FILE,
+                                         "endpoint": {"url": url, "root": "ZorgGrowth/"}}))
+    check("(the endpoint-only registration reads as auto with no core folder)", repo_of({"id": "zorg-growth", "kind": "mcp",
+          "endpoint": {"url": "http://x/mcp"}})["blocks_source"] == "auto" and repo_of({"id": "zorg-growth", "kind": "mcp"})["core_root"] == "")
+    for label, note in (("an empty note", ""), ("a note cut inside a block", GROWTH_TEXT[:GROWTH_TEXT.rindex("<!-- zorg-growth:end")])):
+        with FakeMcp(tree={GROWTH_PATH: note}) as fake:
+            fs = solo(fake.url)
+        check("auto, an endpoint and no core folder, %s → unsound, the words of the error (the sync: broken)" % label,
+              fs["source"] is None and fs["error"] and fs["error"].startswith("MCP: the blocks file ") and fs["unsound"] == fs["error"], fs)
+    fsd = solo("http://127.0.0.1:9/mcp")
+    check("…and a server that does not answer, with no core folder, is no unsound text (the sync: unreachable)",
+          fsd["source"] is None and fsd["error"] and fsd["unsound"] is None, fsd)
+    fsp = cr.fetch(repo_of({"id": "zorg-case", "kind": "folder", "blocks_source": "paths", "blocks_file": "Core/blocks.md"}))
+    check("…but blocks_source paths with no core folder is a source that did not answer: an error, not unsound",
+          fsp["error"] and "no core folder" in fsp["error"] and fsp["unsound"] is None, fsp)
 
     # --- a core file that never arrives
     saved = os.environ.get("GROW_PM_CTX_READ_TIMEOUT")
@@ -683,9 +743,9 @@ with tempfile.TemporaryDirectory() as d:
     check("a people card that never arrives → no team block within the budget, the blocks stay",
           fsl["source"] == "folder" and fsl["blocks"] == f["blocks"] and fsl["team"] is None and fsl["team_source"] is None
           and fsl["error"] is None and time.time() - t0 < 5, (fsl, time.time() - t0))
-    check("…and the team error says why: the card, the time budget, nothing else",
-          isinstance(fsl["team_error"], str) and "not available" in fsl["team_error"] and "zz-slow.md" in fsl["team_error"]
-          and len(fsl["team_error"]) <= 300 and fsl["team_error"].startswith("team block"), fsl["team_error"])
+    check("…and the team error says why: a person card cannot be read, which one, that it is not downloaded yet (since v3.14)",
+          fsl["team_error"] == "team block: not available (a person card cannot be read: zz-slow.md — not downloaded yet)",
+          fsl["team_error"])
     try:
         os.close(os.open(pipe, os.O_WRONLY | os.O_NONBLOCK))
     except OSError:
@@ -694,6 +754,137 @@ with tempfile.TemporaryDirectory() as d:
         os.environ.pop("GROW_PM_CTX_READ_TIMEOUT")
     else:
         os.environ["GROW_PM_CTX_READ_TIMEOUT"] = saved
+
+    # --- v3.14: cs.read_budget — every read inside the block gets no more than what is left; nested, the smaller wins
+    saved = os.environ.pop("GROW_PM_CTX_READ_TIMEOUT", None)
+    try:
+        base = cs.read_timeout()
+        with cs.read_budget(5):
+            outer = cs.read_timeout()
+            with cs.read_budget(0.2):
+                inner = cs.read_timeout()
+                with cs.read_budget(10):
+                    inner_wider = cs.read_timeout()
+            back = cs.read_timeout()
+        after = cs.read_timeout()
+        check("read_budget: read_timeout() is what is left of the budget, the smaller one when nested, the store's own after it",
+              base == 30.0 and 4.5 < outer <= 5 and 0 < inner <= 0.2 and 0 < inner_wider <= 0.2 and 4.5 < back <= 5 and after == 30.0,
+              (base, outer, inner, inner_wider, back, after))
+        with cs.read_budget(None):
+            unbounded = cs.read_timeout()
+        with cs.read_budget(-3):
+            spent = cs.read_timeout()
+        check("…None is no budget; a budget already spent is 0, never negative", unbounded == 30.0 and spent == 0, (unbounded, spent))
+        os.environ["GROW_PM_CTX_READ_TIMEOUT"] = "0.1"
+        with cs.read_budget(5):
+            env_smaller = cs.read_timeout()
+        os.environ.pop("GROW_PM_CTX_READ_TIMEOUT")
+        check("…never more than the store's own (GROW_PM_CTX_READ_TIMEOUT)", env_smaller == 0.1, env_smaller)
+        box = {}
+        with cs.read_budget(0.2):
+            t = threading.Thread(target=lambda: box.update(other=cs.read_timeout()))
+            t.start()
+            t.join()
+        check("…a budget belongs to the thread that set it (a sync in one thread does not cut another's reads)",
+              box.get("other") == 30.0, box)
+        fifo_b = os.path.join(d, "budget-fifo.md")
+        os.mkfifo(fifo_b)
+        got, t0 = None, time.monotonic()
+        try:
+            with cs.read_budget(0.2):
+                cs.read_text(fifo_b)
+        except cs.StoreError as e:
+            got = e
+        took = time.monotonic() - t0
+        check("cs.read_budget(0.2) over a file that never arrives → StoreError within 1 s (the store's own is 30 s)",
+              got is not None and took < 1.0 and "budget-fifo.md" in str(got), (repr(got), took))
+        check("…and the budget ends with the block, an exception or not", cs.read_timeout() == 30.0, cs.read_timeout())
+        try:
+            os.close(os.open(fifo_b, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+
+        # --- v3.14: fetch within a deadline — the server's request and the core folder's reads both get what is left
+        with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}, delay=3) as fake:
+            t0 = time.monotonic()
+            fd = cr.fetch(growth_repo(fake.url), deadline=time.monotonic() + 0.5)
+            took = time.monotonic() - t0
+            check("fetch(deadline = now + 0.5) on a server that answers in 3 s → an error within 1.5 s",
+                  fd["source"] is None and fd["blocks"] == {} and fd["error"] and took < 1.5, (fd, took))
+        with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+            fpast = cr.fetch(growth_repo(fake.url), deadline=time.monotonic() - 1)
+            check("…a deadline already past: not one request, and the error says why",
+                  fake.seen == [] and fpast["source"] is None and "deadline reached" in (fpast["error"] or ""), (fpast, fake.methods()))
+            fok = cr.fetch(growth_repo(fake.url), deadline=time.monotonic() + 30)
+            check("…a deadline with time left changes nothing", fok["source"] == "mcp" and fok["error"] is None
+                  and set(fok["blocks"]) == {"growth-metrics", "team"}, fok)
+        fifo_dl_core = os.path.join(d, "FifoDeadlineCore")
+        os.makedirs(os.path.join(fifo_dl_core, "Core", "_System"))
+        fifo_dl = os.path.join(fifo_dl_core, "Core", "_System", "context-blocks.md")
+        os.mkfifo(fifo_dl)
+        t0 = time.monotonic()
+        fdf = cr.fetch(repo_of({"id": "zorg-fifo", "kind": "folder", "paths": [fifo_dl_core], "blocks_file": CORE_BLOCKS_FILE}),
+                       deadline=time.monotonic() + 0.3)
+        took = time.monotonic() - t0
+        check("…a core file that never arrives costs what the deadline leaves, not the store's 30 s",
+              fdf["source"] is None and "not available" in (fdf["error"] or "") and took < 1.5, (fdf, took))
+        check("…and the fetch's budget ends with it", cs.read_timeout() == 30.0, cs.read_timeout())
+        try:
+            os.close(os.open(fifo_dl, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+    finally:
+        if saved is not None:
+            os.environ["GROW_PM_CTX_READ_TIMEOUT"] = saved
+
+    # --- v3.14: reach and public_url, moved from ctx.py without a change
+    check("public_url: scheme, host, port and path — no credentials, no query, no fragment",
+          cr.public_url("http://zorguser:zorgpass9@127.0.0.1:8123/mcp/x?tok=zorgtok7#frag") == "http://127.0.0.1:8123/mcp/x"
+          and cr.public_url("https://zorg.example/mcp") == "https://zorg.example/mcp"
+          and cr.public_url("") == "" and cr.public_url("127.0.0.1:9/mcp") == "" and cr.public_url("http://[::1/mcp") == "",
+          cr.public_url("http://zorguser:zorgpass9@127.0.0.1:8123/mcp/x?tok=zorgtok7#frag"))
+    check("reach: a folder repository is reachable when its core folder is there, else says so",
+          cr.reach(core_repo()) == (True, "") and cr.reach(core_repo(core_root=os.path.join(d, "gone"))) == (False, "core folder not found"),
+          (cr.reach(core_repo()), cr.reach(core_repo(core_root=os.path.join(d, "gone")))))
+    check("…an mcp one without a url, and one with neither, say so",
+          cr.reach(repo_of({"id": "zorg-bare", "kind": "mcp"})) == (False, "no endpoint url in the registration")
+          and cr.reach(repo_of({"id": "zorg-none", "kind": "folder"})) == (False, "no endpoint and no core folder in the registration"), "")
+    class StubClient:                                   # a server's words on a failed handshake: ESC, newlines, bidi, a BOM, length
+        last_error = "\x1b[31mred\nline2\u202e\ufeff " + "y" * 500
+
+        def __init__(self, *a, **k):
+            pass
+
+        def probe(self):
+            return False
+
+    real_client, cm.McpClient = cm.McpClient, StubClient
+    try:
+        ok_s, why_s = cr.reach(growth_repo("http://127.0.0.1:9/mcp"))
+    finally:
+        cm.McpClient = real_client
+    check("reach keeps v3.13.1's reason: one clean line of at most 300 characters, '…' when cut",
+          ok_s is False and len(why_s) <= 300 and why_s.endswith("…") and why_s.startswith("[31mred line2 ")
+          and not cc.CONTROLS.search(why_s), repr(why_s[:60]))
+    check("…cb.clip is ctx_common's clip, and clipping twice changes nothing", cb.clip is cc.clip
+          and cc.clip(why_s, 300) == why_s, "")
+    with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+        check("…a server that answers the handshake is reachable", cr.reach(growth_repo(fake.url)) == (True, ""), fake.methods())
+        n0 = len(fake.seen)
+        check("…and with a deadline already past: unreachable, 'deadline reached', no request",
+              cr.reach(growth_repo(fake.url), deadline=time.monotonic() - 1) == (False, "deadline reached") and len(fake.seen) == n0,
+              fake.methods()[n0:])
+    with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}, require_headers={"X-Token": "tok-9f3a"}) as fake:
+        os.environ[HDR_VAR] = "Host: tok-9f3a"
+        hrepo = growth_repo(fake.url, endpoint={"url": fake.url, "root": "ZorgGrowth/", "headers_env": HDR_VAR})
+        ok_h, why_h = cr.reach(hrepo)
+        fh = cr.fetch(hrepo)
+        os.environ.pop(HDR_VAR, None)
+        check("v3.14: a header variable naming Host is never sent: reach and fetch say the variable and the name, not the value",
+              ok_h is False and "401" in why_h and HDR_VAR in why_h and "Host" in why_h and "not allowed" in why_h
+              and fh["source"] is None and HDR_VAR in fh["error"] and "not allowed" in fh["error"]
+              and "tok-9f3a" not in why_h + fh["error"]
+              and all(s["headers"].get("Host", "").startswith("127.0.0.1") for s in fake.seen), (why_h, fh["error"]))
 
     # --- a core whose team block cannot be built
     nomf = os.path.join(d, "NoManifestCore")
@@ -739,6 +930,38 @@ with tempfile.TemporaryDirectory() as d:
           and fbm["blocks"] == f["blocks"] and fbm["team"] is None and isinstance(fbm["team_error"], str)
           and "manifest" in fbm["team_error"] and len(fbm["team_error"]) <= 300 and out.getvalue() == "", (fbm, out.getvalue()))
     check("…and names no path", "BadManifestCore" not in fbm["team_error"] and os.sep + "Core" not in fbm["team_error"], fbm["team_error"])
+    # v3.14.0: the daily sync fetches in a helper thread it may leave behind at its deadline, so the fetch must never swap
+    # the process's stdout (redirect_stdout is global: the command's own CTX_RESULT would land in the thread's buffer)
+    real_redirect = contextlib.redirect_stdout
+
+    def no_redirect(*a, **k):
+        raise AssertionError("redirect_stdout used")
+
+    contextlib.redirect_stdout = no_redirect
+    try:
+        got = [cr._manifest(nomf), cr._manifest(badm), cr._manifest(CORE_FIX)]
+        quiet = [pb_mod.read_manifest(nomf), pb_mod.read_manifest(badm)]
+        swapped = None
+    except AssertionError as ex:
+        swapped = str(ex)
+    finally:
+        contextlib.redirect_stdout = real_redirect
+    check("_manifest never swaps the process's stdout, and says the same: no manifest, cannot be parsed, a manifest",
+          swapped is None and got[0] == (None, "team block: not available (no provider manifest in the core)")
+          and got[1][0] is None and got[1][1].startswith("team block: not available (the provider manifest cannot be parsed")
+          and got[2][0] is not None and got[2][1] is None, (swapped, got if swapped is None else None))
+    check("…pb.read_manifest gives (None, the words load_manifest prints) with nothing printed and no exit",
+          swapped is None and quiet[0][0] is None and quiet[0][1].startswith("no provider manifest under ")
+          and quiet[1][0] is None and "provider-manifest.yaml: " in quiet[1][1], quiet if swapped is None else swapped)
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out):
+            pb_mod.load_manifest(nomf)
+        exited = None
+    except SystemExit as ex:
+        exited = ex.code
+    check("…and load_manifest (the bundle builder's) still prints and exits 3", exited == 3
+          and out.getvalue().startswith("no provider manifest under "), (exited, out.getvalue()))
     check("every reason a team block cannot be built reads 'team block: not available (…)'",
           all(x["team_error"].startswith("team block: not available (") for x in (fbj, fnmod, fbm, fsl)),
           [x["team_error"] for x in (fbj, fnmod, fbm, fsl)])
@@ -778,8 +1001,8 @@ with tempfile.TemporaryDirectory() as d:
         fnr = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [noread], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
         os.chmod(card, 0o644)
         check("a people card without read permission → team error naming the file, blocks stay", fnr["source"] == "folder"
-              and fnr["blocks"] == f["blocks"] and fnr["team"] is None and isinstance(fnr["team_error"], str)
-              and "a-one.md" in fnr["team_error"] and "Permission" in fnr["team_error"], fnr)
+              and fnr["blocks"] == f["blocks"] and fnr["team"] is None and fnr["team_source"] is None
+              and fnr["team_error"] == "team block: not available (a person card cannot be read: a-one.md)", fnr)
     real_tc = cr.pb.team_context
 
     def exploding(*a, **k):
@@ -793,6 +1016,47 @@ with tempfile.TemporaryDirectory() as d:
     check("an unexpected exception in the team build never leaves fetch: the team error names the class, not the message",
           fex["source"] == "folder" and fex["blocks"] == f["blocks"] and fex["team"] is None and fex["team_source"] is None
           and isinstance(fex["team_error"], str) and "RuntimeError" in fex["team_error"] and "zorgsecret-4411" not in json.dumps(fex), fex)
+
+    # --- v3.14.0 Task 9: no silent degraded team block — the sync would apply one as an unattended "~"
+    def gap(name, change):
+        """The fetch of a copy of the core that `change(core_folder)` altered."""
+        c = os.path.join(d, "Gap-" + name)
+        shutil.copytree(CORE_FIX, c)
+        change(os.path.join(c, "Core"))
+        return cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [c], "blocks_file": CORE_BLOCKS_FILE,
+                                 "team": "team-alpha", "jira_write": "own"}))
+
+    def not_text(path):
+        open(path, "wb").write(b"---\nname: \xff\xfe\n---\n")
+
+    cases = (("no-card", lambda c: os.remove(os.path.join(c, "Teams", "team-alpha.md")), "team card not found"),
+             ("no-card-folder", lambda c: shutil.rmtree(os.path.join(c, "Teams")), "team card not found"),
+             ("no-people", lambda c: shutil.rmtree(os.path.join(c, "People")), "people folder not found"),
+             ("bad-person", lambda c: not_text(os.path.join(c, "People", "b-two.md")), "a person card cannot be read: b-two.md"),
+             ("bad-card", lambda c: not_text(os.path.join(c, "Teams", "team-alpha.md")), "team card cannot be read"))
+    for name, change, why in cases:
+        fg = gap(name, change)
+        check("%s → the team block is unavailable with its reason, never a block built without it; the blocks stay" % name,
+              fg["source"] == "folder" and fg["blocks"] == f["blocks"] and fg["error"] is None and fg["team"] is None
+              and fg["team_source"] is None and fg["team_error"] == "team block: not available (%s)" % why, fg)
+    fig = gap("ignored", lambda c: (not_text(os.path.join(c, "People", "_index.md")), not_text(os.path.join(c, "People", "notes.txt"))))
+    check("…a file of the people folder the builder never reads (_index.md, not .md) changes nothing: the team block as before",
+          fig["team"] == f["team"] and fig["team_error"] is None, fig)
+    check("provider_bundle keeps no module-wide reader (the daily sync fetches in helper threads): each caller passes its own",
+          not hasattr(pb_mod, "READ") and not hasattr(cr, "_bounded_reads"), "")
+    real_read = cr._read_bounded
+    seen = []
+    cr._read_bounded = lambda p: (seen.append(os.path.relpath(p, CORE_FIX)), real_read(p))[1]
+    try:
+        fseen = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [CORE_FIX], "blocks_file": CORE_BLOCKS_FILE,
+                                  "team": "team-alpha", "jira_write": "own"}))
+    finally:
+        cr._read_bounded = real_read
+    check("…fetch reads the manifest, the role model, the team card and every people card through its bounded reader",
+          fseen["team"] == f["team"] and {os.path.join("Core", "_System", "provider-manifest.yaml"),
+                                          os.path.join("Core", "Teams", "team-alpha.md")} <= set(seen)
+          and any(p.startswith(os.path.join("Core", "People") + os.sep) for p in seen)
+          and any(p.endswith("access-bundles.json") for p in seen), seen)
 
     # --- the blocks file: what counts as a block
     def folder_with(text, **kw):
@@ -832,11 +1096,17 @@ with tempfile.TemporaryDirectory() as d:
     check("an empty blocks file (0 bytes) is no source: an error, never 'the repository removed every block'",
           fempty["blocks"] == {} and fempty["source"] is None and fempty["version"] is None
           and fempty["error"] == "the blocks file holds no zorg-core block (empty, cut, or another namespace)", fempty)
+    check("…unsound: the folder answered, with a text that is no source", fempty["unsound"] == fempty["error"], fempty)
+    fgone = cr.fetch(repo_of({"id": "zorg-case", "kind": "folder", "paths": [d], "blocks_file": "Core/no-such-blocks.md"}))
+    check("…a blocks file that is not there is an error and no unsound text (nothing answered)",
+          fgone["error"] and "not found" in fgone["error"] and fgone["unsound"] is None, fgone)
     pristine_core = read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))
     cut = pristine_core[:pristine_core.index("<!-- zorg-core:end id=teams -->")]
     fcut = folder_with(cut, namespace="zorg-core")
     check("a blocks file cut inside its last region → 'cut at block teams', no blocks (the regions before it are not offered alone)",
           fcut["blocks"] == {} and fcut["source"] is None and fcut["error"] == "the blocks file is cut at block teams", fcut)
+    check("…unsound, as are a file of another namespace and a begin marker never closed",
+          fcut["unsound"] == fcut["error"] and fbr["unsound"] == fbr["error"] and fns["unsound"] == fns["error"], (fcut, fbr, fns))
     fother = folder_with(blocks_of(region("zorg-other", "scope", "1", "Not ours")), namespace="zorg-core")
     check("a file of another namespace only → the same error as an empty one", fother["source"] is None
           and fother["error"] == "the blocks file holds no zorg-core block (empty, cut, or another namespace)", fother)

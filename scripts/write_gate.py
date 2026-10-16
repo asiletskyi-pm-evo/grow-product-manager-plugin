@@ -16,6 +16,10 @@ folder's `writable` globs, gets the same "ask" with the reason and the
 alternative (references/context-provider-protocol.md §7). Everything else
 passes silently.
 
+Since v3.14.0 the registrations are read within 3 s each and 6 s for all; one that is
+not read in time (iCloud has not downloaded it) gets the "ask" too, naming it — the
+target may lie in its folder.
+
 Metadata-only edits (status, labels, title) pass silently. The gate is opt-out:
 `/grow-product-manager:setup --write-gate off` writes {"write_gate": "off"} to
 the plugin data dir. Fail open: any error → exit 0, no output (= allow).
@@ -87,16 +91,19 @@ def context_text(cwd=None):
 
 
 def provider_hit(tool_input, cwd=None):
-    """The provider registration whose read-only folder holds the target, or None."""
+    """(the provider registration whose read-only folder holds the target or None, the target, [the registrations not
+    read in time]). Since v3.14 the registrations are read on the boundary's budget — 3 s each, 6 s for all
+    (`cc.boundary_registrations`) — so a registration iCloud has not downloaded never holds the write past the hook's
+    timeout; it is named instead, and the caller asks, since the target may be in its folder."""
     path = str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
     if not path:
-        return None, ""
+        return None, "", []
     if not os.path.isabs(os.path.expanduser(path)) and cwd:
         path = os.path.join(cwd, path)           # the hook input's cwd, not this process's
     import ctx_common as cc
     text = context_text(cwd)
-    regs = cc.find_registrations(cc.vault_entries(text) if text else [])
-    return cc.boundary_hit(path, regs), path
+    regs, late = cc.boundary_registrations(cc.vault_entries(text) if text else [])
+    return cc.boundary_hit(path, regs), path, late
 
 
 def ask(reason):
@@ -115,13 +122,19 @@ def main():
     if not tool or not write_gate_enabled():
         return
     if tool in FILE_TOOLS:
-        hit, path = provider_hit(tool_input, data.get("cwd"))
+        hit, path, late = provider_hit(tool_input, data.get("cwd"))
         if hit:
             ask("Grow PM provider boundary: %s is inside the local folder of the shared-context provider "
                 "'%s', which is read-only for this plugin (references/context-provider-protocol.md §7). "
                 "Write the note in your own vault layer instead, or record a correction in your overlay "
                 "note for this provider; confirm only if you mean to edit the provider's copy. "
                 "Disable with /grow-product-manager:setup --write-gate off." % (path, hit.get("title") or hit.get("id")))
+        elif late:
+            ask("Grow PM provider boundary: a shared-context provider registration could not be read: %s — not available "
+                "locally (still downloading?), so whether %s is inside a provider's read-only folder cannot be checked "
+                "(references/context-provider-protocol.md §7). Confirm only if it is not; or wait until the registration "
+                "has downloaded and try again. Disable with /grow-product-manager:setup --write-gate off."
+                % (", ".join(late), path))
         return
     op = tool.rsplit("__", 1)[-1]
     if op not in ("createJiraIssue", "editJiraIssue", "createConfluencePage", "updateConfluencePage"):

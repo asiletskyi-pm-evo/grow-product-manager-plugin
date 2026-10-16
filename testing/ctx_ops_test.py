@@ -845,10 +845,40 @@ with tempfile.TemporaryDirectory() as d:                 # no section of the las
     res = e.sync(resolve={"product.zorg-app": "record"})
     co.restore(res["snapshot"], e.store, e.copies)
     kept = read(p)
-    check("a record whose last-compile section copy 0 does not hold is left as it is — never guessed",
-          "REC" in kept and "PROJ" not in read(e.ctx) and co.consistent_records(e.store, e.copies)[0] == [] and read(p) == kept)
+    if "- **Jira Project Key:** PROJ" in read(e.mirror):           # since v3.14 the mirror is asked too: edit it as well
+        e.edit(e.mirror, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** MIRROR")
+    check("a record whose last-compile section no copy holds is left as it is — never guessed",
+          "REC" in kept and "PROJ" not in read(e.ctx) and "PROJ" not in read(e.mirror)
+          and co.consistent_records(e.store, e.copies)[0] == [] and read(p) == kept)
     changed, left = co.consistent_records(e.store, e.copies)
     check("consistent_records names the records it could not put back", changed == [] and left == ["product.zorg-app"], (changed, left))
+
+with tempfile.TemporaryDirectory() as d:                 # v3.14.0 Task 9: copy 0 was changed, the mirror holds the section
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    before = read(p)
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    res = e.sync(resolve={"product.zorg-app": "record"})
+    co.restore(res["snapshot"], e.store, e.copies)
+    mirror_had = "- **Jira Project Key:** PROJ" in read(e.mirror)
+    changed, left = co.consistent_records(e.store, e.copies)
+    check("consistent_records: the last compile's section not in copy 0 (changed) but in the mirror → put back from the mirror",
+          mirror_had and "FILE" in read(e.ctx) and changed == ["product.zorg-app"] and left == [] and read(p) == before,
+          (mirror_had, changed, left, read(p)[-300:]))
+    check("…a second call finds nothing", co.consistent_records(e.store, e.copies) == ([], []))
+
+with tempfile.TemporaryDirectory() as d:                 # …a mirror that cannot be read is passed over: the record is left
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    res = e.sync(resolve={"product.zorg-app": "record"})
+    co.restore(res["snapshot"], e.store, e.copies)
+    open(e.mirror, "wb").write(b"\xff\xfe not text")
+    kept = read(p)
+    check("…a later copy that cannot be read (not UTF-8, not there in time) is passed over, never a reason to fail",
+          co.consistent_records(e.store, e.copies) == ([], ["product.zorg-app"]) and read(p) == kept, read(p)[-200:])
 
 with tempfile.TemporaryDirectory() as d:                 # a consistent store, a record the state does not know, no home copy
     e = Env(d); e.migrate()
@@ -859,10 +889,16 @@ with tempfile.TemporaryDirectory() as d:                 # a consistent store, a
     before = tree(e.store.root)
     check("a record the last compile did not know (created in the file) is left as it is",
           co.consistent_records(e.store, e.copies) == ([], []) and tree(e.store.root) == before)
-    e.edit(os.path.join(e.store.records_dir, "setting.templates.md"), "builtin", "obsidian edit")
+    tpl = os.path.join(e.store.records_dir, "setting.templates.md")
+    clean_tpl = read(tpl)
+    e.edit(tpl, "builtin", "obsidian edit")
     os.remove(e.copies[0])
+    check("no home copy → since v3.14 the mirror is asked: the section is put back from it",
+          co.consistent_records(e.store, e.copies) == (["setting.templates"], []) and read(tpl) == clean_tpl, read(tpl)[-200:])
+    e.edit(tpl, "builtin", "obsidian edit")
+    os.remove(e.copies[1])
     before = tree(e.store.root)
-    check("no home copy → no section to take, nothing is written, and the edited record is named as not put back",
+    check("no copy at all → no section to take, nothing is written, and the edited record is named as not put back",
           co.consistent_records(e.store, e.copies) == ([], ["setting.templates"]) and tree(e.store.root) == before)
 
 # --- v3.13.1: the summary the digest falls back to when the store is slow to read (a cold start)
@@ -1025,6 +1061,208 @@ with tempfile.TemporaryDirectory() as d:                 # a registration skippe
           refreshed is False and after_refresh == kept and [p for p, _ in skipped] == [growth]
           and "not available locally" in skipped[0][1], (refreshed, after_refresh, skipped))
     check("card_repos with a registration skipped: None — the list is not known", listed is None, listed)
+
+# --- v3.14.0 Task 7: the result of the daily sync, for the digest's repos line (sync_by_repo; cached with the summary)
+def sync_result(outcome, **fields):
+    """A sync_result as ctx_synced keeps it in the block state: every key of RESULT_KEYS."""
+    out = {"at": "2026-10-20T10:05:00+03:00", "outcome": outcome, "updated": 0, "added": 0, "removed": 0, "kept_yours": [],
+           "took_rule": [], "awaiting": [], "held": [], "rejected": [], "reason": None, "report": None, "snapshot": None}
+    out.update(fields)
+    return out
+
+
+def put_sync(env, rid, result, checked=NOW):
+    """The block state of `rid` with `result` as its sync_result (and its attempt)."""
+    with cs.guard_roots(co.allowed_roots(env.home, env.text)):
+        try:
+            state = cb.load_state(env.store, rid)
+        except cs.StoreError:
+            state = {}
+        state.update({"checked": checked, "source": "folder", "version": "0.4", "blocks": state.get("blocks") or {},
+                      "sync_attempt": result["at"], "sync_result": result})
+        cb.save_state(env.store, rid, state)
+
+
+def saved_sync(path):
+    return (json.load(open(path, encoding="utf-8")).get("facts") or {}).get("sync") if os.path.isfile(path) else None
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    check("sync_by_repo: no block state, no results", co.sync_by_repo(e.store.root) == {}, co.sync_by_repo(e.store.root))
+    changed = sync_result("changed", updated=2, kept_yours=["scope"], report="_System/context/sync/2026-10-20.md")
+    gone = sync_result("unreachable", reason="no answer")
+    put_sync(e, "zorg-core", changed)
+    put_sync(e, "zorg-growth", gone)
+    save_state(e, "zorg-idle", NOW, {"scope": "0.4"})                     # checked, never synced: a state with no sync_result
+    check("sync_by_repo: the sync_result of every repository that has one, as the state keeps it; a state without one is left out",
+          co.sync_by_repo(e.store.root) == {"zorg-core": changed, "zorg-growth": gone}, co.sync_by_repo(e.store.root))
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-growth.json"), "w").write("{ not json")
+    check("…a state that cannot be read is skipped, the others stay",
+          co.sync_by_repo(e.store.root) == {"zorg-core": changed}, co.sync_by_repo(e.store.root))
+    with cs.guard_roots(co.allowed_roots(e.home, e.text)):
+        for name, bad in [("that is a list", ["changed"]), ("that is a text", "changed"), ("that is a number", 7),
+                          ("without an outcome", {"at": NOW}), ("whose outcome is not a text", {"outcome": 3})]:
+            state = cb.load_state(e.store, "zorg-core")
+            state["sync_result"] = bad
+            cs.atomic_write(os.path.join(e.store.state_dir, "blocks", "zorg-core.json"), json.dumps(state))
+            check("…a sync_result %s is left out" % name, co.sync_by_repo(e.store.root) == {}, co.sync_by_repo(e.store.root))
+    check("sync_by_repo never fails: a store root that is not there is no results", co.sync_by_repo(os.path.join(d, "nowhere")) == {}, "")
+    real_mod = sys.modules.get("ctx_blocks")
+    sys.modules["ctx_blocks"] = None                                      # an import that fails
+    try:
+        got = co.sync_by_repo(e.store.root)
+    finally:
+        sys.modules["ctx_blocks"] = real_mod
+    check("…a module that cannot be imported is no results, no exception", got == {}, got)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    changed = sync_result("changed", updated=2, kept_yours=["scope"], report="_System/context/sync/2026-10-20.md")
+    put_sync(e, "zorg-core", changed)
+    cache = co.summary_cache_path(e.ctx)
+    s = co.summary_in_time(e.ctx, home=e.home)
+    check("summary_in_time: the results of the sync come with the days, in the same budget, and are saved in the cache",
+          s and s["sync"] == {"zorg-core": changed} and s["checked"] == {"zorg-core": NOW}
+          and saved_sync(cache) == {"zorg-core": changed}, (s, saved_sync(cache)))
+    loaded = co.load_summary(e.ctx)
+    check("load_summary: the results of the sync come back from the cache", loaded and loaded["sync"] == {"zorg-core": changed}, loaded)
+    data = json.load(open(cache, encoding="utf-8"))
+    old = dict(data, facts={k: v for k, v in data["facts"].items() if k != "sync"})
+    open(cache, "w", encoding="utf-8").write(json.dumps(old))
+    loaded = co.load_summary(e.ctx)
+    check("…a cache of v3.13.1, which has no sync, still loads: sync is {}",
+          loaded and loaded["records"] == 7 and loaded["sync"] == {}, loaded)
+    for name, bad in [("a list", [1]), ("a text", "changed"), ("null", None)]:
+        open(cache, "w", encoding="utf-8").write(json.dumps(dict(data, facts=dict(data["facts"], sync=bad))))
+        loaded = co.load_summary(e.ctx)
+        check("…a sync that is %s is {}, the rest of the cache stays" % name, loaded and loaded["records"] == 7 and loaded["sync"] == {}, loaded)
+    open(cache, "w", encoding="utf-8").write(json.dumps(dict(data, facts=dict(data["facts"], sync={"zorg-core": changed, "zorg-bad": "x", "": {"outcome": "changed"}}))))
+    loaded = co.load_summary(e.ctx)
+    check("…a result that is not an object is dropped, the others stay", loaded and loaded["sync"] == {"zorg-core": changed}, loaded)
+    facts = dict(s)
+    co.save_summary(e.ctx, dict(facts, sync={"zorg-core": changed}))
+    check("save_summary: facts without results keep the results saved before for this context (as the days)",
+          co.save_summary(e.ctx, dict(facts, sync={})) and saved_sync(cache) == {"zorg-core": changed}, saved_sync(cache))
+    other = sync_result("no-changes")
+    check("…facts with results replace them", co.save_summary(e.ctx, dict(facts, sync={"zorg-growth": other}))
+          and saved_sync(cache) == {"zorg-growth": other}, saved_sync(cache))
+    check("…facts with no key at all (an old caller) keep them too",
+          co.save_summary(e.ctx, {k: v for k, v in facts.items() if k != "sync"}) and saved_sync(cache) == {"zorg-growth": other}, saved_sync(cache))
+    state = os.path.join(e.store.state_dir, "blocks", "zorg-core.json")
+    os.remove(state)
+    os.mkfifo(state)                                     # a state that never arrives: the days and the results miss their half second
+    try:
+        t0 = time.time(); s = co.summary_in_time(e.ctx, home=e.home); took = time.time() - t0
+    finally:
+        release(state)
+    check("a block state that never arrives: the facts in time, the days and the results missed — and the results saved before stay",
+          s and s["records"] == 7 and s["checked"] == {} and s["sync"] == {} and saved_sync(cache) == {"zorg-growth": other} and took < 2.0,
+          (s, took, saved_sync(cache)))
+
+
+# --- v3.14.0 Task 7 fix round: one read of each block state, one read of the cache (the hook's budget on a slow store)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX); e.migrate()
+    put_sync(e, "zorg-core", sync_result("changed", updated=1))
+    put_sync(e, "zorg-growth", sync_result("unreachable"), checked="2026-10-19T08:00:00+03:00")
+    reads = {}
+    real_load = cb.load_state
+
+    def counting(store, rid):
+        reads[rid] = reads.get(rid, 0) + 1
+        return real_load(store, rid)
+
+    cb.load_state = counting
+    try:
+        s = co.summary_in_time(e.ctx, home=e.home)
+    finally:
+        cb.load_state = real_load
+    check("summary_in_time reads each block state once, for the days and the results together",
+          reads == {"zorg-core": 1, "zorg-growth": 1} and s and s["checked"] == {"zorg-core": NOW, "zorg-growth": "2026-10-19T08:00:00+03:00"}
+          and sorted(s["sync"]) == ["zorg-core", "zorg-growth"], (reads, s))
+    check("checked_by_repo and sync_by_repo stay public, each from the same pass",
+          co.checked_by_repo(e.store.root) == s["checked"] and co.sync_by_repo(e.store.root) == s["sync"])
+    reads.clear()
+    cb.load_state = counting
+    try:
+        co.checked_by_repo(e.store.root); co.sync_by_repo(e.store.root)
+    finally:
+        cb.load_state = real_load
+    check("…and each reads a state once", reads == {"zorg-core": 2, "zorg-growth": 2}, reads)
+    cache = co.summary_cache_path(e.ctx)
+    real_read = cs.read_text
+    cache_reads = []
+
+    def counting_read(path, *a, **k):
+        if path == cache:
+            cache_reads.append(path)
+        return real_read(path, *a, **k)
+
+    cs.read_text = counting_read
+    try:
+        facts = dict(s, checked={}, sync={})
+        co.save_summary(e.ctx, facts)
+    finally:
+        cs.read_text = real_read
+    check("save_summary reads the saved summary once for both the days and the results it keeps",
+          len(cache_reads) == 1 and saved_sync(cache) == s["sync"]
+          and (json.load(open(cache, encoding="utf-8"))["facts"]["checked"]) == s["checked"], (len(cache_reads), saved_sync(cache)))
+    cache_reads.clear()
+    cs.read_text = counting_read
+    try:
+        co.save_summary(e.ctx, dict(s))                     # nothing to keep: the saved summary is not read at all
+    finally:
+        cs.read_text = real_read
+    check("…and not at all when the facts have both", cache_reads == [], len(cache_reads))
+
+# --- v3.14.0 Task 9: a snapshot reads the store through the store's bounded reader (an evicted file costs the budget)
+with tempfile.TemporaryDirectory() as d:
+    st, copy = seeded_store(d)
+    home = os.path.join(d, "home")
+    raw = bytes(range(256)) * 2
+    open(os.path.join(st.records_dir, "pasted.png"), "wb").write(raw)    # Obsidian put an attachment next to a record: not text
+    open(st.card_path, "w", encoding="utf-8").write("# Context card\n")
+    cb.put_base(st, "zorg-core", "a base")                               # .state/blocks/zorg-core/<sha>.md: a subfolder too
+    seen, real_bytes = [], cs.read_bytes
+
+    def tracing(path, timeout=None):
+        seen.append(os.path.relpath(path, st.root))
+        return real_bytes(path, timeout)
+
+    cs.read_bytes = tracing
+    try:
+        snap = co.snapshot(st, [copy], home, "bounded")
+    finally:
+        cs.read_bytes = real_bytes
+    on_disk = []
+    for dp, dn, fn in os.walk(st.root):
+        parts = [x for x in os.path.relpath(dp, st.root).split(os.sep) if x != "."]
+        if not any(x.startswith(".") for x in parts[1:]) and not (parts and parts[0].startswith(".") and parts[0] != ".state"):
+            on_disk += [os.path.join(*(parts + [f])) for f in fn if not f.startswith(".")]
+    store_seen = sorted(p for p in seen if not p.startswith(os.pardir))
+    check("every file of the store a snapshot copies is read through cs.read_bytes (the time budget), the card too",
+          store_seen == sorted(on_disk) and "INDEX.md" in seen
+          and os.path.join(".state", "blocks", "zorg-core", cs.sha_text(cb.norm("a base")) + ".md") in seen, (store_seen, sorted(on_disk)))
+    check("…and so is the compiled copy", any(os.path.realpath(os.path.join(st.root, p)) == os.path.realpath(copy) for p in seen), seen)
+    check("…and a file that is not UTF-8 text is copied byte for byte, as before",
+          open(os.path.join(snap, "records", "pasted.png"), "rb").read() == raw, "")
+
+    def never(path, timeout=None):
+        raise cs.StoreError("not available locally: %s did not load within 0.1 s" % os.path.basename(path))
+
+    cs.read_bytes = never
+    rec = st.load()[0]
+    st.write(dict(rec, body=rec["body"] + "\n- changed\n"))
+    n_snaps = len(os.listdir(os.path.join(home, ".grow-pm", "snapshots")))
+    try:
+        co.snapshot(st, [copy], home, "never"); err = None
+    except cs.StoreError as e:
+        err = e
+    finally:
+        cs.read_bytes = real_bytes
+    check("…a file that does not arrive stops the snapshot with StoreError before anything is written",
+          isinstance(err, cs.StoreError) and len(os.listdir(os.path.join(home, ".grow-pm", "snapshots"))) == n_snaps, err)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
