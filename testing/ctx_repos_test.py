@@ -743,9 +743,8 @@ with tempfile.TemporaryDirectory() as d:
     check("a people card that never arrives → no team block within the budget, the blocks stay",
           fsl["source"] == "folder" and fsl["blocks"] == f["blocks"] and fsl["team"] is None and fsl["team_source"] is None
           and fsl["error"] is None and time.time() - t0 < 5, (fsl, time.time() - t0))
-    check("…and the team error says why: the card, the time budget, nothing else",
-          isinstance(fsl["team_error"], str) and "not available" in fsl["team_error"] and "zz-slow.md" in fsl["team_error"]
-          and len(fsl["team_error"]) <= 300 and fsl["team_error"].startswith("team block"), fsl["team_error"])
+    check("…and the team error says why: a person card cannot be read, which one, nothing else (since v3.14)",
+          fsl["team_error"] == "team block: not available (a person card cannot be read: zz-slow.md)", fsl["team_error"])
     try:
         os.close(os.open(pipe, os.O_WRONLY | os.O_NONBLOCK))
     except OSError:
@@ -1001,8 +1000,8 @@ with tempfile.TemporaryDirectory() as d:
         fnr = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [noread], "blocks_file": CORE_BLOCKS_FILE, "team": "team-alpha"}))
         os.chmod(card, 0o644)
         check("a people card without read permission → team error naming the file, blocks stay", fnr["source"] == "folder"
-              and fnr["blocks"] == f["blocks"] and fnr["team"] is None and isinstance(fnr["team_error"], str)
-              and "a-one.md" in fnr["team_error"] and "Permission" in fnr["team_error"], fnr)
+              and fnr["blocks"] == f["blocks"] and fnr["team"] is None and fnr["team_source"] is None
+              and fnr["team_error"] == "team block: not available (a person card cannot be read: a-one.md)", fnr)
     real_tc = cr.pb.team_context
 
     def exploding(*a, **k):
@@ -1016,6 +1015,47 @@ with tempfile.TemporaryDirectory() as d:
     check("an unexpected exception in the team build never leaves fetch: the team error names the class, not the message",
           fex["source"] == "folder" and fex["blocks"] == f["blocks"] and fex["team"] is None and fex["team_source"] is None
           and isinstance(fex["team_error"], str) and "RuntimeError" in fex["team_error"] and "zorgsecret-4411" not in json.dumps(fex), fex)
+
+    # --- v3.14.0 Task 9: no silent degraded team block — the sync would apply one as an unattended "~"
+    def gap(name, change):
+        """The fetch of a copy of the core that `change(core_folder)` altered."""
+        c = os.path.join(d, "Gap-" + name)
+        shutil.copytree(CORE_FIX, c)
+        change(os.path.join(c, "Core"))
+        return cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [c], "blocks_file": CORE_BLOCKS_FILE,
+                                 "team": "team-alpha", "jira_write": "own"}))
+
+    def not_text(path):
+        open(path, "wb").write(b"---\nname: \xff\xfe\n---\n")
+
+    cases = (("no-card", lambda c: os.remove(os.path.join(c, "Teams", "team-alpha.md")), "team card not found"),
+             ("no-card-folder", lambda c: shutil.rmtree(os.path.join(c, "Teams")), "team card not found"),
+             ("no-people", lambda c: shutil.rmtree(os.path.join(c, "People")), "people folder not found"),
+             ("bad-person", lambda c: not_text(os.path.join(c, "People", "b-two.md")), "a person card cannot be read: b-two.md"),
+             ("bad-card", lambda c: not_text(os.path.join(c, "Teams", "team-alpha.md")), "team card cannot be read"))
+    for name, change, why in cases:
+        fg = gap(name, change)
+        check("%s → the team block is unavailable with its reason, never a block built without it; the blocks stay" % name,
+              fg["source"] == "folder" and fg["blocks"] == f["blocks"] and fg["error"] is None and fg["team"] is None
+              and fg["team_source"] is None and fg["team_error"] == "team block: not available (%s)" % why, fg)
+    fig = gap("ignored", lambda c: (not_text(os.path.join(c, "People", "_index.md")), not_text(os.path.join(c, "People", "notes.txt"))))
+    check("…a file of the people folder the builder never reads (_index.md, not .md) changes nothing: the team block as before",
+          fig["team"] == f["team"] and fig["team_error"] is None, fig)
+    check("provider_bundle keeps no module-wide reader (the daily sync fetches in helper threads): each caller passes its own",
+          not hasattr(pb_mod, "READ") and not hasattr(cr, "_bounded_reads"), "")
+    real_read = cr._read_bounded
+    seen = []
+    cr._read_bounded = lambda p: (seen.append(os.path.relpath(p, CORE_FIX)), real_read(p))[1]
+    try:
+        fseen = cr.fetch(repo_of({"id": "zorg-core", "kind": "bundle", "paths": [CORE_FIX], "blocks_file": CORE_BLOCKS_FILE,
+                                  "team": "team-alpha", "jira_write": "own"}))
+    finally:
+        cr._read_bounded = real_read
+    check("…fetch reads the manifest, the role model, the team card and every people card through its bounded reader",
+          fseen["team"] == f["team"] and {os.path.join("Core", "_System", "provider-manifest.yaml"),
+                                          os.path.join("Core", "Teams", "team-alpha.md")} <= set(seen)
+          and any(p.startswith(os.path.join("Core", "People") + os.sep) for p in seen)
+          and any(p.endswith("access-bundles.json") for p in seen), seen)
 
     # --- the blocks file: what counts as a block
     def folder_with(text, **kw):

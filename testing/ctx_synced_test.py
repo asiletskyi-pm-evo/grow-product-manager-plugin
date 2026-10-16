@@ -497,6 +497,14 @@ with tempfile.TemporaryDirectory() as d:
     empty_store = cs.Store(os.path.join(d, "none", "context"))
     check("a store with no report folder: nothing to do, no error", sy.prune_reports(empty_store, home, AT) == [])
     check("a now that is no time prunes nothing and raises nothing", sy.prune_reports(store, home, "yesterday") == [])
+    import time  # noqa: E402
+    stale, fresh = os.path.join(store.sync_dir, ".2026-10-01.md.tmp"), os.path.join(store.sync_dir, ".2026-10-16.md.tmp")
+    for path, age_h in ((stale, 25), (fresh, 1)):
+        open(path, "w", encoding="utf-8").write("# Синк контексту — half a write")
+        os.utime(path, (time.time() - age_h * 3600,) * 2)
+    gone = sy.prune_reports(store, home, AT)
+    check("v3.14.0 Task 9: the temp file an interrupted report write left (.<day>.md.tmp) goes once it is a day old; "
+          "a fresh one stays; neither is a report moved", not os.path.exists(stale) and os.path.exists(fresh) and gone == [], gone)
 
 # ------------------------------------------------------------------ fix round 1
 import errno  # noqa: E402

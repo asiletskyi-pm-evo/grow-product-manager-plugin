@@ -696,10 +696,12 @@ def prune_reports(store, home, now):
     where they stay another 30 days (`_move_to_trash`: the target is checked first, one copy at any time). Only
     `YYYY-MM-DD.md` files are touched — a note of yours in that folder is not; and a folder that is a link is not entered. A
     report that cannot be read or moved is left for the next time. Returns the names moved; a `now` that is no time, or a
-    folder that is not there, moves nothing."""
+    folder that is not there, moves nothing. Since v3.14.0 the temp file a report write cut short left there
+    (`.<YYYY-MM-DD>.md.tmp`, hidden) is removed once it is 24 h old (`cs.remove_stale_tmp`); it is no report moved."""
     when, gone = instant(now), []
     if when is None or os.path.islink(store.sync_dir):
         return gone
+    cs.remove_stale_tmp(store.sync_dir)
     try:
         names = sorted(os.listdir(store.sync_dir))
     except OSError:

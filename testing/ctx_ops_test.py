@@ -845,10 +845,40 @@ with tempfile.TemporaryDirectory() as d:                 # no section of the las
     res = e.sync(resolve={"product.zorg-app": "record"})
     co.restore(res["snapshot"], e.store, e.copies)
     kept = read(p)
-    check("a record whose last-compile section copy 0 does not hold is left as it is — never guessed",
-          "REC" in kept and "PROJ" not in read(e.ctx) and co.consistent_records(e.store, e.copies)[0] == [] and read(p) == kept)
+    if "- **Jira Project Key:** PROJ" in read(e.mirror):           # since v3.14 the mirror is asked too: edit it as well
+        e.edit(e.mirror, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** MIRROR")
+    check("a record whose last-compile section no copy holds is left as it is — never guessed",
+          "REC" in kept and "PROJ" not in read(e.ctx) and "PROJ" not in read(e.mirror)
+          and co.consistent_records(e.store, e.copies)[0] == [] and read(p) == kept)
     changed, left = co.consistent_records(e.store, e.copies)
     check("consistent_records names the records it could not put back", changed == [] and left == ["product.zorg-app"], (changed, left))
+
+with tempfile.TemporaryDirectory() as d:                 # v3.14.0 Task 9: copy 0 was changed, the mirror holds the section
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    before = read(p)
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    res = e.sync(resolve={"product.zorg-app": "record"})
+    co.restore(res["snapshot"], e.store, e.copies)
+    mirror_had = "- **Jira Project Key:** PROJ" in read(e.mirror)
+    changed, left = co.consistent_records(e.store, e.copies)
+    check("consistent_records: the last compile's section not in copy 0 (changed) but in the mirror → put back from the mirror",
+          mirror_had and "FILE" in read(e.ctx) and changed == ["product.zorg-app"] and left == [] and read(p) == before,
+          (mirror_had, changed, left, read(p)[-300:]))
+    check("…a second call finds nothing", co.consistent_records(e.store, e.copies) == ([], []))
+
+with tempfile.TemporaryDirectory() as d:                 # …a mirror that cannot be read is passed over: the record is left
+    e = Env(d); e.migrate()
+    p = os.path.join(e.store.records_dir, "product.zorg-app.md")
+    e.edit(p, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    res = e.sync(resolve={"product.zorg-app": "record"})
+    co.restore(res["snapshot"], e.store, e.copies)
+    open(e.mirror, "wb").write(b"\xff\xfe not text")
+    kept = read(p)
+    check("…a later copy that cannot be read (not UTF-8, not there in time) is passed over, never a reason to fail",
+          co.consistent_records(e.store, e.copies) == ([], ["product.zorg-app"]) and read(p) == kept, read(p)[-200:])
 
 with tempfile.TemporaryDirectory() as d:                 # a consistent store, a record the state does not know, no home copy
     e = Env(d); e.migrate()
@@ -859,10 +889,16 @@ with tempfile.TemporaryDirectory() as d:                 # a consistent store, a
     before = tree(e.store.root)
     check("a record the last compile did not know (created in the file) is left as it is",
           co.consistent_records(e.store, e.copies) == ([], []) and tree(e.store.root) == before)
-    e.edit(os.path.join(e.store.records_dir, "setting.templates.md"), "builtin", "obsidian edit")
+    tpl = os.path.join(e.store.records_dir, "setting.templates.md")
+    clean_tpl = read(tpl)
+    e.edit(tpl, "builtin", "obsidian edit")
     os.remove(e.copies[0])
+    check("no home copy → since v3.14 the mirror is asked: the section is put back from it",
+          co.consistent_records(e.store, e.copies) == (["setting.templates"], []) and read(tpl) == clean_tpl, read(tpl)[-200:])
+    e.edit(tpl, "builtin", "obsidian edit")
+    os.remove(e.copies[1])
     before = tree(e.store.root)
-    check("no home copy → no section to take, nothing is written, and the edited record is named as not put back",
+    check("no copy at all → no section to take, nothing is written, and the edited record is named as not put back",
           co.consistent_records(e.store, e.copies) == ([], ["setting.templates"]) and tree(e.store.root) == before)
 
 # --- v3.13.1: the summary the digest falls back to when the store is slow to read (a cold start)
@@ -1179,6 +1215,54 @@ with tempfile.TemporaryDirectory() as d:
     finally:
         cs.read_text = real_read
     check("…and not at all when the facts have both", cache_reads == [], len(cache_reads))
+
+# --- v3.14.0 Task 9: a snapshot reads the store through the store's bounded reader (an evicted file costs the budget)
+with tempfile.TemporaryDirectory() as d:
+    st, copy = seeded_store(d)
+    home = os.path.join(d, "home")
+    raw = bytes(range(256)) * 2
+    open(os.path.join(st.records_dir, "pasted.png"), "wb").write(raw)    # Obsidian put an attachment next to a record: not text
+    open(st.card_path, "w", encoding="utf-8").write("# Context card\n")
+    cb.put_base(st, "zorg-core", "a base")                               # .state/blocks/zorg-core/<sha>.md: a subfolder too
+    seen, real_bytes = [], cs.read_bytes
+
+    def tracing(path, timeout=None):
+        seen.append(os.path.relpath(path, st.root))
+        return real_bytes(path, timeout)
+
+    cs.read_bytes = tracing
+    try:
+        snap = co.snapshot(st, [copy], home, "bounded")
+    finally:
+        cs.read_bytes = real_bytes
+    on_disk = []
+    for dp, dn, fn in os.walk(st.root):
+        parts = [x for x in os.path.relpath(dp, st.root).split(os.sep) if x != "."]
+        if not any(x.startswith(".") for x in parts[1:]) and not (parts and parts[0].startswith(".") and parts[0] != ".state"):
+            on_disk += [os.path.join(*(parts + [f])) for f in fn if not f.startswith(".")]
+    store_seen = sorted(p for p in seen if not p.startswith(os.pardir))
+    check("every file of the store a snapshot copies is read through cs.read_bytes (the time budget), the card too",
+          store_seen == sorted(on_disk) and "INDEX.md" in seen
+          and os.path.join(".state", "blocks", "zorg-core", cs.sha_text(cb.norm("a base")) + ".md") in seen, (store_seen, sorted(on_disk)))
+    check("…and so is the compiled copy", any(os.path.realpath(os.path.join(st.root, p)) == os.path.realpath(copy) for p in seen), seen)
+    check("…and a file that is not UTF-8 text is copied byte for byte, as before",
+          open(os.path.join(snap, "records", "pasted.png"), "rb").read() == raw, "")
+
+    def never(path, timeout=None):
+        raise cs.StoreError("not available locally: %s did not load within 0.1 s" % os.path.basename(path))
+
+    cs.read_bytes = never
+    rec = st.load()[0]
+    st.write(dict(rec, body=rec["body"] + "\n- changed\n"))
+    n_snaps = len(os.listdir(os.path.join(home, ".grow-pm", "snapshots")))
+    try:
+        co.snapshot(st, [copy], home, "never"); err = None
+    except cs.StoreError as e:
+        err = e
+    finally:
+        cs.read_bytes = real_bytes
+    check("…a file that does not arrive stops the snapshot with StoreError before anything is written",
+          isinstance(err, cs.StoreError) and len(os.listdir(os.path.join(home, ".grow-pm", "snapshots"))) == n_snaps, err)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

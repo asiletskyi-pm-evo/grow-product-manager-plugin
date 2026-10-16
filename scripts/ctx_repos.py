@@ -12,7 +12,6 @@ themselves are read from local files only. `reach` says whether a repository ans
 may be shown (both moved here from ctx.py in v3.14). Nothing is ever written. Stdlib only.
 """
 import collections
-import contextlib
 import datetime
 import json
 import os
@@ -155,18 +154,32 @@ def _lf(text):
 
 def _read_bounded(path):
     """The text of a file the way `provider_bundle.rd` gives it (universal newlines), but through the store's
-    reader: a file iCloud has not downloaded costs the time budget, not a hang."""
+    reader: a file iCloud has not downloaded costs the time budget, not a hang. Every read of the core goes through
+    it, passed to provider_bundle as its `read` (since v3.14.0 a parameter: a module-wide reader swapped in and out
+    by one thread would leave another's reads unbounded — the daily sync fetches in helper threads)."""
     return _lf(cs.read_text(path))
 
 
-@contextlib.contextmanager
-def _bounded_reads():
-    prev = pb.READ
-    pb.READ = _read_bounded
-    try:
-        yield
-    finally:
-        pb.READ = prev
+class _Gap(Exception):
+    """A file the team block cannot do without is not there or cannot be read; the message is the reason."""
+
+
+def _team_reader(card, pdir):
+    """`_read_bounded` for the team build: the team card or a person card that cannot be read (not there by now, not
+    UTF-8, no permission, not arrived within the budget) is a _Gap — "team card cannot be read", "a person card
+    cannot be read: <its name>"; any other file's failure comes back as it is."""
+    card, pdir = os.path.normpath(card), os.path.normpath(pdir)
+
+    def read(path):
+        try:
+            return _read_bounded(path)
+        except Exception:
+            if os.path.normpath(path) == card:
+                raise _Gap("team card cannot be read")
+            if os.path.normpath(os.path.dirname(path)) == pdir:
+                raise _Gap("a person card cannot be read: %s" % os.path.basename(path))
+            raise
+    return read
 
 
 def _unavailable(why):
@@ -221,7 +234,7 @@ def _manifest(core_root):
     neither prints nor exits: the process's stdout is never swapped, so a fetch the daily sync left behind in its helper
     thread cannot take the command's own output (since v3.14; before, `load_manifest` ran under redirect_stdout)."""
     try:
-        manifest, said = pb.read_manifest(core_root)
+        manifest, said = pb.read_manifest(core_root, read=_read_bounded)
     except Exception as e:
         return None, _team_why(e)
     if manifest is not None:
@@ -240,10 +253,15 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
     known: the registration names no team; or the role model was read and does not list the team; or there is no
     core folder in the registration and the blocks file itself carries the team region (`in_file`: the file offers
     it). Whenever a team was due and cannot be built — no core folder in the registration, a core folder not on this
-    machine, a provider manifest that is missing (iCloud evicted it), unreadable or unparsable, a role model or a
-    card that does not arrive or cannot be read, a card iCloud has evicted (`_not_downloaded`: the builder would
-    leave it out and give a degraded block), anything unexpected — it is (None, "team block: not available
-    (<why>)"): the plan shows "·" and the region is never touched."""
+    machine, a provider manifest that is missing (iCloud evicted it), unreadable or unparsable, a role model that
+    does not arrive or cannot be read, a card iCloud has evicted (`_not_downloaded`), anything unexpected — it is
+    (None, "team block: not available (<why>)"): the plan shows "·" and the region is never touched.
+
+    The builder takes a missing card and a missing people folder as optional and would give a degraded block (no head,
+    no Jira, no members) that the daily sync would apply as an unattended "~". Since v3.14.0 neither is built: the
+    reasons are "team card not found" (no card file, or its folder is not there or cannot be listed), "team card cannot
+    be read", "people folder not found" and "a person card cannot be read: <its name>" (any card of the people
+    folder the builder reads — one that is not UTF-8, not readable or not arrived within the budget)."""
     team, core_root = repo["team"], repo["core_root"]
     if not team:
         return None, None
@@ -255,7 +273,7 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         return None, manifest_why or _unavailable("no provider manifest in the core")
     try:
         bundles = manifest.s("bundles_file") or os.path.join(manifest.s("plugin_folder", "."), "_System", "access-bundles.json")
-        model = json.loads(pb.rd(os.path.join(core_root, bundles)))
+        model = json.loads(_read_bounded(os.path.join(core_root, bundles)))
         teams = model["teams"]
         key = team if team in teams else (team[len("team-"):] if team.startswith("team-") else team)
         if key not in teams:
@@ -264,8 +282,16 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         if evicted:
             return None, _unavailable("%d file%s not downloaded — open the core folder in Finder to download them"
                                       % (evicted, "" if evicted == 1 else "s"))
-        block = pb.team_context(core_root, manifest, key, teams[key], model, repo["jira_write"] or "ask")[0]
+        card, pdir = pb.team_card_path(core_root, manifest, key), pb.people_path(core_root, manifest)
+        if not os.path.isfile(card):
+            return None, _unavailable("team card not found")
+        if not os.path.isdir(pdir):
+            return None, _unavailable("people folder not found")
+        block = pb.team_context(core_root, manifest, key, teams[key], model, repo["jira_write"] or "ask",
+                                read=_team_reader(card, pdir))[0]
         return block.rstrip("\n"), None
+    except _Gap as e:
+        return None, _unavailable(str(e))
     except (Exception, SystemExit) as e:
         return None, _team_why(e)
 
@@ -361,8 +387,7 @@ def manifest_namespace(repo):
     root = repo["core_root"]
     if repo.get("namespace_explicit", True) or not root or not os.path.isdir(root):
         return None
-    with _bounded_reads():
-        manifest, _ = _manifest(root)
+    manifest, _ = _manifest(root)
     return (_s(manifest.get("namespace")) or None) if manifest is not None else None
 
 
@@ -456,7 +481,7 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
            "team_error": None, "error": None, "unsound": None, "checked": _stamp(now)}
     src, core_root, url = repo["blocks_source"], repo["core_root"], repo["endpoint"]["url"]
     explicit = repo.get("namespace_explicit", True)         # a repository built by hand has no flag: its namespace is meant
-    with _bounded_reads(), cs.read_budget(None if deadline is None else deadline - time.monotonic()):
+    with cs.read_budget(None if deadline is None else deadline - time.monotonic()):
         blocks_file = repo["blocks_file"]
         manifest, manifest_why = None, None
         if core_root and os.path.isdir(core_root) and ((team and repo["team"]) or not blocks_file or not explicit):

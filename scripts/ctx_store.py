@@ -8,7 +8,9 @@ references/context-protocol.md. Used by ctx_ops.py and the `ctx` command line.
 - split_sections / assign_ids   the split rules and stable record ids
 - render_record / parse_record  the record file: frontmatter + the section text as is
 - compile_records               the compiled local-context.md
-- read_text                     a read with a time budget (an iCloud-evicted file blocks until it downloads)
+- read_text                     a read with a time budget (an iCloud-evicted file blocks until it downloads);
+                                read_bytes the same for a file that need not be text
+- atomic_write                  a write through a hidden temp file; remove_stale_tmp clears what a cut write left
 
 Stdlib only.
 """
@@ -17,6 +19,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import sys
 import threading
 import time
@@ -310,12 +313,22 @@ def read_text(path, timeout=None):
     """The file's text byte for byte, read in a helper thread: an iCloud-evicted file blocks in open()
     until it downloads. Not there within `timeout` seconds → StoreError naming it; OSError and
     UnicodeDecodeError come back as they are."""
+    return _read_in_thread(path, timeout, binary=False)
+
+
+def read_bytes(path, timeout=None):
+    """`read_text` for a file that need not be text (since v3.14.0: a snapshot copies the store's files as they are —
+    an attachment Obsidian put next to a record too): its bytes, in the same helper thread and time budget."""
+    return _read_in_thread(path, timeout, binary=True)
+
+
+def _read_in_thread(path, timeout, binary):
     timeout = read_timeout() if timeout is None else timeout
     box = {}
 
     def work():
         try:
-            with open(path, encoding="utf-8", newline="") as f:
+            with (open(path, "rb") if binary else open(path, encoding="utf-8", newline="")) as f:
                 box["text"] = f.read()
         except BaseException as e:  # handed back to the caller below
             box["error"] = e
@@ -346,6 +359,40 @@ def atomic_write(path, text):
         if os.path.exists(tmp):
             os.remove(tmp)
         raise
+
+
+TMP_STALE_S = 24 * 3600                 # an atomic_write temp file older than this was left by a write that never finished
+TMP_NAME = re.compile(r"^\..+\.tmp$")   # …and its name: `.<name>.tmp`, in the folder of the file it was for
+
+
+def remove_stale_tmp(folder, older_than=TMP_STALE_S):
+    """Remove the temp files `atomic_write` names (`.<name>.tmp`) directly in `folder` that were last changed more than
+    `older_than` seconds ago — what a write cut short (a crash, a kill, a full disk) left behind; no write is still at it a
+    day later (since v3.14.0). Only regular files: a folder or a link of that name is left, so is a subfolder's file. Each
+    goes through check_target; one that is refused or cannot be removed stays. A folder that is a link or is not there
+    is nothing to do. Never raises; returns the names removed."""
+    removed = []
+    if os.path.islink(folder):
+        return removed
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return removed
+    now = time.time()
+    for name in names:
+        if not TMP_NAME.match(name):
+            continue
+        path = os.path.join(folder, name)
+        try:
+            st = os.lstat(path)
+            if not stat.S_ISREG(st.st_mode) or now - st.st_mtime <= older_than:
+                continue
+            check_target(path)
+            os.remove(path)
+        except (OSError, PathRefused):
+            continue
+        removed.append(name)
+    return removed
 
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")

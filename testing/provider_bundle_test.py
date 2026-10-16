@@ -473,6 +473,35 @@ check("exit 5 in connect-steps: the core moved → point to the kept-key line an
 check("connect-steps: the blocks the report lists as reference_only show as + in the next plan; exit 4 also means a refused run",
       "reference_only" in steps_f and "show as `+` in the next plan" in steps_f and "a store inside a provider's folder, a busy lock" in steps_f, "")
 
+# 10 — v3.14.0 Task 9: no module-wide reader; a caller passes its own to every function that reads the core
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import provider_bundle as pb  # noqa: E402
+check("provider_bundle has no module variable READ (a caller in a helper thread must never swap it for another)",
+      not hasattr(pb, "READ"), "")
+CORE_DIR = os.path.join(FIX, "zorg-core")
+m_plain, _ = pb.read_manifest(CORE_DIR)
+seen = []
+def tracing(p):
+    seen.append(os.path.relpath(p, ROOT))
+    with open(p, encoding="utf-8") as f:
+        return f.read()
+m_traced, _ = pb.read_manifest(CORE_DIR, read=tracing)
+check("read_manifest(…, read=) reads through the reader it is given", m_traced == m_plain
+      and seen == [os.path.relpath(os.path.join(CORE_DIR, "Core", "_System", "provider-manifest.yaml"), ROOT)], seen)
+J = json.load(open(os.path.join(CORE_DIR, "Core", "_System", "access-bundles.json"), encoding="utf-8"))
+plain = pb.team_context(CORE_DIR, m_plain, "alpha", J["teams"]["alpha"], J, "own")
+seen[:] = []
+traced = pb.team_context(CORE_DIR, m_plain, "alpha", J["teams"]["alpha"], J, "own", read=tracing)
+people = sorted(os.path.relpath(os.path.join(CORE_DIR, "Core", "People", n), ROOT)
+                for n in os.listdir(os.path.join(CORE_DIR, "Core", "People")) if n.endswith(".md") and not n.startswith("_"))
+check("team_context(…, read=) gives the same block and reads the card, every people card and the template through the reader",
+      traced[0] == plain[0] and os.path.relpath(os.path.join(CORE_DIR, "Core", "Teams", "team-alpha.md"), ROOT) in seen
+      and sorted(p for p in seen if os.sep + "People" + os.sep in p) == people
+      and any(p.endswith("team-block.md") for p in seen), seen)
+check("…and with no reader it reads the files itself, as the bundle builder always has (rd with no reader)",
+      pb.rd(os.path.join(CORE_DIR, "Core", "Teams", "team-alpha.md")) == open(os.path.join(CORE_DIR, "Core", "Teams", "team-alpha.md"),
+                                                                                 encoding="utf-8").read(), "")
+
 # 9
 tok_file = os.path.join(ROOT, "testing", "org-tokens.local")
 toks = [l.strip() for l in open(tok_file, encoding="utf-8")] if os.path.isfile(tok_file) else []

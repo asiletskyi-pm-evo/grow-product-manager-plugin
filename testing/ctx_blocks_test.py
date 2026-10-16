@@ -1530,5 +1530,164 @@ with tempfile.TemporaryDirectory() as d:
     check("theirs on a '~' that is not rejected is still 'не потрібне' (the '~' applies by itself)",
           res["ignored"] == {"teams": "~"} and res["decisions"]["teams"] == "~" and NEW_TEAMS in body_of(store, HOST_NOTES), res)
 
+# --- v3.14.0 Task 9: the state's hygiene — a bounded repository id, a base is text, temp files a day old go
+import time  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:
+    store = cs.Store(os.path.join(d, "store"))
+    st_ok = {"checked": None, "source": None, "version": None, "blocks": {}}
+    longest, too_long = "z" + "-9" * 31 + "z", "z" * 65
+    before = files_under(d)
+    outcome = [raises(cs.StoreError, cb.load_state, store, too_long), raises(cs.StoreError, cb.save_state, store, too_long, st_ok),
+               raises(cs.StoreError, cb.put_base, store, too_long, "x"), raises(cs.StoreError, cb.prune_bases, store, too_long, st_ok)]
+    check("a repository id of 65 characters is refused everywhere (StoreError) and nothing is written",
+          all(isinstance(o, cs.StoreError) for o in outcome) and files_under(d) == before and cb.REPO_ID.fullmatch(too_long) is None, outcome)
+    check("…64 characters are fine", len(longest) == 64 and cb.load_state(store, longest) == st_ok
+          and cb.put_base(store, longest, "x") == sha_of("x"), len(longest))
+    before = files_under(d)
+    wrong = [raises(cs.StoreError, cb.put_base, store, "zorg-core", v) for v in (5, b"text", ["text"], {"t": 1}, 2.5, True)]
+    check("put_base of what is not text (a number, bytes, a list …) → StoreError, nothing written",
+          all(isinstance(o, cs.StoreError) for o in wrong) and files_under(d) == before, wrong)
+    check("…None is still the empty base, as before", cb.put_base(store, "zorg-core", None) == cs.sha_text(""), "")
+
+with tempfile.TemporaryDirectory() as d:
+    store = cs.Store(os.path.join(d, "store"))
+    st_ok = {"checked": None, "source": None, "version": None, "blocks": {}}
+    sha = cb.put_base(store, "zorg-core", "a base")
+    blocks_root = os.path.join(store.state_dir, "blocks")
+    day_old, hour_old = time.time() - 25 * 3600, time.time() - 3600
+    stale = [os.path.join(blocks_root, ".zorg-growth.json.tmp"), os.path.join(blocks_root, "zorg-core", "." + sha + ".md.tmp")]
+    fresh = [os.path.join(blocks_root, ".zorg-other.json.tmp"), os.path.join(blocks_root, "zorg-core", ".%s.md.tmp" % ("0" * 64))]
+    for path, t in [(p, day_old) for p in stale] + [(p, hour_old) for p in fresh]:
+        open(path, "w", encoding="utf-8").write("{\"half\": ")
+        os.utime(path, (t, t))
+    keep = os.path.join(blocks_root, ".DS_Store")
+    open(keep, "w", encoding="utf-8").write("x")
+    os.utime(keep, (day_old, day_old))
+    cb.save_state(store, "zorg-core", st_ok)
+    check("save_state removes the temp files an interrupted write left in .state/blocks/ and in the repository's bases, "
+          "older than 24 h", not any(os.path.exists(p) for p in stale), [p for p in stale if os.path.exists(p)])
+    check("…one 1 h old stays (a write may still be at it), and so does any other hidden file",
+          all(os.path.exists(p) for p in fresh) and os.path.exists(keep), [p for p in fresh if not os.path.exists(p)])
+    check("…and the state is saved as ever", cb.load_state(store, "zorg-core") == st_ok, cb.load_state(store, "zorg-core"))
+
+# --- v3.14.0 Task 9: a comparison is bounded — the first 2000 lines a side, and it says so
+def paragraphs(n, mark, every):
+    """`n` lines of a long note: a paragraph, a blank line, … — every `every`-th paragraph carries `mark`."""
+    return "\n".join("" if i % 2 else "Paragraph %d%s." % (i, mark if (i // 2) % every == 0 else "") for i in range(n))
+
+
+BIG_BASE, BIG_THEIRS, BIG_MINE = (region("big", "0.4", paragraphs(5000, m, e)) for m, e in (("", 1), (" (core)", 7), (" (mine)", 5)))
+t0 = time.time()
+big = cb._differences(BIG_MINE, BIG_THEIRS, BIG_BASE)
+took = time.time() - t0
+CUT = "(порівняно перші 2000 рядків)"
+check("5000 lines a side (a long note, a blank line between paragraphs): compared within a second, and it says the first 2000",
+      took < 1 and big.get("note") == CUT and any("(core)" in x for x in big["theirs"]) and any("(mine)" in x for x in big["mine"]),
+      (round(took, 3), big))
+check("…the note is a line under the three in the plan and the report", "    " + CUT in cb._detail_lines(big), cb._detail_lines(big))
+late = region("big", "0.4", paragraphs(5000, "", 1).replace("Paragraph 4500.", "Paragraph 4500 (mine, late)."))
+cut = cb._differences(late, BIG_BASE, BIG_BASE)
+check("…a change after line 2000 is not seen, and no side claims 'only the version' on the strength of the first 2000",
+      cut["mine"] == [] and cut["theirs"] == [] and cut.get("note") == CUT, cut)
+check("…a block of ordinary length carries no note", "note" not in cb._differences(A2, A0, A1)
+      and "note" not in cb._differences(A2, None, A1) and not any(CUT in x for x in cb._detail_lines(cb._differences(A2, A0, A1))), "")
+
+# --- v3.14.0 Task 9: a copy of the source that lags lacks the newest blocks — that is behind, never a removal
+A2V = dict(st(A2), v="0.3")
+check("classify: the source does not offer a block and its version is older than your base's → '=' (the copy lags)",
+      cb.classify(A2, None, A2V, version="0.2") == "=" and cb.behind(A2, None, A2V, "0.2"), "")
+check("…the same version, a newer one, or none known → '−' as before (the core removed it)",
+      cb.classify(A2, None, A2V, version="0.3") == "−" and cb.classify(A2, None, A2V, version="0.4") == "−"
+      and cb.classify(A2, None, A2V) == "−" and cb.classify(A2, None, st(A2), version="0.2") == "−"
+      and not cb.behind(A2, None, A2V, "0.3") and not cb.behind(A2, None, A2V, None), "")
+check("…versions compare as numbers: 0.9 is older than 0.10, 1.0 is 1, dates in order; a word is no version",
+      cb.classify(A2, None, dict(A2V, v="0.10"), version="0.9") == "="
+      and cb.classify(A2, None, dict(A2V, v="1"), version="1.0") == "−"
+      and cb.classify(A2, None, dict(A2V, v="2026-10-15"), version="2026-10-01") == "="
+      and cb.classify(A2, None, A2V, version="beta") == "−" and cb.classify(A2, None, dict(A2V, v="next"), version="0.1") == "−"
+      and cb.classify(A2, None, A2V, version="0." + "9" * 40) == "−", "")
+check("…a block you edited that a lagging copy lacks keeps your edit: '✎', never '⚠' (the sync would detach it)",
+      cb.classify(B, None, dict(st(A), v="0.3"), version="0.2") == "✎" and cb.classify(B, None, dict(st(A), v="0.3"), version="0.3") == "⚠", "")
+check("…and with the source's text there the version plays no part",
+      cb.classify(A2, A0, dict(st(A2, bases=[A0, A1, A2]), v="0.3"), version="0.9") == "="
+      and cb.classify(A0, A1, dict(st(A0), v="0.1"), version="0.0") == "~", "")
+
+OKR_05 = region("okr", "0.5", "### OKR\n- grow, the 0.5 way")
+LAG = "джерело позаду вашої бази (v0.4 < v0.5)"
+
+
+def release_05(store, **over):
+    """The core's v0.5: every block it had bumped to v0.5, and a new block okr."""
+    f = published(store, version="0.5", **over)
+    f["blocks"].update(scope=NEW_SCOPE, teams=NEW_TEAMS, okr=OKR_05)
+    return f
+
+
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    apply_of(home, text, copies, store, release_05(store), add=["okr"])     # your bases are now at v0.5, okr's too
+    okr_host = cb.load_state(store, "zorg-core")["blocks"]["okr"]["host"]
+    body, state_before = body_of(store, okr_host), cb.load_state(store, "zorg-core")
+    p = plan_of(store, copies, published(store))                    # a copy still at v0.4 (a mirror not updated yet): no okr
+    row = row_of(p, "okr")
+    check("plan: a lagging copy (v0.4) lacks the block your base has at v0.5 → '=' «джерело позаду», no change, no question",
+          cb.base_version(state_before) == "0.5" and state_before["blocks"]["okr"]["v"] == "0.5" and row["sign"] == "="
+          and row["note"] == LAG and row.get("behind") is True and p["changes"] == 0 and p["questions"] == 0
+          and signs_of(p) == {"scope": "=", "teams": "=", "team": "=", "okr": "="}, (signs_of(p), row))
+    import ctx_synced as sy  # noqa: E402
+    d_lag = sy.decide(p, cb._theirs(published(store))[0])
+    check("…the daily sync's cascade leaves it alone: no removal held, nothing chosen",
+          "okr" not in d_lag["held_removals"] and "okr" not in d_lag["choose"] and "okr" not in d_lag["hold"], d_lag)
+    res = apply_of(home, text, copies, store, published(store, checked=LATER))
+    check("apply writes nothing: your v0.5 region and its base stay, only the time of the check moves",
+          res["changed"] is False and res["written"] == [] and body_of(store, okr_host) == body and OKR_05 in body
+          and cb.load_state(store, "zorg-core")["blocks"]["okr"]["base_sha"] == state_before["blocks"]["okr"]["base_sha"], res)
+    check("…and its text shows the lagging source", LAG in cb.render_apply(res), cb.render_apply(res))
+    p_again = plan_of(store, copies, published(store))
+    check("…the next pass on the same lagging copy says the same (a pass does not make the copy current)",
+          signs_of(p_again)["okr"] == "=" and row_of(p_again, "okr").get("behind") is True, signs_of(p_again))
+    gone = release_05(store)
+    del gone["blocks"]["okr"]
+    check("the core at the version of your bases without the block → '−' as before (it removed the block)",
+          signs_of(plan_of(store, copies, gone))["okr"] == "−"
+          and signs_of(plan_of(store, copies, dict(gone, version=None)))["okr"] == "−", "")
+    edit_record(store, okr_host, "- grow, the 0.5 way", "- grow, the 0.5 way (mine)")
+    settle(home, text, copies, store)
+    row = row_of(plan_of(store, copies, published(store)), "okr")
+    check("a block you edited that the lagging copy lacks → '✎' with the same note: your edit stays, nothing is asked",
+          row["sign"] == "✎" and row["note"] == LAG and row.get("behind") is True, row)
+    res = apply_of(home, text, copies, store, published(store), choose={"okr": "theirs"})
+    check("…theirs for it takes nothing (there is no text of the core to take): not applied, said so, the region stays",
+          res["ignored"] == {"okr": "✎"} and res["changed"] is False and "(mine)" in body_of(store, okr_host), res)
+    check("…at the version of your bases the core did remove it: '⚠' as before",
+          signs_of(plan_of(store, copies, gone))["okr"] == "⚠", "")
+
+with tempfile.TemporaryDirectory() as d:                      # a core whose blocks carry their own versions
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f_okr = published(store)
+    f_okr["blocks"]["okr"] = OKR_05                               # one new block at v0.5, the others stay at v0.4
+    apply_of(home, text, copies, store, f_okr, add=["okr"])
+    p = plan_of(store, copies, published(store))                  # …and it is gone again: the source's version is still v0.4
+    check("a core whose blocks carry their own versions: removing the one at v0.5 while most stay at v0.4 is '−' — "
+          "the copy is no older than most of your bases", cb.base_version(cb.load_state(store, "zorg-core")) == "0.4"
+          and signs_of(p)["okr"] == "−" and not row_of(p, "okr").get("behind"), signs_of(p))
+
+# --- v3.14.0 Task 9: a team block that cannot be built from what the core has is '·', the region you hold untouched
+TEAM_GAP = "team block: not available (team card not found)"
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    team_host = cb.find_regions(store.load(), "zorg-core")[0]["team"]["host"]
+    body = body_of(store, team_host)
+    f_gap = published(store, team=None, team_source=None, team_error=TEAM_GAP)
+    row = row_of(plan_of(store, copies, f_gap), "team")
+    res = apply_of(home, text, copies, store, f_gap)
+    check("plan '·' with the reason, and apply leaves the team region as it is",
+          row["sign"] == "·" and row["note"] == "недоступний: " + TEAM_GAP and res["changed"] is False
+          and body_of(store, team_host) == body, (row, res["changed"]))
+
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

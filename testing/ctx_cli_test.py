@@ -636,12 +636,13 @@ with tempfile.TemporaryDirectory() as d:        # frontmatter edited in the same
           rc == 0 and "obsidian edit" not in e.record("setting.templates") and "obsidian alias" in e.record("setting.templates")
           and "obsidian edit" not in read(e.ctx) and in_sync(e), (rc, out[-400:], e.record("setting.templates")[:400]))
 
-with tempfile.TemporaryDirectory() as d:        # v3.13.1: a record edited in its file AND the copy edited too: nothing to put back, and undo says so
+with tempfile.TemporaryDirectory() as d:        # v3.13.1: a record edited in its file AND the copies edited too: nothing to put back, and undo says so
     e = Env(d)
     run_ok(e, "migrate", "--apply")
     rid = "product.zorg-app"
     e.edit(os.path.join(e.store, "records", rid + ".md"), "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
     e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    e.edit(e.mirror, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")   # since v3.14 the mirror is asked too
     rc_s, out_s, _ = run_ok(e, "sync", "--resolve", rid + "=record")
     rc, out, res = run_ok(e, "undo")
     check("undo names what it could not put back", rc == 0 and rc_s == 0
@@ -649,6 +650,18 @@ with tempfile.TemporaryDirectory() as d:        # v3.13.1: a record edited in it
           and res.get("records_not_reverted") == [rid], (rc_s, rc, out[-500:], res))
     check("…and an undo that put every record back says nothing of the kind",
           run_ok(e, "undo")[2].get("records_not_reverted") == [], "")
+
+with tempfile.TemporaryDirectory() as d:        # v3.14.0 Task 9: only copy 0 edited — the vault mirror still holds the section
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rid = "product.zorg-app"
+    e.edit(os.path.join(e.store, "records", rid + ".md"), "- **Jira Project Key:** PROJ", "- **Jira Project Key:** REC")
+    e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** FILE")
+    rc_s, out_s, _ = run_ok(e, "sync", "--resolve", rid + "=record")
+    rc, out, res = run_ok(e, "undo")
+    check("undo puts the record back from the mirror's section when copy 0 no longer holds it",
+          rc == 0 and rc_s == 0 and res.get("records_reverted") == [rid] and res.get("records_not_reverted") == []
+          and "- **Jira Project Key:** PROJ" in e.record(rid) and "- **Jira Project Key:** PROJ" in read(e.ctx), (rc_s, rc, out[-400:]))
 
 # --- v3.12.1 final review: undo of a compile snapshot; assign does not verify
 with tempfile.TemporaryDirectory() as d:

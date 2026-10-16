@@ -53,7 +53,7 @@ And the third, which writes your records:
                             changes nothing writes only the time of the check. `render_apply` is its text.
 
 Every write goes through ctx_store.atomic_write / check_target (the write allow-list). A repository id is
-kebab-case and nothing else, so it can never name a path outside `.state/blocks/`.
+kebab-case of at most 64 characters and nothing else, so it can never name a path outside `.state/blocks/`.
 
 `find_regions` is the strict reading of the user's own records. `ctx_repos._regions` is the lenient reading of
 what a repository publishes (it keeps the first of a repeated id); the two differ on purpose and share only the
@@ -180,10 +180,12 @@ def find_regions(records, ns):
     return {k: v for k, v in found.items() if k not in bad}, errors
 
 
-def classify(mine, theirs, st):
+def classify(mine, theirs, st, version=None):
     """The plan's sign for one block. `mine` / `theirs`: the region text on either side, or None when absent.
-    `st`: what the state remembers of the block, {"base_sha", "bases", "user_removed"}, or None when there is no
-    base. `bases` holds hashes of recent versions (never their text); a hash is cs.sha_text(norm(text)).
+    `st`: what the state remembers of the block, {"base_sha", "bases", "v", "user_removed"}, or None when there is no
+    base. `bases` holds hashes of recent versions (never their text); a hash is cs.sha_text(norm(text)). `version`
+    (since v3.14.0): the version of a source's copy that lags — `plan` passes it only when the copy's version (the `v=`
+    most of its blocks carry) is older than the one most of your bases are at; None otherwise.
 
     The rules apply in this order:
       "="  both are present and equal once normalised (even with no base)
@@ -191,6 +193,9 @@ def classify(mine, theirs, st):
       "✂"  yours is absent and there is a base: you removed it (flagged or not)
       the repository's is absent and yours is there — the repository removed the block:
       "?"    there is no base: nothing says yours is the repository's text
+      unless the source's copy is older than your base (`behind`): a copy made before the block came cannot remove it
+      "="    …yours is the base (or an older base): nothing moves
+      "✎"    …you changed it: your edit stays, nothing moves
       "−"    yours is the base (or an older base): you never changed it, remove it
       "⚠"    yours is no base: you changed it — your edit is not dropped without a question
       "?"  both are present, differ, and there is no base to tell which moved
@@ -215,6 +220,8 @@ def classify(mine, theirs, st):
     if st.get("base_sha"):
         known.add(st["base_sha"])
     if nt is None:
+        if behind(mine, None, st, version):
+            return "=" if cs.sha_text(nm) in known else "✎"
         return "−" if cs.sha_text(nm) in known else "⚠"
     if behind(mine, theirs, st):
         return "="
@@ -225,12 +232,40 @@ def classify(mine, theirs, st):
     return "⚠"
 
 
-def behind(mine, theirs, st):
-    """Does the repository offer an older base of a block whose base yours is? A copy of the source that lags (an MCP
-    mirror not updated yet, a folder restored from a backup) would otherwise read as "the repository moved" and an
-    apply would take your block a version back. The plan says "=" with a note and apply writes nothing: the base stays."""
-    if mine is None or theirs is None or not st or not st.get("base_sha"):
+VERSION_NUMBER = re.compile(r"[vV]?(\d{1,9}(?:[.-]\d{1,9}){0,7})")     # 0.4, v3.14.0, 2026-10-16 — a version that orders
+
+
+def _version_key(v):
+    """The version `v` as numbers to compare (1.0 and 1 are the same), or None when it is not dotted or dashed digits."""
+    found = VERSION_NUMBER.fullmatch(v.strip()) if isinstance(v, str) else None
+    if not found:
+        return None
+    parts = [int(x) for x in re.split(r"[.-]", found.group(1))]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
+def _older(a, b):
+    """Is version `a` older than version `b`? False when either is unknown or is no version that orders."""
+    ka, kb = _version_key(a), _version_key(b)
+    return ka is not None and kb is not None and ka < kb
+
+
+def behind(mine, theirs, st, version=None):
+    """Does the source lag behind your base of a block? A copy of the source that lags (an MCP mirror not updated yet,
+    a folder restored from a backup) would otherwise read as "the repository moved" — an apply would take your block a
+    version back, or remove a block the copy does not have yet. Two cases:
+      - it offers an older base of a block whose base yours is;
+      - it does not offer the block (`theirs` None) and its `version` — given only for a copy that lags (see
+        `classify`) — is older than the version of your base (the state's `v`), since v3.14.0: a block added after that
+        copy was made is not in it, which is no removal.
+    The plan says "=" with a note ("✎" for a block you edited that the copy lacks) and apply writes nothing: the base
+    stays."""
+    if mine is None or not st or not st.get("base_sha"):
         return False
+    if theirs is None:
+        return _older(version, st.get("v"))
     nm, nt = norm(mine), norm(theirs)
     if nm == nt:
         return False
@@ -239,7 +274,7 @@ def behind(mine, theirs, st):
 
 
 # ------------------------------------------------------------------ the store's memory of a repository
-REPO_ID = re.compile(r"[a-z0-9][a-z0-9-]*")
+REPO_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")         # at most 64 characters (since v3.14.0): it names a file and a folder
 SHA = re.compile(r"[0-9a-f]{64}")
 BASE_FILE = re.compile(r"[0-9a-f]{64}\.md")
 MAX_BASES = 10                                  # the hashes of the last ten bases are kept, the oldest dropped first
@@ -248,9 +283,10 @@ REMOVED = "removed"                             # what stands for "the repositor
 
 
 def _repo(repo_id):
-    """The repository id when it is kebab-case, else StoreError: it names a folder and a file under `.state/blocks/`."""
+    """The repository id when it is kebab-case of at most 64 characters, else StoreError: it names a folder and a file
+    under `.state/blocks/`."""
     if not isinstance(repo_id, str) or not REPO_ID.fullmatch(repo_id):
-        raise cs.StoreError("not a repository id (lower-case letters, digits and '-'): %.60r" % (repo_id,))
+        raise cs.StoreError("not a repository id (lower-case letters, digits and '-', at most 64): %.60r" % (repo_id,))
     return repo_id
 
 
@@ -341,7 +377,9 @@ def load_state(store, repo_id):
 
 def save_state(store, repo_id, state):
     """Write the repository's state (sorted, indented, atomic). `bases` are kept to the last ten with `base_sha`
-    the newest of them, as `load_state` gives them back."""
+    the newest of them, as `load_state` gives them back. Since v3.14.0 it also clears what a write cut short left: the
+    temp files (`.<name>.tmp`) older than 24 h in `.state/blocks/` and in the repository's bases folder
+    (`cs.remove_stale_tmp`; never a reason to fail)."""
     path = _state_path(store, repo_id)
     clean = _clean(state, ".state/blocks/%s.json" % repo_id)
     try:
@@ -349,12 +387,17 @@ def save_state(store, repo_id, state):
     except (TypeError, ValueError) as e:
         raise cs.StoreError("state not storable: .state/blocks/%s.json (%s)" % (repo_id, e))
     cs.atomic_write(path, text)
+    for folder in (os.path.dirname(path), _bases_dir(store, repo_id)):
+        cs.remove_stale_tmp(folder)
 
 
 def put_base(store, repo_id, text):
     """Keep `text` (None is empty) as it is, byte for byte, as a base of the repository; the hash of its normalised
-    form names it and is returned. A base that is already there is not written again."""
+    form names it and is returned. A base that is already there is not written again. Anything else that is not text
+    (a number, bytes, a list …) → StoreError, nothing written (since v3.14.0)."""
     folder = _bases_dir(store, repo_id)
+    if text is not None and not isinstance(text, str):
+        raise cs.StoreError("a base is text, not %s: .state/blocks/%s/" % (type(text).__name__, repo_id))
     sha = cs.sha_text(norm(text))
     path = os.path.join(folder, sha + ".md")
     if not os.path.isfile(path):
@@ -543,9 +586,11 @@ def _body_lines(text):
 
 def _changed(base, side):
     """(the lines of `side` that are new or changed against `base`, the indexes of the `base` lines that were removed
-    or changed)."""
+    or changed). difflib's heuristic for popular lines is on (since v3.14.0): it only starts at 200 lines, so a block
+    of ordinary length compares as before, and a long one stays quick — the blank lines between paragraphs would
+    otherwise make 2000 lines take seconds."""
     added, gone = [], set()
-    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, base, side, autojunk=False).get_opcodes():
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, base, side, autojunk=True).get_opcodes():
         if tag in ("replace", "insert"):
             added.extend(side[j1:j2])
         if tag in ("replace", "delete"):
@@ -562,20 +607,29 @@ def _version_only(ref, side):
     return ["(лише версія v%s → v%s)" % (clip(a or "—", HEADER_CLIP), clip(b or "—", HEADER_CLIP))]
 
 
+DIFF_MAX = 2000                                 # the lines of each side a comparison reads (since v3.14.0) …
+DIFF_CUT = "(порівняно перші %d рядків)" % DIFF_MAX   # … and what it says when a side had more
+
+
 def _differences(mine, theirs, base):
     """{"theirs", "mine", "base"}: the first DIFF_LINES lines (blank ones skipped, each clipped to LINE_CLIP) of what
     the repository changed, what you changed and what both started from, all against the base text. Without the base
     text ("base" is None) each side is set against the other. A side whose lines are exactly those it is set against
     and whose version moved says only that: "(лише версія v<a> → v<b>)" — a side that removed lines says nothing new.
-    `theirs` None is a block the repository removed: its side says so, and what both said is the base's first lines."""
+    `theirs` None is a block the repository removed: its side says so, and what both said is the base's first lines.
+    Each side is compared on its first DIFF_MAX lines (since v3.14.0: thousands of lines must not hold a plan or the
+    daily sync); when any side had more, "note" is DIFF_CUT and no side says "only the version" on the strength of a
+    part of it."""
     m = _body_lines(mine)
     t = None if theirs is None else _body_lines(theirs)
-    if base is None:
+    b = None if base is None else _body_lines(base)
+    cut = any(side is not None and len(side) > DIFF_MAX for side in (m, t, b))
+    m, t, b = (None if side is None else side[:DIFF_MAX] for side in (m, t, b))
+    if b is None:
         said_t = [] if t is None else _changed(m, t)[0]
         said_m, was = (m if t is None else _changed(t, m)[0]), None
         ref_t, ref_m, vref_t, vref_m = m, t, mine, theirs
     else:
-        b = _body_lines(base)
         said_t, gone_t = _changed(b, t) if t is not None else ([], set(range(len(b))))
         said_m, gone_m = _changed(b, m)
         was = [b[i] for i in sorted(gone_t | gone_m)]
@@ -586,9 +640,12 @@ def _differences(mine, theirs, base):
     if theirs is None:
         said = [REMOVED_LINE]
     else:
-        said = first(said_t) or (_version_only(vref_t, theirs) if t == ref_t else [])
-    return {"theirs": said, "mine": first(said_m) or (_version_only(vref_m, mine) if m == ref_m else []),
-            "base": None if was is None else first(was)}
+        said = first(said_t) or (_version_only(vref_t, theirs) if t == ref_t and not cut else [])
+    out = {"theirs": said, "mine": first(said_m) or (_version_only(vref_m, mine) if m == ref_m and not cut else []),
+           "base": None if was is None else first(was)}
+    if cut:
+        out["note"] = DIFF_CUT
+    return out
 
 
 def _source_label(repo, source):
@@ -689,12 +746,15 @@ def plan(store, copies, repo, fetched, now, all_=False):
     distinct hosts of the rows "~" and "−" — a `rejected` row counts in neither, since apply holds it. `errors` are
     `find_regions`' problems (a block with one has no row).
     A "=" row whose source lags behind your base (`behind`) carries `behind: True` and the note
-    "джерело позаду вашої бази (v<theirs> < v<yours>)". A row that offers the repository's text or its removal ("~",
-    "+", "−", "⚠", "?") whose offer (`offered`: the hash of the text, or "removed") is among the state's `rejected` for
-    the block carries `rejected: True` and the note "відкинуто вами — не застосовується, доки ядро не змінить блок"; the
-    sign stays `classify`'s. A row whose repository text is a core rule (`is_rule`) carries `rule: True`, and " (правило
-    ядра)" ends its note. A blocks file that holds none of the blocks you have a base for
-    is no plan at all: SourceLost (see `_lost`).
+    "джерело позаду вашої бази (v<theirs> < v<yours>)" — since v3.14.0 also a block the source's copy lacks while that
+    copy lags: its version (`fetched["version"]`) is older than the one most of your bases are at (`base_version`) and
+    than your base of the block — "=", or "✎" when you edited it, never "−" or "⚠". (A core whose blocks carry their
+    own versions keeps its version where most blocks are: removing one block of a newer version is still "−".)
+    A row that offers the repository's text or its removal ("~", "+", "−", "⚠", "?") whose offer (`offered`: the hash
+    of the text, or "removed") is among the state's `rejected` for the block carries `rejected: True` and the note
+    "відкинуто вами — не застосовується, доки ядро не змінить блок"; the sign stays `classify`'s. A row whose
+    repository text is a core rule (`is_rule`) carries `rule: True`, and " (правило ядра)" ends its note. A blocks file
+    that holds none of the blocks you have a base for is no plan at all: SourceLost (see `_lost`).
     Every text a server controls is cleaned of control characters and bounded (HEADER_CLIP, NOTE_CLIP, LINE_CLIP).
     """
     if fetched.get("error"):
@@ -712,7 +772,8 @@ def plan(store, copies, repo, fetched, now, all_=False):
     ids = [b for b in list(mine) + [b for b in theirs if b not in mine] if b not in bad]
     if team_error and "team" not in ids and "team" not in bad:
         ids.append("team")
-    rows = []
+    rows, version = [], fetched.get("version")
+    lagging = version if _older(version, base_version(state)) else None   # the copy is older than most of your bases
     for bid in ids:
         m, t, entry = mine.get(bid), theirs.get(bid), state["blocks"].get(bid)
         row = {"block": bid, "sign": SKIPPED, "host": m["host"] if m else None, "source": where.get(bid), "note": ""}
@@ -726,10 +787,12 @@ def plan(store, copies, repo, fetched, now, all_=False):
             if m is None and t is None:
                 continue
             held = _held(entry, m["text"] if m else None)
-            row["sign"] = classify(m["text"] if m else None, t, held)
+            row["sign"] = classify(m["text"] if m else None, t, held, lagging)
+            lags = row["sign"] in ("=", "✎") and behind(m["text"] if m else None, t, held, lagging)
             row["note"] = REMOVED_NOTES[row["sign"]] if t is None and row["sign"] in REMOVED_NOTES else NOTES[row["sign"]]
-            if row["sign"] == "=" and behind(m["text"] if m else None, t, held):
-                vm, vt = _marker_version(m["text"]), _marker_version(t)
+            if lags:                                     # the copy lags: its text is an older base, or it lacks the block
+                vm, vt = ((_marker_version(m["text"]), _marker_version(t)) if t is not None
+                          else ((held or {}).get("v") or "", lagging or ""))
                 row["behind"] = True
                 row["note"] = clip(BEHIND_NOTE + (" (v%s < v%s)" % (clip(vt, HEADER_CLIP), clip(vm, HEADER_CLIP))
                                                   if vm and vt and vm != vt else ""), NOTE_CLIP)
@@ -751,7 +814,6 @@ def plan(store, copies, repo, fetched, now, all_=False):
                 row["rule"] = True
                 row["note"] = clip(row["note"] + RULE_NOTE, NOTE_CLIP)
         rows.append(row)
-    version = fetched.get("version")
     open_rows = [r for r in rows if not r.get("rejected")]   # a rejected text is held by apply: neither asked nor written
     return {"repo": rid, "source": fetched.get("source"), "source_label": _source_label(repo, fetched.get("source")),
             "version": clip(version, HEADER_CLIP) if version else None,
@@ -793,7 +855,8 @@ def held_rejected(p, choose, add):
 
 def _detail_lines(diff):
     """The three lines under a "⚠" row: what the repository says now, what you wrote, what both said before (this
-    one only when the base text is there). A side with several changed lines continues on aligned lines."""
+    one only when the base text is there). A side with several changed lines continues on aligned lines. A comparison
+    cut at DIFF_MAX lines adds its note on a line of its own."""
     out = []
     for label, key in (("Ядро тепер каже", "theirs"), ("Ви писали", "mine"), ("Раніше обидва казали", "base")):
         lines = diff.get(key)
@@ -802,6 +865,8 @@ def _detail_lines(diff):
         head = "    %s: " % label
         out.append(head + (lines[0] if lines else "—"))
         out.extend(" " * len(head) + line for line in lines[1:])
+    if diff.get("note"):
+        out.append("    " + diff["note"])
     return out
 
 
@@ -927,7 +992,8 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
           behind your base (`behind`): then the base stays as it is
       ~   the region becomes the repository's text, and so does the base
       ✎   your region stays, the base too — unless `choose` says theirs for it (since v3.14.0): then the region becomes
-          the repository's text and so does the base (mine or both for a "✎" is no answer: `ignored`)
+          the repository's text and so does the base (mine or both for a "✎" is no answer: `ignored`; nor is theirs
+          for a "✎" whose lagging source lacks the block)
       −   the region is removed (its text stays in the snapshot), and the block's state entry with it
       ✂   nothing in the records; the state marks it removed by you (`user_removed`, today) — never offered again
       ⚠ ? only with an answer in `choose` {block: "theirs" | "mine" | "both"}: theirs — the region becomes the
@@ -1004,8 +1070,10 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
                 entry["checked"] = checked
             continue
         how, wanted = choose.get(bid), bid in add
-        # theirs on a ✎, or on a row that offers a text you rejected (the explicit take), is an answer too
-        answers = sign in ("⚠", "?") or (how == "theirs" and (sign == "✎" or bool(row.get("rejected"))))
+        # theirs on a ✎, or on a row that offers a text you rejected (the explicit take), is an answer too — but not on a
+        # ✎ whose source lags and lacks the block: there is no text of the repository to take
+        answers = sign in ("⚠", "?") or (how == "theirs" and ((sign == "✎" and t is not None)
+                                                              or bool(row.get("rejected"))))
         if (how and not answers) or (wanted and sign != "+"):
             ignored[bid] = sign                         # an answer to a question the plan does not ask: dropped
         wanted = (wanted or (answers and sign == "+")) and sign == "+"    # theirs on a rejected "+" is its --add

@@ -96,7 +96,9 @@ SNAP_RE = re.compile(r"^(\d{8}T\d{6})")
 
 def _files(folder, prefix):
     """{prefix + relative path: bytes} of the files under `folder`, subfolders too (the block bases live in
-    `state/blocks/<repo>/`). A hidden name — a file or a folder — and a linked folder are skipped."""
+    `state/blocks/<repo>/`). A hidden name — a file or a folder — and a linked folder are skipped. Each file is read
+    through cs.read_bytes (since v3.14.0): a file iCloud has not downloaded costs the time budget, not a hang — as
+    bytes, so a file that is not text (an attachment next to a record) is copied as it is."""
     out = {}
     if os.path.isdir(folder):
         for name in sorted(os.listdir(folder)):
@@ -104,8 +106,7 @@ def _files(folder, prefix):
             if name.startswith("."):
                 continue
             if os.path.isfile(p):
-                with open(p, "rb") as f:
-                    out[prefix + name] = f.read()
+                out[prefix + name] = cs.read_bytes(p)
             elif os.path.isdir(p) and not os.path.islink(p):
                 out.update(_files(p, prefix + name + "/"))
     return out
@@ -113,23 +114,25 @@ def _files(folder, prefix):
 
 def snapshot(store, copies, home, label):
     """Copy the store and the compiled copies to ~/.grow-pm/snapshots/<time>-<label>/; an identical
-    newest snapshot is reused. Returns the snapshot folder."""
+    newest snapshot is reused. Returns the snapshot folder. Every file is read within one time budget (`cs.read_timeout`,
+    or what is left of the caller's `cs.read_budget`): one that does not arrive → StoreError before anything is written."""
     root = os.path.join(_grow(home), "snapshots")
     os.makedirs(root, exist_ok=True)
-    files = _files(store.records_dir, "records/")
-    files.update(_files(store.state_dir, "state/"))
-    if os.path.isdir(store.archive_dir):
-        for year in sorted(os.listdir(store.archive_dir)):
-            files.update(_files(os.path.join(store.archive_dir, year), "archive/%s/" % year))
-    if os.path.isfile(store.card_path):
-        files["INDEX.md"] = open(store.card_path, "rb").read()
-    existed = os.path.isdir(store.records_dir) or os.path.isdir(store.state_dir)
-    cps = []
-    for n, path in enumerate(copies):
-        rel = "copies/%d.md" % n
-        if os.path.isfile(path):
-            files[rel] = open(path, "rb").read()
-        cps.append({"path": path, "file": rel, "existed": os.path.isfile(path)})
+    with cs.read_budget(cs.read_timeout()):
+        files = _files(store.records_dir, "records/")
+        files.update(_files(store.state_dir, "state/"))
+        if os.path.isdir(store.archive_dir):
+            for year in sorted(os.listdir(store.archive_dir)):
+                files.update(_files(os.path.join(store.archive_dir, year), "archive/%s/" % year))
+        if os.path.isfile(store.card_path):
+            files["INDEX.md"] = cs.read_bytes(store.card_path)
+        existed = os.path.isdir(store.records_dir) or os.path.isdir(store.state_dir)
+        cps = []
+        for n, path in enumerate(copies):
+            rel = "copies/%d.md" % n
+            if os.path.isfile(path):
+                files[rel] = cs.read_bytes(path)
+            cps.append({"path": path, "file": rel, "existed": os.path.isfile(path)})
     h = hashlib.sha256()
     for rel in sorted(files):
         h.update(rel.encode("utf-8") + b"\0" + files[rel] + b"\0")
@@ -229,22 +232,39 @@ def restore(snap_dir, store, copies):
 def consistent_records(store, copies):
     """After `restore`: a record whose text is not the one the last compile saved a hash for was already edited
     in its file (Obsidian) when the snapshot was taken — an import's snapshot holds the edit in the records and
-    the previous compile in the copies. Put its body back to the section of the home copy (copy 0) whose hash is
-    the saved one; the frontmatter stays. A record with no such section — no home copy, or the copy was edited
-    too — is left as it is, never guessed; so is a record the last compile did not know (it is not "off": nothing
-    says what it was). Returns (the ids changed, the ids left as they were although their text is not the saved one)."""
+    the previous compile in the copies. Put its body back to the section whose hash is the saved one: of the home
+    copy (copy 0) first, then — since v3.14.0 — of the other copies in order (the vault mirror still holds it when
+    the edit was made in copy 0); the frontmatter stays. A record with no such section in any copy — no copy there,
+    or every copy edited too — is left as it is, never guessed; so is a record the last compile did not know (it is
+    not "off": nothing says what it was). A later copy is read only while a record is still unmatched, and one that
+    cannot be read (not there in time, not UTF-8) is passed over. Returns (the ids changed, the ids left as they
+    were although their text is not the saved one)."""
     saved = store.state().get("records", {})
     if not saved:
         return [], []
     off = [r for r in store.load() if r["id"] in saved and cs.sha_text(r["body"]) != saved[r["id"]]]
     if not off:
         return [], []
-    if not copies or not os.path.isfile(copies[0]):
-        return [], [r["id"] for r in off]
-    sections = {cs.sha_text(f["text"]): f["text"] for f in cs.split_sections(_read(copies[0]))}
+    found = {}
+    for n, path in enumerate(copies or []):
+        wanted = {saved[r["id"]] for r in off} - set(found)
+        if not wanted:
+            break
+        if not os.path.isfile(path):
+            continue
+        try:
+            text = _read(path)
+        except (OSError, UnicodeDecodeError, cs.StoreError):
+            if n == 0:                                  # the home copy: as before, its failure is the caller's
+                raise
+            continue
+        for f in cs.split_sections(text):
+            h = cs.sha_text(f["text"])
+            if h in wanted and h not in found:
+                found[h] = f["text"]
     changed, left = [], []
     for r in off:
-        text = sections.get(saved[r["id"]])
+        text = found.get(saved[r["id"]])
         if text is not None:
             store.write(dict(r, body=text))
             changed.append(r["id"])
