@@ -8,6 +8,10 @@ goes through (§6.1); `⚠` keeps yours unless the repository's text is a core r
 keeps your text; `?` waits (the base does not move) or takes a rule; `+` is added; every other sign is left to `apply`.
 Also: the answer is only ever about the rows of the plan, the plan's own dict and a bare list of rows are the same input, and
 the rule is read from the repository's text, never from the row. Semantics: Context-Core-v3.14-Spec §5.1, §5.2, §6.1.
+Then `due` (Task 4), the table of when a repository is synced: never for `sync: off`, no key or a paused registration; 24 h
+after the last successful check, no sooner than an hour after a failed attempt that came after it; a time more than a day
+ahead (another Mac's clock) counts as unknown (§4.1–§4.3). And `sentence`, the one line a skill repeats (§8). The pass
+itself (`run`) is tested end to end in ctx_cli_test.py.
 Stdlib only; run from the repo root.
 """
 import os, sys
@@ -167,6 +171,66 @@ check("a choice is only ever mine or theirs", set(d["choose"].values()) <= {"min
 check("every block is in at most one of choose / add / hold", all(sum(b in x for x in (d["choose"], d["add"], d["hold"])) <= 1
                                                                   for b in {r["block"] for r in plan["rows"]}))
 check("decide is the same twice (nothing is kept between calls)", decide(plan, tx) == decide(plan, tx) == d)
+
+# ------------------------------------------------------------------ due: once a day, a failed attempt once an hour (Task 4)
+import datetime  # noqa: E402
+
+NOW = "2026-10-17T09:00:00+03:00"
+DAILY = {"id": "zorg-growth", "sync": "daily", "status": "active"}
+
+
+def ago(**kw):
+    return (datetime.datetime.fromisoformat(NOW) - datetime.timedelta(**kw)).isoformat()
+
+
+def ahead(**kw):
+    return (datetime.datetime.fromisoformat(NOW) + datetime.timedelta(**kw)).isoformat()
+
+
+check("the numbers of the spec: 24 h from the last successful check, 1 h after a failed attempt, a 20 s budget",
+      sy.DUE_AFTER == datetime.timedelta(hours=24) and sy.RETRY_AFTER == datetime.timedelta(hours=1) and sy.BUDGET_S == 20)
+check("never checked, never tried: due", sy.due(DAILY, {}, NOW) is True)
+check("an empty state (load_state's shape, checked None) is due", sy.due(DAILY, {"checked": None, "blocks": {}}, NOW) is True)
+check("checked 23 h ago: not due", sy.due(DAILY, {"checked": ago(hours=23)}, NOW) is False)
+check("checked 25 h ago: due", sy.due(DAILY, {"checked": ago(hours=25)}, NOW) is True)
+check("checked 24 h ago exactly: due (24 h have passed)", sy.due(DAILY, {"checked": ago(hours=24)}, NOW) is True)
+check("…but an attempt 30 min ago failed: not due", sy.due(DAILY, {"checked": ago(hours=25), "sync_attempt": ago(minutes=30)}, NOW) is False)
+check("…an attempt 2 h ago: due again", sy.due(DAILY, {"checked": ago(hours=25), "sync_attempt": ago(hours=2)}, NOW) is True)
+check("…an attempt 1 h ago exactly: due again", sy.due(DAILY, {"checked": ago(hours=25), "sync_attempt": ago(hours=1)}, NOW) is True)
+check("never checked, an attempt 30 min ago: not due", sy.due(DAILY, {"sync_attempt": ago(minutes=30)}, NOW) is False)
+check("an attempt not later than the last check is no failed attempt: due",
+      sy.due(DAILY, {"checked": ago(hours=25), "sync_attempt": ago(hours=25)}, NOW) is True
+      and sy.due(DAILY, {"checked": ago(hours=25), "sync_attempt": ago(hours=26)}, NOW) is True)
+check("checked 2 days in the future (another Mac's clock, iCloud): unknown, so due",
+      sy.due(DAILY, {"checked": ahead(days=2)}, NOW) is True)
+check("checked 2 h in the future (a clock a little ahead): not due", sy.due(DAILY, {"checked": ahead(hours=2)}, NOW) is False)
+check("an attempt 2 days in the future is unknown too: due", sy.due(DAILY, {"checked": ago(hours=25), "sync_attempt": ahead(days=2)}, NOW) is True)
+check("a check that is no time is unknown: due", sy.due(DAILY, {"checked": "yesterday"}, NOW) is True
+      and sy.due(DAILY, {"checked": 5}, NOW) is True)
+check("sync: off — never due", sy.due(dict(DAILY, sync="off"), {}, NOW) is False)
+check("no sync key — never due (off is the default)", sy.due({"id": "zorg-growth", "status": "active"}, {}, NOW) is False)
+check("a paused registration — never due", sy.due(dict(DAILY, status="paused"), {}, NOW) is False)
+check("now as a datetime, and a time in UTC with Z, are read the same",
+      sy.due(DAILY, {"checked": ago(hours=23)}, datetime.datetime.fromisoformat(NOW)) is False
+      and sy.due(DAILY, {"checked": "2026-10-16T07:00:00Z"}, NOW) is False          # 23 h before 06:00Z
+      and sy.due(DAILY, {"checked": "2026-10-16T07:00:00Z"}, "2026-10-17T08:00:00Z") is True)
+state = {"checked": ago(hours=25), "sync_attempt": ago(minutes=30)}
+sy.due(DAILY, state, NOW)
+check("due reads only: the state is not changed", state == {"checked": ago(hours=25), "sync_attempt": ago(minutes=30)})
+
+# ------------------------------------------------------------------ the sentence for the skill (Task 4; the report path is Task 5's)
+R = {"repo": "zorg-growth", "updated": 1, "added": 0, "removed": 0, "kept_yours": [], "report": None}
+check("one block, no conflict, no report yet: the sentence without the report clause",
+      sy.sentence(R) == "Ядро оновило 1 блок у zorg-growth, конфліктів 0 (лишено твоє)", sy.sentence(R))
+check("updated, added and removed count together; the plural is cs.blocks_word's; the conflicts kept yours are K",
+      sy.sentence(dict(R, updated=2, added=2, removed=1, kept_yours=["a"])) == "Ядро оновило 5 блоків у zorg-growth, конфліктів 1 (лишено твоє)"
+      and sy.sentence(dict(R, updated=1, added=1)) == "Ядро оновило 2 блоки у zorg-growth, конфліктів 0 (лишено твоє)")
+check("with a report: ' — звіт: <path from the storage root>'",
+      sy.sentence(dict(R, report="_System/context/sync/2026-10-17.md"))
+      == "Ядро оновило 1 блок у zorg-growth, конфліктів 0 (лишено твоє) — звіт: _System/context/sync/2026-10-17.md")
+check("the result's keys are the contract's", sy.RESULT_KEYS == ("at", "outcome", "updated", "added", "removed", "kept_yours", "took_rule",
+                                                                 "awaiting", "held", "rejected", "reason", "report", "snapshot"))
+check("the outcomes are the contract's", set(sy.OUTCOMES) == {"changed", "no-changes", "unreachable", "broken", "held", "import-conflict", "timeout"})
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

@@ -1985,6 +1985,304 @@ check("fix round 1: the usage and §12.6 say a manual apply holds a rejected tex
       and "`ctx provider apply` passes neither (its `held` is `{}`)" not in pp_now and "neither makes `apply` act differently" not in pp_now,
       (lacks(usage_now, need_fix1_usage), lacks(pp_now, need_fix1_pp)))
 
+# --- v3.14.0 Task 4: ctx provider sync — the daily pass, due once a day, within 20 seconds, never waiting on a lock
+import threading  # noqa: E402
+import ctx_mcp as cm_mod  # noqa: E402
+import ctx_repos as crp_mod  # noqa: E402
+import ctx_synced as sy_mod  # noqa: E402
+
+DAY0 = "2026-10-14T09:00:00+03:00"
+DAY1 = "2026-10-16T09:00:00+03:00"
+DAY1_PLUS_1H = "2026-10-16T10:00:00+03:00"
+DAY2 = "2026-10-17T09:00:00+03:00"
+DAY2_PLUS_1M = "2026-10-17T09:01:00+03:00"
+DAY2_PLUS_31M = "2026-10-17T09:31:00+03:00"
+DAY2_PLUS_2H = "2026-10-17T11:02:00+03:00"
+G_METRICS = ("<!-- zorg-growth:begin id=growth-metrics v=0.1 -->\n#### Growth metrics\n- **North star:** weekly active shoppers\n"
+             "<!-- zorg-growth:end id=growth-metrics -->")
+G_TEAM = "<!-- zorg-growth:begin id=team v=0.1 -->\n### Team: Alpha (growth view)\n- **Growth squad:** Alpha\n<!-- zorg-growth:end id=team -->"
+G_OKR = "<!-- zorg-growth:begin id=growth-okr v=0.2 -->\n#### Growth OKR\n- double weekly buyers\n<!-- zorg-growth:end id=growth-okr -->"
+SYNC_KEYS = {"repo", "at", "outcome", "updated", "added", "removed", "kept_yours", "took_rule", "awaiting", "held", "rejected", "reason",
+             "report", "snapshot"}
+assert G_METRICS in GROWTH_TEXT and G_TEAM in GROWTH_TEXT
+
+
+def set_sync(e, rid, value):
+    """`sync: <value>` at the end of the registration of `rid` (the home providers folder of repos_env)."""
+    with open(os.path.join(e.home, ".grow-pm", "providers", rid + ".yaml"), "a", encoding="utf-8") as f:
+        f.write("sync: %s\n" % value)
+
+
+def checked_at(e, rid, when):
+    """Put the repository's last check at `when`: an adopt checks too (now, on the real clock), so a test whose days are
+    fixed puts it days before its first one."""
+    path = os.path.join(e.store, ".state", "blocks", rid + ".json")
+    state = json.loads(read(path))
+    state["checked"] = when
+    open(path, "w", encoding="utf-8").write(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n")
+
+
+def growth_blocks(*regions):
+    return "# Context blocks — Zorg Growth\n\n" + "\n\n".join(regions) + "\n"
+
+
+def sha_of(text):
+    return cs_mod.sha_text(cb_mod.norm(text))
+
+
+fake = FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT})
+try:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        set_sync(e, "zorg-dead", "off")                 # zorg-core has no sync key: off too
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        checked_at(e, "zorg-growth", DAY0)
+        rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", "2026-10-15T08:00:00+03:00")
+        check("--if-due a day after the adopt's check (23 h): not due — an adopt and an apply count as a check",
+              rc == 0 and res == {"command": "provider", "action": "sync", "synced": [], "ok": True}, (rc, out[-300:]))
+        core_before = block_state(e, "zorg-core")
+        new_metrics = G_METRICS.replace("v=0.1", "v=0.2").replace("weekly active shoppers", "monthly active shoppers")
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, new_metrics)
+        cache = os.path.join(e.home, ".grow-pm", ".ctx-summary.json")
+        if os.path.exists(cache):
+            os.remove(cache)
+        rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1)
+        check("first run: due, the core's change applied, one sentence for the skill",
+              rc == 0 and res["synced"] == ["zorg-growth"] and "Ядро оновило 1 блок у zorg-growth" in out, (rc, out[-700:]))
+        check("…only the registration with sync: daily: sync: off and a registration without the key are not touched",
+              [r["repo"] for r in res["results"]] == ["zorg-growth"] and block_state(e, "zorg-core") == core_before
+              and block_state(e, "zorg-dead") is None, res.get("results"))
+        r0 = res["results"][0]
+        check("…the result: changed, 1 updated, every key of the contract", set(r0) == SYNC_KEYS and r0["outcome"] == "changed"
+              and r0["updated"] == 1 and r0["added"] == 0 and r0["removed"] == 0 and r0["at"] == DAY1 and r0["report"] is None
+              and r0["snapshot"] and os.path.isdir(r0["snapshot"]), r0)
+        check("…the region is the core's text in both copies; one journal line, op provider-sync, naming the text taken",
+              region_in(read(e.ctx), "zorg-growth", "growth-metrics") == new_metrics
+              and region_in(read(e.mirror), "zorg-growth", "growth-metrics") == new_metrics
+              and last_journal(e)["op"] == "provider-sync" and last_journal(e)["taken"] == {"growth-metrics": sha_of(new_metrics)}
+              and last_journal(e)["snapshot"] == r0["snapshot"], last_journal(e))
+        st = block_state(e, "zorg-growth")
+        check("…the state: the check and the attempt at the pass's time, sync_result as in the result",
+              st["checked"] == DAY1 and st["sync_attempt"] == DAY1
+              and st["sync_result"] == {k: v for k, v in r0.items() if k != "repo"}, st)
+        check("…a sync that synced saves the digest's summary (v3.13.1)", os.path.isfile(cache))
+        j_before, snaps_before, state_before = journal_len(e), snapshot_names(e), read(e.store, ".state", "blocks", "zorg-growth.json")
+        os.remove(cache)
+        seen = len(fake.seen)
+        rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1_PLUS_1H)
+        check("not due an hour later: nothing printed but CTX_RESULT, nothing written",
+              res["synced"] == [] and out.strip().count("\n") == 0 and journal_len(e) == j_before, (rc, out))
+        check("…exit 0, the result is the short one, no request to the server, not a byte in the state, no snapshot",
+              rc == 0 and res == {"command": "provider", "action": "sync", "synced": [], "ok": True} and len(fake.seen) == seen
+              and read(e.store, ".state", "blocks", "zorg-growth.json") == state_before and snapshot_names(e) == snaps_before, res)
+        check("…and no summary saved: nothing was synced", not os.path.exists(cache))
+
+
+        fake.close()                                     # VPN off
+        t0 = time.time()
+        rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY2_PLUS_1M)
+        took = time.time() - t0
+        check("unreachable: within the budget, outcome unreachable, retried no sooner than an hour", rc == 0 and res["synced"] == ["zorg-growth"]
+              and res["results"][0]["outcome"] == "unreachable" and took < 25, (rc, round(took, 2), out[-500:]))
+        st = block_state(e, "zorg-growth")
+        check("…only the attempt is recorded: checked stays the last successful check, the reason is said, no sentence",
+              st["checked"] == DAY1 and st["sync_attempt"] == DAY2_PLUS_1M and st["sync_result"]["outcome"] == "unreachable"
+              and st["sync_result"]["reason"] and "Ядро оновило" not in out and journal_len(e) == j_before, (st, out[-300:]))
+        check("…and not again 30 minutes later", run_ok(e, "provider", "sync", "--if-due", "--now", DAY2_PLUS_31M)[2]["synced"] == [])
+        rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY2_PLUS_2H)
+        check("…but again two hours later (still unreachable)", res["synced"] == ["zorg-growth"]
+              and res["results"][0]["outcome"] == "unreachable" and block_state(e, "zorg-growth")["sync_attempt"] == DAY2_PLUS_2H, res)
+
+        rc, out, res = run_ok(e, "provider", "sync", "zorg-core")
+        check("naming a repository whose sync is off: a usage error (exit 3) — the daily sync touches only sync: daily",
+              rc == 3 and "sync: daily" in out and block_state(e, "zorg-core") == core_before, (rc, out[-300:]))
+        rc, out, res = run_ok(e, "provider", "sync", "--now", "tomorrow morning")
+        check("--now that is no ISO time: exit 3", rc == 3 and "--now" in out, (rc, out[-300:]))
+        rc, out, res = run_ok(e, "provider", "sync", "--store", e.store)
+        check("--store is refused: the sync is a writing command", rc == 3 and "--store is for read commands only" in out, (rc, out[-300:]))
+finally:
+    fake.close()
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the lock, a guard that refuses, an import conflict, one repository down
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        set_sync(e, "zorg-dead", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        new_metrics = G_METRICS.replace("v=0.1", "v=0.2").replace("weekly active shoppers", "monthly active shoppers")
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, new_metrics)
+        j, records, ctx_text, seen = journal_len(e), tree_of(os.path.join(e.store, "records")), read(e.ctx), len(fake.seen)
+        state = read(e.store, ".state", "blocks", "zorg-growth.json")
+        lockf = os.path.join(e.home, ".grow-pm", ".ctx.lock")
+        open(lockf, "w").write(json.dumps({"pid": os.getpid(), "at": time.time()}))   # another session holds the lock
+        try:
+            t0 = time.time()
+            rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+            took = time.time() - t0
+        finally:
+            os.remove(lockf)
+        check("a lock another session holds: skipped at once — nothing synced, nothing written, exit 0",
+              rc == 0 and res["synced"] == [] and res["results"] == [] and journal_len(e) == j and read(e.ctx) == ctx_text
+              and read(e.store, ".state", "blocks", "zorg-growth.json") == state and len(fake.seen) == seen and took < 10,
+              (rc, round(took, 2), out[-400:]))
+
+        real_guard = ctx_cli.Ctx.guard
+
+        def refusing_guard(self):
+            raise ctx_ops_mod.Refused("a registration could not be read: zorg-x.yaml — the provider boundary cannot be checked")
+
+        ctx_cli.Ctx.guard = refusing_guard
+        try:
+            rc, out, res = in_process(e, "provider", "sync", "--now", DAY1)
+        finally:
+            ctx_cli.Ctx.guard = real_guard
+        check("a guard that refuses (a registration still downloading) is a busy lock: nothing synced, nothing recorded, exit 0",
+              rc == 0 and res["synced"] == [] and journal_len(e) == j and read(e.store, ".state", "blocks", "zorg-growth.json") == state
+              and len(fake.seen) == seen, (rc, out[-400:]))
+
+        e.edit(e.ctx, "- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ-HOME\n")
+        e.edit(e.mirror, "- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ-VAULT\n")
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+        outcomes = {r["repo"]: r["outcome"] for r in (res or {}).get("results") or []}
+        check("an import conflict (both copies edited differently): every repository import-conflict, the records unchanged, exit 0",
+              rc == 0 and outcomes == {"zorg-dead": "import-conflict", "zorg-growth": "import-conflict"}
+              and tree_of(os.path.join(e.store, "records")) == records and journal_len(e) == j, (rc, out[-500:]))
+        st = block_state(e, "zorg-growth")
+        check("…the core's change waits; the reason says `ctx sync` first; only the attempt is recorded",
+              region_in(read(e.ctx), "zorg-growth", "growth-metrics") == G_METRICS and "ctx sync" in res["results"][0]["reason"]
+              and st["sync_result"]["outcome"] == "import-conflict" and st["sync_attempt"] == DAY1
+              and st["checked"] == json.loads(state)["checked"] and "Ядро оновило" not in out, (st, res["results"]))
+        e.edit(e.mirror, "PROJ-VAULT", "PROJ-HOME")      # the two copies agree again: the import goes through
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+        outcomes = {r["repo"]: r["outcome"] for r in res["results"]}
+        check("one repository unreachable does not stop the next: zorg-dead unreachable, zorg-growth changed (the edit imported first)",
+              rc == 0 and outcomes == {"zorg-dead": "unreachable", "zorg-growth": "changed"}
+              and region_in(read(e.ctx), "zorg-growth", "growth-metrics") == new_metrics and "PROJ-HOME" in e.record("product.zorg-app")
+              and "Ядро оновило 1 блок у zorg-growth" in out
+              and not [l for l in out.splitlines() if "zorg-dead" in l and not l.startswith("CTX_RESULT ")], (rc, outcomes, out[-600:]))
+        j, snaps = journal_len(e), snapshot_names(e)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1_PLUS_1H)
+        outcomes = {r["repo"]: r["outcome"] for r in res["results"]}
+        check("without --if-due the sync runs whatever the time: nothing new in the core → no-changes, no sentence, no journal line",
+              rc == 0 and res["synced"] == ["zorg-dead", "zorg-growth"] and outcomes == {"zorg-dead": "unreachable", "zorg-growth": "no-changes"}
+              and "Ядро оновило" not in out and journal_len(e) == j and snapshot_names(e) == snaps, (rc, out[-500:]))
+        check("…the check moved to its time", block_state(e, "zorg-growth")["checked"] == DAY1_PLUS_1H
+              and block_state(e, "zorg-growth")["sync_result"]["outcome"] == "no-changes", block_state(e, "zorg-growth"))
+
+with tempfile.TemporaryDirectory() as d:                 # a provider-registration/1 (a folder) with sync: daily; two removals held
+    e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra="sync: daily\n")
+    core = os.path.join(d, "ZorgCore")
+    blocks_file = os.path.join(core, CORE_BLOCKS)
+    run_ok(e, "migrate", "--apply")
+    run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+    checked_at(e, "zorg-core", DAY0)
+    rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1)
+    r0 = (res or {}).get("results", [{}])[0]
+    check("a provider-registration/1 with sync: daily is synced: the core's new block is added",
+          rc == 0 and res["synced"] == ["zorg-core"] and r0.get("outcome") == "changed" and r0.get("added") == 1
+          and region_in(read(e.ctx), "zorg-core", "product") and "Ядро оновило 1 блок у zorg-core" in out, (rc, out[-500:]))
+    pristine = read(blocks_file)
+    open(blocks_file, "w", encoding="utf-8", newline="").write(
+        pristine.replace(region_in(pristine, "zorg-core", "scope") + "\n\n", "").replace(region_in(pristine, "zorg-core", "teams"), ""))
+    j, ctx_text = journal_len(e), read(e.ctx)
+    rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY2)
+    r0 = (res or {}).get("results", [{}])[0]
+    check("two blocks the core removed: outcome held, both regions in place, nothing written",
+          rc == 0 and r0.get("outcome") == "held" and r0.get("held") == ["scope", "teams"] and read(e.ctx) == ctx_text
+          and region_in(read(e.ctx), "zorg-core", "scope") and region_in(read(e.ctx), "zorg-core", "teams") and journal_len(e) == j
+          and "Ядро оновило" not in out, (rc, out[-500:], r0))
+    check("…a successful check: checked moves, so the next try is a day later", block_state(e, "zorg-core")["checked"] == DAY2
+          and block_state(e, "zorg-core")["sync_result"]["outcome"] == "held"
+          and run_ok(e, "provider", "sync", "--if-due", "--now", DAY2_PLUS_2H)[2]["synced"] == [], block_state(e, "zorg-core"))
+    open(blocks_file, "w", encoding="utf-8", newline="").write(pristine.replace(region_in(pristine, "zorg-core", "scope"),
+                                                                             region_in(pristine, "zorg-core", "teams").replace("id=teams", "id=other")))
+    rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2)
+    check("…a lone removal goes through (scope gone from the core, no edit of yours)",
+          (res or {}).get("results", [{}])[0].get("outcome") == "changed" and (res or {}).get("results", [{}])[0].get("removed") == 1
+          and region_in(read(e.ctx), "zorg-core", "scope") is None, (rc, out[-500:]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # end to end: plan → decide → apply, ⚠ kept yours, + added, ~ updated
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        edit_both(e, "- **North star:** weekly active shoppers\n", "- **North star:** weekly active shoppers (mine)\n")
+        core_metrics = G_METRICS.replace("v=0.1", "v=0.2").replace("weekly active shoppers", "weekly buyers")
+        core_team = G_TEAM.replace("v=0.1", "v=0.2").replace("- **Growth squad:** Alpha", "- **Growth squad:** Alpha Prime")
+        fake.tree[GROWTH_PATH] = growth_blocks(core_metrics, core_team, G_OKR)
+        mine_metrics = G_METRICS.replace("weekly active shoppers", "weekly active shoppers (mine)")
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+        r0 = (res or {}).get("results", [{}])[0]
+        jl = last_journal(e)
+        check("end to end, one pass: ⚠ kept yours, + added, ~ updated — outcome changed, the counts",
+              rc == 0 and r0.get("outcome") == "changed" and r0.get("kept_yours") == ["growth-metrics"] and r0.get("updated") == 1
+              and r0.get("added") == 1 and r0.get("removed") == 0 and r0.get("took_rule") == [] and r0.get("awaiting") == [], (rc, r0, out[-600:]))
+        check("…the records, both copies: your metrics, the core's team, the new block",
+              all(region_in(read(p), "zorg-growth", "growth-metrics") == mine_metrics and region_in(read(p), "zorg-growth", "team") == core_team
+                  and region_in(read(p), "zorg-growth", "growth-okr") == G_OKR for p in (e.ctx, e.mirror)), read(e.ctx)[-1500:])
+        check("…the journal: one provider-sync line with the decisions, `taken` naming the core's texts written (not yours)",
+              jl["op"] == "provider-sync" and jl["source"] == "repo:zorg-growth"
+              and jl["decisions"] == {"growth-metrics": "⚠ mine", "team": "~", "growth-okr": "+"}
+              and jl["taken"] == {"team": sha_of(core_team), "growth-okr": sha_of(G_OKR)} and jl["snapshot"] == r0.get("snapshot"), jl)
+        check("…the sentence: two blocks, one conflict kept yours", "Ядро оновило 2 блоки у zorg-growth, конфліктів 1 (лишено твоє)" in out, out[-400:])
+        rc, out, res = run_ok(e, "provider", "plan", "zorg-growth")
+        check("…the next plan: ✎ for yours (its base is the core's text now), = for the others — nothing asks again",
+              signs_in(res) == {"growth-metrics": "✎", "team": "=", "growth-okr": "="} and res["questions"] == 0, out[-500:])
+        j, snaps = journal_len(e), snapshot_names(e)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2)
+        check("…a second sync with nothing new is idempotent: no-changes, no journal line, no snapshot, no sentence",
+              rc == 0 and res["results"][0]["outcome"] == "no-changes" and journal_len(e) == j and snapshot_names(e) == snaps
+              and "Ядро оновило" not in out, (rc, out[-400:]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # the hard bound: a fetch that never returns costs the budget, not the skill
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra="sync: daily\n")
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        core_state = block_state(e, "zorg-core")
+        release = threading.Event()
+        real_fetch, real_budget = crp_mod.fetch, sy_mod.BUDGET_S
+
+        def hanging_fetch(repo, **kw):                   # zorg-core first (registration order): a DNS lookup that never returns
+            if repo["id"] == "zorg-core":
+                release.wait(60)
+            return real_fetch(repo, **kw)
+
+        crp_mod.fetch, sy_mod.BUDGET_S = hanging_fetch, 2.0
+        try:
+            t0 = time.time()
+            rc, out, res = in_process(e, "provider", "sync", "--now", DAY1)
+            took = time.time() - t0
+        finally:
+            crp_mod.fetch, sy_mod.BUDGET_S = real_fetch, real_budget
+            release.set()
+        outcomes = {r["repo"]: r["outcome"] for r in (res or {}).get("results") or []}
+        check("a fetch that never returns: timeout within the budget, and the repository after it times out too (no time left)",
+              rc == 0 and outcomes == {"zorg-core": "timeout", "zorg-growth": "timeout"} and took < 2.0 + 3.0, (rc, round(took, 2), outcomes))
+        st = block_state(e, "zorg-core") or {}
+        check("…the attempt is recorded (retry in an hour), the check is not", st.get("sync_attempt") == DAY1
+              and st.get("checked") == (core_state or {}).get("checked") and st.get("sync_result", {}).get("outcome") == "timeout"
+              and (block_state(e, "zorg-growth") or {}).get("sync_attempt") == DAY1, st)
+
+        def deadline_fetch(repo, **kw):                  # the client gave up at the deadline: its error says so
+            if repo["id"] == "zorg-growth":
+                return {"source": None, "version": None, "blocks": {}, "namespace": repo["namespace"], "team": None, "team_source": None,
+                        "team_error": None, "error": "MCP: " + cm_mod.DEADLINE, "checked": kw.get("now")}
+            return real_fetch(repo, **kw)
+
+        crp_mod.fetch = deadline_fetch
+        try:
+            rc, out, res = in_process(e, "provider", "sync", "--now", DAY2)
+        finally:
+            crp_mod.fetch = real_fetch
+        outcomes = {r["repo"]: r["outcome"] for r in (res or {}).get("results") or []}
+        check("a fetch error that says the deadline was reached is a timeout, not unreachable; the other repository is synced",
+              rc == 0 and outcomes.get("zorg-growth") == "timeout" and outcomes.get("zorg-core") in ("changed", "no-changes"), (rc, outcomes))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

@@ -3,14 +3,14 @@
 
 The registrations of the fictional "Zorg" (zorg-core: a v1 bundle folder; zorg-growth: a v2 MCP repository)
 on a temp HOME and a temp vault, written as `{vault}/Notes/_System/providers/<id>.yaml`. Covers the
-normalised keys and their defaults (rank by authority, core_root, namespace, blocks_source, products),
+normalised keys and their defaults (rank by authority, core_root, namespace, blocks_source, products; since v3.14 `sync`),
 the order and dedupe of registrations, the real HOME never being read, and the command: the table, the
 `CTX_RESULT` line, a paused repository, an unreadable registration. Then `fetch` — a repository's blocks
 ("theirs") from the fake MCP server (testing/mcp_fake.py, 127.0.0.1) or from the core folder, the team
 block from the folder, the fallback order of blocks_source, errors (a dead server, a server's error, a file
 that never arrives, a bad answer), skip_blocks, the most common version, and that nothing is written. Since v3.14:
 `cs.read_budget`, `fetch(…, deadline=)` against a slow server and a file that never arrives, and `reach` / `public_url`
-(moved from ctx.py).
+(moved from ctx.py); a fetch never swaps the process's stdout (it may run in the daily sync's helper thread).
 Semantics: references/context-provider-protocol.md §3b. Stdlib only; run from the repo root.
 """
 import contextlib, datetime, hashlib, io, json, os, re, shutil, socket, stat, subprocess, sys, tempfile, threading, time
@@ -27,6 +27,7 @@ import ctx_mcp as cm  # noqa: E402
 import ctx_repos as cr  # noqa: E402
 import ctx_store as cs  # noqa: E402
 from mcp_fake import FakeMcp  # noqa: E402
+import provider_bundle as pb_mod  # noqa: E402
 
 cm.McpClient.BACKOFF = 0.0                                # no pause between retries in tests
 
@@ -158,6 +159,21 @@ with tempfile.TemporaryDirectory() as d:
     check("v1 has no endpoint: empty url, root and headers_env, no home record",
           r.get("endpoint") == {"url": "", "root": "", "headers_env": ""} and r.get("home_record") == ""
           and r.get("blocks_file") == "", r)
+    # --- v3.14.0: the daily sync is switched on per registration (the D6 write boundary): `sync: daily`, else off
+    check("a registration without the sync key is off (v1 and v2 alike)", r.get("sync") == "off" and g.get("sync") == "off",
+          (r.get("sync"), g.get("sync")))
+    sync_of = lambda v: cr.normalise({"id": "x", "sync": v})["sync"]
+    check("sync: daily is daily; off, any other word, a boolean, a number, a list or nothing is off",
+          sync_of("daily") == "daily" and sync_of(" Daily ") == "daily" and sync_of("off") == "off" and sync_of("weekly") == "off"
+          and sync_of(True) == "off" and sync_of(1) == "off" and sync_of(["daily"]) == "off" and sync_of("") == "off"
+          and sync_of(None) == "off", [sync_of(v) for v in ("daily", " Daily ", "off", "weekly", True, 1, ["daily"], "", None)])
+    e.reg("zorg-core", CORE_V1 + "sync: daily\n")
+    e.reg("zorg-growth", GROWTH_V2 + "sync: off\n")
+    by_sync = {x["id"]: x.get("sync") for x in e.repos()}
+    check("…and as read from a registration file: v1 with sync: daily, v2 with sync: off",
+          by_sync == {"zorg-core": "daily", "zorg-growth": "off"}, by_sync)
+    e.reg("zorg-core", CORE_V1)
+    e.reg("zorg-growth", GROWTH_V2)
     check("v2 keys are read", g.get("endpoint", {}).get("url") == "http://127.0.0.1:9/mcp"
           and g.get("endpoint", {}).get("root") == "ZorgGrowth/"
           and g.get("blocks_file") == "Growth/_System/context-blocks.md" and g.get("rank") == 500
@@ -877,6 +893,38 @@ with tempfile.TemporaryDirectory() as d:
           and fbm["blocks"] == f["blocks"] and fbm["team"] is None and isinstance(fbm["team_error"], str)
           and "manifest" in fbm["team_error"] and len(fbm["team_error"]) <= 300 and out.getvalue() == "", (fbm, out.getvalue()))
     check("…and names no path", "BadManifestCore" not in fbm["team_error"] and os.sep + "Core" not in fbm["team_error"], fbm["team_error"])
+    # v3.14.0: the daily sync fetches in a helper thread it may leave behind at its deadline, so the fetch must never swap
+    # the process's stdout (redirect_stdout is global: the command's own CTX_RESULT would land in the thread's buffer)
+    real_redirect = contextlib.redirect_stdout
+
+    def no_redirect(*a, **k):
+        raise AssertionError("redirect_stdout used")
+
+    contextlib.redirect_stdout = no_redirect
+    try:
+        got = [cr._manifest(nomf), cr._manifest(badm), cr._manifest(CORE_FIX)]
+        quiet = [pb_mod.read_manifest(nomf), pb_mod.read_manifest(badm)]
+        swapped = None
+    except AssertionError as ex:
+        swapped = str(ex)
+    finally:
+        contextlib.redirect_stdout = real_redirect
+    check("_manifest never swaps the process's stdout, and says the same: no manifest, cannot be parsed, a manifest",
+          swapped is None and got[0] == (None, "team block: not available (no provider manifest in the core)")
+          and got[1][0] is None and got[1][1].startswith("team block: not available (the provider manifest cannot be parsed")
+          and got[2][0] is not None and got[2][1] is None, (swapped, got if swapped is None else None))
+    check("…pb.read_manifest gives (None, the words load_manifest prints) with nothing printed and no exit",
+          swapped is None and quiet[0][0] is None and quiet[0][1].startswith("no provider manifest under ")
+          and quiet[1][0] is None and "provider-manifest.yaml: " in quiet[1][1], quiet if swapped is None else swapped)
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out):
+            pb_mod.load_manifest(nomf)
+        exited = None
+    except SystemExit as ex:
+        exited = ex.code
+    check("…and load_manifest (the bundle builder's) still prints and exits 3", exited == 3
+          and out.getvalue().startswith("no provider manifest under "), (exited, out.getvalue()))
     check("every reason a team block cannot be built reads 'team block: not available (…)'",
           all(x["team_error"].startswith("team block: not available (") for x in (fbj, fnmod, fbm, fsl)),
           [x["team_error"] for x in (fbj, fnmod, fbm, fsl)])

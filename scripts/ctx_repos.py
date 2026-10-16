@@ -14,7 +14,6 @@ may be shown (both moved here from ctx.py in v3.14). Nothing is ever written. St
 import collections
 import contextlib
 import datetime
-import io
 import json
 import os
 import re
@@ -57,8 +56,13 @@ def _rank(v, authority):
     return RANKS.get(authority, FALLBACK_RANK)
 
 
+SYNC_DAILY, SYNC_OFF = "daily", "off"
+
+
 def normalise(reg):
-    """A registration as read by `find_registrations` → the repository dict (schema v1 or v2)."""
+    """A registration as read by `find_registrations` → the repository dict (schema v1 or v2). `sync` (since v3.14) is
+    "daily" only when the registration says `sync: daily` (any case); anything else, and no key, is "off" — the daily
+    sync writes without asking, so it is switched on per repository, by an explicit word (the D6 write boundary)."""
     out = dict(reg)                                     # access, mode, contract, index, source_version, writable …
     rid = _s(reg.get("id"))
     authority = _s(reg.get("authority")) or DEFAULT_AUTHORITY
@@ -91,6 +95,7 @@ def normalise(reg):
         "role": _s(reg.get("role")),
         "jira_write": _s(reg.get("jira_write")),
         "status": _s(reg.get("status")) or "active",
+        "sync": SYNC_DAILY if isinstance(reg.get("sync"), str) and reg["sync"].strip().lower() == SYNC_DAILY else SYNC_OFF,
         "synced_at": _s(reg.get("synced_at")),
         "access": _s(reg.get("access")),
         "source_version": _s(reg.get("source_version")),
@@ -208,20 +213,19 @@ def _not_downloaded(core_root, manifest):
 def _manifest(core_root):
     """(manifest, why not) of the core's provider manifest as the bundle builder reads it. A manifest that is not there
     (never written, or evicted by iCloud: only its `.icloud` placeholder is), or that cannot be read or parsed, is
-    (None, reason) — the reason in the words of `_unavailable`, with no path. The builder's `sys.exit(3)` and its
-    message on stdout are not ours: neither leaves this function."""
-    buf = io.StringIO()
+    (None, reason) — the reason in the words of `_unavailable`, with no path. It reads through `pb.read_manifest`, which
+    neither prints nor exits: the process's stdout is never swapped, so a fetch the daily sync left behind in its helper
+    thread cannot take the command's own output (since v3.14; before, `load_manifest` ran under redirect_stdout)."""
     try:
-        with contextlib.redirect_stdout(buf):
-            return pb.load_manifest(core_root), None
-    except SystemExit:
-        said = buf.getvalue().strip()
-        if said.startswith("no provider manifest"):
-            return None, _unavailable("no provider manifest in the core")
-        detail = said.split("provider-manifest.yaml: ", 1)[1] if "provider-manifest.yaml: " in said else ""
-        return None, _unavailable("the provider manifest cannot be parsed" + (": " + detail if detail else ""))
+        manifest, said = pb.read_manifest(core_root)
     except Exception as e:
         return None, _team_why(e)
+    if manifest is not None:
+        return manifest, None
+    if said.startswith("no provider manifest"):
+        return None, _unavailable("no provider manifest in the core")
+    detail = said.split("provider-manifest.yaml: ", 1)[1] if "provider-manifest.yaml: " in said else ""
+    return None, _unavailable("the provider manifest cannot be parsed" + (": " + detail if detail else ""))
 
 
 def _team_block(repo, manifest, manifest_why, in_file=False):

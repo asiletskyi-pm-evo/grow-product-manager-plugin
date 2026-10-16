@@ -66,6 +66,19 @@
                                 answers is read as one of them. An answer for a block with a broken marker is not
                                 applied ("не застосовано").
                                 CTX_RESULT: the plan with applied, decisions, pending, ignored, held, written, snapshot
+  provider sync [REPO] [--if-due] [--now ISO]
+                                the daily sync (since v3.14.0): the repositories whose registration says `sync: daily`
+                                (REPO names one of them; another is exit 3), each brought up to date with no question —
+                                yours kept on a ⚠ unless the core marks the block a rule, + added, more than one − held,
+                                ? left waiting, a text you rejected by undoing a pass held. --if-due first keeps only the
+                                repositories due — a day after their last successful check, an hour after a failed
+                                attempt — reading their block state alone (no lock, no network); none → only CTX_RESULT.
+                                The lock held by another session: nothing, at once. The edits waiting are imported first
+                                (a conflict: import-conflict, nothing written). 20 s for every repository together.
+                                One line per repository the pass changed: «Ядро оновило N блоків у <repo>, конфліктів K
+                                (лишено твоє)». Exit 0 whatever happened (3: bad usage). CTX_RESULT: synced (ids),
+                                results [{repo, at, outcome, updated, added, removed, kept_yours, took_rule, awaiting, held,
+                                rejected, reason, report, snapshot}] — the same as the block state's sync_result
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
@@ -86,6 +99,7 @@ import datetime
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_blocks as cb  # noqa: E402
@@ -95,6 +109,7 @@ import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_repos as crp  # noqa: E402
 import ctx_schema as sc  # noqa: E402
+import ctx_synced as sy  # noqa: E402
 
 HEADINGS = {"product": "### Product: %s", "team": "### Team: %s", "org": "## Organization: %s",
             "setting": "## %s", "custom": "## %s"}
@@ -109,9 +124,9 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
 
 
 def writes(a):
-    """Does this run write to the store? Every command of WRITING does, and `provider apply`; `migrate` and `provider
-    adopt` only with --apply."""
-    if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) == "apply"):
+    """Does this run write to the store? Every command of WRITING does, and `provider apply` and `provider sync`;
+    `migrate` and `provider adopt` only with --apply. (A `provider sync` that synced nothing saves no summary: `main`.)"""
+    if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) in ("apply", "sync")):
         return True
     if a.cmd == "migrate" or (a.cmd == "provider" and getattr(a, "action", None) == "adopt"):
         return getattr(a, "apply", False)
@@ -981,6 +996,54 @@ def cmd_provider_apply(a, c):
                 "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
 
 
+def _sync_now(text):
+    """--now as ISO text with its offset (local time when it names none), seconds only; the present moment without it."""
+    if text is None:
+        return now()
+    t = sy.instant(text)
+    if t is None:
+        raise Usage("--now takes an ISO time, such as 2026-10-16T09:00:00+03:00, not %r" % text)
+    return t.isoformat(timespec="seconds")
+
+
+def cmd_provider_sync(a, c):
+    """The daily sync (ctx_synced): the repositories with `sync: daily` — REPO names one of them — not paused, not
+    search-only; with --if-due only those due, read from their block state without the lock or the network (none →
+    nothing printed, only CTX_RESULT). Then `sy.run` within BUDGET_S, and one sentence per repository whose pass changed a
+    block or decided a conflict. Exit 0 whatever the repositories did; a usage error (an unknown REPO, one without
+    `sync: daily`, a paused one, a bad --now) is exit 3."""
+    deadline = time.monotonic() + sy.BUDGET_S
+    at = _sync_now(a.now)
+    quiet = {"command": "provider", "action": "sync", "synced": []}
+    if a.repo:
+        repo = _repository(c, a.repo)
+        rid = cb.clip(repo["id"], cb.HEADER_CLIP)
+        if repo["sync"] != crp.SYNC_DAILY:
+            raise Usage("%s has no `sync: daily` in its registration — the daily sync touches only the repositories it was "
+                        "switched on for (context-connect asks); `ctx provider apply %s` updates it with your answers" % (rid, rid))
+        if repo["status"] == "paused":
+            raise Usage("%s is paused (status: paused) — the daily sync leaves it alone" % rid)
+        repos = [repo]
+    else:
+        repos = [r for r in crp.load_repos(c.text, c.home)
+                 if r["sync"] == crp.SYNC_DAILY and r["status"] != "paused" and not crp.search_only(r)]
+    if not c.store.exists():
+        if not a.if_due:
+            print("nothing to sync — no context store")
+        return 0, quiet
+    if a.if_due:
+        repos = sy.pick_due(c.store, repos, at)
+    elif not repos:
+        print("nothing to sync — no repository has `sync: daily` in its registration (context-connect turns it on)")
+    if not repos:
+        return 0, quiet
+    results = sy.run(c, repos, at, deadline)
+    for r in results:
+        if sy.news(r):
+            print(sy.sentence(r))
+    return 0, dict(quiet, synced=[r["repo"] for r in results], results=[sy.public(r) for r in results])
+
+
 def cmd_provider(a, c):
     if a.action == "adopt":
         return cmd_provider_adopt(a, c)
@@ -988,7 +1051,9 @@ def cmd_provider(a, c):
         return cmd_provider_plan(a, c)
     if a.action == "apply":
         return cmd_provider_apply(a, c)
-    raise Usage("provider takes adopt, plan or apply")
+    if a.action == "sync":
+        return cmd_provider_sync(a, c)
+    raise Usage("provider takes adopt, plan, apply or sync")
 
 
 # ---------------------------------------------------------------------- main
@@ -1040,6 +1105,8 @@ def build_parser():
     sp = pp.add_parser("apply", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--product")
     sp.add_argument("--choose", action="extend", nargs="+"); sp.add_argument("--add", action="extend", nargs="+")
     sp.add_argument("--json", action="store_true")
+    sp = pp.add_parser("sync", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--if-due", action="store_true")
+    sp.add_argument("--now"); sp.add_argument("--json", action="store_true")
     return p
 
 
@@ -1067,7 +1134,8 @@ def main(argv=None):
         c = Ctx(a)
         with cs.guard_roots(co.allowed_roots(c.home, c.text)):
             rc, res = COMMANDS[a.cmd](a, c)
-            if rc == 0 and writes(a):                   # since v3.13.1: the summary the digest shows on a cold start,
+            idle = a.cmd == "provider" and a.action == "sync" and not res.get("synced")    # a sync that synced nothing
+            if rc == 0 and writes(a) and not idle:      # since v3.13.1: the summary the digest shows on a cold start,
                 try:                                    # on the digest's budget; a miss saves nothing
                     co.summary_in_time(c.found, home=c.home)
                 except Exception:  # noqa: BLE001 — a cache never changes the command's result

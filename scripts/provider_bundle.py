@@ -112,7 +112,9 @@ class Manifest(dict):
         return default if v in (None, "", []) else v
 
 
-def load_manifest(core, path=None):
+def read_manifest(core, path=None):
+    """(manifest, None), or (None, why) in the words `load_manifest` prints — with nothing printed and no exit, so a
+    caller in a helper thread (the daily sync's fetch, since v3.14.0) never has to swap the process's stdout."""
     cands = [path] if path else [os.path.join(core, "_System", "provider-manifest.yaml")] + \
         sorted(glob.glob(os.path.join(core, "*", "_System", "provider-manifest.yaml")))
     for p in cands:
@@ -120,16 +122,22 @@ def load_manifest(core, path=None):
             try:
                 m = Manifest(cc.read_yaml_subset(rd(p)))
             except (ValueError, UnicodeDecodeError) as e:
-                sys.stdout.write("provider manifest %s: %s\n" % (p, e)); sys.exit(3)
+                return None, "provider manifest %s: %s" % (p, e)
             m["_path"] = os.path.relpath(os.path.abspath(p), os.path.abspath(core))
             pf = m.s("plugin_folder", ".")
             m.setdefault("namespace", m.get("id"))
             for k, sub in (("team_card_dir", "Teams"), ("people_dir", "People")):
                 if not m.get(k):
                     m[k] = os.path.normpath(os.path.join(pf, sub))
-            return m
-    sys.stdout.write("no provider manifest under %s (expected _System/provider-manifest.yaml)\n" % core)
-    sys.exit(3)
+            return m, None
+    return None, "no provider manifest under %s (expected _System/provider-manifest.yaml)" % core
+
+
+def load_manifest(core, path=None):
+    m, why = read_manifest(core, path)
+    if m is None:
+        sys.stdout.write(why + "\n"); sys.exit(3)
+    return m
 
 
 def check_patterns(m):
