@@ -692,7 +692,8 @@ def plan(store, copies, repo, fetched, now, all_=False):
     `classify`'s, and "·" for a block of `skip_blocks` (listed only with `all_`; yours never appears without it) and
     for the team block when it could not be built (its reason is the note) — neither is a question or a change.
     `questions` counts the rows "⚠", "+" and "?"; `changes` the records an apply without decisions would rewrite: the
-    distinct hosts of the rows "~" and "−". `errors` are `find_regions`' problems (a block with one has no row).
+    distinct hosts of the rows "~" and "−" — a `rejected` row counts in neither, since apply holds it. `errors` are
+    `find_regions`' problems (a block with one has no row).
     A "=" row whose source lags behind your base (`behind`) carries `behind: True` and the note
     "джерело позаду вашої бази (v<theirs> < v<yours>)". A row that offers the repository's text or its removal ("~",
     "+", "−", "⚠", "?") whose offer (`offered`: the hash of the text, or "removed") is among the state's `rejected` for
@@ -757,12 +758,29 @@ def plan(store, copies, repo, fetched, now, all_=False):
                 row["note"] = clip(row["note"] + RULE_NOTE, NOTE_CLIP)
         rows.append(row)
     version = fetched.get("version")
+    open_rows = [r for r in rows if not r.get("rejected")]   # a rejected text is held by apply: neither asked nor written
     return {"repo": rid, "source": fetched.get("source"), "source_label": _source_label(repo, fetched.get("source")),
             "version": clip(version, HEADER_CLIP) if version else None,
             "base_version": clip(base_version(state) or "—", HEADER_CLIP), "rows": rows,
-            "questions": sum(1 for r in rows if r["sign"] in QUESTIONS),
-            "changes": len({r["host"] for r in rows if r["sign"] in REWRITES and r["host"]}),
+            "questions": sum(1 for r in open_rows if r["sign"] in QUESTIONS),
+            "changes": len({r["host"] for r in open_rows if r["sign"] in REWRITES and r["host"]}),
             "errors": [dict(x) for x in problems if all_ or x["block"] not in skip]}
+
+
+def held_rejected(p, choose, add):
+    """The blocks a manual `ctx provider apply` holds, in plan order: the rows of plan `p` that offer a text you rejected
+    by undoing a sync pass (`rejected: True`; spec v3.14 §5.4, "do not repeat") — unless this pass takes it: `choose`
+    says theirs for it (any sign that offers), `add` names a "+", or `choose` answers a "⚠" or a "?" at all. Mine or
+    both on a rejected "~", "−" or "+" takes nothing, so the block stays held."""
+    out = []
+    for r in p["rows"]:
+        bid, how = r["block"], (choose or {}).get(r["block"])
+        if not r.get("rejected") or r["sign"] not in OFFERS:
+            continue
+        if how == "theirs" or (r["sign"] == "+" and bid in (add or ())) or (r["sign"] in ("⚠", "?") and how):
+            continue
+        out.append(bid)
+    return out
 
 
 def _detail_lines(diff):
@@ -918,9 +936,12 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
     A "⚠", "?" or "+" without its answer waits (`pending`); everything else is applied. A repository region that is
     not one sound region of its block is never written into a record: that block goes to `errors`, untouched.
 
-    `hold` (the daily sync's, since v3.14.0) names blocks this pass does not touch, whatever their sign and whatever
-    `choose` / `add` say of them: each is listed in `held` with its sign — not in `pending`, `ignored`, `applied` or
-    the journal's decisions — and nothing of it changes but the time its entry was checked.
+    `hold` (since v3.14.0) names blocks this pass does not touch, whatever their sign and whatever `choose` / `add`
+    say of them: each is listed in `held` with its sign — not in `pending`, `ignored`, `applied` or the journal's
+    decisions — and nothing of it changes but the time its entry was checked. The daily sync holds what its cascade
+    leaves alone; `ctx provider apply` holds the rows that offer a text you rejected (`held_rejected`). Theirs for such a
+    row — any sign that offers, "~", "−" and "+" too — is the explicit take: the text (or the removal) is applied as
+    the sign says and the base moves, so the next plan has no mark; for a "+" it is its --add.
 
     The order: snapshot `op` → the new base texts → the host records (verified today, source "repo:<id>") → the
     state (checked, source, version; per block v, host, checked) → the base texts nobody refers to are pruned → one
@@ -976,11 +997,12 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
                 entry["checked"] = checked
             continue
         how, wanted = choose.get(bid), bid in add
-        answers = sign in ("⚠", "?") or (sign == "✎" and how == "theirs")    # theirs on a ✎ takes the repository's text
+        # theirs on a ✎, or on a row that offers a text you rejected (the explicit take), is an answer too
+        answers = sign in ("⚠", "?") or (how == "theirs" and (sign == "✎" or bool(row.get("rejected"))))
         if (how and not answers) or (wanted and sign != "+"):
             ignored[bid] = sign                         # an answer to a question the plan does not ask: dropped
-        how = how if answers else None
-        wanted = wanted and sign == "+"
+        wanted = (wanted or (answers and sign == "+")) and sign == "+"    # theirs on a rejected "+" is its --add
+        how = how if answers and sign != "+" else None
         if sign == SKIPPED:
             continue
         if (sign in ("⚠", "?") and not how) or (sign == "+" and not wanted):
@@ -992,7 +1014,7 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
         if gone and how == "both":
             raise ValueError("both is not possible for a block the repository removed: %s — theirs removes it, mine keeps "
                              "your text without its markers" % bid)
-        takes = sign in ("~", "+") or (how in ("theirs", "both") and not gone)     # the repository's text goes into a record
+        takes = sign in ("~", "+") or (how in ("theirs", "both") and t is not None)   # the repository's text goes into a record
         if takes and not _sound(t, ns, bid):
             refused.append({"block": bid, "host": row["host"], "why": "the repository's region is not well-formed"})
             continue
@@ -1075,7 +1097,8 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
 
 def render_apply(res):
     """The text of an apply: the plan's table (a "⚠" with its three versions under it), then what was not needed,
-    what was held (`утримано: <sign> <block> — цей прохід його не чіпав`), what waits and how to answer it, what was
+    what was held (`утримано: <sign> <block> — цей прохід його не чіпав`, and for a text you rejected
+    ` · взяти текст ядра: --choose <block>=theirs` after it), what waits and how to answer it, what was
     written — and the last line `Чекають рішення: N · змінено записів: M`.
     A pass that changed nothing, with nothing waiting or held, is the header and the one line "без змін" — and under
     it the blocks that could not be checked ("·", such as a team block whose core folder is not here) and those whose
@@ -1093,8 +1116,10 @@ def render_apply(res):
             lines.append("не застосовано: --choose/--add %s — у блоку зламані маркери (рядок «помилка» вище)" % clip(bid, HEADER_CLIP))
         else:
             lines.append("не потрібне: --choose/--add %s — знак %s" % (clip(bid, HEADER_CLIP), sign))
+    rejected = {r["block"] for r in p["rows"] if r.get("rejected")}
     for bid, sign in held.items():
-        lines.append("утримано: %s %s — цей прохід його не чіпав" % (sign, clip(bid, HEADER_CLIP)))
+        lines.append("утримано: %s %s — цей прохід його не чіпав" % (sign, clip(bid, HEADER_CLIP))
+                     + (" · взяти текст ядра: --choose %s=theirs" % clip(bid, HEADER_CLIP) if bid in rejected else ""))
     signs = {r["block"]: r["sign"] for r in p["rows"]}
     gone = {r["block"] for r in p["rows"] if r["source"] is None and r["sign"] in ("⚠", "?")}
     for bid in res["pending"]:

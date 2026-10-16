@@ -54,16 +54,18 @@
                                 one pass per repository: = ~ ✎ − ✂ are applied (your edits stay), ⚠ and ? wait
                                 for --choose, + for --add (it goes to the record holding most of the repository's
                                 blocks, else a new record); a ✎ takes --choose BLOCK=theirs (the repository's
-                                text, and its base; mine or both for a ✎ is "не потрібне"). The snapshot, the
-                                records, the block state, one journal line (taken: the repository texts written),
-                                the compile. Nothing moved: only the time of the check, "без змін".
+                                text, and its base; mine or both for a ✎ is "не потрібне"). A text you rejected
+                                by undoing a sync pass is held ("утримано: …"), never re-applied, unless taken:
+                                --choose BLOCK=theirs (any sign), --add for a +, any answer for a ⚠ or ?. The
+                                snapshot, the records, the block state, one journal line (taken: the repository
+                                texts written), the compile. Nothing moved: only the time of the check, "без змін".
                                 Every repository is read first: one unreachable → exit 5, nothing written.
                                 Exit 2 when an answer is awaited (the rest applied), 4 when only refused blocks
                                 (a broken marker) are left. --choose / --add need REPO when several are in scope;
                                 REPO comes first — a word with "=" in its place is exit 3, and the word after the
                                 answers is read as one of them. An answer for a block with a broken marker is not
                                 applied ("не застосовано").
-                                CTX_RESULT: the plan with applied, decisions, pending, ignored, written, snapshot
+                                CTX_RESULT: the plan with applied, decisions, pending, ignored, held, written, snapshot
 
 Every writing command takes the lock, refuses a store inside a provider's folder, imports direct
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
@@ -943,7 +945,8 @@ def _applied(res):
 def cmd_provider_apply(a, c):
     """One pass per repository: every repository is read first, and one that cannot be read stops the run before
     the lock (exit 5, nothing written); then, under the lock, the edits waiting are imported and each repository is
-    applied (its own snapshot, journal line and compile). Exit 2 when an answer is still awaited (the rest applied),
+    applied (its own snapshot, journal line and compile), holding the blocks that offer a text you rejected unless this
+    run takes it (`cb.held_rejected`). Exit 2 when an answer is still awaited (the rest applied),
     4 when a block was refused (a broken marker) and nothing else changed, else 0."""
     if a.repo and "=" in a.repo:
         raise Usage("%r looks like an answer, not a repository — put the repository first: "
@@ -982,7 +985,9 @@ def cmd_provider_apply(a, c):
             c.guard()
             c.import_first()
             for repo, f in fetched:
-                results.append(cb.apply(c.store, c.copies, c.home, repo, f, choose, add, now()))
+                at = now()
+                hold = cb.held_rejected(cb.plan(c.store, c.copies, repo, f, at), choose, add)   # spec v3.14 §5.4: not again
+                results.append(cb.apply(c.store, c.copies, c.home, repo, f, choose, add, at, hold=hold))
             card_note = _refresh_card(c)
     for k, res in enumerate(results):
         if k or paused or search or skipped:

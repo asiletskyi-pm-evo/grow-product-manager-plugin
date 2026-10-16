@@ -1078,6 +1078,8 @@ with tempfile.TemporaryDirectory() as d:                      # no base: '?', an
     check("'?' mine: your text stays, the repository's becomes the base — the next plan says '✎'",
           res["applied"]["scope"] == "?" and "(my note)" in body_of(store, HOST_NOTES) and base_text(store, "scope") == f["blocks"]["scope"]
           and signs_of(plan_of(store, copies, f))["scope"] == "✎" and journal_of(store)[-1]["decisions"]["scope"] == "? mine", res)
+    check("v3.14.0: '? mine' takes nothing from the repository — the journal's taken is empty (a rebase is no take)",
+          journal_of(store)[-1]["taken"] == {}, journal_of(store)[-1])
 
 with tempfile.TemporaryDirectory() as d:
     home, text, copies, store = migrated(d, patch=[EDIT_SCOPE])
@@ -1086,6 +1088,20 @@ with tempfile.TemporaryDirectory() as d:
     check("'?' theirs: the repository's text replaces yours; the next plan is all '='",
           "(my note)" not in body_of(store, HOST_NOTES) and f["blocks"]["scope"] in body_of(store, HOST_NOTES)
           and set(signs_of(plan_of(store, copies, f)).values()) == {"="}, res)
+    check("v3.14.0: '? theirs' — taken holds the repository text's hash (cb.offered), nothing for the '=' rebased",
+          journal_of(store)[-1]["taken"] == {"scope": cb.offered(f["blocks"]["scope"])}
+          and cb.offered(f["blocks"]["scope"]) == sha_of(f["blocks"]["scope"]) and cb.offered(None) == "removed", journal_of(store)[-1])
+
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    edit_record(store, HOST_NOTES, "The user works on Zorg App only.", "The user works on Zorg App only. (mine)")
+    settle(home, text, copies, store)
+    f = published(store)
+    f["blocks"]["scope"] = NEW_SCOPE
+    res = apply_of(home, text, copies, store, f, choose={"scope": "theirs"})
+    check("v3.14.0: '⚠ theirs' — taken holds the repository text's hash",
+          res["decisions"]["scope"] == "⚠ theirs" and journal_of(store)[-1]["taken"] == {"scope": cb.offered(NEW_SCOPE)}, journal_of(store)[-1])
 
 with tempfile.TemporaryDirectory() as d:
     home, text, copies, store = migrated(d)
@@ -1103,6 +1119,8 @@ with tempfile.TemporaryDirectory() as d:
           and both.endswith("The user works on Zorg App only. (mine)\n<!-- zorg-core:end id=scope -->"), both)
     check("…the base is the repository's text; the next plan keeps it as your edit",
           base_text(store, "scope") == NEW_SCOPE and signs_of(plan_of(store, copies, f))["scope"] == "✎", "")
+    check("v3.14.0: '⚠ both' — taken holds the hash of the repository's text, not of the joined region",
+          journal_of(store)[-1]["taken"] == {"scope": cb.offered(NEW_SCOPE)} and cb.offered(both) != cb.offered(NEW_SCOPE), journal_of(store)[-1])
 
 with tempfile.TemporaryDirectory() as d:                      # what apply refuses
     home, text, copies, store = migrated(d)
@@ -1159,6 +1177,8 @@ with tempfile.TemporaryDirectory() as d:                      # a repository tex
     check("a repository region with another region inside: that block is refused into errors, the rest applies",
           "scope" not in res["applied"] and any(x["block"] == "scope" for x in res["errors"]) and body_of(store, HOST_NOTES) == before
           and res["applied"]["team"] == "~" and HEAD_NEW in body_of(store, "team.alpha-a"), res)
+    check("v3.14.0: a refused block is not in taken; the '~' applied beside it is",
+          journal_of(store)[-1]["taken"] == {"team": cb.offered(f["team"])}, journal_of(store)[-1])
 
 with tempfile.TemporaryDirectory() as d:                      # the write order: base texts, records, state — a crash before the state
     home, text, copies, store = migrated(d)
@@ -1219,6 +1239,8 @@ with tempfile.TemporaryDirectory() as d:                      # the repository r
     check("mine: the markers go, your text stays where it was, as your own text",
           res["applied"]["teams"] == "⚠" and "zorg-core:begin id=teams" not in body and "zorg-core:end id=teams" not in body
           and "### Teams map\n- Alpha, Beta\n- my own note on Gamma\n" in body and journal_of(store)[-1]["decisions"]["teams"] == "⚠ mine", body)
+    check("v3.14.0: a detach (mine for a block the repository removed) takes nothing: taken is empty",
+          journal_of(store)[-1]["taken"] == {}, journal_of(store)[-1])
     check("…the state forgets the block, and the next plan has no row for it",
           "teams" not in cb.load_state(store, "zorg-core")["blocks"] and "teams" not in signs_of(plan_of(store, copies, f)), "")
 
@@ -1233,6 +1255,8 @@ with tempfile.TemporaryDirectory() as d:
     check("theirs: the region goes, your edit with it (it stays in the snapshot); the state forgets the block",
           res["applied"]["teams"] == "⚠" and "Teams map" not in body_of(store, HOST_NOTES) and "teams" not in cb.load_state(store, "zorg-core")["blocks"]
           and "my own note on Gamma" in open(os.path.join(res["snapshot"], "records", HOST_NOTES + ".md"), encoding="utf-8").read(), res)
+    check("v3.14.0: theirs for a block the repository removed — taken says \"removed\"",
+          journal_of(store)[-1]["taken"] == {"teams": "removed"} and journal_of(store)[-1]["decisions"]["teams"] == "⚠ theirs", journal_of(store)[-1])
 
 with tempfile.TemporaryDirectory() as d:                      # a region with no base that the repository does not offer
     home, text, copies, store = migrated(d)
@@ -1453,6 +1477,58 @@ with tempfile.TemporaryDirectory() as d:                      # the plan: reject
     check("a manual apply still asks about a '⚠' of a rule, and shows the mark",
           res["pending"] == ["scope"] and row_of(res["plan"], "scope")["sign"] == "⚠" and row_of(res["plan"], "scope").get("rule") is True
           and "(правило ядра)" in cb.render_apply(res), cb.render_apply(res))
+
+# --- v3.14.0 Task 1, fix round 1: a manual apply never re-applies a text you rejected (spec §5.4), unless you take it
+SYN = {"rows": [{"block": "a", "sign": "~", "rejected": True}, {"block": "b", "sign": "−", "rejected": True},
+                {"block": "c", "sign": "+", "rejected": True}, {"block": "d", "sign": "⚠", "rejected": True},
+                {"block": "e", "sign": "?", "rejected": True}, {"block": "f", "sign": "~"}, {"block": "g", "sign": "=", "rejected": True}]}
+check("held_rejected: every rejected row that offers, in plan order — none that is not rejected",
+      cb.held_rejected(SYN, {}, []) == ["a", "b", "c", "d", "e"], cb.held_rejected(SYN, {}, []))
+check("…unless taken here: theirs on any of them, an --add of a '+', any answer to a '⚠' or a '?'",
+      cb.held_rejected(SYN, {"a": "theirs", "b": "theirs", "d": "mine", "e": "both"}, ["c"]) == []
+      and cb.held_rejected(SYN, {"c": "theirs"}, []) == ["a", "b", "d", "e"], cb.held_rejected(SYN, {"c": "theirs"}, []))
+check("…mine or both on a rejected '~', '−' or '+' takes nothing: it stays held",
+      cb.held_rejected(SYN, {"a": "mine", "b": "both", "c": "mine"}, []) == ["a", "b", "c", "d", "e"], "")
+
+KPI = region("kpi", "0.1", "### KPI\n- reach")
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f0 = published(store)
+    f0["blocks"]["okr"] = OKR
+    apply_of(home, text, copies, store, f0, add=["okr"])
+    state = cb.load_state(store, "zorg-core")
+    state["rejected"] = {"scope": [cb.offered(NEW_SCOPE)], "okr": ["removed"], "kpi": [cb.offered(KPI)]}
+    with cs.guard_roots(co.allowed_roots(home, text)):
+        cb.save_state(store, "zorg-core", state)
+    f = published(store, checked=LATER)
+    f["blocks"]["scope"], f["blocks"]["kpi"] = NEW_SCOPE, KPI       # okr left out: the repository removed it
+    p = plan_of(store, copies, f)
+    check("plan: rejected rows keep their sign, and count neither as questions nor as changes",
+          signs_of(p) == {"scope": "~", "teams": "=", "okr": "−", "team": "=", "kpi": "+"} and p["questions"] == 0 and p["changes"] == 0
+          and cb.render_plan(p).splitlines()[-1] == "Питань: 0 · зміниться записів: 0", (signs_of(p), p["questions"], p["changes"]))
+    body, n_journal = body_of(store, HOST_NOTES), len(journal_of(store))
+    res = apply_of(home, text, copies, store, f, hold=cb.held_rejected(p, {}, []))
+    check("an apply that holds them writes nothing and asks nothing", res["held"] == {"scope": "~", "okr": "−", "kpi": "+"}
+          and res["pending"] == [] and res["changed"] is False and body_of(store, HOST_NOTES) == body and len(journal_of(store)) == n_journal, res)
+    check("…its text says how to take one", "утримано: ~ scope — цей прохід його не чіпав · взяти текст ядра: --choose scope=theirs"
+          in cb.render_apply(res).splitlines() and "утримано: + kpi — цей прохід його не чіпав · взяти текст ядра: --choose kpi=theirs"
+          in cb.render_apply(res).splitlines(), cb.render_apply(res))
+    take = {"scope": "theirs", "okr": "theirs", "kpi": "theirs"}
+    res = apply_of(home, text, copies, store, f, choose=take, hold=cb.held_rejected(p, take, []))
+    body = body_of(store, HOST_NOTES)
+    check("theirs on a rejected '~', '−' and '+' is the explicit take: applied, not 'не потрібне'",
+          res["held"] == {} and res["ignored"] == {} and res["decisions"].get("scope") == "~ theirs" and res["decisions"].get("okr") == "− theirs"
+          and res["applied"].get("kpi") == "+" and NEW_SCOPE in body and "id=okr" not in body and KPI in body, res)
+    check("…the journal names what was taken", journal_of(store)[-1]["taken"] == {"scope": cb.offered(NEW_SCOPE), "okr": "removed",
+                                                                                   "kpi": cb.offered(KPI)}, journal_of(store)[-1])
+    p2 = plan_of(store, copies, f)
+    check("…the base moved, so the next plan carries no mark", set(signs_of(p2).values()) == {"="}
+          and not any(r.get("rejected") for r in p2["rows"]), p2["rows"])
+    f3 = dict(f, blocks=dict(f["blocks"], teams=NEW_TEAMS))
+    res = apply_of(home, text, copies, store, f3, choose={"teams": "theirs"})
+    check("theirs on a '~' that is not rejected is still 'не потрібне' (the '~' applies by itself)",
+          res["ignored"] == {"teams": "~"} and res["decisions"]["teams"] == "~" and NEW_TEAMS in body_of(store, HOST_NOTES), res)
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

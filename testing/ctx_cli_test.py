@@ -1921,6 +1921,53 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("…and so does apply, which takes a '~' of a rule as any other", rc == 0 and res["applied"].get("scope") == "~"
               and "(правило ядра)" in out and "policy=rule" in region_in(read(e.ctx), "zorg-core", "scope"), (rc, out[-500:]))
 
+def reject(e, repo, texts):
+    """Write `rejected` into the repository's block state: {block: repository text or None (a removal)} — what undoing a
+    sync pass will leave there (Task 6)."""
+    path = os.path.join(e.store, ".state", "blocks", repo + ".json")
+    state = json.loads(read(path))
+    state["rejected"] = {b: [cb_mod.offered(t)] for b, t in texts.items()}
+    open(path, "w", encoding="utf-8").write(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n")
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # fix round 1: a manual apply never re-applies a text you rejected
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        blocks_file = os.path.join(core, CORE_BLOCKS)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        old_a, old_b = region_in(read(e.ctx), "zorg-core", "scope"), region_in(read(e.ctx), "zorg-core", "teams")
+        change(blocks_file, SCOPE_04, SCOPE_05)
+        change(blocks_file, "- Alpha, Beta\n<!-- zorg-core:end id=teams -->", "- Alpha, Beta, Gamma\n<!-- zorg-core:end id=teams -->")
+        new_a, new_b = region_in(read(blocks_file), "zorg-core", "scope"), region_in(read(blocks_file), "zorg-core", "teams")
+        reject(e, "zorg-core", {"scope": new_a, "teams": new_b})
+        n_journal = journal_len(e)
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("apply over two rejected '~' blocks writes neither: both held, nothing asked, exit 0",
+              rc == 0 and r["held"] == {"scope": "~", "teams": "~"} and r["pending"] == [] and r["written"] == []
+              and region_in(read(e.ctx), "zorg-core", "scope") == old_a and region_in(read(e.ctx), "zorg-core", "teams") == old_b
+              and journal_len(e) == n_journal, (rc, out[-600:]))
+        check("…its text says each is held and how to take it",
+              "утримано: ~ scope — цей прохід його не чіпав · взяти текст ядра: --choose scope=theirs" in out.splitlines()
+              and "утримано: ~ teams — цей прохід його не чіпав · взяти текст ядра: --choose teams=theirs" in out.splitlines(), out[-600:])
+        rc, out, r = apply_run(e, core, "zorg-core", "--choose", "scope=theirs")
+        check("--choose A=theirs takes A, B stays held", rc == 0 and r["decisions"].get("scope") == "~ theirs" and r["held"] == {"teams": "~"}
+              and region_in(read(e.ctx), "zorg-core", "scope") == new_a and region_in(read(e.ctx), "zorg-core", "teams") == old_b, (rc, out[-600:]))
+        rc, out, r = plan_run(e, core, "zorg-core")
+        rows = {x["block"]: x for x in r["rows"]}
+        check("…the next plan shows A without the rejected mark, B still with it",
+              rows["scope"]["sign"] == "=" and "rejected" not in rows["scope"] and rows["teams"].get("rejected") is True
+              and rows["teams"]["sign"] == "~" and r["changes"] == 0, out[-500:])
+        open(blocks_file, "a", encoding="utf-8").write("\n" + OKR + "\n")
+        reject(e, "zorg-core", {"teams": new_b, "okr": OKR})
+        rc, out, r = apply_run(e, core, "zorg-core")
+        check("a rejected '+' is held too: not awaited, exit 0", rc == 0 and r["held"] == {"teams": "~", "okr": "+"} and r["pending"] == []
+              and "id=okr" not in read(e.ctx), (rc, out[-500:]))
+        rc, out, r = apply_run(e, core, "zorg-core", "--add", "okr")
+        check("…--add of the rejected '+' takes it", rc == 0 and r["applied"].get("okr") == "+" and OKR in read(e.ctx)
+              and r["held"] == {"teams": "~"}, (rc, out[-500:]))
+
 pp_now = re.sub(r"\s+", " ", read(ROOT, "references", "context-provider-protocol.md"))
 need_1314_t1 = ["policy=rule", "(правило ядра)", "`--choose <block>=theirs` on a `✎`", "`✎ theirs`", "`taken`", "`\"removed\"`",
                 "`rejected`", "відкинуто вами — не застосовується, доки ядро не змінить блок", "`hold`", "`held`", "`provider-sync`",
@@ -1929,6 +1976,14 @@ check("context-provider-protocol documents v3.14.0's apply: policy=rule, theirs 
       not lacks(pp_now, need_1314_t1), lacks(pp_now, need_1314_t1))
 check("ctx usage says a ✎ takes --choose BLOCK=theirs", "a ✎ takes --choose BLOCK=theirs" in re.sub(r"\s+", " ", ast.get_docstring(ast.parse(read(CTX))) or ""),
       "")
+usage_now = re.sub(r"\s+", " ", ast.get_docstring(ast.parse(read(CTX))) or "")
+need_fix1_usage = ["A text you rejected by undoing a sync pass is held (\"утримано: …\"), never re-applied, unless taken: --choose BLOCK=theirs (any sign)", "CTX_RESULT: the plan with applied, decisions, pending, ignored, held, written, snapshot"]
+need_fix1_pp = ["`ctx provider apply` does not take it again either", "· взяти текст ядра: --choose <block>=theirs",
+                "`--choose <block>=theirs` on a rejected row of any sign that offers"]
+check("fix round 1: the usage and §12.6 say a manual apply holds a rejected text and how to take it",
+      not lacks(usage_now, need_fix1_usage) and not lacks(pp_now, need_fix1_pp)
+      and "`ctx provider apply` passes neither (its `held` is `{}`)" not in pp_now and "neither makes `apply` act differently" not in pp_now,
+      (lacks(usage_now, need_fix1_usage), lacks(pp_now, need_fix1_pp)))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
