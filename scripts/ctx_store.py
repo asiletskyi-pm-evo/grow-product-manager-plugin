@@ -277,14 +277,33 @@ def check_target(path):
 
 
 READ_TIMEOUT_S = 30.0
+_BUDGET = threading.local()     # `until`: the time.monotonic() moment the innermost read_budget of this thread ends
 
 
 def read_timeout():
-    """Seconds a ctx run waits for its files in all; GROW_PM_CTX_READ_TIMEOUT overrides."""
+    """Seconds a ctx run waits for its files in all; GROW_PM_CTX_READ_TIMEOUT overrides. Inside `read_budget` (since
+    v3.14), no more than what is left of it — 0 once it is spent."""
     try:
-        return float(os.environ.get("GROW_PM_CTX_READ_TIMEOUT") or READ_TIMEOUT_S)
+        own = float(os.environ.get("GROW_PM_CTX_READ_TIMEOUT") or READ_TIMEOUT_S)
     except ValueError:
-        return READ_TIMEOUT_S
+        own = READ_TIMEOUT_S
+    until = getattr(_BUDGET, "until", None)
+    return own if until is None else min(own, max(0.0, until - time.monotonic()))
+
+
+@contextlib.contextmanager
+def read_budget(seconds):
+    """A time budget for every read in the block that asks `read_timeout()` (read_text, Store._texts …): `seconds`
+    from now, None for none. A block inside another ends no later than the outer one — the smaller wins. The budget
+    is the calling thread's: an unattended sync that keeps one never cuts the reads of another thread."""
+    prev = getattr(_BUDGET, "until", None)
+    if seconds is not None:
+        until = time.monotonic() + seconds
+        _BUDGET.until = until if prev is None else min(prev, until)
+    try:
+        yield
+    finally:
+        _BUDGET.until = prev
 
 
 def read_text(path, timeout=None):

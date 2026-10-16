@@ -8,7 +8,8 @@ references/context-provider-protocol.md §3b). `load_repos` reads them through
 that fetches blocks never branches on the schema version.
 
 `fetch` reads a repository's blocks ("theirs") from its MCP server or from its core folder; the registrations
-themselves are read from local files only. Nothing is ever written. Stdlib only.
+themselves are read from local files only. `reach` says whether a repository answers, `public_url` how its endpoint
+may be shown (both moved here from ctx.py in v3.14). Nothing is ever written. Stdlib only.
 """
 import collections
 import contextlib
@@ -18,6 +19,8 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
@@ -259,8 +262,13 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         return None, _team_why(e)
 
 
-def _from_mcp(repo, blocks_file, client_factory):
-    """(text, None) of the blocks file as the server serves it, or (None, why not)."""
+def _header_hint(ep, hdrs):
+    """"; <why the variable gives no header>" when the registration names one and it gave none, else ""."""
+    return "; " + cm.header_problem(ep["headers_env"]) if ep["headers_env"] and not hdrs else ""
+
+
+def _from_mcp(repo, blocks_file, client_factory, deadline=None):
+    """(text, None) of the blocks file as the server serves it, or (None, why not). The client keeps `deadline`."""
     ep = repo["endpoint"]
     if not ep["url"]:
         return None, "no endpoint url in the registration"
@@ -268,9 +276,9 @@ def _from_mcp(repo, blocks_file, client_factory):
         return None, "the registration names no blocks_file"
     hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
     try:
-        client = client_factory(ep["url"], headers=hdrs)
+        client = client_factory(ep["url"], headers=hdrs, deadline=deadline)
         if not client.probe():
-            hint = "; %s is not set (or not 'Name: value')" % ep["headers_env"] if ep["headers_env"] and not hdrs else ""
+            hint = _header_hint(ep, hdrs)
             return None, "MCP unreachable: %s%s" % (_clean(getattr(client, "last_error", "") or "no answer"), hint)
         note = client.call(NOTE_TOOL, {"path": ep["root"] + blocks_file})      # Ruling P1: plain concatenation
     except cm.McpError as e:
@@ -362,7 +370,35 @@ def namespace_warning(repo, namespace=None):
     return "registration has no namespace \u2014 the core's manifest says %s; add `namespace: %s`" % (ns, ns)
 
 
-def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
+def public_url(url):
+    """An endpoint as it may be shown: scheme, host, port and path — no credentials, no query, no fragment."""
+    try:
+        u = urllib.parse.urlsplit(url)
+        return "%s://%s%s" % (u.scheme, u.netloc.rpartition("@")[2], u.path) if u.scheme and u.netloc else ""
+    except ValueError:
+        return ""
+
+
+def reach(repo, deadline=None):
+    """(reachable, reason) of one repository. An MCP repository answers the handshake within 3 s a step (the header its
+    registration names, if any, comes from the environment; the client keeps `deadline`, a time.monotonic() moment);
+    a folder or bundle is there when its core folder is. The reason is the client's, as it said it — a caller that
+    prints it clips it (ctx.py: cb.clip(…, cb.NOTE_CLIP))."""
+    ep = repo["endpoint"]
+    if repo["kind"] == "mcp" or ep["url"]:
+        if not ep["url"]:
+            return False, "no endpoint url in the registration"
+        hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
+        client = cm.McpClient(ep["url"], headers=hdrs, deadline=deadline)
+        if client.probe():
+            return True, ""
+        return False, client.last_error + _header_hint(ep, hdrs)
+    if repo["core_root"]:
+        return (True, "") if os.path.isdir(repo["core_root"]) else (False, "core folder not found")
+    return False, "no endpoint and no core folder in the registration"
+
+
+def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, deadline=None):
     """A repository's blocks ("theirs") — read only, nothing is written anywhere.
 
     `blocks_source` decides where from: "mcp" asks the server only; "paths" reads the core folder only; "auto"
@@ -381,6 +417,11 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
     manifest that cannot be read, leaves the stand-in. Files are read through ctx_store.read_text (the iCloud time
     budget).
 
+    `deadline` (since v3.14; a time.monotonic() moment, None for none) bounds the whole fetch: the client keeps it —
+    every request gets what is left, none is made once it has passed (the error then says "deadline reached") — and
+    the core folder is read within `cs.read_budget` of what is left, so a file iCloud never delivers costs that, not
+    the store's own 30 s. `client_factory` is called as (url, headers=…, deadline=…).
+
     Returns {source: "mcp"|"folder"|None, version: the v= most blocks carry (the first met on a tie; counted
     before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks (unless `include_skipped`),
     namespace: the marker namespace the blocks were read in (set even when `error` is),
@@ -398,7 +439,7 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
            "team_error": None, "error": None, "checked": _stamp(now)}
     src, core_root, url = repo["blocks_source"], repo["core_root"], repo["endpoint"]["url"]
     explicit = repo.get("namespace_explicit", True)         # a repository built by hand has no flag: its namespace is meant
-    with _bounded_reads():
+    with _bounded_reads(), cs.read_budget(None if deadline is None else deadline - time.monotonic()):
         blocks_file = repo["blocks_file"]
         manifest, manifest_why = None, None
         if core_root and os.path.isdir(core_root) and (repo["team"] or not blocks_file or not explicit):
@@ -413,7 +454,7 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False):
             errors.append("the registration has neither an endpoint url nor a core folder")
         else:
             if src == "mcp" or (src == "auto" and url):
-                text, why = _from_mcp(repo, blocks_file, client_factory)
+                text, why = _from_mcp(repo, blocks_file, client_factory, deadline)
                 bad = _unsound(text, out["namespace"]) if text is not None else None
                 if bad:                                 # an empty, cut or foreign note is a bad answer: under auto, the folder
                     text, why = None, "MCP: " + bad

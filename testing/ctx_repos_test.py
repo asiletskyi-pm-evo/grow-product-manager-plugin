@@ -8,10 +8,12 @@ the order and dedupe of registrations, the real HOME never being read, and the c
 `CTX_RESULT` line, a paused repository, an unreadable registration. Then `fetch` — a repository's blocks
 ("theirs") from the fake MCP server (testing/mcp_fake.py, 127.0.0.1) or from the core folder, the team
 block from the folder, the fallback order of blocks_source, errors (a dead server, a server's error, a file
-that never arrives, a bad answer), skip_blocks, the most common version, and that nothing is written.
+that never arrives, a bad answer), skip_blocks, the most common version, and that nothing is written. Since v3.14:
+`cs.read_budget`, `fetch(…, deadline=)` against a slow server and a file that never arrives, and `reach` / `public_url`
+(moved from ctx.py).
 Semantics: references/context-provider-protocol.md §3b. Stdlib only; run from the repo root.
 """
-import contextlib, datetime, hashlib, io, json, os, re, shutil, socket, stat, subprocess, sys, tempfile, time
+import contextlib, datetime, hashlib, io, json, os, re, shutil, socket, stat, subprocess, sys, tempfile, threading, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -22,6 +24,7 @@ import ctx as ctxmain  # noqa: E402
 import ctx_blocks as cb  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_repos as cr  # noqa: E402
+import ctx_store as cs  # noqa: E402
 from mcp_fake import FakeMcp  # noqa: E402
 
 cm.McpClient.BACKOFF = 0.0                                # no pause between retries in tests
@@ -540,12 +543,15 @@ with tempfile.TemporaryDirectory() as d:
 
         seen = []
 
-        def factory(url, headers=None):
-            seen.append((url, headers))
-            return cm.McpClient(url, headers=headers, probe_timeout=2.0, retries=0)
+        def factory(url, headers=None, deadline=None):
+            seen.append((url, headers, deadline))
+            return cm.McpClient(url, headers=headers, probe_timeout=2.0, retries=0, deadline=deadline)
 
         cr.fetch(growth_repo(fake.url), client_factory=factory)
-        check("client_factory is called with the endpoint url and the (empty) headers", seen == [(fake.url, {})], seen)
+        check("client_factory is called with the endpoint url, the (empty) headers and no deadline", seen == [(fake.url, {}, None)], seen)
+        until = time.monotonic() + 60
+        fdl = cr.fetch(growth_repo(fake.url), client_factory=factory, deadline=until)
+        check("v3.14: fetch passes its deadline to the client", seen[-1] == (fake.url, {}, until) and fdl["source"] == "mcp", (seen, fdl))
 
     with FakeMcp(tree={"ZorgCore/" + CORE_BLOCKS_FILE: read(CORE_FIX, *CORE_BLOCKS_FILE.split("/"))}) as fake:
         fnc = cr.fetch(repo_of({"id": "zorg-core", "kind": "mcp", "blocks_file": CORE_BLOCKS_FILE, "blocks_source": "mcp",
@@ -694,6 +700,118 @@ with tempfile.TemporaryDirectory() as d:
         os.environ.pop("GROW_PM_CTX_READ_TIMEOUT")
     else:
         os.environ["GROW_PM_CTX_READ_TIMEOUT"] = saved
+
+    # --- v3.14: cs.read_budget — every read inside the block gets no more than what is left; nested, the smaller wins
+    saved = os.environ.pop("GROW_PM_CTX_READ_TIMEOUT", None)
+    try:
+        base = cs.read_timeout()
+        with cs.read_budget(5):
+            outer = cs.read_timeout()
+            with cs.read_budget(0.2):
+                inner = cs.read_timeout()
+                with cs.read_budget(10):
+                    inner_wider = cs.read_timeout()
+            back = cs.read_timeout()
+        after = cs.read_timeout()
+        check("read_budget: read_timeout() is what is left of the budget, the smaller one when nested, the store's own after it",
+              base == 30.0 and 4.5 < outer <= 5 and 0 < inner <= 0.2 and 0 < inner_wider <= 0.2 and 4.5 < back <= 5 and after == 30.0,
+              (base, outer, inner, inner_wider, back, after))
+        with cs.read_budget(None):
+            unbounded = cs.read_timeout()
+        with cs.read_budget(-3):
+            spent = cs.read_timeout()
+        check("…None is no budget; a budget already spent is 0, never negative", unbounded == 30.0 and spent == 0, (unbounded, spent))
+        os.environ["GROW_PM_CTX_READ_TIMEOUT"] = "0.1"
+        with cs.read_budget(5):
+            env_smaller = cs.read_timeout()
+        os.environ.pop("GROW_PM_CTX_READ_TIMEOUT")
+        check("…never more than the store's own (GROW_PM_CTX_READ_TIMEOUT)", env_smaller == 0.1, env_smaller)
+        box = {}
+        with cs.read_budget(0.2):
+            t = threading.Thread(target=lambda: box.update(other=cs.read_timeout()))
+            t.start()
+            t.join()
+        check("…a budget belongs to the thread that set it (a sync in one thread does not cut another's reads)",
+              box.get("other") == 30.0, box)
+        fifo_b = os.path.join(d, "budget-fifo.md")
+        os.mkfifo(fifo_b)
+        got, t0 = None, time.monotonic()
+        try:
+            with cs.read_budget(0.2):
+                cs.read_text(fifo_b)
+        except cs.StoreError as e:
+            got = e
+        took = time.monotonic() - t0
+        check("cs.read_budget(0.2) over a file that never arrives → StoreError within 1 s (the store's own is 30 s)",
+              got is not None and took < 1.0 and "budget-fifo.md" in str(got), (repr(got), took))
+        check("…and the budget ends with the block, an exception or not", cs.read_timeout() == 30.0, cs.read_timeout())
+        try:
+            os.close(os.open(fifo_b, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+
+        # --- v3.14: fetch within a deadline — the server's request and the core folder's reads both get what is left
+        with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}, delay=3) as fake:
+            t0 = time.monotonic()
+            fd = cr.fetch(growth_repo(fake.url), deadline=time.monotonic() + 0.5)
+            took = time.monotonic() - t0
+            check("fetch(deadline = now + 0.5) on a server that answers in 3 s → an error within 1.5 s",
+                  fd["source"] is None and fd["blocks"] == {} and fd["error"] and took < 1.5, (fd, took))
+        with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+            fpast = cr.fetch(growth_repo(fake.url), deadline=time.monotonic() - 1)
+            check("…a deadline already past: not one request, and the error says why",
+                  fake.seen == [] and fpast["source"] is None and "deadline reached" in (fpast["error"] or ""), (fpast, fake.methods()))
+            fok = cr.fetch(growth_repo(fake.url), deadline=time.monotonic() + 30)
+            check("…a deadline with time left changes nothing", fok["source"] == "mcp" and fok["error"] is None
+                  and set(fok["blocks"]) == {"growth-metrics", "team"}, fok)
+        fifo_dl_core = os.path.join(d, "FifoDeadlineCore")
+        os.makedirs(os.path.join(fifo_dl_core, "Core", "_System"))
+        fifo_dl = os.path.join(fifo_dl_core, "Core", "_System", "context-blocks.md")
+        os.mkfifo(fifo_dl)
+        t0 = time.monotonic()
+        fdf = cr.fetch(repo_of({"id": "zorg-fifo", "kind": "folder", "paths": [fifo_dl_core], "blocks_file": CORE_BLOCKS_FILE}),
+                       deadline=time.monotonic() + 0.3)
+        took = time.monotonic() - t0
+        check("…a core file that never arrives costs what the deadline leaves, not the store's 30 s",
+              fdf["source"] is None and "not available" in (fdf["error"] or "") and took < 1.5, (fdf, took))
+        check("…and the fetch's budget ends with it", cs.read_timeout() == 30.0, cs.read_timeout())
+        try:
+            os.close(os.open(fifo_dl, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+    finally:
+        if saved is not None:
+            os.environ["GROW_PM_CTX_READ_TIMEOUT"] = saved
+
+    # --- v3.14: reach and public_url, moved from ctx.py without a change
+    check("public_url: scheme, host, port and path — no credentials, no query, no fragment",
+          cr.public_url("http://zorguser:zorgpass9@127.0.0.1:8123/mcp/x?tok=zorgtok7#frag") == "http://127.0.0.1:8123/mcp/x"
+          and cr.public_url("https://zorg.example/mcp") == "https://zorg.example/mcp"
+          and cr.public_url("") == "" and cr.public_url("127.0.0.1:9/mcp") == "" and cr.public_url("http://[::1/mcp") == "",
+          cr.public_url("http://zorguser:zorgpass9@127.0.0.1:8123/mcp/x?tok=zorgtok7#frag"))
+    check("reach: a folder repository is reachable when its core folder is there, else says so",
+          cr.reach(core_repo()) == (True, "") and cr.reach(core_repo(core_root=os.path.join(d, "gone"))) == (False, "core folder not found"),
+          (cr.reach(core_repo()), cr.reach(core_repo(core_root=os.path.join(d, "gone")))))
+    check("…an mcp one without a url, and one with neither, say so",
+          cr.reach(repo_of({"id": "zorg-bare", "kind": "mcp"})) == (False, "no endpoint url in the registration")
+          and cr.reach(repo_of({"id": "zorg-none", "kind": "folder"})) == (False, "no endpoint and no core folder in the registration"), "")
+    with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+        check("…a server that answers the handshake is reachable", cr.reach(growth_repo(fake.url)) == (True, ""), fake.methods())
+        n0 = len(fake.seen)
+        check("…and with a deadline already past: unreachable, 'deadline reached', no request",
+              cr.reach(growth_repo(fake.url), deadline=time.monotonic() - 1) == (False, "deadline reached") and len(fake.seen) == n0,
+              fake.methods()[n0:])
+    with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}, require_headers={"X-Token": "tok-9f3a"}) as fake:
+        os.environ[HDR_VAR] = "Host: tok-9f3a"
+        hrepo = growth_repo(fake.url, endpoint={"url": fake.url, "root": "ZorgGrowth/", "headers_env": HDR_VAR})
+        ok_h, why_h = cr.reach(hrepo)
+        fh = cr.fetch(hrepo)
+        os.environ.pop(HDR_VAR, None)
+        check("v3.14: a header variable naming Host is never sent: reach and fetch say the variable and the name, not the value",
+              ok_h is False and "401" in why_h and HDR_VAR in why_h and "Host" in why_h and "not allowed" in why_h
+              and fh["source"] is None and HDR_VAR in fh["error"] and "not allowed" in fh["error"]
+              and "tok-9f3a" not in why_h + fh["error"]
+              and all(s["headers"].get("Host", "").startswith("127.0.0.1") for s in fake.seen), (why_h, fh["error"]))
 
     # --- a core whose team block cannot be built
     nomf = os.path.join(d, "NoManifestCore")

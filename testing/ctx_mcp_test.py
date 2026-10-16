@@ -5,13 +5,16 @@ The fictional "Zorg" on a fake Streamable-HTTP MCP server (testing/mcp_fake.py: 
 thread; JSON and SSE answers, a session id, recorded requests). Covers the handshake probe, calls in both
 answer formats, the session id going back, the allow-list refusing before any request, errors (isError,
 JSON-RPC error, HTTP status, timeout, dropped connection) and retries on network errors only, no redirects
-and no secrets in messages, `headers_from_env`, and the command: reachable yes / no for an MCP repository
+and no secrets in messages, `headers_from_env`; since v3.14 the deadline (none is made once it has passed, a silent
+server costs what is left), a handshake step of probe_timeout each, the allow-list at the transport, the answer by
+its id only, header names (a token, never Host / Content-Length / Transfer-Encoding / Connection); and the command:
+reachable yes / no for an MCP repository
 and for a folder, the header from the environment, the version on the source (`source_version`: what its blocks
 carry now, None when they were not read — the registration's own goes in `registration_version`, never in its
 place). No real server, no real data.
 Semantics: references/context-provider-protocol.md. Stdlib only; run from the repo root.
 """
-import json, os, socket, subprocess, sys, tempfile, threading, time, traceback
+import contextlib, io, json, os, socket, subprocess, sys, tempfile, threading, time, traceback
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -20,6 +23,7 @@ os.environ["NO_PROXY"] = "127.0.0.1,localhost"          # the fake is local; a p
 os.environ["no_proxy"] = "127.0.0.1,localhost"
 import ctx as ctxmain  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
+import ctx_repos as crp  # noqa: E402
 from ctx_mcp import McpClient, McpError, McpRefused  # noqa: E402
 from mcp_fake import BLOCKS, FakeMcp  # noqa: E402
 
@@ -182,8 +186,9 @@ c._send = lambda msg, timeout, retries: ({}, "text/event-stream", b"data:\n\neve
 err = raises(lambda: c._rpc("tools/call", {}, 1, 0), McpError)
 check("SSE with nothing but such events → McpError (no message in it)", err is not None and "no JSON-RPC message" in str(err), repr(err))
 c._send = lambda msg, timeout, retries: ({}, "text/event-stream", b"data: {\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{}}\n\ndata: ping\n\n")
-check("SSE: a parseable message with another id is the fallback when none matches (the last parseable one)",
-      c._rpc("tools/call", {}, 1, 0)[0] == {})
+err = raises(lambda: c._rpc("tools/call", {}, 1, 0), McpError)
+check("v3.14: SSE with a message of another id only → McpError 'no response with id …' (no fallback to the last message)",
+      err is not None and str(err).startswith("no response with id "), repr(err))
 
 # --- the allow-list
 with FakeMcp() as fake:
@@ -390,6 +395,137 @@ with FakeMcp(require_headers={"X-Token": "zorg"}) as fake:
     check("…and without it the server says no", raises(lambda: McpClient(fake.url).call("vault_get_note", {"path": "a"}), McpError) is not None)
 
 
+# --- v3.14: header names — a token of RFC 7230, never one that steers the request itself
+for raw in ("Host: x", "host: zorg.example", "Content-Length: 5", "content-length: 0", "Transfer-Encoding: chunked",
+            "Connection: close", "X Token: zorg", "X-Tok\x01en: zorg", "X-Tokené: zorg", "(X-Token): zorg", "X/Token: zorg"):
+    os.environ["ZORG_HDR"] = raw
+    check("headers_from_env refuses %r → {}" % raw, cm.headers_from_env("ZORG_HDR") == {}, cm.headers_from_env("ZORG_HDR"))
+os.environ["ZORG_HDR"] = "Host: x"
+why = cm.header_problem("ZORG_HDR")
+check("header_problem names the variable and the refused name", "ZORG_HDR" in why and "Host" in why and "not allowed" in why, why)
+os.environ["ZORG_HDR"] = "zorgsekret9 X: zorg"
+why = cm.header_problem("ZORG_HDR")
+check("…a name that is not a token is not repeated (it may be part of a secret)", "ZORG_HDR" in why
+      and "not a valid header name" in why and "zorgsekret9" not in why, why)
+os.environ.pop("ZORG_HDR", None)
+check("…a variable that is not set keeps its v3.13 words", cm.header_problem("ZORG_HDR") == "ZORG_HDR is not set (or not 'Name: value')",
+      cm.header_problem("ZORG_HDR"))
+os.environ["ZORG_HDR"] = "X-Token: zorg"
+check("…and a good one has no problem, and still passes", cm.header_problem("ZORG_HDR") == ""
+      and cm.headers_from_env("ZORG_HDR") == {"X-Token": "zorg"}
+      and cm.headers_from_env("ZORG_HDR") == {"X-Token": "zorg"}, cm.header_problem("ZORG_HDR"))
+os.environ["ZORG_HDR"] = "x-api-key!#$%&'*+.^_`|~9: zorg"
+check("…every tchar of RFC 7230 is a token character", cm.headers_from_env("ZORG_HDR") == {"x-api-key!#$%&'*+.^_`|~9": "zorg"},
+      cm.headers_from_env("ZORG_HDR"))
+os.environ["ZORG_HDR"] = "X-Token: zorg"
+with FakeMcp() as fake:
+    for hdrs in ({"Host": "zorg.example"}, {"CONTENT-LENGTH": "0"}, {"X Token": "zorg"}):
+        c = McpClient(fake.url, headers=hdrs)
+        ok = c.probe()
+        err = raises(lambda: c.call("vault_get_note", {"path": "a"}), McpError)
+        check("the client itself refuses a header it may not send (%s): probe false with the reason, call McpError, no request"
+              % list(hdrs)[0], ok is False and "header" in c.last_error and err is not None and fake.seen == [],
+              (ok, c.last_error, repr(err), fake.methods()))
+
+# --- v3.14: the deadline — a time.monotonic() moment no request outlasts
+with FakeMcp() as fake:
+    c = McpClient(fake.url, deadline=time.monotonic() - 1)
+    ok = c.probe()
+    err = raises(lambda: c.call("vault_get_note", {"path": BLOCKS_PATH}), McpError)
+    check("a deadline in the past: probe false with 'deadline reached', call McpError('deadline reached'), not one request",
+          ok is False and c.last_error == "deadline reached" and err is not None and str(err) == "deadline reached"
+          and fake.seen == [] and calls(fake) == 0, (ok, c.last_error, repr(err), fake.methods()))
+    c = McpClient(fake.url, deadline=time.monotonic() + 30)
+    check("a deadline far ahead changes nothing", c.call("vault_get_note", {"path": BLOCKS_PATH})["path"] == BLOCKS_PATH, fake.methods())
+
+
+class Silent:
+    """A listener that takes every connection into its backlog and never answers a byte (a server gone quiet)."""
+
+    def __init__(self):
+        self.sock = socket.socket()
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(64)
+        self.url = "http://127.0.0.1:%d/mcp" % self.sock.getsockname()[1]
+
+    def close(self):
+        self.sock.close()
+
+
+silent = Silent()
+t0 = time.monotonic()
+err = raises(lambda: McpClient(silent.url, retries=2, deadline=time.monotonic() + 1).call("vault_get_note", {"path": "a"}), McpError)
+took = time.monotonic() - t0
+check("a silent server with deadline = now + 1: the call (handshake retried twice by default) is back within 2 s",
+      err is not None and took < 2.0, (repr(err), took))
+t0 = time.monotonic()
+c = McpClient(silent.url, deadline=time.monotonic() + 1)
+ok = c.probe()
+took = time.monotonic() - t0
+check("…and the probe of 3 s too", ok is False and took < 2.0 and "timed out" in c.last_error, (ok, took, c.last_error))
+silent.close()
+
+with FakeMcp(delay=3) as fake:
+    c = McpClient(fake.url, call_timeout=30, deadline=time.monotonic() + 0.8)
+    t0 = time.monotonic()
+    err = raises(lambda: c.call("vault_get_note", {"path": BLOCKS_PATH}), McpError)
+    took = time.monotonic() - t0
+    check("a call of 30 s is cut to what the deadline leaves, and not retried past it",
+          err is not None and took < 2.0 and calls(fake) <= 2, (repr(err), took, calls(fake)))
+
+# --- v3.14: the handshake — initialize and the notification each within probe_timeout of their own
+with FakeMcp(delays={"initialize": 0.6, "notifications/initialized": 0.6}) as fake:
+    c = McpClient(fake.url, probe_timeout=1.0)
+    check("a slow but healthy server (0.6 s per handshake step, probe_timeout 1 s): the probe succeeds",
+          c.probe() is True and fake.methods() == ["initialize", "notifications/initialized"], (c.last_error, fake.methods()))
+with FakeMcp(delays={"initialize": 1.5}) as fake:
+    c = McpClient(fake.url, probe_timeout=0.5, call_timeout=30, retries=0)
+    t0 = time.monotonic()
+    err = raises(lambda: c.call("vault_get_note", {"path": BLOCKS_PATH}), McpError)
+    took = time.monotonic() - t0
+    check("the handshake of a call is held to probe_timeout per step, not to call_timeout",
+          err is not None and "timed out" in str(err) and took < 1.2, (repr(err), took))
+
+# --- v3.14: the allow-list at the transport — _rpc and _send refuse a tools/call outside it, before any request
+with FakeMcp() as fake:
+    c = McpClient(fake.url)
+    c.probe()
+    before = len(fake.seen)
+    refused = [raises(lambda: c._rpc("tools/call", {"name": "vault_write_note", "arguments": {"path": "a"}}, 1, 0), McpError),
+               raises(lambda: c._rpc("tools/call", {"name": None}, 1, 0), McpError),
+               raises(lambda: c._rpc("tools/call", {}, 1, 0), McpError),
+               raises(lambda: c._rpc("tools/call", ["vault_get_note"], 1, 0), McpError),
+               raises(lambda: c._send({"jsonrpc": "2.0", "id": 99, "method": "tools/call",
+                                       "params": {"name": "brain_write", "arguments": {}}}, 1, 0), McpError)]
+    check("a tool outside ALLOWED is refused at the transport (_rpc, _send), with nothing sent",
+          all(type(e) is McpRefused for e in refused) and len(fake.seen) == before,
+          ([type(e).__name__ for e in refused], fake.methods()[before:]))
+    got, _ = c._rpc("tools/call", {"name": "vault_get_note", "arguments": {"path": BLOCKS_PATH}}, 5, 0)
+    check("…while an allowed tool goes through _rpc as before", "content" in got and calls(fake) == 1, got)
+
+# --- v3.14: the answer is the message with the request's id, and only that one
+c = McpClient("http://127.0.0.1:9/mcp")
+c._send = lambda msg, timeout, retries: ({}, "application/json", b'{"jsonrpc":"2.0","id":99,"result":{"x":1}}')
+err = raises(lambda: c._rpc("tools/call", {"name": "brain_status"}, 1, 0), McpError)
+check("a JSON answer with another id → McpError 'no response with id …'", err is not None
+      and str(err).startswith("no response with id "), repr(err))
+c = McpClient("http://127.0.0.1:9/mcp")
+c._send = lambda msg, timeout, retries: ({}, "application/json",
+                                         b'[{"jsonrpc":"2.0","id":7,"result":{"x":7}},{"jsonrpc":"2.0","id":1,"result":{"x":1}},'
+                                         b'{"jsonrpc":"2.0","method":"notifications/x"}]')
+check("…in a batch, the message with the request's id is the answer, wherever it stands",
+      c._rpc("tools/call", {"name": "brain_status"}, 1, 0)[0] == {"x": 1})
+c = McpClient("http://127.0.0.1:9/mcp")
+c._send = lambda msg, timeout, retries: ({}, "application/json", b'{"jsonrpc":"2.0","id":true,"result":{"x":1}}')
+err = raises(lambda: c._rpc("tools/call", {"name": "brain_status"}, 1, 0), McpError)
+check("…an id of true is not the id 1", err is not None and str(err).startswith("no response with id "), repr(err))
+c = McpClient("http://127.0.0.1:9/mcp")
+c._send = lambda msg, timeout, retries: ({}, "application/json", b'{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"x"}}')
+err = raises(lambda: c._rpc("tools/call", {"name": "brain_status"}, 1, 0), McpError)
+check("…and an answer with no id is no answer to the request", err is not None and str(err).startswith("no response with id "),
+      repr(err))
+
+
 # --- ctx repo status
 CORE_V1 = """schema: provider-registration/1
 id: zorg-core
@@ -538,14 +674,29 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=ROOTED, require_headers={"
         def probe(self):
             return False
 
+    # v3.14: reach lives in ctx_repos and gives the reason as the client said it; `repo status` clips it where it prints
+    e.reg("zorg-noisy", MCP_V2.format(id="zorg-noisy", url="http://127.0.0.1:9/mcp"))
     real_client, cm.McpClient = cm.McpClient, Noisy
+    buf, saved_ctx = io.StringIO(), os.environ.pop("GROW_PM_CONTEXT_PATH", None)
     try:
-        ok_, why_ = ctxmain._reach({"kind": "mcp", "endpoint": {"url": "http://127.0.0.1:9/mcp", "headers_env": "", "root": ""},
-                                    "core_root": ""})
+        raw_ok, raw_why = crp.reach({"kind": "mcp", "endpoint": {"url": "http://127.0.0.1:9/mcp", "headers_env": "", "root": ""},
+                                     "core_root": ""})
+        with contextlib.redirect_stdout(buf):
+            rc_ = ctxmain.main(["repo", "status", "zorg-noisy", "--home", e.home, "--context", e.ctx])
     finally:
         cm.McpClient = real_client
+        if saved_ctx is not None:
+            os.environ["GROW_PM_CONTEXT_PATH"] = saved_ctx
+    last = [l for l in buf.getvalue().splitlines() if l.startswith("CTX_RESULT ")]
+    why_ = json.loads(last[-1][len("CTX_RESULT "):])["repos"][0]["reason"] if last else ""
     check("the reason a repository is unreachable is one clean line of at most 300 characters",
-          ok_ is False and len(why_) <= 300 and why_.endswith("…") and "\x1b" not in why_ and "\n" not in why_, why_)
+          rc_ == 0 and len(why_) <= 300 and why_.endswith("…") and "\x1b" not in why_ and "\n" not in why_
+          and "\x1b" not in block(buf.getvalue(), "zorg-noisy"), why_)
+    check("…while crp.reach gives the client's reason as it is (the clip is where it is printed)",
+          raw_ok is False and raw_why == Noisy.last_error, raw_why)
+    check("v3.14: _reach and _public_url left ctx.py for ctx_repos", not hasattr(ctxmain, "_reach")
+          and not hasattr(ctxmain, "_public_url") and callable(crp.reach) and callable(crp.public_url), "")
+    os.remove(os.path.join(e.providers, "zorg-noisy.yaml"))
 
     e.reg("zorg-lost", MCP_V2.format(id="zorg-lost", url=fake.url).replace('root: "ZorgGrowth/"', 'root: "Elsewhere/"'))
     rc, out, res = e.run("repo", "status", "zorg-lost", **good)
@@ -568,6 +719,13 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=ROOTED, require_headers={"
     gn = block(out, "zorg-growth")
     check("without the header variable the server's 401 is a reachable no that names the variable (not a value)",
           rc == 0 and "reachable no" in gn and "401" in gn and "ZORG_GROWTH_MCP_HEADERS" in gn and "is not set" in gn, gn)
+    n_seen = len(fake.seen)
+    rc, out, res = e.run("repo", "status", "zorg-growth", ZORG_GROWTH_MCP_HEADERS="Host: zorg-elsewhere.example")
+    gh = block(out, "zorg-growth")
+    check("v3.14: a header variable naming Host is not sent; the reason names the variable and the refused name, not the value",
+          rc == 0 and "reachable no" in gh and "ZORG_GROWTH_MCP_HEADERS" in gh and "Host" in gh and "not allowed" in gh
+          and "zorg-elsewhere" not in out and all(s["headers"].get("Host", "").startswith("127.0.0.1") for s in fake.seen[n_seen:]),
+          (gh, [s["headers"].get("Host") for s in fake.seen[n_seen:]]))
 
     e.reg("zorg-gone", CORE_V1.replace("id: zorg-core", "id: zorg-gone").replace("{core}", os.path.join(d, "no-such-core")))
     rc, out, res = e.run("repo", "status", "zorg-gone")

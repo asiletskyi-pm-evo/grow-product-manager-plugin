@@ -86,12 +86,10 @@ import datetime
 import json
 import os
 import sys
-import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_blocks as cb  # noqa: E402
 import ctx_common as cc  # noqa: E402
-import ctx_mcp as cm  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
@@ -684,33 +682,6 @@ def cmd_repo_list(a, c):
                "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
 
 
-def _public_url(url):
-    """An endpoint as it may be shown: scheme, host, port and path — no credentials, no query, no fragment."""
-    try:
-        u = urllib.parse.urlsplit(url)
-        return "%s://%s%s" % (u.scheme, u.netloc.rpartition("@")[2], u.path) if u.scheme and u.netloc else ""
-    except ValueError:
-        return ""
-
-
-def _reach(r):
-    """(reachable, reason) of one repository. An MCP repository answers the handshake within 3 s (the header its
-    registration names, if any, comes from the environment); a folder or bundle is there when its core folder is."""
-    ep = r["endpoint"]
-    if r["kind"] == "mcp" or ep["url"]:
-        if not ep["url"]:
-            return False, "no endpoint url in the registration"
-        hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
-        client = cm.McpClient(ep["url"], headers=hdrs)
-        if client.probe():
-            return True, ""
-        hint = "; %s is not set (or not 'Name: value')" % ep["headers_env"] if ep["headers_env"] and not hdrs else ""
-        return False, cb.clip(client.last_error + hint, cb.NOTE_CLIP)
-    if r["core_root"]:
-        return (True, "") if os.path.isdir(r["core_root"]) else (False, "core folder not found")
-    return False, "no endpoint and no core folder in the registration"
-
-
 def cmd_repo_status(a, c):
     skipped = []
     repos = crp.load_repos(c.text, c.home, skipped=skipped)
@@ -720,7 +691,8 @@ def cmd_repo_status(a, c):
             raise Usage("no repository %r is registered — `ctx.py repo list`" % a.id)
     rows = []
     for r in repos:
-        ok, why = _reach(r)
+        ok, why = crp.reach(r)
+        why = cb.clip(why, cb.NOTE_CLIP)                # what a server said, as one safe line
         # the version on the source is what its blocks carry now, and only that: when the source was not read there is
         # none (the registration's own version, a note from whoever wrote it, goes in its own key and is never shown as
         # the source's). The base is the version most of the blocks the store holds a base for are at.
@@ -732,7 +704,7 @@ def cmd_repo_status(a, c):
             base = cb.base_version(cb.load_state(c.store, r["id"]))
         except cs.StoreError as e:                      # a status must not fail over a state file; it says so
             bad_state = str(e)
-        rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": _public_url(r["endpoint"]["url"]),
+        rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": crp.public_url(r["endpoint"]["url"]),
                      "reachable": ok, "reason": why, "source_version": live,
                      "registration_version": r["source_version"], "base_version": base, "namespace_warning": warning})
         if fetched and fetched.get("error"):             # the server answers, the blocks could not be read

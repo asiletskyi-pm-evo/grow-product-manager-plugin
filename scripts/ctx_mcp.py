@@ -8,23 +8,34 @@ references/context-provider-protocol.md §3b) over Streamable HTTP: POST JSON-RP
 
 What it will do, and nothing more:
   * call only the tools in `ALLOWED`; any other name raises `McpRefused` before a request is made — the
-    engine reads a repository, it never writes to one;
-  * `probe()` is the `initialize` handshake and the `notifications/initialized` notification, once, within
-    `probe_timeout` — never an exception, never a retry;
-  * `call()` handshakes first when no session is open; a network error (no connection, a timeout, a dropped
-    connection) is retried `retries` times, a server's answer — an HTTP status, a JSON-RPC error,
-    `isError` — never is;
+    engine reads a repository, it never writes to one. Since v3.14 the transport (`_send`, which every
+    message passes) checks it too, so no path around `call()` can send another tool;
+  * `probe()` is the `initialize` handshake and the `notifications/initialized` notification, once — each of
+    the two within `probe_timeout` of its own (since v3.14; not one shared remainder) — never an exception,
+    never a retry;
+  * `call()` handshakes first when no session is open (the same `probe_timeout` per step, retried like the call);
+    a network error (no connection, a timeout, a dropped connection) is retried `retries` times, a server's
+    answer — an HTTP status, a JSON-RPC error, `isError` — never is;
+  * keep a `deadline` when given one (since v3.14; a `time.monotonic()` moment): every request gets
+    min(its own timeout, what is left), no retry starts that the deadline would not leave room for, and once it
+    has passed no request is made at all — `McpError("deadline reached")`. A timeout is per socket operation
+    (urllib's): it bounds a server that has gone quiet, not one that trickles bytes, nor a name lookup;
+  * take as the answer only the message that carries the request's id — anything else is no answer;
+  * send no header whose name is not a token of RFC 7230 or is one that steers the request itself
+    (`DENIED_HEADERS`: Host, Content-Length, Transfer-Encoding, Connection);
   * follow no redirect (a header meant for one host does not travel to another) and speak only http and https;
   * keep secrets out of every message it raises or keeps: no header value, no url (it may hold credentials) —
     and out of the exception chain: an error is raised outside the `except` that caught the original, so
     `__context__` is None and a traceback prints nothing of the request.
 
 The header a server wants (`headers_env` of the registration names an environment variable that holds
-`Name: value`) is read by `headers_from_env`; the value is never stored by the engine.
+`Name: value`) is read by `headers_from_env` (`header_problem` says why a variable gives none); the value is
+never stored by the engine.
 """
 import http.client
 import json
 import os
+import re
 import socket
 import time
 import urllib.error
@@ -35,6 +46,9 @@ ALLOWED = frozenset({"vault_get_note", "vault_list_by_folder", "vault_search", "
 PROTOCOL_VERSION = "2025-03-26"
 CLIENT_INFO = {"name": "grow-pm-ctx", "version": "1"}
 MAX_BODY = 32 * 1024 * 1024                            # a note is text; more than this is not one
+DENIED_HEADERS = frozenset({"host", "content-length", "transfer-encoding", "connection"})   # they steer the request itself
+TOKEN = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+\Z")  # a header name: a token of RFC 7230 (§3.2.6), ASCII only
+DEADLINE = "deadline reached"
 
 
 class McpError(Exception):
@@ -57,13 +71,55 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_NoRedirect)
 
 
-def headers_from_env(var):
-    """The request header an environment variable holds: `Name: value` → {Name: value}.
-    No variable, an empty one or one that is not `Name: value` → {}."""
+def _name_problem(name):
+    """Why a header of this name may not be sent, or "". A name that is not a token is not repeated (whatever the
+    variable holds may be part of a secret); a refused one is, by its standard spelling."""
+    if not isinstance(name, str) or not TOKEN.match(name):
+        return "not a valid header name"
+    if name.lower() in DENIED_HEADERS:
+        return "the header %s is not allowed" % "-".join(w.capitalize() for w in name.split("-"))
+    return ""
+
+
+def _parse_env(var):
+    """(name, value) of `Name: value` in the variable, or None when it is not set or not of that shape."""
     raw = os.environ.get(var) if var else None
     name, sep, value = (raw or "").partition(":")
     name, value = name.strip(), value.strip()
-    return {name: value} if sep and name and value else {}
+    return (name, value) if sep and name and value else None
+
+
+def headers_from_env(var):
+    """The request header an environment variable holds: `Name: value` → {Name: value}.
+    No variable, an empty one, one that is not `Name: value`, and (since v3.14) one whose name is not a token of
+    RFC 7230 or is in DENIED_HEADERS → {}; `header_problem` says which."""
+    got = _parse_env(var)
+    return {got[0]: got[1]} if got and not _name_problem(got[0]) else {}
+
+
+def header_problem(var):
+    """Why `headers_from_env(var)` gives no header, in words that name the variable and never the value; "" when it
+    gives one. The words for a variable that is not set are those of v3.13."""
+    got = _parse_env(var)
+    if not got:
+        return "%s is not set (or not 'Name: value')" % var
+    why = _name_problem(got[0])
+    return "%s: %s" % (var, why) if why else ""
+
+
+def _check_message(message):
+    """The allow-list at the transport: a `tools/call` whose tool is not in ALLOWED → McpRefused (no request)."""
+    if not isinstance(message, dict) or message.get("method") != "tools/call":
+        return
+    params = message.get("params")
+    name = params.get("name") if isinstance(params, dict) else None
+    if not isinstance(name, str) or name not in ALLOWED:
+        raise McpRefused("tool %r is not on the allow-list (%s)" % (name, ", ".join(sorted(ALLOWED))))
+
+
+def _same_id(value, rid):
+    """Is `value` the request id `rid`? An int, not a bool (`true == 1` in Python) and not a text."""
+    return isinstance(value, int) and not isinstance(value, bool) and value == rid
 
 
 def _reason(exc):
@@ -115,12 +171,13 @@ def _sse_events(text):
 class McpClient:
     BACKOFF = 0.3                                      # seconds before the n-th retry, times n
 
-    def __init__(self, url, headers=None, probe_timeout=3.0, call_timeout=30.0, retries=2):
+    def __init__(self, url, headers=None, probe_timeout=3.0, call_timeout=30.0, retries=2, deadline=None):
         self.url = url
         self.headers = dict(headers or {})
         self.probe_timeout = probe_timeout
         self.call_timeout = call_timeout
         self.retries = retries
+        self.deadline = deadline                       # a time.monotonic() moment no request outlasts; None: none
         self.session_id = None
         self.server_info = {}
         self.protocol_version = ""
@@ -165,19 +222,41 @@ class McpClient:
             raise McpError("the response is too large (over %d bytes)" % MAX_BODY)
         return headers, ctype, body
 
+    def _left(self):
+        """Seconds left before the deadline, or None without one."""
+        return None if self.deadline is None else self.deadline - time.monotonic()
+
+    def _within(self, timeout):
+        """`timeout`, cut to what the deadline leaves; nothing left → McpError("deadline reached")."""
+        left = self._left()
+        if left is None:
+            return timeout
+        if left <= 0:
+            raise McpError(DEADLINE)
+        return min(timeout, left)
+
     def _send(self, message, timeout, retries):
-        """_post with the retries: only a failure of the connection is tried again."""
+        """_post with the allow-list, the header names, the deadline and the retries: only a failure of the connection is
+        tried again, and only when the deadline leaves room for the pause before it."""
+        _check_message(message)
+        refusal = next((why for why in map(_name_problem, self.headers) if why), "")
+        if refusal:
+            raise McpError("a request header cannot be sent: %s" % refusal)
         attempt = 0
         while True:
             failure = None
             try:
-                return self._post(message, timeout)
+                return self._post(message, self._within(timeout))
             except _Network as e:
                 failure = e
-            if attempt >= retries:
-                raise McpError("%s (after %d attempts)" % (failure, attempt + 1) if attempt else str(failure))
             attempt += 1
-            time.sleep(self.BACKOFF * attempt)
+            pause = self.BACKOFF * attempt
+            left = self._left()
+            late = attempt <= retries and left is not None and left <= pause
+            if attempt > retries or late:
+                notes = (["after %d attempts" % attempt] if attempt > 1 else []) + ([DEADLINE] if late else [])
+                raise McpError("%s (%s)" % (failure, "; ".join(notes)) if notes else str(failure))
+            time.sleep(pause)
 
     def _rpc(self, method, params, timeout, retries):
         """A request → (its result object, response headers)."""
@@ -193,9 +272,11 @@ class McpClient:
                 raise McpError("the server's answer is not JSON-RPC")
             msgs = parsed if isinstance(parsed, list) else [parsed]
         msgs = [m for m in msgs if isinstance(m, dict)]
-        mine = [m for m in msgs if m.get("id") == rid] or msgs[-1:]   # the answer, not a notification beside it
-        if not mine:
+        if not msgs:
             raise McpError("the server's answer holds no JSON-RPC message")
+        mine = [m for m in msgs if _same_id(m.get("id"), rid)]     # the answer, not a notification beside it
+        if not mine:                                    # nor another request's answer, nor an error that names no request
+            raise McpError("no response with id %d in the server's answer" % rid)
         msg = mine[-1]
         if isinstance(msg.get("error"), dict):
             err = msg["error"]
@@ -204,26 +285,25 @@ class McpClient:
             raise McpError("the server's answer has no result")
         return msg["result"], headers
 
-    def _handshake(self, timeout, retries):
-        """initialize + notifications/initialized, within `timeout` in all."""
-        deadline = time.monotonic() + timeout
+    def _handshake(self, retries):
+        """initialize + notifications/initialized, each within probe_timeout of its own (and the deadline)."""
         self._ready, self.session_id = False, None
         result, headers = self._rpc("initialize", {"protocolVersion": PROTOCOL_VERSION, "capabilities": {},
-                                                   "clientInfo": CLIENT_INFO}, timeout, retries)
+                                                   "clientInfo": CLIENT_INFO}, self.probe_timeout, retries)
         self.session_id = headers.get("mcp-session-id") or None
         info = result.get("serverInfo")
         self.server_info = info if isinstance(info, dict) else {}
         self.protocol_version = str(result.get("protocolVersion") or "")
-        self._send({"jsonrpc": "2.0", "method": "notifications/initialized"}, max(0.1, deadline - time.monotonic()), retries)
+        self._send({"jsonrpc": "2.0", "method": "notifications/initialized"}, self.probe_timeout, retries)
         self._ready = True
 
     # ------------------------------------------------------------------ interface
     def probe(self):
-        """True when the server answers the handshake within probe_timeout. Never raises; one attempt;
-        `last_error` says why not."""
+        """True when the server answers the handshake within probe_timeout a step (and the deadline). Never raises;
+        one attempt; `last_error` says why not."""
         self.last_error = ""
         try:
-            self._handshake(self.probe_timeout, 0)
+            self._handshake(0)
             return True
         except McpError as e:
             self.last_error = str(e)
@@ -238,7 +318,7 @@ class McpClient:
         if not isinstance(name, str) or name not in ALLOWED:
             raise McpRefused("tool %r is not on the allow-list (%s)" % (name, ", ".join(sorted(ALLOWED))))
         if not self._ready:
-            self._handshake(self.call_timeout, self.retries)
+            self._handshake(self.retries)
         result, _ = self._rpc("tools/call", {"name": name, "arguments": {} if args is None else args}, self.call_timeout, self.retries)
         text = _text_of(result)
         if result.get("isError"):
