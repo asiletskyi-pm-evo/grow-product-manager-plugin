@@ -52,6 +52,7 @@ Stdlib only.
 """
 import contextlib
 import datetime
+import errno
 import os
 import re
 import sys
@@ -354,6 +355,7 @@ def _failure(e):
 REPORT_DIR = "_System/context/sync"             # from the storage root: where a result's `report` points, in the vault
 REPORT_DAYS = 90                                # a report older than this is moved to ~/.grow-pm/trash/
 REPORT_LINES = 40                               # lines of a conflict's text shown for each side
+REPORT_LINE_CHARS = 500                         # …and characters of a line of it
 REPORTED = ("changed", "held", "broken", "import-conflict", "error")   # the outcomes that write a part of the report
 REPEATS = ("held", "broken", "import-conflict", "error")               # …and write none again for the same set and reason (§6.6)
 PRUNE_S = 1.0                                   # the most the clearing of old reports takes of the budget
@@ -366,18 +368,33 @@ VERSION_MOVE = re.compile(r"\(v[^()]* → v[^()]*\)")
 
 
 def reported(result):
-    """Does a pass with this outcome write a part of the report? Only those that changed something, kept a safeguard on or
-    failed in a way the person should see; a pass that only moved the time of the check, or could not reach the server,
-    leaves nothing to read."""
-    return result["outcome"] in REPORTED
+    """Does a pass with this outcome write a part of the report? Those that changed something, kept a safeguard on or
+    failed in a way the person should see — and a pass that changed nothing but left a block waiting for a decision (a "?":
+    `awaiting`), which §5.1 says the report names; whether that block is a new one is `repeats`' question. A pass that only
+    moved the time of the check, or could not reach the server, leaves nothing to read."""
+    return result["outcome"] in REPORTED or (result["outcome"] == "no-changes" and bool(result["awaiting"]))
+
+
+def new_waiting(prev, result):
+    """The blocks waiting for a decision in `result` that the previous `sync_result` (`prev`) did not have waiting, in the
+    result's order — the ones not yet named in a report (§5.1: "звіт називає блок один раз"). A `prev` that is not what the
+    state keeps names none: every waiting block is new."""
+    seen = prev.get("awaiting") if isinstance(prev, dict) else None
+    seen = set(map(str, seen)) if isinstance(seen, list) else set()
+    return [b for b in result["awaiting"] if b not in seen]
 
 
 def repeats(prev, result):
-    """Is `result` a safeguard going off again as it did last time (§6.6)? The previous `sync_result` (`prev`) has the same
-    outcome, the same set of blocks held and the same reason, and this pass wrote nothing else (no snapshot): then the
-    report says it once, and the digest goes on showing the mark. Only the outcomes in REPEATS can repeat. A `prev` that
-    is not what the state keeps is no repeat."""
-    if result["outcome"] not in REPEATS or result.get("snapshot") or not isinstance(prev, dict):
+    """Is `result` news that the report already told (§6.6, §5.1)? Never when a block waits that the previous `sync_result`
+    (`prev`) did not have waiting (`new_waiting`). A pass that changed nothing then (`no-changes`) with every waiting block
+    named before is a repeat. A safeguard going off again is one when `prev` has the same outcome, the same set of blocks held
+    and the same reason, and this pass wrote nothing else (no snapshot): the report says it once, and the digest goes on
+    showing the mark. Only the outcomes in REPEATS repeat. A `prev` that is not what the state keeps is no repeat."""
+    if not isinstance(prev, dict) or new_waiting(prev, result):
+        return False
+    if result["outcome"] == "no-changes":
+        return True
+    if result["outcome"] not in REPEATS or result.get("snapshot"):
         return False
     held = prev.get("held")
     return (prev.get("outcome") == result["outcome"] and isinstance(held, list) and sorted(map(str, held)) == sorted(result["held"])
@@ -400,8 +417,13 @@ def _cell(text):
 
 
 def _text_lines(text):
-    """The lines of a region without its two marker lines, with every control character a server may have sent made a space."""
-    return [cb.CONTROLS.sub(" ", line).rstrip() for line in cb._body_lines(text)]
+    """The lines of a region without its two marker lines, with every control character a server may have sent made a space
+    and no line longer than REPORT_LINE_CHARS (the last character "…"): one huge line must not bloat a note in the vault."""
+    out = []
+    for line in cb._body_lines(text):
+        line = cb.CONTROLS.sub(" ", line).rstrip()
+        out.append(line if len(line) <= REPORT_LINE_CHARS else line[:REPORT_LINE_CHARS - 1].rstrip() + "…")
+    return out
 
 
 def _fenced(lines):
@@ -493,19 +515,21 @@ def _conflict(row, kind, apply, texts, rid, record):
     return out
 
 
-def render_section(result, apply=None, texts=None, hosts=None, base_after=None):
+def render_section(result, apply=None, texts=None, hosts=None, base_after=None, only=None):
     """One repository's part of the day's report (spec §7), Markdown for Obsidian, no trailing newline.
 
     `result` is a pass's result (`run`'s: `public` keys and `repo`); `apply` the apply's result with its `plan` (None for
     a pass that never planned: broken, import-conflict, error); `texts` the full texts taken before the write
     (`_conflicts`); `hosts` {block: record} read after it (a "+" has no record in the plan); `base_after` the version the
-    bases stood at after the pass.
+    bases stood at after the pass; `only`, when given, the blocks the table and the parts are limited to (a pass that changed
+    nothing names just the blocks that began to wait for a decision).
 
     The heading is `## <id> · HH:MM · джерело <label> · ядро v<v> · база v<a> → v<b>` (only `## <id> · HH:MM` with no
     plan). Then the table `| Блок | Знак | Рішення | Чому | Запис |` — a row for every block the repository offered
     something for (~ + − ⚠ ?), in the cascade's words; the part of every ⚠ and ? with both texts (REPORT_LINES lines each)
     and the command that takes the core's; what the safeguard held and what to do; the texts you rejected before; and the
-    last line, the way back (`Відкотити цей прохід: ctx undo (знімок <folder>)`) or that there is none."""
+    last line, the way back (`Відкотити цей прохід: ctx undo (знімок <folder>)`) or that there is none — or, for an
+    unexpected failure that may have written before it failed, that the snapshot is unknown and `ctx status` shows the journal."""
     rid = cb.clip(result["repo"], cb.HEADER_CLIP)
     at = result.get("at") or ""
     plan = (apply or {}).get("plan")
@@ -515,13 +539,16 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None):
                                                               plan["version"] or "—", plan["base_version"], cb.clip(base_after or "—", cb.HEADER_CLIP))
     blocks = [[head]]
     outcome, reason = result["outcome"], cb.clip(result.get("reason") or "—", cb.NOTE_CLIP)
-    if plan and outcome in ("changed", "held"):
-        rows = [r for r in plan["rows"] if r["sign"] in cb.OFFERS]
+    if plan and outcome in ("changed", "held", "no-changes"):
+        rows = [r for r in plan["rows"] if r["sign"] in cb.OFFERS and (only is None or r["block"] in only)]
         verdicts = {r["block"]: _verdict(r, apply, result) for r in rows}
-        summary = ("Оновлено %d · додано %d · прибрано %d · лишено твоє %d · чекає рішення %d"
-                   % (result["updated"], result["added"], result["removed"], len(result["kept_yours"]), len(result["awaiting"])))
-        if result["held"]:
-            summary += " · не прибрано %d" % len(result["held"])
+        if outcome == "no-changes":
+            summary = "Прохід нічого не змінив; блоків, що чекають твого рішення: %d." % len(rows)
+        else:
+            summary = ("Оновлено %d · додано %d · прибрано %d · лишено твоє %d · чекає рішення %d"
+                       % (result["updated"], result["added"], result["removed"], len(result["kept_yours"]), len(result["awaiting"])))
+            if result["held"]:
+                summary += " · не прибрано %d" % len(result["held"])
         blocks.append([summary])
         if rows:
             table = ["| Блок | Знак | Рішення | Чому | Запис |", "|---|---|---|---|---|"]
@@ -559,8 +586,13 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None):
         blocks.append(["### Несподівана помилка" if outcome == "error" else "### Прохід не завершено", "", "Причина: %s" % reason])
         blocks.append(["Прохід не завершено; нова спроба — не раніше ніж за годину."])
     snapshot = (apply or {}).get("snapshot") or result.get("snapshot")
-    blocks.append(["Відкотити цей прохід: ctx undo (знімок %s)" % cb.clip(snapshot, 1000) if snapshot
-                   else "Знімка цього проходу немає: відкочувати нічого."])
+    if snapshot:
+        blocks.append(["Відкотити цей прохід: ctx undo (знімок %s)" % cb.clip(snapshot, 1000)])
+    elif outcome == "error":                        # the pass may have written before it failed: nobody knows
+        blocks.append(["Знімок цього проходу невідомий: до помилки прохід міг щось записати — останні рядки журналу покажуть "
+                       "це в `ctx status`."])
+    else:
+        blocks.append(["Знімка цього проходу немає: відкочувати нічого."])
     return "\n\n".join("\n".join(b) for b in blocks)
 
 
@@ -617,28 +649,60 @@ def write_report(store, date, section_text, repo=None):
     return "%s/%s.md" % (REPORT_DIR, date)
 
 
-def _put_in_trash(home, name, text, when):
-    """A file that is no record into ~/.grow-pm/trash/<time>-<name>.md, where the trash's own purge finds it (30 days)."""
+def _trash_path(home, name, when):
+    """A free path ~/.grow-pm/trash/<time>-<name>.md, where the trash's own purge finds the file (30 days)."""
     root = co.trash_root(home)
     base = when.astimezone().strftime("%Y%m%dT%H%M%S") + "-" + name
     path, k = os.path.join(root, base + ".md"), 2
     while os.path.exists(path):
         path, k = os.path.join(root, "%s-%d.md" % (base, k)), k + 1
-    cs.atomic_write(path, text)
     return path
+
+
+def _move_to_trash(home, name, path, when):
+    """Move the report `path` to the trash so that it is never left in both places. The target is checked first — a path
+    that leads outside the guarded roots (a symlinked folder), or is itself a link, is neither read nor moved. On one volume
+    it is a single rename. Across volumes (the vault is not always where ~/.grow-pm is) the copy is written first and the
+    original removed after; an original that cannot be removed takes its copy back out of the trash, so the next sync does
+    not find a second one. Raises what failed (OSError, StoreError, PathRefused, UnicodeDecodeError); the original is then
+    where it was."""
+    cs.check_target(path)
+    if os.path.islink(path) or os.path.islink(os.path.dirname(path)):
+        raise cs.PathRefused("%s is a link: a report is not moved through one" % path)
+    text = cs.read_text(path)
+    target = _trash_path(home, name, when)
+    cs.check_target(target)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    try:
+        os.rename(path, target)
+        return target
+    except OSError as e:
+        if e.errno != errno.EXDEV:
+            raise
+    cs.atomic_write(target, text)
+    try:
+        os.remove(path)
+    except OSError:
+        try:
+            os.remove(target)
+        except OSError:
+            pass
+        raise
+    return target
 
 
 def prune_reports(store, home, now):
     """Move the reports older than REPORT_DAYS days (by the day in the name) from `{store}/sync/` to ~/.grow-pm/trash/,
-    where they stay another 30 days. Only `YYYY-MM-DD.md` files are touched — a note of yours in that folder is not. A
+    where they stay another 30 days (`_move_to_trash`: the target is checked first, one copy at any time). Only
+    `YYYY-MM-DD.md` files are touched — a note of yours in that folder is not; and a folder that is a link is not entered. A
     report that cannot be read or moved is left for the next time. Returns the names moved; a `now` that is no time, or a
     folder that is not there, moves nothing."""
     when, gone = instant(now), []
+    if when is None or os.path.islink(store.sync_dir):
+        return gone
     try:
         names = sorted(os.listdir(store.sync_dir))
     except OSError:
-        return gone
-    if when is None:
         return gone
     for name in names:
         found = REPORT_FILE.match(name)
@@ -648,11 +712,8 @@ def prune_reports(store, home, now):
             continue
         if age <= REPORT_DAYS:
             continue
-        path = os.path.join(store.sync_dir, name)
         try:
-            _put_in_trash(home, "sync-report-" + found.group(1), cs.read_text(path), when)
-            cs.check_target(path)
-            os.remove(path)
+            _move_to_trash(home, "sync-report-" + found.group(1), os.path.join(store.sync_dir, name), when)
         except (OSError, UnicodeDecodeError, cs.StoreError, cs.PathRefused):
             continue
         gone.append(name)
@@ -661,25 +722,27 @@ def prune_reports(store, home, now):
 
 def _write_report(c, result, apply, facts, deadline):
     """The path of the part this pass wrote into the day's report, or None: the pass is not one that writes (`reported`),
-    or it is a safeguard going off again as before (`repeats`, from the state's `sync_result` as the last pass left it —
-    read here, before `_record` replaces it). What the render needs of the state the pass left (the record a "+" went
+    or it is news already told — a safeguard going off again as before, a block still waiting that the last pass named
+    (`repeats`, from the state's `sync_result` as the last pass left it — read here, before `_record` replaces it). What the render needs of the state the pass left (the record a "+" went
     into, the version the bases stand at) is read after the write, within what is left of the budget; what cannot be read
     is shown as unknown."""
     if not reported(result):
         return None
     rid = result["repo"]
-    hosts, base_after = {}, None
+    hosts, base_after, prev = {}, None, None
     with cs.read_budget(max(RECORD_S, _left(deadline))):
         try:
             state = cb.load_state(c.store, rid)
         except (cs.StoreError, OSError, ValueError):
             state = None
         if state is not None:
-            if repeats(state.get("sync_result"), result):
+            prev = state.get("sync_result")
+            if repeats(prev, result):
                 return None
             hosts = {b: e.get("host") for b, e in state["blocks"].items()}
             base_after = cb.base_version(state)
-        section = render_section(result, apply, facts, hosts, base_after)
+        only = new_waiting(prev, result) if result["outcome"] == "no-changes" else None
+        section = render_section(result, apply, facts, hosts, base_after, only)
         return write_report(c.store, result["at"][:10], section, rid)
 
 

@@ -2715,6 +2715,8 @@ with tempfile.TemporaryDirectory() as d:                 # broken, an import tha
           r2.get("outcome") == "error" and r2.get("report") == "_System/context/sync/2026-10-19.md" and "### Несподівана помилка" in rep
           and "boom in the plan" in rep and res2["results"][0]["outcome"] == "error" and res2["results"][0]["report"] is None
           and rep.count("\n## zorg-core · ") == 1, (r2, rep, res2["results"]))
+    check("…it does not claim there is nothing to undo (the pass may have written before it failed): the snapshot is unknown, `ctx status`",
+          "Знімок цього проходу невідомий" in rep and "`ctx status`" in rep and "відкочувати нічого" not in rep.split("### Несподівана помилка")[1], rep)
 
 with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a text you rejected by undoing a pass is held, and the report says how to take it
     with tempfile.TemporaryDirectory() as d:
@@ -2733,6 +2735,70 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a text you rejected b
               and any("`team`" in r and "утримано" in r and "відкинуто вами раніше" in r for r in table_rows(rep))
               and "Взяти текст ядра: ctx provider apply zorg-growth --choose team=theirs" in rep.splitlines()
               and "Alpha Prime" not in read(e.ctx), (r0, rep))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a block that begins to wait on a ?: named once, though nothing changed
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        unbase(e, "zorg-growth", "team")                 # no base for the block: the plan cannot tell who changed it
+        core_team = G_TEAM.replace("v=0.1", "v=0.2").replace("- **Growth squad:** Alpha", "- **Growth squad:** Alpha Prime")
+        fake.tree[GROWTH_PATH] = growth_blocks(G_METRICS, core_team)
+        records, j = tree_of(os.path.join(e.store, "records")), journal_len(e)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+        r0 = (res or {}).get("results", [{}])[0]
+        rep1 = report_of(e, "2026-10-16") or ""
+        check("day 1: a ? appears — the pass changes nothing (no-changes, no snapshot, no journal line, records as they were) …",
+              r0.get("outcome") == "no-changes" and r0.get("awaiting") == ["team"] and r0.get("snapshot") is None and journal_len(e) == j
+              and tree_of(os.path.join(e.store, "records")) == records and "Alpha Prime" not in read(e.ctx), (r0, out[-300:]))
+        check("… but a part names the block once: one row «чекає рішення», both texts, both commands, nothing to undo",
+              r0.get("report") == "_System/context/sync/2026-10-16.md" and len(table_rows(rep1)) == 1
+              and "чекає рішення" in table_rows(rep1)[0] and rep1.count("### Конфлікт: `team` — чекає рішення") == 1
+              and "Growth squad:** Alpha\n" in rep1 and "Growth squad:** Alpha Prime" in rep1
+              and "Взяти текст ядра: ctx provider apply zorg-growth --choose team=theirs" in rep1
+              and "Лишити своє: ctx provider apply zorg-growth --choose team=mine" in rep1
+              and rep1.rstrip("\n").splitlines()[-1] == "Знімка цього проходу немає: відкочувати нічого."
+              and block_state(e, "zorg-growth")["sync_result"]["report"] == r0["report"], (r0, rep1))
+        check("…no sentence for the skill (nothing of yours changed)", "Ядро оновило" not in out and "звіт" not in out, out[-300:])
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY2)
+        r1 = (res or {}).get("results", [{}])[0]
+        check("day 2: the same ? still waits — still no-changes, and no new part or file",
+              r1.get("outcome") == "no-changes" and r1.get("awaiting") == ["team"] and r1.get("report") is None
+              and report_of(e, "2026-10-17") is None and report_of(e, "2026-10-16") == rep1, (r1, os.listdir(os.path.join(e.store, "sync"))))
+        unbase(e, "zorg-growth", "growth-metrics")        # a second block loses its base, and the core says something else about it
+        core_metrics = G_METRICS.replace("v=0.1", "v=0.2").replace("weekly active shoppers", "weekly buyers")
+        fake.tree[GROWTH_PATH] = growth_blocks(core_metrics, core_team)
+        rc, out, res = run_ok(e, "provider", "sync", "--now", "2026-10-18T09:00:00+03:00")
+        r2 = (res or {}).get("results", [{}])[0]
+        rep3 = report_of(e, "2026-10-18") or ""
+        check("day 3: a second block waits — a part for the NEW one only (`team` was named on day 1), still no-changes",
+              r2.get("outcome") == "no-changes" and r2.get("awaiting") == ["growth-metrics", "team"]
+              and r2.get("report") == "_System/context/sync/2026-10-18.md" and len(table_rows(rep3)) == 1
+              and "### Конфлікт: `growth-metrics` — чекає рішення" in rep3 and "`team`" not in rep3 and "weekly buyers" in rep3, (r2, rep3))
+        rc, out, res = run_ok(e, "provider", "sync", "--now", "2026-10-19T09:00:00+03:00")
+        check("day 4: both still wait — nothing more is written", res["results"][0]["report"] is None and report_of(e, "2026-10-19") is None
+              and read(e.store, "sync", "2026-10-18.md") == rep3)
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a report folder that is a symlink to somewhere else: nothing goes through it
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        set_sync(e, "zorg-growth", "daily")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        outside = os.path.join(d, "Elsewhere")
+        os.makedirs(outside)
+        stale = os.path.join(outside, "2020-01-01.md")
+        open(stale, "w", encoding="utf-8").write("not a report of the sync\n")
+        os.symlink(outside, os.path.join(e.store, "sync"))
+        fake.tree[GROWTH_PATH] = GROWTH_TEXT.replace(G_METRICS, G_METRICS.replace("v=0.1", "v=0.2").replace("weekly active shoppers", "daily buyers"))
+        rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
+        r0 = (res or {}).get("results", [{}])[0]
+        trash = os.path.join(e.home, ".grow-pm", "trash")
+        check("sync/ is a symlink out of the vault: its files are not read or copied to the trash, nothing is written through it, the pass stands",
+              rc == 0 and r0.get("outcome") == "changed" and r0.get("report") is None and "звіт не записано" in (r0.get("reason") or "")
+              and sorted(os.listdir(outside)) == ["2020-01-01.md"] and read(stale) == "not a report of the sync\n"
+              and not (os.path.isdir(trash) and os.listdir(trash)) and "daily buyers" in read(e.ctx), (rc, r0, os.listdir(outside)))
 
 with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a report that cannot be written does not undo or hide the pass
     with tempfile.TemporaryDirectory() as d:

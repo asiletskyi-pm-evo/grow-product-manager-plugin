@@ -401,7 +401,12 @@ check("import-conflict: «спершу `ctx sync`», nothing written", "спер
 err = sy.render_section(result_of("error", snapshot=None, reason="boom in the plan"), None)
 check("error: the reason, a retry in an hour", "### Несподівана помилка" in err and "boom in the plan" in err and "за годину" in err, err)
 check("every section ends with the way back, or says there is none",
-      all(x.splitlines()[-1].startswith(("Відкотити цей прохід: ctx undo (знімок ", "Знімка цього проходу немає")) for x in (brk, imp, err, held_only, SEC)))
+      all(x.splitlines()[-1].startswith(("Відкотити цей прохід: ctx undo (знімок ", "Знімка цього проходу немає")) for x in (brk, imp, held_only, SEC)))
+check("an unexpected failure may have written before it failed: the snapshot is unknown, `ctx status` shows the journal — not «nothing to undo»",
+      err.splitlines()[-1].startswith("Знімок цього проходу невідомий") and "`ctx status`" in err.splitlines()[-1]
+      and "відкочувати нічого" not in err and "Знімка цього проходу немає" not in err, err)
+check("…an error that did leave a snapshot offers the way back as any pass does",
+      sy.render_section(result_of("error", reason="boom"), None).splitlines()[-1] == "Відкотити цей прохід: ctx undo (знімок %s)" % SNAP)
 
 # which outcomes write, and when a repeat is no news (§6.6)
 check("changed, held, broken, import-conflict and error write a section; no-changes, unreachable and timeout do not",
@@ -492,6 +497,143 @@ with tempfile.TemporaryDirectory() as d:
     empty_store = cs.Store(os.path.join(d, "none", "context"))
     check("a store with no report folder: nothing to do, no error", sy.prune_reports(empty_store, home, AT) == [])
     check("a now that is no time prunes nothing and raises nothing", sy.prune_reports(store, home, "yesterday") == [])
+
+# ------------------------------------------------------------------ fix round 1
+import errno  # noqa: E402
+
+# (1) a ? that begins to wait is reported once (§5.1: «звіт називає блок один раз»), though the pass changed nothing
+WAIT_P = plan_of(row("q", "?"), row("old", "?"), row("r", "~", rejected=True, note="відкинуто вами"))
+WAIT_TX = {"mine": {"q": reg("zorg-growth", "q", "0.1", "my q"), "old": reg("zorg-growth", "old", "0.1", "my old")},
+           "theirs": {"q": reg("zorg-growth", "q", "0.2", "core q"), "old": reg("zorg-growth", "old", "0.2", "core old")}}
+WAIT_R = result_of("no-changes", awaiting=["q", "old"], snapshot=None)
+check("a pass that changed nothing but left a block waiting for a decision is reported; one with nothing waiting is not",
+      sy.reported(WAIT_R) and not sy.reported(result_of("no-changes", snapshot=None)) and not sy.reported(result_of("unreachable", awaiting=["q"])))
+check("new_waiting: the waiting blocks the last sync_result did not have, in order; a state that is no object names none, so all are new",
+      sy.new_waiting(None, WAIT_R) == ["q", "old"] and sy.new_waiting({"awaiting": ["old"]}, WAIT_R) == ["q"]
+      and sy.new_waiting({"awaiting": ["q", "old", "x"]}, WAIT_R) == [] and sy.new_waiting({"awaiting": 3}, WAIT_R) == ["q", "old"]
+      and sy.new_waiting("x", WAIT_R) == ["q", "old"])
+check("the same waiting set on a later pass is a repeat; a new block in the set is not; a block gone from the set is nothing new",
+      sy.repeats({"outcome": "no-changes", "awaiting": ["old", "q"]}, WAIT_R)
+      and not sy.repeats({"outcome": "no-changes", "awaiting": ["q"]}, WAIT_R)
+      and sy.repeats({"outcome": "no-changes", "awaiting": ["q", "old", "x"]}, WAIT_R)
+      and not sy.repeats(None, WAIT_R) and not sy.repeats("x", WAIT_R))
+check("a safeguard that repeats is news again when a new block waits beside it; a changed pass never repeats",
+      not sy.repeats({"outcome": "held", "held": ["a", "b"], "reason": "R", "awaiting": []}, result_of("held", held=["a", "b"], reason="R", awaiting=["q"], snapshot=None))
+      and sy.repeats({"outcome": "held", "held": ["a", "b"], "reason": "R", "awaiting": ["q"]}, result_of("held", held=["a", "b"], reason="R", awaiting=["q"], snapshot=None))
+      and not sy.repeats({"outcome": "changed", "awaiting": ["q"]}, result_of("changed", awaiting=["q"])))
+wait = sy.render_section(WAIT_R, applied(WAIT_P, {}, pending=["q", "old"], snapshot=None, held={"r": "~"}), WAIT_TX, None, "0.1", only=["q"])
+check("the part of a pass that only began to wait: the heading, a line saying nothing changed, ONE row — the new block (`old` was named before)",
+      wait.splitlines()[0].startswith("## zorg-growth · 09:00 · джерело") and "Прохід нічого не змінив; блоків, що чекають твого рішення: 1." in wait, wait)
+wrows = [l for l in wait.splitlines() if l.startswith("| `")]
+check("…the table has the one row, «чекає рішення»; `old` and the rejected `r` are not in the part",
+      len(wrows) == 1 and "`q`" in wrows[0] and "чекає рішення" in wrows[0] and "`old`" not in wait and "`r`" not in wait
+      and "Відкинуто" not in wait, wait)
+check("…both texts and both commands, the block named once",
+      wait.count("### Конфлікт: `q` — чекає рішення") == 1 and "my q" in wait and "core q" in wait
+      and "Взяти текст ядра: ctx provider apply zorg-growth --choose q=theirs" in wait
+      and "Лишити своє: ctx provider apply zorg-growth --choose q=mine" in wait, wait)
+check("…nothing was written, so it ends by saying there is nothing to undo", wait.splitlines()[-1] == "Знімка цього проходу немає: відкочувати нічого.")
+every = sy.render_section(WAIT_R, applied(WAIT_P, {}, pending=["q", "old"], snapshot=None, held={"r": "~"}), WAIT_TX, None, "0.1")
+check("without `only` every waiting block is in the part", len([l for l in every.splitlines() if l.startswith("| `")]) == 3 and "`old`" in every)
+
+# (3) one huge line of a server's text must not bloat the note
+HUGE = sy.render_section(result_of(kept_yours=["big"]), applied(BIG, {"big": "⚠ mine"}),
+                         {"mine": {"big": reg("zorg-growth", "big", "0.1", "x" * 10000 + "\nnext line")},
+                          "theirs": {"big": reg("zorg-growth", "big", "0.2", "y" * 500 + "\n" + "z" * 501 + "\n  indented")}})
+check("a line of 10 000 characters shows 500 at most, the last one «…», and the lines after it are still there",
+      max(len(l) for l in HUGE.splitlines()) <= 500 and ("x" * 499 + "…") in HUGE and ("x" * 500) not in HUGE and "next line" in HUGE, [len(l) for l in HUGE.splitlines()])
+check("…a line of exactly 500 stays whole, one of 501 is cut; the indentation of a short line is kept",
+      ("y" * 500) in HUGE and ("y" * 499 + "…") not in HUGE and ("z" * 499 + "…") in HUGE and "\n  indented\n" in HUGE)
+
+# (2) the trash: check the target first, never two copies, never through a link
+def old_report(store, k, text="an old report\n"):
+    day = (datetime.date(2026, 10, 16) - datetime.timedelta(days=k)).isoformat()
+    os.makedirs(store.sync_dir, exist_ok=True)
+    path = os.path.join(store.sync_dir, day + ".md")
+    open(path, "w", encoding="utf-8").write(text)
+    return day, path
+
+
+def trash_files(home):
+    root = co.trash_root(home)
+    return sorted(os.listdir(root)) if os.path.isdir(root) else []
+
+
+if os.geteuid() != 0:
+    with tempfile.TemporaryDirectory() as d:
+        store, home = cs.Store(os.path.join(d, "Notes", "_System", "context")), os.path.join(d, "home")
+        os.makedirs(os.path.join(home, ".grow-pm"))
+        day, path = old_report(store, 100)
+        os.chmod(store.sync_dir, 0o555)                     # the original cannot be moved or removed
+        try:
+            first, second = sy.prune_reports(store, home, AT), sy.prune_reports(store, home, AT)
+        finally:
+            os.chmod(store.sync_dir, 0o755)
+        check("a report that cannot be removed is left where it is and is not put in the trash — not once, not on the second sync",
+              first == [] and second == [] and os.path.exists(path) and trash_files(home) == [], (first, second, trash_files(home)))
+        check("…and when the folder is writable again the next sync moves it, once", sy.prune_reports(store, home, AT) == [day + ".md"]
+              and not os.path.exists(path) and len(trash_files(home)) == 1)
+
+real_rename, real_remove = os.rename, os.remove
+
+
+def across_volumes(src, dst):
+    raise OSError(errno.EXDEV, "Invalid cross-device link", src)
+
+
+with tempfile.TemporaryDirectory() as d:                     # the vault and ~/.grow-pm on different volumes: copy, then remove
+    store, home = cs.Store(os.path.join(d, "Notes", "_System", "context")), os.path.join(d, "home")
+    os.makedirs(os.path.join(home, ".grow-pm"))
+    day, path = old_report(store, 100, "across\n")
+    os.rename = across_volumes
+    try:
+        gone = sy.prune_reports(store, home, AT)
+    finally:
+        os.rename = real_rename
+    check("across volumes the report is copied and the original removed: one copy, in the trash, whole",
+          gone == [day + ".md"] and not os.path.exists(path) and len(trash_files(home)) == 1
+          and open(os.path.join(co.trash_root(home), trash_files(home)[0]), encoding="utf-8").read() == "across\n", (gone, trash_files(home)))
+
+with tempfile.TemporaryDirectory() as d:                     # …and the remove fails: the copy is taken back out
+    store, home = cs.Store(os.path.join(d, "Notes", "_System", "context")), os.path.join(d, "home")
+    os.makedirs(os.path.join(home, ".grow-pm"))
+    day, path = old_report(store, 100, "stays\n")
+
+    def refusing_remove(p, *a, **k):
+        if str(p).startswith(store.sync_dir):
+            raise PermissionError(errno.EACCES, "Permission denied", p)
+        return real_remove(p, *a, **k)
+
+    os.rename, os.remove = across_volumes, refusing_remove
+    try:
+        first, second = sy.prune_reports(store, home, AT), sy.prune_reports(store, home, AT)
+    finally:
+        os.rename, os.remove = real_rename, real_remove
+    check("…a remove that fails takes its copy back out of the trash: the trash is empty after the first sync and after the second",
+          first == [] and second == [] and os.path.exists(path) and trash_files(home) == [], (first, second, trash_files(home)))
+
+with tempfile.TemporaryDirectory() as d:                     # a symlinked report folder leads outside: nothing of it is copied
+    outside = os.path.join(d, "Elsewhere")
+    os.makedirs(outside)
+    secret = os.path.join(outside, "2020-01-01.md")
+    open(secret, "w", encoding="utf-8").write("not a report of the sync\n")
+    store, home = cs.Store(os.path.join(d, "Notes", "_System", "context")), os.path.join(d, "home")
+    os.makedirs(store.root)
+    os.makedirs(os.path.join(home, ".grow-pm"))
+    os.symlink(outside, store.sync_dir)
+    guard_ok = sy.prune_reports(store, home, AT)
+    with cs.guard_roots([store.root, os.path.join(home, ".grow-pm")]):
+        guarded = sy.prune_reports(store, home, AT)
+    check("a report folder that is a symlink to somewhere else: nothing is read, copied to the trash or removed — with the write guard or without",
+          guard_ok == [] and guarded == [] and os.path.exists(secret) and trash_files(home) == [], (guard_ok, guarded, trash_files(home)))
+    os.remove(store.sync_dir)
+    os.makedirs(store.sync_dir)
+    day = (datetime.date(2026, 10, 16) - datetime.timedelta(days=100)).isoformat()
+    os.symlink(secret, os.path.join(store.sync_dir, day + ".md"))
+    with cs.guard_roots([store.root, os.path.join(home, ".grow-pm")]):
+        guarded = sy.prune_reports(store, home, AT)
+    check("…and a report that is itself a link to a file outside the guarded roots is refused before it is read",
+          guarded == [] and os.path.exists(secret) and trash_files(home) == [], (guarded, trash_files(home)))
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)
