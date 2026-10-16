@@ -1889,6 +1889,47 @@ check("ctx_mcp_test's docstring says what repo status shows now (no fallback to 
       "registration's own as the fallback" not in mcp_doc and "registration_version" in mcp_doc, mcp_doc[-500:])
 check("repo list tests the state error by `is not None`", "if error is not None:" in read(CTX), "")
 
+# --- v3.14.0 Task 1: --choose theirs on a ✎ takes the repository's text; plan and apply show a core rule
+import ctx_blocks as cb_mod  # noqa: E402
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT)
+        core = os.path.join(d, "ZorgCore")
+        blocks_file = os.path.join(core, CORE_BLOCKS)
+        core_teams_text = region_in(read(blocks_file), "zorg-core", "teams")
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        edit_both(e, "- Alpha, Beta\n", "- Alpha, Beta (mine)\n")
+        rc, out, res = apply_run(e, core, "zorg-core", "--choose", "teams=mine")
+        check("--choose mine on a ✎ is still not needed, and said so", rc == 0 and res["ignored"] == {"teams": "✎"}
+              and "не потрібне: --choose/--add teams — знак ✎" in out and "(mine)" in region_in(read(e.ctx), "zorg-core", "teams"), (rc, out[-500:]))
+        rc, out, res = apply_run(e, core, "zorg-core", "--choose", "teams=theirs")   # teams is ✎ (yours edited, core unchanged)
+        check("--choose theirs on a ✎ takes the repository's text", rc == 0 and res["decisions"]["teams"] == "✎ theirs"
+              and region_in(read(e.ctx), "zorg-core", "teams") == core_teams_text, (rc, out[-500:]))
+        check("…in both copies; the journal names the text taken; the next plan is '='",
+              region_in(read(e.mirror), "zorg-core", "teams") == core_teams_text and res["ignored"] == {}
+              and last_journal(e)["taken"] == {"teams": cs_mod.sha_text(cb_mod.norm(core_teams_text))}
+              and signs_in(run_ok(e, "provider", "plan", "zorg-core")[2])["teams"] == "=", last_journal(e))
+        change(blocks_file, "<!-- zorg-core:begin id=scope v=0.4 -->", "<!-- zorg-core:begin id=scope v=0.4 policy=rule -->")
+        rc, out, res = plan_run(e, core, "zorg-core")
+        scope_row = [r for r in res["rows"] if r["block"] == "scope"][0]
+        check("plan shows a core rule: the row's note ends with (правило ядра), rule: true in the result",
+              rc == 0 and scope_row.get("rule") is True and any(l.startswith("~") and "scope" in l and l.endswith("(правило ядра)")
+                                                                for l in out.splitlines()), (rc, out[-500:]))
+        rc, out, res = apply_run(e, core, "zorg-core")
+        check("…and so does apply, which takes a '~' of a rule as any other", rc == 0 and res["applied"].get("scope") == "~"
+              and "(правило ядра)" in out and "policy=rule" in region_in(read(e.ctx), "zorg-core", "scope"), (rc, out[-500:]))
+
+pp_now = re.sub(r"\s+", " ", read(ROOT, "references", "context-provider-protocol.md"))
+need_1314_t1 = ["policy=rule", "(правило ядра)", "`--choose <block>=theirs` on a `✎`", "`✎ theirs`", "`taken`", "`\"removed\"`",
+                "`rejected`", "відкинуто вами — не застосовується, доки ядро не змінить блок", "`hold`", "`held`", "`provider-sync`",
+                "утримано: <sign> <block> — цей прохід його не чіпав"]
+check("context-provider-protocol documents v3.14.0's apply: policy=rule, theirs on ✎, taken, rejected, hold, the op label",
+      not lacks(pp_now, need_1314_t1), lacks(pp_now, need_1314_t1))
+check("ctx usage says a ✎ takes --choose BLOCK=theirs", "a ✎ takes --choose BLOCK=theirs" in re.sub(r"\s+", " ", ast.get_docstring(ast.parse(read(CTX))) or ""),
+      "")
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

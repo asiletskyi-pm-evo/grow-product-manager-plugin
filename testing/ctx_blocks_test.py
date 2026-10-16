@@ -976,9 +976,9 @@ def settle(home, text, copies, store):
         co.apply_sync(store, co.plan_sync(store, copies), copies, home, None, "", NOW)
 
 
-def apply_of(home, text, copies, store, fetched, choose=None, add=None, repo=SKIPPING):
+def apply_of(home, text, copies, store, fetched, choose=None, add=None, repo=SKIPPING, **kw):
     with cs.guard_roots(co.allowed_roots(home, text)):
-        return cb.apply(store, copies, home, repo, fetched, choose or {}, add or [], NOW)
+        return cb.apply(store, copies, home, repo, fetched, choose or {}, add or [], NOW, **kw)
 
 
 def body_of(store, rid):
@@ -1131,9 +1131,21 @@ with tempfile.TemporaryDirectory() as d:                      # what apply refus
     check("edits to local-context.md that wait to be imported: refused, nothing written (the caller imports first)",
           refused and files_under(d) == everything, "")
     settle(home, text, copies, store)
-    res = apply_of(home, text, copies, store, f, choose={"teams": "theirs"})
+    res = apply_of(home, text, copies, store, f, choose={"teams": "mine"})
     check("a --choose for a block that needs no decision is ignored and said so; your edit stays",
           res["ignored"] == {"teams": "✎"} and "Gamma" in body_of(store, HOST_NOTES) and res["applied"]["scope"] == "~", res)
+    res = apply_of(home, text, copies, store, f, choose={"teams": "both"})
+    check("…both on a '✎' is no answer either (v3.14.0: only theirs is)", res["ignored"] == {"teams": "✎"}
+          and "Gamma" in body_of(store, HOST_NOTES) and res["decisions"].get("teams") == "✎", res)
+    n_journal = len(journal_of(store))
+    res = apply_of(home, text, copies, store, f, choose={"teams": "theirs"})
+    check("v3.14.0: --choose theirs on a '✎' takes the repository's text — the region and the base; the next plan says '='",
+          res["applied"].get("teams") == "✎" and res["decisions"].get("teams") == "✎ theirs" and res["ignored"] == {}
+          and "Gamma" not in body_of(store, HOST_NOTES) and f["blocks"]["teams"] in body_of(store, HOST_NOTES)
+          and base_text(store, "teams") == f["blocks"]["teams"] and signs_of(plan_of(store, copies, f))["teams"] == "=", res)
+    check("…one journal line, which names the text taken",
+          len(journal_of(store)) == n_journal + 1 and journal_of(store)[-1]["decisions"]["teams"] == "✎ theirs"
+          and journal_of(store)[-1]["taken"] == {"teams": sha_of(f["blocks"]["teams"])}, journal_of(store)[-1])
 
 with tempfile.TemporaryDirectory() as d:                      # a repository text that is not one sound region is never written
     home, text, copies, store = migrated(d)
@@ -1317,6 +1329,130 @@ check("namespace_of: the fetch's (a registration with no namespace takes the cor
       cb.namespace_of({"namespace": "zorg-context"}, {"namespace": "zorg-core"}) == "zorg-core"
       and cb.namespace_of({"namespace": "zorg-context"}, {}) == "zorg-context"
       and cb.namespace_of({"namespace": "zorg-context"}, {"namespace": ""}) == "zorg-context", "")
+
+# --- v3.14.0 Task 1: apply for the daily sync — an op label, held blocks, the texts taken, theirs on a ✎, policy=rule, rejected
+RULE_SCOPE = region("scope", "0.5", "### Scope of work\nThe user works on Zorg App and Zorg Lite.").replace(
+    "id=scope v=0.5 -->", "id=scope v=0.5 policy=rule -->", 1)
+NEW_TEAMS = region("teams", "0.5", "### Teams map\n- Alpha, Beta, Gamma")
+SCOPE_06 = region("scope", "0.6", "### Scope of work\nThe user works on Zorg App, Zorg Lite and Zorg Max.")
+REJECTED_NOTE = "відкинуто вами — не застосовується, доки ядро не змінить блок"
+LATER = "2026-10-21T09:00:00+03:00"
+
+check("is_rule reads policy=rule from the begin marker only",
+      cb.is_rule("<!-- zorg-core:begin id=scope v=0.5 policy=rule -->\nx\n<!-- zorg-core:end id=scope -->")
+      and not cb.is_rule("<!-- zorg-core:begin id=scope v=0.5 -->\npolicy=rule\n<!-- zorg-core:end id=scope -->"), "")
+check("…as a whole word, anywhere among the attributes; policy=rules, xpolicy=rule, policy=rule-x are none, nor is no text",
+      cb.is_rule(RULE_SCOPE) and cb.is_rule("<!-- zorg-core:begin id=scope policy=rule v=0.5 -->\nx\n<!-- zorg-core:end id=scope -->")
+      and cb.is_rule("<!-- zorg-core:begin id=scope v=0.5 policy=rule-->\nx\n<!-- zorg-core:end id=scope -->")
+      and not cb.is_rule("<!-- zorg-core:begin id=scope v=0.5 policy=rules -->\nx\n<!-- zorg-core:end id=scope -->")
+      and not cb.is_rule("<!-- zorg-core:begin id=scope v=0.5 xpolicy=rule -->\nx\n<!-- zorg-core:end id=scope -->")
+      and not cb.is_rule("<!-- zorg-core:begin id=scope v=0.5 policy=rule-x -->\nx\n<!-- zorg-core:end id=scope -->")
+      and not cb.is_rule("<!-- zorg-core:begin id=policy=rule v=0.5 -->\nx\n<!-- zorg-core:end id=policy=rule -->")
+      and not cb.is_rule(None) and not cb.is_rule("") and not cb.is_rule("policy=rule"), "")
+
+check("rejected survives _clean and a bad shape is refused",
+      cb._clean({"rejected": {"scope": ["a" * 64]}}, "w")["rejected"] == {"scope": ["a" * 64]}
+      and isinstance(raises(cs.StoreError, cb._clean, {"rejected": {"scope": "x"}}, "w"), cs.StoreError)
+      and isinstance(raises(cs.StoreError, cb._clean, {"rejected": ["a" * 64]}, "w"), cs.StoreError)
+      and isinstance(raises(cs.StoreError, cb._clean, {"rejected": {"scope": [1]}}, "w"), cs.StoreError), "")
+check("…ten per block, the oldest dropped first, a repeat kept at its newest place; a state without it has none",
+      cb._clean({"rejected": {"scope": hexes(12)}}, "w")["rejected"] == {"scope": hexes(12)[2:]}
+      and cb._clean({"rejected": {"scope": ["removed", "a" * 64, "removed"]}}, "w")["rejected"] == {"scope": ["a" * 64, "removed"]}
+      and "rejected" not in cb._clean({}, "w"), cb._clean({"rejected": {"scope": hexes(12)}}, "w"))
+
+with tempfile.TemporaryDirectory() as d:                      # hold, op, taken
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f0 = published(store)
+    f0["blocks"]["okr"] = OKR
+    apply_of(home, text, copies, store, f0, add=["okr"])         # okr is yours now, with a base
+    j = journal_of(store)
+    check("the journal line of an apply names the repository texts taken (an --add)",
+          j[-1]["op"] == "provider-apply" and j[-1]["taken"] == {"okr": sha_of(OKR)}, j[-1])
+    old_scope = cb.find_regions(store.load(), NS)[0]["scope"]["text"]
+    state0 = cb.load_state(store, "zorg-core")
+    f = published(store, checked=LATER)
+    f["blocks"]["scope"], f["blocks"]["teams"] = NEW_SCOPE, NEW_TEAMS     # okr left out: the repository removed it
+    n_journal = len(journal_of(store))
+    res = apply_of(home, text, copies, store, f, op="provider-sync", hold=("scope",))
+    mine_now = cb.find_regions(store.load(), NS)[0]
+    state = cb.load_state(store, "zorg-core")
+    check("hold leaves a ~ block untouched and lists it", res["held"] == {"scope": "~"} and mine_now["scope"]["text"] == old_scope
+          and "scope" not in res["applied"] and "scope" not in res["pending"] and "scope" not in res["ignored"]
+          and "scope" not in res["decisions"], res)
+    check("…its state moves only the time of the check",
+          {k: v for k, v in state["blocks"]["scope"].items() if k != "checked"} == {k: v for k, v in state0["blocks"]["scope"].items() if k != "checked"}
+          and state["blocks"]["scope"]["checked"] == LATER, (state0["blocks"]["scope"], state["blocks"]["scope"]))
+    check("…the rest of the pass is applied", res["applied"].get("teams") == "~" and res["applied"].get("okr") == "−"
+          and mine_now["teams"]["text"] == NEW_TEAMS and "okr" not in mine_now, res["applied"])
+    j = journal_of(store)
+    check("op labels the snapshot and the journal line", len(j) == n_journal + 1 and j[-1]["op"] == "provider-sync"
+          and res["snapshot"].endswith("provider-sync")
+          and json.load(open(os.path.join(res["snapshot"], "manifest.json"), encoding="utf-8"))["label"] == "provider-sync", (j[-1], res["snapshot"]))
+    check("taken names the sha of each repository text written, 'removed' for a removal",
+          j[-1]["taken"] == {"teams": sha_of(NEW_TEAMS), "okr": "removed"}, j[-1])
+    check("…a held block is in no decision of the journal line", "scope" not in j[-1]["decisions"] and "scope" not in j[-1]["pending"], j[-1])
+    check("render_apply names the held block", "утримано: ~ scope — цей прохід його не чіпав" in cb.render_apply(res).splitlines(),
+          cb.render_apply(res))
+    everything = files_under(d)
+    check("a block in hold that the plan does not have: ValueError, nothing written",
+          isinstance(raises(ValueError, lambda: apply_of(home, text, copies, store, f, hold=("nosuch",))), ValueError)
+          and files_under(d) == everything, "")
+
+with tempfile.TemporaryDirectory() as d:                      # held questions: neither pending nor ignored, even with an answer
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    edit_record(store, HOST_NOTES, "The user works on Zorg App only.", "The user works on Zorg App only. (mine)")
+    settle(home, text, copies, store)
+    f = published(store, checked=LATER)
+    f["blocks"]["scope"], f["blocks"]["okr"] = NEW_SCOPE, OKR
+    n_journal, body = len(journal_of(store)), body_of(store, HOST_NOTES)
+    res = apply_of(home, text, copies, store, f, choose={"scope": "theirs"}, add=["okr"], hold=("scope", "okr"))
+    check("held '⚠' and '+' with their answers: not pending, not ignored, not applied — and nothing changes",
+          res["held"] == {"scope": "⚠", "okr": "+"} and res["pending"] == [] and res["ignored"] == {}
+          and res["applied"] == {"teams": "=", "team": "="} and res["changed"] is False and res["snapshot"] is None
+          and body_of(store, HOST_NOTES) == body and len(journal_of(store)) == n_journal, res)
+    check("…render_apply says they were held, not 'без змін' alone",
+          "утримано: ⚠ scope — цей прохід його не чіпав" in cb.render_apply(res) and "утримано: + okr — цей прохід його не чіпав" in cb.render_apply(res),
+          cb.render_apply(res))
+    res = apply_of(home, text, copies, store, f)
+    check("without hold the same pass asks as before (default op, nothing held)", res["held"] == {} and sorted(res["pending"]) == ["okr", "scope"], res)
+
+with tempfile.TemporaryDirectory() as d:                      # the plan: rejected texts and core rules
+    home, text, copies, store = migrated(d)
+    adopt_apply(home, text, copies, store, REPO, published(store))
+    f0 = published(store)
+    f0["blocks"]["okr"] = OKR
+    apply_of(home, text, copies, store, f0, add=["okr"])
+    state = cb.load_state(store, "zorg-core")
+    state["rejected"] = {"scope": [sha_of(NEW_SCOPE)], "okr": ["removed"], "teams": [sha_of(published(store)["blocks"]["teams"])]}
+    with cs.guard_roots(co.allowed_roots(home, text)):
+        cb.save_state(store, "zorg-core", state)
+    check("rejected round-trips through save_state / load_state", cb.load_state(store, "zorg-core")["rejected"] == state["rejected"], "")
+    plan_rejected = plan_of(store, copies, dict(published(store), blocks=dict(published(store)["blocks"], scope=NEW_SCOPE)))
+    check("plan marks a rejected repository text", row_of(plan_rejected, "scope")["rejected"] is True
+          and "відкинуто вами" in row_of(plan_rejected, "scope")["note"] and row_of(plan_rejected, "scope")["sign"] == "~", row_of(plan_rejected, "scope"))
+    check("…with the note of the constraints, the sign classify gave; and a rejected removal ('removed')",
+          row_of(plan_rejected, "scope")["note"] == REJECTED_NOTE and row_of(plan_rejected, "okr")["sign"] == "−"
+          and row_of(plan_rejected, "okr").get("rejected") is True and row_of(plan_rejected, "okr")["note"] == REJECTED_NOTE,
+          (row_of(plan_rejected, "scope"), row_of(plan_rejected, "okr")))
+    check("…a '=' row offers nothing, so it is no rejection", "rejected" not in row_of(plan_rejected, "teams"), row_of(plan_rejected, "teams"))
+    check("…and the rendered plan says so", any(l.startswith("~") and "scope" in l and REJECTED_NOTE in l for l in cb.render_plan(plan_rejected).splitlines()),
+          cb.render_plan(plan_rejected))
+    newer = plan_of(store, copies, dict(published(store), blocks=dict(published(store)["blocks"], scope=SCOPE_06, okr=OKR)))
+    check("…a new text in the block is no longer rejected", "rejected" not in row_of(newer, "scope") and row_of(newer, "scope")["sign"] == "~"
+          and "rejected" not in row_of(newer, "okr"), (row_of(newer, "scope"), row_of(newer, "okr")))
+    ruled = plan_of(store, copies, dict(published(store), blocks=dict(published(store)["blocks"], scope=RULE_SCOPE, okr=OKR)))
+    check("plan marks a core rule: rule True and ' (правило ядра)' after the note",
+          row_of(ruled, "scope").get("rule") is True and row_of(ruled, "scope")["note"].endswith(" (правило ядра)")
+          and row_of(ruled, "scope")["sign"] == "~" and "rule" not in row_of(ruled, "teams"), (row_of(ruled, "scope"), row_of(ruled, "teams")))
+    edit_record(store, HOST_NOTES, "The user works on Zorg App only.", "The user works on Zorg App only. (mine)")
+    settle(home, text, copies, store)
+    f_rule = dict(published(store), blocks=dict(published(store)["blocks"], scope=RULE_SCOPE, okr=OKR))
+    res = apply_of(home, text, copies, store, f_rule)
+    check("a manual apply still asks about a '⚠' of a rule, and shows the mark",
+          res["pending"] == ["scope"] and row_of(res["plan"], "scope")["sign"] == "⚠" and row_of(res["plan"], "scope").get("rule") is True
+          and "(правило ядра)" in cb.render_apply(res), cb.render_apply(res))
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

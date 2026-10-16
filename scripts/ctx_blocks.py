@@ -17,13 +17,15 @@ The pure part reads nothing and writes nothing:
 - norm          the text two blocks are compared by (and hashed by)
 - find_regions  {block id: {host, text, v}} of one namespace over all records, and the structure errors
 - classify      the plan's sign for one block from mine / theirs / the state
+- is_rule       does the repository's begin marker say `policy=rule` (a core rule, since v3.14.0)
 
 The persistent part is the store's memory of a repository, under `<store>/.state/blocks/` — snapshots keep it, so
 `ctx undo` brings it back:
 
 - load_state / save_state   `<repo>.json`: when and where the repository was last checked, and per block the hash
                             of its base, the last ten bases, the version, the host record, the time it was checked
-                            and whether you removed it
+                            and whether you removed it; since v3.14.0 also `rejected`, the repository texts you
+                            rejected by undoing a sync pass (the last ten hashes per block)
 - put_base / get_base       `<repo>/<sha>.md`: the text of a base as it was stored, named by the hash of its
                             normalised form (a hash is cs.sha_text(norm(text)))
 - prune_bases               drop the base texts no block refers to any more
@@ -79,12 +81,24 @@ BEGIN_ATTRS = re.compile(r"^\s+id=(%s)((?:\s.*)?)$" % ID, re.S)     # what follo
 END_ATTRS = re.compile(r"^\s+id=(%s)\s*$" % ID)                      # …and what follows `<ns>:end`
 VERSION = re.compile(r"(?:^|\s)v=([^\s>]+)")
 ANY_ID = re.compile(r"id=(%s)" % ID)
+LEADING_BEGIN = re.compile(r"\s*<!--\s*[^\s:>]+:begin(?![A-Za-z0-9_:.])([^>]*)-->")   # the begin marker a region text starts with
+RULE_WORD = re.compile(r"(?:^|\s)policy=rule(?:\s|$)")
 
 
 def norm(text):
     """CRLF → LF, no trailing spaces or tabs on a line, no trailing blank lines. None is the empty text."""
     lines = (text or "").replace("\r\n", "\n").split("\n")
     return "\n".join(line.rstrip(" \t\r") for line in lines).rstrip("\n")
+
+
+def is_rule(region_text):
+    """Does the repository hold this block as a core rule? True when the attributes of the begin marker the region text
+    starts with — what follows its id — hold the whole word `policy=rule` (`<!-- <ns>:begin id=<id> v=<v> policy=rule -->`).
+    Text inside the region never counts; None, "" and a text that does not start with a well-formed begin marker are no
+    rule. It is read from the repository's text (theirs), never from yours."""
+    found = LEADING_BEGIN.match(region_text or "")
+    attrs = BEGIN_ATTRS.match(found.group(1)) if found else None
+    return bool(attrs and RULE_WORD.search(attrs.group(2)))
 
 
 def _scan(text, ns):
@@ -229,6 +243,8 @@ REPO_ID = re.compile(r"[a-z0-9][a-z0-9-]*")
 SHA = re.compile(r"[0-9a-f]{64}")
 BASE_FILE = re.compile(r"[0-9a-f]{64}\.md")
 MAX_BASES = 10                                  # the hashes of the last ten bases are kept, the oldest dropped first
+MAX_REJECTED = 10                               # the repository texts you rejected, per block: the last ten, the oldest dropped first
+REMOVED = "removed"                             # what stands for "the repository removed the block" where a text's hash would
 
 
 def _repo(repo_id):
@@ -246,9 +262,21 @@ def _bases_dir(store, repo_id):
     return os.path.join(store.state_dir, "blocks", _repo(repo_id))
 
 
+def _newest(seq, limit):
+    """`seq` with every value once, at its newest (last) place, and only the last `limit` of them, oldest first."""
+    kept = []
+    for h in reversed(seq):
+        if h not in kept:
+            kept.append(h)
+    return kept[:limit][::-1]
+
+
 def _clean(state, where):
     """A copy of `state` in its stored shape: every key present, `v` a string ("" is unknown), `bases` without
-    repeats, the last MAX_BASES of them with `base_sha` the newest. A wrong shape → StoreError naming `where`."""
+    repeats, the last MAX_BASES of them with `base_sha` the newest. Unknown top-level keys are kept as they are, except
+    `rejected` ({block: [sha | "removed", …]}: the repository texts you rejected by undoing a sync pass, oldest first),
+    which is kept to the last MAX_REJECTED values per block without repeats, and left out when absent or null. A wrong
+    shape → StoreError naming `where`."""
     if not isinstance(state, dict):
         raise cs.StoreError("%s: the state is not an object" % where)
     blocks = state.get("blocks")
@@ -267,13 +295,8 @@ def _clean(state, where):
             raise cs.StoreError("%s: bases of block %s are not a list of hashes" % (where, bid))
         if base_sha is not None and not isinstance(base_sha, str):
             raise cs.StoreError("%s: base_sha of block %s is not a hash" % (where, bid))
-        seq = list(bases) + ([base_sha] if base_sha else [])
-        kept = []
-        for h in reversed(seq):                  # a hash stays once, at its newest place
-            if h not in kept:
-                kept.append(h)
         b = dict(block)
-        b["bases"] = kept[:MAX_BASES][::-1]
+        b["bases"] = _newest(list(bases) + ([base_sha] if base_sha else []), MAX_BASES)   # a hash stays once, at its newest place
         b["base_sha"] = base_sha or None
         b["v"] = block.get("v") or ""
         b.setdefault("host", None)
@@ -284,6 +307,14 @@ def _clean(state, where):
     out["blocks"] = out_blocks
     for key in ("checked", "source", "version"):
         out.setdefault(key, None)
+    rejected = out.pop("rejected", None)
+    if rejected is not None:
+        if not isinstance(rejected, dict):
+            raise cs.StoreError("%s: rejected is not an object" % where)
+        for bid, seq in rejected.items():
+            if not isinstance(seq, list) or not all(isinstance(h, str) for h in seq):
+                raise cs.StoreError("%s: rejected texts of block %s are not a list of hashes" % (where, bid))
+        out["rejected"] = {bid: _newest(seq, MAX_REJECTED) for bid, seq in rejected.items()}
     return out
 
 
@@ -476,8 +507,11 @@ REMOVED_NOTES = {"⚠": "репозиторій прибрав блок, а у �
                  "?": "репозиторій не має цього блоку, а бази немає — theirs прибере, mine лишить текст як ваш"}
 REMOVED_LINE = "(репозиторій прибрав цей блок)"
 BEHIND_NOTE = "джерело позаду вашої бази"         # a "=" whose source offers an older base of yours (`behind`)
+REJECTED_NOTE = "відкинуто вами — не застосовується, доки ядро не змінить блок"   # a text you rejected by undoing a sync pass
+RULE_NOTE = " (правило ядра)"                   # after the note of a block the repository holds as a rule (`is_rule`)
 QUESTIONS = ("⚠", "+", "?")                     # the signs that need an answer
 REWRITES = ("~", "−")                           # the signs an apply without decisions acts on: it rewrites the record that holds the block
+OFFERS = ("~", "+", "−", "⚠", "?")              # the signs whose row offers the repository's text (or its removal) — a rejection can apply
 
 
 def clip(text, limit):
@@ -590,6 +624,12 @@ def _theirs(fetched):
     return theirs, where
 
 
+def offered(theirs):
+    """What the repository offers for a block, as the journal's `taken` and the state's `rejected` name it: the hash of
+    its normalised text (cs.sha_text(norm(text))), or "removed" when it has none."""
+    return REMOVED if theirs is None else cs.sha_text(norm(theirs))
+
+
 def _held(entry, mine):
     """What `classify` gets for a block: the state's entry when it holds a base — or a removal mark and no region of
     yours — else None (no base: the region you hold now is not one, and a mark with nothing to put back is a removal)."""
@@ -642,7 +682,8 @@ def plan(store, copies, repo, fetched, now, all_=False):
     `include_skipped`). Reads only — no lock, nothing written.
 
     Returns {"repo", "source" ("mcp" | "folder"), "source_label", "version" (the repository's), "base_version" ("—" when no
-    block has a base), "rows": [{"block", "sign", "host", "source", "note"}], "questions", "changes", "errors"}.
+    block has a base), "rows": [{"block", "sign", "host", "source", "note", "diff"?, "behind"?, "rejected"?, "rule"?}],
+    "questions", "changes", "errors"}.
 
     The rows are the blocks in your records (the pending edits of local-context.md count: the live view) followed by
     those only the repository offers; a block absent on both sides is none. `host` is the record that holds your
@@ -653,7 +694,11 @@ def plan(store, copies, repo, fetched, now, all_=False):
     `questions` counts the rows "⚠", "+" and "?"; `changes` the records an apply without decisions would rewrite: the
     distinct hosts of the rows "~" and "−". `errors` are `find_regions`' problems (a block with one has no row).
     A "=" row whose source lags behind your base (`behind`) carries `behind: True` and the note
-    "джерело позаду вашої бази (v<theirs> < v<yours>)". A blocks file that holds none of the blocks you have a base for
+    "джерело позаду вашої бази (v<theirs> < v<yours>)". A row that offers the repository's text or its removal ("~",
+    "+", "−", "⚠", "?") whose offer (`offered`: the hash of the text, or "removed") is among the state's `rejected` for
+    the block carries `rejected: True` and the note "відкинуто вами — не застосовується, доки ядро не змінить блок"; the
+    sign stays `classify`'s. A row whose repository text is a core rule (`is_rule`) carries `rule: True`, and " (правило
+    ядра)" ends its note. A blocks file that holds none of the blocks you have a base for
     is no plan at all: SourceLost (see `_lost`).
     Every text a server controls is cleaned of control characters and bounded (HEADER_CLIP, NOTE_CLIP, LINE_CLIP).
     """
@@ -705,6 +750,11 @@ def plan(store, copies, repo, fetched, now, all_=False):
                 except cs.StoreError:
                     base = None
                 row["diff"] = _differences(m["text"], t, base)
+            if row["sign"] in OFFERS and offered(t) in (state.get("rejected") or {}).get(bid, ()):
+                row["rejected"], row["note"] = True, REJECTED_NOTE
+            if is_rule(t):
+                row["rule"] = True
+                row["note"] = clip(row["note"] + RULE_NOTE, NOTE_CLIP)
         rows.append(row)
     version = fetched.get("version")
     return {"repo": rid, "source": fetched.get("source"), "source_label": _source_label(repo, fetched.get("source")),
@@ -840,7 +890,7 @@ def _substance(state):
     return {bid: {k: v for k, v in b.items() if k not in BLOCK_SERVICE} for bid, b in _clean(state, "state")["blocks"].items()}
 
 
-def apply(store, copies, home, repo, fetched, choose, add, now):
+def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-apply", hold=()):
     """One pass of `repo` over your context, from `fetched` (`ctx_repos.fetch` with no `error`). The caller holds the
     lock and has imported the edits of local-context.md first: with edits still waiting it is refused (co.Refused),
     and nothing is written.
@@ -850,7 +900,8 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
       =   nothing in the records; the base becomes the repository's text when it was not — except when the source lags
           behind your base (`behind`): then the base stays as it is
       ~   the region becomes the repository's text, and so does the base
-      ✎   your region stays, the base too
+      ✎   your region stays, the base too — unless `choose` says theirs for it (since v3.14.0): then the region becomes
+          the repository's text and so does the base (mine or both for a "✎" is no answer: `ignored`)
       −   the region is removed (its text stays in the snapshot), and the block's state entry with it
       ✂   nothing in the records; the state marks it removed by you (`user_removed`, today) — never offered again
       ⚠ ? only with an answer in `choose` {block: "theirs" | "mine" | "both"}: theirs — the region becomes the
@@ -867,22 +918,31 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
     A "⚠", "?" or "+" without its answer waits (`pending`); everything else is applied. A repository region that is
     not one sound region of its block is never written into a record: that block goes to `errors`, untouched.
 
-    The order: snapshot "provider-apply" → the new base texts → the host records (verified today, source
-    "repo:<id>") → the state (checked, source, version; per block v, host, checked) → the base texts nobody refers
-    to are pruned → one journal line {op provider-apply, source repo:<id>, from_v, to_v, ids: the records written,
-    decisions: {block: sign, or "<sign> <answer>"}, pending, snapshot} → the compiled copies. A pass that changes
-    nothing but the time of the check writes the state file alone: no snapshot, no journal line, no record.
+    `hold` (the daily sync's, since v3.14.0) names blocks this pass does not touch, whatever their sign and whatever
+    `choose` / `add` say of them: each is listed in `held` with its sign — not in `pending`, `ignored`, `applied` or
+    the journal's decisions — and nothing of it changes but the time its entry was checked.
 
-    A `choose` value that is not an answer, or a block in `choose` / `add` that the plan does not have → ValueError
-    before anything is written; an answer for a block that needs none is left out and listed in `ignored` with its
-    sign — and one for a block the plan refuses (broken markers: it is in `errors`, not in the rows) with "!".
+    The order: snapshot `op` → the new base texts → the host records (verified today, source "repo:<id>") → the
+    state (checked, source, version; per block v, host, checked) → the base texts nobody refers to are pruned → one
+    journal line {op: `op`, source repo:<id>, from_v, to_v, ids: the records written, decisions: {block: sign, or
+    "<sign> <answer>"}, pending, taken, snapshot} → the compiled copies. `op` is "provider-apply" unless the caller
+    labels the pass ("provider-sync"). `taken` is {block: offered(text)} for every block whose repository text went
+    into your records ("~", "+", theirs, both — the repository's text, not the joined one) and {block: "removed"} for
+    every block removed ("−", theirs for a block the repository removed); a block kept as yours (mine, ✎) is not in
+    it. A pass that changes nothing but the time of the check writes the state file alone: no snapshot, no journal
+    line, no record.
+
+    A `choose` value that is not an answer, or a block in `choose` / `add` / `hold` that the plan does not have →
+    ValueError before anything is written; an answer for a block that needs none is left out and listed in `ignored`
+    with its sign — and one for a block the plan refuses (broken markers: it is in `errors`, not in the rows) with "!".
 
     Returns {"repo", "plan", "applied": {block: sign}, "decisions", "pending": [block], "ignored": {block: sign},
-    "errors", "changed": bool, "written": [record ids], "snapshot": folder or None, "compiled": [copies]}.
+    "held": {block: sign}, "errors", "changed": bool, "written": [record ids], "snapshot": folder or None,
+    "compiled": [copies]}.
     """
     if fetched.get("error"):
         raise ValueError("apply needs a repository that was fetched, not one that failed: %s" % fetched["error"])
-    choose, add = dict(choose or {}), list(add or [])
+    choose, add, hold = dict(choose or {}), list(add or []), set(hold or ())
     wrong = ["%s=%s" % (b, how) for b, how in choose.items() if how not in CHOICES]
     if wrong:
         raise ValueError("--choose takes BLOCK=theirs|mine|both, not %s" % ", ".join(wrong))
@@ -892,7 +952,7 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
     rid, ns = repo["id"], namespace_of(repo, fetched)
     p = plan(store, copies, repo, fetched, now)
     known = {r["block"] for r in p["rows"]} | {x["block"] for x in p["errors"] if x["block"]}
-    unknown = sorted(b for b in set(choose) | set(add) if b not in known)
+    unknown = sorted(b for b in set(choose) | set(add) | hold if b not in known)
     if unknown:
         raise ValueError("no block %s in the plan of %s — `ctx provider plan %s` lists them" % (", ".join(unknown), rid, rid))
     records = store.load()
@@ -902,21 +962,27 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
     old = load_state(store, rid)
     state = copy.deepcopy(old)
     checked, today = fetched.get("checked") or now, now[:10]
-    edits, rebased, adds = {}, {}, []
-    applied, decisions, pending, ignored, refused = {}, {}, [], {}, []
+    edits, rebased, adds, taken = {}, {}, [], {}
+    applied, decisions, pending, ignored, refused, held = {}, {}, [], {}, [], {}
     broken = {x["block"] for x in p["errors"] if x["block"]} - {r["block"] for r in p["rows"]}
-    for bid in sorted((set(choose) | set(add)) & broken):
+    for bid in sorted(((set(choose) | set(add)) & broken) - hold):
         ignored[bid] = "!"                              # an answer for a block with broken markers: not applied, and said so
     for row in p["rows"]:
         bid, sign = row["block"], row["sign"]
+        m, t, entry = mine.get(bid), theirs.get(bid), state["blocks"].get(bid)
+        if bid in hold:                                 # not this pass's: only the time of the check moves
+            held[bid] = sign
+            if entry and sign != SKIPPED:
+                entry["checked"] = checked
+            continue
         how, wanted = choose.get(bid), bid in add
-        if (how and sign not in ("⚠", "?")) or (wanted and sign != "+"):
+        answers = sign in ("⚠", "?") or (sign == "✎" and how == "theirs")    # theirs on a ✎ takes the repository's text
+        if (how and not answers) or (wanted and sign != "+"):
             ignored[bid] = sign                         # an answer to a question the plan does not ask: dropped
-        how = how if sign in ("⚠", "?") else None
+        how = how if answers else None
         wanted = wanted and sign == "+"
         if sign == SKIPPED:
             continue
-        m, t, entry = mine.get(bid), theirs.get(bid), state["blocks"].get(bid)
         if (sign in ("⚠", "?") and not how) or (sign == "+" and not wanted):
             pending.append(bid)
             if entry:
@@ -926,9 +992,14 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
         if gone and how == "both":
             raise ValueError("both is not possible for a block the repository removed: %s — theirs removes it, mine keeps "
                              "your text without its markers" % bid)
-        if (sign in ("~", "+") or (sign in ("⚠", "?") and how in ("theirs", "both") and not gone)) and not _sound(t, ns, bid):
+        takes = sign in ("~", "+") or (how in ("theirs", "both") and not gone)     # the repository's text goes into a record
+        if takes and not _sound(t, ns, bid):
             refused.append({"block": bid, "host": row["host"], "why": "the repository's region is not well-formed"})
             continue
+        if takes:
+            taken[bid] = offered(t)
+        elif sign == "−" or (gone and how == "theirs"):
+            taken[bid] = REMOVED
         if sign == "−" or gone:
             edits.setdefault(m["host"], {})[bid] = DETACH if gone and how == "mine" else None
             state["blocks"].pop(bid, None)
@@ -944,12 +1015,12 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
                 adds.append(bid)
             entry = state["blocks"].setdefault(bid, {"base_sha": None, "bases": [], "v": "", "host": None, "checked": None,
                                                      "user_removed": None})
-            if sign != "✎" and not row.get("behind"):       # a source behind your base never moves the base back
+            if (sign != "✎" or how == "theirs") and not row.get("behind"):   # a source behind your base never moves the base back
                 _rebase(entry, t)
                 rebased[bid] = t
             entry.update(host=m["host"] if m else None, checked=checked, user_removed=None)
         applied[bid] = sign
-        decisions[bid] = "%s %s" % (sign, how) if sign in ("⚠", "?") else sign
+        decisions[bid] = "%s %s" % (sign, how) if how else sign
 
     bodies = {}
     for host, ops in edits.items():
@@ -973,12 +1044,12 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
                           "title": title, "after": records[-1]["id"] if records else None}
     state.update(checked=checked, source=fetched.get("source"), version=fetched.get("version"))
     res = {"repo": rid, "plan": p, "applied": applied, "decisions": decisions, "pending": pending, "ignored": ignored,
-           "errors": [dict(x) for x in p["errors"]] + refused, "written": [], "snapshot": None, "compiled": [],
+           "held": held, "errors": [dict(x) for x in p["errors"]] + refused, "written": [], "snapshot": None, "compiled": [],
            "changed": bool(bodies or new_record) or _substance(old) != _substance(state)}
     if not res["changed"]:
         save_state(store, rid, state)                  # the time of the check, and nothing else
         return res
-    snap = co.snapshot(store, copies, home, "provider-apply")
+    snap = co.snapshot(store, copies, home, op)
     for text in rebased.values():
         put_base(store, rid, text)
     source = "repo:" + rid
@@ -993,9 +1064,9 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
         res["written"].extend(made)
     save_state(store, rid, state)
     prune_bases(store, rid, state)
-    store.journal({"ts": now, "op": "provider-apply", "source": source, "from_v": old.get("version") or base_version(old),
+    store.journal({"ts": now, "op": op, "source": source, "from_v": old.get("version") or base_version(old),
                    "to_v": fetched.get("version"), "ids": res["written"], "decisions": decisions, "pending": pending,
-                   "snapshot": snap})
+                   "taken": taken, "snapshot": snap})
     if res["written"]:
         res["compiled"] = co.compile_store(store, copies, now, home, snap)["written"]
     res["snapshot"] = snap
@@ -1004,13 +1075,15 @@ def apply(store, copies, home, repo, fetched, choose, add, now):
 
 def render_apply(res):
     """The text of an apply: the plan's table (a "⚠" with its three versions under it), then what was not needed,
-    what waits and how to answer it, what was written — and the last line `Чекають рішення: N · змінено записів: M`.
-    A pass that changed nothing, with nothing waiting, is the header and the one line "без змін" — and under it the
-    blocks that could not be checked ("·", such as a team block whose core folder is not here) and those whose source
-    lags behind your base ("=", with its note)."""
+    what was held (`утримано: <sign> <block> — цей прохід його не чіпав`), what waits and how to answer it, what was
+    written — and the last line `Чекають рішення: N · змінено записів: M`.
+    A pass that changed nothing, with nothing waiting or held, is the header and the one line "без змін" — and under
+    it the blocks that could not be checked ("·", such as a team block whose core folder is not here) and those whose
+    source lags behind your base ("=", with its note)."""
     p = res["plan"]
     lines = render_plan(p).splitlines()[:-1]            # the plan's last line speaks of what would change
-    if not (res["changed"] or res["pending"] or res["errors"] or res["ignored"]):
+    held = res.get("held") or {}
+    if not (res["changed"] or res["pending"] or res["errors"] or res["ignored"] or held):
         return "\n".join([lines[0], "без змін"] + ["%s  %s  %s" % (r["sign"], clip(r["block"], HEADER_CLIP), clip(r["note"], NOTE_CLIP))
                                                   for r in p["rows"] if r["sign"] == SKIPPED or r.get("behind")])
     for x in res["errors"][len(p["errors"]):]:
@@ -1020,6 +1093,8 @@ def render_apply(res):
             lines.append("не застосовано: --choose/--add %s — у блоку зламані маркери (рядок «помилка» вище)" % clip(bid, HEADER_CLIP))
         else:
             lines.append("не потрібне: --choose/--add %s — знак %s" % (clip(bid, HEADER_CLIP), sign))
+    for bid, sign in held.items():
+        lines.append("утримано: %s %s — цей прохід його не чіпав" % (sign, clip(bid, HEADER_CLIP)))
     signs = {r["block"]: r["sign"] for r in p["rows"]}
     gone = {r["block"] for r in p["rows"] if r["source"] is None and r["sign"] in ("⚠", "?")}
     for bid in res["pending"]:

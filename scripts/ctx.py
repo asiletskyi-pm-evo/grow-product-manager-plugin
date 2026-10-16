@@ -53,8 +53,10 @@
   provider apply [REPO] [--product P] [--choose BLOCK=theirs|mine|both [BLOCK=… …]] [--add BLOCK [BLOCK …]] [--json]
                                 one pass per repository: = ~ ✎ − ✂ are applied (your edits stay), ⚠ and ? wait
                                 for --choose, + for --add (it goes to the record holding most of the repository's
-                                blocks, else a new record); the snapshot, the records, the block state, one
-                                journal line, the compile. Nothing moved: only the time of the check, "без змін".
+                                blocks, else a new record); a ✎ takes --choose BLOCK=theirs (the repository's
+                                text, and its base; mine or both for a ✎ is "не потрібне"). The snapshot, the
+                                records, the block state, one journal line (taken: the repository texts written),
+                                the compile. Nothing moved: only the time of the check, "без змін".
                                 Every repository is read first: one unreachable → exit 5, nothing written.
                                 Exit 2 when an answer is awaited (the rest applied), 4 when only refused blocks
                                 (a broken marker) are left. --choose / --add need REPO when several are in scope;
