@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.14.0
+**Version:** 3.14.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.14.1** — **A skill sees the subsections it lacks; `Team Members` answers `Members`** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx read` used to list a missing field but never a missing subsection, so a skill that asked for a team's `Members` under a heading named `Team Members` got no members and said nothing. A subsection nobody has now goes to the `Відсутнє` line (named with the team when several are read), `Members` is also found under `Team Members` — your own text before any block — and the card counts members under either heading.
 
 **New in v3.14.0** — **The core reaches your context by itself, once a day** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Turn it on per repository (`sync: daily`, asked once by context-connect) and the first skill of the day runs `ctx provider sync --if-due`: blocks you did not edit are updated, a block you and the core both changed keeps your text unless the core marks it `policy=rule`, new blocks are added, more than one removal at once is held, a text you undid is never applied again and a copy of the core that lags behind takes nothing — within 20 seconds, never waiting on a lock. Every decision is explained in a report in `_System/context/sync/` with both texts of a conflict and the way back, and the session digest shows a `repos:` line.
 
@@ -1054,5 +1056,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.14.0  
+**Version:** 3.14.1  
 **Last Updated:** October 2026

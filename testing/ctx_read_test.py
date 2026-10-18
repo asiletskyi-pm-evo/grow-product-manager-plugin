@@ -329,6 +329,39 @@ with tempfile.TemporaryDirectory() as d:
           and not any("конфлікт" in l for l in other), head)
     check("…the record is what is read, the file's text is not", "FROM-RECORD" in text_conflict and "FROM-FILE" not in text_conflict, text_conflict[:900])
 
+# --- v3.14.1: a subsection nobody has is listed, and `Team Members` answers `Members`
+SECTION_SKILL = {"schema": "context-manifest/1", "skills": {"sec-skill": {"product": {"sections": ["Nowhere Section"]}}}}
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    text, res = e.view("sec-skill", product="Zorg App", manifest=SECTION_SKILL)
+    check("a missing subsection is listed, not as obligatory", "Nowhere Section" in res["missing"]
+          and "Відсутнє: Nowhere Section — " in text and "Nowhere Section (обов'язкове)" not in text, (text[-400:], res["missing"]))
+    text, res = e.view("hiring-designer", product="Zorg App")
+    check("a team without the subsection is named with the team when there are several", "Members (Team: Beta (B))" in res["missing"]
+          and "Members (Team: Alpha (A))" not in res["missing"] and "Members" not in res["missing"]
+          and "Відсутнє: Members (Team: Beta (B))" in text, (text[-400:], res["missing"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edit=("#### Members\n", "#### Team Members\n"))
+    text, res = e.view("task-creator", product="Zorg App")
+    check("Team Members answers Members", "#### Team Members" in text and "Alex One" in text
+          and "Members (Team: Alpha (A))" not in res["missing"], (text[-700:], res["missing"]))
+
+TEAM_MEMBERS = ("- **Jira Team ID:** <team-uuid>\n", "- **Jira Team ID:** <team-uuid>\n\n#### Team Members\n\n| Name | Role |\n|---|---|\n| Own Person | PM |\n")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[TEAM_MEMBERS])
+    block_state(e, "zorg-core", {"team": "0.2"})
+    text, res = e.view("hiring-designer", repos=REPOS)
+    check("your own Team Members wins over the block's Members", "Own Person" in text and "#### Team Members" in text
+          and "Bea Two" not in text and "> [zorg-core" not in text
+          and not any(m.startswith("Members") for m in res["missing"]), (text[-700:], res["missing"]))
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX)
+    block_state(e, "zorg-core", {"team": "0.2"})
+    text, res = e.view("hiring-designer", repos=REPOS)
+    check("…and without it the block's Members is read as before", "> [zorg-core · v0.2 · станом на 2026-10-20]\n#### Members" in text
+          and not any(m.startswith("Members") for m in res["missing"]), (text[-700:], res["missing"]))
+
 check("check_manifest is clean on the repo", cr.check_manifest(ROOT) == [], cr.check_manifest(ROOT))
 with tempfile.TemporaryDirectory() as d:
     src = read(cr.MANIFEST_PATH)

@@ -336,6 +336,9 @@ check("members: your own table wins over the block, whichever comes first",
       and cs._member_count("### Team: Alpha\n\n" + OWN_MEMBERS + "\n" + CORE_TEAM) == 3)
 check("members: a Members heading of yours with no table leaves the count to the block",
       cs._member_count("### Team: Alpha\n\n#### Members\n\nsee the core\n\n" + CORE_TEAM) == 2)
+check("members: a Team Members heading counts as Members (v3.14.1)",
+      cs._member_count("### Team: Alpha\n\n" + OWN_MEMBERS.replace("#### Members", "#### Team Members")) == 3
+      and cs._member_count("### Team: Alpha\n\n#### Team Membership rules\n\n| a | b |\n|---|---|\n| x | y |\n") is None)
 check("members: none anywhere", cs._member_count("### Team: Alpha\n\n- **Lead:** Alex\n") is None
       and cs._member_count("### Team: Alpha\n\n<!-- zorg-core:begin id=team v=0.2 -->\n- core\n<!-- zorg-core:end id=team -->\n") is None)
 
