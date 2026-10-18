@@ -635,9 +635,21 @@ def _member_count(body):
     return count
 
 
+SECTION_ALIASES = {"members": ("Team Members",)}   # since v3.14.1: other headings a subsection is also found under
+
+
+def section_names(name):
+    """`name` and the other headings it is also found under (SECTION_ALIASES), in the order they are tried."""
+    return (name,) + SECTION_ALIASES.get(name.lower(), ())
+
+
+def _members_heading(core):
+    return (_heading_text(core) or "").startswith("Members") or any(heading_matches(core, a) for a in SECTION_ALIASES["members"])
+
+
 def _table_rows_after_members(body):
     lines = [core for _, core, _ in _lines(body)]
-    at = next((k for k, c in enumerate(lines) if (_heading_text(c) or "").startswith("Members")), None)
+    at = next((k for k, c in enumerate(lines) if _members_heading(c)), None)
     if at is None:
         return None
     rows = []

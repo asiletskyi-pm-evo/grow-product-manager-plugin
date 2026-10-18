@@ -163,15 +163,21 @@ def _field_text(body, name):
 def _lookup(body, name, field=True):
     """(text, block) of a field (its line, else its `####` subsection; `field=False`: the subsection alone). Your own
     text is read first, with the managed regions left out; failing that, the first block that has it, and then
-    `block` is (namespace, id, version) — a subsection ends with its block. (None, None) when nothing has it."""
+    `block` is (namespace, id, version) — a subsection ends with its block. A subsection is also found under the other
+    headings of cs.SECTION_ALIASES (since v3.14.1: `Team Members` answers `Members`), your own text still before any
+    block. (None, None) when nothing has it."""
     find = _field_text if field else _subsection
-    own = find(cc.strip_managed_regions(body), name)
-    if own is not None:
-        return own, None
-    for ns, bid, v, _, inner in _blocks(body):
-        text = find(inner, name)
+    names = cs.section_names(name)
+    own = cc.strip_managed_regions(body)
+    for n in names:
+        text = find(own, n)
         if text is not None:
-            return text, (ns, bid, v)
+            return text, None
+    for ns, bid, v, _, inner in _blocks(body):
+        for n in names:
+            text = find(inner, n)
+            if text is not None:
+                return text, (ns, bid, v)
     return None, None
 
 
@@ -309,7 +315,7 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
                     if want.get("whole"):
                         add(t, _without_heading(t["body"]))
                     else:
-                        _parts(add, miss, t, want, origin)
+                        _parts(add, miss, t, want, origin, where=t["title"] if len(teams) > 1 else None)
             req = list(spec.get("required_settings") or [])
             for name in req + [n for n in spec["settings"] if n not in req]:
                 rec = next((r for r in recs if r["type"] == "setting" and r["title"].lower().startswith(name.lower())), None)
@@ -340,21 +346,28 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
     return text, res
 
 
-def _parts(add, miss, rec, want, origin):
+def _parts(add, miss, rec, want, origin, where=None):
+    """The fields and subsections `want` names from `rec`; what it lacks goes to `miss` — a subsection too (since
+    v3.14.1), never as obligatory — named `<name> (<where>)` when `where` is given (one of several teams)."""
     parts = []
 
     def shown(text, block):
         return text.rstrip("\n") if block is None else origin.line(*block) + "\n" + text.rstrip("\n")
 
+    def named(name):
+        return "%s (%s)" % (name, where) if where else name
+
     for name in (want.get("required") or []) + (want.get("fields") or []):
         t, block = _lookup(rec["body"], name)
         if t is None:
-            miss(name, name in (want.get("required") or []))
+            miss(named(name), name in (want.get("required") or []))
         else:
             parts.append(shown(t, block))
     for name in want.get("sections") or []:
         t, block = _lookup(rec["body"], name, field=False)
-        if t is not None:
+        if t is None:
+            miss(named(name), False)
+        else:
             parts.append(shown(t, block))
     add(rec, "\n".join(parts) + "\n")
 
