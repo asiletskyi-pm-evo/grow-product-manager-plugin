@@ -3420,6 +3420,143 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # Important 2: a laggin
               and sorted((block_state(e, "zorg-growth").get("sync_result") or {}).get("held_behind") or []) == ["growth-metrics", "team"],
               (r1, (report_of(e, "2026-10-17") or "")[-300:]))
 
+# --- v3.15.0: ctx slot bind|map|prefer|forget — what you decided about slots is kept in .state/slots.json
+def slots_memory(e):
+    path = os.path.join(e.store, ".state", "slots.json")
+    return json.loads(read(path)) if os.path.isfile(path) else None
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        mem_path = os.path.join(e.store, ".state", "slots.json")
+        rc, out, res = run_ok(e, "slot", "bind", "zorg-core", "team#Members", "team.members")
+        check("slot without a store: exit 3, nothing created", rc == 3 and "no store" in out and not os.path.exists(e.store)
+              and not os.path.exists(os.path.join(e.home, ".grow-pm", "snapshots")), (rc, out[-300:]))
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "slot")
+        check("slot without an action is a usage error", rc == 3, (rc, out[-200:]))
+        records_before, copies_before = tree_of(os.path.join(e.store, "records")), (read(e.ctx), read(e.mirror))
+        n_journal = len(read(e.store, ".state", "journal.jsonl").splitlines())
+
+        rc, out, res = run_ok(e, "slot", "bind", "zorg-core", "team#Members", "team.members")
+        check("slot bind writes the memory, a snapshot and a journal line", rc == 0 and res["changed"]
+              and res["memory"]["bindings"] == [{"repo": "zorg-core", "block": "team", "sub": "Members", "slot": "team.members", "team": None}]
+              and last_journal(e)["op"] == "slot", (rc, out[-300:], res))
+        check("…the result: command, action, slot, snapshot (a folder), the memory; the file holds that memory",
+              res["command"] == "slot" and res["action"] == "bind" and res["slot"] == "team.members" and os.path.isdir(res["snapshot"])
+              and res["memory"]["schema"] == "context-slots-memory/1" and slots_memory(e) == res["memory"], res)
+        j = last_journal(e)
+        check("…one journal line: op slot, the action and the slot, no record ids, the source, the snapshot taken before the write",
+              len(read(e.store, ".state", "journal.jsonl").splitlines()) == n_journal + 1 and j["action"] == "bind"
+              and j["slot"] == "team.members" and j["ids"] == [] and j["source"] == "ctx-slot" and j["snapshot"] == res["snapshot"]
+              and not os.path.exists(os.path.join(j["snapshot"], "state", "slots.json")), j)
+        check("…and it says what it did and how to take it back", "slot bind: zorg-core team#Members → team.members · snapshot " in out
+              and "(back: ctx undo)" in out, out[-300:])
+        check("…no record and no copy changes: it is not a content change", tree_of(os.path.join(e.store, "records")) == records_before
+              and (read(e.ctx), read(e.mirror)) == copies_before, "")
+        snaps, n_journal = sorted(os.listdir(os.path.join(e.home, ".grow-pm", "snapshots"))), len(read(e.store, ".state", "journal.jsonl").splitlines())
+        before = read(mem_path)
+        rc, out, res = run_ok(e, "slot", "bind", "zorg-core", "team#Members", "team.members")
+        check("the same bind again: exit 0, changed false, no snapshot, no journal line, the file as it was",
+              rc == 0 and res["changed"] is False and res["snapshot"] is None and read(mem_path) == before
+              and len(read(e.store, ".state", "journal.jsonl").splitlines()) == n_journal
+              and sorted(os.listdir(os.path.join(e.home, ".grow-pm", "snapshots"))) == snaps and len(res["memory"]["bindings"]) == 1
+              and "unchanged — slot bind: zorg-core team#Members → team.members" in out, (rc, out[-300:]))
+        rc, _, _ = run_ok(e, "undo")
+        check("undo takes the memory back", rc == 0 and not os.path.exists(mem_path), rc)
+        n_journal = len(read(e.store, ".state", "journal.jsonl").splitlines())
+
+        for label, args, said in (
+                ("an unknown slot", ("bind", "zorg-core", "team", "team.nowhere"), "no slot 'team.nowhere'"),
+                ("an unknown repository", ("bind", "no-such-repo", "team", "team.members"), "no-such-repo"),
+                ("a block id that is no id", ("bind", "zorg-core", "te am", "team.members"), "not a block id"),
+                ("an empty subsection", ("bind", "zorg-core", "team#", "team.members"), "nothing follows the '#'"),
+                ("a team that is no record", ("bind", "zorg-core", "team", "team.members", "--team", "team.no-such"), "no record team.no-such"),
+                ("a team that is a product record", ("bind", "zorg-core", "team", "team.members", "--team", "product.zorg-app"), "team record, not product"),
+                ("a team for a slot that is not a team slot", ("bind", "zorg-core", "scope", "org.structure", "--team", "team.alpha-a"), "--team is for the team.* slots"),
+                ("a name for an unknown slot", ("map", "product.zorg-app", "Key Metrics (focus)", "product.nowhere"), "no slot 'product.nowhere'"),
+                ("a name for a record that is not there", ("map", "product.no-such", "Key Metrics (focus)", "product.key_metrics"), "no record product.no-such"),
+                ("a name for a record of another kind than the slot's", ("map", "team.alpha-a", "Key Metrics (focus)", "product.key_metrics"), "team.alpha-a is a team record"),
+                ("a blank name", ("map", "product.zorg-app", "  ", "product.key_metrics"), "heading of your subsection is empty"),
+                ("a preference for an unknown slot", ("prefer", "team.nowhere", "all"), "no slot 'team.nowhere'"),
+                ("a preference that is none of the three", ("prefer", "team.members", "theirs"), "mine, all or repo:<id>"),
+                ("a preference for a repository that is not registered", ("prefer", "team.members", "repo:no-such-repo"), "no-such-repo"),
+                ("forgetting an unknown slot", ("forget", "team.nowhere"), "no slot 'team.nowhere'")):
+            rc, out, res = run_ok(e, "slot", *args)
+            check("slot %s: %s is exit 3, nothing written" % (args[0], label), rc == 3 and said in out and not os.path.exists(mem_path)
+                  and len(read(e.store, ".state", "journal.jsonl").splitlines()) == n_journal, (rc, out[-300:]))
+
+        rc, out, res = run_ok(e, "slot", "bind", "zorg-core", "team#Members", "team.members", "--team", "team.alpha-a")
+        check("bind --team names the record of a team", rc == 0 and res["memory"]["bindings"][0]["team"] == "team.alpha-a", (rc, out[-300:], res))
+        rc, out, res = run_ok(e, "slot", "bind", "zorg-core", "team#Members", "team.members")
+        check("…the same bind without the team changes nothing", rc == 0 and res["changed"] is False
+              and res["memory"]["bindings"][0]["team"] == "team.alpha-a", (rc, res))
+        rc, out, res = run_ok(e, "slot", "bind", "zorg-growth", "growth-metrics", "product.key_metrics")
+        check("bind a whole block, from another repository", rc == 0 and res["changed"]
+              and {"repo": "zorg-growth", "block": "growth-metrics", "sub": None, "slot": "product.key_metrics", "team": None}
+              in res["memory"]["bindings"] and len(res["memory"]["bindings"]) == 2, (rc, out[-300:], res))
+
+        rc, out, res = run_ok(e, "slot", "map", "product.zorg-app", "Key Metrics (focus)", "product.key_metrics")
+        check("slot map keeps your name for a slot: the record, the heading, the slot", rc == 0 and res["changed"] and res["action"] == "map"
+              and res["memory"]["aliases"] == [{"record": "product.zorg-app", "heading": "Key Metrics (focus)", "slot": "product.key_metrics"}]
+              and last_journal(e)["action"] == "map" and last_journal(e)["op"] == "slot", (rc, out[-300:], res))
+        rc, out, res = run_ok(e, "slot", "map", "product.zorg-app", "key metrics (FOCUS)", "product.key_metrics")
+        check("…the same name again (case, spacing aside) adds nothing", rc == 0 and res["changed"] is False and res["snapshot"] is None
+              and len(res["memory"]["aliases"]) == 1, (rc, res))
+
+        rc, out, res = run_ok(e, "slot", "prefer", "team.members", "repo:zorg-core")
+        check("slot prefer keeps whose answer a slot gives first", rc == 0 and res["changed"] and res["memory"]["prefer"] == {"team.members": "repo:zorg-core"}
+              and last_journal(e)["action"] == "prefer", (rc, out[-300:], res))
+        rc, out, res = run_ok(e, "slot", "prefer", "team.members", "all")
+        check("…another preference replaces it", rc == 0 and res["changed"] and res["memory"]["prefer"] == {"team.members": "all"}, (rc, res))
+        rc, out, res = run_ok(e, "slot", "prefer", "team.members", "all")
+        check("…the same one again changes nothing", rc == 0 and res["changed"] is False and res["snapshot"] is None, (rc, res))
+        rc, out, res = run_ok(e, "slot", "prefer", "org.structure", "mine")
+        check("…mine is a preference too, kept as it is", rc == 0 and res["memory"]["prefer"].get("org.structure") == "mine", (rc, res))
+
+        n_journal = len(read(e.store, ".state", "journal.jsonl").splitlines())
+        rc, out, res = run_ok(e, "slot", "forget", "team.members")
+        mem = res["memory"]
+        check("slot forget takes everything about the slot — bindings, names, preference — and only that slot",
+              rc == 0 and res["changed"] and not [b for b in mem["bindings"] if b["slot"] == "team.members"] and "team.members" not in mem["prefer"]
+              and len(mem["bindings"]) == 1 and len(mem["aliases"]) == 1 and mem["prefer"] == {"org.structure": "mine"}
+              and last_journal(e)["action"] == "forget" and last_journal(e)["slot"] == "team.members"
+              and len(read(e.store, ".state", "journal.jsonl").splitlines()) == n_journal + 1, (rc, out[-300:], res))
+        rc, out, res = run_ok(e, "slot", "forget", "team.members")
+        check("…a slot the memory knows nothing of: exit 0, changed false, no snapshot", rc == 0 and res["changed"] is False
+              and res["snapshot"] is None and len(read(e.store, ".state", "journal.jsonl").splitlines()) == n_journal + 1, (rc, res))
+        rc, out, res = run_ok(e, "undo")
+        check("undo of a forget brings back what it took", rc == 0 and any(b["slot"] == "team.members" for b in slots_memory(e)["bindings"]), (rc, out[-300:]))
+
+        # a direct edit waiting is imported first, as in every writing command
+        e.edit(e.ctx, "- **Jira Project Key:** PROJ", "- **Jira Project Key:** PROJ2")
+        rc, out, res = run_ok(e, "slot", "prefer", "product.okrs", "all")
+        check("slot imports the edits waiting first, like every writing command", rc == 0 and "PROJ2" in e.record("product.zorg-app"), (rc, out[-300:]))
+        cache = os.path.join(e.home, ".grow-pm", ".ctx-summary.json")
+        if os.path.exists(cache):
+            os.remove(cache)
+        run_ok(e, "slot", "prefer", "product.okrs", "mine")
+        check("…and, as a writing command that exited 0, saves the digest's summary", os.path.isfile(cache))
+        rc, out, res = run_ok(e, "slot", "prefer", "product.okrs", "all", "--store", e.store)
+        check("…--store is for read commands only", rc == 3 and "--store is for read commands only" in out, (rc, out[-300:]))
+
+        # an unreadable memory stops every slot command, and is left as it is
+        for text, label in (("{ not json", "not JSON"), ('{"schema": "context-slots-memory/9"}', "another schema"),
+                            ('{"schema": "context-slots-memory/1", "prefer": []}', "the wrong shape")):
+            open(mem_path, "w", encoding="utf-8", newline="").write(text)
+            n_journal = len(read(e.store, ".state", "journal.jsonl").splitlines())
+            rcs = [run_ok(e, "slot", *args) for args in (("bind", "zorg-core", "team#Members", "team.members"),
+                                                         ("map", "product.zorg-app", "Key Metrics (focus)", "product.key_metrics"),
+                                                         ("prefer", "team.members", "all"), ("forget", "team.members"))]
+            check("an unreadable memory (%s) stops every slot command: exit 3, the file named, nothing written" % label,
+                  all(r[0] == 3 and "slots memory" in r[1] and ".state/slots.json" in r[1] for r in rcs) and read(mem_path) == text
+                  and len(read(e.store, ".state", "journal.jsonl").splitlines()) == n_journal, [(r[0], r[1][-200:]) for r in rcs])
+        os.remove(mem_path)
+        os.mkdir(mem_path)
+        rc, out, res = run_ok(e, "slot", "prefer", "team.members", "all")
+        check("…a memory that is not a file cannot be read: exit 3", rc == 3 and "slots memory not readable" in out, (rc, out[-300:]))
+
 # the documents say what the code does now
 pp_fr, cp_fr, lcp_fr = doc("references", "context-provider-protocol.md"), doc("references", "context-protocol.md"), \
     doc("references", "local-context-protocol.md")

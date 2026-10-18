@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""TC-ctx-3150-slots — scripts/ctx_slots.py: the catalogue of slots (since v3.15.0).
+"""TC-ctx-3150-slots — scripts/ctx_slots.py: the catalogue of slots and the memory of what you decided (since v3.15.0).
 
 references/context-slots.yaml names the places in a record where an answer to a question lives; this checks
 the catalogue loads, is clean, finds a slot by the name a manifest or a person uses, and says what is wrong
-with a bad one. Fictional names only ("Zorg"). Stdlib only; run from the repo root.
+with a bad one. The memory (`.state/slots.json` of the store: your bindings, your names, your preference, your
+answers) is read and written here: an absent file is an empty memory, an unreadable or foreign one is a StoreError,
+a repeated bind or map adds nothing. Fictional names only ("Zorg"). Stdlib only; run from the repo root.
 """
-import os, sys, tempfile
+import json, os, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import ctx_slots as sl  # noqa: E402
+import ctx_store as cs  # noqa: E402
 
 fails = 0
 
@@ -109,6 +112,121 @@ with tempfile.TemporaryDirectory() as d:
     except ValueError as e:
         gone = str(e)
     check("a file that cannot be read is a ValueError too", gone is not None and "nope.yaml" in gone, gone)
+
+# --- the memory: .state/slots.json of the store
+EMPTY = {"schema": "context-slots-memory/1", "bindings": [], "aliases": [], "prefer": {}, "decisions": {}}
+check("the memory states its schema", sl.MEMORY_SCHEMA == "context-slots-memory/1", sl.MEMORY_SCHEMA)
+
+
+def bad_memory(d, text):
+    """What load_memory says about a slots.json holding `text` (None: it loaded)."""
+    store = cs.Store(os.path.join(d, "context"))
+    os.makedirs(store.state_dir, exist_ok=True)
+    open(os.path.join(store.state_dir, "slots.json"), "w", encoding="utf-8").write(text)
+    try:
+        sl.load_memory(store)
+        return None
+    except cs.StoreError as e:
+        return str(e)
+
+
+with tempfile.TemporaryDirectory() as d:
+    store = cs.Store(os.path.join(d, "context"))
+    os.makedirs(store.state_dir)
+    path = os.path.join(store.state_dir, "slots.json")
+    check("no file is an empty memory", sl.load_memory(store) == EMPTY and not os.path.exists(path), sl.load_memory(store))
+    mem = sl.load_memory(store)
+    check("a bind adds a binding, and says so", sl.add_binding(mem, "zorg-core", "team", "Members", "team.members", None) is True
+          and mem["bindings"] == [{"repo": "zorg-core", "block": "team", "sub": "Members", "slot": "team.members", "team": None}], mem)
+    check("…the same bind again adds nothing", sl.add_binding(mem, "zorg-core", "team", "Members", "team.members", None) is False
+          and len(mem["bindings"]) == 1, mem)
+    check("…another subsection, another slot, or the whole block is another binding",
+          sl.add_binding(mem, "zorg-core", "team", None, "team.members", None) and sl.add_binding(mem, "zorg-core", "team", "Members", "org.structure", None)
+          and sl.add_binding(mem, "zorg-growth", "team", "Members", "team.members", None) and len(mem["bindings"]) == 4, mem)
+    check("a repeat that names the team sets the team of that binding, not a second binding",
+          sl.add_binding(mem, "zorg-core", "team", "Members", "team.members", "team.alpha") is True
+          and sl.add_binding(mem, "zorg-core", "team", "Members", "team.members", "team.alpha") is False
+          and [b["team"] for b in mem["bindings"] if b["repo"] == "zorg-core" and b["sub"] == "Members" and b["slot"] == "team.members"] == ["team.alpha"]
+          and len(mem["bindings"]) == 4, mem)
+    check("a map adds a name once, whatever its case or spacing",
+          sl.add_alias(mem, "product.zorg-app", "Key Metrics (focus)", "product.key_metrics") is True
+          and sl.add_alias(mem, "product.zorg-app", "key  metrics (FOCUS)", "product.key_metrics") is False
+          and sl.add_alias(mem, "product.zorg-app", "Key Metrics (focus)", "product.okrs") is True
+          and sl.add_alias(mem, "product.other", "Key Metrics (focus)", "product.key_metrics") is True and len(mem["aliases"]) == 3, mem)
+    check("a preference is set once; a different one replaces it",
+          sl.set_prefer(mem, "team.members", "all") is True and sl.set_prefer(mem, "team.members", "all") is False
+          and sl.set_prefer(mem, "team.members", "repo:zorg-core") is True and mem["prefer"] == {"team.members": "repo:zorg-core"}, mem)
+    mem["decisions"]["team.members"] = {"winner": "zorg-core", "hashes": {"zorg-core": "a" * 64, "zorg-growth": "b" * 64}}
+    sl.save_memory(store, mem)
+    text = open(path, encoding="utf-8").read()
+    check("save_memory writes JSON with an indent, sorted, ending in a newline, and leaves no temp file",
+          text.endswith("}\n") and "\n " in text and json.loads(text)["schema"] == sl.MEMORY_SCHEMA
+          and not [n for n in os.listdir(store.state_dir) if n.endswith(".tmp")], text[:300])
+    again = sl.load_memory(store)
+    check("the memory reads back as it was saved", again["prefer"] == mem["prefer"] and again["decisions"] == mem["decisions"]
+          and len(again["bindings"]) == 4 and len(again["aliases"]) == 3, again)
+    check("…bindings and names come back in a fixed order, whatever order they were added in",
+          [(b["repo"], b["block"], b["sub"] or "", b["slot"]) for b in again["bindings"]] == sorted(
+              (b["repo"], b["block"], b["sub"] or "", b["slot"]) for b in again["bindings"])
+          and [(a["record"], a["slot"]) for a in again["aliases"]] == sorted((a["record"], a["slot"]) for a in again["aliases"]), again)
+    sl.save_memory(store, again)
+    check("saving what was read changes nothing", open(path, encoding="utf-8").read() == text)
+    dup = json.loads(text)
+    dup["bindings"] = dup["bindings"] + dup["bindings"]
+    dup["aliases"] = dup["aliases"] + dup["aliases"]
+    open(path, "w", encoding="utf-8").write(json.dumps(dup))
+    sl.save_memory(store, sl.load_memory(store))
+    check("a file with a record twice is saved with it once", open(path, encoding="utf-8").read() == text)
+    check("forget takes everything about a slot, and nothing about another",
+          sl.drop_slot(mem, "team.members") is True and not [b for b in mem["bindings"] if b["slot"] == "team.members"]
+          and "team.members" not in mem["prefer"] and "team.members" not in mem["decisions"]
+          and [b["slot"] for b in mem["bindings"]] == ["org.structure"] and len(mem["aliases"]) == 3, mem)
+    check("…a slot the memory knows nothing of is nothing to forget", sl.drop_slot(mem, "team.members") is False
+          and sl.drop_slot(mem, "product.okrs") is True and [a["slot"] for a in mem["aliases"]].count("product.okrs") == 0, mem)
+    check("in_memory says whether a slot is anywhere in the memory", sl.in_memory(mem, "org.structure") is True
+          and sl.in_memory(mem, "team.members") is False and sl.in_memory(again, "team.members") is True, mem)
+
+with tempfile.TemporaryDirectory() as d:
+    why = bad_memory(d, "{ not json")
+    check("a file that is not JSON is a StoreError that names the file", why is not None
+          and why.startswith("slots memory not valid: .state/slots.json ("), why)
+with tempfile.TemporaryDirectory() as d:
+    store = cs.Store(os.path.join(d, "context"))
+    os.makedirs(os.path.join(store.state_dir, "slots.json"))
+    try:
+        sl.load_memory(store); why = None
+    except cs.StoreError as e:
+        why = str(e)
+    check("a file that cannot be read is a StoreError that names the file", why is not None
+          and why.startswith("slots memory not readable: .state/slots.json ("), why)
+for label, doc in (("another schema", {"schema": "context-slots-memory/9"}), ("no schema", {"bindings": []}),
+                   ("not an object", ["schema"]), ("bindings that are no list", {"schema": sl.MEMORY_SCHEMA, "bindings": {}}),
+                   ("a binding with no repo", {"schema": sl.MEMORY_SCHEMA, "bindings": [{"block": "team", "slot": "team.members"}]}),
+                   ("a binding that is no object", {"schema": sl.MEMORY_SCHEMA, "bindings": ["team"]}),
+                   ("a binding whose sub is a number", {"schema": sl.MEMORY_SCHEMA, "bindings": [{"repo": "r", "block": "b", "slot": "s", "sub": 3}]}),
+                   ("a name with no heading", {"schema": sl.MEMORY_SCHEMA, "aliases": [{"record": "product.x", "slot": "product.okrs"}]}),
+                   ("a preference that is none of the three", {"schema": sl.MEMORY_SCHEMA, "prefer": {"team.members": "theirs"}}),
+                   ("a preference for a repository with no id", {"schema": sl.MEMORY_SCHEMA, "prefer": {"team.members": "repo:"}}),
+                   ("prefer that is no object", {"schema": sl.MEMORY_SCHEMA, "prefer": []}),
+                   ("a decision with no winner", {"schema": sl.MEMORY_SCHEMA, "decisions": {"team.members": {"hashes": {}}}}),
+                   ("a decision whose hashes are no object", {"schema": sl.MEMORY_SCHEMA, "decisions": {"team.members": {"winner": "r", "hashes": []}}}),
+                   ("a key nobody knows", {"schema": sl.MEMORY_SCHEMA, "extra": 1})):
+    with tempfile.TemporaryDirectory() as d:
+        why = bad_memory(d, json.dumps(doc))
+        check("%s is a StoreError that names the file" % label, why is not None and why.startswith("slots memory not valid: .state/slots.json ("), why)
+with tempfile.TemporaryDirectory() as d:
+    why = bad_memory(d, json.dumps({"schema": sl.MEMORY_SCHEMA}))
+    store = cs.Store(os.path.join(d, "context"))
+    check("a file that holds only its schema is an empty memory", why is None and sl.load_memory(store) == EMPTY, why)
+    path = os.path.join(store.state_dir, "slots.json")
+    before = open(path, encoding="utf-8").read()
+    bad = dict(EMPTY, prefer={"team.members": "theirs"})
+    try:
+        sl.save_memory(store, bad); why = None
+    except cs.StoreError as e:
+        why = str(e)
+    check("a memory of the wrong form is not saved, and the file stays", why is not None and "slots memory" in why
+          and open(path, encoding="utf-8").read() == before, why)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
