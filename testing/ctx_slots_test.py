@@ -177,6 +177,15 @@ with tempfile.TemporaryDirectory() as d:
     open(path, "w", encoding="utf-8").write(json.dumps(dup))
     sl.save_memory(store, sl.load_memory(store))
     check("a file with a record twice is saved with it once", open(path, encoding="utf-8").read() == text)
+    two = {"schema": sl.MEMORY_SCHEMA, "bindings": [
+        {"repo": "zorg-core", "block": "team", "sub": "Members", "slot": "team.members", "team": "team.alpha"},
+        {"repo": "zorg-core", "block": "team", "sub": "Members", "slot": "team.members", "team": "team.beta"},
+        {"repo": "zorg-core", "block": "team", "sub": "Members", "slot": "team.members", "team": None}]}
+    open(path, "w", encoding="utf-8").write(json.dumps(two))
+    check("a binding is one per (repo, block, sub, slot): the first team is kept, the others dropped",
+          sl.load_memory(store)["bindings"] == [{"repo": "zorg-core", "block": "team", "sub": "Members", "slot": "team.members",
+                                                 "team": "team.alpha"}], sl.load_memory(store)["bindings"])
+    sl.save_memory(store, again)
     check("forget takes everything about a slot, and nothing about another",
           sl.drop_slot(mem, "team.members") is True and not [b for b in mem["bindings"] if b["slot"] == "team.members"]
           and "team.members" not in mem["prefer"] and "team.members" not in mem["decisions"]

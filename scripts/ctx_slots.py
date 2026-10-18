@@ -29,6 +29,13 @@ line; `ctx undo` puts it back), the resolver reads it. Its shape:
   set_prefer, drop_slot             said so (a repeated bind or map adds nothing)
 - in_memory                         is the slot anywhere in the memory
 
+Which block answers which slot (spec §4.2) — read only, for the resolver (scripts/ctx_resolve.py):
+
+- bindings_of                       {(namespace, block): [{slot, sub, team, how}]} from your memory, the `slot=` attribute
+                                    of each block's base and the plugin's own binding of the `team` block — the first
+                                    found per block — and the lines on block states that could not be read
+- marker_slots                      the slots a begin marker names in `slot=a,b` (a whole word, as `policy=rule`)
+
 Stdlib only.
 """
 import json
@@ -157,8 +164,9 @@ def valid_preference(who):
 
 def _clean_memory(data):
     """`data` as the canonical memory: every part there (a part the file lacks is empty), bindings and names in a fixed
-    order with none twice. Anything else — a schema that is not MEMORY_SCHEMA, a part of the wrong shape, a key nobody
-    knows — is a ValueError that says which."""
+    order with none twice. A binding is one per (repo, block, sub, slot) — one team per binding, as `add_binding` keeps
+    it: of two with the same four, the first is kept and the later dropped, whatever team it names. Anything else — a
+    schema that is not MEMORY_SCHEMA, a part of the wrong shape, a key nobody knows — is a ValueError that says which."""
     if not isinstance(data, dict):
         raise ValueError("not an object")
     if data.get("schema") != MEMORY_SCHEMA:
@@ -181,7 +189,7 @@ def _clean_memory(data):
             if b.get(key) is not None and not _text(b.get(key)):
                 raise ValueError("binding %d: %s is neither text nor null" % (i + 1, key))
         one = {"repo": b["repo"], "block": b["block"], "sub": b.get("sub"), "slot": b["slot"], "team": b.get("team")}
-        key = (one["repo"], one["block"], one["sub"], one["slot"], one["team"])
+        key = (one["repo"], one["block"], one["sub"], one["slot"])          # the binding's identity: no team in it
         if key not in seen:
             seen.add(key)
             out["bindings"].append(one)
@@ -261,7 +269,8 @@ def save_memory(store, mem):
 
 
 def add_binding(mem, repo, block, sub, slot, team):
-    """Bind the block (or its subsection `sub`) of a repository to `slot`, in `mem`, in place. The same bind again changes
+    """Bind the block (or its subsection `sub`) of a repository to `slot`, in `mem`, in place. A binding is one per
+    (repo, block, sub, slot) — one team per binding (`_clean_memory` keeps the same identity). The same bind again changes
     nothing; so does one without a team when the binding has one. A bind that names another team sets the team of the
     binding it repeats. True when `mem` changed."""
     for b in mem["bindings"]:
@@ -306,3 +315,73 @@ def drop_slot(mem, slot):
     mem["prefer"].pop(slot, None)
     mem["decisions"].pop(slot, None)
     return found
+
+
+# ------------------------------------------------------------------ bindings: which block answers which slot
+PLUGIN_BINDINGS = (("team.members", "Members"), ("product.jira_key", None))   # the plugin builds the `team` block (provider_templates/team-block.md)
+PLUGIN_BLOCK = "team"
+STATE_UNREAD = "стан блоків %s не прочитано — атрибути slot= і policy=rule його блоків невідомі"
+SLOT_WORD = re.compile(r"(?:^|\s)slot=(\S+)(?=\s|$)")
+
+
+def marker_slots(region_text):
+    """The slot ids the begin marker a region text starts with names in a whole-word attribute `slot=a,b` (after its id,
+    before or after `v=`) — the same reading as `policy=rule` (ctx_blocks.is_rule): `xslot=` is no attribute, text inside
+    the region never counts, an item that is not `<record>.<name>` is left out, each slot once in the order given. None,
+    "" and a text that does not start with a well-formed begin marker name no slot."""
+    import ctx_blocks as cb                     # here: ctx_blocks imports ctx_read, which imports this module
+    found = cb.LEADING_BEGIN.match(region_text or "")
+    attrs = cb.BEGIN_ATTRS.match(found.group(1)) if found else None
+    out = []
+    for value in SLOT_WORD.findall(attrs.group(2)) if attrs else ():
+        for item in value.split(","):
+            item = item.strip()
+            if _SLOT_ID.match(item) and item not in out:
+                out.append(item)
+    return out
+
+
+def bindings_of(store, repos, mem):
+    """(bindings, problems): which block of which repository answers which slot, and what could not be read.
+
+    `bindings` is {(namespace, block id): [{"slot", "sub", "team", "how"}]}. Per block the first source found binds it,
+    and the others do not apply to it (spec §4.2):
+      "memory"  your bindings in `mem` (load_memory); a binding names the repository, and the block is keyed by that
+                registration's namespace (else by the repository id itself, as an unregistered namespace is named)
+      "marker"  the `slot=` attribute (marker_slots) of the block's base — the repository's text the store keeps
+                (`.state/blocks/<repo>/<sha>.md`), never your region; one binding per slot, with no sub and no team
+      "plugin"  the `team` block of every registered repository: `Members` → team.members, the `jira_project_key` line
+                → product.jira_key (there is no slot for `jira_team_field`: it is a team's name, not an id)
+    A plugin binding is listed for every registration, whether or not its team block is in the records; a binding to a
+    block the records lack simply has no candidate. `problems` holds one line per repository whose block state (or a
+    base of it) cannot be read — STATE_UNREAD, its `slot=` attributes are then unknown and the rest still binds. Reads
+    only: no lock, no network, nothing written."""
+    import ctx_blocks as cb                     # here: ctx_blocks imports ctx_read, which imports this module
+    ns_of = {}
+    for r in repos or ():
+        ns_of.setdefault(r["id"], r.get("namespace") or r["id"])
+    out, problems = {}, []
+    for b in (mem or {}).get("bindings") or ():
+        out.setdefault((ns_of.get(b["repo"], b["repo"]), b["block"]), []).append(
+            {"slot": b["slot"], "sub": b.get("sub"), "team": b.get("team"), "how": "memory"})
+    for r in repos or ():
+        ns, marked = ns_of[r["id"]], {}
+        try:
+            state = cb.load_state(store, r["id"])
+            for bid in sorted(state["blocks"]):
+                if (ns, bid) in out:
+                    continue
+                slots = marker_slots(cb.get_base(store, r["id"], state["blocks"][bid].get("base_sha")))
+                if slots:
+                    marked[(ns, bid)] = [{"slot": s, "sub": None, "team": None, "how": "marker"} for s in slots]
+        except (cs.StoreError, OSError):
+            line = STATE_UNREAD % r["id"]
+            if line not in problems:
+                problems.append(line)
+            marked = {}
+        for key, found in marked.items():
+            out.setdefault(key, found)
+        key = (ns, PLUGIN_BLOCK)
+        if key not in out:
+            out[key] = [{"slot": s, "sub": sub, "team": None, "how": "plugin"} for s, sub in PLUGIN_BINDINGS]
+    return out, problems

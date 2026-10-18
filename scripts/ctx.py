@@ -949,8 +949,7 @@ def _product_repos(c, repos, wanted):
     if prod is None:
         raise Usage("no single product matches %r — products: %s" % (
             wanted, ", ".join(p["title"].split(":", 1)[-1].strip() for p in products) or "none"))
-    names = {prod["id"].lower(), prod["title"].strip().lower(), prod["title"].split(":", 1)[-1].strip().lower()}
-    return [r for r in repos if not r["products"] or names & {x.lower() for x in r["products"]}]
+    return [r for r in repos if crp.serves_product(r, prod)]
 
 
 def _in_scope(c, a, skipped, registered=None):
