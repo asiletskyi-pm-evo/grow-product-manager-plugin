@@ -1,0 +1,169 @@
+# The slots of the context store (since v3.15.0) — the places in a record where an answer to a question lives.
+# A slot is a question's answer, not a heading: `team.members` is "who is on the team" whether the record says
+# `#### Members`, `#### Team Members` or `#### Склад команди`, and whether it sits in your own text or in a block a
+# repository put there. scripts/ctx_slots.py reads this file; scripts/ctx_read.py (validator check 16) keeps it in
+# step with references/context-manifest.yaml: every field or subsection the manifest names has a slot here.
+#
+#   <id>      `<record>.<name>`: the record kind, a dot, a short name. The id never changes once shipped.
+#   kind      value — one line, one answer (a key, an address, an e-mail)
+#             text  — prose or a table, read whole
+#             list  — items, one per bullet or row
+#   record    product | team | profile | org — the kind of record the slot is looked for in
+#   names     headings and field names the slot answers to, English and Ukrainian, matched without regard to case;
+#             the first is the name the manifest uses
+#   about     one line, in Ukrainian, on what the slot holds — it is shown beside the text when the slot is explained
+schema: context-slots/1
+slots:
+  product.description:
+    kind: value
+    record: product
+    names:
+      - Description
+      - Опис
+    about: "опис продукту: що він робить і для кого"
+  product.url:
+    kind: value
+    record: product
+    names:
+      - URL
+    about: "адреса продукту: сайт або застосунок"
+  product.jira_key:
+    kind: value
+    record: product
+    names:
+      - Jira Project Key
+      - jira_project_key
+    about: "ключ проєкту в Jira"
+  product.confluence_space:
+    kind: value
+    record: product
+    names:
+      - Confluence Space
+    about: "простір Confluence, де живуть документи продукту"
+  product.confluence_template_name:
+    kind: value
+    record: product
+    names:
+      - Confluence Template Name
+    about: "назва сторінки-шаблону в Confluence"
+  product.confluence_template_url:
+    kind: value
+    record: product
+    names:
+      - Confluence Template URL
+    about: "посилання на сторінку-шаблон у Confluence"
+  product.platforms:
+    kind: list
+    record: product
+    names:
+      - Platforms
+      - Платформи
+    about: "платформи продукту: web, iOS, Android"
+  product.locales:
+    kind: list
+    record: product
+    names:
+      - Locales
+    about: "мови й локалі продукту"
+  product.key_metrics:
+    kind: text
+    record: product
+    names:
+      - Key Metrics
+      - Ключові метрики
+    about: "ключові метрики продукту: що міряємо і яка ціль"
+  product.okrs:
+    kind: text
+    record: product
+    names:
+      - Current OKRs
+      - OKRs
+      - Цілі
+    about: "поточні цілі продукту: OKR і ключові результати"
+  product.competitors:
+    kind: list
+    record: product
+    names:
+      - Competitors
+      - Конкуренти
+    about: "конкуренти продукту"
+  product.analytics_dashboards:
+    kind: text
+    record: product
+    names:
+      - Analytics Dashboards
+      - Dashboards
+      - Дашборди
+    about: "дашборди продукту: де дивитись цифри"
+  product.design_system:
+    kind: text
+    record: product
+    names:
+      - Design System
+      - Дизайн-система
+    about: "дизайн-система продукту: де вона і як нею користуватись"
+  product.test_accounts:
+    kind: text
+    record: product
+    names:
+      - Test Accounts
+      - Тестові акаунти
+    about: "тестові акаунти продукту за ролями"
+  product.scope:
+    kind: text
+    record: product
+    names:
+      - Scope of work
+      - Межі роботи
+    about: "межі роботи над продуктом: що входить і що ні"
+  team.jira_team_id:
+    kind: value
+    record: team
+    names:
+      - Jira Team ID
+    about: "ідентифікатор команди в Jira"
+  team.members:
+    kind: list
+    record: team
+    names:
+      - Members
+      - Team Members
+      - Склад команди
+      - Учасники
+    about: "склад команди: люди, ролі, контакти"
+  profile.email:
+    kind: value
+    record: profile
+    names:
+      - Email
+    about: "пошта користувача"
+  org.key_metrics:
+    kind: text
+    record: org
+    names:
+      - Company Metrics
+      - Метрики компанії
+    about: "метрики компанії: виручка, обсяги, бізнес-план"
+  org.data_sources:
+    kind: text
+    record: org
+    names:
+      - Analytics & Data Sources
+      - Data Sources
+      - Джерела даних
+    about: "аналітика компанії: де лежать дані й хто ними володіє"
+  org.structure:
+    kind: text
+    record: org
+    names:
+      - Group Structure
+      - Team / Product Departments
+      - Структура
+    about: "структура групи: департаменти, команди, продукти"
+  org.people_rules:
+    kind: text
+    record: org
+    names:
+      - People and external contacts
+      - Люди і контакти
+    about: "люди й зовнішні контакти: з ким і як спілкуватись"

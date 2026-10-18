@@ -372,5 +372,46 @@ with tempfile.TemporaryDirectory() as d:
     errs = cr.check_manifest(ROOT, manifest_path=path)
     check("check_manifest flags a skill without an entry", any("decision-log" in x for x in errs), errs)
 
+# --- v3.15.0: every name the manifest reads has a slot in references/context-slots.yaml
+def without_slot(src, slot_id):
+    """The catalogue text with the slot `slot_id` cut out (a slot runs to the next two-space-indented key)."""
+    lines, out, skip = src.split("\n"), [], False
+    for line in lines:
+        if line.startswith("  ") and not line.startswith("   "):
+            skip = line.strip() == slot_id + ":"
+        elif not line.startswith(" "):
+            skip = False
+        if not skip:
+            out.append(line)
+    return "\n".join(out)
+
+
+with tempfile.TemporaryDirectory() as d:
+    src = read(os.path.join(ROOT, "references", "context-slots.yaml"))
+    path = os.path.join(d, "context-slots.yaml")
+    open(path, "w", encoding="utf-8").write(without_slot(src, "team.members"))
+    errs = cr.check_manifest(ROOT, catalogue_path=path)
+    check("check_manifest flags a manifest name with no slot", any("Members" in x and "team" in x and "no slot" in x for x in errs), errs)
+    check("…once per skill that reads it, naming the skill and the record", "hiring-designer: team name 'Members' has no slot in context-slots.yaml" in errs
+          and "task-creator: team name 'Members' has no slot in context-slots.yaml" in errs, errs)
+    check("…and nothing else is flagged", errs and all("'Members'" in x for x in errs), errs)
+    for slot_id, name, skill in (("product.jira_key", "Jira Project Key", "product-reporter"),      # required
+                                 ("product.description", "Description", "decision-log"),            # a field
+                                 ("product.key_metrics", "Key Metrics", "write-concept"),           # a section
+                                 ("profile.email", "Email", "context-connect"),                     # the profile
+                                 ("team.jira_team_id", "Jira Team ID", "task-creator")):            # a team field
+        open(path, "w", encoding="utf-8").write(without_slot(src, slot_id))
+        errs = cr.check_manifest(ROOT, catalogue_path=path)
+        check("check_manifest flags %s as having no slot" % name, any(x.startswith(skill + ":") and repr(name) in x and "no slot" in x for x in errs), errs)
+    open(path, "w", encoding="utf-8").write(src.replace("kind: list", "kind: blob", 1))
+    errs = cr.check_manifest(ROOT, catalogue_path=path)
+    check("check_manifest carries the errors check_catalogue finds", any("kind" in x and "context-slots.yaml" in x for x in errs), errs)
+    open(path, "w", encoding="utf-8").write("slots: [not, a, block]\n")
+    errs = cr.check_manifest(ROOT, catalogue_path=path)
+    check("check_manifest says the catalogue cannot be read", len(errs) == 1 and errs[0].startswith("context-slots.yaml:"), errs)
+    errs = cr.check_manifest(ROOT, catalogue_path=os.path.join(d, "gone.yaml"))
+    check("…and when it is missing", len(errs) == 1 and errs[0].startswith("context-slots.yaml:"), errs)
+check("check_manifest reads the repo catalogue by default", cr.check_manifest(ROOT) == cr.check_manifest(ROOT, catalogue_path=os.path.join(ROOT, "references", "context-slots.yaml")), "")
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

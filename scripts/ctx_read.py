@@ -11,7 +11,7 @@ references/context-protocol.md.
 
 - load_manifest / manifest_for    the manifest
 - read_view                       the text of `ctx read --skill <name>` and its result
-- check_manifest                  validator check 16: the manifest against the skills and the schema
+- check_manifest                  validator check 16: the manifest against the skills, the schema and the slot catalogue
 
 Stdlib only.
 """
@@ -26,6 +26,7 @@ import ctx_common as cc  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_schema as sc  # noqa: E402
 import ctx_ops as co  # noqa: E402
+import ctx_slots as sl  # noqa: E402
 
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST_PATH = os.path.join(PLUGIN_ROOT, "references", "context-manifest.yaml")
@@ -387,9 +388,28 @@ def _table_rows(root):
     return rows
 
 
-def check_manifest(root, manifest_path=None):
+def _manifest_names(man):
+    """[(skill, record, name)] — each name the manifest reads from a product, a team or the profile (`required`,
+    `fields`, `sections`), once per skill, in the order the manifest gives them. `every_skill` is named as such."""
+    out, seen = [], set()
+    entries = [("every_skill", man.get("every_skill"))] + list((man.get("skills") or {}).items())
+    for skill, entry in entries:
+        for record in ("product", "team", "profile"):
+            want = entry.get(record) if isinstance(entry, dict) else None
+            for key in ("required", "fields", "sections") if isinstance(want, dict) else ():
+                names = want.get(key)
+                for name in names if isinstance(names, list) else ():
+                    if (skill, record, name) not in seen:
+                        seen.add((skill, record, name))
+                        out.append((skill, record, name))
+    return out
+
+
+def check_manifest(root, manifest_path=None, catalogue_path=None):
     """Errors: a skill without an entry or an entry without a skill, a setting name no setting title starts
-    with, a required field of "Which Skills Read What" the manifest does not carry."""
+    with, a required field of "Which Skills Read What" the manifest does not carry; the slot catalogue
+    (references/context-slots.yaml, `catalogue_path`) that cannot be read or has an error of its own, and a name of
+    a product, a team or the profile that the manifest reads and the catalogue gives no slot (since v3.15.0)."""
     errs = []
     try:
         man = load_manifest(manifest_path or os.path.join(root, "references", "context-manifest.yaml"))
@@ -424,4 +444,11 @@ def check_manifest(root, manifest_path=None):
                 ok = field in ((e.get(where) or {}).get("required") or []) or e.get("full")
             if not ok:
                 errs.append("%s: required %s is not under %s in context-manifest.yaml" % (skill, tok, where))
+    try:
+        cat = sl.load_catalogue(catalogue_path or os.path.join(root, "references", "context-slots.yaml"))
+    except ValueError as e:
+        return errs + ["context-slots.yaml: %s" % e]
+    errs += ["context-slots.yaml: %s" % e for e in sl.check_catalogue(cat)]
+    errs += ["%s: %s name %r has no slot in context-slots.yaml" % (skill, record, name)
+             for skill, record, name in _manifest_names(man) if sl.slot_for(cat, record, name) is None]
     return errs
