@@ -12,6 +12,26 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.14.1 (2026-10-18)
+
+**A skill sees the subsections it lacks; `Team Members` answers `Members`.** Found on a real store, read only, while the v3.15 resolver was being designed: task-creator asks for a team's `Members` subsection, the user's own heading was `Team Members`, and `ctx read` matches a heading by its start — so the skill got neither the members nor their Jira account ids, and said nothing, because a missing subsection never reached the `Відсутнє` line (only a missing field did).
+
+PATCH: a reading fix; no new command, no skill changed.
+
+### Fixed
+
+- **`ctx read` lists the subsections it did not find.** A subsection the manifest names and nobody has goes to the closing `Відсутнє: …` line, never as obligatory, and to `missing` in `CTX_RESULT`. When a skill reads several teams, what one of them lacks is named with it — `Members (Team: Beta)` — so the line never seems to contradict a team that has it.
+- **`Team Members` answers `Members`.** A subsection is also found under the other headings the engine knows for it (`ctx_store.SECTION_ALIASES`; one today). Your own text is still read before any repository block, under either heading; a block's `Members` is read as before when you have neither.
+- **The card counts a team's members under either heading** — it showed `—` for a team whose table sat under `Team Members`.
+- Tests: `ctx_read_test.py` 48, `ctx_store_test.py` 72 checks — each new check failed before its code.
+
+### Backwards compatibility
+
+- `ctx read` output and `missing` gain entries for subsections nobody has; with several teams a team field or subsection that one team lacks is now named with the team (`Jira Team ID (Team: Beta)`) instead of the bare name. Nothing is removed.
+- No skill renamed, no description changed: routing is as in v3.14.0.
+
+---
+
 ## v3.14.0 (2026-10-16)
 
 **The core reaches your context by itself, once a day.** Until now a change in a team's or an organisation's core reached `local-context.md` only when someone ran «онови мій пакет з ядра». Now a repository can be synced daily: the first skill of the day runs `ctx provider sync --if-due` at step 0c, and the sync decides every block by the cascade agreed in phase 3 — yours wins unless the core marks the block as a rule — writes through the same snapshot-and-journal path as `provider apply`, and explains every decision in a report. It is opt-in per repository (D6: the write boundary is asked once).
