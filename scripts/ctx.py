@@ -25,10 +25,34 @@
                                 rejected {repo: [blocks]}, rejected_failed {repo: why} (a state that could not take
                                 it: the undo stands, and says the sync may apply the text again)
   read --skill S [--product P]  the card plus what the skill's manifest entry names (reads only)
+  explain [SLOT …] [--skill S] [--product P] [--json]
+                                where each slot came from and why it won (since v3.15.0; reads only — no lock, no network,
+                                nothing written). Per slot a header (slot · kind · record) and a line for each candidate —
+                                ✔ shown (yours, or a block with its repository, version and day of the last check), ✗ lost
+                                (with the reason), ⚠ divergence between repositories (with `ctx slot decide`), · a block that
+                                cannot be given to one team (with `ctx slot bind … --team`) — then `чому:`; a slot nobody
+                                answers says what it looked for and prints `ctx slot map`; what you decided about the slot
+                                is shown with `ctx slot forget`. SLOTs: only those; --skill S: the slots S asks, in the
+                                manifest's order and lookup mode; neither: every slot with a candidate, then the blocks no
+                                slot takes (a region of a registered repository with no binding) and the blocks of
+                                `skip_blocks`. With several products and none named the slots of a product and of a team are
+                                held back (needs_product). An unknown slot or skill is exit 3. CTX_RESULT: slots [{slot,
+                                kind, about, record, title, winner, candidates [{source, record, block, sub, version, checked,
+                                edited, rule, how, rank, outcome won|lost|shown|diverges|unplaced, reason, command}], why,
+                                prefer, looked_in {names, records}, commands, decision, memory, notes}], unmapped_blocks,
+                                skipped_blocks, needs_product, products, warnings
   invalidate ID --reason R      mark a record no longer current (it stays, with a status region)
   archive ID [--reason R]       move a record to the archive; restore ID brings it (or a trashed one) back
   verify [ID ...] [--stale]     mark records verified today
-  validate                      records, ids, parents, card size, edits waiting
+  validate                      records, ids, parents, card size, edits waiting; since v3.15.0 also slots (reads only): a slots
+                                memory that cannot be read is an error (exit 3); warnings name each binding that does nothing
+                                (`slot binding: <repo> <block>[#<sub>] → <slot> — <why>`: a slot the catalogue lacks, a
+                                repository nobody registered, a block gone from the records, a block that gives its slot no
+                                text, a team slot's block that cannot be given to one team), each divergence between repositories
+                                (`slot <slot> diverges between <a>, <b> — ctx slot decide <slot> <repo>`) and each binding worth
+                                making (`proposal: ctx slot bind <repo> <block>[#<sub>] <slot>`: an unbound block of a registered
+                                repository whose heading answers a slot's names; never the plugin's `team` block). CTX_RESULT
+                                adds slot_proposals [{repo, block, sub, slot}]
   card                          regenerate INDEX.md only
   repo list [--json]            the repositories (provider registrations) a product draws context blocks
                                 from: kind, products, rank, access and, from the block state, how many blocks you
@@ -96,11 +120,37 @@
                                 (лишено твоє)». Exit 0 whatever happened (3: bad usage). CTX_RESULT: synced (ids),
                                 results [{repo, at, outcome, updated, added, removed, kept_yours, took_rule, awaiting, held,
                                 held_behind, rejected, reason, report, snapshot}] — the same as the block state's sync_result
+  slot bind REPO BLOCK[#Subsection] SLOT [--team ID]
+                                what you decided about the slots of the catalogue (references/context-slots.yaml;
+                                since v3.15.0), kept in the store's `.state/slots.json` — no record changes. bind: the
+                                block (or its subsection) of a registered repository answers for SLOT; for a team.*
+                                slot --team names the team record it is for (a record of type team)
+  slot map RECORD "Heading" SLOT
+                                your own subsection "Heading" in the record RECORD answers for SLOT (a record of the
+                                kind the slot is looked for in)
+  slot prefer SLOT mine|repo:ID|all
+                                whose answer SLOT gives first (mine: yours, the default; repo:ID: one repository's)
+  slot decide SLOT REPO [--product P]
+                                the answer to a divergence between repositories (since v3.15.0): two or more of them tie
+                                at the highest rank with different text for SLOT, and you have no text of your own for it,
+                                no core rule and no preference — REPO's text wins. Kept with the hash of every side's
+                                text (a value slot: the value) and the day; a new text from any side asks again. SLOT is
+                                computed on the records as they are now, for the product P (a product or team slot with
+                                several products needs --product; an organisation slot does not)
+  slot forget SLOT              everything the memory holds about SLOT: bindings, names, preference, decision
+                                All five: snapshot, one journal line (op slot, action, slot), `ctx undo` takes it back;
+                                one that changes nothing (the same bind again) says "unchanged" — no snapshot, no line.
+                                An unknown slot, repository, record or block id, a --team that is not a team record, a
+                                record of another kind than the slot's, a preference that is none of the three, a
+                                `decide` with no divergence ("no divergence for SLOT") or for a REPO that is not one of
+                                the sides, and a memory that cannot be read ("slots memory not readable|not valid:
+                                .state/slots.json (…)") are exit 3. CTX_RESULT: action, slot, changed, snapshot, memory (after)
 
-Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
+`read` and `explain` take no lock and write nothing. Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
 registration is not read in time — 3 s each, 6 s for all: the boundary cannot be checked, exit 4), imports direct
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
-writes only the block state under `.state/blocks/` and the card's Repos line). Files are read within a time budget
+writes only the block state under `.state/blocks/` and the card's Repos line; `slot` imports first too, and then
+writes only `.state/slots.json` — no record, no copy, no compile). Files are read within a time budget
 (GROW_PM_CTX_READ_TIMEOUT, default 30 s): a record that does not arrive (iCloud) or is missing
 on disk stops the run before anything is written. A writing command that exits 0 then saves the
 session digest's summary of the store beside the context (`~/.grow-pm/.ctx-summary.json`, since v3.13.1), counted
@@ -116,6 +166,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 import time
 
@@ -126,7 +177,9 @@ import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_repos as crp  # noqa: E402
+import ctx_resolve as rv  # noqa: E402
 import ctx_schema as sc  # noqa: E402
+import ctx_slots as sl  # noqa: E402
 import ctx_synced as sy  # noqa: E402
 
 HEADINGS = {"product": "### Product: %s", "team": "### Team: %s", "org": "## Organization: %s",
@@ -138,7 +191,7 @@ class Usage(Exception):
 
 
 WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card",
-           "invalidate", "archive", "restore", "verify", "assign"}
+           "invalidate", "archive", "restore", "verify", "assign", "slot"}
 
 
 def writes(a):
@@ -364,13 +417,38 @@ def cmd_read(a, c):
         cr.manifest_for(cr.load_manifest(), a.skill)
     except KeyError:
         raise cs.StoreError("no manifest entry for %s — read local-context.md whole" % a.skill)
+    skipped = []                    # since v3.15.0: a registration not read is one line, when it may own a block read here
     try:
-        repos = crp.load_repos(c.text, c.home)
+        repos = crp.load_repos(c.text, c.home, skipped=skipped)
     except Exception:  # noqa: BLE001 — the line that names a block's repository is not worth a read
         repos = []
-    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10], repos=repos)
+    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10], repos=repos, skipped=skipped)
     sys.stdout.write(text)
     return 0, dict(res, command="read", skill=a.skill, text=text if a.json else None)
+
+
+def cmd_explain(a, c):
+    """`explain`: where each slot came from and why it won (ctx_resolve.explain). Reads only, as `read` does: no lock, no
+    network, nothing written; the registrations are read in a try, and one that cannot be read is a line, not a failure."""
+    c.need_store()
+    cat = sl.load_catalogue()
+    for slot in a.slots:
+        if sl.slot_info(cat, slot) is None:
+            raise Usage(_no_slot(slot))
+    if a.skill:
+        try:
+            cr.manifest_for(cr.load_manifest(), a.skill)
+        except KeyError:
+            raise cs.StoreError("no manifest entry for %s — read local-context.md whole" % a.skill)
+    skipped = []
+    try:
+        repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    except Exception:  # noqa: BLE001 — what names a block's repository is not worth an explanation
+        repos = []
+    text, res = rv.explain(c.store, c.copies, repos, skipped, slots=a.slots or None, skill=a.skill, product=a.product,
+                           today=now()[:10], catalogue=cat)
+    sys.stdout.write(text)
+    return 0, dict(res, command="explain", skill=a.skill, text=text if a.json else None)
 
 
 def _lifecycle(c, fn, *args):
@@ -693,12 +771,22 @@ def cmd_validate(a, c):
             warnings.append("%d change(s) waiting — `ctx sync`" % waiting)
         for x in plan["conflicts"]:
             warnings.append("conflict: %s — `ctx sync` asks" % x["id"])
+    proposals = []
+    if recs:                        # since v3.15.0: the slots — bindings that do nothing, divergences, bindings to propose (reads only)
+        skipped = []
+        try:
+            repos = crp.load_repos(c.text, c.home, skipped=skipped)
+        except Exception:  # noqa: BLE001 — a registration that cannot be read is a line (unread_lines), not a failure
+            repos = []
+        slot_errors, slot_warnings, proposals = rv.validate_slots(c.store, c.copies, repos, skipped, now())
+        errors += slot_errors
+        warnings += slot_warnings
     for e in errors:
         print("error: " + e)
     for w in warnings:
         print("warning: " + w)
     print("valid" if not errors else "%d error(s)" % len(errors))
-    return (3 if errors else 0), {"command": "validate", "errors": errors, "warnings": warnings}
+    return (3 if errors else 0), {"command": "validate", "errors": errors, "warnings": warnings, "slot_proposals": proposals}
 
 
 def cmd_card(a, c):
@@ -929,8 +1017,7 @@ def _product_repos(c, repos, wanted):
     if prod is None:
         raise Usage("no single product matches %r — products: %s" % (
             wanted, ", ".join(p["title"].split(":", 1)[-1].strip() for p in products) or "none"))
-    names = {prod["id"].lower(), prod["title"].strip().lower(), prod["title"].split(":", 1)[-1].strip().lower()}
-    return [r for r in repos if not r["products"] or names & {x.lower() for x in r["products"]}]
+    return [r for r in repos if crp.serves_product(r, prod)]
 
 
 def _in_scope(c, a, skipped, registered=None):
@@ -1140,6 +1227,125 @@ def cmd_provider_sync(a, c):
     return 0, out
 
 
+def _no_slot(slot):
+    return "no slot %r in the catalogue (references/context-slots.yaml)" % slot
+
+
+def _slot_request(a, cat):
+    """What the arguments of a `ctx slot` command ask for, checked as far as they can be without the store: the slot is
+    in the catalogue (`forget` also takes one only the memory still knows — checked under the lock), a block id is an id,
+    a subsection or a heading is not empty, a preference is mine, all or repo:<id>. Anything else is a usage error."""
+    req = {"slot": a.slot, "info": sl.slot_info(cat, a.slot)}
+    if req["info"] is None and a.action != "forget":
+        raise Usage(_no_slot(a.slot))
+    if a.action == "bind":
+        block, hash_, sub = a.target.partition("#")
+        block = block.strip()
+        if not re.fullmatch(cb.ID, block):
+            raise Usage("%r is not a block id (letters, digits, '_', '.' and '-'); a subsection follows a '#': block#Subsection"
+                        % block)
+        if hash_ and not sub.strip():
+            raise Usage("nothing follows the '#' in %r — the subsection's heading, or no '#' for the whole block" % a.target)
+        req["block"], req["sub"] = block, (sub.strip() if hash_ else None)
+        if a.team and not a.slot.startswith("team."):
+            raise Usage("--team is for the team.* slots; %s is not one" % a.slot)
+    elif a.action == "map":
+        req["heading"] = a.heading.strip()
+        if not req["heading"]:
+            raise Usage("the heading of your subsection is empty")
+    elif a.action == "prefer":
+        req["who"] = a.who.strip()
+        if not sl.valid_preference(req["who"]):
+            raise Usage("prefer takes mine, all or repo:<id>, not %r" % a.who)
+    return req
+
+
+def _slot_decide(c, a, info, mem, day):
+    """`slot decide`: the answer to a divergence between repositories, put into `mem` (in place). The slot is computed on the
+    records as they are now (ctx_resolve.slot_context / slot_answers — what `ctx read` would give): the first place (product
+    or team) where repositories tie at the highest rank with different text has the sides; `a.repo` must be one of them. What
+    is kept is the winner, the hash of each side's compared text (ctx_resolve.divergence_hashes) and the day — a new text from
+    any side is a new hash, and the question comes back. Returns the line that says what was decided."""
+    skipped = []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    if skipped:
+        raise Usage("a registration could not be read: %s — the ranks of its blocks are not known; try again when it has "
+                    "downloaded" % _unread(skipped))
+    sctx = rv.slot_context(c.store, c.copies, repos, a.product, now(), mem=mem)
+    if sctx["needs_product"] and info["record"] in ("product", "team"):
+        names = ", ".join(sctx["products"])
+        raise Usage("%s matches no single product (products: %s)" % (a.product, names) if a.product else
+                    "several products (%s) — name the one whose slot it is: --product \"<name>\"" % names)
+    sides = [x for x in rv.slot_answers(sctx, a.slot) if x["result"]["diverges"]]
+    if not sides:
+        raise Usage("no divergence for %s" % a.slot)
+    first = sides[0]["result"]
+    if a.repo not in first["diverges"]:
+        raise Usage("%s is not one of the repositories whose texts differ for %s: %s"
+                    % (a.repo, a.slot, ", ".join(first["diverges"])))
+    mem["decisions"][a.slot] = {"winner": a.repo, "hashes": rv.divergence_hashes(info["kind"], first["shown"]), "at": day}
+    return "%s → %s" % (a.slot, a.repo)
+
+
+def cmd_slot(a, c):
+    """What you decided about slots (bind, map, prefer, decide, forget): `.state/slots.json`. A writing command — the lock,
+    the guard, the memory read (one that cannot be read stops the run before anything is imported), the edits waiting
+    imported, a snapshot, the memory written, one journal line. No record changes, so nothing is compiled. A command that
+    changes nothing writes nothing and takes no snapshot."""
+    req = _slot_request(a, sl.load_catalogue())
+    slot, info = req["slot"], req["info"]
+    c.need_store()
+    repo = None
+    if a.action == "bind":
+        repo = _repository(c, a.repo)["id"]
+    elif a.action == "prefer" and req["who"].startswith("repo:"):
+        skipped = []
+        if req["who"][5:] not in [r["id"] for r in crp.load_repos(c.text, c.home, skipped=skipped)]:
+            raise Usage(_not_registered(req["who"][5:], skipped))
+    with co.lock(c.home):
+        c.guard()
+        mem = sl.load_memory(c.store)
+        pre = c.import_first()
+        if a.action == "bind":
+            if a.team:
+                team = _record(c, a.team)
+                if team["type"] != "team":
+                    raise Usage("--team takes the id of a team record, not %s (%s)" % (team["type"], a.team))
+            changed = sl.add_binding(mem, repo, req["block"], req["sub"], slot, a.team or None)
+            what = "%s %s%s → %s" % (repo, req["block"], "#" + req["sub"] if req["sub"] else "", slot)
+        elif a.action == "map":
+            rec = _record(c, a.record)
+            if rec["type"] != info["record"]:
+                raise Usage("%s is a %s record; %s is looked for in a %s record" % (a.record, rec["type"], slot, info["record"]))
+            changed = sl.add_alias(mem, a.record, req["heading"], slot)
+            what = "%s “%s” → %s" % (a.record, req["heading"], slot)
+        elif a.action == "prefer":
+            changed = sl.set_prefer(mem, slot, req["who"])
+            what = "%s → %s" % (slot, req["who"])
+        elif a.action == "decide":
+            what = _slot_decide(c, a, info, mem, now()[:10])
+            changed = True
+        else:
+            if info is None and not sl.in_memory(mem, slot):
+                raise Usage(_no_slot(slot))
+            changed = sl.drop_slot(mem, slot)
+            what = slot
+        out = {"command": "slot", "action": a.action, "slot": slot, "changed": changed, "snapshot": None, "memory": mem,
+               "imported": pre["changed"] + pre["added"]}
+        if not changed:
+            print("unchanged — slot %s: %s" % (a.action, what) if a.action != "forget" else
+                  "unchanged — the memory holds nothing about %s" % slot)
+            return 0, out
+        t = now()
+        snap = co.snapshot(c.store, c.copies, c.home, "slot")
+        out["memory"] = sl.save_memory(c.store, mem)
+        out["snapshot"] = snap
+        c.store.journal({"ts": t, "op": "slot", "action": a.action, "slot": slot, "ids": [], "source": "ctx-slot",
+                         "snapshot": snap})
+    print("slot %s: %s · snapshot %s (back: ctx undo)" % (a.action, what, snap))
+    return 0, out
+
+
 def cmd_provider(a, c):
     if a.action == "adopt":
         return cmd_provider_adopt(a, c)
@@ -1173,6 +1379,8 @@ def build_parser():
     g = sp.add_mutually_exclusive_group(); g.add_argument("--archived", action="store_true"); g.add_argument("--trash", action="store_true")
     sp = sub.add_parser("read", parents=[common]); sp.add_argument("--skill", required=True); sp.add_argument("--product")
     sp.add_argument("--json", action="store_true")
+    sp = sub.add_parser("explain", parents=[common]); sp.add_argument("slots", nargs="*"); sp.add_argument("--skill")
+    sp.add_argument("--product"); sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("invalidate", parents=[common]); sp.add_argument("id"); sp.add_argument("--reason", required=True)
     sp = sub.add_parser("archive", parents=[common]); sp.add_argument("id"); sp.add_argument("--reason")
     sp = sub.add_parser("restore", parents=[common]); sp.add_argument("id")
@@ -1193,6 +1401,13 @@ def build_parser():
     rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
+    kp = sub.add_parser("slot").add_subparsers(dest="action", required=True, parser_class=Parser)
+    sp = kp.add_parser("bind", parents=[common]); sp.add_argument("repo"); sp.add_argument("target"); sp.add_argument("slot")
+    sp.add_argument("--team")
+    sp = kp.add_parser("map", parents=[common]); sp.add_argument("record"); sp.add_argument("heading"); sp.add_argument("slot")
+    sp = kp.add_parser("prefer", parents=[common]); sp.add_argument("slot"); sp.add_argument("who")
+    sp = kp.add_parser("decide", parents=[common]); sp.add_argument("slot"); sp.add_argument("repo"); sp.add_argument("--product")
+    sp = kp.add_parser("forget", parents=[common]); sp.add_argument("slot")
     pp = sub.add_parser("provider").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = pp.add_parser("adopt", parents=[common]); sp.add_argument("repo"); sp.add_argument("--apply", action="store_true")
     sp.add_argument("--json", action="store_true")
@@ -1209,8 +1424,8 @@ def build_parser():
 COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c: cmd_sync(a, c, source="compile"),
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
-            "read": cmd_read, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider}
+            "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
+            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot}
 
 
 def emit(result, conflict=None):

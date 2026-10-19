@@ -9,7 +9,8 @@ that fetches blocks never branches on the schema version.
 
 `fetch` reads a repository's blocks ("theirs") from its MCP server or from its core folder; the registrations
 themselves are read from local files only. `reach` says whether a repository answers, `public_url` how its endpoint
-may be shown (both moved here from ctx.py in v3.14). Nothing is ever written. Stdlib only.
+may be shown (both moved here from ctx.py in v3.14); `serves_product` whether it serves a product record (moved here
+from ctx.py in v3.15: `--product` and the resolver match a product the same way). Nothing is ever written. Stdlib only.
 """
 import collections
 import datetime
@@ -101,6 +102,17 @@ def normalise(reg):
         "_file": reg.get("_file", ""),
     })
     return out
+
+
+def serves_product(repo, prod):
+    """Does the repository serve the product record `prod` (a dict with `id` and `title`)? One whose `products` is empty
+    serves every product; otherwise one of its names must be the product's id, its title or the title after the colon,
+    without regard to case (`ctx provider plan|apply --product`, and the resolver's placement of a block, since v3.15.0)."""
+    products = repo.get("products") or []
+    if not products:
+        return True
+    names = {prod["id"].lower(), prod["title"].strip().lower(), prod["title"].split(":", 1)[-1].strip().lower()}
+    return bool(names & {x.lower() for x in products})
 
 
 def search_only(repo):

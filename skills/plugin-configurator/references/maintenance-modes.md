@@ -356,7 +356,7 @@ For each configured vault:
 5. Check .vault-schema-version → compatible or needs migration
 6. Check the search providers (`references/context-provider-protocol.md` §4) → one row per provider: reachable (3-second probe), `last_index` or `synced_at`, stale or fresh (§6), local paths present → ✅ L2 available or ℹ️ L1 only
 7. Verify last save timestamp → "Last artifact saved: [date]"
-8. Context store (since v3.11.0) — when the digest shows a `context:` line, run `ctx status` and `ctx validate` (`references/context-protocol.md`) and add their lines to the report: records, edits waiting, conflicts, stray files; since v3.12.0 also stale, invalid and archived counts and type warnings (offer "Review stale records" when anything is stale); since v3.12.1 the `custom` records without `read_by` (offer "Who reads custom sections")
+8. Context store (since v3.11.0) — when the digest shows a `context:` line, run `ctx status` and `ctx validate` (`references/context-protocol.md`) and add their lines to the report: records, edits waiting, conflicts, stray files; since v3.12.0 also stale, invalid and archived counts and type warnings (offer "Review stale records" when anything is stale); since v3.12.1 the `custom` records without `read_by` (offer "Who reads custom sections"); since v3.15.0 the slots (`references/context-protocol.md` §5f) — the `warning:` lines of `ctx validate` that name a divergence between repositories (`slot <slot> diverges between <a>, <b> — ctx slot decide <slot> <repo>`), a binding that does nothing or a block that cannot be given to one team (`slot binding: …`) and a binding worth making (`proposal: ctx slot bind <repo> <block>[#<sub>] <slot>`). Show the divergences and the unconfirmed proposals as the package `context-connect` shows on a refresh (`skills/context-connect/references/connect-steps.md` §4c): one screen for all divergences, the answer per slot being `ctx slot decide <slot> <repo>`, and one message for all proposals, a yes being `ctx slot bind …` for each confirmed one; what is declined stays a proposal; say each `slot binding:` line in one line and ask nothing about it. A slots memory that cannot be read is an error of `validate` (exit 3): report it, ask nothing. A line that says a registration, the slots memory or a block state was not read: report it and stop there — ranks, rules or decisions are unknown
 
 Add to the validation report output.
 
@@ -400,6 +400,12 @@ Present a comprehensive report:
 |-------|------|--------|-----------|-----------|
 | Primary | /Users/name/Vault | ✅ Connected | 23 files | 2026-04-14 |
 | Product A | /Users/name/VaultA | ✅ Connected | 8 files | 2026-04-12 |
+
+### Context slots (only with a context store)
+| Item | Count | Action |
+|------|-------|--------|
+| Divergences between repositories | 1 | decide: ctx slot decide product.scope zorg-core |
+| Bindings to confirm | 2 | confirm: ctx slot bind zorg-core scope product.scope |
 
 ### Recommendations
 1. Connect Figma MCP for working with designs
