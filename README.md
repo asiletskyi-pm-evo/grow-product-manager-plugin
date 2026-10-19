@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.14.1
+**Version:** 3.15.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.15.0** — **A skill gets its slot, says what it lacks, and `ctx explain` says where each piece came from** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx read` now answers every name a skill asks for through a **slot** of a catalogue (`references/context-slots.yaml`, 22 slots — `team.members`, `product.key_metrics`, `org.key_metrics` …), whatever the heading is called and whichever record holds it. A repository's block fills a slot only when it is bound — by you (`ctx slot bind`), by its publisher (`slot=` in the marker) or, for the team block, by the plugin — and the cascade decides: a core rule, then your text, then the repositories by rank. A list shows both halves with their sources, the rest is one `також` line, nothing is repeated, and the missing line says where it looked. `ctx explain` shows the winner and why for every slot; `ctx validate` names broken bindings and divergences and proposes bindings, which `context-connect` offers in one message. Without any binding every skill reads what it read in v3.14.1 (a golden test of 99 views).
 
 **New in v3.14.1** — **A skill sees the subsections it lacks; `Team Members` answers `Members`** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx read` used to list a missing field but never a missing subsection, so a skill that asked for a team's `Members` under a heading named `Team Members` got no members and said nothing. A subsection nobody has now goes to the `Відсутнє` line (named with the team when several are read), `Members` is also found under `Team Members` — your own text before any block — and the card counts members under either heading.
 
@@ -1057,5 +1059,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.14.1  
+**Version:** 3.15.0  
 **Last Updated:** October 2026

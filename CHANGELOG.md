@@ -12,6 +12,38 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.15.0 (2026-10-19)
+
+**A skill gets its slot, says what it lacks, and `ctx explain` says where each piece came from.** Until now `ctx read` found a field or a subsection by the exact start of its heading, in the record the manifest named, and mixed a repository's block into a skill's context with nothing to say which text won or why. A read-only look at a real store showed what that hides: a skill that silently got no team members because the heading had another name, two `Key Metrics` sections that meant different things, and the two halves of one team list in two records. v3.15.0 is the resolver: every name a skill asks for is a **slot**, every candidate text for it is found wherever it sits, and one cascade decides what the skill gets — and says so.
+
+MINOR: two new commands, a new memory file in the store, a new marker attribute, a changed `ctx read` output. No skill renamed, no description changed.
+
+### Added
+
+- **A catalogue of slots** — `references/context-slots.yaml` (schema `context-slots/1`), 22 slots, each with a kind (`value` | `text` | `list`), the record kind it lives in, the names it goes by (English and Ukrainian: `team.members` answers `Members`, `Team Members`, `Склад команди`, `Учасники`) and a one-line `about`. The manifest is unchanged: each name it asks for is translated to its slot. Validator check 16 now also requires a slot for every manifest name and a clean catalogue.
+- **Bindings** — a repository's block (or one of its subsections) answers a slot only when it is bound: by you (`ctx slot bind <repo> <block>[#<Підсекція>] <slot> [--team <запис>]`), by its publisher (`slot=<slot>[,<slot>]` in the begin marker, read from the block's base, never from your region), or — for the team block the plugin builds — by the plugin itself (`team#Members` → `team.members`). A heading never binds a block by guesswork; `ctx validate` proposes bindings and `context-connect` offers them in one message.
+- **The cascade** — for each slot and place: a core rule (`policy=rule`) first, with your text under it as a note; then your text; then the repositories by rank (a higher `rank` wins); equal ranks with different texts are a **divergence**, never decided mid-run. Value slots compare values, not lines. A per-slot preference (`ctx slot prefer <slot> mine|repo:<id>|all`) and a remembered answer to a divergence (`ctx slot decide <slot> <repo>`, kept with the hashes of both sides — a new text asks again).
+- **The memory of decisions** — `<store>/.state/slots.json` (schema `context-slots-memory/1`): your bindings, your headings mapped to a slot (`ctx slot map <запис> "<Назва>" <slot>`), preferences and decisions; `ctx slot forget <slot>` drops them. Every `ctx slot …` is a writing command — lock, snapshot `slot`, one journal line `op: slot`, `ctx undo`.
+- **`ctx explain [<slot> …] [--skill S] [--product P]`** — read only (no lock, no network): for each slot the winner with its source, record, block, version and day of check, every other candidate and why it lost, a divergence, an unplaced block with the command that places it, where it looked when nothing was found, and the decisions in force. Without arguments it also lists the unbound blocks and the blocks you switched off.
+- **`ctx validate`** names bindings that do nothing (an unknown slot, an unregistered repository, a block no longer in the records, several slots without their subsections, a team slot with no team to place it), every divergence with its `ctx slot decide` command, and proposes `ctx slot bind …` for unbound blocks whose headings match a slot (`slot_proposals` in `CTX_RESULT`). An unreadable memory is an error.
+
+### Changed
+
+- **`ctx read`** answers every manifest name through its slot. A list shows every candidate in full, each with its source (`> [твоє · <запис>]`, `> [<repo> · v<v> · станом на <date> · слот <slot> — <about>]`); a value or a text shows the winner and one line for the rest — `також: <джерело> каже інакше — ctx explain <slot>`; a divergence shows both and how to decide. A bound block shown in a slot is not repeated in a record read whole — exactly what the slot used is replaced by `> [блок <block> — у слоті <slot> вище]` or `> [блок <block> › <Підсекція> — у слоті <slot> вище]`. The `Відсутнє` line says where it looked (`Members (шукав: Members, Team Members, Склад команди, Учасники у Team: …; блоків із цим слотом немає)`). An unread registration, memory or block state is one line, and the read goes on. The whole read runs on one read budget.
+- **Without any binding nothing changes**: a golden test hashes the 99 read views (33 skills × three fixtures) of v3.14.1 and the new code must give the same, but for the `Відсутнє` line and the two provenance marks.
+- **`context-connect` 0.5.0** — at a refresh, one message with the binding proposals, one with any divergence (both texts, their sources and days, no recommended side), and an offer to return the blocks you switched off that now have a slot (a no is offered again at the next refresh). The registration gains a second exception to "a refresh changes no key": `context-connect` may remove an id from `skip_blocks`, only on your yes for that block.
+- **`plugin-configurator` 2.15.2** — Validate shows the same package: divergences and binding proposals.
+- Protocols: `context-protocol.md` §3, §5a, new §5f (slots, the cascade, explain), §8, §9, §10; `context-provider-protocol.md` §3b, §12.2 (`slot=`, the plugin's binding), §12.8, §12.9; Step 0c of `local-context-protocol.md` (how to read `також`, a divergence and a rule's note).
+- Tests: `ctx_slots_test.py` (new) 70, `ctx_resolve_test.py` (new) 208, `ctx_read_test.py` 101 incl. the golden test, `ctx_cli_test.py` 613 checks — each new check failed before its code. A whole-branch review found two more defects (a plugin-bound team block with a `Team Members` heading lost its text and the read claimed no block; a blank line after a begin marker left a duplicate section) — fixed with checks that failed first.
+
+### Backwards compatibility
+
+- Your context, your records, the manifest and the registrations are unchanged; nothing is written by `ctx read`, `explain` or `validate`. With no binding and no memory, every skill reads what it read in v3.14.1 except: the `Відсутнє` entries carry where they looked; a block found by its heading is marked `за назвою, без прив'язки`; and the team block, which the plugin binds, carries its slot tag — so a skill that asks for a team's members now gets both your table and the core's `Members`.
+- `.state/slots.json` is new and only `ctx slot …` writes it; a plugin before v3.15.0 never reads it, and a snapshot and `ctx undo` carry it like the rest of `.state/`. The memory refuses keys it does not know: a later version that adds one will bump the schema.
+- Searching several repositories at Step 0.5, once planned for this version, moved to a separate «Пошук» version; the daily sync, `adopt` and `apply` are as in v3.14.1.
+
+---
+
 ## v3.14.1 (2026-10-18)
 
 **A skill sees the subsections it lacks; `Team Members` answers `Members`.** Found on a real store, read only, while the v3.15 resolver was being designed: task-creator asks for a team's `Members` subsection, the user's own heading was `Team Members`, and `ctx read` matches a heading by its start — so the skill got neither the members nor their Jira account ids, and said nothing, because a missing subsection never reached the `Відсутнє` line (only a missing field did).
