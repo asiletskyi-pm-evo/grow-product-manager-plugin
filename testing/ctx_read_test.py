@@ -7,7 +7,7 @@ edits not imported yet and of records missing on disk, archived records hidden, 
 marks, missing fields; the manifest check behind validator check 16. Semantics:
 references/context-protocol.md. Stdlib only; run from the repo root.
 """
-import os, shutil, sys, tempfile
+import hashlib, json, os, re, shutil, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -61,6 +61,74 @@ class Env:
         assert old in t, old
         open(path, "w", encoding="utf-8", newline="").write(t.replace(old, new, 1))
 
+
+CHECKED = "2026-10-20T10:00:00+03:00"
+REPOS = [{"id": "zorg-core", "namespace": "zorg-core"}, {"id": "zorg-growth", "namespace": "zorg-growth"}]
+
+
+def block_state(env, repo, blocks, checked=CHECKED):
+    """What `ctx provider adopt/apply` leaves in the store: the repository's check and, per block, its version and check."""
+    entry = lambda v: {"base_sha": None, "bases": [], "v": v, "host": None, "checked": checked, "user_removed": None}
+    with cs.guard_roots(co.allowed_roots(env.home, env.text)):
+        cb.save_state(env.store, repo, {"checked": checked, "source": "folder", "version": "0.4",
+                                        "blocks": {b: entry(v) for b, v in blocks.items()}})
+
+
+def read_by(env, title, who):
+    rec = next(r for r in env.store.load() if r["title"] == title)
+    env.store.write(dict(rec, read_by=who))
+
+
+# --- v3.15.0: the golden read views — without bindings or memory, every view of v3.14.1 stays as it was (Task 5)
+GOLDEN = os.path.join(ROOT, "testing", "fixtures", "ctx-read-golden.json")
+GOLDEN_REPOS = [{"id": "zorg-core", "namespace": "zorg-core", "rank": 1000, "products": []},
+                {"id": "zorg-growth", "namespace": "zorg-growth", "rank": 500, "products": []}]
+GOLDEN_FIXTURES = (("typical", FIX, "typical", "Zorg App"), ("rich", FIX, "rich", None), ("ctx-repos", REPOS_FIX, "context", None))
+SLOT_TAG = re.compile(r" · слот [a-z]+\.[a-z0-9_]+ — [^\]\n]*?(?= · |\])")
+
+
+def golden_text(text, vault):
+    """A read view as v3.14.1 and v3.15 must agree on it when nothing is bound but the plugin's own `team#Members`: the temp
+    vault path is {{VAULT}}; the «Відсутнє» line (its long form is new) is dropped; the origin additions « · за назвою, без
+    прив'язки» and « · слот <slot> — <about>» (the plugin binds the team block always) are taken out."""
+    text = text.replace(vault, "{{VAULT}}")
+    text = "\n".join(line for line in text.split("\n") if not line.startswith("Відсутнє:"))
+    return SLOT_TAG.sub("", text.replace(" · за назвою, без прив'язки", ""))
+
+
+def golden_key(text, vault):
+    return hashlib.sha256(golden_text(text, vault).encode("utf-8")).hexdigest()
+
+
+def golden_views(d, texts=False):
+    """{"<fixture>/<skill>": golden_key} for every skill on typical (--product "Zorg App"), rich and ctx-repos/context (no
+    --product) — 99 views; the ctx-repos store has the block state of zorg-core and its notes record is read by all skills.
+    `texts`: the normalised texts instead of their keys."""
+    out = {}
+    for name, fix, fixture, prod in GOLDEN_FIXTURES:
+        env = Env(os.path.join(d, name), fixture, fix=fix)
+        if name == "ctx-repos":
+            block_state(env, "zorg-core", {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+            read_by(env, "Zorg Core Notes", "all")
+        for s in SKILLS:
+            text, _ = env.view(s, product=prod, repos=GOLDEN_REPOS)
+            out[name + "/" + s] = golden_text(text, env.vault) if texts else golden_key(text, env.vault)
+    return out
+
+
+if "--write-golden" in sys.argv:            # once, from the code of v3.14.1 (Task 5 Step 1); never to make a red test green
+    with tempfile.TemporaryDirectory() as d:
+        views = golden_views(d)
+    with open(GOLDEN, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(views, indent=1, sort_keys=True) + "\n")
+    print("wrote %d read views to %s" % (len(views), os.path.relpath(GOLDEN, ROOT)))
+    sys.exit(0)
+
+with tempfile.TemporaryDirectory() as d:
+    want = json.load(open(GOLDEN, encoding="utf-8")) if os.path.isfile(GOLDEN) else {}
+    got = golden_views(d)
+    mismatches = sorted(k for k in set(want) | set(got) if want.get(k) != got.get(k))
+check("without bindings or memory every read view is v3.14.1's", mismatches == [] and len(want) == 99, (len(want), mismatches))
 
 with tempfile.TemporaryDirectory() as d:
     t = Env(os.path.join(d, "t"))
@@ -217,25 +285,10 @@ with tempfile.TemporaryDirectory() as d:
     check("--product on a context without products", not res["needs_product"] and "продукт (обов'язкове)" in text, text[-400:])
 
 # --- v3.13.0: where a repository's text comes from — a provenance line, own text before a block, a conflict mark
-CHECKED = "2026-10-20T10:00:00+03:00"
-REPOS = [{"id": "zorg-core", "namespace": "zorg-core"}, {"id": "zorg-growth", "namespace": "zorg-growth"}]
 OWN_LEAD = ("- **Jira Team ID:** <team-uuid>\n", "- **Jira Team ID:** <team-uuid>\n- **Lead:** Own Lead\n")
 BLOCK_LEAD = ("### Team: Alpha\n\n- **Team card", "### Team: Alpha\n\n- **Lead:** Block Lead\n- **Team card")
 LEAD_SKILL = {"schema": "context-manifest/1", "skills": {"lead-skill": {"team": {"fields": ["Lead"]}}}}
 LEAD_REQ = {"schema": "context-manifest/1", "skills": {"lead-skill": {"team": {"required": ["Lead"]}}}}
-
-
-def block_state(env, repo, blocks, checked=CHECKED):
-    """What `ctx provider adopt/apply` leaves in the store: the repository's check and, per block, its version and check."""
-    entry = lambda v: {"base_sha": None, "bases": [], "v": v, "host": None, "checked": checked, "user_removed": None}
-    with cs.guard_roots(co.allowed_roots(env.home, env.text)):
-        cb.save_state(env.store, repo, {"checked": checked, "source": "folder", "version": "0.4",
-                                        "blocks": {b: entry(v) for b, v in blocks.items()}})
-
-
-def read_by(env, title, who):
-    rec = next(r for r in env.store.load() if r["title"] == title)
-    env.store.write(dict(rec, read_by=who))
 
 
 with tempfile.TemporaryDirectory() as d:
