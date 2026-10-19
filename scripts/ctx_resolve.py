@@ -305,8 +305,10 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
     not one sound region (cb.find_regions: repeated, nested, broken) is no bound candidate but may still answer by name,
     and so may a block the plugin's own `team#Members` gives this slot no text (a `Team Members` heading). Never found by
     name: a block a binding gives this slot a text — not even where the binding does not place it (another team's,
-    another product's) — and a block you or its publisher bound (`how` memory, marker) to any slot: an explicit binding
-    says what the block is, as a heading you mapped to another slot is no candidate of this one (spec §4.1, §4.2).
+    another product's) — and a block you or its publisher bound (`how` memory, marker) to any slot of the catalogue: an
+    explicit binding says what the block is, as a heading you mapped to another slot is no candidate of this one (spec
+    §4.1, §4.2); a binding to a slot the catalogue lacks does nothing (`validate` names it `unknown`), so it keeps no
+    block from answering by name.
     In order: your text, place by place; the bound blocks, in record order; the blocks found by name. `regs` is the
     _Repos of slot_context (None: one is made here). Reads only."""
     info = sl.slot_info(cat, slot)
@@ -366,7 +368,8 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
                 continue
             hit = None
             for ns, bid, v, _, inner in cr._blocks(rec.get("body") or ""):
-                if bid and ((ns, bid) in answered or any(b.get("how") in EXPLICIT for b in bindings.get((ns, bid)) or ())):
+                if bid and ((ns, bid) in answered or any(b.get("how") in EXPLICIT and sl.slot_info(cat, b.get("slot")) is not None
+                                                         for b in bindings.get((ns, bid)) or ())):
                     continue                # it answers through a binding, or yours / the publisher's says what it is
                 text = _first(find, inner, names)
                 if text is not None:

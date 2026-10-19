@@ -952,6 +952,21 @@ with tempfile.TemporaryDirectory() as d:
     got, org = cands(e, "product.key_metrics"), cands(e, "org.key_metrics")
     check("…and the same with the publisher's slot=org.key_metrics in the block's base", got == []
           and [(c["how"], c["block"]) for c in org] == [("marker", "growth-metrics")], (got, org))
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[(GROWTH, GROWTH_KM)])
+    e.state("zorg-growth", {"growth-metrics": ("0.1", [GROWTH_KM.replace("v=0.1 -->", "v=0.1 slot=org.nowhere -->")])})
+    got = cands(e, "product.key_metrics")
+    check("v3.15.1: the publisher's slot= to a slot the catalogue lacks does nothing — the block still answers product.key_metrics by name",
+          [(c["how"], c["block"]) for c in got] == [("name", "growth-metrics")], got)
+    check("…and validate still names that slot= as unknown", [(p_["kind"], p_["slot"], p_["how"]) for p_ in problems(e, memory())]
+          == [("unknown", "org.nowhere", "marker")], problems(e, memory()))
+    e.state("zorg-growth", {"growth-metrics": ("0.1", [GROWTH_KM])})
+    mem = memory(("zorg-growth", "growth-metrics", None, "product.retired_metrics", None))
+    got = cands(e, "product.key_metrics", mem=mem)
+    check("v3.15.1: your binding to a slot the catalogue no longer has does nothing — the block still answers product.key_metrics by name",
+          [(c["how"], c["block"]) for c in got] == [("name", "growth-metrics")], got)
+    check("…and validate still names that binding as unknown", [(p_["kind"], p_["slot"], p_["how"]) for p_ in problems(e, mem)]
+          == [("unknown", "product.retired_metrics", "memory")], problems(e, mem))
 
 # ------------------------------------------------------------------ unread_lines
 with tempfile.TemporaryDirectory() as d:
