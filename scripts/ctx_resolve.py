@@ -10,10 +10,10 @@ A slot (scripts/ctx_slots.py, references/context-slots.yaml) is answered by cand
 - a bound block   from any record, when a binding (ctx_slots.bindings_of: yours, the `slot=` of the block's base, the
               plugin's own for the `team` block) ties it to the slot; where it belongs is decided as spec §4.4 says,
               and what text it gives as §4.5 says
-- a block found by name   a block of the same product, team (or profile) record that no binding gives the slot a text
-              (unbound, bound to other slots only, bound but not one sound region, or bound to a part it lacks — the
-              plugin's `team#Members` under a `Team Members` heading), read as v3.14.1 read it (ctx_read._lookup: the
-              first block that has a name) — only when your text in that record has nothing
+- a block found by name   a block of the same product, team (or profile) record that neither you nor its publisher
+              bound (`ctx slot bind`, `slot=` — to any slot) and that the plugin's `team#Members` gives no text for the
+              slot (a `Team Members` heading), read as v3.14.1 read it (ctx_read._lookup: the first block that has a
+              name) — only when your text in that record has nothing
 
 The lookup mode follows the manifest (`field`: a field line, else its subsection — or the subsection only), as
 ctx_read._lookup reads a `fields`/`required` name and a `sections` one.
@@ -57,6 +57,7 @@ import ctx_slots as sl  # noqa: E402
 import ctx_store as cs  # noqa: E402
 
 BY_NAME = "name"                      # the `how` of an unbound block found by a heading's name, as v3.14.1 found it
+EXPLICIT = ("memory", "marker")       # a binding that says what a block is (yours, the publisher's slot=): never found by name
 NAME_PLACES = ("product", "team", "profile")   # the records whose unbound blocks answer by name (ctx_read._lookup looked there)
 
 
@@ -301,10 +302,11 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
     False (`sections`) — the subsection only, as _lookup(body, name, field=False); None — by the slot's kind (a value or a
     list: the field line first; a text: the subsection). It holds for your text, the blocks found by name and the part a
     bound block gives. Your text gives at most one candidate per record (the first name that answers). A block that is
-    not one sound region (cb.find_regions: repeated, nested, broken) is no bound candidate but may still answer by name;
-    so may a sound block none of whose bindings gives this slot a text (the plugin's `team#Members` under a `Team Members`
-    heading, a binding to a subsection the block lacks, a binding to another slot only). A block a binding gives this slot
-    a text is never found by name — not even where the binding does not place it (another team's, another product's).
+    not one sound region (cb.find_regions: repeated, nested, broken) is no bound candidate but may still answer by name,
+    and so may a block the plugin's own `team#Members` gives this slot no text (a `Team Members` heading). Never found by
+    name: a block a binding gives this slot a text — not even where the binding does not place it (another team's,
+    another product's) — and a block you or its publisher bound (`how` memory, marker) to any slot: an explicit binding
+    says what the block is, as a heading you mapped to another slot is no candidate of this one (spec §4.1, §4.2).
     In order: your text, place by place; the bound blocks, in record order; the blocks found by name. `regs` is the
     _Repos of slot_context (None: one is made here). Reads only."""
     info = sl.slot_info(cat, slot)
@@ -364,8 +366,8 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
                 continue
             hit = None
             for ns, bid, v, _, inner in cr._blocks(rec.get("body") or ""):
-                if bid and (ns, bid) in answered:
-                    continue                # a binding gives this slot its text: it answers through it, never by name
+                if bid and ((ns, bid) in answered or any(b.get("how") in EXPLICIT for b in bindings.get((ns, bid)) or ())):
+                    continue                # it answers through a binding, or yours / the publisher's says what it is
                 text = _first(find, inner, names)
                 if text is not None:
                     hit = regs.block(slot, rec, ns, bid, v, region_of(ns, bid, rec["id"]) if bid else None, text,

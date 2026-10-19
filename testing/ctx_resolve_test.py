@@ -314,8 +314,8 @@ with tempfile.TemporaryDirectory() as d:
     check("a block bound to one slot gives the whole region, without its markers", len(got) == 1
           and got[0]["text"] == "### Teams map\n- Alpha, Beta\n" and got[0]["heading"] == "Teams map" and got[0]["place"] is None, got)
     got = cands(e, "team.members", mem=memory(("zorg-core", "team", "Nowhere", "team.members", None)))
-    check("a binding to a subsection the block lacks is no bound candidate — the block answers by name, as with no binding (final review)",
-          [(c["how"], c["block"], c["sub"]) for c in got] == [("name", "team", None)] and got[0]["text"].startswith("#### Members"), got)
+    check("a binding of yours to a subsection the block lacks is no candidate — and your binding keeps the block out of the by-name answer",
+          got == [], got)
 with tempfile.TemporaryDirectory() as d:
     e = Env(d, edits=[(SCOPE, SCOPE2)])
     e.state("zorg-core", {"scope": ("0.4", [SCOPE2])})
@@ -928,8 +928,8 @@ with tempfile.TemporaryDirectory() as d:
           and rv.NOT_FOUND not in text and rv.NO_BLOCKS not in text, (tm, text))
     mem = memory(("zorg-core", "team", "Members", "team.members", None))
     got = cands(e, "team.members", mem=mem)
-    check("…so does a binding of yours to the subsection the block lacks: no bound candidate, the block by name — and the binding is named as empty",
-          [(c["how"], c["block"]) for c in got] == [("name", "team")] and [p_["kind"] for p_ in problems(e, mem)] == ["empty"], got)
+    check("…but a binding of yours to the subsection the block lacks is your word on the block: no candidate, no guess by name — "
+          "the binding is named as empty", got == [] and [p_["kind"] for p_ in problems(e, mem)] == ["empty"], got)
     mem = memory(("zorg-core", "team", None, "team.members", "team.beta-b"))
     check("…a binding that gives the slot its text but places the block with a team not read: the block is that team's, not found by name here",
           cands(e, "team.members", mem=mem) == [], cands(e, "team.members", mem=mem))
@@ -939,6 +939,19 @@ with tempfile.TemporaryDirectory() as d:
     got = cands(e, "team.jira_team_id")
     check("…a block bound to another slot only (the plugin's team#Members) answers this slot by name, as v3.14.1 read it",
           [(c["how"], c["block"], c["text"]) for c in got] == [("name", "team", "- **Jira Team ID:** core-uuid\n")], got)
+GROWTH_KM = GROWTH.replace("#### Growth metrics", "#### Key Metrics")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[(GROWTH, GROWTH_KM)])
+    check("follow-up: unbound, the product record's block with a `Key Metrics` heading answers product.key_metrics by name",
+          [(c["how"], c["block"]) for c in cands(e, "product.key_metrics")] == [("name", "growth-metrics")], cands(e, "product.key_metrics"))
+    mem = memory(("zorg-growth", "growth-metrics", None, "org.key_metrics", None))
+    got, org = cands(e, "product.key_metrics", mem=mem), cands(e, "org.key_metrics", mem=mem)
+    check("follow-up: bound by you to org.key_metrics, the block is no product.key_metrics candidate by name (two `Key Metrics` are two slots)",
+          got == [] and [(c["how"], c["block"]) for c in org] == [("memory", "growth-metrics")], (got, org))
+    e.state("zorg-growth", {"growth-metrics": ("0.1", [GROWTH_KM.replace("v=0.1 -->", "v=0.1 slot=org.key_metrics -->")])})
+    got, org = cands(e, "product.key_metrics"), cands(e, "org.key_metrics")
+    check("…and the same with the publisher's slot=org.key_metrics in the block's base", got == []
+          and [(c["how"], c["block"]) for c in org] == [("marker", "growth-metrics")], (got, org))
 
 # ------------------------------------------------------------------ unread_lines
 with tempfile.TemporaryDirectory() as d:
