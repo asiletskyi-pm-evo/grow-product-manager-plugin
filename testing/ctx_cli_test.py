@@ -3915,8 +3915,191 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # what could no
               rc == 0 and "пам'ять слотів не прочитано (slots memory not valid: .state/slots.json" in out and "прив'язки й рішення не застосовано" in out
               and read(mem_path) == "{ not json", (rc, out[:600]))
 
+# --- v3.15.0 Task 7: ctx validate names the bindings that do nothing and the divergences, and proposes bindings (spec §4.2, §4.4, §6, §8)
+GROWTH_SUB = ("- **North star:** weekly active shoppers\n<!-- zorg-growth:end id=growth-metrics -->",
+              "- **North star:** weekly active shoppers\n\n#### Key Metrics (focus)\n- Weekly active shoppers\n<!-- zorg-growth:end id=growth-metrics -->")
+SCOPE_PROPOSAL = {"repo": "zorg-core", "block": "scope", "sub": None, "slot": "product.scope"}
+SUB_PROPOSAL = {"repo": "zorg-growth", "block": "growth-metrics", "sub": "Key Metrics (focus)", "slot": "product.key_metrics"}
+BINDING_LINE = "warning: slot binding: "
+
+
+def put_memory(e, *bindings):
+    """A slots memory written by hand — the way a catalogue that changed, or a core that took a block away, leaves one."""
+    path = os.path.join(e.store, ".state", "slots.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    open(path, "w", encoding="utf-8", newline="").write(json.dumps({"schema": "context-slots-memory/1", "bindings": [
+        {"repo": r, "block": b, "sub": s, "slot": x, "team": t} for r, b, s, x, t in bindings]}))
+
+
+def command_args(out, prefix, **fill):
+    """The arguments of the command the output prints from `prefix` on (an empty `ctx slot` when it prints none: a usage error, not a wait on stdin)."""
+    command = printed(out, prefix) or "ctx slot"
+    for old_, new_ in fill.items():
+        command = command.replace("<" + old_ + ">", new_)
+    return ctx_args(command)
+
+
+def lines_with(out, prefix):
+    return [l for l in out.splitlines() if l.startswith(prefix)]
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, patch=[GROWTH_SUB])
+        run_ok(e, "migrate", "--apply")
+        before = full_tree(e.home, e.store, e.vault)
+        rc, out, res = run_ok(e, "validate")
+        check("validate proposes a binding for each unbound block of a registered repository whose heading answers a slot's names; exit 0 (warnings only)",
+              rc == 0 and res.get("slot_proposals") == [SUB_PROPOSAL, SCOPE_PROPOSAL]
+              and "warning: proposal: ctx slot bind zorg-core scope product.scope" in out.splitlines()
+              and "warning: proposal: ctx slot bind zorg-growth \"growth-metrics#Key Metrics (focus)\" product.key_metrics" in out.splitlines()
+              and "proposal: ctx slot bind zorg-core scope product.scope" in res["warnings"], (rc, res.get("slot_proposals"), out[-600:]))
+        check("…a block whose heading answers no slot is not proposed (teams, a block of the growth squad's team), and neither is the `team` block — the plugin binds it",
+              not any(p["block"] in ("team", "teams") for p in res.get("slot_proposals") or []) and text_of(out).count("warning: proposal:") == 2, res.get("slot_proposals"))
+        check("…validate wrote nothing: the home, the store and the vault, directories and times included", full_tree(e.home, e.store, e.vault) == before, "")
+        check("…and it proposes nothing about a binding that does nothing: no «slot binding» line, no divergence", BINDING_LINE not in out and "diverges" not in out, out[-500:])
+
+        rc_b, out_b, _ = run_ok(e, *command_args(out, "ctx slot bind zorg-growth"))
+        rc, out, res = run_ok(e, "validate")
+        check("the printed command runs (a heading with spaces is quoted), and the block is not proposed any more",
+              rc_b == 0 and rc == 0 and res.get("slot_proposals") == [SCOPE_PROPOSAL] and text_of(out).count("warning: proposal:") == 1, (rc_b, out_b[-200:], res.get("slot_proposals")))
+        rc, out_x, res_x = run_ok(e, "explain", "product.key_metrics")
+        km = slot_in(res_x, "product.key_metrics")
+        check("…the subsection it bound is the candidate of the slot", km is not None and km["candidates"] and (km["candidates"] or [{}])[0].get("sub") == "Key Metrics (focus)"
+              and km["candidates"][0].get("how") == "memory", km)
+        run_ok(e, *command_args(out, "ctx slot bind zorg-core scope"))
+        rc, out, res = run_ok(e, "validate")
+        check("every proposal accepted: none left, slot_proposals is an empty list, nothing else changed", rc == 0 and res.get("slot_proposals") == []
+              and "proposal" not in text_of(out) and BINDING_LINE not in out and res["errors"] == [], (rc, out[-400:]))
+
+        # ---- a slots memory that cannot be read is an error: exit 3, the file named, no guesses about bindings
+        mem_path = os.path.join(e.store, ".state", "slots.json")
+        good = read(mem_path)
+        os.chmod(mem_path, 0)
+        rc, out, res = run_ok(e, "validate")
+        os.chmod(mem_path, stat.S_IRUSR | stat.S_IWUSR)
+        check("a slots memory that cannot be read: exit 3, «error: slots memory not readable: .state/slots.json …»; no proposal is guessed from it",
+              rc == 3 and "error: slots memory not readable: .state/slots.json" in out and any(x.startswith("slots memory not readable") for x in res["errors"])
+              and "proposal" not in text_of(out) and res.get("slot_proposals") == [], (rc, out[-500:]))
+        for text, label in (("{ not json", "not JSON"), ('{"schema": "context-slots-memory/9"}', "another schema")):
+            open(mem_path, "w", encoding="utf-8", newline="").write(text)
+            rc, out, res = run_ok(e, "validate")
+            check("…a memory that is %s: the same, exit 3" % label, rc == 3 and "error: slots memory not valid: .state/slots.json" in out
+                  and "proposal" not in text_of(out) and read(mem_path) == text, (rc, out[-400:]))
+        open(mem_path, "w", encoding="utf-8", newline="").write(good)
+        rc, out, res = run_ok(e, "validate")
+        check("…the memory back: validate is as it was", rc == 0 and res["errors"] == [], (rc, out[-300:]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "validate")
+        check("a store with no memory and no growth heading to propose: only the scope block is proposed, and the exit stays 0",
+              rc == 0 and res.get("slot_proposals") == [SCOPE_PROPOSAL], (rc, res.get("slot_proposals")))
+        put_memory(e, ("zorg-core", "scope", None, "product.nowhere", None), ("zorg-nowhere", "scope", None, "product.scope", None),
+                   ("zorg-core", "gone", None, "product.scope", None), ("zorg-core", "team", "Nowhere", "team.members", None))
+        before = full_tree(e.home, e.store, e.vault)
+        rc, out, res = run_ok(e, "validate")
+        said = lines_with(out, BINDING_LINE)
+        check("a binding to a slot the catalogue lacks: «warning: slot binding: <repo> <block> → <slot> — <why>»",
+              any(l.startswith(BINDING_LINE + "zorg-core scope → product.nowhere — ") and "каталозі" in l for l in said), said)
+        check("…to a repository nobody registered", any(l.startswith(BINDING_LINE + "zorg-nowhere scope → product.scope — ") and "не зареєстровано" in l for l in said), said)
+        check("…to a block the records lack (the core took it away)", any(l.startswith(BINDING_LINE + "zorg-core gone → product.scope — ") and "блоку немає в записах" in l for l in said), said)
+        check("…to a subsection the block lacks: the sub is in the line", any(l.startswith(BINDING_LINE + "zorg-core team#Nowhere → team.members — ")
+              and "підсекції «Nowhere»" in l for l in said), said)
+        check("…the exit stays 0, each line is in CTX_RESULT warnings without the prefix, validate wrote nothing",
+              rc == 0 and len(said) == 4 and all(l[len("warning: "):] in res["warnings"] for l in said) and full_tree(e.home, e.store, e.vault) == before, (rc, said))
+        check("…a block that has a binding, even one that does nothing, is not proposed again (the line above says what is wrong with it)",
+              res.get("slot_proposals") == [], res.get("slot_proposals"))
+
+        put_memory(e)
+        run_ok(e, "slot", "bind", "zorg-core", "scope", "product.scope")
+        run_ok(e, "slot", "bind", "zorg-core", "scope", "product.key_metrics")
+        rc, out, res = run_ok(e, "validate")
+        said = lines_with(out, BINDING_LINE)
+        check("a block bound to several slots with a part for only one of them: the other is named — no subsection or line by the slot's names",
+              rc == 0 and len(said) == 1 and said[0].startswith(BINDING_LINE + "zorg-core scope → product.key_metrics — ")
+              and "підсекції чи рядка за назвами слоту" in said[0], (rc, said))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # a block that cannot be given to one team
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, patch=TEAM_TO_NOTES)
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "validate")
+        said = lines_with(out, BINDING_LINE)
+        check("team.* without a placement (two teams, the core's team block in a record of its own): a warning that says so, with the teams and the command that places it",
+              rc == 0 and len(said) == 1 and said[0].startswith(BINDING_LINE + "zorg-core team#Members → team.members — не розміщено: ")
+              and "(team.alpha-a, team.beta-b)" in said[0] and said[0].endswith("— ctx slot bind zorg-core team#Members team.members --team <запис>"),
+              (rc, said))
+        check("…and the plugin's block is not a proposal", not any(p["block"] == "team" for p in res.get("slot_proposals") or []), res.get("slot_proposals"))
+        rc_b, out_b, _ = run_ok(e, *command_args(out, "ctx slot bind zorg-core team#Members", запис="team.alpha-a"))
+        rc, out, res = run_ok(e, "validate")
+        check("the command, with the team filled in, places the block: no warning is left", rc_b == 0 and rc == 0 and BINDING_LINE not in out, (rc_b, out_b[-200:], out[-400:]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # a divergence between repositories (spec §6)
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        equal_ranks(e)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "slot", "bind", "zorg-core", "scope", DIVERGE)
+        run_ok(e, "slot", "bind", "zorg-growth", "growth-metrics", DIVERGE)
+        before = full_tree(e.home, e.store, e.vault)
+        rc, out, res = run_ok(e, "validate")
+        line = "warning: slot product.scope diverges between zorg-core, zorg-growth — ctx slot decide product.scope zorg-core"
+        check("two repositories at an equal rank with different text: «slot <slot> diverges between <a>, <b> — ctx slot decide <slot> <repo>», exit 0",
+              rc == 0 and line in out.splitlines() and text_of(out).count("diverges between") == 1 and line[len("warning: "):] in res["warnings"], (rc, out[-500:]))
+        check("…validate wrote nothing", full_tree(e.home, e.store, e.vault) == before, "")
+        rc_d, out_d, _ = run_ok(e, *command_args(out, "ctx slot decide product.scope zorg-core"))
+        rc, out, res = run_ok(e, "validate")
+        check("the printed command answers it: the divergence is no longer named", rc_d == 0 and rc == 0 and "diverges" not in out, (rc_d, out_d[-200:], out[-300:]))
+        edit_both(e, "weekly active shoppers", "weekly active buyers")
+        run_ok(e, "sync")
+        rc, out, res = run_ok(e, "validate")
+        check("…a new text from a side brings the question back (a new hash)", rc == 0 and line in out.splitlines(), (rc, out[-400:]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "slot", "bind", "zorg-core", "scope", DIVERGE)
+        run_ok(e, "slot", "bind", "zorg-growth", "growth-metrics", DIVERGE)
+        rc, out, res = run_ok(e, "validate")
+        check("different ranks: the stronger wins silently, so there is no divergence to name", rc == 0 and "diverges" not in out, out[-400:])
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # several products: every product is checked, a divergence is named once
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, patch=[LITE_PRODUCT])
+        equal_ranks(e)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "slot", "bind", "zorg-core", "scope", DIVERGE)
+        run_ok(e, "slot", "bind", "zorg-growth", "growth-metrics", DIVERGE)
+        rc, out, res = run_ok(e, "validate")
+        check("several products and none asked for: validate needs no --product — a divergence only one product sees (the growth block sits in its record, the core's serves all) is named",
+              rc == 0 and text_of(out).count("warning: slot product.scope diverges between zorg-core, zorg-growth — ctx slot decide product.scope zorg-core") == 1, (rc, out[-500:]))
+
+GROWTH_REGION_CLI = region_in(FIXTURE_TEXT_CLI, "zorg-growth", "growth-metrics")
+GROWTH_TO_NOTES = [(GROWTH_REGION_CLI + "\n\n", ""), ("## Zorg Core Notes\n\n", "## Zorg Core Notes\n\n" + GROWTH_REGION_CLI + "\n\n")]
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, patch=[LITE_PRODUCT] + GROWTH_TO_NOTES)
+        equal_ranks(e)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "slot", "bind", "zorg-core", "scope", DIVERGE)
+        run_ok(e, "slot", "bind", "zorg-growth", "growth-metrics", DIVERGE)
+        rc, out, res = run_ok(e, "validate")
+        check("…a divergence both products see (both blocks serve every product) is named once, not once for each",
+              rc == 0 and text_of(out).count("diverges between") == 1 and sum("diverges between" in w for w in res["warnings"]) == 1, (rc, out[-500:]))
+
+with tempfile.TemporaryDirectory() as d:                           # no repository registered: nothing to propose, nothing new to say
+    e = Env(d)
+    run_ok(e, "migrate", "--apply")
+    rc, out, res = run_ok(e, "validate")
+    check("a store with no registered repository: slot_proposals is an empty list, and no slot line is printed",
+          rc == 0 and res.get("slot_proposals") == [] and "proposal" not in text_of(out) and "slot " not in text_of(out), (rc, out[-300:]))
+
 # the documents say what the code does now
-pp_fr, cp_fr, lcp_fr = doc("references", "context-provider-protocol.md"), doc("references", "context-protocol.md"), \
+pp_fr, cp_fr, lcp_fr =doc("references", "context-provider-protocol.md"), doc("references", "context-protocol.md"), \
     doc("references", "local-context-protocol.md")
 sec11_fr = between(pp_fr, "### 12.11 ", "### 12.12 ") if "### 12.12 " in pp_fr else pp_fr[pp_fr.find("### 12.11 "):]
 need_fr = [(sec11_fr, ["no fetch, plan or write begins with less than 3 s of the work time left, and a write, once begun, has at least "

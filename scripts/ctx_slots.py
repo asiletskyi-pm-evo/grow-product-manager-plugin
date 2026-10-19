@@ -35,6 +35,8 @@ Which block answers which slot (spec §4.2) — read only, for the resolver (scr
                                     of each block's base and the plugin's own binding of the `team` block — the first
                                     found per block — and the lines on block states that could not be read
 - marker_slots                      the slots a begin marker names in `slot=a,b` (a whole word, as `policy=rule`)
+- proposals                         the bindings `ctx validate` proposes: for each block of a registered repository that nothing
+                                    binds, the heading of the block (or of one of its subsections) that answers a slot's names
 
 Stdlib only.
 """
@@ -392,3 +394,45 @@ def bindings_of(store, repos, mem):
         if key not in out:
             out[key] = [{"slot": s, "sub": sub, "team": None, "how": "plugin"} for s, sub in PLUGIN_BINDINGS]
     return out, problems
+
+
+def proposals(records, repos, bindings, cat):
+    """[{"repo", "block", "sub", "slot"}]: the bindings worth proposing (spec §4.2), in the order of the records, then of the
+    headings, then of the catalogue — what `ctx validate` prints as `ctx slot bind <repo> <block>[#<sub>] <slot>`.
+
+    For each block of a registered repository (the namespace of a registration in `repos`; `repo` is that registration's id)
+    that nothing binds — no key (namespace, block id) in `bindings`, the first item of bindings_of — and that is one sound
+    region (ctx_blocks.find_regions: a repeated, nested or broken block would take no binding), a heading inside it that
+    answers a slot's names (cs.heading_matches: the name, or the name followed by a qualifier — `Key Metrics (focus)`) is a
+    proposal. The block's first heading proposes the whole block (`sub` None); a later heading proposes its own subsection
+    (`sub` the heading's text, which `ctx slot bind <block>#<sub>` finds again). A heading counts once per slot. The `team`
+    block is never proposed: the plugin binds it itself (PLUGIN_BINDINGS), whatever `bindings` holds. The headings only: the
+    `about` of the catalogue is not read, and a field line is not a heading. Reads only."""
+    import ctx_blocks as cb                     # here: ctx_blocks imports ctx_read, which imports this module
+    import ctx_read as cr
+    ns_of = {}
+    for r in repos or ():
+        ns_of.setdefault(r.get("namespace") or r["id"], r["id"])
+    slots = [(sid, _names(slot)) for sid, slot in _slots(cat).items() if isinstance(slot, dict)]
+    tied, sound, out = bindings or {}, {}, []
+    for rec in records or ():
+        for ns, bid, _, _, _ in cr._blocks(rec.get("body") or ""):
+            repo = ns_of.get(ns)
+            if repo is None or not bid or bid == PLUGIN_BLOCK or (ns, bid) in tied:
+                continue
+            if ns not in sound:
+                sound[ns] = cb.find_regions(records, ns)[0]
+            region = sound[ns].get(bid)
+            if not region or region["host"] != rec["id"]:
+                continue
+            lines = cb._detach(region["text"]).splitlines()
+            first = next((k for k, line in enumerate(lines) if line.strip()), None)
+            for k, core in enumerate(lines):
+                if not cs._level(core):
+                    continue
+                for sid, names in slots:
+                    if any(cs.heading_matches(core, n) for n in names):
+                        item = {"repo": repo, "block": bid, "sub": None if k == first else cs._heading_text(core), "slot": sid}
+                        if item not in out:
+                            out.append(item)
+    return out

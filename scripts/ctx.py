@@ -44,7 +44,15 @@
   invalidate ID --reason R      mark a record no longer current (it stays, with a status region)
   archive ID [--reason R]       move a record to the archive; restore ID brings it (or a trashed one) back
   verify [ID ...] [--stale]     mark records verified today
-  validate                      records, ids, parents, card size, edits waiting
+  validate                      records, ids, parents, card size, edits waiting; since v3.15.0 also slots (reads only): a slots
+                                memory that cannot be read is an error (exit 3); warnings name each binding that does nothing
+                                (`slot binding: <repo> <block>[#<sub>] → <slot> — <why>`: a slot the catalogue lacks, a
+                                repository nobody registered, a block gone from the records, a block that gives its slot no
+                                text, a team slot's block that cannot be given to one team), each divergence between repositories
+                                (`slot <slot> diverges between <a>, <b> — ctx slot decide <slot> <repo>`) and each binding worth
+                                making (`proposal: ctx slot bind <repo> <block>[#<sub>] <slot>`: an unbound block of a registered
+                                repository whose heading answers a slot's names; never the plugin's `team` block). CTX_RESULT
+                                adds slot_proposals [{repo, block, sub, slot}]
   card                          regenerate INDEX.md only
   repo list [--json]            the repositories (provider registrations) a product draws context blocks
                                 from: kind, products, rank, access and, from the block state, how many blocks you
@@ -763,12 +771,22 @@ def cmd_validate(a, c):
             warnings.append("%d change(s) waiting — `ctx sync`" % waiting)
         for x in plan["conflicts"]:
             warnings.append("conflict: %s — `ctx sync` asks" % x["id"])
+    proposals = []
+    if recs:                        # since v3.15.0: the slots — bindings that do nothing, divergences, bindings to propose (reads only)
+        skipped = []
+        try:
+            repos = crp.load_repos(c.text, c.home, skipped=skipped)
+        except Exception:  # noqa: BLE001 — a registration that cannot be read is a line (unread_lines), not a failure
+            repos = []
+        slot_errors, slot_warnings, proposals = rv.validate_slots(c.store, c.copies, repos, skipped, now())
+        errors += slot_errors
+        warnings += slot_warnings
     for e in errors:
         print("error: " + e)
     for w in warnings:
         print("warning: " + w)
     print("valid" if not errors else "%d error(s)" % len(errors))
-    return (3 if errors else 0), {"command": "validate", "errors": errors, "warnings": warnings}
+    return (3 if errors else 0), {"command": "validate", "errors": errors, "warnings": warnings, "slot_proposals": proposals}
 
 
 def cmd_card(a, c):

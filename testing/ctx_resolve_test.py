@@ -861,11 +861,21 @@ with tempfile.TemporaryDirectory() as d:
     got = problems(e, memory(("zorg-core", "scope", None, "product.scope", None), ("zorg-core", "scope", None, "product.key_metrics", None)))
     check("…a block bound to several slots and a part for only one of them: empty for the other",
           [(p_["kind"], p_["slot"]) for p_ in got] == [("empty", "product.key_metrics")], got)
-    check("a binding to a slot the catalogue lacks is not reported here", problems(e, memory(("zorg-core", "gone", None, "product.nowhere", None))) == [], "")
+    got = problems(e, memory(("zorg-core", "gone", None, "product.nowhere", None)))
+    check("a binding to a slot the catalogue lacks (v3.15.0 Task 7): unknown, whatever else is wrong with it — `validate` names it",
+          [(p_["kind"], p_["slot"], p_["repo"], p_["block"], p_["how"]) for p_ in got] == [("unknown", "product.nowhere", "zorg-core", "gone", "memory")]
+          and got[0]["text"] == "прив'язка до слоту, якого немає в каталозі: zorg-core gone → product.nowhere", got)
+    got = problems(e, memory(("zorg-core", "team", "Members", "team.nowhere", None)))
+    check("…with its subsection in the line", [(p_["kind"], p_["sub"]) for p_ in got] == [("unknown", "Members")]
+          and got[0]["text"] == "прив'язка до слоту, якого немає в каталозі: zorg-core team#Members → team.nowhere", got)
+    check("…and every kind of problem carries `why`, the short reason `validate` prints after the slot",
+          all(isinstance(p_.get("why"), str) and p_["why"] for p_ in got), got)
 with tempfile.TemporaryDirectory() as d:
     e = Env(d, edits=[("## Zorg Core Notes\n\n", "## Zorg Core Notes\n\n" + SCOPE + "\n\n")])
     got = problems(e, memory(("zorg-core", "scope", None, "product.scope", None)))
     check("a block that is not one sound region (repeated): broken", [p_["kind"] for p_ in got] == ["broken"], got)
+    check("…proposals skip it: a block that is not one sound region would take no binding", sl.proposals(e.records(), REPOS, sl.bindings_of(e.store, REPOS, memory())[0], CAT) == [],
+          sl.proposals(e.records(), REPOS, {}, CAT))
 with tempfile.TemporaryDirectory() as d:
     e = Env(d)
     e.state("zorg-core", {"scope": ("0.4", [SCOPE.replace("v=0.4 -->", "v=0.4 slot=product.scope,org.structure -->")])})
@@ -878,6 +888,13 @@ with tempfile.TemporaryDirectory() as d:
     got = problems(e, memory())
     check("…the publisher's own slot= that names a slot the block has no part for (a block of several slots): empty, like yours (spec §4.5)",
           [(p_["kind"], p_["slot"], p_["how"]) for p_ in got] == [("empty", "org.structure", "marker")], got)
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    e.state("zorg-core", {"scope": ("0.4", [SCOPE.replace("v=0.4 -->", "v=0.4 slot=product.nowhere -->")])})
+    got = problems(e, memory())
+    check("the publisher's slot= that names a slot the catalogue lacks: unknown, with how marker", [(p_["kind"], p_["slot"], p_["how"]) for p_ in got]
+          == [("unknown", "product.nowhere", "marker")], got)
     e.state("zorg-core", {"scope": ("0.4", [SCOPE.replace("v=0.4 -->", "v=0.4 slot=product.scope -->")])})
     check("…and a slot= that the block can answer, with nobody binding the block, is no problem", problems(e, memory()) == [], problems(e, memory()))
     e.state("zorg-core", {"scope": ("0.4", [SCOPE.replace("v=0.4 -->", "v=0.4 slot=product.scope,org.structure -->")])})
@@ -906,6 +923,84 @@ with tempfile.TemporaryDirectory() as d:
     e.state("zorg-core", {"team": ("0.2", [TEAM])})
     open(os.path.join(e.store.state_dir, "blocks", "zorg-core.json"), "w", encoding="utf-8").write("{ not json")
     check("…a block state that cannot be read: its line", ctx_(REPOS, []) == [STATE_LINE], ctx_(REPOS, []))
+
+# ------------------------------------------------------------------ proposals: the bindings `validate` suggests (spec §4.2)
+def proposals_of(e, repos=REPOS, mem=None, bindings=None):
+    binds = sl.bindings_of(e.store, repos, mem or memory())[0] if bindings is None else bindings
+    return sl.proposals(e.records(), repos, binds, CAT)
+
+
+SCOPE_P = {"repo": "zorg-core", "block": "scope", "sub": None, "slot": "product.scope"}
+GROWTH_SUB = ("- **North star:** weekly active shoppers\n<!-- zorg-growth:end id=growth-metrics -->",
+              "- **North star:** weekly active shoppers\n\n#### Key Metrics (focus)\n- Weekly active shoppers\n<!-- zorg-growth:end id=growth-metrics -->")
+SCOPE_SUBS = ("The user works on Zorg App only.\n<!-- zorg-core:end id=scope -->",
+              "The user works on Zorg App only.\n\n#### Key Metrics\n- DAU\n\n#### Ключові метрики\n- WAU\n\n#### Key Metrics\n- again\n<!-- zorg-core:end id=scope -->")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    check("an unbound block of a registered repository whose first heading answers a slot's names: proposed — repository, block, no subsection, slot",
+          proposals_of(e) == [SCOPE_P], proposals_of(e))
+    check("…the plugin's `team` block is never proposed, even where no binding holds it (its Members heading answers team.members); the rest is as before",
+          proposals_of(e, bindings={}) == [SCOPE_P] and not [p_ for p_ in proposals_of(e, bindings={}) if p_["block"] == "team"], proposals_of(e, bindings={}))
+    check("…a block that has a binding — whatever slot it is bound to — is not proposed",
+          proposals_of(e, mem=memory(("zorg-core", "scope", None, "product.key_metrics", None))) == []
+          and proposals_of(e, mem=memory(("zorg-core", "scope", "Nowhere", "product.scope", None))) == [], "")
+    check("…a repository nobody registered owns no proposal", proposals_of(e, repos=REPOS[1:]) == [], proposals_of(e, repos=REPOS[1:]))
+    alias = [dict(REPOS[0], id="zorg-core-mirror")]
+    check("…the proposal names the registration (its id), the block carries the namespace",
+          proposals_of(e, repos=alias) == [dict(SCOPE_P, repo="zorg-core-mirror")], proposals_of(e, repos=alias))
+    check("…nothing to propose in no records or no catalogue", sl.proposals([], REPOS, {}, CAT) == [] and sl.proposals(e.records(), REPOS, {}, {}) == []
+          and sl.proposals(e.records(), [], {}, CAT) == [], "")
+    check("proposals reads only: the records it was given are as they were", e.records() == e.records(), "")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[GROWTH_SUB])
+    check("a subsection of an unbound block whose heading answers a slot (a qualifier after the name counts): proposed with the heading as `sub`",
+          proposals_of(e) == [{"repo": "zorg-growth", "block": "growth-metrics", "sub": "Key Metrics (focus)", "slot": "product.key_metrics"}, SCOPE_P],
+          proposals_of(e))
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[SCOPE_SUBS])
+    check("the block's first heading is the whole block, a later heading its subsection; each heading once, in both languages",
+          proposals_of(e) == [SCOPE_P, {"repo": "zorg-core", "block": "scope", "sub": "Key Metrics", "slot": "product.key_metrics"},
+                              {"repo": "zorg-core", "block": "scope", "sub": "Ключові метрики", "slot": "product.key_metrics"}], proposals_of(e))
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[("### Scope of work\n", "### Межі роботи\n")])
+    check("a Ukrainian name answers the same slot", proposals_of(e) == [SCOPE_P], proposals_of(e))
+
+# ------------------------------------------------------------------ validate_slots: what `ctx validate` says about slots
+def validated(e, repos=REPOS, skipped=(), mem=None):
+    if mem is not None:
+        remember(e, mem)
+    return rv.validate_slots(e.store, e.copies, repos, list(skipped), NOW, cat=CAT)
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    before = tree(e.home, e.vault)
+    errors, warnings, props = validated(e)
+    check("validate_slots → (errors, warnings, proposals); a proposal is a warning line and an item", errors == [] and props == [SCOPE_P]
+          and warnings == ["proposal: ctx slot bind zorg-core scope product.scope"], (errors, warnings, props))
+    check("…it writes nothing", tree(e.home, e.vault) == before, "")
+    errors, warnings, props = validated(e, mem=memory(("zorg-core", "gone", None, "product.nowhere", None), ("zorg-nowhere", "scope", None, "product.scope", None),
+                                                      ("zorg-core", "team", "Nowhere", "team.members", None), ("zorg-core", "gone2", None, "product.scope", None)))
+    check("bindings that do nothing, one line each — «slot binding: <repo> <block>[#<sub>] → <slot> — <why>» (the unknown slot, the repository nobody registered, the subsection the block lacks, the block that is gone)", sorted(w_ for w_ in warnings if w_.startswith("slot binding: ")) == sorted([
+              "slot binding: zorg-core gone → product.nowhere — " + rv.WHY_UNKNOWN,
+              "slot binding: zorg-nowhere scope → product.scope — " + rv.WHY_UNREGISTERED,
+              "slot binding: zorg-core team#Nowhere → team.members — у блоці немає підсекції «Nowhere»",
+              "slot binding: zorg-core gone2 → product.scope — " + rv.WHY_GONE]), warnings)
+    errors, warnings, props = validated(e, mem=memory(("zorg-core", "scope", None, "product.scope", None)))
+    check("a memory that binds every block there is: nothing to say, nothing to propose", errors == [] and warnings == [] and props == [], (errors, warnings, props))
+    open(os.path.join(e.store.state_dir, "slots.json"), "w", encoding="utf-8").write("{ not json")
+    errors, warnings, props = validated(e)
+    check("a slots memory that cannot be read: one error (it names the file), and nothing guessed from an empty memory — no binding line, no divergence, no proposal",
+          len(errors) == 1 and errors[0].startswith("slots memory not valid: .state/slots.json") and warnings == [] and props == [], (errors, warnings, props))
+    os.remove(os.path.join(e.store.state_dir, "slots.json"))
+    errors, warnings, props = validated(e, repos=REPOS[:1], skipped=[("/p/zorg-growth.yaml", "slow")])
+    check("a registration that was not read, while a block carries its namespace: the line `ctx read` prints, as a warning",
+          errors == [] and rv.UNREAD_REGISTRATION % "/p/zorg-growth.yaml" in warnings, warnings)
+    e.state("zorg-core", {"team": ("0.2", [TEAM])})
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-core.json"), "w", encoding="utf-8").write("{ not json")
+    errors, warnings, props = validated(e)
+    check("a block state that cannot be read: its line as a warning — the slot= attributes it holds are unknown, so the checks are not complete",
+          errors == [] and STATE_LINE in warnings, warnings)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

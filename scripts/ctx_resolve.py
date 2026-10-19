@@ -31,8 +31,10 @@ ctx_read._lookup reads a `fields`/`required` name and a `sections` one.
 - without_shown, bound_slots, looked_for   no duplicates in a whole record (spec §5.2), the slots a bound block's origin
                 line names wherever it is printed, and the names a slot was looked for under (spec §5.3)
 - unread_lines   the lines that say what a reader could not read (an unread registration, the slots memory, a block state)
-- binding_problems   the bindings that do nothing, and why (a block that is gone, a repository nobody registered, a region that
-                is not whole, a binding with nothing to give, a publisher's `slot=` your own binding set aside)
+- binding_problems   the bindings that do nothing, and why (a slot the catalogue lacks, a block that is gone, a repository nobody
+                registered, a region that is not whole, a binding with nothing to give, a publisher's `slot=` your own binding set aside)
+- validate_slots   what `ctx validate` says about slots: the memory that cannot be read, those bindings, the blocks that cannot be
+                given to one team, the divergences between repositories, and the bindings worth proposing (ctx_slots.proposals)
 - explain       what `ctx explain` prints (spec §7): for each slot its candidates and why the winner won, what it looked for
                 where nothing answered, what you decided about it and the command that takes that back
 
@@ -40,6 +42,7 @@ Reads only: no lock, no network, nothing written. Semantics: references/context-
 """
 import datetime
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -716,12 +719,22 @@ UNKNOWN_REPO = "прив'язка до репозиторію, якого не �
 BROKEN_BLOCK = "блок %s (%s) не є одним цілим регіоном — повторений, вкладений чи зламаний; прив'язка до %s не діє"
 EMPTY_BINDING = "прив'язка %s %s → %s недійсна: у блоці немає %s"
 IGNORED_MARKER = "атрибут slot=%s блоку %s %s ігноровано — блок прив'язано твоєю прив'язкою (до %s)"
+UNKNOWN_SLOT = "прив'язка до слоту, якого немає в каталозі: %s %s → %s"
+WHY_UNKNOWN = "слота немає в каталозі (references/context-slots.yaml)"
+WHY_UNREGISTERED = "репозиторій не зареєстровано (чи реєстрацію не прочитано)"
+WHY_GONE = "блоку немає в записах"
+WHY_BROKEN = "блок не є одним цілим регіоном — повторений, вкладений чи зламаний; прив'язка не діє"
+WHY_EMPTY = "у блоці немає %s"
+WHY_IGNORED = "атрибут slot= видавця ігноровано — блок прив'язано твоєю прив'язкою (до %s)"
 
 
 def binding_problems(sctx):
-    """The bindings of a `slot_context` that do not do what they say, [{"kind", "slot", "repo", "block", "sub", "how", "text"}],
-    `text` being the line that tells it (spec §4.5, and what a core that took a block away leaves behind). `kind`:
+    """The bindings of a `slot_context` that do not do what they say, [{"kind", "slot", "repo", "block", "sub", "how", "text", "why"}],
+    `text` being the line that tells it (spec §4.5, and what a core that took a block away leaves behind) and `why` the short
+    reason that follows the binding in `ctx validate`. `kind`:
 
+      "unknown"       the binding (yours, or the `slot=` attribute of the block's base) names a slot the catalogue lacks — a
+                      catalogue that changed, a publisher ahead of the plugin; nothing else is judged of it
       "unregistered"  your binding names a repository nobody registered (or whose registration was not read)
       "missing"       your binding names a block that is in none of the records — the core took it away, the binding stayed
       "broken"        the block is there but is not one sound region (repeated, nested, a marker broken): no binding applies
@@ -731,7 +744,7 @@ def binding_problems(sctx):
                       binding wins for the whole block (spec §4.2); `slot` is the slot the attribute names
 
     The plugin's own binding of the `team` block is not a problem when its block lacks the part (a growth squad's team block
-    has no Members). A slot the catalogue lacks has no entry here. Reads only."""
+    has no Members). Reads only."""
     cat, recs = sctx["cat"], sctx["records"]
     regs = _Repos(sctx["store"], sctx["repos"])
     present = {(ns, bid) for rec in recs for ns, bid, _, _, _ in cr._blocks(rec.get("body") or "") if bid}
@@ -744,8 +757,8 @@ def binding_problems(sctx):
 
     out = []
 
-    def add(kind, slot, repo, bid, sub, how, text):
-        out.append({"kind": kind, "slot": slot, "repo": repo, "block": bid, "sub": sub, "how": how, "text": text})
+    def add(kind, slot, repo, bid, sub, how, text, why):
+        out.append({"kind": kind, "slot": slot, "repo": repo, "block": bid, "sub": sub, "how": how, "text": text, "why": why})
 
     for (ns, bid), tied in (sctx["bindings"] or {}).items():
         reg = regs.reg(ns)
@@ -754,27 +767,30 @@ def binding_problems(sctx):
         for b in tied:
             slot, sub, how = b.get("slot"), b.get("sub"), b.get("how")
             info = sl.slot_info(cat, slot)
-            if info is None or how == "plugin":
-                continue
             where = bid + ("#" + sub if sub else "")
+            if how == "plugin":
+                continue
             whole = region(ns, bid)
-            if how == "memory" and reg is None:
-                add("unregistered", slot, repo, bid, sub, how, UNKNOWN_REPO % (repo, where, slot))
+            if info is None:
+                add("unknown", slot, repo, bid, sub, how, UNKNOWN_SLOT % (repo, where, slot), WHY_UNKNOWN)
+            elif how == "memory" and reg is None:
+                add("unregistered", slot, repo, bid, sub, how, UNKNOWN_REPO % (repo, where, slot), WHY_UNREGISTERED)
             elif (ns, bid) not in present:
                 if how == "memory":
-                    add("missing", slot, repo, bid, sub, how, GONE_BLOCK % (repo, where, slot))
+                    add("missing", slot, repo, bid, sub, how, GONE_BLOCK % (repo, where, slot), WHY_GONE)
             elif whole is None:
-                add("broken", slot, repo, bid, sub, how, BROKEN_BLOCK % (bid, repo, slot))
+                add("broken", slot, repo, bid, sub, how, BROKEN_BLOCK % (bid, repo, slot), WHY_BROKEN)
             else:
                 kind = info.get("kind")
                 find = cr._subsection if kind == "text" else cr._field_text
                 if _bound_text(_inner(whole["text"]), sub, kind, sl._names(info), several, find) is None:
                     lacks = "підсекції «%s»" % sub if sub else "підсекції чи рядка за назвами слоту"
-                    add("empty", slot, repo, bid, sub, how, EMPTY_BINDING % (repo, where, slot, lacks))
+                    add("empty", slot, repo, bid, sub, how, EMPTY_BINDING % (repo, where, slot, lacks), WHY_EMPTY % lacks)
         yours = [b.get("slot") for b in tied if b.get("how") == "memory"]
         for slot in sl.marker_slots(regs.base(ns, bid)) if yours else ():
             if slot not in yours and sl.slot_info(cat, slot) is not None:
-                add("ignored", slot, repo, bid, None, "marker", IGNORED_MARKER % (slot, repo, bid, ", ".join(yours)))
+                add("ignored", slot, repo, bid, None, "marker", IGNORED_MARKER % (slot, repo, bid, ", ".join(yours)),
+                    WHY_IGNORED % ", ".join(yours))
     return out
 
 
@@ -1077,3 +1093,81 @@ def explain(store, copies, repos, skipped, slots=None, skill=None, product=None,
     if sctx["needs_product"]:
         result["products"] = sctx["products"]
     return "\n".join(lines) + "\n", result
+
+
+# ------------------------------------------------------------------ what `ctx validate` says about slots (spec §4.2, §4.4, §6, §8)
+BINDING_WARNING = "slot binding: %s %s → %s — %s"
+DIVERGES_WARNING = "slot %s diverges between %s — " + DECIDE_COMMAND
+PROPOSAL_WARNING = "proposal: ctx slot bind %s %s %s"
+CATALOGUE_UNREAD = "слоти не перевірено — каталог не прочитано: %s"
+RECORDS_UNREAD = "слоти не перевірено — записи не прочитано: %s"
+
+
+def _shell_arg(arg):
+    """`arg` as one word of a command line: as it is when nothing in it needs quoting (a `#` inside is no comment), else in
+    double quotes — so that the line `validate` prints can be pasted and runs."""
+    if arg and not re.search(r"[\s\"'\\$`&|;<>()*?!{}\[\]~]", arg):
+        return arg
+    return '"%s"' % re.sub(r'(["\\$`])', r"\\\1", arg)
+
+
+def validate_slots(store, copies, repos, skipped, now, cat=None):
+    """(errors, warnings, proposals) of `ctx validate` for slots — reads only, as `ctx read` reads: the live records, the
+    registrations `repos` (`skipped` — those that could not be read, as ctx_repos.load_repos reports them), the slots memory, the
+    block states. Nothing is written.
+
+    `errors`: the slots memory cannot be read (`slots memory not readable|not valid: .state/slots.json (…)`) — and then nothing
+    else is said: bindings, divergences and proposals judged against an empty memory would be wrong. `warnings`, in this order:
+    what a reader could not read (unread_lines); each binding that does nothing (binding_problems) and each block that cannot be
+    given to one team (a team slot, several teams, no `--team`), as `slot binding: <repo> <block>[#<sub>] → <slot> — <why>`;
+    each divergence between repositories, as `slot <slot> diverges between <a>, <b> — ctx slot decide <slot> <repo>`; and one
+    `proposal: ctx slot bind <repo> <block>[#<sub>] <slot>` for each of `proposals` (ctx_slots.proposals). With several products
+    every product is checked (a divergence or an unplaced block in any of them is named, once). A catalogue or records that
+    cannot be read: one warning, the slots are not checked."""
+    try:
+        cat = sl.load_catalogue() if cat is None else cat
+    except ValueError as e:
+        return [], [CATALOGUE_UNREAD % cc.clip(e, 200)], []
+    try:
+        mem = sl.load_memory(store)
+    except cs.StoreError as e:
+        return [str(e)], [], []
+    try:
+        first = slot_context(store, copies, repos, None, now, mem=mem, cat=cat)
+        views = [first]
+        if first["needs_product"]:
+            views = [slot_context(store, copies, repos, r["id"], now, mem=mem, cat=cat) for r in first["records"] if r["type"] == "product"]
+    except (cs.StoreError, OSError) as e:
+        return [], [RECORDS_UNREAD % cc.clip(e, 200)], []
+    clip = cc.clip
+
+    def named(repo, block, sub):
+        return clip(repo, 60), clip(block + ("#" + sub if sub else ""), 120)
+
+    bound, diverging = [], []
+
+    def put(into, line):
+        if line not in into:
+            into.append(line)
+
+    for p in binding_problems(first):
+        repo, where = named(p["repo"], p["block"], p["sub"])
+        put(bound, BINDING_WARNING % (repo, where, clip(p["slot"], 80), p["why"]))
+    for view in views:
+        teams = ", ".join(clip(t["id"], 80) for t in view["teams"])
+        for slot in sl._slots(cat):
+            if sl.slot_info(cat, slot) is None:
+                continue
+            unplaced = []
+            for x in slot_answers(view, slot, unplaced=unplaced):
+                ids = sorted(clip(i, 60) for i in x["result"]["diverges"])
+                if ids:
+                    put(diverging, DIVERGES_WARNING % (slot, ", ".join(ids), slot, ids[0]))
+            for c in unplaced:
+                repo, where = named(c["source"], c["block"], c.get("sub"))
+                why = UNPLACED_WHY + (" (%s)" % teams if teams else "") + " — " + BIND_COMMAND % (repo, _shell_arg(where), slot, "<запис>")
+                put(bound, BINDING_WARNING % (repo, where, slot, why))
+    found = sl.proposals(first["records"], repos, first["bindings"], cat)
+    proposed = [PROPOSAL_WARNING % (clip(q["repo"], 60), _shell_arg(clip(q["block"] + ("#" + q["sub"] if q["sub"] else ""), 120)), q["slot"])
+                for q in found]
+    return [], unread_lines(first, skipped) + bound + diverging + proposed, found
