@@ -15,8 +15,9 @@ references/context-protocol.md.
 - slot_info                         a slot's own entry (kind, record, names, about), or None
 
 What you decided about slots is kept in the store, in `<store>/.state/slots.json` (schema context-slots-memory/1) —
-not in a record and not in a registration. `ctx slot bind|map|prefer|decide|forget` write it (a snapshot first, a journal
-line; `ctx undo` puts it back), the resolver reads it. Its shape:
+not in a record and not in a registration. A key this version does not know is refused, never dropped: a new key needs
+a new schema, context-slots-memory/2 (`_clean_memory` says what v3.15.0 then does). `ctx slot bind|map|prefer|decide|
+forget` write it (a snapshot first, a journal line; `ctx undo` puts it back), the resolver reads it. Its shape:
   {"schema", "bindings": [{"repo", "block", "sub": str|None, "slot", "team": str|None}],
    "aliases": [{"record": a record id, "heading", "slot"}], "prefer": {slot: "mine"|"repo:<id>"|"all"},
    "decisions": {slot: {"winner": repo id, "hashes": {repo id: sha}, "at": "YYYY-MM-DD" (optional: the day it was taken)}}}
@@ -169,7 +170,14 @@ def _clean_memory(data):
     """`data` as the canonical memory: every part there (a part the file lacks is empty), bindings and names in a fixed
     order with none twice. A binding is one per (repo, block, sub, slot) — one team per binding, as `add_binding` keeps
     it: of two with the same four, the first is kept and the later dropped, whatever team it names. Anything else — a
-    schema that is not MEMORY_SCHEMA, a part of the wrong shape, a key nobody knows — is a ValueError that says which."""
+    schema that is not MEMORY_SCHEMA, a part of the wrong shape, a key nobody knows — is a ValueError that says which.
+
+    The rule for whoever changes the memory: a top-level key this loader does not know is refused, never dropped (a save
+    would lose what a newer version wrote). So a new key — or a new meaning of one — needs a new schema,
+    `context-slots-memory/2`, and a loader that reads both; never a /1 file with one more key. What v3.15.0 does with a /2
+    file: `ctx read` and `ctx explain` go on without the memory and say so in one line (UNREAD_MEMORY of ctx_resolve, "slots
+    memory not valid: … schema is 'context-slots-memory/2' …"), every `ctx slot …` stops with exit 3, and `ctx validate`
+    reports it as an error — the file is never rewritten."""
     if not isinstance(data, dict):
         raise ValueError("not an object")
     if data.get("schema") != MEMORY_SCHEMA:
@@ -349,7 +357,7 @@ def marker_slots(region_text):
     return out
 
 
-def bindings_of(store, repos, mem):
+def bindings_of(store, repos, mem, reads=None):
     """(bindings, problems): which block of which repository answers which slot, and what could not be read.
 
     `bindings` is {(namespace, block id): [{"slot", "sub", "team", "how"}]}. Per block the first source found binds it,
@@ -359,13 +367,19 @@ def bindings_of(store, repos, mem):
       "marker"  the `slot=` attribute (marker_slots) of the block's base — the repository's text the store keeps
                 (`.state/blocks/<repo>/<sha>.md`), never your region; one binding per slot, with no sub and no team
       "plugin"  the `team` block of every registered repository: `Members` → team.members and nothing else — not its
-                `jira_project_key` line (the label differs from the product's own `Jira Project Key`, so the block would
-                add a «також» line to every skill that reads the key) and not `jira_team_field` (a team's name, not an id)
+                `jira_project_key` line (its label differs from the product's own `Jira Project Key`, and its value can
+                carry the team's other projects too — `PROJ (others: LEGACY)`, which provider_bundle writes when the team
+                has more than one key — so it can differ from the product's key: bound, the block would add a «також» line
+                to every skill that reads the key) and not `jira_team_field` (a team's name, not an id)
     A plugin binding is listed for every registration, whether or not its team block is in the records; a binding to a
     block the records lack simply has no candidate. `problems` holds one line per repository whose block state (or a
-    base of it) cannot be read — STATE_UNREAD, its `slot=` attributes are then unknown and the rest still binds. Reads
-    only: no lock, no network, nothing written."""
+    base of it) cannot be read — STATE_UNREAD, its `slot=` attributes are then unknown and the rest still binds. `reads` —
+    what reads the block states and the bases for it, with `load_state(repo_id)` and `get_base(repo_id, sha)` as
+    ctx_blocks has them (the resolver's _Repos, so that a read reads each once); None — ctx_blocks itself. Reads only: no
+    lock, no network, nothing written."""
     import ctx_blocks as cb                     # here: ctx_blocks imports ctx_read, which imports this module
+    load_state = reads.load_state if reads is not None else (lambda repo_id: cb.load_state(store, repo_id))
+    get_base = reads.get_base if reads is not None else (lambda repo_id, sha: cb.get_base(store, repo_id, sha))
     ns_of = {}
     for r in repos or ():
         ns_of.setdefault(r["id"], r.get("namespace") or r["id"])
@@ -376,11 +390,11 @@ def bindings_of(store, repos, mem):
     for r in repos or ():
         ns, marked = ns_of[r["id"]], {}
         try:
-            state = cb.load_state(store, r["id"])
+            state = load_state(r["id"])
             for bid in sorted(state["blocks"]):
                 if (ns, bid) in out:
                     continue
-                slots = marker_slots(cb.get_base(store, r["id"], state["blocks"][bid].get("base_sha")))
+                slots = marker_slots(get_base(r["id"], state["blocks"][bid].get("base_sha")))
                 if slots:
                     marked[(ns, bid)] = [{"slot": s, "sub": None, "team": None, "how": "marker"} for s in slots]
         except (cs.StoreError, OSError):

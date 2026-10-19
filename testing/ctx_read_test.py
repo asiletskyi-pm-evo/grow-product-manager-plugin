@@ -663,6 +663,88 @@ with tempfile.TemporaryDirectory() as d:
     check("a catalogue that cannot be read: every name is read as in v3.14.1, the read goes on", "> [твоє" not in text
           and "Bea Two" not in text and "Own Person" in text and res["slots"] == {} and "слот team.members" not in text, text[-700:])
 
+# --- v3.15.0 final review: a bound block that gives a slot nothing answers by name; a whole region with a blank line after its
+# begin marker; a required field of a record read whole; one read budget, each block state and base read once
+import ctx_resolve as rv  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[("#### Members (registry", "#### Team Members (registry")])
+    block_state(e, "zorg-core", {"team": "0.2"})
+    text, res = e.view("task-creator", repos=RANKED)
+    body = next(r for r in e.store.load() if r["id"] == "team.alpha-a")["body"]
+    check("final review: the plugin-bound team block whose heading reads `Team Members` answers by name, as v3.14.1 found it — "
+          "the members are there and the false «блоків із цим слотом немає» is gone",
+          "> [zorg-core · v0.2 · станом на 2026-10-20 · за назвою, без прив'язки]\n#### Team Members (registry" in text
+          and cr._lookup(body, "Members", field=False)[0].rstrip("\n") in text and text.count("Bea Two") == 1
+          and "Members (шукав" not in text and not any(m.startswith("Members") for m in res["missing"])
+          and res["slots"].get("team.members") == {"shown": ["zorg-core"], "also": [], "diverges": []}, (text[-1500:], res["missing"]))
+
+SCOPE_BLANK = ("<!-- zorg-core:begin id=scope v=0.4 -->\n### Scope of work\nThe user works on Zorg App only.\n",
+               "<!-- zorg-core:begin id=scope v=0.4 -->\n\n### Scope of work\nThe user works on Zorg App only.\n\n### Out of scope\nZorg Lite.\n")
+SCOPE_SKILL = {"schema": "context-manifest/1", "skills": {"lead-skill": {"product": {"sections": ["Scope of work"]}}}}
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[SCOPE_BLANK])
+    block_state(e, "zorg-core", {"scope": "0.4"})
+    read_by(e, "Zorg Core Notes", "all")
+    remember(e, ("zorg-core", "scope", None, "product.scope", None))
+    text, res = e.view("lead-skill", repos=RANKED, manifest=SCOPE_SKILL)
+    view, notes = text[text.index("## Product: Zorg App"):], text[text.index("## Zorg Core Notes"):]     # the card above quotes the record
+    check("final review: a whole region with a blank line after its begin marker, shown in its slot, is the one line in the read_by "
+          "record — its second section is not printed twice", view.count("Zorg Lite.") == 1 and view.count("The user works on Zorg App only.") == 1
+          and "> [блок scope — у слоті product.scope вище]\n" in notes and "<!-- zorg-core:begin id=scope " not in notes
+          and view.index("Zorg Lite.") < view.index("## Zorg Core Notes"), notes[:1200])
+
+CONTACT = ("<!-- zorg-core:end id=teams -->\n", "<!-- zorg-core:end id=teams -->\n\n<!-- zorg-core:begin id=contact v=0.1 -->\n"
+           "- **Email:** core@zorg.example\n<!-- zorg-core:end id=contact -->\n")
+EMAIL_SKILL = {"schema": "context-manifest/1", "every_skill": {"records": ["profile"]},
+               "skills": {"lead-skill": {"profile": {"required": ["Email"]}}}}
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[CONTACT])
+    block_state(e, "zorg-core", {"contact": "0.1"})
+    remember(e, ("zorg-core", "contact", None, "profile.email", None))
+    text, res = e.view("lead-skill", repos=RANKED, manifest=EMAIL_SKILL)
+    check("final review: a required field of a record read whole is there only when that record has it — a block bound to the slot in "
+          "another record does not make the profile's Email present, and «Відсутнє» says where the block is",
+          res["missing"] == ["Email"] and "core@zorg.example" not in text
+          and "Email (обов'язкове) (шукав: Email у User Profile; є блок в іншому записі — ctx explain profile.email)" in text, (text[-900:], res["missing"]))
+    e.edit(os.path.join(e.store.records_dir, "profile.md"), "- **Work Email:** a.one@zorg.example\n",
+           "- **Work Email:** a.one@zorg.example\n- **Email:** a.one@zorg.example\n")
+    text, res = e.view("lead-skill", repos=RANKED, manifest=EMAIL_SKILL)
+    check("…and the profile's own Email is there", res["missing"] == [] and "Відсутнє" not in text, (text[-900:], res["missing"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[TEAM_MEMBERS, KEYS_NOTES])
+    block_state(e, "zorg-core", {"team": "0.2", "keys": "0.1", "scope": "0.4", "teams": "0.4"}, bases={"team": TEAM_REGION})
+    block_state(e, "zorg-growth", {"team": "0.1", "growth-metrics": "0.1"})
+    remember(e, ("zorg-core", "keys", None, "product.jira_key", None))
+    read_by(e, "Zorg Core Notes", "all")
+    want, _ = e.view("task-creator", repos=RANKED)
+    seen = {"read": [], "explain": []}
+    real_state, real_base = cb.load_state, cb.get_base
+
+    def counted(kind, real):
+        def call(store, *args):
+            seen[at[0]].append(((kind,) + args, cs.budget_until()))
+            return real(store, *args)
+        return call
+
+    at = ["read"]
+    cb.load_state, cb.get_base = counted("state", real_state), counted("base", real_base)
+    try:
+        got, _ = e.view("task-creator", repos=RANKED)
+        at[0] = "explain"
+        rv.explain(e.store, e.copies, RANKED, [], skill="task-creator", today=TODAY)
+    finally:
+        cb.load_state, cb.get_base = real_state, real_base
+    for run, calls in sorted(seen.items()):
+        what = [c for c, _ in calls]
+        check("final review: %s reads the block state of each repository once and each base once (one assembly, one _Repos)" % run,
+              len(what) == len(set(what)) and ("state", "zorg-core") in what and ("state", "zorg-growth") in what, what)
+        budgets = [b for _, b in calls]
+        check("…all of it within one read budget (cs.read_budget, as a snapshot reads)", budgets and None not in budgets
+              and len(set(budgets)) == 1, budgets)
+    check("…and the read prints what it printed before", got == want, "")
+
 check("check_manifest is clean on the repo", cr.check_manifest(ROOT) == [], cr.check_manifest(ROOT))
 with tempfile.TemporaryDirectory() as d:
     src = read(cr.MANIFEST_PATH)

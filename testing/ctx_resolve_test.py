@@ -314,7 +314,8 @@ with tempfile.TemporaryDirectory() as d:
     check("a block bound to one slot gives the whole region, without its markers", len(got) == 1
           and got[0]["text"] == "### Teams map\n- Alpha, Beta\n" and got[0]["heading"] == "Teams map" and got[0]["place"] is None, got)
     got = cands(e, "team.members", mem=memory(("zorg-core", "team", "Nowhere", "team.members", None)))
-    check("a binding to a subsection the block lacks is no candidate", got == [], got)
+    check("a binding to a subsection the block lacks is no bound candidate — the block answers by name, as with no binding (final review)",
+          [(c["how"], c["block"], c["sub"]) for c in got] == [("name", "team", None)] and got[0]["text"].startswith("#### Members"), got)
 with tempfile.TemporaryDirectory() as d:
     e = Env(d, edits=[(SCOPE, SCOPE2)])
     e.state("zorg-core", {"scope": ("0.4", [SCOPE2])})
@@ -672,7 +673,7 @@ check("a slot the catalogue lacks has no kind, and is read as a text: no excepti
 
 # ------------------------------------------------------------------ slot_context and slot_answers (shared by read, explain, decide)
 SCTX_KEYS = {"store", "cat", "records", "notes", "pending", "product", "needs_product", "products", "teams", "repos", "mem",
-             "mem_error", "bindings", "problems"}
+             "mem_error", "bindings", "problems", "regs"}
 with tempfile.TemporaryDirectory() as d:
     e = Env(d)
     before = tree(e.home, e.vault)
@@ -907,6 +908,37 @@ with tempfile.TemporaryDirectory() as d:
           and "org.structure · текст · Organization: Zorg · не знайдено" in text, text)
     check("…the ignored attribute is shown under the slot it names", "увага: атрибут slot=product.scope блоку zorg-core scope ігноровано" in text
           and entry(res, "product.scope")["notes"], text)
+
+# ------------------------------------------------------------------ final review: a binding that gives the slot nothing
+TEAM_MEMBERS_HEADING = ("#### Members (registry", "#### Team Members (registry")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[TEAM_MEMBERS_HEADING])
+    e.state("zorg-core", {"team": ("0.2", [region(e.text, "zorg-core", "team")])})
+    got = cands(e, "team.members")
+    body = next(x for x in e.records() if x["id"] == "team.alpha-a")["body"]
+    check("final review: the plugin's team#Members finds nothing under `Team Members` — the block answers by name, as cr._lookup found it",
+          len(got) == 1 and got[0]["how"] == "name" and got[0]["block"] == "team" and got[0]["source"] == "zorg-core"
+          and got[0]["text"] == cr._lookup(body, "Members", field=False)[0] and got[0]["text"].startswith("#### Team Members")
+          and got[0]["level"] == "repo" and got[0]["sub"] is None and got[0]["place"] == "team.alpha-a", got)
+    text, res = explain(e, "team.members")
+    tm = entry(res, "team.members")
+    check("…explain tells the truth: the block is shown by name; nothing «не знайдено», no note (the plugin's binding is no problem)",
+          outs(tm) == [("zorg-core", "shown")] and tm["candidates"][0]["how"] == "name" and "notes" not in tm
+          and "  ✔ zorg-core · блок team v0.2 у записі team.alpha-a · станом на 2026-10-20 · за назвою, без прив'язки\n" in text
+          and rv.NOT_FOUND not in text and rv.NO_BLOCKS not in text, (tm, text))
+    mem = memory(("zorg-core", "team", "Members", "team.members", None))
+    got = cands(e, "team.members", mem=mem)
+    check("…so does a binding of yours to the subsection the block lacks: no bound candidate, the block by name — and the binding is named as empty",
+          [(c["how"], c["block"]) for c in got] == [("name", "team")] and [p_["kind"] for p_ in problems(e, mem)] == ["empty"], got)
+    mem = memory(("zorg-core", "team", None, "team.members", "team.beta-b"))
+    check("…a binding that gives the slot its text but places the block with a team not read: the block is that team's, not found by name here",
+          cands(e, "team.members", mem=mem) == [], cands(e, "team.members", mem=mem))
+TEAM_ID_IN_BLOCK = [("- **Jira Team ID:** <team-uuid>\n", ""), ("- **jira_team_field:** Alpha\n", "- **jira_team_field:** Alpha\n- **Jira Team ID:** core-uuid\n")]
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=TEAM_ID_IN_BLOCK)
+    got = cands(e, "team.jira_team_id")
+    check("…a block bound to another slot only (the plugin's team#Members) answers this slot by name, as v3.14.1 read it",
+          [(c["how"], c["block"], c["text"]) for c in got] == [("name", "team", "- **Jira Team ID:** core-uuid\n")], got)
 
 # ------------------------------------------------------------------ unread_lines
 with tempfile.TemporaryDirectory() as d:

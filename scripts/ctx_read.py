@@ -99,9 +99,11 @@ class _Origin:
     registration whose namespace the block carries (the namespace itself when nobody registered it), the version is
     the block's marker, the date the day the store last checked that block against its repository — none when it never
     did or the state cannot be read. Since v3.15.0 a bound block's line also names its slots, `слот <slot> — <about>`
-    (spec §5.2): `tags` {(namespace, block id): [slot, …]} (ctx_resolve.bound_slots), the `about` from the catalogue `cat`."""
+    (spec §5.2): `tags` {(namespace, block id): [slot, …]} (ctx_resolve.bound_slots), the `about` from the catalogue `cat`;
+    `states` — what reads the block states (`load_state(repo_id)`: the resolver's _Repos, so that a read reads each once;
+    None — ctx_blocks itself)."""
 
-    def __init__(self, store, repos, tags=None, cat=None):
+    def __init__(self, store, repos, tags=None, cat=None, states=None):
         self.store = store
         self.repo_of = {}
         for r in repos or ():
@@ -109,6 +111,7 @@ class _Origin:
         self._blocks = {}
         self.tags = tags or {}
         self.cat = cat or {}
+        self.states = states
 
     @staticmethod
     def clip(text, n=60):
@@ -117,7 +120,9 @@ class _Origin:
     def _state(self, repo_id):
         if repo_id not in self._blocks:
             try:
-                self._blocks[repo_id] = _blocks_module().load_state(self.store, repo_id)["blocks"]
+                state = (self.states.load_state(repo_id) if self.states is not None
+                         else _blocks_module().load_state(self.store, repo_id))
+                self._blocks[repo_id] = state["blocks"]
             except (cs.StoreError, OSError):
                 self._blocks[repo_id] = {}
         return self._blocks[repo_id]
@@ -282,9 +287,19 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
     What a slot of this view used from a bound block (in full or as a «також» line) is not repeated in a record read whole
     (ctx_resolve.without_shown): the whole region is `> [блок <block> — у слоті <slot> вище]`, a subsection
     `> [блок <block> › <Підсекція> — у слоті <slot> вище]` with the rest of the block kept, a value slot's block stays
-    whole. A bound block's origin line names its slot wherever it is printed. A registration not read while a block in the
-    records has a namespace no registration read has, a slots memory and a block state that cannot be read are one line
-    each, before «Відсутнє». `slots` is {slot: {"shown", "also", "diverges"}} — the sources, for `explain` and the tests."""
+    whole. A bound block's origin line names the slot shown in a slot, and every slot it answers in a record read whole
+    (ctx_resolve.bound_slots). A registration not read while a block in the records has a namespace no registration read
+    has, a slots memory and a block state that cannot be read are one line each, before «Відсутнє». `slots` is
+    {slot: {"shown", "also", "diverges"}} — the sources, for `explain` and the tests. A required field of a record read
+    whole counts as there only when that record has it (a block bound to its slot in another record does not print it
+    there: `є блок в іншому записі — ctx explain <slot>`). Every file is read within one time budget (cs.read_timeout, or
+    what is left of the caller's cs.read_budget), as a snapshot reads, and each block state and base once (the one _Repos
+    of ctx_resolve.slot_context)."""
+    with cs.read_budget(cs.read_timeout()):
+        return _read_view(store, copies, skill, product, today, manifest, repos, skipped, catalogue)
+
+
+def _read_view(store, copies, skill, product, today, manifest, repos, skipped, catalogue):
     import ctx_resolve as rv                     # here: ctx_resolve imports this module
     spec = manifest_for(manifest or load_manifest(), skill)
     today = (today or datetime.date.today().isoformat())[:10]
@@ -297,7 +312,8 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
             catalogue = {}                       # validator check 16 names it; meanwhile every name is read as in v3.14.1
     sctx = rv.slot_context(store, copies, repos, product, today + "T00:00:00", cat=catalogue)
     recs, notes, pending = sctx["records"], sctx["notes"], sctx["pending"]
-    origin = _Origin(store, repos, tags=rv.bound_slots(catalogue, recs, sctx["bindings"]), cat=catalogue)
+    origin = _Origin(store, repos, tags=rv.bound_slots(catalogue, recs, sctx["bindings"], regs=sctx["regs"]), cat=catalogue,
+                     states=sctx["regs"])
     blocks, used, missing, sizes, unassigned = [], [], [], {}, []
     res = {"records": used, "missing": missing, "pending": pending, "needs_product": False,
            "unassigned": unassigned, "over_budget": False, "largest": None, "slots": {}}
@@ -325,10 +341,12 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
             answers[(slot, field)] = (rv.slot_answers(sctx, slot, field=field, unplaced=unplaced), bool(unplaced))
         return next((e for e in answers[(slot, field)][0] if e["place"] == place), None)
 
-    def looked(slot, rec, field):
-        """Where `slot` was looked for — after entry_of(slot, field, …) answered it."""
+    def looked(slot, rec, field, elsewhere=False):
+        """Where `slot` was looked for — after entry_of(slot, field, …) answered it; `elsewhere`: a block answers the slot
+        from another record (a required field of a record read whole)."""
+        tail = rv.ELSEWHERE_BLOCK if elsewhere else rv.UNPLACED_BLOCK if answers[(slot, field)][1] else None
         return "(шукав: %s у %s; %s)" % (", ".join(rv.looked_for(catalogue, slot, rec, sctx["mem"])), rec["title"],
-                                         rv.UNPLACED_BLOCK % slot if answers[(slot, field)][1] else rv.NO_BLOCKS)
+                                         tail % slot if tail else rv.NO_BLOCKS)
 
     def slot_text(rkind, rec, name, field):
         """(the slot printed, None), (None, where it looked) — or None: the name has no slot."""
@@ -350,11 +368,15 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
         return rv.render_slot(result, origin), None
 
     def present(rkind, rec, name):
-        """(is it there, where it looked) of a required field of a record read whole."""
+        """(is it there, where it looked) of a required field of a record read whole: there when a candidate of its slot
+        sits in that record — the record is what is printed; a block bound to the slot elsewhere does not print it here."""
         slot = sl.slot_for(catalogue, rkind, name)
         if slot is None:
             return _lookup(rec["body"], name)[0] is not None, None
-        return entry_of(slot, True, rec["id"] if rkind in ("product", "team") else None) is not None, looked(slot, rec, True)
+        found = entry_of(slot, True, rec["id"] if rkind in ("product", "team") else None)
+        cands = found["candidates"] if found else []
+        there = any(c["record"] == rec["id"] for c in cands)
+        return there, None if there else looked(slot, rec, True, elsewhere=bool(cands))
 
     if spec.get("full"):
         blocks.append("Цей скіл редагує local-context.md і читає його цілком.")

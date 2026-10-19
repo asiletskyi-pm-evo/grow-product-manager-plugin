@@ -10,8 +10,9 @@ A slot (scripts/ctx_slots.py, references/context-slots.yaml) is answered by cand
 - a bound block   from any record, when a binding (ctx_slots.bindings_of: yours, the `slot=` of the block's base, the
               plugin's own for the `team` block) ties it to the slot; where it belongs is decided as spec §4.4 says,
               and what text it gives as §4.5 says
-- a block found by name   a block of the same product, team (or profile) record that does not answer through a
-              binding (unbound, or bound but not one sound region), read as v3.14.1 read it (ctx_read._lookup: the
+- a block found by name   a block of the same product, team (or profile) record that no binding gives the slot a text
+              (unbound, bound to other slots only, bound but not one sound region, or bound to a part it lacks — the
+              plugin's `team#Members` under a `Team Members` heading), read as v3.14.1 read it (ctx_read._lookup: the
               first block that has a name) — only when your text in that record has nothing
 
 The lookup mode follows the manifest (`field`: a field line, else its subsection — or the subsection only), as
@@ -29,7 +30,8 @@ ctx_read._lookup reads a `fields`/`required` name and a `sections` one.
 - render_slot   how `ctx read` prints one answer (spec §5.2): the shown candidates with their origin lines, the note under a
                 rule, one «також» line for each other text, the divergence line
 - without_shown, bound_slots, looked_for   no duplicates in a whole record (spec §5.2), the slots a bound block's origin
-                line names wherever it is printed, and the names a slot was looked for under (spec §5.3)
+                line names in a record read whole (in a slot it names the slot shown), and the names a slot was looked for
+                under (spec §5.3)
 - unread_lines   the lines that say what a reader could not read (an unread registration, the slots memory, a block state)
 - binding_problems   the bindings that do nothing, and why (a slot the catalogue lacks, a block that is gone, a repository nobody
                 registered, a region that is not whole, a binding with nothing to give, a publisher's `slot=` your own binding set aside)
@@ -64,38 +66,70 @@ def _rank(reg):
 
 
 class _Repos:
-    """The registrations by namespace, and the block state of each repository, read once, never written. A state or a
-    base that cannot be read is no state (ctx_slots.bindings_of names it)."""
+    """The registrations by namespace, the block state of each repository and the bases it keeps — each read once, never
+    written — and the sound regions of each namespace in `records` (cb.find_regions), found once. One is made by
+    slot_context and shared by everything a read or an explanation does (ctx_slots.bindings_of, candidates, bound_slots,
+    binding_problems, the origin lines of ctx_read): a read reads each block state and each base once. A state or a base
+    that cannot be read is no state here (ctx_slots.bindings_of names it)."""
 
-    def __init__(self, store, repos):
+    def __init__(self, store, repos, records=None):
         self.store = store
         self.by_ns = {}
         for r in repos or ():
             self.by_ns.setdefault(r.get("namespace") or r["id"], r)
-        self._states = {}
+        self.records = records
+        self._states, self._bases, self._regions = {}, {}, {}
 
     def reg(self, ns):
         return self.by_ns.get(ns)
+
+    @staticmethod
+    def _once(cache, key, read):
+        """read() the first time `key` is asked, its result (or the error it raised, raised again) every time after."""
+        if key not in cache:
+            try:
+                cache[key] = (read(), None)
+            except (cs.StoreError, OSError) as e:
+                cache[key] = (None, e)
+        got, err = cache[key]
+        if err is not None:
+            raise err
+        return got
+
+    def load_state(self, repo_id):
+        """cb.load_state of the repository `repo_id`, read once: one that cannot be read raises its error each time."""
+        return self._once(self._states, repo_id, lambda: cb.load_state(self.store, repo_id))
+
+    def get_base(self, repo_id, sha):
+        """cb.get_base of the repository `repo_id`, read once per hash: one that cannot be read raises its error each time."""
+        return self._once(self._bases, (repo_id, sha), lambda: cb.get_base(self.store, repo_id, sha))
 
     def entry(self, ns, bid):
         reg = self.by_ns.get(ns)
         if reg is None or not bid:
             return {}
-        if reg["id"] not in self._states:
-            try:
-                self._states[reg["id"]] = cb.load_state(self.store, reg["id"])["blocks"]
-            except (cs.StoreError, OSError):
-                self._states[reg["id"]] = {}
-        return self._states[reg["id"]].get(bid) or {}
+        try:
+            return self.load_state(reg["id"])["blocks"].get(bid) or {}
+        except (cs.StoreError, OSError):
+            return {}
 
     def base(self, ns, bid):
         sha = self.entry(ns, bid).get("base_sha")
         if not sha:
             return None
         try:
-            return cb.get_base(self.store, self.by_ns[ns]["id"], sha)
+            return self.get_base(self.by_ns[ns]["id"], sha)
         except (cs.StoreError, OSError):
             return None
+
+    def regions(self, records, ns):
+        """cb.find_regions(records, ns)[0] — found once per namespace for the records this was made for (other records:
+        found afresh)."""
+        if records is not self.records:
+            return cb.find_regions(records, ns)[0]
+        if ns not in self._regions:
+            self._regions[ns] = cb.find_regions(records, ns)[0]
+        return self._regions[ns]
 
     def block(self, slot, rec, ns, bid, v, region, text, how, placed, place, sub=None):
         """A block's candidate: `region` is the whole region text (markers included) when it is sound, else None; `sub` the
@@ -246,7 +280,7 @@ def _placement(rkind, rec, binding, prod, team_ids, reg):
     return (True, None)
 
 
-def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, field=None):
+def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, field=None, regs=None):
     """Every candidate of `slot` (an id of the catalogue `cat`; an unknown one has none), as a list of dicts:
 
       slot, source ("mine" or the repository id: the registration whose namespace the block carries, else the namespace),
@@ -268,8 +302,11 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
     list: the field line first; a text: the subsection). It holds for your text, the blocks found by name and the part a
     bound block gives. Your text gives at most one candidate per record (the first name that answers). A block that is
     not one sound region (cb.find_regions: repeated, nested, broken) is no bound candidate but may still answer by name;
-    a bound, sound block is never found by name. In order: your text, place by place; the bound blocks, in record order;
-    the blocks found by name. Reads only."""
+    so may a sound block none of whose bindings gives this slot a text (the plugin's `team#Members` under a `Team Members`
+    heading, a binding to a subsection the block lacks, a binding to another slot only). A block a binding gives this slot
+    a text is never found by name — not even where the binding does not place it (another team's, another product's).
+    In order: your text, place by place; the bound blocks, in record order; the blocks found by name. `regs` is the
+    _Repos of slot_context (None: one is made here). Reads only."""
     info = sl.slot_info(cat, slot)
     if info is None:
         return []
@@ -279,7 +316,7 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
     aliases = (mem or {}).get("aliases") or []
     bindings = bindings or {}
     team_ids = [t["id"] for t in teams or ()]
-    regs = _Repos(store, repos)
+    regs = _Repos(store, repos, records) if regs is None else regs
 
     def place_of(rec):
         return rec["id"] if rkind in ("product", "team") else None
@@ -297,15 +334,11 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
             out.append(found)
             own_in.add(rec["id"])
 
-    sound = {}
-
     def region_of(ns, bid, host):
-        if ns not in sound:
-            sound[ns] = cb.find_regions(records, ns)[0]
-        reg = sound[ns].get(bid)
+        reg = regs.regions(records, ns).get(bid)
         return reg["text"] if reg and reg["host"] == host else None
 
-    seen = set()
+    seen, answered = set(), set()        # answered: the blocks a binding gives this slot a text — never found by name
     for rec in records:
         for ns, bid, v, _, _ in cr._blocks(rec.get("body") or ""):
             tied = bindings.get((ns, bid)) if bid else None
@@ -316,7 +349,10 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
             several = len({b.get("slot") for b in tied}) > 1
             for b in ours:
                 text = _bound_text(_inner(region), b.get("sub"), kind, names, several, find)
-                where = _placement(rkind, rec, b, prod, team_ids, regs.reg(ns)) if text is not None else None
+                if text is None:
+                    continue                # this binding gives the slot nothing: no candidate through it
+                answered.add((ns, bid))
+                where = _placement(rkind, rec, b, prod, team_ids, regs.reg(ns))
                 if where is None or (ns, bid, text) in seen:
                     continue
                 seen.add((ns, bid, text))
@@ -328,8 +364,8 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
                 continue
             hit = None
             for ns, bid, v, _, inner in cr._blocks(rec.get("body") or ""):
-                if bid and bindings.get((ns, bid)) and region_of(ns, bid, rec["id"]) is not None:
-                    continue                # bound and sound: it answers through its bindings, never by name
+                if bid and (ns, bid) in answered:
+                    continue                # a binding gives this slot its text: it answers through it, never by name
                 text = _first(find, inner, names)
                 if text is not None:
                     hit = regs.block(slot, rec, ns, bid, v, region_of(ns, bid, rec["id"]) if bid else None, text,
@@ -506,11 +542,13 @@ def slot_context(store, copies, repos, product, now, mem=None, cat=None):
     product (`product` — a name or id, or None: the one there is), its teams (the team records under the same parent, as
     ctx_read.read_view takes them), the registrations `repos` (ctx_repos.load_repos, as given), the slots memory (`mem`
     when a writing command already holds it, else read here) and the bindings. Returns {"store", "cat", "records", "notes",
-    "pending", "product", "needs_product", "products", "teams", "repos", "mem", "mem_error", "bindings", "problems"}:
+    "pending", "product", "needs_product", "products", "teams", "repos", "mem", "mem_error", "bindings", "problems", "regs"}:
     `needs_product` is True (and `product` None) when several products and none asked for, or none that matches, `products`
     then being their names; a memory that cannot be read is an empty one and `mem_error` the line that says why (a reader
     goes on without it; a writing command stops on it). `cat` is the catalogue (a file that cannot be read is a
-    ValueError) — `cat` when the caller already holds one; `problems` are the lines of ctx_slots.bindings_of."""
+    ValueError) — `cat` when the caller already holds one; `problems` are the lines of ctx_slots.bindings_of; `regs` the one
+    _Repos everything built on this assembly shares (the bindings, the candidates, the origin lines): each block state and
+    each base is read once."""
     cat = sl.load_catalogue() if cat is None else cat
     recs, notes, pending = cr._live_view(store, copies, now)
     products = [r for r in recs if r["type"] == "product"]
@@ -522,10 +560,11 @@ def slot_context(store, copies, repos, product, now, mem=None, cat=None):
             mem = sl.load_memory(store)
         except cs.StoreError as e:
             mem, mem_error = sl.empty_memory(), str(e)
-    bindings, problems = sl.bindings_of(store, repos, mem)
+    regs = _Repos(store, repos, recs)
+    bindings, problems = sl.bindings_of(store, repos, mem, reads=regs)
     return {"store": store, "cat": cat, "records": recs, "notes": notes, "pending": pending, "product": prod,
             "needs_product": needs, "products": [p["title"].split(":", 1)[-1].strip() for p in products], "teams": teams,
-            "repos": repos, "mem": mem, "mem_error": mem_error, "bindings": bindings, "problems": problems}
+            "repos": repos, "mem": mem, "mem_error": mem_error, "bindings": bindings, "problems": problems, "regs": regs}
 
 
 def slot_answers(sctx, slot, field=None, unplaced=None):
@@ -535,7 +574,7 @@ def slot_answers(sctx, slot, field=None, unplaced=None):
     A candidate that is not placed (a block that cannot be given to one team) is in no entry; `candidates` has it, and so
     does `unplaced` when it is a list (it is appended there)."""
     cands = candidates(slot, sctx["cat"], sctx["records"], sctx["product"], sctx["teams"], sctx["repos"], sctx["mem"],
-                       sctx["store"], sctx["bindings"], field=field)
+                       sctx["store"], sctx["bindings"], field=field, regs=sctx.get("regs"))
     groups = []
     for c in cands:
         if not c["placed"]:
@@ -564,6 +603,7 @@ SHOWN_SUB_LINE = "> [блок %s › %s — у слоті %s вище]"
 MINE_WORD = "твоє"
 NO_BLOCKS = "блоків із цим слотом немає"
 UNPLACED_BLOCK = "є нерозміщений блок — ctx explain %s"
+ELSEWHERE_BLOCK = "є блок в іншому записі — ctx explain %s"      # a required field of a record read whole, a block elsewhere
 UNREAD_REGISTRATION = "реєстрацію %s не прочитано — ранги й правила її блоків невідомі; кандидати з неї показано без каскаду"
 UNREAD_MEMORY = "пам'ять слотів не прочитано (%s) — прив'язки й рішення не застосовано"
 
@@ -628,7 +668,7 @@ def without_shown(text, shown):
         return text
 
     def cut(region, bid, uses):
-        inner = cb._detach(region)
+        inner = _inner(region)                      # as _bound_text gave it: a blank line after the begin marker is no part
         whole = next((slot for slot, kind, part in uses if kind != "value" and cb.norm(part) == cb.norm(inner)), None)
         if whole:
             return SHOWN_LINE % (bid, whole)
@@ -663,20 +703,20 @@ def without_shown(text, shown):
     return walk(text)
 
 
-def bound_slots(cat, records, bindings):
+def bound_slots(cat, records, bindings, regs=None):
     """{(namespace, block id): [slot, …]} — the slots each bound block answers (`bindings`, the first item of
     ctx_slots.bindings_of), in the order its bindings give them: a block that is one sound region (cb.find_regions) and
     gives the slot a text (spec §4.5, in the lookup mode of the slot's kind) — a binding with no such part names no slot. Its
-    origin line names them wherever the block is printed (spec §5.2, criterion 3). A slot the catalogue lacks is left out."""
-    out, sound = {}, {}
+    origin line names them all in a record read whole (spec §5.2, criterion 3); in a slot it names the slot shown
+    (render_slot). A slot the catalogue lacks is left out. `regs` — the _Repos of slot_context (None: one is made here)."""
+    out = {}
+    regs = _Repos(None, None, records) if regs is None else regs
     for rec in records or ():
         for ns, bid, _, _, _ in cr._blocks(rec.get("body") or ""):
             tied = (bindings or {}).get((ns, bid)) if bid else None
             if not tied:
                 continue
-            if ns not in sound:
-                sound[ns] = cb.find_regions(records, ns)[0]
-            reg = sound[ns].get(bid)
+            reg = regs.regions(records, ns).get(bid)
             if not reg or reg["host"] != rec["id"]:
                 continue
             several = len({b.get("slot") for b in tied}) > 1
@@ -744,16 +784,13 @@ def binding_problems(sctx):
                       binding wins for the whole block (spec §4.2); `slot` is the slot the attribute names
 
     The plugin's own binding of the `team` block is not a problem when its block lacks the part (a growth squad's team block
-    has no Members). Reads only."""
+    has no Members; a heading `Team Members` — then the block answers by name, `candidates`). Reads only."""
     cat, recs = sctx["cat"], sctx["records"]
-    regs = _Repos(sctx["store"], sctx["repos"])
+    regs = sctx.get("regs") or _Repos(sctx["store"], sctx["repos"], recs)
     present = {(ns, bid) for rec in recs for ns, bid, _, _, _ in cr._blocks(rec.get("body") or "") if bid}
-    sound = {}
 
     def region(ns, bid):
-        if ns not in sound:
-            sound[ns] = cb.find_regions(recs, ns)[0]
-        return sound[ns].get(bid)
+        return regs.regions(recs, ns).get(bid)
 
     out = []
 
@@ -1016,7 +1053,7 @@ def _slot_lines(s):
 def _unmapped(sctx):
     """The blocks of a registered repository that no slot takes — [{"repo", "block", "record", "version", "heading"}], once each,
     in the order of the records: regions with an id and no binding at all (the plugin's own binding of the `team` block counts)."""
-    regs = _Repos(sctx["store"], sctx["repos"])
+    regs = sctx.get("regs") or _Repos(sctx["store"], sctx["repos"], sctx["records"])
     out, seen = [], set()
     for rec in sctx["records"]:
         for ns, bid, v, _, inner in cr._blocks(rec.get("body") or ""):
@@ -1044,7 +1081,13 @@ def explain(store, copies, repos, skipped, slots=None, skill=None, product=None,
     something to say, "decision" (the one that settled a divergence), "memory" (what you decided about the slot) and "notes"
     (the bindings that do nothing)}], "unmapped_blocks", "skipped_blocks", "needs_product", "products", "warnings" (what could
     not be read: `unread_lines`)}. A slot has one entry for each place — a team is one — so a team slot with several teams
-    appears once for each; `record` tells which."""
+    appears once for each; `record` tells which. Every file is read within one time budget (cs.read_timeout, or what is
+    left of the caller's cs.read_budget), as `ctx read` reads."""
+    with cs.read_budget(cs.read_timeout()):
+        return _explain(store, copies, repos, skipped, slots, skill, product, today, catalogue, manifest)
+
+
+def _explain(store, copies, repos, skipped, slots, skill, product, today, catalogue, manifest):
     today = (today or datetime.date.today().isoformat())[:10]
     cat = sl.load_catalogue() if catalogue is None else catalogue
     asked, whole = [], False
@@ -1123,7 +1166,13 @@ def validate_slots(store, copies, repos, skipped, now, cat=None):
     each divergence between repositories, as `slot <slot> diverges between <a>, <b> — ctx slot decide <slot> <repo>`; and one
     `proposal: ctx slot bind <repo> <block>[#<sub>] <slot>` for each of `proposals` (ctx_slots.proposals). With several products
     every product is checked (a divergence or an unplaced block in any of them is named, once). A catalogue or records that
-    cannot be read: one warning, the slots are not checked."""
+    cannot be read: one warning, the slots are not checked. Every file is read within one time budget (cs.read_timeout, or
+    what is left of the caller's cs.read_budget), as `ctx read` reads."""
+    with cs.read_budget(cs.read_timeout()):
+        return _validate_slots(store, copies, repos, skipped, now, cat)
+
+
+def _validate_slots(store, copies, repos, skipped, now, cat):
     try:
         cat = sl.load_catalogue() if cat is None else cat
     except ValueError as e:

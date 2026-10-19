@@ -4099,7 +4099,7 @@ with tempfile.TemporaryDirectory() as d:                           # no reposito
           rc == 0 and res.get("slot_proposals") == [] and "proposal" not in text_of(out) and "slot " not in text_of(out), (rc, out[-300:]))
 
 # the documents say what the code does now
-pp_fr, cp_fr, lcp_fr =doc("references", "context-provider-protocol.md"), doc("references", "context-protocol.md"), \
+pp_fr, cp_fr, lcp_fr = doc("references", "context-provider-protocol.md"), doc("references", "context-protocol.md"), \
     doc("references", "local-context-protocol.md")
 sec11_fr = between(pp_fr, "### 12.11 ", "### 12.12 ") if "### 12.12 " in pp_fr else pp_fr[pp_fr.find("### 12.11 "):]
 need_fr = [(sec11_fr, ["no fetch, plan or write begins with less than 3 s of the work time left, and a write, once begun, has at least "
@@ -4140,10 +4140,10 @@ printed_15 = [rv_mod.ALSO_LINE, rv_mod.DIVERGE_LINE, rv_mod.SHOWN_LINE, rv_mod.S
 check("context-protocol §5f quotes every line of ctx read and ctx explain as the code prints it (ctx_resolve.py, ctx_slots.py)",
       not quoted_in(between(cp15, "## 5f. ", "## 6. "), printed_15), quoted_in(between(cp15, "## 5f. ", "## 6. "), printed_15))
 reads_15 = [rv_mod.ALSO_LINE, rv_mod.DIVERGE_LINE, rv_mod.SHOWN_LINE, rv_mod.SHOWN_SUB_LINE, rv_mod.NOTE_LINE, rv_mod.NO_BLOCKS,
-            rv_mod.UNPLACED_BLOCK]
+            rv_mod.UNPLACED_BLOCK, rv_mod.ELSEWHERE_BLOCK]
 check("context-protocol §5a quotes the line of a bound block that cannot be given to one team as the code prints it",
-      not quoted_in(between(cp15, "## 5a. ", "## 5b. "), [rv_mod.UNPLACED_BLOCK, rv_mod.NO_BLOCKS]),
-      quoted_in(between(cp15, "## 5a. ", "## 5b. "), [rv_mod.UNPLACED_BLOCK, rv_mod.NO_BLOCKS]))
+      not quoted_in(between(cp15, "## 5a. ", "## 5b. "), [rv_mod.UNPLACED_BLOCK, rv_mod.NO_BLOCKS, rv_mod.ELSEWHERE_BLOCK]),
+      quoted_in(between(cp15, "## 5a. ", "## 5b. "), [rv_mod.UNPLACED_BLOCK, rv_mod.NO_BLOCKS, rv_mod.ELSEWHERE_BLOCK]))
 check("step 0c quotes the lines a skill reads as the code prints them", not quoted_in(between(lcp15, "### 0c.", "### 0d."), reads_15),
       quoted_in(between(lcp15, "### 0c.", "### 0d."), reads_15))
 check("context-provider-protocol §12.9 quotes the provenance additions and the «також» and divergence lines as the code prints them",
@@ -4168,9 +4168,15 @@ need_15 = [
             "Only the headings are read — not the slot's `about`",
             "a block in `skip_blocks` is not in the records, but one already there is proposed whether or not its id is listed",
             "stays in the memory and has no candidate", "There is no `ctx explain` there, no cascade and no `ctx slot …`",
-            "`Key Metrics (focus)` mapped to `product.okrs` is no candidate of `product.key_metrics`", "A block with no binding (or one that is not one sound region) answers by its heading",
-            "A block in another product's record is no candidate",
-            "a `team.*` slot's block in the active product's own record needs exactly one team, else it is unplaced",
+            "`Key Metrics (focus)` mapped to `product.okrs` is no candidate of `product.key_metrics`",
+            "A block that no binding gives the slot a text — it has none, is bound to other slots only, is not one sound region, or its binding finds nothing for the slot",
+            "unless a binding of the block gives this slot its text (then it answers through that binding only, even where the binding does not place it)",
+            "For a `product.*` slot, and for a `team.*` slot whose binding names no team, a block in another product's record is no candidate",
+            "a `team.*` slot's block in the active product's own record needs exactly one team or a binding that names the team, else it is unplaced",
+            "places the block with that team wherever it sits, while that team is read", "An `org.*` or `profile.*` slot takes the block from wherever it sits — another product's record too",
+            "can carry more than the product's own key (the team's other projects, when the team has more than one), so its value can differ whatever the label",
+            "in a slot, the slot shown; in a record read whole, one for each slot the block answers",
+            "a new key, or a new meaning of one, needs a new schema, `context-slots-memory/2`", "v3.15.0 treats a `/2` file as a memory it cannot read",
             "One line, printed once before `Відсутнє:` and not under each candidate", "`jira_team_field` is a team's name, not a Jira Team ID",
             "a block id that is not an id (`bind` does not check that the block exists", "the publisher's `slot=` in the begin marker of the block's base",
             "Search — Step 0.5 across several repositories", "entities and cross-links, which also join the items of a list",
@@ -4178,12 +4184,14 @@ need_15 = [
     (pp15, ["**A slot — `slot=`** (since v3.15.0)", "`<!-- <namespace>:begin id=<block> v=<version> slot=<slot> -->`", "`xslot=` is no attribute",
             "A holder's own binding of the block (`ctx slot bind`) wins over the attribute for the whole block",
             "the plugin binds the block itself", "nothing else of the block is bound",
+            "can carry more than a product's own `Jira Project Key` (the team's other projects, when the team has more than one), so its value can differ whatever the label",
+            "in a slot, the slot shown; in a record read whole — through `read_by` too — one for each slot the block answers",
             "**A second, narrower exception since v3.15.0: `skip_blocks`.**", "only on your explicit yes for that block",
             "One key is the exception, and only by your own word: `sync`", "since v3.15.0 `ctx read` and `ctx explain` decide a slot by it",
             "`ctx explain` (since v3.15.0), `ctx slot …`, `ctx validate`", "`ctx provider adopt|plan|apply|sync`"]),
     (lcp15, ["**Reading the slots (since v3.15.0).**", "Rely on both and name both sources", "do not choose between them and do not ask the user in the middle of the work",
              "the user's text below it is a note on the rule", "never fill it from memory", "that `ctx slot bind … --team` places it",
-             "there is no cascade, no `ctx explain` and no «також» line there"]),
+             "there is no cascade, no `ctx explain` and no «також» line there", "the block is a fact only if its record is printed in this read"]),
     (cst15, ["### §4c Slots after a refresh (with a store, since v3.15.0)", "**Blocks the user switched off — at a refresh, one message.**",
              "is offered again at the next refresh", "This skill binds nothing without the user's yes", "recommend no side", "`ctx slot bind <repo> <block>[#<Підсекція>] <slot>` first, so that a refusal (exit 3) has changed nothing else",
              "take that one id out of `skip_blocks`", "An id is never added to `skip_blocks` here", "`ctx slot decide <slot> <repo>`",
@@ -4206,7 +4214,13 @@ gone_15 = [(pp15, ["no command decides by it yet", "a bound line would put a «�
            (cp15, ["The resolver (slots, the cascade, `ctx explain`) — v3.15;"]),
            (skl15, ["version: 0.4.0", "offered once, in one message", "and binding is the user's"]),
            (cst15, ["once, one message", "first the one with the later version"]),
-           (cp15, ["mapped to `org.key_metrics`"]), (readme15, ["and — once — the blocks you had switched off", "Context Connect (v0.4.0)", "| Context Connect | v0.4.0 |", "Plugin Configurator (v2.15.1)"])]
+           (cp15, ["mapped to `org.key_metrics`"]),
+           (cp15, ["A block with no binding (or one that is not one sound region) answers by its heading", "A block in another product's record is no candidate",
+                   "needs exactly one team, else it is unplaced", "unless the block has a binding and is one sound region",
+                   "carries more than the product's own key", "so its value differs whatever the label", "one for each slot it answers, wherever it is printed"]),
+           (pp15, ["carries more than a product's own `Jira Project Key`", "so its value differs whatever the label",
+                   "wherever it is printed — a record read whole through `read_by` too"]),
+           (readme15, ["and — once — the blocks you had switched off", "Context Connect (v0.4.0)", "| Context Connect | v0.4.0 |", "Plugin Configurator (v2.15.1)"])]
 check("v3.15.0 docs: §5f, the §3 rows, the memory in §1 and §8, the host row and the roadmap of context-protocol; slot= and the second exception in "
       "context-provider-protocol; step 0c; connect-steps §4c; the skill's Step 4a; Validate; the README; none of the outdated sentences stays",
       all(not lacks(text, needed) for text, needed in need_15) and all(not [x for x in bad if x in text] for text, bad in gone_15),
