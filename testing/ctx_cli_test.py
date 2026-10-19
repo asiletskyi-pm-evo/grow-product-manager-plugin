@@ -3225,8 +3225,8 @@ need_cst = ["`sync: daily`", "`sync: off`", "except `sync`", "`--choose <block>=
             "One `--choose` takes several answers", "ctx provider sync <repo>"]
 check("connect-steps asks about `sync: daily` once, settles every `?` before it, carves `sync` out of the kept-keys rule and shows several answers per --choose",
       not lacks(cst3, need_cst) and 0 <= i_first < i_q, (lacks(cst3, need_cst), i_first, i_q))
-need_skl = ["version: 0.4.0", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
-check("the skill is 0.4.0 and asks the daily-sync question only on the user's own yes", not lacks(skl3, need_skl), lacks(skl3, need_skl))
+need_skl = ["version: 0.5.0", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
+check("the skill is 0.5.0 (slots, v3.15.0) and asks the daily-sync question only on the user's own yes", not lacks(skl3, need_skl), lacks(skl3, need_skl))
 
 # the registry: one case per area, above v3.13.1
 tc = read(ROOT, "testing", "test-cases.md")
@@ -4111,6 +4111,108 @@ gone_fr = [(lcp_fr, ["for most runs it costs milliseconds"])]
 check("final review: §12.11 (the floor, held_behind, the lag's report part once), §12.7's result keys, the digest's lag mark and step 0c's cost",
       all(not lacks(text, needed) for text, needed in need_fr) and all(not [x for x in bad if x in text] for text, bad in gone_fr),
       ([lacks(text, needed) for text, needed in need_fr], [[x for x in bad if x in text] for text, bad in gone_fr]))
+
+# --- v3.15.0 Task 8: the protocols, step 0c, context-connect 0.5.0 and the configurator say what the resolver does (doc pins)
+import ctx_resolve as rv_mod  # noqa: E402
+import ctx_slots as sl_mod  # noqa: E402
+
+cp15, pp15, lcp15 = doc("references", "context-protocol.md"), doc("references", "context-provider-protocol.md"), \
+    doc("references", "local-context-protocol.md")
+cst15, skl15 = doc("skills", "context-connect", "references", "connect-steps.md"), doc("skills", "context-connect", "SKILL.md")
+mm15, cfg15 = doc("skills", "plugin-configurator", "references", "maintenance-modes.md"), doc("skills", "plugin-configurator", "SKILL.md")
+readme15, hp15 = doc("README.md"), doc("references", "host-profiles.md")
+
+
+def as_doc(template):
+    """A string the code prints with `%s` where a name goes, as a pattern for the documents, which write `<name>` there."""
+    return re.escape(template).replace("%s", "<[^>]+>")
+
+
+def quoted_in(text, templates):
+    return [s for s in templates if not re.search(as_doc(s), text)]
+
+
+# every output string the documents quote is the one the code prints
+printed_15 = [rv_mod.ALSO_LINE, rv_mod.DIVERGE_LINE, rv_mod.SHOWN_LINE, rv_mod.SHOWN_SUB_LINE, rv_mod.UNREAD_REGISTRATION,
+              rv_mod.UNREAD_MEMORY, sl_mod.STATE_UNREAD, rv_mod.NOTE_LINE, rv_mod.BY_NAME_MARK,
+              rv_mod.EDITED_MARK, rv_mod.RULE_MARK, rv_mod.NO_BLOCKS, rv_mod.WHY_LIST, rv_mod.WHY_ONLY, rv_mod.WHY_MINE,
+              rv_mod.GONE_BLOCK.split(":")[0]]
+check("context-protocol §5f quotes every line of ctx read and ctx explain as the code prints it (ctx_resolve.py, ctx_slots.py)",
+      not quoted_in(between(cp15, "## 5f. ", "## 6. "), printed_15), quoted_in(between(cp15, "## 5f. ", "## 6. "), printed_15))
+reads_15 = [rv_mod.ALSO_LINE, rv_mod.DIVERGE_LINE, rv_mod.SHOWN_LINE, rv_mod.SHOWN_SUB_LINE, rv_mod.NOTE_LINE, rv_mod.NO_BLOCKS,
+            rv_mod.UNPLACED_BLOCK]
+check("context-protocol §5a quotes the line of a bound block that cannot be given to one team as the code prints it",
+      not quoted_in(between(cp15, "## 5a. ", "## 5b. "), [rv_mod.UNPLACED_BLOCK, rv_mod.NO_BLOCKS]),
+      quoted_in(between(cp15, "## 5a. ", "## 5b. "), [rv_mod.UNPLACED_BLOCK, rv_mod.NO_BLOCKS]))
+check("step 0c quotes the lines a skill reads as the code prints them", not quoted_in(between(lcp15, "### 0c.", "### 0d."), reads_15),
+      quoted_in(between(lcp15, "### 0c.", "### 0d."), reads_15))
+check("context-provider-protocol §12.9 quotes the provenance additions and the «також» and divergence lines as the code prints them",
+      not quoted_in(between(pp15, "### 12.9 ", "### 12.10 "), [rv_mod.ALSO_LINE, rv_mod.DIVERGE_LINE, rv_mod.NOTE_LINE, rv_mod.BY_NAME_MARK,
+                                                              rv_mod.EDITED_MARK, rv_mod.RULE_MARK]),
+      quoted_in(between(pp15, "### 12.9 ", "### 12.10 "), [rv_mod.ALSO_LINE, rv_mod.DIVERGE_LINE, rv_mod.NOTE_LINE, rv_mod.BY_NAME_MARK]))
+
+need_15 = [
+    (cp15, ["## 5f. Slots, the cascade and `explain` (since v3.15.0)", "`references/context-slots.yaml` (`schema: context-slots/1`)",
+            "| `explain [SLOT …] [--skill S] [--product P] [--json]` |", "`slot bind REPO BLOCK[#Subsection] SLOT [--team ID]`",
+            "├── slots.json", "`.state/slots.json` since v3.15.0", "adds `op` `slot` with `action`",
+            "A guess from a heading never binds a block", "its `jira_project_key` and `jira_team_field` lines are not bound",
+            "under the first of the slot's `names` that answers, in the catalogue's order",
+            "your explicit mapping beats a name of the catalogue",
+            "the first block of that same record that has a subsection or a field under one of the slot's names",
+            "A `value` slot compares the value after `**<label>:**`, not the whole line",
+            "only when the slot shows more than one candidate or has a «також» line, a note or a divergence",
+            "for a `value` slot nothing is taken away", "it is shown in full after those that do",
+            "One answer is kept per slot — a second `decide` for another product or team replaces the first",
+            "the slots of a product and of a team are held back and one line says `Продукти: …`",
+            "`ctx read` and `ctx explain` go on without it and say so in one line", "`ctx validate` reports it as an error and skips the other slot checks",
+            "Only the headings are read — not the slot's `about`",
+            "a block in `skip_blocks` is not in the records, but one already there is proposed whether or not its id is listed",
+            "stays in the memory and has no candidate", "There is no `ctx explain` there, no cascade and no `ctx slot …`",
+            "Search — Step 0.5 across several repositories", "entities and cross-links, which also join the items of a list",
+            "the overlay, the person and the provider kit — v3.17", "the configurator as a loop", "— v3.18"]),
+    (pp15, ["**A slot — `slot=`** (since v3.15.0)", "`<!-- <namespace>:begin id=<block> v=<version> slot=<slot> -->`", "`xslot=` is no attribute",
+            "A holder's own binding of the block (`ctx slot bind`) wins over the attribute for the whole block",
+            "the plugin binds the block itself", "nothing else of the block is bound",
+            "**A second, narrower exception since v3.15.0: `skip_blocks`.**", "only on your explicit yes for that block",
+            "One key is the exception, and only by your own word: `sync`", "since v3.15.0 `ctx read` and `ctx explain` decide a slot by it",
+            "`ctx explain` (since v3.15.0), `ctx slot …`, `ctx validate`", "`ctx provider adopt|plan|apply|sync`"]),
+    (lcp15, ["**Reading the slots (since v3.15.0).**", "Rely on both and name both sources", "do not choose between them and do not ask the user in the middle of the work",
+             "the user's text below it is a note on the rule", "never fill it from memory", "that `ctx slot bind … --team` places it",
+             "there is no cascade, no `ctx explain` and no «також» line there"]),
+    (cst15, ["### §4c Slots after a refresh (with a store, since v3.15.0)", "`ctx slot bind <repo> <block>[#<Підсекція>] <slot>` first, so that a refusal (exit 3) has changed nothing else",
+             "take that one id out of `skip_blocks`", "An id is never added to `skip_blocks` here", "`ctx slot decide <slot> <repo>`",
+             "for the second kind keep `ctx slot bind <repo> <block> <slot> --team <team record>` ready",
+             "holds for every key except `sync` (and, since v3.15.0, the taking of one id out of `skip_blocks`, below)",
+             "**The second exception: one id out of `skip_blocks`** (since v3.15.0)"]),
+    (skl15, ["version: 0.5.0", "## Step 4a — slots after a refresh (with a store, since v3.15.0)", "and binding is the user's",
+             "(the second exception of `references/context-provider-protocol.md` §3b)", "a no changes nothing",
+             "without the user's own yes for that block or slot"]),
+    (mm15, ["since v3.15.0 the slots (`references/context-protocol.md` §5f)", "the answer per slot being `ctx slot decide <slot> <repo>`",
+            "a yes being `ctx slot bind …` for each confirmed one", "### Context slots (only with a context store)"]),
+    (cfg15, ["version: 2.15.2"]),
+    (readme15, ["### 32. Context Connect (v0.5.0)", "| Context Connect | v0.5.0 |", "### 10. Plugin Configurator (v2.15.2)", "| Plugin Configurator | v2.15.2 |",
+                "**Slots, the cascade and `ctx explain`** (since v3.15.0)", "since v3.15.0 `explain` and `slot bind|map|prefer|decide|forget`"]),
+    (hp15, ["since v3.15.0 slots and the cascade in `ctx read`, `ctx explain`, `ctx slot …`"]),
+]
+gone_15 = [(pp15, ["no command decides by it yet"]),
+           (cp15, ["The resolver (slots, the cascade, `ctx explain`) — v3.15;"]),
+           (skl15, ["version: 0.4.0"]), (readme15, ["Context Connect (v0.4.0)", "| Context Connect | v0.4.0 |", "Plugin Configurator (v2.15.1)"])]
+check("v3.15.0 docs: §5f, the §3 rows, the memory in §1 and §8, the host row and the roadmap of context-protocol; slot= and the second exception in "
+      "context-provider-protocol; step 0c; connect-steps §4c; the skill's Step 4a; Validate; the README; none of the outdated sentences stays",
+      all(not lacks(text, needed) for text, needed in need_15) and all(not [x for x in bad if x in text] for text, bad in gone_15),
+      ([lacks(text, needed) for text, needed in need_15], [[x for x in bad if x in text] for text, bad in gone_15]))
+i_s, i_f = lcp15.find("**Reading the slots (since v3.15.0).**"), lcp15.find("- **FS without SHELL:**")
+i_r = lcp15.find("- **SHELL available — then the read:**")
+check("step 0c: the slot lines come after the read and before the host without a shell", 0 <= i_r < i_s < i_f, (i_r, i_s, i_f))
+i_4, i_4a, i_5 = skl15.find("## Step 4 — "), skl15.find("## Step 4a — "), skl15.find("## Step 5 — ")
+check("the skill: Step 4a between Step 4 and Step 5", 0 <= i_4 < i_4a < i_5, (i_4, i_4a, i_5))
+
+ids3150 = ["TC-ctx-3150-%s" % k for k in ("slots", "resolve", "read", "explain", "validate", "slot", "docs", "acceptance")]
+head3150 = "## Release v3.15.0 — slots, the cascade and explain (added 2026-10-19)"
+check("test-cases.md has the v3.15.0 section above v3.14.0 with one TC-ctx-3150-* row per area; Testing-process lists the two new test files",
+      head3150 in tc and 0 <= tc.index(head3150) < tc.index("## Release v3.14.0") and not [i for i in ids3150 if "**%s**" % i not in tc]
+      and "testing/ctx_slots_test.py" in read(ROOT, "testing", "Testing-process.md") and "testing/ctx_resolve_test.py" in read(ROOT, "testing", "Testing-process.md"),
+      [i for i in ids3150 if "**%s**" % i not in tc])
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

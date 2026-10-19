@@ -1,6 +1,6 @@
 ---
 name: context-connect
-version: 0.4.0
+version: 0.5.0
 description: Shared team core — connect, refresh bundle, daily sync, add MCP provider, enrich your context. Not your Obsidian vault or plugin setup (plugin-configurator), not curated sources (knowledge-library). UA — «онови мій пакет з ядра», «підключи мене до спільного контексту», «збагати мій контекст блоками ядра». EN — "refresh my bundle", "connect me to the team vault".
 ---
 
@@ -15,6 +15,7 @@ This is a model of **relevance, not security**: never promise that the bundle "h
 ## Prerequisites
 - `references/local-context-protocol.md` — Step 0; the `GROW_PM_SESSION` digest's `providers:` and `bundle:` lines say what is already connected.
 - `references/context-provider-protocol.md` — contract `vault/v1`, the provider manifest (§3a), the registration (§3b), the `### Vault Search MCP` declaration (§3c), the write boundary (§7), the provider kit (§9).
+- `references/context-protocol.md` §5f — the slots, the cascade and `ctx explain` (a refresh with a store ends with Step 4a).
 - `references/persistent-storage.md` — backups before `local-context.md` is written (last 5 kept).
 - `references/data-policy.md` — provider content is internal data.
 - `references/connect-steps.md` (skill-local) — the full procedure with every command; `references/focus-interview.md` (skill-local) — the five-question interview.
@@ -36,7 +37,7 @@ The connect run has no judgment points: it copies, proposes and records what the
 | Mode | Trigger | What happens |
 |---|---|---|
 | **Connect** | first connection to a provider | Steps 0–6; with a context store the blocks go in through `ctx provider apply` and `adopt` (Step 4) |
-| **Refresh** | «онови мій пакет з ядра» / "refresh my bundle"; a newer core version; the digest marks the provider stale | Steps 0, 3, 4, 6 — the same run without `--force`: new files added, the user's notes kept. With a store: `ctx provider plan` → one message about `⚠`, `+`, `?` rows only → `ctx provider apply` (Step 4); without: the blocks proposed again (usually one confirmation) |
+| **Refresh** | «онови мій пакет з ядра» / "refresh my bundle"; a newer core version; the digest marks the provider stale | Steps 0, 3, 4, 6 — the same run without `--force`: new files added, the user's notes kept. With a store: `ctx provider plan` → one message about `⚠`, `+`, `?` rows only → `ctx provider apply` (Step 4), then the slots (Step 4a: bindings to confirm, divergences, blocks switched off); without: the blocks proposed again (usually one confirmation) |
 | **Enrich** | only the context blocks, no bundle | Steps 0, 3 (`--propose-only` with the user's context), 4 |
 | **Daily sync** | «увімкни щоденний синк ядра», «вимкни синк ядра» / "turn on the daily core sync"; also the last question of Connect and Refresh | Step 6 item 2 only, with a store: to switch on, every `?` settled first, then the one question; to switch off, nothing to settle or ask; `sync: daily` or `sync: off` in the registration |
 | **Register an MCP provider** | a provider reachable only as an MCP server (no folder) | Step 0, then `references/connect-steps.md` §7 |
@@ -60,6 +61,13 @@ Run the builder for real (`references/connect-steps.md` §3): it copies the bund
 4. **Without a store**, after "yes": backup, copy the proposal over `~/.grow-pm/local-context.md`, refresh the vault mirror if one exists (`references/connect-steps.md` §4b). When the shell cannot reach `~/.grow-pm/`, give the user the one command to run.
 5. A new context (none existed) → after copying, recommend `plugin-configurator` Validate / Update — never start it yourself.
 
+## Step 4a — slots after a refresh (with a store, since v3.15.0)
+After the blocks are settled (Step 4 item 3), run `python3 "<plugin root>/scripts/ctx.py" validate` and read its slot lines and `CTX_RESULT.slot_proposals`; the commands and the screens are in `references/connect-steps.md` §4c. A slot is the place in a record where an answer lives (`references/context-protocol.md` §5f); a block of the core answers one only when it is **bound**, and binding is the user's. Three things, each as **one** message per refresh, the recommended answer first, in `user.language`:
+1. **Bindings to confirm** — every `proposal: ctx slot bind <repo> <block>[#<sub>] <slot>` line as one package: for each block, the slot and what it holds. A yes runs `ctx slot bind …` for each confirmed proposal; what is declined comes back at the next refresh.
+2. **Divergences** — every `slot <slot> diverges between <a>, <b>` line as one screen: for each slot the two texts with their repositories. The answer is `ctx slot decide <slot> <repo>`, remembered until a repository publishes a new text; «not now» leaves both texts shown to every skill, named.
+3. **Blocks the user switched off** (`skip_blocks`) that now have a slot — offered once, in one message, saying plainly that the user's own text still wins and the core's shows as a «також» line and in `ctx explain`. A yes **for a block** binds it (`ctx slot bind`), takes that one id out of the registration's `skip_blocks` (the second exception of `references/context-provider-protocol.md` §3b) and adds it as the `+` row it now is; a no changes nothing.
+A `slot binding:` warning (a binding that does nothing, a block that cannot be given to one team) is said in one line and not asked. A line that says a registration, the slots memory or a block state was not read ends the step: ranks, rules or decisions are unknown, and an answer now would rest on them.
+
 ## Step 5 — focus note (five questions, one at a time)
 `references/focus-interview.md`. Write each answer into the focus note right away; link every mission the user names to the provider's mission cards; never invent one.
 
@@ -77,6 +85,7 @@ Run the builder for real (`references/connect-steps.md` §3): it copies the bund
 - Inventing a team, a role or a mission; editing the provider's role model or blocks (only the owner's generators do that).
 - Writing an MCP server into the host's configuration — show the entry; the user adds it.
 - Writing `sync: daily` (or changing the `sync` key) without the user's own yes, switching the daily sync on while a `?` row waits, or asking the sync question again after an answer.
+- Binding a block to a slot, deciding a divergence or taking an id out of `skip_blocks` without the user's own yes for that block or slot, taking out an id on a yes meant for another, adding an id to `skip_blocks`, or changing anything else of the registration while doing it.
 
 ## Quality Standards
 - One sentence per finding, in `user.language`; paths and field names only when the user must act on them.
@@ -85,9 +94,10 @@ Run the builder for real (`references/connect-steps.md` §3): it copies the bund
 - Refresh never re-asks a discrepancy the user already answered with "keep mine" unless the core changed that field again.
 - With a store, the user is asked only about `⚠`, `+` and `?` rows, once; `=`, `~`, `✎`, `−`, `✂` and `·` are said in one line.
 - The daily sync is offered once per repository, after the blocks are settled, with the plain list of what it will do without asking; `no` is kept as `sync: off`.
+- Slots: bindings, divergences and switched-off blocks are each one message per refresh, never one question per block; an answer given is kept by `ctx slot …` and not asked again (a divergence returns only when a repository publishes a new text), while a proposal the user declines stays a proposal and comes back at the next refresh.
 
 ## Skill Chaining
-→ `plugin-configurator` (Validate / Update after a new context; the provider row in Validate) · → `context-navigator` (answers from the provider's graph) · → `task-creator` (writes only into the project the Jira write scope names).
+→ `plugin-configurator` (Validate / Update after a new context; the provider row in Validate; the same slot package — unconfirmed bindings and divergences — in Validate) · → `context-navigator` (answers from the provider's graph) · → `task-creator` (writes only into the project the Jira write scope names).
 
 ## Routing
 

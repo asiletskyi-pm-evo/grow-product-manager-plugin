@@ -335,7 +335,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.15.1)
+### 10. Plugin Configurator (v2.15.2)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -596,9 +596,9 @@ The second contour of the plugin: **manager → people → goals → communicati
 **Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
 
 
-### 32. Context Connect (v0.4.0) — NEW in v3.10.0
+### 32. Context Connect (v0.5.0) — NEW in v3.10.0
 
-**Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
+**Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. With a context store a refresh ends with the slots (since v3.15.0): in one message each, the bindings of the core's blocks to slots for you to confirm, the divergences between repositories to settle, and — once — the blocks you had switched off that now have a slot, with a yes per block to bring one back (`references/context-protocol.md` §5f). Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
@@ -624,7 +624,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.18.1 | Process meetings and extract action items |
-| Plugin Configurator | v2.15.1 | Configure plugin for your organization |
+| Plugin Configurator | v2.15.2 | Configure plugin for your organization |
 | Knowledge Library | v0.9.1 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
@@ -644,7 +644,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Hiring Designer | v0.2.1 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
 | Offboarding Guide | v0.2.1 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.1 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
-| Context Connect | v0.4.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
+| Context Connect | v0.5.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
 | Context Navigator | v0.1.1 | Answer from the shared core through the provider's rules and graph, with note paths and snapshot dates |
 
 ---
@@ -709,8 +709,9 @@ The sixth contour, **Context**, groups `context-connect`, `context-navigator` an
 - **Lean reading** (since v3.12.0) — with a store, a skill's Step 0 runs `ctx read --skill <name>`: the card plus only the fields and subsections its entry in `references/context-manifest.yaml` names, instead of the whole file.
 - **Lifecycle and freshness** (since v3.12.0) — `ctx invalidate` marks a record no longer current, `ctx archive` moves it out of the file, removed records wait 30 days in a trash, `ctx restore` brings any of them back; every record knows when it was last verified, the digest counts stale ones and skills state their facts "as of" that date; `ctx verify` or the configurator's "Review stale records" confirms them.
 - **Repositories and block merge** (since v3.13.0) — registrations v2 (`products`, `rank`, `core_root`, `endpoint`, `namespace`, `blocks_file`) list the repositories a product draws blocks from; `ctx repo list|status`; `ctx provider adopt` records what each block was when the repository last gave it, `plan` compares the three versions, `apply` writes one pass with a snapshot and a journal line; a stdlib MCP client calls only read tools. `references/context-provider-protocol.md` §12.
+- **Slots, the cascade and `ctx explain`** (since v3.15.0) — a skill asks for a *slot* (`team.members`, `product.key_metrics`; the catalogue is `references/context-slots.yaml`), not for a heading, so your `Team Members` answers a request for `Members`, two different things under one name are two slots, and what a skill cannot find is named with where it looked. The resolver in `ctx read` takes every text that may answer a slot — yours, and the core's blocks bound to it wherever they sit — decides by the cascade (a core rule, then yours, then repositories by rank) and says whose each text is on a provenance line; a block no slot takes keeps answering by its heading, as before. `ctx explain` shows where each slot came from and why it won; `ctx slot bind|map|prefer|decide|forget` keeps what you decided in `.state/slots.json` (a snapshot, a journal line, `ctx undo`); `ctx validate` names bindings that do nothing, divergences between repositories and bindings worth making. `references/context-protocol.md` §5f.
 - **Your own sections** (since v3.12.1) — a custom or setting record names the skills that read it (`read_by`: `all` or skill names; `ctx assign`, or the Obsidian property); `ctx read` gives it to them whole and names the unassigned ones; the digest counts them (`· N custom unassigned`).
-- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify`, since v3.12.1 `assign`, since v3.13.0 `repo list|status`, `provider adopt|plan|apply`, and since v3.14.0 `provider sync` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
+- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify`, since v3.12.1 `assign`, since v3.13.0 `repo list|status`, `provider adopt|plan|apply`, since v3.14.0 `provider sync`, and since v3.15.0 `explain` and `slot bind|map|prefer|decide|forget` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
 
 ## Multilingual Artifact Templates
 
