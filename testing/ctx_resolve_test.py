@@ -99,12 +99,13 @@ def teams_of(recs, prod):
     return [r for r in recs if r["type"] == "team" and (prod is None or r.get("parent") == prod.get("parent"))]
 
 
-def cands(e, slot, product="Zorg App", repos=REPOS, mem=None, teams=None):
+def cands(e, slot, product="Zorg App", repos=REPOS, mem=None, teams=None, **kw):
     recs = e.records()
     prod = product_of(recs, product) if product else None
     mem = mem or sl.empty_memory()
     binds, _ = sl.bindings_of(e.store, repos, mem)
-    return rv.candidates(slot, CAT, recs, prod, teams_of(recs, prod) if teams is None else teams, repos, mem, e.store, binds)
+    return rv.candidates(slot, CAT, recs, prod, teams_of(recs, prod) if teams is None else teams, repos, mem, e.store, binds,
+                         **kw)
 
 
 def memory(*bindings, aliases=()):
@@ -225,6 +226,8 @@ with tempfile.TemporaryDirectory() as d:
           and [c["level"] for c in jira] == ["mine", "repo"] and jira[1]["place"] == "product.zorg-app"
           and jira[1]["heading"] == "jira_project_key", jira)
     check("the growth team block, plugin-bound too, has no Members subsection: no candidate", not by(got, source="zorg-growth"), got)
+    check("a product slot's block in a team record answers only when that team is read (spec §4.4)",
+          [c["level"] for c in cands(e, "product.jira_key", teams=[])] == ["mine"], cands(e, "product.jira_key", teams=[]))
     check("candidates and bindings_of write nothing", tree(e.home, e.vault) == before, "")
     check("an unknown slot has no candidates", rv.candidates("team.nowhere", CAT, e.records(), None, [], REPOS,
                                                               sl.empty_memory(), e.store, {}) == [], "")
@@ -239,6 +242,13 @@ with tempfile.TemporaryDirectory() as d:
           len(got) == 1 and got[0]["how"] == "name" and got[0]["level"] == "repo"
           and got[0]["text"] == cr._lookup(body, "Members", field=False)[0] and got[0]["block"] == "team"
           and got[0]["source"] == "zorg-core" and got[0]["rank"] is None and got[0]["place"] == "team.alpha-a", got)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[("## Zorg Core Notes\n\n", "## Zorg Core Notes\n\n" + TEAM + "\n\n")])
+    got = cands(e, "team.members")
+    body = next(x for x in e.records() if x["id"] == "team.alpha-a")["body"]
+    check("a bound block whose id repeats (no sound region) is no bound candidate, but still answers by name",
+          len(got) == 1 and got[0]["how"] == "name" and got[0]["record"] == "team.alpha-a"
+          and got[0]["text"] == cr._lookup(body, "Members", field=False)[0], got)
 with tempfile.TemporaryDirectory() as d:
     e = Env(d, edits=[TEAM_MEMBERS])
     got = cands(e, "team.members", repos=[])
@@ -337,17 +347,24 @@ with tempfile.TemporaryDirectory() as d:
     got = cands(e, "product.key_metrics")
     check("your subsection answers by the start of its heading", len(got) == 1 and got[0]["heading"] == "Key Metrics (focus)"
           and got[0]["text"] == "#### Key Metrics (focus)\n- weekly shoppers\n", got)
-    mem = memory(aliases=[("product.zorg-app", "Key Metrics (focus)", "org.key_metrics")])
-    check("a heading you mapped to another slot is no candidate of this one (Review Focus 5)",
-          cands(e, "product.key_metrics", mem=mem) == [], cands(e, "product.key_metrics", mem=mem))
-    mem = memory(aliases=[("product.zorg-app", "Key Metrics (focus)", "org.key_metrics"),
+    mem = memory(aliases=[("product.zorg-app", "Key Metrics (focus)", "product.okrs")])
+    km, okrs = cands(e, "product.key_metrics", mem=mem), cands(e, "product.okrs", mem=mem)
+    check("a heading you mapped to another slot is no candidate of this one (Review Focus 5)", km == [], km)
+    check("…and it is the other slot's own candidate", len(okrs) == 1 and okrs[0]["level"] == "mine"
+          and okrs[0]["heading"] == "Key Metrics (focus)" and okrs[0]["text"] == "#### Key Metrics (focus)\n- weekly shoppers\n", okrs)
+    mem = memory(aliases=[("product.zorg-app", "Key Metrics (focus)", "product.okrs"),
                           ("product.zorg-app", "Key Metrics (focus)", "product.key_metrics")])
     check("…unless you mapped it to this slot as well", [c["heading"] for c in cands(e, "product.key_metrics", mem=mem)]
           == ["Key Metrics (focus)"], cands(e, "product.key_metrics", mem=mem))
+    mem = memory(aliases=[("product.zorg-app", "Key Metrics (focus)", "product.okrs"),
+                          ("product.zorg-app", "focus  NUMBERS", "product.key_metrics")])
+    got = cands(e, "product.key_metrics", mem=mem)
+    check("a name you mapped answers when no catalogue name does, whatever its case and spacing",
+          [c["heading"] for c in got] == ["Focus numbers"] and got[0]["level"] == "mine", got)
     mem = memory(aliases=[("product.zorg-app", "focus  NUMBERS", "product.key_metrics")])
     got = cands(e, "product.key_metrics", mem=mem)
-    check("a name you mapped adds a candidate, whatever its case and spacing", [c["heading"] for c in got]
-          == ["Key Metrics (focus)", "Focus numbers"] and all(c["level"] == "mine" for c in got), got)
+    check("one own candidate per record: a catalogue name that answers comes before a name you mapped (ruling)",
+          [c["heading"] for c in got] == ["Key Metrics (focus)"], got)
     mem = memory(aliases=[("product.zorg-app", "Key Metrics", "product.key_metrics")])
     check("the same heading found twice is one candidate", len(cands(e, "product.key_metrics", mem=mem)) == 1, "")
     mem = memory(aliases=[("product.other", "Focus numbers", "product.key_metrics")])
@@ -355,6 +372,41 @@ with tempfile.TemporaryDirectory() as d:
     got = cands(e, "product.platforms")
     check("a list slot answers by its field line too (Platforms is a typed list field)", len(got) == 1
           and got[0]["text"] == "- **Platforms:** Web, iOS\n" and got[0]["heading"] == "Platforms", got)
+    got = cands(e, "product.platforms", field=True)
+    check("…and with the manifest's field mode", [c["text"] for c in got] == ["- **Platforms:** Web, iOS\n"], got)
+
+TWO_NAMES = ("- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ\n\n#### Ключові метрики\n- uk numbers\n\n"
+             "#### Key Metrics\n- en numbers\n")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[TWO_NAMES])
+    got = cands(e, "product.key_metrics")
+    check("one own candidate per record: the first name in the catalogue's order, not one per name (ruling)",
+          len(got) == 1 and got[0]["heading"] == "Key Metrics" and "en numbers" in got[0]["text"], got)
+
+# ------------------------------------------------------------------ the manifest's lookup mode (ruling)
+BOTH = ("- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ\n- **Competitors:** Zorg Rival\n\n"
+        "#### Competitors\n- Zorg Other\n")
+BLOCK_BOTH = ("#### Growth metrics\n", "- **Competitors:** Block Rival\n\n#### Competitors\n- Block Other\n#### Growth metrics\n")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[BOTH])
+    sec, fld, kind = (cands(e, "product.competitors", field=False), cands(e, "product.competitors", field=True),
+                      cands(e, "product.competitors"))
+    check("field=False (the manifest's sections) gives the subsection", [c["text"] for c in sec] == ["#### Competitors\n- Zorg Other\n"], sec)
+    check("field=True (fields, required) gives the field line", [c["text"] for c in fld] == ["- **Competitors:** Zorg Rival\n"], fld)
+    check("no mode: by the slot's kind — a list reads its field line first", [c["text"] for c in kind] == ["- **Competitors:** Zorg Rival\n"], kind)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[BLOCK_BOTH])
+    body = next(x for x in e.records() if x["id"] == "product.zorg-app")["body"]
+    sec, fld = cands(e, "product.competitors", field=False), cands(e, "product.competitors", field=True)
+    check("the mode holds for a block found by name too, as cr._lookup with the same mode",
+          [c["text"] for c in sec] == [cr._lookup(body, "Competitors", field=False)[0]] == ["#### Competitors\n- Block Other\n"]
+          and [c["text"] for c in fld] == [cr._lookup(body, "Competitors")[0]] == ["- **Competitors:** Block Rival\n"]
+          and sec[0]["how"] == fld[0]["how"] == "name", (sec, fld))
+    mem = memory(("zorg-growth", "growth-metrics", None, "product.competitors", None),
+                 ("zorg-growth", "growth-metrics", None, "product.platforms", None))
+    sec, fld = cands(e, "product.competitors", mem=mem, field=False), cands(e, "product.competitors", mem=mem, field=True)
+    check("…and for a block bound to several slots", [c["text"] for c in sec] == ["#### Competitors\n- Block Other\n"]
+          and [c["text"] for c in fld] == ["- **Competitors:** Block Rival\n"] and sec[0]["how"] == "memory", (sec, fld))
 
 # ------------------------------------------------------------------ your edits, and a core rule (spec §4.3, §5.1)
 EDITED = ("| Bea Two ◌ | Data analyst |", "| Bea Two ◌ | Senior data analyst |")

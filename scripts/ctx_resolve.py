@@ -4,13 +4,18 @@
 A slot (scripts/ctx_slots.py, references/context-slots.yaml) is answered by candidates of three kinds (spec §4):
 
 - your text   in the records of the slot's kind — the active product, the teams a skill reads, the organisation, the
-              profile — outside the managed regions, under any of the slot's catalogue names, or a heading you mapped
-              to it (`ctx slot map`); a heading you mapped to another slot is not this slot's
+              profile — outside the managed regions, under the first of the slot's catalogue names that answers, else a
+              heading you mapped to it (`ctx slot map`): one per record; a heading you mapped to another slot is not
+              this slot's
 - a bound block   from any record, when a binding (ctx_slots.bindings_of: yours, the `slot=` of the block's base, the
               plugin's own for the `team` block) ties it to the slot; where it belongs is decided as spec §4.4 says,
               and what text it gives as §4.5 says
-- a block found by name   an unbound block of the same product, team (or profile) record, read as v3.14.1 read it
-              (ctx_read._lookup: the first block that has a name) — only when your text in that record has nothing
+- a block found by name   a block of the same product, team (or profile) record that does not answer through a
+              binding (unbound, or bound but not one sound region), read as v3.14.1 read it (ctx_read._lookup: the
+              first block that has a name) — only when your text in that record has nothing
+
+The lookup mode follows the manifest (`field`: a field line, else its subsection — or the subsection only), as
+ctx_read._lookup reads a `fields`/`required` name and a `sections` one.
 
 - candidates    every candidate of one slot, each a dict that says whose it is, where, which version, when it was
                 checked, whether you edited it, whether it is a core rule, and whether it can be placed at all
@@ -141,30 +146,25 @@ def _answers_any(core, is_field, names):
     return any(_heading_answers(core, n, True) for n in names)
 
 
-def _own(slot, rec, kind, names, aliases, place):
-    """Your candidates of `slot` in `rec`: outside the managed regions, the first place each catalogue name answers (a
-    field line for a value or a list, else the subsection), then each heading you mapped to the slot in this record.
-    A heading you mapped to another slot in this record does not answer a catalogue name (unless you mapped it to this
-    slot too); a text already taken — the same heading found twice, or one inside another — is one candidate."""
+def _own(slot, rec, names, aliases, place, field):
+    """Your candidate of `slot` in `rec`, or None — one per record, as ctx_read._lookup took the first name only: outside
+    the managed regions, the first catalogue name that answers, in the catalogue's order (`field`: a field line, else its
+    subsection; else the subsection), then the headings you mapped to the slot in this record. A heading you mapped to
+    another slot in this record does not answer a catalogue name (unless you mapped it to this slot too): the name's next
+    place answers, if it has one."""
     body = cc.strip_managed_regions(rec.get("body") or "")
     lines = body.splitlines(keepends=True)
     cores = [line.rstrip("\r\n") for line in lines]
     mine = [a["heading"] for a in aliases if a.get("record") == rec["id"] and a.get("slot") == slot]
     other = [a["heading"] for a in aliases if a.get("record") == rec["id"] and a.get("slot") != slot]
-    field = kind != "text"
-    taken, out = [], []
     for name, loose in [(n, False) for n in names] + [(h, True) for h in mine]:
-        for start, end, is_field, text in _occurrences(lines, cores, name, field, loose):
+        for start, _, is_field, text in _occurrences(lines, cores, name, field, loose):
             if not loose and _answers_any(cores[start], is_field, other) and not _answers_any(cores[start], is_field, mine):
                 continue
-            if not any(start < e and s < end for s, e in taken):
-                taken.append((start, end))
-                out.append({"slot": slot, "source": "mine", "level": "mine", "record": rec["id"], "block": None, "ns": None,
-                            "version": None, "checked": sc.verified_of(rec, None), "edited": False, "rule": False,
-                            "how": None, "heading": _heading(text), "text": text, "rank": None, "placed": True,
-                            "place": place})
-            break
-    return out
+            return {"slot": slot, "source": "mine", "level": "mine", "record": rec["id"], "block": None, "ns": None,
+                    "version": None, "checked": sc.verified_of(rec, None), "edited": False, "rule": False, "how": None,
+                    "heading": _heading(text), "text": text, "rank": None, "placed": True, "place": place}
+    return None
 
 
 def _inner(region):
@@ -180,15 +180,15 @@ def _first(find, body, names):
     return None
 
 
-def _bound_text(inner, sub, kind, names, several):
+def _bound_text(inner, sub, kind, names, several, find):
     """The text a bound block gives its slot (spec §4.5): the subsection `sub` the binding names; for a block bound to
-    several slots, the part that answers the slot's names; else the whole block. A value slot takes the field line
-    (ctx_read._field_text) inside that text. None when the block has no such part: then it is no candidate."""
-    find = cr._subsection if kind == "text" else cr._field_text
+    several slots, the part that answers the slot's names; else the whole block. A value slot takes the part that
+    answers its names inside that text. `find` is the lookup mode (ctx_read._field_text or _subsection). None when the
+    block has no such part: then it is no candidate."""
     if sub:
         part = cr._subsection(inner, sub)
         if part is not None and kind == "value":
-            part = _first(cr._field_text, part, names)
+            part = _first(find, part, names)
     elif kind == "value" or several:
         part = _first(find, inner, names)
     else:
@@ -202,11 +202,14 @@ def _placement(rkind, rec, binding, prod, team_ids, reg):
     it; one elsewhere fills a product slot for the products its repository serves (crp.serves_product: none named — all;
     a registration not read — all) and a team slot for the team a binding names, else for the one team there is; with
     several teams and none named it is unplaced (placed False, place None). A binding that names a team places the block
-    with that team wherever it sits. An org or profile slot takes a bound block from anywhere (place None)."""
+    with that team wherever it sits. A product slot's block in a team record answers only when that team is read
+    (`team_ids`). An org or profile slot takes a bound block from anywhere (place None)."""
     host = rec.get("type")
     if rkind == "product":
         if host == "product":
             return (True, prod["id"]) if prod is not None and rec["id"] == prod["id"] else None
+        if host == "team":
+            return (True, prod["id"] if prod is not None else None) if rec["id"] in team_ids else None
         if prod is None:
             return (True, None) if reg is None or not reg.get("products") else None
         return (True, prod["id"]) if reg is None or crp.serves_product(reg, prod) else None
@@ -222,7 +225,7 @@ def _placement(rkind, rec, binding, prod, team_ids, reg):
     return (True, None)
 
 
-def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings):
+def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, field=None):
     """Every candidate of `slot` (an id of the catalogue `cat`; an unknown one has none), as a list of dicts:
 
       slot, source ("mine" or the repository id: the registration whose namespace the block carries, else the namespace),
@@ -237,13 +240,20 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings):
 
     `records` are the live records (ctx_read._live_view), `prod` the active product record (or None), `teams` the team
     records the skill reads, `repos` the registrations (crp.load_repos), `mem` the slots memory (its `aliases`; None —
-    an empty memory), `bindings` the first item of ctx_slots.bindings_of. A block that is not one sound region
-    (cb.find_regions: repeated, nested, broken) is no bound candidate; a block any binding names is never found by name.
-    In order: your text, place by place; the bound blocks, in record order; the blocks found by name. Reads only."""
+    an empty memory), `bindings` the first item of ctx_slots.bindings_of. `field` is the lookup mode, as the manifest
+    asks the name: True (`fields`, `required`) — a field line, else its `####` subsection, as ctx_read._lookup(body, name);
+    False (`sections`) — the subsection only, as _lookup(body, name, field=False); None — by the slot's kind (a value or a
+    list: the field line first; a text: the subsection). It holds for your text, the blocks found by name and the part a
+    bound block gives. Your text gives at most one candidate per record (the first name that answers). A block that is
+    not one sound region (cb.find_regions: repeated, nested, broken) is no bound candidate but may still answer by name;
+    a bound, sound block is never found by name. In order: your text, place by place; the bound blocks, in record order;
+    the blocks found by name. Reads only."""
     info = sl.slot_info(cat, slot)
     if info is None:
         return []
     kind, rkind, names = info.get("kind"), info.get("record"), sl._names(info)
+    field = (kind != "text") if field is None else bool(field)
+    find = cr._field_text if field else cr._subsection
     aliases = (mem or {}).get("aliases") or []
     bindings = bindings or {}
     team_ids = [t["id"] for t in teams or ()]
@@ -260,9 +270,9 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings):
         places = [r for r in records if r.get("type") == rkind]
     out, own_in = [], set()
     for rec in places:
-        found = _own(slot, rec, kind, names, aliases, place_of(rec))
-        out += found
+        found = _own(slot, rec, names, aliases, place_of(rec), field)
         if found:
+            out.append(found)
             own_in.add(rec["id"])
 
     sound = {}
@@ -283,7 +293,7 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings):
                 continue                    # unbound, bound elsewhere, or broken / repeated: find_regions left it out
             several = len({b.get("slot") for b in tied}) > 1
             for b in ours:
-                text = _bound_text(_inner(region), b.get("sub"), kind, names, several)
+                text = _bound_text(_inner(region), b.get("sub"), kind, names, several, find)
                 where = _placement(rkind, rec, b, prod, team_ids, regs.reg(ns)) if text is not None else None
                 if where is None or (ns, bid, text) in seen:
                     continue
@@ -291,14 +301,13 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings):
                 out.append(regs.block(slot, rec, ns, bid, v, region, text, b.get("how"), where[0], where[1]))
 
     if rkind in NAME_PLACES:
-        find = cr._subsection if kind == "text" else cr._field_text
         for rec in places:
             if rec["id"] in own_in:
                 continue
             hit = None
             for ns, bid, v, _, inner in cr._blocks(rec.get("body") or ""):
-                if bid and bindings.get((ns, bid)):
-                    continue
+                if bid and bindings.get((ns, bid)) and region_of(ns, bid, rec["id"]) is not None:
+                    continue                # bound and sound: it answers through its bindings, never by name
                 text = _first(find, inner, names)
                 if text is not None:
                     hit = regs.block(slot, rec, ns, bid, v, region_of(ns, bid, rec["id"]) if bid else None, text,
