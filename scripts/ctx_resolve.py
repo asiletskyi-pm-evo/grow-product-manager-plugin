@@ -19,6 +19,13 @@ ctx_read._lookup reads a `fields`/`required` name and a `sections` one.
 
 - candidates    every candidate of one slot, each a dict that says whose it is, where, which version, when it was
                 checked, whether you edited it, whether it is a core rule, and whether it can be placed at all
+- resolve       what the cascade makes of them (spec §5.1, §6): a core rule, else yours, else the repositories by rank —
+                with the «також» candidates, a divergence between repositories at an equal rank, your preference for the
+                slot and your decision on a divergence. Pure: candidates and memory in, an answer out.
+- compare_key, divergence_hashes   what two texts are compared by (a value slot: the value, not the line) and what a
+                decision keeps of each side
+- slot_context, slot_answers   the one assembly `ctx read`, `ctx explain` and `ctx slot decide` share: the live records,
+                the product, its teams, the registrations, the memory and the bindings — and the answer of a slot per place
 
 Reads only: no lock, no network, nothing written. Semantics: references/context-protocol.md. Stdlib only.
 """
@@ -316,3 +323,193 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
             if hit:
                 out.append(hit)
     return out
+
+
+# ------------------------------------------------------------------ the cascade (spec §5.1, §5.2, §6)
+LEVEL_ORDER = {"rule": 0, "mine": 1, "repo": 2}
+WHY_RULE = "правило ядра"
+WHY_MINE = "твоє перемагає (блок не є правилом ядра)"
+WHY_LIST = "список — виводяться всі кандидати; склеювання пунктів — у v3.16"
+WHY_ONLY = "єдиний кандидат"
+
+
+def compare_key(kind, text):
+    """What two candidates' texts are compared by, to tell whether they say the same: a value slot compares the VALUE —
+    the text after the `**<label>:**` of a field line, or the text of a subsection without its heading — stripped and
+    normalised, so the same value under two labels is no disagreement; a text or a list compares `cb.norm(text)` (CRLF,
+    trailing blanks and trailing blank lines do not count)."""
+    if kind == "value":
+        lines = (text or "").splitlines(keepends=True)
+        at = next((k for k, line in enumerate(lines) if line.strip()), None)
+        if at is not None:
+            core = lines[at].rstrip("\r\n")
+            m = cs.FIELD_RE.match(core)
+            if m:
+                return cb.norm(m.group("value")).strip()
+            if cs._level(core):
+                return cb.norm("".join(lines[at + 1:])).strip()
+    return cb.norm(text)
+
+
+def _rank_key(c):
+    """Smaller is stronger: a higher rank first, a rank that was not read (None) below every rank read."""
+    r = c.get("rank")
+    return (1, 0) if r is None else (0, -r)
+
+
+def _cascade(cands):
+    """The candidates that can be placed, in the order of the cascade: core rules, then yours, then the repositories —
+    the rules and the repositories by rank (high first, a rank not read last), then by repository id; ties keep the order
+    they came in."""
+    live = [c for c in cands or () if c.get("placed")]
+    return sorted(live, key=lambda c: (LEVEL_ORDER.get(c.get("level"), 2),
+                                       (0, 0) if c.get("level") == "mine" else _rank_key(c),
+                                       "" if c.get("level") == "mine" else str(c.get("source") or "")))
+
+
+def _rank_text(c):
+    return "?" if c.get("rank") is None else str(c["rank"])
+
+
+def _firsts(cands):
+    """One candidate per source, the first, in order."""
+    seen, out = set(), []
+    for c in cands:
+        if c["source"] not in seen:
+            seen.add(c["source"])
+            out.append(c)
+    return out
+
+
+def divergence_hashes(kind, cands):
+    """{source: sha256 of compare_key(kind, text)} — the first candidate of each source in `cands`: what a decision on a
+    divergence keeps of each side, and what `resolve` checks it against."""
+    return {c["source"]: cs.sha_text(compare_key(kind, c["text"])) for c in _firsts(cands)}
+
+
+def resolve(slot, cat, cands, mem):
+    """What the cascade makes of the candidates of `slot` (`candidates`; one place — one product's or one team's — at a
+    time) given the memory `mem` (its `prefer` and `decisions`; None — an empty one). A candidate that is not `placed` is
+    ignored. Returns {"slot", "kind", "shown", "note", "also", "diverges", "why", "decision", "prefer"}:
+
+      shown      the candidates the skill gets in full, in the order of the cascade
+      note       your candidate under a core rule (printed after «твоя примітка до правила»), else None
+      also       the other candidates whose text differs from every shown one — one «також» line each (a value slot
+                 compares values, not lines: compare_key)
+      diverges   the repository ids that tie at the highest rank with different text, when no rule, text of yours,
+                 preference or decision settles it (then all of them are `shown`); else []
+      why        the cascade in words: «правило ядра» · «перевага: …» · «список — …» · «твоє перемагає (…)» · «більший
+                 ранг: <repo> <rank> > <repo> <rank>» · «рівний ранг <rank>, різний текст: <repos>» · «твоє рішення від
+                 <день>» · «єдиний кандидат»; "" when there is no candidate
+      decision   the decision of yours that settled a divergence, else None
+      prefer     the preference that shaped the answer: "all", "repo:<id>" (only when that repository has a candidate),
+                 else "mine"
+
+    The order: `all` (every candidate, the rule first; no note, no «також») · a core rule (shown; yours is the note) ·
+    `repo:<id>` (that repository's candidate — all of them for a list) · a list (every candidate) · yours · the
+    repositories: the highest rank; several at it with different text → a divergence, unless a decision of yours has the
+    same hash for every one of them (ctx slot decide) — then its winner. Pure: nothing it is given is changed."""
+    kind = (sl.slot_info(cat, slot) or {}).get("kind")
+    mem = mem or {}
+    pref = (mem.get("prefer") or {}).get(slot) or "mine"
+    out = {"slot": slot, "kind": kind, "shown": [], "note": None, "also": [], "diverges": [], "why": "", "decision": None,
+           "prefer": "mine"}
+    live = _cascade(cands)
+    if not live:
+        return out
+
+    def key(c):
+        return compare_key(kind, c["text"])
+
+    def settle(shown, why, note=None, prefer="mine", diverges=(), decision=None):
+        keys = {key(c) for c in shown}
+        rest = [c for c in live if not any(c is s for s in shown) and c is not note and key(c) not in keys]
+        out.update(shown=list(shown), note=note, also=rest, diverges=list(diverges), why=why, decision=decision, prefer=prefer)
+        return out
+
+    if pref == "all":
+        out.update(shown=list(live), why="перевага: all", prefer="all")
+        return out
+    mines = [c for c in live if c["level"] == "mine"]
+    rules = [c for c in live if c["level"] == "rule"]
+    if rules:
+        return settle([rules[0]], WHY_RULE, note=mines[0] if mines else None)
+    if pref.startswith("repo:"):
+        theirs = [c for c in live if c["level"] == "repo" and c["source"] == pref[5:]]
+        if theirs:
+            return settle(theirs if kind == "list" else theirs[:1], "перевага: " + pref, prefer=pref)
+    if kind == "list":
+        out.update(shown=list(live), why=WHY_LIST)
+        return out
+    if mines:
+        return settle([mines[0]], WHY_MINE if len(live) > 1 else WHY_ONLY)
+    top = [c for c in live if _rank_key(c) == _rank_key(live[0])]
+    sides = _firsts(top)
+    if len(sides) > 1 and len({key(c) for c in sides}) > 1:
+        hashes = divergence_hashes(kind, top)
+        dec = (mem.get("decisions") or {}).get(slot)
+        if isinstance(dec, dict) and dec.get("winner") in hashes and dec.get("hashes") == hashes:
+            win = next(c for c in sides if c["source"] == dec["winner"])
+            return settle([win], "твоє рішення від " + dec["at"] if dec.get("at") else "твоє рішення",
+                          decision=dict(dec, hashes=dict(dec["hashes"])))
+        ids = [c["source"] for c in sides]
+        return settle(sides, "рівний ранг %s, різний текст: %s" % (_rank_text(top[0]), ", ".join(ids)), diverges=ids)
+    win = top[0]
+    lower = [c for c in live if _rank_key(c) != _rank_key(win) and key(c) != key(win)]
+    if lower:
+        why = "більший ранг: %s %s > %s %s" % (win["source"], _rank_text(win), lower[0]["source"], _rank_text(lower[0]))
+    elif all(key(c) == key(win) for c in live):
+        why = WHY_ONLY if len(live) == 1 else "однаковий текст у: " + ", ".join(c["source"] for c in _firsts(live))
+    else:
+        why = "перший з блоків %s" % win["source"]
+    return settle([win], why)
+
+
+# ------------------------------------------------------------------ the assembly the readers and `decide` share
+def slot_context(store, copies, repos, product, now, mem=None):
+    """Everything the resolver needs to answer slots, assembled as `ctx read` assembles it — reads only, no lock, no
+    network, nothing written: the live records (ctx_read._live_view: a direct edit not yet imported counts), the active
+    product (`product` — a name or id, or None: the one there is), its teams (the team records under the same parent, as
+    ctx_read.read_view takes them), the registrations `repos` (ctx_repos.load_repos, as given), the slots memory (`mem`
+    when a writing command already holds it, else read here) and the bindings. Returns {"store", "cat", "records", "notes",
+    "pending", "product", "needs_product", "products", "teams", "repos", "mem", "mem_error", "bindings", "problems"}:
+    `needs_product` is True (and `product` None) when several products and none asked for, or none that matches, `products`
+    then being their names; a memory that cannot be read is an empty one and `mem_error` the line that says why (a reader
+    goes on without it; a writing command stops on it). `cat` is the catalogue (a file that cannot be read is a
+    ValueError); `problems` are the lines of ctx_slots.bindings_of."""
+    cat = sl.load_catalogue()
+    recs, notes, pending = cr._live_view(store, copies, now)
+    products = [r for r in recs if r["type"] == "product"]
+    prod, needs = cr._pick_product(products, product)
+    teams = [r for r in recs if r["type"] == "team" and (prod is None or r.get("parent") == prod.get("parent"))]
+    mem_error = None
+    if mem is None:
+        try:
+            mem = sl.load_memory(store)
+        except cs.StoreError as e:
+            mem, mem_error = sl.empty_memory(), str(e)
+    bindings, problems = sl.bindings_of(store, repos, mem)
+    return {"store": store, "cat": cat, "records": recs, "notes": notes, "pending": pending, "product": prod,
+            "needs_product": needs, "products": [p["title"].split(":", 1)[-1].strip() for p in products], "teams": teams,
+            "repos": repos, "mem": mem, "mem_error": mem_error, "bindings": bindings, "problems": problems}
+
+
+def slot_answers(sctx, slot, field=None):
+    """The answer of `slot` per place, from a `slot_context`: [{"place", "candidates", "result"}] — one entry for each
+    product or team record (or None: an organisation or profile slot) that has a candidate placed for it, in the order they
+    first appear, `result` being `resolve` over that place's candidates. `field` is the lookup mode of `candidates`.
+    A candidate that is not placed (a block that cannot be given to one team) is in no entry; `candidates` has it."""
+    cands = candidates(slot, sctx["cat"], sctx["records"], sctx["product"], sctx["teams"], sctx["repos"], sctx["mem"],
+                       sctx["store"], sctx["bindings"], field=field)
+    groups = []
+    for c in cands:
+        if not c["placed"]:
+            continue
+        for place, members in groups:
+            if place == c["place"]:
+                members.append(c)
+                break
+        else:
+            groups.append((c["place"], [c]))
+    return [{"place": place, "candidates": members, "result": resolve(slot, sctx["cat"], members, sctx["mem"])}
+            for place, members in groups]

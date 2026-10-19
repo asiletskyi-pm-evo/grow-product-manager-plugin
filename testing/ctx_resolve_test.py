@@ -142,10 +142,9 @@ LITE = ("### Team: Alpha (A)\n", "### Product: Zorg Lite\n\n- **Jira Project Key
 with tempfile.TemporaryDirectory() as d:
     e = Env(d)
     binds, problems = sl.bindings_of(e.store, REPOS, sl.empty_memory())
-    plugin = [{"slot": "team.members", "sub": "Members", "team": None, "how": "plugin"},
-              {"slot": "product.jira_key", "sub": None, "team": None, "how": "plugin"}]
-    check("the plugin binds the team block of every registered repository", binds == {("zorg-core", "team"): plugin,
-          ("zorg-growth", "team"): plugin} and problems == [], (binds, problems))
+    plugin = [{"slot": "team.members", "sub": "Members", "team": None, "how": "plugin"}]
+    check("the plugin binds the team block of every registered repository to team.members only (ruling: no jira_project_key)",
+          binds == {("zorg-core", "team"): plugin, ("zorg-growth", "team"): plugin} and problems == [], (binds, problems))
     mem = memory(("zorg-core", "team", "Members", "team.members", "team.alpha-a"), ("zorg-core", "scope", None, "product.scope", None))
     binds, problems = sl.bindings_of(e.store, REPOS, mem)
     check("your binding replaces the plugin's for that block, and keys a block by its namespace",
@@ -221,13 +220,17 @@ with tempfile.TemporaryDirectory() as d:
           and r.get("rank") == 1000 and r.get("edited") is False and r.get("rule") is False and r.get("placed") is True
           and r.get("record") == "team.alpha-a" and r.get("place") == "team.alpha-a", r)
     jira = cands(e, "product.jira_key")
-    check("one value: your field line, and the field line inside the team block (the plugin's jira_project_key)",
+    check("the plugin does not bind the team block's jira_project_key line (ruling): only your Jira Project Key",
+          [c["text"] for c in jira] == ["- **Jira Project Key:** PROJ\n"] and [c["level"] for c in jira] == ["mine"], jira)
+    JIRA = memory(("zorg-core", "team", None, "product.jira_key", None))
+    jira = cands(e, "product.jira_key", mem=JIRA)
+    check("one value: your field line, and — when you bind the block — the field line inside the team block",
           [c["text"] for c in jira] == ["- **Jira Project Key:** PROJ\n", "- **jira_project_key:** PROJ (others: LEGACY)\n"]
           and [c["level"] for c in jira] == ["mine", "repo"] and jira[1]["place"] == "product.zorg-app"
-          and jira[1]["heading"] == "jira_project_key", jira)
+          and jira[1]["heading"] == "jira_project_key" and jira[1]["how"] == "memory", jira)
     check("the growth team block, plugin-bound too, has no Members subsection: no candidate", not by(got, source="zorg-growth"), got)
     check("a product slot's block in a team record answers only when that team is read (spec §4.4)",
-          [c["level"] for c in cands(e, "product.jira_key", teams=[])] == ["mine"], cands(e, "product.jira_key", teams=[]))
+          [c["level"] for c in cands(e, "product.jira_key", mem=JIRA, teams=[])] == ["mine"], cands(e, "product.jira_key", mem=JIRA, teams=[]))
     check("candidates and bindings_of write nothing", tree(e.home, e.vault) == before, "")
     check("an unknown slot has no candidates", rv.candidates("team.nowhere", CAT, e.records(), None, [], REPOS,
                                                               sl.empty_memory(), e.store, {}) == [], "")
@@ -436,6 +439,254 @@ with tempfile.TemporaryDirectory() as d:
     check("…an unbound block found by name is a rule by its base, but stays on the repository level (a rule is bound)",
           len(got) == 1 and got[0]["how"] == "name" and got[0]["rule"] is True and got[0]["level"] == "repo"
           and got[0]["source"] == "zorg-growth" and got[0]["rank"] == 500, got)
+
+# ------------------------------------------------------------------ the cascade: resolve (spec §5.1, §5.2, §6)
+import copy  # noqa: E402
+
+TEXT_SLOT, VALUE_SLOT, LIST_SLOT = "product.key_metrics", "product.jira_key", "team.members"
+RESULT_KEYS = {"slot", "kind", "shown", "note", "also", "diverges", "why", "decision", "prefer"}
+
+
+def cand(source, text="x\n", level=None, rank=500, rule=False, placed=True, slot=TEXT_SLOT):
+    """A hand-built candidate with every key of KEYS: `source` "mine" is your text; level "rule" is a bound core rule."""
+    level = level or ("mine" if source == "mine" else "repo")
+    return {"slot": slot, "source": source, "level": level, "record": "product.zorg-app",
+            "block": None if source == "mine" else "blk", "ns": None if source == "mine" else source, "version": None,
+            "checked": None, "edited": False, "rule": rule or level == "rule", "how": None if source == "mine" else "memory",
+            "heading": None, "text": text, "rank": None if source == "mine" else rank, "placed": placed, "place": "product.zorg-app"}
+
+
+def R(slot, cands, mem=None):
+    return rv.resolve(slot, CAT, cands, mem)
+
+
+def src(cs_):
+    return [c["source"] for c in cs_]
+
+
+def sha(s):
+    return cs.sha_text(s)
+
+
+rule = cand("zorg-core", "RULE\n", level="rule", rank=1000)
+mine = cand("mine", "MINE\n")
+core = cand("zorg-core", "CORE\n", rank=1000)
+growth = cand("zorg-growth", "GROWTH\n", rank=500)
+r = R(TEXT_SLOT, [growth, mine, rule])
+check("resolve returns the agreed keys", set(r) == RESULT_KEYS and r["slot"] == TEXT_SLOT and r["kind"] == "text", sorted(r))
+check("a core rule: it is shown, your text is the note, the rest is «також»; the reason is the rule",
+      r["shown"] == [rule] and r["note"] is mine and r["also"] == [growth] and r["why"] == "правило ядра"
+      and r["diverges"] == [] and r["decision"] is None and r["prefer"] == "mine", r)
+r = R(TEXT_SLOT, [growth, rule])
+check("…no text of yours: no note", r["shown"] == [rule] and r["note"] is None and r["also"] == [growth], r)
+r = R(TEXT_SLOT, [cand("zorg-growth", "RULE\n"), rule, mine])
+check("…a candidate that says the same as the rule is not in «також»", r["also"] == [] and r["note"] is mine, r)
+r = R(LIST_SLOT, [cand("zorg-growth", "G\n", slot=LIST_SLOT), cand("mine", "M\n", slot=LIST_SLOT),
+                  cand("zorg-core", "R\n", level="rule", slot=LIST_SLOT)])
+check("…a list too: the rule fully, yours as the note, the rest one line each", src(r["shown"]) == ["zorg-core"]
+      and r["note"]["source"] == "mine" and src(r["also"]) == ["zorg-growth"] and r["why"] == "правило ядра", r)
+r = R(TEXT_SLOT, [growth, mine, rule], {"prefer": {TEXT_SLOT: "repo:zorg-growth"}})
+check("a preference for a repository does not beat a rule", r["shown"] == [rule] and r["prefer"] == "mine" and r["note"] is mine, r)
+r = R(TEXT_SLOT, [cand("zorg-aaa", "RULE A\n", level="rule", rank=1000), rule, cand("zorg-low", "RULE L\n", level="rule", rank=10)])
+check("several rules: the strongest (rank, then id) is shown; the others with other text are «також»",
+      src(r["shown"]) == ["zorg-aaa"] and src(r["also"]) == ["zorg-core", "zorg-low"], r)
+
+r = R(TEXT_SLOT, [growth, mine, core, rule], {"prefer": {TEXT_SLOT: "all"}})
+check("prefer all: every candidate in the order of the cascade, the rule first; no note, no «також» (ruling P3)",
+      src(r["shown"]) == ["zorg-core", "mine", "zorg-core", "zorg-growth"] and r["shown"][0] is rule and r["shown"][2] is core
+      and r["note"] is None and r["also"] == [] and r["diverges"] == [] and r["prefer"] == "all"
+      and r["why"] == "перевага: all", r)
+r = R(VALUE_SLOT, [growth, core], {"prefer": {VALUE_SLOT: "all"}})
+check("…a divergence is shown in full, too, and is no divergence to resolve", src(r["shown"]) == ["zorg-core", "zorg-growth"]
+      and r["diverges"] == [], r)
+
+r = R(TEXT_SLOT, [mine, core, growth], {"prefer": {TEXT_SLOT: "repo:zorg-growth"}})
+check("prefer repo:<id>: that repository wins, even over your text; the rest differing is «також»",
+      r["shown"] == [growth] and src(r["also"]) == ["mine", "zorg-core"] and r["note"] is None and r["prefer"] == "repo:zorg-growth"
+      and r["why"] == "перевага: repo:zorg-growth" and r["diverges"] == [], r)
+r = R(TEXT_SLOT, [mine, core], {"prefer": {TEXT_SLOT: "repo:zorg-growth"}})
+check("…a repository with no candidate: the cascade as usual (yours), and the preference is not the one applied",
+      r["shown"] == [mine] and r["prefer"] == "mine" and "перевага" not in r["why"], r)
+r = R(TEXT_SLOT, [mine, cand("zorg-growth", "MINE\n", rank=100)], {"prefer": {TEXT_SLOT: "repo:zorg-growth"}})
+check("…a candidate with your text is not «також»", r["also"] == [], r)
+r = R(TEXT_SLOT, [mine, core], {"prefer": {TEXT_SLOT: "mine"}})
+check("prefer mine is the default", r["shown"] == [mine] and r["prefer"] == "mine", r)
+
+lg = [cand("zorg-growth", "G\n", rank=500, slot=LIST_SLOT), cand("mine", "M\n", slot=LIST_SLOT),
+      cand("zorg-core", "C\n", rank=1000, slot=LIST_SLOT), cand("zorg-aaa", "A\n", rank=1000, slot=LIST_SLOT),
+      cand("zorg-nil", "N\n", rank=None, slot=LIST_SLOT), cand("zorg-zzz", "Z\n", rank=2000, slot=LIST_SLOT),
+      cand("zorg-zero", "O\n", rank=0, slot=LIST_SLOT), cand("zorg-growth", "G2\n", rank=500, slot=LIST_SLOT)]
+r = R(LIST_SLOT, lg)
+check("a list: every candidate, yours first, then the repositories by rank (high first), then by id; a rank not read is last",
+      src(r["shown"]) == ["mine", "zorg-zzz", "zorg-aaa", "zorg-core", "zorg-growth", "zorg-growth", "zorg-zero", "zorg-nil"]
+      and r["note"] is None and r["also"] == []
+      and r["diverges"] == [] and r["kind"] == "list"
+      and r["why"] == "список — виводяться всі кандидати; склеювання пунктів — у v3.16", r)
+r = R(LIST_SLOT, lg, {"prefer": {LIST_SLOT: "repo:zorg-growth"}})
+check("…a list with a preference for a repository: all its candidates, the rest in «також»", src(r["shown"]) == ["zorg-growth"] * 2
+      and src(r["also"]) == ["mine", "zorg-zzz", "zorg-aaa", "zorg-core", "zorg-zero", "zorg-nil"], r)
+
+for slot in (TEXT_SLOT, VALUE_SLOT):
+    mv = cand("mine", "MINE\n" if slot == TEXT_SLOT else "- **Jira Project Key:** MINE\n", slot=slot)
+    other = cand("zorg-core", "CORE\n" if slot == TEXT_SLOT else "- **jira_project_key:** CORE\n", rank=1000, slot=slot)
+    r = R(slot, [other, mv])
+    check("%s: yours wins over a repository of any rank; the other is «також»" % slot, r["shown"] == [mv] and r["also"] == [other]
+          and r["why"] == "твоє перемагає (блок не є правилом ядра)" and r["diverges"] == [] and r["note"] is None, r)
+    r = R(slot, [mv])
+    check("%s: yours alone: no reason to give but that it is the only one" % slot, r["shown"] == [mv] and r["also"] == []
+          and r["why"] == "єдиний кандидат", r)
+
+r = R(TEXT_SLOT, [growth, core])
+check("a higher rank wins; the loser is «також»; the reason names both ranks",
+      r["shown"] == [core] and r["also"] == [growth] and r["diverges"] == [] and r["decision"] is None
+      and r["why"] == "більший ранг: zorg-core 1000 > zorg-growth 500", r)
+r = R(TEXT_SLOT, [growth, cand("zorg-nil", "N\n", rank=None), core])
+check("…a rank not read is below any rank read", r["shown"] == [core] and src(r["also"]) == ["zorg-growth", "zorg-nil"]
+      and r["why"] == "більший ранг: zorg-core 1000 > zorg-growth 500", r)
+r = R(TEXT_SLOT, [cand("zorg-nil", "N\n", rank=None), growth])
+check("…and says so when it is the loser's", r["shown"] == [growth] and r["why"] == "більший ранг: zorg-growth 500 > zorg-nil ?", r)
+r = R(TEXT_SLOT, [cand("zorg-aaa", "AAA\n", rank=10), cand("zorg-zzz", "ZZZ\n", rank=900)])
+check("…by rank, not by id", r["shown"][0]["source"] == "zorg-zzz" and r["why"] == "більший ранг: zorg-zzz 900 > zorg-aaa 10", r)
+r = R(TEXT_SLOT, [cand("zorg-nil", "N\n", rank=None), cand("zorg-zero", "O\n", rank=0)])
+check("…a rank of 0 is still a rank read", r["shown"][0]["source"] == "zorg-zero" and r["diverges"] == [], r)
+r = R(TEXT_SLOT, [core])
+check("one repository, one candidate: it wins, with no loser to name", r["shown"] == [core] and r["why"] == "єдиний кандидат"
+      and r["also"] == [] and r["diverges"] == [], r)
+r = R(TEXT_SLOT, [core, cand("zorg-growth", "CORE   \r\n", rank=1000)])
+check("equal rank, the same text up to trailing blanks and line ends: no divergence; the first by id wins; nothing in «також»",
+      r["shown"] == [core] and r["also"] == [] and r["diverges"] == [], r)
+
+peer = cand("zorg-growth", "GROWTH\n", rank=1000)
+low = cand("zorg-low", "LOW\n", rank=10)
+r = R(TEXT_SLOT, [peer, core, low])
+check("equal highest rank and a different text: a divergence — both shown, in the order of ids; a lower rank is «також»",
+      r["diverges"] == ["zorg-core", "zorg-growth"] and r["shown"] == [core, peer] and r["also"] == [low]
+      and r["decision"] is None and r["note"] is None and r["why"] == "рівний ранг 1000, різний текст: zorg-core, zorg-growth", r)
+r = R(TEXT_SLOT, [cand("zorg-growth", "GROWTH\n", rank=None), cand("zorg-core", "CORE\n", rank=None)])
+check("…two ranks not read, different text: they tie", r["diverges"] == ["zorg-core", "zorg-growth"]
+      and r["why"] == "рівний ранг ?, різний текст: zorg-core, zorg-growth", r)
+third = cand("zorg-third", "CORE\n", rank=1000)
+r = R(TEXT_SLOT, [peer, third, core])
+check("…a third at the same rank with the same text as the first still takes part", r["diverges"] == ["zorg-core", "zorg-growth", "zorg-third"], r)
+r = R(TEXT_SLOT, [mine, peer, core])
+check("…never when you have text of your own", r["diverges"] == [] and r["shown"] == [mine], r)
+r = R(TEXT_SLOT, [cand("zorg-core", "ONE\n", rank=1000), cand("zorg-core", "TWO\n", rank=1000)])
+check("two blocks of one repository are no divergence between repositories: the first wins, the other is «також»",
+      r["diverges"] == [] and r["shown"][0]["text"] == "ONE\n" and [c["text"] for c in r["also"]] == ["TWO\n"], r)
+
+DEC_HASHES = {"zorg-core": sha("CORE"), "zorg-growth": sha("GROWTH")}
+DEC = {"winner": "zorg-growth", "hashes": DEC_HASHES, "at": "2026-10-20"}
+mem = {"decisions": {TEXT_SLOT: DEC}}
+r = R(TEXT_SLOT, [peer, core], mem)
+check("a decision with the same hashes: its winner wins, no divergence, «також» for the other, the reason names the day",
+      r["shown"] == [peer] and r["diverges"] == [] and src(r["also"]) == ["zorg-core"] and r["decision"] == DEC
+      and r["why"] == "твоє рішення від 2026-10-20", r)
+check("…the memory it was given is not changed by it", mem == {"decisions": {TEXT_SLOT: {"winner": "zorg-growth", "hashes": DEC_HASHES, "at": "2026-10-20"}}}, mem)
+r = R(TEXT_SLOT, [peer, core], {"decisions": {TEXT_SLOT: {"winner": "zorg-growth", "hashes": DEC_HASHES}}})
+check("…a decision with no day: the reason without it", r["shown"] == [peer] and r["why"] == "твоє рішення", r)
+r = R(TEXT_SLOT, [cand("zorg-growth", "GROWTH, new\n", rank=1000), core], mem)
+check("a new text in a repository (a new hash): the decision no longer acts — the divergence is back",
+      r["diverges"] == ["zorg-core", "zorg-growth"] and r["decision"] is None and len(r["shown"]) == 2, r)
+r = R(TEXT_SLOT, [peer, core, third], {"decisions": {TEXT_SLOT: {"winner": "zorg-growth", "hashes": DEC_HASHES}}})
+check("…so does one more repository at the same rank (the participants are not the same)", r["decision"] is None
+      and r["diverges"] == ["zorg-core", "zorg-growth", "zorg-third"], r)
+r = R(TEXT_SLOT, [peer, core], {"decisions": {TEXT_SLOT: {"winner": "zorg-third", "hashes": DEC_HASHES}}})
+check("…and a winner who is not one of the participants", r["decision"] is None and r["diverges"] == ["zorg-core", "zorg-growth"], r)
+r = R(TEXT_SLOT, [peer, core], {"decisions": {VALUE_SLOT: DEC}})
+check("…and a decision about another slot", r["decision"] is None and r["diverges"] == ["zorg-core", "zorg-growth"], r)
+r = R(TEXT_SLOT, [mine, peer, core], mem)
+check("a decision does not outrank yours, nor a core rule", r["shown"] == [mine] and R(TEXT_SLOT, [rule, peer, core], mem)["shown"] == [rule], r)
+r = R(TEXT_SLOT, [peer, core], {"prefer": {TEXT_SLOT: "repo:zorg-core"}, "decisions": {TEXT_SLOT: DEC}})
+check("a preference for a repository comes before a decision", r["shown"] == [core] and r["decision"] is None, r)
+
+# value slots compare the value after the label, not the line (ruling 2)
+a1, a2 = "- **Jira Project Key:** PROJ\n", "- **jira_project_key:** PROJ   \n"
+check("compare_key: a field line is its value, stripped; the label does not count",
+      rv.compare_key("value", a1) == rv.compare_key("value", a2) == "PROJ" and rv.compare_key("value", "- **Jira Project Key:** OTHER\n") == "OTHER", "")
+check("…a subsection used as a value is its text without the heading", rv.compare_key("value", "#### Jira Project Key\nPROJ\n")
+      == rv.compare_key("value", "#### jira_project_key\nPROJ  \n\n") == "PROJ", rv.compare_key("value", "#### Jira Project Key\nPROJ\n"))
+check("…a text or a list: the text as cb.norm has it, the label kept", rv.compare_key("text", "a  \r\nb\n\n") == "a\nb"
+      and rv.compare_key("list", "- **Platforms:** Web\n") == "- **Platforms:** Web"
+      and rv.compare_key("list", "- **Platforms:** Web\n") != rv.compare_key("list", "- **platforms:** Web\n"), "")
+v_mine, v_core = cand("mine", a1, slot=VALUE_SLOT), cand("zorg-core", a2, rank=1000, slot=VALUE_SLOT)
+v_other = cand("zorg-growth", "- **jira_project_key:** OTHER\n", rank=500, slot=VALUE_SLOT)
+check("a value slot: the same value under two labels is no «також»", R(VALUE_SLOT, [v_mine, v_core])["also"] == [], "")
+check("…another value is", R(VALUE_SLOT, [v_mine, v_other])["also"] == [v_other], "")
+r = R(VALUE_SLOT, [v_core, cand("zorg-growth", "- **Jira Project Key:** PROJ\n", rank=1000, slot=VALUE_SLOT)])
+check("…two repositories at the same rank, the same value under two labels: no divergence", r["diverges"] == [] and src(r["shown"]) == ["zorg-core"], r)
+r = R(VALUE_SLOT, [v_core, cand("zorg-growth", "- **Jira Project Key:** OTHER\n", rank=1000, slot=VALUE_SLOT)])
+check("…another value: a divergence", r["diverges"] == ["zorg-core", "zorg-growth"], r)
+check("divergence_hashes: per participant the hash of the compared text (the value, for a value slot) — what a decision keeps",
+      rv.divergence_hashes("value", r["shown"]) == {"zorg-core": sha("PROJ"), "zorg-growth": sha("OTHER")}
+      and rv.divergence_hashes("text", [peer, core]) == DEC_HASHES
+      and rv.divergence_hashes("text", [core, cand("zorg-core", "Z\n")]) == {"zorg-core": sha("CORE")}, rv.divergence_hashes("value", r["shown"]))
+r2 = R(VALUE_SLOT, r["shown"], {"decisions": {VALUE_SLOT: {"winner": "zorg-growth", "hashes": rv.divergence_hashes("value", r["shown"])}}})
+check("…and a decision on a value slot acts on the value: another label for the same value keeps it",
+      src(r2["shown"]) == ["zorg-growth"] and r2["diverges"] == [] and R(VALUE_SLOT, [
+          cand("zorg-core", "- **Key:** PROJ\n", rank=1000, slot=VALUE_SLOT), cand("zorg-growth", "- **Key:** OTHER\n", rank=1000, slot=VALUE_SLOT)],
+          {"decisions": {VALUE_SLOT: {"winner": "zorg-growth", "hashes": rv.divergence_hashes("value", r["shown"])}}})["decision"] is not None, r2)
+
+# what is not placed is not a candidate; an empty cascade; purity
+unplaced = dict(cand("zorg-core", "CORE\n", rank=1000), placed=False, place=None)
+r = R(TEXT_SLOT, [unplaced, growth])
+check("a candidate that is not placed is ignored by resolve", r["shown"] == [growth] and r["also"] == [] and r["diverges"] == []
+      and r["why"] == "єдиний кандидат", r)
+r = R(TEXT_SLOT, [unplaced])
+check("…only such candidates, or none: nothing shown, no reason", r["shown"] == [] and r["note"] is None and r["also"] == [] and r["why"] == ""
+      and R(TEXT_SLOT, []) == r and R(TEXT_SLOT, [], None) == r, r)
+r = R(TEXT_SLOT, [unplaced, rule], {"prefer": {TEXT_SLOT: "all"}})
+check("…also under prefer all", r["shown"] == [rule], r)
+inputs = [mine, core, peer, growth, low, rule]
+frozen, mem2 = copy.deepcopy(inputs), copy.deepcopy(mem)
+for m_ in (None, {}, mem2, {"prefer": {TEXT_SLOT: "all"}}):
+    R(TEXT_SLOT, inputs, m_)
+check("resolve changes neither the candidates nor the memory", inputs == frozen and mem2 == mem, "")
+r = R("team.nowhere", [growth])
+check("a slot the catalogue lacks has no kind, and is read as a text: no exception", r["kind"] is None and r["shown"] == [growth], r)
+
+# ------------------------------------------------------------------ slot_context and slot_answers (shared by read, explain, decide)
+SCTX_KEYS = {"store", "cat", "records", "notes", "pending", "product", "needs_product", "products", "teams", "repos", "mem",
+             "mem_error", "bindings", "problems"}
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    before = tree(e.home, e.vault)
+    x = rv.slot_context(e.store, e.copies, REPOS, "Zorg App", NOW)
+    check("slot_context assembles what the resolver needs, with the keys the docstring lists", set(x) == SCTX_KEYS, sorted(x))
+    check("…the live records, the product asked for, the teams ctx read would read, the memory and the bindings",
+          [r_["id"] for r_ in x["records"]] == [r_["id"] for r_ in e.records()] and x["product"]["id"] == "product.zorg-app"
+          and x["needs_product"] is False and x["products"] == ["Zorg App"] and [t_["id"] for t_ in x["teams"]] == ["team.alpha-a"]
+          and x["mem"] == sl.empty_memory() and x["mem_error"] is None and x["repos"] == REPOS and x["problems"] == []
+          and ("zorg-core", "team") in x["bindings"] and x["pending"] == 0 and x["cat"] == CAT, x)
+    x = rv.slot_context(e.store, e.copies, REPOS, None, NOW)
+    check("…one product and none asked for: that one", x["product"]["id"] == "product.zorg-app" and x["needs_product"] is False, x["product"])
+    x = rv.slot_context(e.store, e.copies, REPOS, "Nowhere", NOW)
+    check("…a product that matches none: needs a choice", x["product"] is None and x["needs_product"] is True and x["products"] == ["Zorg App"], x)
+    x = rv.slot_context(e.store, e.copies, REPOS, "Zorg App", NOW, mem=memory(("zorg-core", "scope", None, "product.scope", None)))
+    check("…a memory handed in is used as it is (the writing command already holds it)", len(x["mem"]["bindings"]) == 1
+          and ("zorg-core", "scope") in x["bindings"], x["mem"])
+    open(os.path.join(e.store.state_dir, "slots.json"), "w", encoding="utf-8").write("{ not json")
+    bad = tree(e.home, e.vault)
+    x = rv.slot_context(e.store, e.copies, REPOS, "Zorg App", NOW)
+    check("a memory that cannot be read: an empty one and the reason (read works without it; a writing command stops on it)",
+          x["mem"] == sl.empty_memory() and (x["mem_error"] or "").startswith("slots memory not valid: .state/slots.json (")
+          and ("zorg-core", "team") in x["bindings"], x["mem_error"])
+    check("slot_context writes nothing", tree(e.home, e.vault) == bad and bad != before, "")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[LITE])
+    x = rv.slot_context(e.store, e.copies, REPOS, None, NOW)
+    check("two products and none asked for: a choice is needed, and they are named",
+          x["needs_product"] is True and x["product"] is None and sorted(x["products"]) == ["Zorg App", "Zorg Lite"], (x["needs_product"], x["products"]))
+    x = rv.slot_context(e.store, e.copies, REPOS, "Zorg Lite", NOW)
+    check("…asked for by name: that one", x["product"]["id"] == "product.zorg-lite" and x["needs_product"] is False, x["product"])
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=TEAM_TO_CUSTOM + [BETA])
+    x = rv.slot_context(e.store, e.copies, REPOS, "Zorg App", NOW)
+    mem3 = memory(("zorg-core", "team", "Members", "team.members", "team.beta-b"))
+    x3 = rv.slot_context(e.store, e.copies, REPOS, "Zorg App", NOW, mem=mem3)
+    check("slot_answers: one answer per place — a team the block is bound to, with its candidates and the resolved result",
+          rv.slot_answers(x, LIST_SLOT) == [] and [(a_["place"], len(a_["candidates"]), a_["result"]["slot"]) for a_ in rv.slot_answers(x3, LIST_SLOT)]
+          == [("team.beta-b", 1, LIST_SLOT)], (rv.slot_answers(x, LIST_SLOT), rv.slot_answers(x3, LIST_SLOT)))
+    check("…and never a candidate that is not placed", all(c_["placed"] for a_ in rv.slot_answers(x3, LIST_SLOT) for c_ in a_["candidates"]), "")
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

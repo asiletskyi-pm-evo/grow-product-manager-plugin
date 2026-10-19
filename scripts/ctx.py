@@ -106,13 +106,21 @@
                                 kind the slot is looked for in)
   slot prefer SLOT mine|repo:ID|all
                                 whose answer SLOT gives first (mine: yours, the default; repo:ID: one repository's)
+  slot decide SLOT REPO [--product P]
+                                the answer to a divergence between repositories (since v3.15.0): two or more of them tie
+                                at the highest rank with different text for SLOT, and you have no text of your own for it,
+                                no core rule and no preference — REPO's text wins. Kept with the hash of every side's
+                                text (a value slot: the value) and the day; a new text from any side asks again. SLOT is
+                                computed on the records as they are now, for the product P (a product or team slot with
+                                several products needs --product; an organisation slot does not)
   slot forget SLOT              everything the memory holds about SLOT: bindings, names, preference, decision
-                                All four: snapshot, one journal line (op slot, action, slot), `ctx undo` takes it back;
+                                All five: snapshot, one journal line (op slot, action, slot), `ctx undo` takes it back;
                                 one that changes nothing (the same bind again) says "unchanged" — no snapshot, no line.
                                 An unknown slot, repository, record or block id, a --team that is not a team record, a
-                                record of another kind than the slot's, a preference that is none of the three, and a
-                                memory that cannot be read ("slots memory not readable|not valid: .state/slots.json
-                                (…)") are exit 3. CTX_RESULT: action, slot, changed, snapshot, memory (after)
+                                record of another kind than the slot's, a preference that is none of the three, a
+                                `decide` with no divergence ("no divergence for SLOT") or for a REPO that is not one of
+                                the sides, and a memory that cannot be read ("slots memory not readable|not valid:
+                                .state/slots.json (…)") are exit 3. CTX_RESULT: action, slot, changed, snapshot, memory (after)
 
 Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
 registration is not read in time — 3 s each, 6 s for all: the boundary cannot be checked, exit 4), imports direct
@@ -145,6 +153,7 @@ import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_repos as crp  # noqa: E402
+import ctx_resolve as rv  # noqa: E402
 import ctx_schema as sc  # noqa: E402
 import ctx_slots as sl  # noqa: E402
 import ctx_synced as sy  # noqa: E402
@@ -1192,9 +1201,36 @@ def _slot_request(a, cat):
     return req
 
 
+def _slot_decide(c, a, info, mem, day):
+    """`slot decide`: the answer to a divergence between repositories, put into `mem` (in place). The slot is computed on the
+    records as they are now (ctx_resolve.slot_context / slot_answers — what `ctx read` would give): the first place (product
+    or team) where repositories tie at the highest rank with different text has the sides; `a.repo` must be one of them. What
+    is kept is the winner, the hash of each side's compared text (ctx_resolve.divergence_hashes) and the day — a new text from
+    any side is a new hash, and the question comes back. Returns the line that says what was decided."""
+    skipped = []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    if skipped:
+        raise Usage("a registration could not be read: %s — the ranks of its blocks are not known; try again when it has "
+                    "downloaded" % _unread(skipped))
+    sctx = rv.slot_context(c.store, c.copies, repos, a.product, now(), mem=mem)
+    if sctx["needs_product"] and info["record"] in ("product", "team"):
+        names = ", ".join(sctx["products"])
+        raise Usage("%s matches no single product (products: %s)" % (a.product, names) if a.product else
+                    "several products (%s) — name the one whose slot it is: --product \"<name>\"" % names)
+    sides = [x for x in rv.slot_answers(sctx, a.slot) if x["result"]["diverges"]]
+    if not sides:
+        raise Usage("no divergence for %s" % a.slot)
+    first = sides[0]["result"]
+    if a.repo not in first["diverges"]:
+        raise Usage("%s is not one of the repositories whose texts differ for %s: %s"
+                    % (a.repo, a.slot, ", ".join(first["diverges"])))
+    mem["decisions"][a.slot] = {"winner": a.repo, "hashes": rv.divergence_hashes(info["kind"], first["shown"]), "at": day}
+    return "%s → %s" % (a.slot, a.repo)
+
+
 def cmd_slot(a, c):
-    """What you decided about slots (bind, map, prefer, forget): `.state/slots.json`. A writing command — the lock, the
-    guard, the memory read (one that cannot be read stops the run before anything is imported), the edits waiting
+    """What you decided about slots (bind, map, prefer, decide, forget): `.state/slots.json`. A writing command — the lock,
+    the guard, the memory read (one that cannot be read stops the run before anything is imported), the edits waiting
     imported, a snapshot, the memory written, one journal line. No record changes, so nothing is compiled. A command that
     changes nothing writes nothing and takes no snapshot."""
     req = _slot_request(a, sl.load_catalogue())
@@ -1227,6 +1263,9 @@ def cmd_slot(a, c):
         elif a.action == "prefer":
             changed = sl.set_prefer(mem, slot, req["who"])
             what = "%s → %s" % (slot, req["who"])
+        elif a.action == "decide":
+            what = _slot_decide(c, a, info, mem, now()[:10])
+            changed = True
         else:
             if info is None and not sl.in_memory(mem, slot):
                 raise Usage(_no_slot(slot))
@@ -1306,6 +1345,7 @@ def build_parser():
     sp.add_argument("--team")
     sp = kp.add_parser("map", parents=[common]); sp.add_argument("record"); sp.add_argument("heading"); sp.add_argument("slot")
     sp = kp.add_parser("prefer", parents=[common]); sp.add_argument("slot"); sp.add_argument("who")
+    sp = kp.add_parser("decide", parents=[common]); sp.add_argument("slot"); sp.add_argument("repo"); sp.add_argument("--product")
     sp = kp.add_parser("forget", parents=[common]); sp.add_argument("slot")
     pp = sub.add_parser("provider").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = pp.add_parser("adopt", parents=[common]); sp.add_argument("repo"); sp.add_argument("--apply", action="store_true")

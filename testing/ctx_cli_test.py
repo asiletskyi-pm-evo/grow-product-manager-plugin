@@ -7,7 +7,7 @@ codes (0 ok, 2 conflict, 3 bad input / no store / unreadable, 4 refused) and the
 (import before write, snapshot, lock, managed regions, the provider boundary).
 Semantics: references/context-protocol.md. Stdlib only; run from the repo root.
 """
-import datetime, json, os, re, shutil, stat, subprocess, sys, tempfile, time
+import datetime, hashlib, json, os, re, shutil, stat, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "testing"))
@@ -3548,7 +3548,8 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
             n_journal = len(read(e.store, ".state", "journal.jsonl").splitlines())
             rcs = [run_ok(e, "slot", *args) for args in (("bind", "zorg-core", "team#Members", "team.members"),
                                                          ("map", "product.zorg-app", "Key Metrics (focus)", "product.key_metrics"),
-                                                         ("prefer", "team.members", "all"), ("forget", "team.members"))]
+                                                         ("prefer", "team.members", "all"), ("decide", "team.members", "zorg-core"),
+                                                         ("forget", "team.members"))]
             check("an unreadable memory (%s) stops every slot command: exit 3, the file named, nothing written" % label,
                   all(r[0] == 3 and "slots memory" in r[1] and ".state/slots.json" in r[1] for r in rcs) and read(mem_path) == text
                   and len(read(e.store, ".state", "journal.jsonl").splitlines()) == n_journal, [(r[0], r[1][-200:]) for r in rcs])
@@ -3556,6 +3557,115 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         os.mkdir(mem_path)
         rc, out, res = run_ok(e, "slot", "prefer", "team.members", "all")
         check("…a memory that is not a file cannot be read: exit 3", rc == 3 and "slots memory not readable" in out, (rc, out[-300:]))
+
+# --- v3.15.0: ctx slot decide — the answer to a divergence between repositories (spec §6): remembered with the hash of
+# every side, so that a new text from either repository asks again
+def sha256(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+SCOPE_NORM = "### Scope of work\nThe user works on Zorg App only."                              # zorg-core's `scope` block, as cb.norm has it
+METRICS_NORM = "#### Growth metrics\n- **North star:** weekly active shoppers"                   # zorg-growth's `growth-metrics`
+DIVERGE = "product.scope"
+
+
+def equal_ranks(e):
+    """zorg-growth at the rank zorg-core has (org: 1000): the two repositories tie."""
+    open(os.path.join(e.home, ".grow-pm", "providers", "zorg-growth.yaml"), "a", encoding="utf-8", newline="").write("rank: 1000\n")
+
+
+def journal_len(e):
+    return len(read(e.store, ".state", "journal.jsonl").splitlines())
+
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        equal_ranks(e)
+        mem_path = os.path.join(e.store, ".state", "slots.json")
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-core")
+        check("decide without a store: exit 3, nothing created", rc == 3 and "no store" in out and not os.path.exists(e.store), (rc, out[-300:]))
+        run_ok(e, "migrate", "--apply")
+        n_journal, snaps = journal_len(e), sorted(os.listdir(os.path.join(e.home, ".grow-pm", "snapshots")))
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-core")
+        check("no divergence (nothing bound to the slot): exit 3 «no divergence for <slot>», nothing written",
+              rc == 3 and "no divergence for product.scope" in out and not os.path.exists(mem_path) and journal_len(e) == n_journal
+              and sorted(os.listdir(os.path.join(e.home, ".grow-pm", "snapshots"))) == snaps, (rc, out[-300:]))
+        rc, out, res = run_ok(e, "slot", "decide", "team.nowhere", "zorg-core")
+        check("…a slot the catalogue lacks: exit 3", rc == 3 and "no slot 'team.nowhere'" in out, (rc, out[-300:]))
+        run_ok(e, "slot", "bind", "zorg-core", "scope", DIVERGE)
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-core")
+        check("…one repository bound is no divergence either", rc == 3 and "no divergence for product.scope" in out, (rc, out[-300:]))
+        run_ok(e, "slot", "bind", "zorg-growth", "growth-metrics", DIVERGE)
+        n_journal, mem_before = journal_len(e), read(mem_path)
+        for label, who, said in (("a repository that is registered but is not one of the sides", "zorg-dead", "zorg-dead"),
+                                 ("a repository nobody registered", "no-such-repo", "no-such-repo")):
+            rc, out, res = run_ok(e, "slot", "decide", DIVERGE, who)
+            check("decide for %s: exit 3, the sides named, nothing written" % label, rc == 3 and said in out
+                  and "zorg-core, zorg-growth" in out and read(mem_path) == mem_before and journal_len(e) == n_journal, (rc, out[-300:]))
+
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-growth")
+        day = datetime.date.today().isoformat()
+        want = {"winner": "zorg-growth", "hashes": {"zorg-core": sha256(SCOPE_NORM), "zorg-growth": sha256(METRICS_NORM)}, "at": day}
+        check("decide writes the winner and the hash of the normalised text of every side, and the day", rc == 0 and res["changed"] is True
+              and res["memory"]["decisions"] == {DIVERGE: want} and slots_memory(e) == res["memory"], (rc, out[-300:], res))
+        j = last_journal(e)
+        check("…the sequence of every slot command: a snapshot folder, one journal line (op slot, action decide, the slot), what to type to undo",
+              res["command"] == "slot" and res["action"] == "decide" and res["slot"] == DIVERGE and os.path.isdir(res["snapshot"])
+              and j["op"] == "slot" and j["action"] == "decide" and j["slot"] == DIVERGE and j["ids"] == [] and j["source"] == "ctx-slot"
+              and j["snapshot"] == res["snapshot"] and journal_len(e) == n_journal + 1
+              and "slot decide: product.scope → zorg-growth · snapshot " in out and "(back: ctx undo)" in out, (j, out[-300:]))
+        check("…the bindings are as they were", len(res["memory"]["bindings"]) == 2, res["memory"])
+        n_journal = journal_len(e)
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-core")
+        check("a divergence you have answered is none: decide again is exit 3 «no divergence», the answer kept",
+              rc == 3 and "no divergence for product.scope" in out and slots_memory(e)["decisions"] == {DIVERGE: want}
+              and journal_len(e) == n_journal, (rc, out[-300:]))
+
+        rc, out, res = run_ok(e, "undo")
+        check("undo takes the decision back — and leaves the bindings", rc == 0 and slots_memory(e)["decisions"] == {}
+              and len(slots_memory(e)["bindings"]) == 2, (rc, out[-300:], slots_memory(e)))
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-core")
+        check("…and the slot diverges again: the other side may be chosen", rc == 0 and res["memory"]["decisions"][DIVERGE]["winner"] == "zorg-core"
+              and res["memory"]["decisions"][DIVERGE]["hashes"] == want["hashes"], (rc, out[-300:]))
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-core")
+        check("…and that answer settles it again", rc == 3 and "no divergence for product.scope" in out, (rc, out[-300:]))
+
+        edit_both(e, "weekly active shoppers", "weekly active buyers")
+        rc_s, out_s, _ = run_ok(e, "sync")
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-growth")
+        new_hash = sha256(METRICS_NORM.replace("shoppers", "buyers"))
+        check("a new text in zorg-growth (a new hash): the slot diverges again, and the new answer keeps the new hash",
+              rc_s == 0 and rc == 0 and res["memory"]["decisions"][DIVERGE]["winner"] == "zorg-growth"
+              and res["memory"]["decisions"][DIVERGE]["hashes"] == {"zorg-core": sha256(SCOPE_NORM), "zorg-growth": new_hash}
+              and new_hash != want["hashes"]["zorg-growth"], (rc_s, rc, out_s[-200:], out[-300:]))
+
+# a skill that reads one product: several products and none named is a question, not a guess
+LITE_PRODUCT = ("### Team: Alpha (A)\n", "### Product: Zorg Lite\n\n- **Jira Project Key:** LITE\n\n### Team: Alpha (A)\n")
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, patch=[LITE_PRODUCT])
+        equal_ranks(e)
+        run_ok(e, "migrate", "--apply")
+        for args in (("zorg-core", "scope", DIVERGE), ("zorg-growth", "growth-metrics", DIVERGE),
+                     ("zorg-core", "teams", "org.structure"), ("zorg-growth", "team", "org.structure")):
+            run_ok(e, "slot", "bind", *args)
+        n_journal = journal_len(e)
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-core")
+        check("a product slot with several products and no --product: exit 3, the products named, nothing written",
+              rc == 3 and "Zorg App" in out and "Zorg Lite" in out and "--product" in out and journal_len(e) == n_journal
+              and not (slots_memory(e) or {}).get("decisions"), (rc, out[-300:]))
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-core", "--product", "Zorg Lite")
+        check("…--product names the one whose slot it is: for Zorg Lite only zorg-core answers, so no divergence",
+              rc == 3 and "no divergence for product.scope" in out, (rc, out[-300:]))
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-core", "--product", "Nowhere")
+        check("…a product that is none: exit 3, the products named", rc == 3 and "Nowhere" in out and "Zorg App" in out, (rc, out[-300:]))
+        rc, out, res = run_ok(e, "slot", "decide", DIVERGE, "zorg-core", "--product", "Zorg App")
+        check("…for Zorg App both repositories answer: the decision is written", rc == 0 and res["memory"]["decisions"][DIVERGE]["winner"] == "zorg-core"
+              and sorted(res["memory"]["decisions"][DIVERGE]["hashes"]) == ["zorg-core", "zorg-growth"], (rc, out[-300:]))
+        rc, out, res = run_ok(e, "slot", "decide", "org.structure", "zorg-growth")
+        check("an organisation slot does not depend on the product: decide needs no --product", rc == 0
+              and res["memory"]["decisions"]["org.structure"]["winner"] == "zorg-growth", (rc, out[-300:]))
 
 # the documents say what the code does now
 pp_fr, cp_fr, lcp_fr = doc("references", "context-provider-protocol.md"), doc("references", "context-protocol.md"), \

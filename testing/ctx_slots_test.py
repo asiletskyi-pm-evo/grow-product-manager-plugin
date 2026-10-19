@@ -219,10 +219,19 @@ for label, doc in (("another schema", {"schema": "context-slots-memory/9"}), ("n
                    ("prefer that is no object", {"schema": sl.MEMORY_SCHEMA, "prefer": []}),
                    ("a decision with no winner", {"schema": sl.MEMORY_SCHEMA, "decisions": {"team.members": {"hashes": {}}}}),
                    ("a decision whose hashes are no object", {"schema": sl.MEMORY_SCHEMA, "decisions": {"team.members": {"winner": "r", "hashes": []}}}),
+                   ("a decision whose date is no date", {"schema": sl.MEMORY_SCHEMA, "decisions": {"team.members": {"winner": "r", "hashes": {}, "at": "yesterday"}}}),
+                   ("a decision with a key nobody knows", {"schema": sl.MEMORY_SCHEMA, "decisions": {"team.members": {"winner": "r", "hashes": {}, "by": "me"}}}),
                    ("a key nobody knows", {"schema": sl.MEMORY_SCHEMA, "extra": 1})):
     with tempfile.TemporaryDirectory() as d:
         why = bad_memory(d, json.dumps(doc))
         check("%s is a StoreError that names the file" % label, why is not None and why.startswith("slots memory not valid: .state/slots.json ("), why)
+with tempfile.TemporaryDirectory() as d:
+    why = bad_memory(d, json.dumps({"schema": sl.MEMORY_SCHEMA, "decisions": {
+        "team.members": {"winner": "zorg-core", "hashes": {"zorg-core": "a" * 64}, "at": "2026-10-20"},
+        "product.scope": {"winner": "zorg-core", "hashes": {"zorg-core": "a" * 64}}}}))
+    again = sl.load_memory(cs.Store(os.path.join(d, "context"))) if why is None else None
+    check("a decision may carry the day it was taken (at, YYYY-MM-DD); one without it is as valid", why is None
+          and again["decisions"]["team.members"]["at"] == "2026-10-20" and "at" not in again["decisions"]["product.scope"], (why, again))
 with tempfile.TemporaryDirectory() as d:
     why = bad_memory(d, json.dumps({"schema": sl.MEMORY_SCHEMA}))
     store = cs.Store(os.path.join(d, "context"))

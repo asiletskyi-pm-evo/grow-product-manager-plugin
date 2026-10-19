@@ -15,11 +15,11 @@ references/context-protocol.md.
 - slot_info                         a slot's own entry (kind, record, names, about), or None
 
 What you decided about slots is kept in the store, in `<store>/.state/slots.json` (schema context-slots-memory/1) —
-not in a record and not in a registration. `ctx slot bind|map|prefer|forget` write it (a snapshot first, a journal
+not in a record and not in a registration. `ctx slot bind|map|prefer|decide|forget` write it (a snapshot first, a journal
 line; `ctx undo` puts it back), the resolver reads it. Its shape:
   {"schema", "bindings": [{"repo", "block", "sub": str|None, "slot", "team": str|None}],
    "aliases": [{"record": a record id, "heading", "slot"}], "prefer": {slot: "mine"|"repo:<id>"|"all"},
-   "decisions": {slot: {"winner": repo id, "hashes": {repo id: sha}}}}
+   "decisions": {slot: {"winner": repo id, "hashes": {repo id: sha}, "at": "YYYY-MM-DD" (optional: the day it was taken)}}}
 
 - MEMORY_SCHEMA, MEMORY_FILE        the schema, and the file name inside `.state/`
 - load_memory, save_memory          read it (no file: an empty memory; a file that cannot be read, is not JSON, is of
@@ -52,6 +52,7 @@ CATALOGUE_PATH = os.path.join(PLUGIN_ROOT, "references", "context-slots.yaml")
 SCHEMA = "context-slots/1"
 KINDS = ("value", "text", "list")
 RECORDS = ("product", "team", "profile", "org")
+_DAY = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 _SLOT_ID = re.compile(r"(?P<record>[a-z]+)\.(?P<name>[a-z0-9_]+)\Z")
 
 
@@ -220,14 +221,19 @@ def _clean_memory(data):
     if not isinstance(decisions, dict):
         raise ValueError("decisions is not an object")
     for slot, d in decisions.items():
-        if not isinstance(d, dict) or sorted(d) != ["hashes", "winner"]:
-            raise ValueError("the decision for %s is not {winner, hashes}" % slot)
+        if not isinstance(d, dict) or sorted(k for k in d if k != "at") != ["hashes", "winner"]:
+            raise ValueError("the decision for %s is not {winner, hashes[, at]}" % slot)
         if not _text(d["winner"]):
             raise ValueError("the decision for %s has no winner" % slot)
         h = d["hashes"]
         if not isinstance(h, dict) or not all(_text(k) and isinstance(v, str) for k, v in h.items()):
             raise ValueError("the hashes of the decision for %s are not {repository: hash}" % slot)
-        out["decisions"][slot] = {"winner": d["winner"], "hashes": dict(h)}
+        one = {"winner": d["winner"], "hashes": dict(h)}
+        if "at" in d:
+            if not isinstance(d["at"], str) or not _DAY.match(d["at"]):
+                raise ValueError("the day of the decision for %s is not YYYY-MM-DD" % slot)
+            one["at"] = d["at"]
+        out["decisions"][slot] = one
     return out
 
 
@@ -318,7 +324,7 @@ def drop_slot(mem, slot):
 
 
 # ------------------------------------------------------------------ bindings: which block answers which slot
-PLUGIN_BINDINGS = (("team.members", "Members"), ("product.jira_key", None))   # the plugin builds the `team` block (provider_templates/team-block.md)
+PLUGIN_BINDINGS = (("team.members", "Members"),)   # the plugin builds the `team` block (provider_templates/team-block.md)
 PLUGIN_BLOCK = "team"
 STATE_UNREAD = "стан блоків %s не прочитано — атрибути slot= і policy=rule його блоків невідомі"
 SLOT_WORD = re.compile(r"(?:^|\s)slot=(\S+)(?=\s|$)")
@@ -350,8 +356,9 @@ def bindings_of(store, repos, mem):
                 registration's namespace (else by the repository id itself, as an unregistered namespace is named)
       "marker"  the `slot=` attribute (marker_slots) of the block's base — the repository's text the store keeps
                 (`.state/blocks/<repo>/<sha>.md`), never your region; one binding per slot, with no sub and no team
-      "plugin"  the `team` block of every registered repository: `Members` → team.members, the `jira_project_key` line
-                → product.jira_key (there is no slot for `jira_team_field`: it is a team's name, not an id)
+      "plugin"  the `team` block of every registered repository: `Members` → team.members and nothing else — not its
+                `jira_project_key` line (the label differs from the product's own `Jira Project Key`, so the block would
+                add a «також» line to every skill that reads the key) and not `jira_team_field` (a team's name, not an id)
     A plugin binding is listed for every registration, whether or not its team block is in the records; a binding to a
     block the records lack simply has no candidate. `problems` holds one line per repository whose block state (or a
     base of it) cannot be read — STATE_UNREAD, its `slot=` attributes are then unknown and the rest still binds. Reads
