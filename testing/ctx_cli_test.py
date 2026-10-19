@@ -3674,6 +3674,247 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         check("an organisation slot does not depend on the product: decide needs no --product", rc == 0
               and res["memory"]["decisions"]["org.structure"]["winner"] == "zorg-growth", (rc, out[-300:]))
 
+# --- v3.15.0 Task 6: ctx explain — where each slot came from and why it won (spec §7); reads only: no lock, no network, no write
+def full_tree(*roots):
+    """Every directory and file under the roots, a file with its bytes and modification time: a created empty directory counts."""
+    out = {}
+    for root in roots:
+        for dp, _, fn in os.walk(root):
+            out[dp] = "dir"
+            for n in fn:
+                p = os.path.join(dp, n)
+                out[p] = (open(p, "rb").read(), os.stat(p).st_mtime_ns)
+    return out
+
+
+def slot_in(res, slot, record=None):
+    return next((s for s in (res or {}).get("slots", []) if s["slot"] == slot and (record is None or s["record"] == record)), None)
+
+
+def outcomes_of(s):
+    return [(c["source"], c["outcome"]) for c in (s or {}).get("candidates", [])]
+
+
+def printed(out, prefix):
+    """The command a line of the explanation prints from `prefix` on (to run it as it stands)."""
+    return next((l[l.index(prefix):] for l in out.splitlines() if prefix in l), None)
+
+
+def ctx_args(command):
+    """`ctx slot bind …` as the arguments `run_ok` takes (the text between double quotes is one argument)."""
+    import shlex
+    return shlex.split(command)[1:]
+
+
+TEAM_OWN = ("- **Jira Team ID:** <team-uuid>\n", "- **Jira Team ID:** <team-uuid>\n\n#### Team Members\n\n| Name | Role |\n|---|---|\n| Own Person | PM |\n")
+KEY_METRICS_OWN = ("- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ\n\n#### Key Metrics\n- Mine: weekly active shoppers\n")
+CORE_NUMBERS = ("- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ\n\n#### Core numbers\n- Mine: weekly active shoppers\n")
+FIXTURE_TEXT_CLI = read(REPOS_FIX, "context.md")
+TEAM_REGION_CLI = region_in(FIXTURE_TEXT_CLI, "zorg-core", "team")
+TEAM_TO_NOTES = [(TEAM_REGION_CLI + "\n\n", ""), ("## Zorg Core Notes\n\n", "## Zorg Core Notes\n\n" + TEAM_REGION_CLI + "\n\n"),
+                 ("<!-- zorg-growth:end id=team -->\n", "<!-- zorg-growth:end id=team -->\n\n### Team: Beta (B)\n\n- **Jira Team ID:** <beta-uuid>\n")]
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT, patch=[TEAM_OWN])
+        rc, out, res = run_ok(e, "explain")
+        check("explain without a store: exit 3, nothing created", rc == 3 and "no store" in out and not os.path.exists(e.store)
+              and not os.path.exists(os.path.join(e.home, ".grow-pm", "snapshots")), (rc, out[-300:]))
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-core", "--apply")
+        check("explain is not a writing command", "explain" not in ctx_cli.WRITING and not ctx_cli.writes(ctx_cli.build_parser().parse_args(["explain"])), "")
+
+        # ---- reads only: no write of any kind (files, directories, times), no lock
+        before = full_tree(e.home, e.store, e.vault)
+        for args in ((), ("--skill", "task-creator"), ("team.members", "product.scope"), ("--json",)):
+            rc, out, res = run_ok(e, "explain", *args)
+            check("explain %s writes nothing: the home, the store and the vault, directories included" % (" ".join(args) or "(no arguments)"),
+                  rc == 0 and full_tree(e.home, e.store, e.vault) == before, (rc, out[-300:]))
+        with ctx_ops_mod.lock(e.home):
+            rc, out, res = run_ok(e, "explain", "--skill", "task-creator")
+            rc_w, out_w, _ = run_ok(e, "slot", "prefer", "team.members", "all")
+        check("explain takes no lock: another run holds it and explain exits 0, while a writing command is refused (exit 4)",
+              rc == 0 and rc_w == 4 and "another ctx run holds" in out_w and slot_in(res, "team.members"), (rc, rc_w, out[-300:], out_w[-200:]))
+        rc, out, res = run_ok(e, "explain", "--skill", "task-creator", "--store", e.store)
+        check("…--store is accepted, as for every read command", rc == 0 and slot_in(res, "team.members"), (rc, out[-200:]))
+
+        # ---- --skill: the slots the skill asks, in the manifest's order, and only those
+        rc, out, res = run_ok(e, "explain", "--skill", "task-creator")
+        check("--skill task-creator: exactly the slots it asks, in the manifest's order",
+              rc == 0 and [s["slot"] for s in res["slots"]] == ["product.jira_key", "product.confluence_space", "team.jira_team_id", "team.members"],
+              (rc, [s["slot"] for s in res.get("slots", [])]))
+        members = slot_in(res, "team.members")
+        check("…team.members: your Team Members and the core's Members, both shown (a list shows every candidate), the header says what it is",
+              outcomes_of(members) == [("mine", "shown"), ("zorg-core", "shown")] and members["kind"] == "list" and members["record"] == "team.alpha-a"
+              and members["winner"] is None and members["why"] == "список — виводяться всі кандидати; склеювання пунктів — у v3.16"
+              and "team.members · список · Team: Alpha (A)\n" in out and "  чому: список — виводяться всі кандидати" in out, (members, out[:1500]))
+        mine_row, core_row = members["candidates"]
+        check("…your row says where your text is; the block's — which block, which version, in which record, checked when",
+              mine_row["record"] == "team.alpha-a" and mine_row["heading"] == "Team Members" and "block" not in mine_row
+              and core_row["block"] == "team" and core_row["sub"] == "Members" and core_row["version"] == "0.2" and core_row["record"] == "team.alpha-a"
+              and core_row["rule"] is False and core_row["edited"] is False and core_row["how"] == "plugin" and core_row["checked"]
+              and "✔ твоє · team.alpha-a › Team Members" in out and "✔ zorg-core · блок team#Members v0.2 у записі team.alpha-a · станом на %s" % core_row["checked"] in out,
+              (mine_row, core_row, out[:1500]))
+        check("…looked_in says the names and the record", members["looked_in"] == {"names": ["Members", "Team Members", "Склад команди", "Учасники"],
+              "records": ["Team: Alpha (A)"]}, members["looked_in"])
+        check("…a skill's explanation lists no unmapped or skipped blocks: only the slots it asks", res["unmapped_blocks"] == [] and res["skipped_blocks"] == [], res)
+        confl = slot_in(res, "product.confluence_space")
+        check("a slot nobody answers: «не знайдено», «шукав:» with the names and the record, and the command that maps your own subsection",
+              confl["candidates"] == [] and confl["winner"] is None and confl["looked_in"]["names"] == ["Confluence Space"]
+              and "product.confluence_space · одне значення · Product: Zorg App · не знайдено\n" in out
+              and "  шукав: Confluence Space — у Product: Zorg App; блоків із цим слотом немає" in out
+              and '  прив\'язати свою підсекцію: ctx slot map product.zorg-app "<Назва>" product.confluence_space' in out, out[-1500:])
+        key = slot_in(res, "product.jira_key")
+        check("a value your text answers: one candidate, it won, «єдиний кандидат»", outcomes_of(key) == [("mine", "won")] and key["winner"] == "mine"
+              and key["why"] == "єдиний кандидат" and "  ✔ твоє · product.zorg-app › Jira Project Key" in out, (key, out[:600]))
+        rc, out_s, res_s = run_ok(e, "explain", "--skill", "no-such-skill")
+        check("an unknown skill: exit 3, as ctx read says it", rc == 3 and "no manifest entry for no-such-skill" in out_s, (rc, out_s[-200:]))
+
+        # ---- slots named: only those, in the order given; an unknown one is exit 3
+        rc, out, res = run_ok(e, "explain", "product.scope", "team.members", "product.scope")
+        check("explain <slot> …: only those, in the order given, none twice", rc == 0 and [s["slot"] for s in res["slots"]] == ["product.scope", "team.members"]
+              and res["unmapped_blocks"] == [] and res["skipped_blocks"] == [], (rc, [s["slot"] for s in res.get("slots", [])]))
+        rc, out, res = run_ok(e, "explain", "team.nowhere")
+        check("an unknown slot: exit 3, the catalogue named", rc == 3 and "no slot 'team.nowhere'" in out, (rc, out[-200:]))
+
+        # ---- nothing asked: every slot with a candidate, then the blocks no slot takes and the blocks you switched off
+        rc, out, res = run_ok(e, "explain")
+        names = [s["slot"] for s in res["slots"]]
+        check("explain with no arguments: the slots that have a candidate (not the ones nobody answers)", rc == 0 and "team.members" in names
+              and "product.jira_key" in names and "product.confluence_space" not in names and all(s["candidates"] for s in res["slots"]), names)
+        check("…skipped_blocks: the block of skip_blocks, with its repository", {"repo": "zorg-core", "block": "product"} in res["skipped_blocks"], res["skipped_blocks"])
+        scope = next((b for b in res["unmapped_blocks"] if b["block"] == "scope"), None)
+        check("…unmapped_blocks: a region of a registered repository that no slot takes (scope), not the team block the plugin binds",
+              scope is not None and scope == {"repo": "zorg-core", "block": "scope", "record": scope["record"], "version": "0.4", "heading": "Scope of work"}
+              and scope["record"] and sorted(b["block"] for b in res["unmapped_blocks"]) == ["growth-metrics", "scope", "teams"], res["unmapped_blocks"])
+        check("…and the text lists both", "scope" in out.split("Блоки без прив'язки", 1)[-1] and "Вимкнені блоки" in out
+              and "zorg-core · блок product" in out.split("Вимкнені блоки", 1)[-1], out[-900:])
+        rc, out_j, res_j = run_ok(e, "explain", "--json")
+        check("--json puts the printed text into CTX_RESULT as read does", rc == 0 and res_j.get("text") == out_j.split("CTX_RESULT ")[0]
+              and res_j["command"] == "explain" and res_j["ok"] is True and res.get("text") is None, (rc, res_j.get("text", "")[:100]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # who won, who lost, and what you can do about it
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, core_extra=SKIP_PRODUCT, patch=[KEY_METRICS_OWN])
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
+        run_ok(e, "slot", "bind", "zorg-growth", "growth-metrics", "product.key_metrics")
+        rc, out, res = run_ok(e, "explain", "product.key_metrics")
+        km = slot_in(res, "product.key_metrics")
+        check("your text over a block that is not a rule: yours won, the block lost and the reason is said as the spec has it",
+              rc == 0 and outcomes_of(km) == [("mine", "won"), ("zorg-growth", "lost")] and km["winner"] == "mine" and km["kind"] == "text"
+              and km["candidates"][1]["reason"] == "програв: твоє перемагає (блок не є правилом ядра)"
+              and "product.key_metrics · текст · Product: Zorg App\n" in out and "  ✔ твоє · product.zorg-app › Key Metrics\n" in out
+              and "  ✗ zorg-growth · блок growth-metrics v0.1 у записі product.zorg-app · станом на " in out
+              and "— програв: твоє перемагає (блок не є правилом ядра)" in out and "  чому: твоє перемагає (блок не є правилом ядра)" in out,
+              (km, out[:1200]))
+        check("…the block's row: its binding is yours, its rank is known", km["candidates"][1]["how"] == "memory" and km["candidates"][1]["rank"] == 500
+              and "прив'язка: твоя" in out, km["candidates"][1])
+        check("…what you decided about the slot is shown, with the command that takes it all back",
+              km["memory"]["bindings"][0]["block"] == "growth-metrics" and "ctx slot forget product.key_metrics" in out
+              and km["commands"][-1] == "ctx slot forget product.key_metrics", (km.get("memory"), out[-500:]))
+        run_ok(e, "slot", "prefer", "product.key_metrics", "repo:zorg-growth")
+        rc, out, res = run_ok(e, "explain", "product.key_metrics")
+        km = slot_in(res, "product.key_metrics")
+        check("a preference for a repository: the block won, your text lost, the preference is named",
+              outcomes_of(km) == [("zorg-growth", "won"), ("mine", "lost")] and km["prefer"] == "repo:zorg-growth"
+              and km["candidates"][1]["reason"] == "програв: перевага: repo:zorg-growth" and "перевага: repo:zorg-growth" in out, (km, out[:900]))
+        rc_f, out_f, _ = run_ok(e, *ctx_args(printed(out, "ctx slot forget product.key_metrics")))
+        rc, out, res = run_ok(e, "explain", "product.key_metrics")
+        km = slot_in(res, "product.key_metrics")
+        check("…the printed forget command runs, and the slot is as it was without it", rc_f == 0 and outcomes_of(km) == [("mine", "won")]
+              and km.get("memory") is None and "ctx slot forget" not in out, (rc_f, out_f[-200:], km))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # a divergence, the answer, the answer taken back
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url)
+        equal_ranks(e)
+        run_ok(e, "migrate", "--apply")
+        run_ok(e, "slot", "bind", "zorg-core", "scope", DIVERGE)
+        run_ok(e, "slot", "bind", "zorg-growth", "growth-metrics", DIVERGE)
+        rc, out, res = run_ok(e, "explain", DIVERGE)
+        sc_ = slot_in(res, DIVERGE)
+        check("two repositories at an equal rank with different text: both shown as a divergence, no winner",
+              rc == 0 and outcomes_of(sc_) == [("zorg-core", "diverges"), ("zorg-growth", "diverges")] and sc_["winner"] is None
+              and sc_["why"] == "рівний ранг 1000, різний текст: zorg-core, zorg-growth" and "decision" not in sc_, (sc_, out[:900]))
+        check("…each side's row carries the reason and the command that settles it for that side",
+              "  ⚠ zorg-core · блок scope v0.4 у записі " in out and "— розбіжність: рівний ранг 1000, різний текст — вирішити: ctx slot decide product.scope zorg-core" in out
+              and "— вирішити: ctx slot decide product.scope zorg-growth" in out, out[:1200])
+        rc_d, out_d, _ = run_ok(e, *ctx_args(printed(out, "ctx slot decide product.scope zorg-growth")))
+        rc, out, res = run_ok(e, "explain", DIVERGE)
+        sc_ = slot_in(res, DIVERGE)
+        day = datetime.date.today().isoformat()
+        check("the printed decide command runs: the answer wins, the other side lost by it, the decision is shown with its day and the way back",
+              rc_d == 0 and outcomes_of(sc_) == [("zorg-growth", "won"), ("zorg-core", "lost")] and sc_["decision"]["winner"] == "zorg-growth"
+              and sc_["decision"]["at"] == day and sc_["why"] == "твоє рішення від " + day
+              and sc_["candidates"][1]["reason"] == "програв: твоє рішення від " + day and "ctx slot forget product.scope" in out
+              and "рішення про розбіжність: zorg-growth" in out, (rc_d, sc_, out[:1200]))
+        edit_both(e, "weekly active shoppers", "weekly active buyers")
+        run_ok(e, "sync")
+        rc, out, res = run_ok(e, "explain", DIVERGE)
+        sc_ = slot_in(res, DIVERGE)
+        check("a new text from a side: the answer no longer holds, the slot diverges again and the stale decision is named",
+              outcomes_of(sc_) == [("zorg-core", "diverges"), ("zorg-growth", "diverges")] and "decision" not in sc_
+              and "зараз не діє" in out and sc_["memory"]["decision"]["winner"] == "zorg-growth", (sc_, out[:1400]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # a block that cannot be given to one team
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, patch=TEAM_TO_NOTES)
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "explain", "team.members")
+        alpha, beta = slot_in(res, "team.members", "team.alpha-a"), slot_in(res, "team.members", "team.beta-b")
+        check("two teams and the core's team block in a record of its own: for each team the slot is not found, and the block is shown as unplaced",
+              rc == 0 and alpha and beta and outcomes_of(alpha) == [("zorg-core", "unplaced")] and outcomes_of(beta) == [("zorg-core", "unplaced")]
+              and alpha["winner"] is None and "не знайдено" in out, (rc, res.get("slots"), out[:1500]))
+        row = alpha["candidates"][0]
+        check("…the unplaced row says why and carries the command that places it with the team (the team's record filled in)",
+              row["reason"].startswith("не розміщено") and row["block"] == "team" and row["sub"] == "Members"
+              and "  · zorg-core · блок team#Members v0.2 у записі " in out and "— прив'язати: ctx slot bind zorg-core team#Members team.members --team team.alpha-a" in out
+              and "--team team.beta-b" in out and "ctx slot bind zorg-core team#Members team.members --team team.alpha-a" in alpha["commands"]
+              and "є нерозміщений блок" in out, (row, out[:1500]))
+        rc_b, out_b, _ = run_ok(e, *ctx_args(printed(out, "ctx slot bind zorg-core team#Members team.members --team team.alpha-a")))
+        rc, out, res = run_ok(e, "explain", "team.members")
+        alpha, beta = slot_in(res, "team.members", "team.alpha-a"), slot_in(res, "team.members", "team.beta-b")
+        check("the printed bind command runs: the block is shown for that team, and the other team has nothing placed",
+              rc_b == 0 and outcomes_of(alpha) == [("zorg-core", "shown")] and alpha["candidates"][0]["how"] == "memory"
+              and outcomes_of(beta) == [] and "прив'язка: твоя" in out, (rc_b, out_b[-200:], res.get("slots")))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # your own name for a slot
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, patch=[CORE_NUMBERS])
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "explain", "product.key_metrics")
+        km = slot_in(res, "product.key_metrics")
+        check("a subsection under a name of your own: the slot is not found, and the command is printed to map it", km["candidates"] == []
+              and "  шукав: Key Metrics, Ключові метрики — у Product: Zorg App; блоків із цим слотом немає" in out
+              and km["commands"] == ['ctx slot map product.zorg-app "<Назва>" product.key_metrics'], (km, out[:800]))
+        rc_m, out_m, _ = run_ok(e, *ctx_args(printed(out, "ctx slot map").replace("<Назва>", "Core numbers")))
+        rc, out, res = run_ok(e, "explain", "product.key_metrics")
+        km = slot_in(res, "product.key_metrics")
+        check("…once mapped it is found, the name is among those looked for, and the memory line says how to take it back",
+              rc_m == 0 and outcomes_of(km) == [("mine", "won")] and km["candidates"][0]["heading"] == "Core numbers"
+              and km["looked_in"]["names"] == ["Key Metrics", "Ключові метрики", "Core numbers"] and "ctx slot forget product.key_metrics" in out
+              and "назва “Core numbers” у product.zorg-app" in out, (rc_m, km, out[:900]))
+
+with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # what could not be read, and several products
+    with tempfile.TemporaryDirectory() as d:
+        e = repos_env(d, fake.url, patch=[LITE_PRODUCT])
+        run_ok(e, "migrate", "--apply")
+        rc, out, res = run_ok(e, "explain", "product.jira_key", "org.structure")
+        check("several products and none named: the product and team slots are held back with the products named, the organisation's are explained",
+              rc == 0 and res["needs_product"] is True and res["products"] == ["Zorg App", "Zorg Lite"] and [s["slot"] for s in res["slots"]] == ["org.structure"]
+              and "Zorg App, Zorg Lite" in out and "--product" in out, (rc, res, out[:800]))
+        rc, out, res = run_ok(e, "explain", "product.jira_key", "--product", "Zorg Lite")
+        check("…--product names the one: its slot is explained", rc == 0 and not res.get("needs_product") and slot_in(res, "product.jira_key")["record"] == "product.zorg-lite"
+              and outcomes_of(slot_in(res, "product.jira_key")) == [("mine", "won")], (rc, res.get("slots")))
+        mem_path = os.path.join(e.store, ".state", "slots.json")
+        os.makedirs(os.path.dirname(mem_path), exist_ok=True)
+        open(mem_path, "w", encoding="utf-8", newline="").write("{ not json")
+        rc, out, res = run_ok(e, "explain", "product.jira_key", "--product", "Zorg App")
+        check("a slots memory that cannot be read: explain goes on without it and says so in one line",
+              rc == 0 and "пам'ять слотів не прочитано (slots memory not valid: .state/slots.json" in out and "прив'язки й рішення не застосовано" in out
+              and read(mem_path) == "{ not json", (rc, out[:600]))
+
 # the documents say what the code does now
 pp_fr, cp_fr, lcp_fr = doc("references", "context-provider-protocol.md"), doc("references", "context-protocol.md"), \
     doc("references", "local-context-protocol.md")

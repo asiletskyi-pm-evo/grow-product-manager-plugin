@@ -25,6 +25,22 @@
                                 rejected {repo: [blocks]}, rejected_failed {repo: why} (a state that could not take
                                 it: the undo stands, and says the sync may apply the text again)
   read --skill S [--product P]  the card plus what the skill's manifest entry names (reads only)
+  explain [SLOT …] [--skill S] [--product P] [--json]
+                                where each slot came from and why it won (since v3.15.0; reads only — no lock, no network,
+                                nothing written). Per slot a header (slot · kind · record) and a line for each candidate —
+                                ✔ shown (yours, or a block with its repository, version and day of the last check), ✗ lost
+                                (with the reason), ⚠ divergence between repositories (with `ctx slot decide`), · a block that
+                                cannot be given to one team (with `ctx slot bind … --team`) — then `чому:`; a slot nobody
+                                answers says what it looked for and prints `ctx slot map`; what you decided about the slot
+                                is shown with `ctx slot forget`. SLOTs: only those; --skill S: the slots S asks, in the
+                                manifest's order and lookup mode; neither: every slot with a candidate, then the blocks no
+                                slot takes (a region of a registered repository with no binding) and the blocks of
+                                `skip_blocks`. With several products and none named the slots of a product and of a team are
+                                held back (needs_product). An unknown slot or skill is exit 3. CTX_RESULT: slots [{slot,
+                                kind, about, record, title, winner, candidates [{source, record, block, sub, version, checked,
+                                edited, rule, how, rank, outcome won|lost|shown|diverges|unplaced, reason, command}], why,
+                                prefer, looked_in {names, records}, commands, decision, memory, notes}], unmapped_blocks,
+                                skipped_blocks, needs_product, products, warnings
   invalidate ID --reason R      mark a record no longer current (it stays, with a status region)
   archive ID [--reason R]       move a record to the archive; restore ID brings it (or a trashed one) back
   verify [ID ...] [--stale]     mark records verified today
@@ -122,7 +138,7 @@
                                 the sides, and a memory that cannot be read ("slots memory not readable|not valid:
                                 .state/slots.json (…)") are exit 3. CTX_RESULT: action, slot, changed, snapshot, memory (after)
 
-Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
+`read` and `explain` take no lock and write nothing. Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
 registration is not read in time — 3 s each, 6 s for all: the boundary cannot be checked, exit 4), imports direct
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
 writes only the block state under `.state/blocks/` and the card's Repos line; `slot` imports first too, and then
@@ -401,6 +417,30 @@ def cmd_read(a, c):
     text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10], repos=repos, skipped=skipped)
     sys.stdout.write(text)
     return 0, dict(res, command="read", skill=a.skill, text=text if a.json else None)
+
+
+def cmd_explain(a, c):
+    """`explain`: where each slot came from and why it won (ctx_resolve.explain). Reads only, as `read` does: no lock, no
+    network, nothing written; the registrations are read in a try, and one that cannot be read is a line, not a failure."""
+    c.need_store()
+    cat = sl.load_catalogue()
+    for slot in a.slots:
+        if sl.slot_info(cat, slot) is None:
+            raise Usage(_no_slot(slot))
+    if a.skill:
+        try:
+            cr.manifest_for(cr.load_manifest(), a.skill)
+        except KeyError:
+            raise cs.StoreError("no manifest entry for %s — read local-context.md whole" % a.skill)
+    skipped = []
+    try:
+        repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    except Exception:  # noqa: BLE001 — what names a block's repository is not worth an explanation
+        repos = []
+    text, res = rv.explain(c.store, c.copies, repos, skipped, slots=a.slots or None, skill=a.skill, product=a.product,
+                           today=now()[:10], catalogue=cat)
+    sys.stdout.write(text)
+    return 0, dict(res, command="explain", skill=a.skill, text=text if a.json else None)
 
 
 def _lifecycle(c, fn, *args):
@@ -1321,6 +1361,8 @@ def build_parser():
     g = sp.add_mutually_exclusive_group(); g.add_argument("--archived", action="store_true"); g.add_argument("--trash", action="store_true")
     sp = sub.add_parser("read", parents=[common]); sp.add_argument("--skill", required=True); sp.add_argument("--product")
     sp.add_argument("--json", action="store_true")
+    sp = sub.add_parser("explain", parents=[common]); sp.add_argument("slots", nargs="*"); sp.add_argument("--skill")
+    sp.add_argument("--product"); sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("invalidate", parents=[common]); sp.add_argument("id"); sp.add_argument("--reason", required=True)
     sp = sub.add_parser("archive", parents=[common]); sp.add_argument("id"); sp.add_argument("--reason")
     sp = sub.add_parser("restore", parents=[common]); sp.add_argument("id")
@@ -1364,7 +1406,7 @@ def build_parser():
 COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c: cmd_sync(a, c, source="compile"),
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
-            "read": cmd_read, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
+            "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot}
 
 

@@ -30,9 +30,15 @@ ctx_read._lookup reads a `fields`/`required` name and a `sections` one.
                 rule, one «також» line for each other text, the divergence line
 - without_shown, bound_slots, looked_for   no duplicates in a whole record (spec §5.2), the slots a bound block's origin
                 line names wherever it is printed, and the names a slot was looked for under (spec §5.3)
+- unread_lines   the lines that say what a reader could not read (an unread registration, the slots memory, a block state)
+- binding_problems   the bindings that do nothing, and why (a block that is gone, a repository nobody registered, a region that
+                is not whole, a binding with nothing to give, a publisher's `slot=` your own binding set aside)
+- explain       what `ctx explain` prints (spec §7): for each slot its candidates and why the winner won, what it looked for
+                where nothing answered, what you decided about it and the command that takes that back
 
 Reads only: no lock, no network, nothing written. Semantics: references/context-protocol.md. Stdlib only.
 """
+import datetime
 import os
 import sys
 
@@ -88,8 +94,9 @@ class _Repos:
         except (cs.StoreError, OSError):
             return None
 
-    def block(self, slot, rec, ns, bid, v, region, text, how, placed, place):
-        """A block's candidate: `region` is the whole region text (markers included) when it is sound, else None."""
+    def block(self, slot, rec, ns, bid, v, region, text, how, placed, place, sub=None):
+        """A block's candidate: `region` is the whole region text (markers included) when it is sound, else None; `sub` the
+        subsection its binding names."""
         reg, entry = self.reg(ns), self.entry(ns, bid)
         rule = cb.is_rule(self.base(ns, bid))
         known = [h for h in [entry.get("base_sha")] + list(entry.get("bases") or []) if h]
@@ -100,7 +107,7 @@ class _Repos:
                 "checked": checked[:10] if isinstance(checked, str) and checked else None,
                 "edited": bool(known and region is not None and cs.sha_text(cb.norm(region)) not in known),
                 "rule": rule, "how": how, "heading": _heading(text), "text": text, "rank": _rank(reg),
-                "placed": placed, "place": place}
+                "placed": placed, "place": place, "sub": sub}
 
 
 def _heading(text):
@@ -174,7 +181,7 @@ def _own(slot, rec, names, aliases, place, field):
                 continue
             return {"slot": slot, "source": "mine", "level": "mine", "record": rec["id"], "block": None, "ns": None,
                     "version": None, "checked": sc.verified_of(rec, None), "edited": False, "rule": False, "how": None,
-                    "heading": _heading(text), "text": text, "rank": None, "placed": True, "place": place}
+                    "heading": _heading(text), "text": text, "rank": None, "placed": True, "place": place, "sub": None}
     return None
 
 
@@ -247,7 +254,8 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
       "marker", "plugin", "name" — found by name without a binding — or None for your text), heading (of the text, or
       the field's name), text, rank (the registration's; None when it was not read), placed (False: a block outside
       a team record that cannot be given to one team — the skill does not get it, explain shows it), place (the id of
-      the product or team record the candidate answers for; None for an org or profile slot and when not placed).
+      the product or team record the candidate answers for; None for an org or profile slot and when not placed), sub (the
+      subsection the binding names; None for your text, a block found by name and a binding of the whole block).
 
     `records` are the live records (ctx_read._live_view), `prod` the active product record (or None), `teams` the team
     records the skill reads, `repos` the registrations (crp.load_repos), `mem` the slots memory (its `aliases`; None —
@@ -309,7 +317,7 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
                 if where is None or (ns, bid, text) in seen:
                     continue
                 seen.add((ns, bid, text))
-                out.append(regs.block(slot, rec, ns, bid, v, region, text, b.get("how"), where[0], where[1]))
+                out.append(regs.block(slot, rec, ns, bid, v, region, text, b.get("how"), where[0], where[1], sub=b.get("sub")))
 
     if rkind in NAME_PLACES:
         for rec in places:
@@ -686,3 +694,386 @@ def looked_for(cat, slot, rec, mem):
     mapped = [a["heading"] for a in (mem or {}).get("aliases") or () if a.get("record") == rec["id"] and a.get("slot") == slot]
     names = sl._names(sl.slot_info(cat, slot) or {})
     return names + [h for h in mapped if sl._norm(h) not in {sl._norm(n) for n in names}]
+
+
+# ------------------------------------------------------------------ what a reader could not read, and the bindings that do nothing
+def unread_lines(sctx, skipped):
+    """The lines that say what a reader could not read, from a `slot_context` and the registrations `skipped` (as
+    ctx_repos.load_repos reports them, (path, reason)): one line for each registration file not read — only when a block in the
+    records has a namespace no registration read has, for then its ranks and rules are what the file would have said (spec
+    §4.6) —, the slots memory that could not be read, and the block state of each repository that could not be. `ctx read` and
+    `ctx explain` print them; an empty list says everything was read."""
+    known = {r.get("namespace") or r["id"] for r in sctx["repos"] or ()}
+    stray = any(ns not in known for r in sctx["records"] for ns, _, _, _, _ in cr._blocks(r.get("body") or ""))
+    out = [UNREAD_REGISTRATION % cc.clip(path, 200) for path, _ in skipped or ()] if stray else []
+    if sctx["mem_error"]:
+        out.append(UNREAD_MEMORY % sctx["mem_error"])
+    return out + list(sctx["problems"])
+
+
+GONE_BLOCK = "прив'язка до блоку, якого немає в записах: %s %s → %s"
+UNKNOWN_REPO = "прив'язка до репозиторію, якого не зареєстровано (чи реєстрацію не прочитано): %s %s → %s"
+BROKEN_BLOCK = "блок %s (%s) не є одним цілим регіоном — повторений, вкладений чи зламаний; прив'язка до %s не діє"
+EMPTY_BINDING = "прив'язка %s %s → %s недійсна: у блоці немає %s"
+IGNORED_MARKER = "атрибут slot=%s блоку %s %s ігноровано — блок прив'язано твоєю прив'язкою (до %s)"
+
+
+def binding_problems(sctx):
+    """The bindings of a `slot_context` that do not do what they say, [{"kind", "slot", "repo", "block", "sub", "how", "text"}],
+    `text` being the line that tells it (spec §4.5, and what a core that took a block away leaves behind). `kind`:
+
+      "unregistered"  your binding names a repository nobody registered (or whose registration was not read)
+      "missing"       your binding names a block that is in none of the records — the core took it away, the binding stayed
+      "broken"        the block is there but is not one sound region (repeated, nested, a marker broken): no binding applies
+      "empty"         the block is sound and the slot is in the catalogue, but the block has no part for it — the subsection
+                      the binding names, or (a block of several slots, a value slot) none that answers the slot's names
+      "ignored"       the `slot=` attribute of the block's base names a slot your own binding of the block set aside — your
+                      binding wins for the whole block (spec §4.2); `slot` is the slot the attribute names
+
+    The plugin's own binding of the `team` block is not a problem when its block lacks the part (a growth squad's team block
+    has no Members). A slot the catalogue lacks has no entry here. Reads only."""
+    cat, recs = sctx["cat"], sctx["records"]
+    regs = _Repos(sctx["store"], sctx["repos"])
+    present = {(ns, bid) for rec in recs for ns, bid, _, _, _ in cr._blocks(rec.get("body") or "") if bid}
+    sound = {}
+
+    def region(ns, bid):
+        if ns not in sound:
+            sound[ns] = cb.find_regions(recs, ns)[0]
+        return sound[ns].get(bid)
+
+    out = []
+
+    def add(kind, slot, repo, bid, sub, how, text):
+        out.append({"kind": kind, "slot": slot, "repo": repo, "block": bid, "sub": sub, "how": how, "text": text})
+
+    for (ns, bid), tied in (sctx["bindings"] or {}).items():
+        reg = regs.reg(ns)
+        repo = reg["id"] if reg else ns
+        several = len({b.get("slot") for b in tied}) > 1
+        for b in tied:
+            slot, sub, how = b.get("slot"), b.get("sub"), b.get("how")
+            info = sl.slot_info(cat, slot)
+            if info is None or how == "plugin":
+                continue
+            where = bid + ("#" + sub if sub else "")
+            whole = region(ns, bid)
+            if how == "memory" and reg is None:
+                add("unregistered", slot, repo, bid, sub, how, UNKNOWN_REPO % (repo, where, slot))
+            elif (ns, bid) not in present:
+                if how == "memory":
+                    add("missing", slot, repo, bid, sub, how, GONE_BLOCK % (repo, where, slot))
+            elif whole is None:
+                add("broken", slot, repo, bid, sub, how, BROKEN_BLOCK % (bid, repo, slot))
+            else:
+                kind = info.get("kind")
+                find = cr._subsection if kind == "text" else cr._field_text
+                if _bound_text(_inner(whole["text"]), sub, kind, sl._names(info), several, find) is None:
+                    lacks = "підсекції «%s»" % sub if sub else "підсекції чи рядка за назвами слоту"
+                    add("empty", slot, repo, bid, sub, how, EMPTY_BINDING % (repo, where, slot, lacks))
+        yours = [b.get("slot") for b in tied if b.get("how") == "memory"]
+        for slot in sl.marker_slots(regs.base(ns, bid)) if yours else ():
+            if slot not in yours and sl.slot_info(cat, slot) is not None:
+                add("ignored", slot, repo, bid, None, "marker", IGNORED_MARKER % (slot, repo, bid, ", ".join(yours)))
+    return out
+
+
+# ------------------------------------------------------------------ what `ctx explain` prints (spec §7)
+KIND_WORDS = {"value": "одне значення", "text": "текст", "list": "список"}
+OUTCOME_MARKS = {"won": "✔", "shown": "✔", "lost": "✗", "diverges": "⚠", "unplaced": "·"}
+HOW_WORDS = {"memory": "прив'язка: твоя", "marker": "прив'язка: slot= видавця", "plugin": "прив'язка: плагіна"}
+COMMAND_WORDS = {"diverges": "вирішити: ", "unplaced": "прив'язати: "}
+NOT_FOUND = "не знайдено"
+LOOKED_LINE = "шукав: %s — у %s; %s"
+UNPLACED_ABOVE = "є нерозміщений блок — рядок вище"
+MAP_LINE = "прив'язати свою підсекцію: "
+MAP_COMMAND = 'ctx slot map %s "<Назва>" %s'
+BIND_COMMAND = "ctx slot bind %s %s %s --team %s"
+DECIDE_COMMAND = "ctx slot decide %s %s"
+FORGET_COMMAND = "ctx slot forget %s"
+UNPLACED_WHY = "не розміщено: блок поза записом команди, а команд не одна"
+TIE_WHY = "розбіжність: рівний ранг %s, різний текст"
+STALE_DECISION = " (зараз не діє: тексти змінилися)"
+NEEDS_PRODUCT = "Продукти: %s. Слоти продукту й команди — для одного продукту: ctx explain … --product \"<назва>\""
+WHOLE_SKILL = "Цей скіл редагує local-context.md і читає його цілком — слотів не просить."
+UNMAPPED_HEAD = "Блоки без прив'язки — репозиторій їх публікує, але жоден слот їх не бере (прив'язати: ctx slot bind <repo> <block>[#<Підсекція>] <slot>):"
+SKIPPED_HEAD = "Вимкнені блоки (skip_blocks) — ядро пропонує, ти вимкнув:"
+NO_SLOTS = "Слотів із кандидатами немає."
+
+
+def _asked(spec, cat):
+    """[(slot, field)] a skill's manifest entry (ctx_read.manifest_for) asks, in the order `ctx read` reads them — the profile,
+    the product, the team; in each `required`, then `fields` (field=True: a field line, else its subsection), then `sections`
+    (field=False: the subsection only) — each name through the catalogue: a name with no slot is left out, a slot comes once."""
+    out = []
+    for record in ("profile", "product", "team"):
+        want = spec.get(record)
+        for key, field in (("required", True), ("fields", True), ("sections", False)) if isinstance(want, dict) else ():
+            names = want.get(key)
+            for name in names if isinstance(names, list) else ():
+                slot = sl.slot_for(cat, record, name)
+                if slot and slot not in [s for s, _ in out]:
+                    out.append((slot, field))
+    return out
+
+
+def _row(c, outcome, reason=None, command=None):
+    """One candidate as the `candidates` item of an explained slot: source, record and outcome; the heading it sits under;
+    when it was checked; for a block also its id, `sub` (the subsection its binding names), version, whether you edited it,
+    whether it acts as a core rule, how it was bound (`how`) and the rank of its repository; `reason` and `command` when the
+    outcome has them."""
+    row = {"source": c["source"], "record": c["record"], "outcome": outcome}
+    if c.get("heading"):
+        row["heading"] = c["heading"]
+    if c.get("checked"):
+        row["checked"] = c["checked"]
+    if c.get("level") != "mine":
+        row.update(block=c["block"], edited=bool(c.get("edited")), rule=c.get("level") == "rule", how=c.get("how"), rank=c.get("rank"))
+        if c.get("sub"):
+            row["sub"] = c["sub"]
+        if c.get("version"):
+            row["version"] = c["version"]
+    if reason:
+        row["reason"] = reason
+    if command:
+        row["command"] = command
+    return row
+
+
+def _rows(res, cands, unplaced, team):
+    """The rows of one place: the candidates the skill gets (`shown`, in the order of the cascade), your text under a rule (the
+    note), the others in the order of the cascade — and then the blocks that cannot be placed. `res` is `resolve` over `cands`.
+    A shown candidate is `won` when the cascade chose it alone (a list shows every candidate, so only a rule or a preference
+    chooses one of a list), `diverges` when repositories tie, `shown` otherwise — your text under a rule too, as the note. Every
+    other is `lost`, with the reason the cascade gives (`why`); one that says what a shown one says lost to it by saying it
+    once."""
+    shown, kind = res["shown"], res["kind"]
+    core = [c for c in shown if not unread_registration(c)]
+    lone = len(core) == 1 and not res["diverges"] and res["prefer"] != "all" and res["why"] != WHY_LIST
+
+    def lost(c):
+        text = compare_key(kind, c["text"])
+        same = next((s for s in shown if compare_key(kind, s["text"]) == text), None)
+        if same is not None:
+            return "той самий текст, що й у " + (MINE_WORD if same.get("level") == "mine" else same["source"])
+        if res["diverges"] and c.get("level") == "repo" and _rank_key(c) != _rank_key(shown[0]):
+            return "нижчий ранг: %s %s < %s %s" % (c["source"], _rank_text(c), shown[0]["source"], _rank_text(shown[0]))
+        if c.get("level") == "rule":
+            return "інше правило ядра сильніше: %s %s" % (shown[0]["source"], _rank_text(shown[0]))
+        return res["why"]
+
+    rows = []
+    first = list(shown) + ([res["note"]] if res["note"] else [])
+    for c in first + [c for c in _cascade(cands) if not any(c is f for f in first)]:
+        if any(c is s for s in shown):
+            if res["diverges"]:
+                rows.append(_row(c, "diverges", TIE_WHY % _rank_text(c), DECIDE_COMMAND % (res["slot"], c["source"])))
+            elif unread_registration(c):
+                rows.append(_row(c, "shown", WHY_UNREAD))
+            else:
+                rows.append(_row(c, "won" if lone else "shown"))
+        elif c is res["note"]:
+            rows.append(_row(c, "shown", NOTE_LINE))
+        else:
+            rows.append(_row(c, "lost", "програв: " + lost(c)))
+    for c in unplaced:
+        rows.append(_row(c, "unplaced", UNPLACED_WHY, BIND_COMMAND % (c["source"], c["block"] + ("#" + c["sub"] if c.get("sub") else ""),
+                                                                      res["slot"], team or "<запис>")))
+    return rows
+
+
+def _row_line(row):
+    """A row as one line: the mark of its outcome, whose it is and where, the marks that matter, the reason, the command."""
+    clip = cc.clip
+    if "block" not in row:
+        bits = [MINE_WORD + " · " + clip(row["record"], 80) + (" › " + clip(row["heading"], 80) if row.get("heading") else "")]
+        if row.get("checked"):
+            bits.append("перевірено " + row["checked"])
+    else:
+        bits = [clip(row["source"], 60), "блок %s%s%s у записі %s" % (
+            clip(row["block"], 60), "#" + clip(row["sub"], 60) if row.get("sub") else "",
+            " v" + clip(row["version"], 40) if row.get("version") else "", clip(row["record"], 80))]
+        if row.get("checked"):
+            bits.append("станом на " + row["checked"])
+        bits += [BY_NAME_MARK] if row.get("how") == BY_NAME else [HOW_WORDS[row["how"]]] if row.get("how") in HOW_WORDS else []
+        bits += [EDITED_MARK] if row.get("edited") else []
+        bits += [RULE_MARK] if row.get("rule") else []
+    line = OUTCOME_MARKS[row["outcome"]] + " " + " · ".join(bits)
+    if row.get("reason"):
+        line += " — " + row["reason"]
+    if row.get("command"):
+        line += " — " + COMMAND_WORDS.get(row["outcome"], "") + row["command"]
+    return line
+
+
+def _remembered(mem, slot, record_id):
+    """What the memory holds about `slot` — its bindings, the names you gave it in this record (`record_id`; every record when
+    None), the preference, the decision — as {"bindings", "aliases", "prefer", "decision"}, or None when it holds nothing."""
+    out = {"bindings": [dict(b) for b in mem.get("bindings") or () if b["slot"] == slot],
+           "aliases": [dict(a) for a in mem.get("aliases") or () if a["slot"] == slot and record_id in (None, a["record"])],
+           "prefer": (mem.get("prefer") or {}).get(slot), "decision": (mem.get("decisions") or {}).get(slot)}
+    return out if any(out.values()) else None
+
+
+def _remembered_words(m, acts):
+    words = ["прив'язка %s %s%s%s" % (b["repo"], b["block"], "#" + b["sub"] if b.get("sub") else "",
+                                      " --team " + b["team"] if b.get("team") else "") for b in m["bindings"]]
+    words += ["назва “%s” у %s" % (a["heading"], a["record"]) for a in m["aliases"]]
+    if m["prefer"]:
+        words.append("перевага: " + m["prefer"])
+    if m["decision"]:
+        d = m["decision"]
+        words.append("рішення про розбіжність: %s%s%s" % (d["winner"], " від " + d["at"] if d.get("at") else "",
+                                                        "" if acts else STALE_DECISION))
+    return words
+
+
+def _explain_slot(sctx, slot, field, strict, problems):
+    """The explanation of one slot, [entry] — one for each place (the product, a team; an organisation or profile slot has one).
+    A place with no candidate is an entry only when the run is `strict` (a skill's or named slots: say what was looked for), or
+    when the slot has an unplaced block, a note or something in the memory (then every place is: that is what to act on)."""
+    cat, mem, recs = sctx["cat"], sctx["mem"] or {}, sctx["records"]
+    info = sl.slot_info(cat, slot)
+    kind, rkind = info.get("kind"), info.get("record")
+    unplaced = []
+    by_place = {a["place"]: a for a in slot_answers(sctx, slot, field=field, unplaced=unplaced)}
+    if rkind == "product":
+        places = [sctx["product"]] if sctx["product"] is not None else [None]
+    elif rkind == "team":
+        places = list(sctx["teams"]) or [None]
+    else:
+        places = [None]
+    notes = [p["text"] for p in problems if p["slot"] == slot]
+    strict = strict or bool(unplaced or notes or sl.in_memory(mem, slot))
+    out = []
+    for rec in places:
+        got = by_place.get(rec["id"] if rec is not None else None)
+        if not (strict or got):
+            continue
+        home = rec if rec is not None else next((r for r in recs if r.get("type") == rkind), None)
+        cands = got["candidates"] if got else []
+        res = got["result"] if got else resolve(slot, cat, [], mem)
+        rows = _rows(res, cands, unplaced, home["id"] if home is not None and rkind == "team" else None)
+        found = any(r["outcome"] != "unplaced" for r in rows)
+        names = []
+        for r in [home] if home is not None else [{"id": None}]:
+            names += [n for n in looked_for(cat, slot, r, mem) if n not in names]
+        entry = {"slot": slot, "kind": kind, "about": info.get("about"), "record": home["id"] if home is not None else None,
+                 "title": home["title"] if home is not None else None,
+                 "winner": next((r["source"] for r in rows if r["outcome"] == "won"), None), "candidates": rows,
+                 "why": res["why"], "prefer": res["prefer"], "looked_in": {"names": names, "records": [home["title"]] if home is not None else []},
+                 "commands": [r["command"] for r in rows if r.get("command")]}
+        if res["decision"]:
+            entry["decision"] = res["decision"]
+        if not found:
+            entry["commands"].append(MAP_COMMAND % (home["id"] if home is not None else "<запис>", slot))
+        kept = _remembered(mem, slot, home["id"] if home is not None else None)
+        if kept:
+            entry["memory"] = kept
+            entry["commands"].append(FORGET_COMMAND % slot)
+        if notes:
+            entry["notes"] = list(notes)
+        out.append(entry)
+    return out
+
+
+def _slot_lines(s):
+    """An explained slot as text: the header, a line for each candidate, why, and — nothing found — what was looked for and the
+    command that maps your own name; what you decided and the way back; the notes."""
+    found = any(r["outcome"] != "unplaced" for r in s["candidates"])
+    out = [" · ".join([s["slot"], KIND_WORDS.get(s["kind"], s["kind"])] + ([s["title"]] if s["title"] else []) + ([] if found else [NOT_FOUND]))]
+    out += ["  " + _row_line(r) for r in s["candidates"]]
+    if s["why"]:
+        out.append("  чому: " + s["why"])
+    if not found:
+        where = ", ".join(s["looked_in"]["records"]) or "записах"
+        out.append("  " + LOOKED_LINE % (", ".join(s["looked_in"]["names"]), where,
+                                        UNPLACED_ABOVE if s["candidates"] else NO_BLOCKS))
+        out.append("  " + MAP_LINE + [c for c in s["commands"] if c.startswith("ctx slot map")][0])
+    if s.get("memory"):
+        out.append("  у твоїй пам'яті слотів: " + "; ".join(_remembered_words(s["memory"], "decision" in s)))
+        out.append("  зняти: " + FORGET_COMMAND % s["slot"])
+    out += ["  увага: " + n for n in s.get("notes") or ()]
+    return out
+
+
+def _unmapped(sctx):
+    """The blocks of a registered repository that no slot takes — [{"repo", "block", "record", "version", "heading"}], once each,
+    in the order of the records: regions with an id and no binding at all (the plugin's own binding of the `team` block counts)."""
+    regs = _Repos(sctx["store"], sctx["repos"])
+    out, seen = [], set()
+    for rec in sctx["records"]:
+        for ns, bid, v, _, inner in cr._blocks(rec.get("body") or ""):
+            reg = regs.reg(ns)
+            if bid and reg is not None and (ns, bid) not in sctx["bindings"] and (ns, bid) not in seen:
+                seen.add((ns, bid))
+                out.append({"repo": reg["id"], "block": bid, "record": rec["id"], "version": v or None, "heading": _heading(inner)})
+    return out
+
+
+def explain(store, copies, repos, skipped, slots=None, skill=None, product=None, today=None, catalogue=None, manifest=None):
+    """(text, result) of `ctx explain`: where each slot came from and why it won (spec §7). Reads only — no lock, no network,
+    nothing written; it is built on the one assembly `ctx read` uses (slot_context) and the candidates and the cascade it
+    resolves with (slot_answers).
+
+    Which slots: the ones `slots` names, in that order, none twice (an unknown one is a ValueError); else those the manifest
+    entry of `skill` asks, in the order `ctx read` reads them (an unknown skill is a KeyError; one that reads the whole file asks
+    none) — and the lookup mode of each is the manifest's, as `ctx read` has it (`slots` and `skill` together: the skill's mode
+    for the slots it asks); else every slot of the catalogue that has a candidate, a note or something in the memory, followed
+    by `unmapped_blocks` and `skipped_blocks`. A named or a skill's slot is explained for every place, found or not. With
+    several products and none named (`product`), the slots of a product and of a team are not explained: `needs_product`.
+
+    `result`: {"slots": [{"slot", "kind", "about", "record", "title", "winner", "candidates": [{"source", "record", "outcome": won
+    | lost | shown | diverges | unplaced, …}], "why", "prefer", "looked_in": {"names", "records"}, "commands", and, when there is
+    something to say, "decision" (the one that settled a divergence), "memory" (what you decided about the slot) and "notes"
+    (the bindings that do nothing)}], "unmapped_blocks", "skipped_blocks", "needs_product", "products", "warnings" (what could
+    not be read: `unread_lines`)}. A slot has one entry for each place — a team is one — so a team slot with several teams
+    appears once for each; `record` tells which."""
+    today = (today or datetime.date.today().isoformat())[:10]
+    cat = sl.load_catalogue() if catalogue is None else catalogue
+    asked, whole = [], False
+    if skill:
+        spec = cr.manifest_for(manifest or cr.load_manifest(), skill)
+        whole = bool(spec.get("full"))
+        asked = [] if whole else _asked(spec, cat)
+    modes = dict(asked)
+    named = list(dict.fromkeys(slots or ()))
+    for s in named:
+        if sl.slot_info(cat, s) is None:
+            raise ValueError("no slot %r in the catalogue (references/context-slots.yaml)" % s)
+    strict = bool(named or skill)
+    order = named or ([s for s, _ in asked] if skill else list(sl._slots(cat)))
+    sctx = slot_context(store, copies, repos, product, today + "T00:00:00", cat=cat)
+    problems = binding_problems(sctx)
+    entries = []
+    for slot in order:
+        if sctx["needs_product"] and sl.slot_info(cat, slot).get("record") in ("product", "team"):
+            continue
+        entries += _explain_slot(sctx, slot, modes.get(slot), strict, problems)
+    unmapped = [] if strict else _unmapped(sctx)
+    off = [] if strict else [{"repo": r["id"], "block": b} for r in repos or () for b in r.get("skip_blocks") or ()]
+    warnings = unread_lines(sctx, skipped)
+
+    head = ["# Звідки слоти"] + (["скіл " + skill] if skill else []) + (["слоти " + ", ".join(named)] if named else []) \
+        + (["продукт " + cc.clip(sctx["product"]["title"].split(":", 1)[-1].strip(), 80)] if sctx["product"] is not None else [])
+    lines = [" · ".join(head)]
+    if whole:
+        lines.append(WHOLE_SKILL)
+    if sctx["needs_product"]:
+        lines.append(NEEDS_PRODUCT % ", ".join(sctx["products"]))
+    lines += warnings
+    for s in entries:
+        lines += [""] + _slot_lines(s)
+    if not entries and not whole and not sctx["needs_product"]:
+        lines += ["", NO_SLOTS]
+    if unmapped:
+        lines += ["", UNMAPPED_HEAD]
+        lines += ["  %s · блок %s%s у записі %s%s" % (cc.clip(b["repo"], 60), cc.clip(b["block"], 60), " v" + cc.clip(b["version"], 40) if b["version"] else "",
+                                                     cc.clip(b["record"], 80), " · " + cc.clip(b["heading"], 80) if b["heading"] else "") for b in unmapped]
+    if off:
+        lines += ["", SKIPPED_HEAD] + ["  %s · блок %s" % (cc.clip(b["repo"], 60), cc.clip(b["block"], 60)) for b in off]
+    result = {"slots": entries, "unmapped_blocks": unmapped, "skipped_blocks": off, "needs_product": bool(sctx["needs_product"]),
+              "warnings": warnings}
+    if sctx["needs_product"]:
+        result["products"] = sctx["products"]
+    return "\n".join(lines) + "\n", result

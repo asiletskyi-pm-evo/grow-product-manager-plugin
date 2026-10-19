@@ -410,13 +410,7 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
                 byid = {r["id"]: r for r in recs}
                 blocks.append("Власні секції без призначення: %s — ctx get <id>, якщо запит їх стосується"
                               % ", ".join("%s (%s)" % (byid[i]["title"], i) for i in unassigned))
-            known = {r.get("namespace") or r["id"] for r in repos or ()}
-            stray = any(ns not in known for r in recs for ns, _, _, _, _ in _blocks(r.get("body") or ""))
-            if skipped and stray:                # every candidate of an unread registration is in a namespace not read
-                blocks += [rv.UNREAD_REGISTRATION % _Origin.clip(path, 200) for path, _ in skipped]
-            if sctx["mem_error"]:
-                blocks.append(rv.UNREAD_MEMORY % sctx["mem_error"])
-            blocks += sctx["problems"]
+            blocks += rv.unread_lines(sctx, skipped)     # what could not be read: a registration, the memory, a block state
     for at, rec in whole:
         blocks[at] = (_head(rec, state, today, notes.get(rec["id"], "")) + "\n"
                       + origin.label(rv.without_shown(_without_heading(rec["body"]), given)).rstrip("\n") + "\n")

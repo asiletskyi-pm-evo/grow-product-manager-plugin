@@ -29,7 +29,7 @@ CAT = sl.load_catalogue()
 REPOS = [{"id": "zorg-core", "namespace": "zorg-core", "rank": 1000, "products": []},
          {"id": "zorg-growth", "namespace": "zorg-growth", "rank": 500, "products": []}]
 KEYS = {"slot", "source", "level", "record", "block", "ns", "version", "checked", "edited", "rule", "how", "heading",
-        "text", "rank", "placed", "place"}
+        "text", "rank", "placed", "place", "sub"}
 STATE_LINE = "стан блоків zorg-core не прочитано — атрибути slot= і policy=rule його блоків невідомі"
 fails = 0
 
@@ -219,6 +219,9 @@ with tempfile.TemporaryDirectory() as d:
           and "<!--" not in r.get("text", "") and r.get("version") == "0.2" and r.get("checked") == "2026-10-20"
           and r.get("rank") == 1000 and r.get("edited") is False and r.get("rule") is False and r.get("placed") is True
           and r.get("record") == "team.alpha-a" and r.get("place") == "team.alpha-a", r)
+    check("…the subsection a binding names is on the candidate (explain prints it and the command that places it): sub",
+          r.get("sub") == "Members" and m.get("sub") is None
+          and by(cands(e, "org.structure", mem=memory(("zorg-core", "teams", None, "org.structure", None))), block="teams")[0]["sub"] is None, got)
     jira = cands(e, "product.jira_key")
     check("the plugin does not bind the team block's jira_project_key line (ruling): only your Jira Project Key",
           [c["text"] for c in jira] == ["- **Jira Project Key:** PROJ\n"] and [c["level"] for c in jira] == ["mine"], jira)
@@ -453,7 +456,8 @@ def cand(source, text="x\n", level=None, rank=500, rule=False, placed=True, slot
     return {"slot": slot, "source": source, "level": level, "record": "product.zorg-app",
             "block": None if source == "mine" else "blk", "ns": None if source == "mine" else source, "version": None,
             "checked": None, "edited": False, "rule": rule or level == "rule", "how": None if source == "mine" else "memory",
-            "heading": None, "text": text, "rank": None if source == "mine" else rank, "placed": placed, "place": "product.zorg-app"}
+            "heading": None, "text": text, "rank": None if source == "mine" else rank, "placed": placed, "place": "product.zorg-app",
+            "sub": None}
 
 
 def R(slot, cands, mem=None):
@@ -709,6 +713,199 @@ with tempfile.TemporaryDirectory() as d:
           rv.slot_answers(x, LIST_SLOT) == [] and [(a_["place"], len(a_["candidates"]), a_["result"]["slot"]) for a_ in rv.slot_answers(x3, LIST_SLOT)]
           == [("team.beta-b", 1, LIST_SLOT)], (rv.slot_answers(x, LIST_SLOT), rv.slot_answers(x3, LIST_SLOT)))
     check("…and never a candidate that is not placed", all(c_["placed"] for a_ in rv.slot_answers(x3, LIST_SLOT) for c_ in a_["candidates"]), "")
+
+# ------------------------------------------------------------------ explain, binding_problems, unread_lines (spec §7)
+def remember(e, mem):
+    """Put a memory into the store, as `ctx slot …` leaves it."""
+    with cs.guard_roots(co.allowed_roots(e.home, e.text)):
+        sl.save_memory(e.store, mem)
+
+
+def explain(e, *slots, repos=REPOS, skipped=(), **kw):
+    return rv.explain(e.store, e.copies, repos, list(skipped), slots=list(slots) or None, today="2026-10-20", catalogue=CAT, **kw)
+
+
+def entry(res, slot, record=None):
+    return next((s_ for s_ in res["slots"] if s_["slot"] == slot and (record is None or s_["record"] == record)), None)
+
+
+def outs(s_):
+    return [(r_["source"], r_["outcome"]) for r_ in (s_ or {}).get("candidates", [])]
+
+
+METRICS_OWN = ("- **Jira Project Key:** PROJ\n", "- **Jira Project Key:** PROJ\n\n#### Key Metrics\n- Mine: weekly shoppers\n")
+RULE_GROWTH = GROWTH.replace("v=0.1 -->", "v=0.1 policy=rule -->")
+BIND_METRICS = ("zorg-growth", "growth-metrics", None, "product.key_metrics", None)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[METRICS_OWN, (GROWTH, RULE_GROWTH)])
+    e.state("zorg-growth", {"growth-metrics": ("0.1", [RULE_GROWTH])})
+    remember(e, memory(BIND_METRICS))
+    before = tree(e.home, e.vault)
+    text, res = explain(e, "product.key_metrics")
+    km = entry(res, "product.key_metrics")
+    check("explain returns (text, result); the result has the agreed keys", isinstance(text, str) and set(res) == {
+        "slots", "unmapped_blocks", "skipped_blocks", "needs_product", "warnings"} and res["warnings"] == [], sorted(res))
+    check("…a slot's entry has the agreed keys", set(km) >= {"slot", "kind", "about", "record", "title", "winner", "candidates", "why", "prefer",
+          "looked_in", "commands"} and km["about"] == sl.slot_info(CAT, "product.key_metrics")["about"], sorted(km))
+    check("a core rule: it won; your text is shown under it as the note — not lost",
+          outs(km) == [("zorg-growth", "won"), ("mine", "shown")] and km["candidates"][0]["rule"] is True
+          and km["candidates"][1]["reason"] == "твоя примітка до правила" and km["why"] == "правило ядра" and km["winner"] == "zorg-growth",
+          (km, text))
+    check("…the text marks the rule and says what your text is",
+          "  ✔ zorg-growth · блок growth-metrics v0.1 у записі product.zorg-app · станом на 2026-10-20 · прив'язка: твоя · правило ядра\n" in text
+          and "  ✔ твоє · product.zorg-app › Key Metrics — твоя примітка до правила\n" in text, text)
+    check("explain writes nothing and changes no record", tree(e.home, e.vault) == before, "")
+    remember(e, dict(memory(BIND_METRICS), prefer={"product.key_metrics": "all"}))
+    text, res = explain(e, "product.key_metrics")
+    km = entry(res, "product.key_metrics")
+    check("prefer all: every candidate is shown, none won", outs(km) == [("zorg-growth", "shown"), ("mine", "shown")] and km["winner"] is None
+          and km["prefer"] == "all" and km["why"] == "перевага: all" and "перевага" in text, (km, text))
+    remember(e, dict(memory(BIND_METRICS), prefer={"product.key_metrics": "mine"}))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[EDITED])
+    e.state("zorg-core", {"team": ("0.2", [TEAM])})
+    text, res = explain(e, "team.members")
+    row = entry(res, "team.members")["candidates"][0]
+    check("a block with your edits: the row says so (edited), and so does the line", row["edited"] is True and row["rule"] is False
+          and "· з твоїми правками" in text and "правило ядра" not in text, (row, text))
+    e.state("zorg-core", {"team": ("0.2", [region(e.text, "zorg-core", "team")])})
+    text, res = explain(e, "team.members")
+    check("…and a block that is its base is not edited", entry(res, "team.members")["candidates"][0]["edited"] is False
+          and "з твоїми правками" not in text, text)
+
+SAME = ("## Zorg Core Notes\n\n", "## Zorg Core Notes\n\n<!-- zorg-growth:begin id=scope2 v=0.1 -->\n### Scope of work\n"
+        "The user works on Zorg App only.\n<!-- zorg-growth:end id=scope2 -->\n\n")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[SAME])
+    remember(e, memory(("zorg-core", "scope", None, "product.scope", None), ("zorg-growth", "scope2", None, "product.scope", None)))
+    text, res = explain(e, "product.scope")
+    sc_ = entry(res, "product.scope")
+    check("two repositories that say the same: the stronger won, the other lost by saying it once, and no divergence",
+          outs(sc_) == [("zorg-core", "won"), ("zorg-growth", "lost")] and sc_["candidates"][1]["reason"] == "програв: той самий текст, що й у zorg-core"
+          and "decision" not in sc_, (sc_, text))
+    text, res = explain(e, "product.scope", repos=[dict(REPOS[0], rank=500), dict(REPOS[1], rank=500)])
+    check("…at an equal rank too (the same text is no divergence)", [o for _, o in outs(entry(res, "product.scope"))].count("diverges") == 0, outs(entry(res, "product.scope")))
+    text, res = explain(e, "product.scope", repos=[{"id": "zorg-core", "namespace": "zorg-core"}], skipped=[("/x/zorg-growth.yaml", "unreadable")])
+    sc_ = entry(res, "product.scope")
+    check("registrations whose rank is not known: shown without a cascade, each with the reason, and the unread file is named",
+          sorted(outs(sc_)) == [("zorg-core", "shown"), ("zorg-growth", "shown")] and sc_["candidates"][0]["reason"].startswith("реєстрацію не прочитано")
+          and sc_["winner"] is None and res["warnings"] == [rv.UNREAD_REGISTRATION % "/x/zorg-growth.yaml"]
+          and rv.UNREAD_REGISTRATION % "/x/zorg-growth.yaml" in text, (sc_, res["warnings"]))
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[LITE])
+    text, res = explain(e, "product.jira_key", "org.structure")
+    check("several products and none named: the slots of a product are held back, an organisation's are explained",
+          res["needs_product"] is True and res["products"] == ["Zorg App", "Zorg Lite"] and [s_["slot"] for s_ in res["slots"]] == ["org.structure"]
+          and "Zorg App, Zorg Lite" in text and "Слотів із кандидатами немає" not in text, (res, text))
+    text, res = explain(e, "product.jira_key")
+    check("…only product slots asked: nothing is explained, and no «no slots» line either", res["slots"] == [] and res["needs_product"] is True
+          and "Слотів із кандидатами немає" not in text, text)
+    text, res = explain(e, "product.jira_key", product="Zorg Lite")
+    check("…a product named: its slot, for that product", res["needs_product"] is False and "products" not in res
+          and [(s_["record"], outs(s_)) for s_ in res["slots"]] == [("product.zorg-lite", [("mine", "won")])], res)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    for label, kw, exc in (("an unknown slot", {"slots": ["team.nowhere"]}, ValueError), ("an unknown skill", {"skill": "no-such-skill"}, KeyError)):
+        try:
+            rv.explain(e.store, e.copies, REPOS, [], today="2026-10-20", catalogue=CAT, **kw)
+            got = None
+        except Exception as x:  # noqa: BLE001
+            got = type(x)
+        check("explain: %s is a %s" % (label, exc.__name__), got is exc, got)
+    text, res = explain(e, skill="context-connect")
+    check("a skill that reads the whole file asks no slot: said once", res["slots"] == [] and rv.WHOLE_SKILL in text and "Слотів із кандидатами немає" not in text, text)
+    man = {"every_skill": {"records": ["profile"]}, "skills": {"x": {"product": {"required": ["Jira Project Key"], "fields": ["Description"],
+           "sections": ["Key Metrics", "Nonexistent name"]}, "profile": {"required": ["Email"]}, "team": {"sections": ["Members"]}}}}
+    check("the slots a skill asks: the profile, then the product, then the team; required, fields, sections; a name with no slot left out",
+          rv._asked(cr.manifest_for(man, "x"), CAT) == [("profile.email", True), ("product.jira_key", True), ("product.description", True),
+                                                          ("product.key_metrics", False), ("team.members", False)], rv._asked(cr.manifest_for(man, "x"), CAT))
+    text, res = explain(e, skill="x", manifest=man)
+    check("explain --skill takes the manifest it is given; every place of every slot it asks is there",
+          [s_["slot"] for s_ in res["slots"]] == ["profile.email", "product.jira_key", "product.description", "product.key_metrics", "team.members"], [s_["slot"] for s_ in res["slots"]])
+    text, res = explain(e, "team.members", "product.jira_key", skill="x", manifest=man)
+    check("slots and a skill together: only the slots named, in the order named", [s_["slot"] for s_ in res["slots"]] == ["team.members", "product.jira_key"], res["slots"])
+    text, res = explain(e, repos=REPOS[:1] + [dict(REPOS[1], skip_blocks=["growth-metrics", "other"])] )
+    check("without arguments: the blocks of skip_blocks of every registration",
+          res["skipped_blocks"] == [{"repo": "zorg-growth", "block": "growth-metrics"}, {"repo": "zorg-growth", "block": "other"}], res["skipped_blocks"])
+    check("…and the regions no binding takes, each once, with where they are and what they are called",
+          [(b_["repo"], b_["block"], b_["version"], b_["heading"]) for b_ in res["unmapped_blocks"]]
+          == [("zorg-growth", "growth-metrics", "0.1", "Growth metrics"), ("zorg-core", "scope", "0.4", "Scope of work"), ("zorg-core", "teams", "0.4", "Teams map")],
+          res["unmapped_blocks"])
+    remember(e, memory(("zorg-core", "scope", None, "product.scope", None)))
+    text, res = explain(e)
+    check("…a block you bound is not unmapped any more; a region of nobody's repository is never listed",
+          "scope" not in [b_["block"] for b_ in res["unmapped_blocks"]], res["unmapped_blocks"])
+    text, res = explain(e, repos=[REPOS[0]])
+    check("…a repository that is not registered owns no unmapped block", [b_["repo"] for b_ in res["unmapped_blocks"]] == ["zorg-core"], res["unmapped_blocks"])
+
+# ------------------------------------------------------------------ the bindings that do nothing
+def problems(e, mem, repos=REPOS):
+    return rv.binding_problems(rv.slot_context(e.store, e.copies, repos, "Zorg App", NOW, mem=mem))
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    got = problems(e, memory(("zorg-core", "gone", None, "product.scope", None)))
+    check("a binding to a block the core took away: missing (Review Focus 1), with the line that names it",
+          [(p_["kind"], p_["slot"], p_["repo"], p_["block"], p_["how"]) for p_ in got] == [("missing", "product.scope", "zorg-core", "gone", "memory")]
+          and got[0]["text"] == "прив'язка до блоку, якого немає в записах: zorg-core gone → product.scope", got)
+    got = problems(e, memory(("zorg-nowhere", "scope", None, "product.scope", None)))
+    check("…a repository nobody registered: said so, not «missing»", [p_["kind"] for p_ in got] == ["unregistered"], got)
+    check("…the plugin's own binding of a team block without Members is no problem; nor is a bound block that is fine",
+          problems(e, memory(("zorg-core", "scope", None, "product.scope", None))) == [], problems(e, memory()))
+    got = problems(e, memory(("zorg-core", "team", "Nowhere", "team.members", None)))
+    check("a binding to a subsection the block lacks: empty (spec §4.5)", [(p_["kind"], p_["sub"]) for p_ in got] == [("empty", "Nowhere")]
+          and "підсекції «Nowhere»" in got[0]["text"], got)
+    got = problems(e, memory(("zorg-core", "scope", None, "product.scope", None), ("zorg-core", "scope", None, "product.key_metrics", None)))
+    check("…a block bound to several slots and a part for only one of them: empty for the other",
+          [(p_["kind"], p_["slot"]) for p_ in got] == [("empty", "product.key_metrics")], got)
+    check("a binding to a slot the catalogue lacks is not reported here", problems(e, memory(("zorg-core", "gone", None, "product.nowhere", None))) == [], "")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[("## Zorg Core Notes\n\n", "## Zorg Core Notes\n\n" + SCOPE + "\n\n")])
+    got = problems(e, memory(("zorg-core", "scope", None, "product.scope", None)))
+    check("a block that is not one sound region (repeated): broken", [p_["kind"] for p_ in got] == ["broken"], got)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    e.state("zorg-core", {"scope": ("0.4", [SCOPE.replace("v=0.4 -->", "v=0.4 slot=product.scope,org.structure -->")])})
+    got = problems(e, memory(("zorg-core", "scope", None, "product.key_metrics", None)))
+    check("a block you bound whose base names slots by slot=: every slot it names that you did not bind is ignored, and the line says so (Review Focus 2)",
+          [(p_["kind"], p_["slot"], p_["how"]) for p_ in got] == [("ignored", "product.scope", "marker"), ("ignored", "org.structure", "marker")]
+          and got[0]["text"] == "атрибут slot=product.scope блоку zorg-core scope ігноровано — блок прив'язано твоєю прив'язкою (до product.key_metrics)", got)
+    check("…the slot you did bind with it too is not ignored", [p_["slot"] for p_ in problems(e, memory(("zorg-core", "scope", None, "product.scope", None)))]
+          == ["org.structure"], problems(e, memory(("zorg-core", "scope", None, "product.scope", None))))
+    got = problems(e, memory())
+    check("…the publisher's own slot= that names a slot the block has no part for (a block of several slots): empty, like yours (spec §4.5)",
+          [(p_["kind"], p_["slot"], p_["how"]) for p_ in got] == [("empty", "org.structure", "marker")], got)
+    e.state("zorg-core", {"scope": ("0.4", [SCOPE.replace("v=0.4 -->", "v=0.4 slot=product.scope -->")])})
+    check("…and a slot= that the block can answer, with nobody binding the block, is no problem", problems(e, memory()) == [], problems(e, memory()))
+    e.state("zorg-core", {"scope": ("0.4", [SCOPE.replace("v=0.4 -->", "v=0.4 slot=product.scope,org.structure -->")])})
+    mem = memory(("zorg-core", "gone", None, "org.structure", None), ("zorg-core", "scope", None, "product.key_metrics", None))
+    remember(e, mem)
+    text, res = explain(e)
+    check("without arguments a slot with only a note is listed, with the note — and says nothing was found",
+          outs(entry(res, "org.structure")) == [] and entry(res, "org.structure")["notes"][0] == problems(e, mem)[0]["text"]
+          and "  увага: прив'язка до блоку, якого немає в записах: zorg-core gone → org.structure" in text
+          and "org.structure · текст · Organization: Zorg · не знайдено" in text, text)
+    check("…the ignored attribute is shown under the slot it names", "увага: атрибут slot=product.scope блоку zorg-core scope ігноровано" in text
+          and entry(res, "product.scope")["notes"], text)
+
+# ------------------------------------------------------------------ unread_lines
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    ctx_ = lambda repos, skipped: rv.unread_lines(rv.slot_context(e.store, e.copies, repos, "Zorg App", NOW), skipped)    # noqa: E731
+    check("unread_lines: nothing unread, nothing said", ctx_(REPOS, []) == [] and ctx_(REPOS, None) == [], ctx_(REPOS, []))
+    check("…a registration not read, while a block carries a namespace no registration read has: one line for the file",
+          ctx_(REPOS[:1], [("/p/zorg-growth.yaml", "slow")]) == [rv.UNREAD_REGISTRATION % "/p/zorg-growth.yaml"], ctx_(REPOS[:1], [("/p/zorg-growth.yaml", "slow")]))
+    check("…and no line when every namespace in the records is registered", ctx_(REPOS, [("/p/other.yaml", "slow")]) == [], "")
+    open(os.path.join(e.store.state_dir, "slots.json"), "w", encoding="utf-8").write("{ not json")
+    got = ctx_(REPOS, [])
+    check("…a memory that cannot be read: its line", len(got) == 1 and got[0].startswith("пам'ять слотів не прочитано (slots memory not valid: .state/slots.json"), got)
+    os.remove(os.path.join(e.store.state_dir, "slots.json"))
+    e.state("zorg-core", {"team": ("0.2", [TEAM])})
+    open(os.path.join(e.store.state_dir, "blocks", "zorg-core.json"), "w", encoding="utf-8").write("{ not json")
+    check("…a block state that cannot be read: its line", ctx_(REPOS, []) == [STATE_LINE], ctx_(REPOS, []))
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
