@@ -421,6 +421,7 @@ with tempfile.TemporaryDirectory() as d:
           and not any(m.startswith("Members") for m in res["missing"]), (text[-700:], res["missing"]))
 
 # --- v3.15.0: ctx read resolves slots — both halves of a list, one line for the rest, no duplicates, where it looked
+MEMBERS_SHOWN = "> [блок team › Members (registry `Core/People/`, field `team`; ◌ — registry stub) — у слоті team.members вище]"
 RANKED = [{"id": "zorg-core", "namespace": "zorg-core", "rank": 1000, "products": []},
           {"id": "zorg-growth", "namespace": "zorg-growth", "rank": 500, "products": []}]
 TIED = [dict(RANKED[0]), dict(RANKED[1], rank=1000)]
@@ -466,17 +467,82 @@ with tempfile.TemporaryDirectory() as d:
     e = Env(d, "context", fix=REPOS_FIX, edits=MOVE_TEAM)
     block_state(e, "zorg-core", {"scope": "0.4", "teams": "0.4", "team": "0.2"})
     read_by(e, "Zorg Core Notes", "all")
-    text, res = e.view("hiring-designer", repos=RANKED)
-    check("a bound block shown in a slot is not repeated in a read_by record", text.count("Bea Two") == 1
-          and "> [блок team — у слоті team.members вище]" in text
-          and text.index("Bea Two") < text.index("> [блок team — у слоті team.members вище]")
-          and "> [zorg-core · v0.2 · станом на 2026-10-20%s]\n#### Members" % TEAM_TAG in text, text[-1800:])
-    check("…the rest of that record is still read, labelled", "> [zorg-core · v0.4 · станом на 2026-10-20]\n<!-- zorg-core:begin id=scope" in text
-          and "<!-- zorg-core:begin id=team " not in text, text[-1800:])
+    for skill in ("hiring-designer", "task-creator"):
+        text, res = e.view(skill, repos=RANKED)
+        notes = text[text.index("## Zorg Core Notes"):]
+        check("%s: a bound block's subsection shown in a slot is not repeated in a read_by record — only that subsection "
+              "is replaced (fix round 1)" % skill, text.count("Bea Two") == 1 and text.count("Members' Jira accountIds") == 1
+              and text.index("Bea Two") < text.index("## Zorg Core Notes") and MEMBERS_SHOWN in notes
+              and "> [zorg-core · v0.2 · станом на 2026-10-20%s]\n#### Members" % TEAM_TAG in text, text[-1800:])
+        check("…the rest of that block stays, under its own provenance line, and so does the rest of the record",
+              "Team card (source of truth)" in notes and "jira_write_scope" in notes and "Team missions" in notes
+              and "> [zorg-core · v0.2 · станом на 2026-10-20%s]\n<!-- zorg-core:begin id=team " % TEAM_TAG in notes
+              and "> [zorg-core · v0.4 · станом на 2026-10-20]\n<!-- zorg-core:begin id=scope" in notes
+              and "> [блок team — у слоті" not in text, notes[:1500])
     other, _ = e.view("product-analysis", repos=RANKED)
     check("a skill that does not ask the slot still gets the record whole, with the slot tag", "Bea Two" in other
           and "· слот team.members — " in other and "у слоті" not in other
           and "> [zorg-core · v0.2 · станом на 2026-10-20%s]\n<!-- zorg-core:begin id=team " % TEAM_TAG in other, other[-1800:])
+
+with tempfile.TemporaryDirectory() as d:          # fix round 1: no-duplicates replaces exactly what the slot used
+    e = Env(d, "context", fix=REPOS_FIX, edits=MOVE_TEAM)
+    block_state(e, "zorg-core", {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+    read_by(e, "Zorg Core Notes", "all")
+    remember(e, ("zorg-core", "team", None, "team.members", None))
+    text, _ = e.view("hiring-designer", repos=RANKED)
+    notes = text[text.index("## Zorg Core Notes"):]
+    check("a whole-region binding: the whole region is one line in the read_by record", "> [блок team — у слоті team.members вище]" in notes
+          and text.count("Team card (source of truth)") == 1 and text.count("Bea Two") == 1 and "<!-- zorg-core:begin id=team " not in notes
+          and "Team card (source of truth)" not in notes, notes[:1200])
+
+KEYS_NOTES = ("<!-- zorg-core:end id=teams -->\n", "<!-- zorg-core:end id=teams -->\n\n<!-- zorg-core:begin id=keys v=0.1 -->\n"
+              "- **jira_project_key:** CORE\n<!-- zorg-core:end id=keys -->\n")
+SUB_METRICS = ("<!-- zorg-core:end id=teams -->\n", "<!-- zorg-core:end id=teams -->\n\n<!-- zorg-core:begin id=metrics v=0.3 -->\n"
+               "### Core metrics\n- **Owner:** Core team\n\n#### Key Metrics\n- Core: GMV per month\n\n#### Targets\n- Target: 10%\n"
+               "<!-- zorg-core:end id=metrics -->\n")
+MINE_METRICS = (KEY, KEY + "\n#### Key Metrics\n- Mine: weekly active shoppers\n")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[KEYS_NOTES])
+    block_state(e, "zorg-core", {"keys": "0.1"})
+    read_by(e, "Zorg Core Notes", "all")
+    remember(e, ("zorg-core", "keys", None, "product.jira_key", None))
+    text, _ = e.view("requirements-creator", repos=RANKED)
+    notes = text[text.index("## Zorg Core Notes"):]
+    check("a value slot's block (here a «також») removes nothing: the block stays whole in the read_by record",
+          "також: zorg-core каже інакше — ctx explain product.jira_key" in text and "- **jira_project_key:** CORE" in notes
+          and "<!-- zorg-core:begin id=keys " in notes and "у слоті" not in text, notes[:1200])
+    e2 = Env(os.path.join(d, "m"), "context", fix=REPOS_FIX, edits=[MINE_METRICS, SUB_METRICS])
+    block_state(e2, "zorg-core", {"metrics": "0.3"})
+    read_by(e2, "Zorg Core Notes", "all")
+    remember(e2, ("zorg-core", "metrics", "Key Metrics", "product.key_metrics", None))
+    text, _ = e2.view("product-analysis", repos=RANKED)
+    notes = text[text.index("## Zorg Core Notes"):]
+    check("a bound block shown only as a «також» line: its subsection is replaced in the read_by record, the rest stays",
+          "також: zorg-core каже інакше — ctx explain product.key_metrics" in text and "- Mine: weekly active shoppers" in text
+          and "> [блок metrics › Key Metrics — у слоті product.key_metrics вище]" in notes and "- **Owner:** Core team" in notes
+          and "GMV per month" not in text and "<!-- zorg-core:begin id=metrics " in notes, notes[:1200])
+    check("…the subsection runs to the next heading of its level: what follows stays, its blank line too",
+          "> [блок metrics › Key Metrics — у слоті product.key_metrics вище]\n\n#### Targets\n- Target: 10%\n<!-- zorg-core:end id=metrics -->"
+          in notes, notes[:1200])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX)
+    block_state(e, "zorg-core", {"team": "0.2"})
+    text, _ = e.view("context-navigator", repos=RANKED)
+    check("a binding that yields no text names no slot on any provenance line (zorg-growth's team block has no Members)",
+          "> [zorg-growth · v0.1]\n<!-- zorg-growth:begin id=team" in text
+          and not any(l.startswith("> [zorg-growth") and "слот" in l for l in text.splitlines())
+          and "> [zorg-core · v0.2 · станом на 2026-10-20%s]\n<!-- zorg-core:begin id=team " % TEAM_TAG in text, text[-1500:])
+
+ROSTER = ("\n## Zorg Roster\n\n<!-- zorg-core:begin id=roster v=0.1 -->\n#### Members\n\n| Name |\n|---|\n| Cy Three |\n"
+          "<!-- zorg-core:end id=roster -->\n")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, extra=ROSTER)
+    remember(e, ("zorg-core", "roster", None, "team.members", None))
+    text, res = e.view("hiring-designer", product="Zorg App", repos=RANKED)
+    check("a missing slot with an unplaced bound block says so, not «блоків немає»",
+          "Members (шукав: Members, Team Members, Склад команди, Учасники у Team: Beta (B); є нерозміщений блок — ctx explain team.members)"
+          in text and "Cy Three" not in text and "Members (Team: Beta (B))" in res["missing"], text[-700:])
 
 with tempfile.TemporaryDirectory() as d:
     e = Env(d, "context", fix=REPOS_FIX, edits=[KEYS_BLOCK])
@@ -570,9 +636,11 @@ with tempfile.TemporaryDirectory() as d:          # ruling: the lookup mode foll
 
 
 def tree_of(*roots):
+    """Every directory and file under `roots`, a file with its size and modification time: a created empty directory counts."""
     out = {}
     for root in roots:
         for d, _, files in os.walk(root):
+            out[d] = "dir"
             for f in files:
                 st = os.stat(os.path.join(d, f))
                 out[os.path.join(d, f)] = (st.st_size, st.st_mtime_ns)

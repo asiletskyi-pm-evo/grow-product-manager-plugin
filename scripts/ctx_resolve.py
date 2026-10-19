@@ -517,16 +517,19 @@ def slot_context(store, copies, repos, product, now, mem=None, cat=None):
             "repos": repos, "mem": mem, "mem_error": mem_error, "bindings": bindings, "problems": problems}
 
 
-def slot_answers(sctx, slot, field=None):
+def slot_answers(sctx, slot, field=None, unplaced=None):
     """The answer of `slot` per place, from a `slot_context`: [{"place", "candidates", "result"}] — one entry for each
     product or team record (or None: an organisation or profile slot) that has a candidate placed for it, in the order they
     first appear, `result` being `resolve` over that place's candidates. `field` is the lookup mode of `candidates`.
-    A candidate that is not placed (a block that cannot be given to one team) is in no entry; `candidates` has it."""
+    A candidate that is not placed (a block that cannot be given to one team) is in no entry; `candidates` has it, and so
+    does `unplaced` when it is a list (it is appended there)."""
     cands = candidates(slot, sctx["cat"], sctx["records"], sctx["product"], sctx["teams"], sctx["repos"], sctx["mem"],
                        sctx["store"], sctx["bindings"], field=field)
     groups = []
     for c in cands:
         if not c["placed"]:
+            if unplaced is not None:
+                unplaced.append(c)
             continue
         for place, members in groups:
             if place == c["place"]:
@@ -546,7 +549,10 @@ RULE_MARK = "правило ядра"
 ALSO_LINE = "також: %s каже інакше — ctx explain %s"
 DIVERGE_LINE = "⚠ розбіжність між репозиторіями — вирішити: ctx slot decide %s %s"
 SHOWN_LINE = "> [блок %s — у слоті %s вище]"
+SHOWN_SUB_LINE = "> [блок %s › %s — у слоті %s вище]"
 MINE_WORD = "твоє"
+NO_BLOCKS = "блоків із цим слотом немає"
+UNPLACED_BLOCK = "є нерозміщений блок — ctx explain %s"
 UNREAD_REGISTRATION = "реєстрацію %s не прочитано — ранги й правила її блоків невідомі; кандидати з неї показано без каскаду"
 UNREAD_MEMORY = "пам'ять слотів не прочитано (%s) — прив'язки й рішення не застосовано"
 
@@ -593,12 +599,43 @@ def render_slot(res, origin):
 
 
 def without_shown(text, shown):
-    """`text` — a record a skill reads whole (read_by, a whole team) — with each region of a block the same view already gave
-    a slot (in full or as a «також» line) replaced by the one line `> [блок <block> — у слоті <slot> вище]` (spec §5.2: no
-    duplicates); `shown` is {(namespace, block id): slot}. Regions inside a `<ns>:section` wrapper are found; the wrapper
-    stays. A region with no id is never replaced."""
+    """`text` — a record a skill reads whole (read_by, a whole team) — with what a slot of the same view already used taken
+    out (spec §5.2: no duplicates; criterion 5: never more than it used). `shown` is {(namespace, block id): [(slot, kind,
+    the text the slot used)]}, for each bound block a slot gave in full or as a «також» line:
+
+      a slot that used the whole region (a binding with no `#Sub`, to one slot, of a text or a list): the region is the one
+        line `> [блок <block> — у слоті <slot> вище]`;
+      a slot that used a subsection (a `#Sub` binding — the plugin's `team#Members` among them — or the part of a block
+        bound to several slots): the region, its markers and its origin line stay; that subsection, heading to the next
+        heading of the same or a higher level, is the one line `> [блок <block> › <Підсекція> — у слоті <slot> вище]`
+        (the heading text without the hashes);
+      a value slot (a field line): nothing goes — the block stays whole.
+
+    Regions inside a `<ns>:section` wrapper are found; the wrapper stays. A region with no id is never touched, and a
+    subsection that cannot be found again in the region is left as it is."""
     if not shown:
         return text
+
+    def cut(region, bid, uses):
+        inner = cb._detach(region)
+        whole = next((slot for slot, kind, part in uses if kind != "value" and cb.norm(part) == cb.norm(inner)), None)
+        if whole:
+            return SHOWN_LINE % (bid, whole)
+        lines = region.splitlines(keepends=True)
+        for slot, kind, part in uses:
+            head = next((line.rstrip("\r\n") for line in (part or "").splitlines() if line.strip()), "")
+            if kind == "value" or not cs._level(head):
+                continue                            # a field line: the block stays whole
+            cores = [line.rstrip("\r\n") for line in lines]
+            at = next((k for k in range(1, len(cores) - 1) if cores[k] == head), None)
+            if at is None:
+                continue
+            level = cs._level(head)
+            end = next((j for j in range(at + 1, len(cores) - 1) if 0 < cs._level(cores[j]) <= level), len(cores) - 1)
+            while end > at + 1 and not cores[end - 1].strip():
+                end -= 1                            # the blank lines before the next heading stay
+            lines[at:end] = [SHOWN_SUB_LINE % (bid, cs._heading_text(head), slot) + "\n"]
+        return "".join(lines)
 
     def walk(t):
         out, at = [], 0
@@ -608,8 +645,8 @@ def without_shown(text, shown):
                 closing = t.rindex("<!--", m.start(), m.end())
                 out += [t[at:opened], walk(t[opened:closing]), t[closing:m.end()]]
             else:
-                slot = shown.get((m.group(1), m.group(2))) if m.group(2) else None
-                out.append(t[at:m.end()] if slot is None else t[at:m.start()] + SHOWN_LINE % (m.group(2), slot))
+                uses = shown.get((m.group(1), m.group(2))) if m.group(2) else None
+                out.append(t[at:m.end()] if not uses else t[at:m.start()] + cut(m.group(0), m.group(2), uses))
             at = m.end()
         return "".join(out) + t[at:]
     return walk(text)

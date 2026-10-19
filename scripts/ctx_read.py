@@ -277,11 +277,14 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
     Since v3.15.0 every name the manifest reads from a product, a team or the profile that has a slot goes through the
     resolver — ctx_resolve.candidates → resolve → render_slot — over the one assembly ctx_resolve.slot_context; a name
     with no slot is read as v3.14.1 read it. A slot nothing answers is in «Відсутнє» with where it was looked for, while
-    `missing` keeps the short form (`Members`, `Members (Team: Beta (B))`). A block a slot of this view gave (in full or
-    as a «також» line) is one line in a record read whole (ctx_resolve.without_shown); a bound block's origin line names
-    its slot wherever it is printed. A registration not read that may own a block in the records, a slots memory and a
-    block state that cannot be read are one line each, before «Відсутнє». `slots` is {slot: {"shown", "also",
-    "diverges"}} — the sources, for `explain` and the tests."""
+    `missing` keeps the short form (`Members`, `Members (Team: Beta (B))`); when a bound block for the slot exists but
+    cannot be given to one team, it says `є нерозміщений блок — ctx explain <slot>` instead of `блоків із цим слотом немає`.
+    What a slot of this view used from a bound block (in full or as a «також» line) is not repeated in a record read whole
+    (ctx_resolve.without_shown): the whole region is `> [блок <block> — у слоті <slot> вище]`, a subsection
+    `> [блок <block> › <Підсекція> — у слоті <slot> вище]` with the rest of the block kept, a value slot's block stays
+    whole. A bound block's origin line names its slot wherever it is printed. A registration not read while a block in the
+    records has a namespace no registration read has, a slots memory and a block state that cannot be read are one line
+    each, before «Відсутнє». `slots` is {slot: {"shown", "also", "diverges"}} — the sources, for `explain` and the tests."""
     import ctx_resolve as rv                     # here: ctx_resolve imports this module
     spec = manifest_for(manifest or load_manifest(), skill)
     today = (today or datetime.date.today().isoformat())[:10]
@@ -298,7 +301,7 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
     blocks, used, missing, sizes, unassigned = [], [], [], {}, []
     res = {"records": used, "missing": missing, "pending": pending, "needs_product": False,
            "unassigned": unassigned, "over_budget": False, "largest": None, "slots": {}}
-    given, whole, unread, answers = {}, [], [], {}   # blocks a slot gave; records read whole (printed last); unread ones
+    given, whole, answers = {}, [], {}   # what a slot used of each bound block; records read whole (printed last); answers
 
     def add(rec, text):
         blocks.append(_head(rec, state, today, notes.get(rec["id"], "")) + "\n" + origin.label(text).rstrip("\n") + "\n")
@@ -318,12 +321,14 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
 
     def entry_of(slot, field, place):
         if (slot, field) not in answers:
-            answers[(slot, field)] = rv.slot_answers(sctx, slot, field=field)
-        return next((e for e in answers[(slot, field)] if e["place"] == place), None)
+            unplaced = []
+            answers[(slot, field)] = (rv.slot_answers(sctx, slot, field=field, unplaced=unplaced), bool(unplaced))
+        return next((e for e in answers[(slot, field)][0] if e["place"] == place), None)
 
-    def looked(slot, rec):
-        return "(шукав: %s у %s; блоків із цим слотом немає)" % (
-            ", ".join(rv.looked_for(catalogue, slot, rec, sctx["mem"])), rec["title"])
+    def looked(slot, rec, field):
+        """Where `slot` was looked for — after entry_of(slot, field, …) answered it."""
+        return "(шукав: %s у %s; %s)" % (", ".join(rv.looked_for(catalogue, slot, rec, sctx["mem"])), rec["title"],
+                                         rv.UNPLACED_BLOCK % slot if answers[(slot, field)][1] else rv.NO_BLOCKS)
 
     def slot_text(rkind, rec, name, field):
         """(the slot printed, None), (None, where it looked) — or None: the name has no slot."""
@@ -332,17 +337,16 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
             return None
         found = entry_of(slot, field, rec["id"] if rkind in ("product", "team") else None)
         if found is None:
-            return None, looked(slot, rec)
+            return None, looked(slot, rec, field)
         result = found["result"]
         got = res["slots"].setdefault(slot, {"shown": [], "also": [], "diverges": []})
         for key, items in (("shown", [c["source"] for c in result["shown"]]),
                            ("also", [c["source"] for c in result["also"]]), ("diverges", result["diverges"])):
             got[key] += [x for x in items if x not in got[key]]
         for c in result["shown"] + result["also"]:
-            if c.get("ns") and c.get("block"):
-                given.setdefault((c["ns"], c["block"]), slot)
-            if rv.unread_registration(c):
-                unread.append(c)
+            used_part = (slot, result["kind"], c["text"])
+            if c.get("ns") and c.get("block") and used_part not in given.get((c["ns"], c["block"]), ()):
+                given.setdefault((c["ns"], c["block"]), []).append(used_part)
         return rv.render_slot(result, origin), None
 
     def present(rkind, rec, name):
@@ -350,7 +354,7 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
         slot = sl.slot_for(catalogue, rkind, name)
         if slot is None:
             return _lookup(rec["body"], name)[0] is not None, None
-        return entry_of(slot, True, rec["id"] if rkind in ("product", "team") else None) is not None, looked(slot, rec)
+        return entry_of(slot, True, rec["id"] if rkind in ("product", "team") else None) is not None, looked(slot, rec, True)
 
     if spec.get("full"):
         blocks.append("Цей скіл редагує local-context.md і читає його цілком.")
@@ -408,7 +412,7 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
                               % ", ".join("%s (%s)" % (byid[i]["title"], i) for i in unassigned))
             known = {r.get("namespace") or r["id"] for r in repos or ()}
             stray = any(ns not in known for r in recs for ns, _, _, _, _ in _blocks(r.get("body") or ""))
-            if skipped and (unread or stray):
+            if skipped and stray:                # every candidate of an unread registration is in a namespace not read
                 blocks += [rv.UNREAD_REGISTRATION % _Origin.clip(path, 200) for path, _ in skipped]
             if sctx["mem_error"]:
                 blocks.append(rv.UNREAD_MEMORY % sctx["mem_error"])
