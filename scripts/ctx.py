@@ -393,11 +393,12 @@ def cmd_read(a, c):
         cr.manifest_for(cr.load_manifest(), a.skill)
     except KeyError:
         raise cs.StoreError("no manifest entry for %s — read local-context.md whole" % a.skill)
+    skipped = []                    # since v3.15.0: a registration not read is one line, when it may own a block read here
     try:
-        repos = crp.load_repos(c.text, c.home)
+        repos = crp.load_repos(c.text, c.home, skipped=skipped)
     except Exception:  # noqa: BLE001 — the line that names a block's repository is not worth a read
         repos = []
-    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10], repos=repos)
+    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10], repos=repos, skipped=skipped)
     sys.stdout.write(text)
     return 0, dict(res, command="read", skill=a.skill, text=text if a.json else None)
 

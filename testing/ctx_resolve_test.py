@@ -523,8 +523,9 @@ check("a list: every candidate, yours first, then the repositories by rank (high
       and r["diverges"] == [] and r["kind"] == "list"
       and r["why"] == "список — виводяться всі кандидати; склеювання пунктів — у v3.16", r)
 r = R(LIST_SLOT, lg, {"prefer": {LIST_SLOT: "repo:zorg-growth"}})
-check("…a list with a preference for a repository: all its candidates, the rest in «також»", src(r["shown"]) == ["zorg-growth"] * 2
-      and src(r["also"]) == ["mine", "zorg-zzz", "zorg-aaa", "zorg-core", "zorg-zero", "zorg-nil"], r)
+check("…a list with a preference for a repository: all its candidates, the rest in «також» — but a registration not read is "
+      "shown after them (Task 5 ruling)", src(r["shown"]) == ["zorg-growth"] * 2 + ["zorg-nil"]
+      and src(r["also"]) == ["mine", "zorg-zzz", "zorg-aaa", "zorg-core", "zorg-zero"], r)
 
 for slot in (TEXT_SLOT, VALUE_SLOT):
     mv = cand("mine", "MINE\n" if slot == TEXT_SLOT else "- **Jira Project Key:** MINE\n", slot=slot)
@@ -540,11 +541,13 @@ r = R(TEXT_SLOT, [growth, core])
 check("a higher rank wins; the loser is «також»; the reason names both ranks",
       r["shown"] == [core] and r["also"] == [growth] and r["diverges"] == [] and r["decision"] is None
       and r["why"] == "більший ранг: zorg-core 1000 > zorg-growth 500", r)
-r = R(TEXT_SLOT, [growth, cand("zorg-nil", "N\n", rank=None), core])
-check("…a rank not read is below any rank read", r["shown"] == [core] and src(r["also"]) == ["zorg-growth", "zorg-nil"]
+nil = cand("zorg-nil", "N\n", rank=None)
+r = R(TEXT_SLOT, [growth, nil, core])
+check("…a rank not read takes no part in the cascade: shown after the winner, never «також» (spec §4.6, Task 5 ruling)",
+      r["shown"] == [core, nil] and src(r["also"]) == ["zorg-growth"]
       and r["why"] == "більший ранг: zorg-core 1000 > zorg-growth 500", r)
-r = R(TEXT_SLOT, [cand("zorg-nil", "N\n", rank=None), growth])
-check("…and says so when it is the loser's", r["shown"] == [growth] and r["why"] == "більший ранг: zorg-growth 500 > zorg-nil ?", r)
+r = R(TEXT_SLOT, [nil, growth])
+check("…so it is never the loser a reason names", r["shown"] == [growth, nil] and r["also"] == [] and r["why"] == "єдиний кандидат", r)
 r = R(TEXT_SLOT, [cand("zorg-aaa", "AAA\n", rank=10), cand("zorg-zzz", "ZZZ\n", rank=900)])
 check("…by rank, not by id", r["shown"][0]["source"] == "zorg-zzz" and r["why"] == "більший ранг: zorg-zzz 900 > zorg-aaa 10", r)
 r = R(TEXT_SLOT, [cand("zorg-nil", "N\n", rank=None), cand("zorg-zero", "O\n", rank=0)])
@@ -563,8 +566,8 @@ check("equal highest rank and a different text: a divergence — both shown, in 
       r["diverges"] == ["zorg-core", "zorg-growth"] and r["shown"] == [core, peer] and r["also"] == [low]
       and r["decision"] is None and r["note"] is None and r["why"] == "рівний ранг 1000, різний текст: zorg-core, zorg-growth", r)
 r = R(TEXT_SLOT, [cand("zorg-growth", "GROWTH\n", rank=None), cand("zorg-core", "CORE\n", rank=None)])
-check("…two ranks not read, different text: they tie", r["diverges"] == ["zorg-core", "zorg-growth"]
-      and r["why"] == "рівний ранг ?, різний текст: zorg-core, zorg-growth", r)
+check("…two ranks not read, different text: no divergence — both shown without the cascade, as they came",
+      r["diverges"] == [] and src(r["shown"]) == ["zorg-growth", "zorg-core"] and r["also"] == [] and r["why"] == rv.WHY_UNREAD, r)
 third = cand("zorg-third", "CORE\n", rank=1000)
 r = R(TEXT_SLOT, [peer, third, core])
 check("…a third at the same rank with the same text as the first still takes part", r["diverges"] == ["zorg-core", "zorg-growth", "zorg-third"], r)
@@ -573,6 +576,25 @@ check("…never when you have text of your own", r["diverges"] == [] and r["show
 r = R(TEXT_SLOT, [cand("zorg-core", "ONE\n", rank=1000), cand("zorg-core", "TWO\n", rank=1000)])
 check("two blocks of one repository are no divergence between repositories: the first wins, the other is «також»",
       r["diverges"] == [] and r["shown"][0]["text"] == "ONE\n" and [c["text"] for c in r["also"]] == ["TWO\n"], r)
+
+# Task 5 ruling: a candidate whose registration was not read (rank None, a repository's) is shown without the cascade
+unread_v = cand("zorg-nil", "- **jira_project_key:** NIL\n", rank=None, slot=VALUE_SLOT)
+mine_v = cand("mine", "- **Jira Project Key:** MINE\n", slot=VALUE_SLOT)
+r = R(VALUE_SLOT, [unread_v, mine_v])
+check("a candidate of a registration not read is never «також»: it joins `shown` after the cascade's own shown",
+      r["shown"] == [mine_v, unread_v] and r["also"] == [] and r["why"] == "єдиний кандидат" and r["note"] is None, r)
+r = R(VALUE_SLOT, [unread_v])
+check("…alone, it is shown, and the reason says the cascade did not rank it", r["shown"] == [unread_v] and r["why"] == rv.WHY_UNREAD
+      and r["diverges"] == [] and r["prefer"] == "mine", r)
+r = R(TEXT_SLOT, [nil, rule, mine])
+check("…a rule still wins, yours is still its note, the unread one follows the rule", r["shown"] == [rule, nil] and r["note"] is mine
+      and r["also"] == [], r)
+r = R(TEXT_SLOT, [nil, mine, core], {"prefer": {TEXT_SLOT: "repo:zorg-core"}})
+check("…a preference does not touch it", r["shown"] == [core, nil] and src(r["also"]) == ["mine"] and r["prefer"] == "repo:zorg-core", r)
+r = R(TEXT_SLOT, [dict(nil, placed=False), mine])
+check("…an unplaced one is still ignored", r["shown"] == [mine], r)
+r = R(TEXT_SLOT, [cand("mine", "MINE\n"), dict(cand("mine", "MINE 2\n"), rank=None)])
+check("…your text is never «not read»: the rank is a repository's", src(r["shown"]) == ["mine"] and src(r["also"]) == ["mine"], r)
 
 DEC_HASHES = {"zorg-core": sha("CORE"), "zorg-growth": sha("GROWTH")}
 DEC = {"winner": "zorg-growth", "hashes": DEC_HASHES, "at": "2026-10-20"}

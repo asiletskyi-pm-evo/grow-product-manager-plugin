@@ -1375,8 +1375,9 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         open(state_path, "w", encoding="utf-8").write(good_state)
         run_ok(e, "card")
         rc, out, res = run_ok(e, "read", "--skill", "hiring-designer")
-        check("ctx read puts the repository, the version and the day of the check before a block",
-              rc == 0 and "> [zorg-core · v0.2 · станом на %s]\n#### Members" % day in out, (rc, out[-600:]))
+        check("ctx read puts the repository, the version and the day of the check before a block",      # v3.15: and its slot
+              rc == 0 and "> [zorg-core · v0.2 · станом на %s · слот team.members — склад команди: люди, ролі, контакти]\n#### Members"
+              % day in out, (rc, out[-600:]))
         check("…and carries the card with the repositories", line in out, out[:900])
 
 # --- v3.13.0 Task 9 fix: a card that cannot be refreshed costs one line, never the report or the exit code of the command
@@ -1856,6 +1857,10 @@ with tempfile.TemporaryDirectory() as d:                 # a registration the 3 
     check("apply without REPO names a registration it could not read, in the output and the result; the readable one is applied (exit 0)",
           rc == 0 and "unreadable registration: %s (%s)" % (broken, why) in out.splitlines() and why != "?"
           and res["unreadable"] == [{"file": broken, "reason": why}] and [r["repo"] for r in res["repos"]] == ["zorg-core"], (rc, out[-600:]))
+    unread_line = "реєстрацію %s не прочитано — ранги й правила її блоків невідомі; кандидати з неї показано без каскаду" % broken
+    rc, out, res = run_ok(e, "read", "--skill", "product-analysis")    # v3.15: zorg-growth's blocks have no registration read
+    check("ctx read names a registration it could not read, once, when a block in the records has no registration read",
+          rc == 0 and out.splitlines().count(unread_line) == 1, (rc, out[-600:]))
     rc, out, res = run_ok(e, "provider", "apply", "zorg-core")
     check("…and the card keeps its Repos line, with one line saying why it was not refreshed",
           rc == 0 and card_line() == line_before and line_before
@@ -1871,6 +1876,8 @@ with tempfile.TemporaryDirectory() as d:                 # a registration the 3 
     rc, out, res = run_ok(e, "card")
     check("…and with every registration read, `ctx card` rebuilds it", rc == 0 and "zorg-core: 3 блоки · v0.4 · перевірено 2026-01-01" in (card_line() or ""),
           (rc, card_line()))
+    rc, out, res = run_ok(e, "read", "--skill", "product-analysis")
+    check("…and ctx read no longer names one", rc == 0 and "не прочитано — ранги" not in out, (rc, out[-400:]))
 
 with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # an answer or a block that names a repository
     with tempfile.TemporaryDirectory() as d:

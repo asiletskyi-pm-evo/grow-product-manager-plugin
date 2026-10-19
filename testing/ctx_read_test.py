@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import ctx_blocks as cb  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
+import ctx_slots as sl  # noqa: E402
 import ctx_store as cs  # noqa: E402
 
 FIX = os.path.join(ROOT, "testing", "fixtures", "ctx")
@@ -66,12 +67,15 @@ CHECKED = "2026-10-20T10:00:00+03:00"
 REPOS = [{"id": "zorg-core", "namespace": "zorg-core"}, {"id": "zorg-growth", "namespace": "zorg-growth"}]
 
 
-def block_state(env, repo, blocks, checked=CHECKED):
-    """What `ctx provider adopt/apply` leaves in the store: the repository's check and, per block, its version and check."""
-    entry = lambda v: {"base_sha": None, "bases": [], "v": v, "host": None, "checked": checked, "user_removed": None}
+def block_state(env, repo, blocks, checked=CHECKED, bases=None):
+    """What `ctx provider adopt/apply` leaves in the store: the repository's check and, per block, its version and check;
+    `bases` {block id: text} — the repository's text of the block, kept as its base (its marker attributes, the edited mark)."""
     with cs.guard_roots(co.allowed_roots(env.home, env.text)):
+        shas = {b: cb.put_base(env.store, repo, t) for b, t in (bases or {}).items()}
+        entry = lambda b, v: {"base_sha": shas.get(b), "bases": [shas[b]] if b in shas else [], "v": v, "host": None,
+                              "checked": checked, "user_removed": None}
         cb.save_state(env.store, repo, {"checked": checked, "source": "folder", "version": "0.4",
-                                        "blocks": {b: entry(v) for b, v in blocks.items()}})
+                                        "blocks": {b: entry(b, v) for b, v in blocks.items()}})
 
 
 def read_by(env, title, who):
@@ -315,8 +319,8 @@ with tempfile.TemporaryDirectory() as d:
     e = Env(d, "context", fix=REPOS_FIX)
     block_state(e, "zorg-core", {"scope": "0.4", "teams": "0.4", "team": "0.2"})
     text_hd, res_hd = e.view("hiring-designer", repos=REPOS)
-    check("Members falls back to the team block, labelled", "#### Members" in text_hd
-          and "> [zorg-core · v0.2 · станом на 2026-10-20]\n#### Members" in text_hd and "Bea Two" in text_hd
+    check("Members falls back to the team block, labelled", "#### Members" in text_hd     # v3.15: the slot the plugin binds it to
+          and "> [zorg-core · v0.2 · станом на 2026-10-20 · слот team.members — склад команди: люди, ролі, контакти]\n#### Members" in text_hd and "Bea Two" in text_hd
           and "Members" not in res_hd["missing"], text_hd[-900:])
     check("…and only the subsection: not the rest of the block, no region marker", "Team card (source of truth)" not in text_hd
           and "<!-- zorg-core" not in text_hd and "Growth squad" not in text_hd, text_hd[-900:])
@@ -392,7 +396,8 @@ with tempfile.TemporaryDirectory() as d:
     text, res = e.view("hiring-designer", product="Zorg App")
     check("a team without the subsection is named with the team when there are several", "Members (Team: Beta (B))" in res["missing"]
           and "Members (Team: Alpha (A))" not in res["missing"] and "Members" not in res["missing"]
-          and "Відсутнє: Members (Team: Beta (B))" in text, (text[-400:], res["missing"]))
+          and "Відсутнє: Members (шукав: Members, Team Members, Склад команди, Учасники у Team: Beta (B); блоків із цим слотом немає)"
+          in text, (text[-400:], res["missing"]))
 
 with tempfile.TemporaryDirectory() as d:
     e = Env(d, edit=("#### Members\n", "#### Team Members\n"))
@@ -404,7 +409,7 @@ TEAM_MEMBERS = ("- **Jira Team ID:** <team-uuid>\n", "- **Jira Team ID:** <team-
 with tempfile.TemporaryDirectory() as d:
     e = Env(d, "context", fix=REPOS_FIX, edits=[TEAM_MEMBERS])
     block_state(e, "zorg-core", {"team": "0.2"})
-    text, res = e.view("hiring-designer", repos=REPOS)
+    text, res = e.view("hiring-designer")        # v3.15: no registration, no plugin binding — with them, both halves (below)
     check("your own Team Members wins over the block's Members", "Own Person" in text and "#### Team Members" in text
           and "Bea Two" not in text and "> [zorg-core" not in text
           and not any(m.startswith("Members") for m in res["missing"]), (text[-700:], res["missing"]))
@@ -412,8 +417,183 @@ with tempfile.TemporaryDirectory() as d:
     e = Env(d, "context", fix=REPOS_FIX)
     block_state(e, "zorg-core", {"team": "0.2"})
     text, res = e.view("hiring-designer", repos=REPOS)
-    check("…and without it the block's Members is read as before", "> [zorg-core · v0.2 · станом на 2026-10-20]\n#### Members" in text
+    check("…and without it the block's Members is read as before", "> [zorg-core · v0.2 · станом на 2026-10-20 · слот team.members — склад команди: люди, ролі, контакти]\n#### Members" in text
           and not any(m.startswith("Members") for m in res["missing"]), (text[-700:], res["missing"]))
+
+# --- v3.15.0: ctx read resolves slots — both halves of a list, one line for the rest, no duplicates, where it looked
+RANKED = [{"id": "zorg-core", "namespace": "zorg-core", "rank": 1000, "products": []},
+          {"id": "zorg-growth", "namespace": "zorg-growth", "rank": 500, "products": []}]
+TIED = [dict(RANKED[0]), dict(RANKED[1], rank=1000)]
+TEAM_TAG = " · слот team.members — склад команди: люди, ролі, контакти"
+FIXTURE_TEXT = read(REPOS_FIX, "context.md")
+TEAM_REGION = FIXTURE_TEXT[FIXTURE_TEXT.index("<!-- zorg-core:begin id=team "):
+                           FIXTURE_TEXT.index("<!-- zorg-core:end id=team -->") + len("<!-- zorg-core:end id=team -->")]
+MOVE_TEAM = [(TEAM_REGION + "\n", ""),                   # the team block in a custom record, as on the recon store
+             ("<!-- zorg-core:end id=teams -->\n", "<!-- zorg-core:end id=teams -->\n\n" + TEAM_REGION + "\n")]
+KEY = "- **Jira Project Key:** PROJ\n"
+KEYS_BLOCK = (KEY, KEY + "\n<!-- zorg-core:begin id=keys v=0.1 -->\n- **jira_project_key:** CORE\n<!-- zorg-core:end id=keys -->\n")
+RULE_REGION = ("<!-- zorg-core:begin id=metrics v=0.3 policy=rule slot=product.key_metrics -->\n#### Key Metrics\n"
+               "- Core: GMV per month\n<!-- zorg-core:end id=metrics -->")
+RULE_BLOCK = (KEY, KEY + "\n#### Key Metrics\n- Mine: weekly active shoppers\n\n" + RULE_REGION + "\n")
+CORE_METRICS = (KEY, KEY + "\n<!-- zorg-core:begin id=metrics v=0.3 -->\n#### Key Metrics\n- Core: GMV per month\n"
+                "<!-- zorg-core:end id=metrics -->\n")
+BY_NAME = ("#### Growth metrics", "#### Key Metrics (growth)")
+
+
+def remember(env, *bindings):
+    """Your bindings (ctx slot bind) in the store's slots memory."""
+    mem = sl.empty_memory()
+    for b in bindings:
+        sl.add_binding(mem, *b)
+    with cs.guard_roots(co.allowed_roots(env.home, env.text)):
+        sl.save_memory(env.store, mem)
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[TEAM_MEMBERS])
+    block_state(e, "zorg-core", {"team": "0.2"})
+    text, res = e.view("task-creator", repos=RANKED)
+    check("task-creator gets both halves of team.members, each with its source", "> [твоє · team.alpha-a]" in text
+          and "> [zorg-core · v0.2 · станом на 2026-10-20 · слот team.members — " in text
+          and text.index("Own Person") < text.index("Bea Two") and not any(m.startswith("Members") for m in res["missing"]),
+          (text[-1600:], res["missing"]))
+    check("…res slots names the sources of each slot", res.get("slots", {}).get("team.members") == {"shown": ["mine", "zorg-core"],
+          "also": [], "diverges": []}, res.get("slots"))
+    check("…a lone text of yours has no origin line, as in v3.14.1", "> [твоє · product.zorg-app]" not in text
+          and "\n- **Jira Team ID:** <team-uuid>" in text, text[-1600:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=MOVE_TEAM)
+    block_state(e, "zorg-core", {"scope": "0.4", "teams": "0.4", "team": "0.2"})
+    read_by(e, "Zorg Core Notes", "all")
+    text, res = e.view("hiring-designer", repos=RANKED)
+    check("a bound block shown in a slot is not repeated in a read_by record", text.count("Bea Two") == 1
+          and "> [блок team — у слоті team.members вище]" in text
+          and text.index("Bea Two") < text.index("> [блок team — у слоті team.members вище]")
+          and "> [zorg-core · v0.2 · станом на 2026-10-20%s]\n#### Members" % TEAM_TAG in text, text[-1800:])
+    check("…the rest of that record is still read, labelled", "> [zorg-core · v0.4 · станом на 2026-10-20]\n<!-- zorg-core:begin id=scope" in text
+          and "<!-- zorg-core:begin id=team " not in text, text[-1800:])
+    other, _ = e.view("product-analysis", repos=RANKED)
+    check("a skill that does not ask the slot still gets the record whole, with the slot tag", "Bea Two" in other
+          and "· слот team.members — " in other and "у слоті" not in other
+          and "> [zorg-core · v0.2 · станом на 2026-10-20%s]\n<!-- zorg-core:begin id=team " % TEAM_TAG in other, other[-1800:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[KEYS_BLOCK])
+    block_state(e, "zorg-core", {"keys": "0.1"})
+    remember(e, ("zorg-core", "keys", None, "product.jira_key", None))
+    t, res = e.view("requirements-creator", repos=RANKED)
+    check("one value: the winner, and one line for the rest", "також: zorg-core каже інакше — ctx explain product.jira_key" in t
+          and "> [твоє · product.zorg-app]\n- **Jira Project Key:** PROJ\nтакож: zorg-core" in t and "CORE" not in t
+          and res.get("slots", {}).get("product.jira_key") == {"shown": ["mine"], "also": ["zorg-core"], "diverges": []}, (t[-1400:], res.get("slots")))
+    e.edit(os.path.join(e.store.records_dir, "product.zorg-app.md"), "- **jira_project_key:** CORE", "- **jira_project_key:** PROJ")
+    t, res = e.view("requirements-creator", repos=RANKED)
+    check("…the same value under another label is no «також»: your text alone, as in v3.14.1", "також:" not in t
+          and "> [твоє" not in t and "\n- **Jira Project Key:** PROJ\n" in t, t[-1400:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[RULE_BLOCK])
+    block_state(e, "zorg-core", {"metrics": "0.3"}, bases={"metrics": RULE_REGION})
+    t, res = e.view("product-analysis", repos=RANKED)
+    check("a rule wins and your text follows it as a note", "правило ядра" in t and "твоя примітка до правила" in t
+          and t.index("правило ядра") < t.index("твоя примітка до правила")
+          and t.index("- Core: GMV per month") < t.index("твоя примітка до правила") < t.index("- Mine: weekly active shoppers")
+          and "> [zorg-core · v0.3 · станом на 2026-10-20 · слот product.key_metrics — ключові метрики продукту: що міряємо і яка ціль"
+              " · правило ядра]\n#### Key Metrics\n- Core: GMV per month" in t
+          and "твоя примітка до правила\n> [твоє · product.zorg-app]\n#### Key Metrics\n- Mine: weekly active shoppers" in t, t[-1400:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[CORE_METRICS])
+    block_state(e, "zorg-core", {"metrics": "0.3"})
+    remember(e, ("zorg-core", "metrics", None, "product.key_metrics", None),
+             ("zorg-growth", "growth-metrics", None, "product.key_metrics", None))
+    t, res = e.view("product-analysis", repos=TIED)
+    check("a divergence shows both and the way to decide", "⚠ розбіжність між репозиторіями — вирішити: ctx slot decide product.key_metrics zorg-core" in t
+          and t.count("⚠ розбіжність") == 1 and "- Core: GMV per month" in t and "weekly active shoppers" in t
+          and res.get("slots", {}).get("product.key_metrics", {}).get("diverges") == ["zorg-core", "zorg-growth"], (t[-1400:], res.get("slots")))
+    t, res = e.view("product-analysis", repos=RANKED)
+    check("…a higher rank wins quietly, the other is one line", "розбіжність" not in t and "- Core: GMV per month" in t
+          and "weekly active shoppers" not in t and "також: zorg-growth каже інакше — ctx explain product.key_metrics" in t, t[-1400:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    text, res = e.view("hiring-designer", product="Zorg App")
+    check("a missing slot says where it looked", "Members (шукав: Members, Team Members, Склад команди, Учасники у Team: Beta (B); "
+          "блоків із цим слотом немає)" in text and "Members (Team: Beta (B))" in res["missing"], (text[-500:], res["missing"]))
+    e2 = Env(os.path.join(d, "x"), edit=("- **Jira Project Key:** PROJ\n", ""))
+    text, res = e2.view("requirements-creator", product="Zorg App")
+    check("…an obligatory one says so before where it looked", "Jira Project Key (обов'язкове) (шукав: Jira Project Key, "
+          "jira_project_key у Product: Zorg App; блоків із цим слотом немає)" in text and "Jira Project Key" in res["missing"], text[-500:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX)
+    block_state(e, "zorg-core", {"team": "0.2"})
+    os.makedirs(e.store.state_dir, exist_ok=True)
+    open(os.path.join(e.store.state_dir, "slots.json"), "w", encoding="utf-8").write("{ not json")
+    t, res = e.view("task-creator", repos=RANKED)
+    check("an unreadable memory is one line, the read goes on", "пам'ять слотів не прочитано" in t and res["records"]
+          and "— прив'язки й рішення не застосовано" in t and t.count("пам'ять слотів") == 1 and "Bea Two" in t, t[-900:])
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[("| Bea Two ◌ | Data analyst |", "| Bea Two ◌ | Data scientist |")])
+    block_state(e, "zorg-core", {"team": "0.2"}, bases={"team": TEAM_REGION})
+    t_edit, _ = e.view("hiring-designer", repos=RANKED)
+    e2 = Env(os.path.join(d, "n"), "context", fix=REPOS_FIX, edits=[BY_NAME])
+    t_name, _ = e2.view("product-analysis", repos=RANKED)
+    check("origin marks: your edits inside a block, found by name", "· з твоїми правками" in t_edit and "· за назвою, без прив'язки" in t_name
+          and "> [zorg-core · v0.2 · станом на 2026-10-20%s · з твоїми правками]\n#### Members" % TEAM_TAG in t_edit
+          and "> [zorg-growth · v0.1 · за назвою, без прив'язки]\n#### Key Metrics (growth)" in t_name, (t_edit[-900:], t_name[-900:]))
+    e3 = Env(os.path.join(d, "s"), "context", fix=REPOS_FIX)
+    os.makedirs(os.path.join(e3.store.state_dir, "blocks"), exist_ok=True)
+    open(os.path.join(e3.store.state_dir, "blocks", "zorg-core.json"), "w", encoding="utf-8").write("{ not json")
+    t_state, res = e3.view("task-creator", repos=RANKED)
+    check("an unreadable block state is one line, its marker attributes unknown", "стан блоків zorg-core не прочитано" in t_state
+          and t_state.count("стан блоків") == 1 and "Bea Two" in t_state, t_state[-900:])
+    t_reg, _ = e2.view("product-analysis", repos=RANKED[:1], skipped=[("/zorg/providers/zorg-growth.yaml", "not available locally")])
+    check("an unread registration is one line naming its file, its candidates shown without the cascade",
+          "реєстрацію /zorg/providers/zorg-growth.yaml не прочитано — ранги й правила її блоків невідомі; кандидати з неї показано без каскаду"
+          in t_reg and "#### Key Metrics (growth)" in t_reg, t_reg[-900:])
+    t_all, _ = e2.view("product-analysis", repos=RANKED, skipped=[("/zorg/providers/zorg-old.yaml", "no id")])
+    t_none, _ = e2.view("product-analysis", repos=RANKED[:1])
+    check("…and no line when every namespace in the records is registered, or nothing was skipped",
+          "реєстрацію" not in t_all and "реєстрацію" not in t_none, (t_all[-500:], t_none[-500:]))
+
+
+with tempfile.TemporaryDirectory() as d:          # ruling: the lookup mode follows the manifest key, as v3.14.1's _parts did
+    e = Env(d, "context", fix=REPOS_FIX, edits=[(KEY, KEY + "- **Key Metrics:** inline line\n")])
+    text, res = e.view("product-analysis", repos=RANKED)
+    check("a `sections` name is a subsection only: a field line of that name does not answer it", "inline line" not in text
+          and "Key Metrics" in res["missing"], (text[-500:], res["missing"]))
+    text, res = e.view("lead-skill", repos=RANKED, manifest={"schema": "context-manifest/1",
+                                                             "skills": {"lead-skill": {"product": {"fields": ["Key Metrics"]}}}})
+    check("…and a `fields` name takes the field line first", "- **Key Metrics:** inline line" in text and res["missing"] == [], text[-500:])
+
+
+def tree_of(*roots):
+    out = {}
+    for root in roots:
+        for d, _, files in os.walk(root):
+            for f in files:
+                st = os.stat(os.path.join(d, f))
+                out[os.path.join(d, f)] = (st.st_size, st.st_mtime_ns)
+    return out
+
+
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, "context", fix=REPOS_FIX, edits=[TEAM_MEMBERS, KEYS_BLOCK])
+    block_state(e, "zorg-core", {"team": "0.2", "keys": "0.1"}, bases={"team": TEAM_REGION})
+    remember(e, ("zorg-core", "keys", None, "product.jira_key", None))
+    before = tree_of(e.home, e.vault)
+    texts = [e.view(s, repos=RANKED, skipped=[("/zorg/providers/zorg-old.yaml", "no id")])[0] for s in ("task-creator", "hiring-designer")]
+    check("ctx read writes nothing — store, memory, block states, copies (criterion 6)", tree_of(e.home, e.vault) == before
+          and all("Own Person" in t for t in texts), "")
+    shipped, sl.CATALOGUE_PATH = sl.CATALOGUE_PATH, os.path.join(d, "gone.yaml")
+    try:
+        text, res = e.view("hiring-designer", repos=RANKED)
+    finally:
+        sl.CATALOGUE_PATH = shipped
+    check("a catalogue that cannot be read: every name is read as in v3.14.1, the read goes on", "> [твоє" not in text
+          and "Bea Two" not in text and "Own Person" in text and res["slots"] == {} and "слот team.members" not in text, text[-700:])
 
 check("check_manifest is clean on the repo", cr.check_manifest(ROOT) == [], cr.check_manifest(ROOT))
 with tempfile.TemporaryDirectory() as d:

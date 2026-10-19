@@ -26,6 +26,10 @@ ctx_read._lookup reads a `fields`/`required` name and a `sections` one.
                 decision keeps of each side
 - slot_context, slot_answers   the one assembly `ctx read`, `ctx explain` and `ctx slot decide` share: the live records,
                 the product, its teams, the registrations, the memory and the bindings — and the answer of a slot per place
+- render_slot   how `ctx read` prints one answer (spec §5.2): the shown candidates with their origin lines, the note under a
+                rule, one «також» line for each other text, the divergence line
+- without_shown, bound_slots, looked_for   no duplicates in a whole record (spec §5.2), the slots a bound block's origin
+                line names wherever it is printed, and the names a slot was looked for under (spec §5.3)
 
 Reads only: no lock, no network, nothing written. Semantics: references/context-protocol.md. Stdlib only.
 """
@@ -331,6 +335,7 @@ WHY_RULE = "правило ядра"
 WHY_MINE = "твоє перемагає (блок не є правилом ядра)"
 WHY_LIST = "список — виводяться всі кандидати; склеювання пунктів — у v3.16"
 WHY_ONLY = "єдиний кандидат"
+WHY_UNREAD = "реєстрацію не прочитано — показано без каскаду"
 
 
 def compare_key(kind, text):
@@ -387,12 +392,19 @@ def divergence_hashes(kind, cands):
     return {c["source"]: cs.sha_text(compare_key(kind, c["text"])) for c in _firsts(cands)}
 
 
+def unread_registration(c):
+    """A repository's candidate whose registration was not read (no rank): its rank and its rules are unknown."""
+    return c.get("level") != "mine" and c.get("rank") is None
+
+
 def resolve(slot, cat, cands, mem):
     """What the cascade makes of the candidates of `slot` (`candidates`; one place — one product's or one team's — at a
     time) given the memory `mem` (its `prefer` and `decisions`; None — an empty one). A candidate that is not `placed` is
-    ignored. Returns {"slot", "kind", "shown", "note", "also", "diverges", "why", "decision", "prefer"}:
+    ignored. A repository's candidate whose registration was not read (rank None) takes no part in the cascade: it is
+    shown after the cascade's own shown candidates, never as «також» (spec §4.6: «кандидати з неї показано без каскаду»).
+    Returns {"slot", "kind", "shown", "note", "also", "diverges", "why", "decision", "prefer"}:
 
-      shown      the candidates the skill gets in full, in the order of the cascade
+      shown      the candidates the skill gets in full, in the order of the cascade, then those of a registration not read
       note       your candidate under a core rule (printed after «твоя примітка до правила»), else None
       also       the other candidates whose text differs from every shown one — one «також» line each (a value slot
                  compares values, not lines: compare_key)
@@ -400,7 +412,8 @@ def resolve(slot, cat, cands, mem):
                  preference or decision settles it (then all of them are `shown`); else []
       why        the cascade in words: «правило ядра» · «перевага: …» · «список — …» · «твоє перемагає (…)» · «більший
                  ранг: <repo> <rank> > <repo> <rank>» · «рівний ранг <rank>, різний текст: <repos>» · «твоє рішення від
-                 <день>» · «єдиний кандидат»; "" when there is no candidate
+                 <день>» · «єдиний кандидат»; WHY_UNREAD when only candidates of a registration not read are left; "" when
+                 there is no candidate
       decision   the decision of yours that settled a divergence, else None
       prefer     the preference that shaped the answer: "all", "repo:<id>" (only when that repository has a candidate),
                  else "mine"
@@ -409,6 +422,16 @@ def resolve(slot, cat, cands, mem):
     `repo:<id>` (that repository's candidate — all of them for a list) · a list (every candidate) · yours · the
     repositories: the highest rank; several at it with different text → a divergence, unless a decision of yours has the
     same hash for every one of them (ctx slot decide) — then its winner. Pure: nothing it is given is changed."""
+    cands = list(cands or ())
+    unread = [c for c in cands if c.get("placed") and unread_registration(c)]
+    out = _resolve_ranked(slot, cat, [c for c in cands if not unread_registration(c)], mem)
+    if unread:
+        out.update(shown=out["shown"] + unread, why=out["why"] or WHY_UNREAD)
+    return out
+
+
+def _resolve_ranked(slot, cat, cands, mem):
+    """`resolve` over your candidates and those whose registration was read (their rank is known)."""
     kind = (sl.slot_info(cat, slot) or {}).get("kind")
     mem = mem or {}
     pref = (mem.get("prefer") or {}).get(slot) or "mine"
@@ -466,7 +489,7 @@ def resolve(slot, cat, cands, mem):
 
 
 # ------------------------------------------------------------------ the assembly the readers and `decide` share
-def slot_context(store, copies, repos, product, now, mem=None):
+def slot_context(store, copies, repos, product, now, mem=None, cat=None):
     """Everything the resolver needs to answer slots, assembled as `ctx read` assembles it — reads only, no lock, no
     network, nothing written: the live records (ctx_read._live_view: a direct edit not yet imported counts), the active
     product (`product` — a name or id, or None: the one there is), its teams (the team records under the same parent, as
@@ -476,8 +499,8 @@ def slot_context(store, copies, repos, product, now, mem=None):
     `needs_product` is True (and `product` None) when several products and none asked for, or none that matches, `products`
     then being their names; a memory that cannot be read is an empty one and `mem_error` the line that says why (a reader
     goes on without it; a writing command stops on it). `cat` is the catalogue (a file that cannot be read is a
-    ValueError); `problems` are the lines of ctx_slots.bindings_of."""
-    cat = sl.load_catalogue()
+    ValueError) — `cat` when the caller already holds one; `problems` are the lines of ctx_slots.bindings_of."""
+    cat = sl.load_catalogue() if cat is None else cat
     recs, notes, pending = cr._live_view(store, copies, now)
     products = [r for r in recs if r["type"] == "product"]
     prod, needs = cr._pick_product(products, product)
@@ -513,3 +536,116 @@ def slot_answers(sctx, slot, field=None):
             groups.append((c["place"], [c]))
     return [{"place": place, "candidates": members, "result": resolve(slot, sctx["cat"], members, sctx["mem"])}
             for place, members in groups]
+
+
+# ------------------------------------------------------------------ what `ctx read` prints (spec §5.2, §5.3)
+NOTE_LINE = "твоя примітка до правила"
+BY_NAME_MARK = "за назвою, без прив'язки"
+EDITED_MARK = "з твоїми правками"
+RULE_MARK = "правило ядра"
+ALSO_LINE = "також: %s каже інакше — ctx explain %s"
+DIVERGE_LINE = "⚠ розбіжність між репозиторіями — вирішити: ctx slot decide %s %s"
+SHOWN_LINE = "> [блок %s — у слоті %s вище]"
+MINE_WORD = "твоє"
+UNREAD_REGISTRATION = "реєстрацію %s не прочитано — ранги й правила її блоків невідомі; кандидати з неї показано без каскаду"
+UNREAD_MEMORY = "пам'ять слотів не прочитано (%s) — прив'язки й рішення не застосовано"
+
+
+def render_slot(res, origin):
+    """One answer (`resolve`) as `ctx read` prints it, ending in a newline:
+
+      the divergence line first, when repositories diverge (`ctx slot decide <slot> <the first of them by id>`);
+      each shown candidate — a block after its origin line (origin.line: `> [<repo> · v<v> · станом на <day>]`, then
+        `слот <slot> — <about>` for a bound block, `за назвою, без прив'язки`, `з твоїми правками`, `правило ядра`,
+        `перевага: <who>` when a preference shaped the answer, never on a candidate of a registration not read); your
+        text after `> [твоє · <record id>]` only when the slot shows more than one candidate or has a «також» line, a
+        note or a divergence — alone, it is printed as v3.14.1 printed it, with no line (ruling P4);
+      under a rule, `твоя примітка до правила` and your text in full;
+      one «також: <repo or «твоє»> каже інакше — ctx explain <slot>» line for each other source with another text.
+
+    `origin` is a ctx_read._Origin (it knows the repositories, their block states and the slots' `about`)."""
+    slot = res["slot"]
+    lined = len(res["shown"]) > 1 or bool(res["also"] or res["note"] or res["diverges"])
+    prefer = [] if res.get("prefer", "mine") == "mine" else ["перевага: " + res["prefer"]]
+    out = []
+    if res["diverges"]:
+        out.append(DIVERGE_LINE % (slot, origin.clip(sorted(res["diverges"])[0])))
+
+    def piece(c, extra):
+        if c.get("level") == "mine":
+            head = ("> [" + " · ".join([MINE_WORD, origin.clip(c["record"])] + extra) + "]") if lined else None
+        else:
+            marks = ([BY_NAME_MARK] if c.get("how") == BY_NAME else []) + ([EDITED_MARK] if c.get("edited") else []) \
+                + ([RULE_MARK] if c.get("level") == "rule" else [])
+            head = origin.line(c["ns"], c["block"], c.get("version") or "", marks + extra,
+                               slots=[] if c.get("how") == BY_NAME else [slot])
+        return ([head] if head else []) + [c["text"].rstrip("\n")]
+
+    for c in res["shown"]:
+        out += piece(c, [] if unread_registration(c) else prefer)       # the preference did not place an unread one
+    if res["note"]:
+        out += [NOTE_LINE] + piece(res["note"], [])
+    for c in res["also"]:
+        line = ALSO_LINE % (MINE_WORD if c.get("level") == "mine" else origin.clip(c["source"]), slot)
+        if line not in out:
+            out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def without_shown(text, shown):
+    """`text` — a record a skill reads whole (read_by, a whole team) — with each region of a block the same view already gave
+    a slot (in full or as a «також» line) replaced by the one line `> [блок <block> — у слоті <slot> вище]` (spec §5.2: no
+    duplicates); `shown` is {(namespace, block id): slot}. Regions inside a `<ns>:section` wrapper are found; the wrapper
+    stays. A region with no id is never replaced."""
+    if not shown:
+        return text
+
+    def walk(t):
+        out, at = [], 0
+        for m in cc.REGION_RE.finditer(t):
+            if m.group(1).endswith(":section"):
+                opened = t.index(">", m.start()) + 1
+                closing = t.rindex("<!--", m.start(), m.end())
+                out += [t[at:opened], walk(t[opened:closing]), t[closing:m.end()]]
+            else:
+                slot = shown.get((m.group(1), m.group(2))) if m.group(2) else None
+                out.append(t[at:m.end()] if slot is None else t[at:m.start()] + SHOWN_LINE % (m.group(2), slot))
+            at = m.end()
+        return "".join(out) + t[at:]
+    return walk(text)
+
+
+def bound_slots(cat, records, bindings):
+    """{(namespace, block id): [slot, …]} — the slots each bound block answers (`bindings`, the first item of
+    ctx_slots.bindings_of), in the order its bindings give them: a block that is one sound region (cb.find_regions) and
+    gives the slot a text (spec §4.5, in the lookup mode of the slot's kind) — a binding with no such part names no slot. Its
+    origin line names them wherever the block is printed (spec §5.2, criterion 3). A slot the catalogue lacks is left out."""
+    out, sound = {}, {}
+    for rec in records or ():
+        for ns, bid, _, _, _ in cr._blocks(rec.get("body") or ""):
+            tied = (bindings or {}).get((ns, bid)) if bid else None
+            if not tied:
+                continue
+            if ns not in sound:
+                sound[ns] = cb.find_regions(records, ns)[0]
+            reg = sound[ns].get(bid)
+            if not reg or reg["host"] != rec["id"]:
+                continue
+            several = len({b.get("slot") for b in tied}) > 1
+            for b in tied:
+                info = sl.slot_info(cat, b.get("slot"))
+                if info is None or b["slot"] in out.get((ns, bid), ()):
+                    continue
+                kind = info.get("kind")
+                find = cr._subsection if kind == "text" else cr._field_text
+                if _bound_text(_inner(reg["text"]), b.get("sub"), kind, sl._names(info), several, find) is not None:
+                    out.setdefault((ns, bid), []).append(b["slot"])
+    return out
+
+
+def looked_for(cat, slot, rec, mem):
+    """The names `slot` was looked for under in the record `rec`: the catalogue's names, then the headings you mapped to the
+    slot in that record (ctx slot map) — what «Відсутнє» and `explain` say it looked for (spec §5.3)."""
+    mapped = [a["heading"] for a in (mem or {}).get("aliases") or () if a.get("record") == rec["id"] and a.get("slot") == slot]
+    names = sl._names(sl.slot_info(cat, slot) or {})
+    return names + [h for h in mapped if sl._norm(h) not in {sl._norm(n) for n in names}]

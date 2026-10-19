@@ -6,8 +6,10 @@ needs; `read_view` gives the context card plus exactly those parts — read only
 writes. Edits not imported yet and records missing on disk are read from the canonical copy,
 with a note. A field or a subsection is looked for in your own text first, outside the managed regions,
 and only then inside them. Every block a repository put in a record is read with the line that says
-whose it is, which version and when it was last checked (since v3.13.0). Semantics:
-references/context-protocol.md.
+whose it is, which version and when it was last checked (since v3.13.0). Since v3.15.0 a name with a slot
+(references/context-slots.yaml) is answered by the resolver (scripts/ctx_resolve.py): your text and the blocks bound
+to the slot, wherever they sit, in the order of the cascade — and a block a slot already gave is not read twice.
+Semantics: references/context-protocol.md.
 
 - load_manifest / manifest_for    the manifest
 - read_view                       the text of `ctx read --skill <name>` and its result
@@ -96,14 +98,21 @@ class _Origin:
     """The line before a repository's text, `> [<repository> · v<version> · станом на <date>]`: the repository is the
     registration whose namespace the block carries (the namespace itself when nobody registered it), the version is
     the block's marker, the date the day the store last checked that block against its repository — none when it never
-    did or the state cannot be read."""
+    did or the state cannot be read. Since v3.15.0 a bound block's line also names its slots, `слот <slot> — <about>`
+    (spec §5.2): `tags` {(namespace, block id): [slot, …]} (ctx_resolve.bound_slots), the `about` from the catalogue `cat`."""
 
-    def __init__(self, store, repos):
+    def __init__(self, store, repos, tags=None, cat=None):
         self.store = store
         self.repo_of = {}
         for r in repos or ():
             self.repo_of.setdefault(r.get("namespace") or r["id"], r["id"])
         self._blocks = {}
+        self.tags = tags or {}
+        self.cat = cat or {}
+
+    @staticmethod
+    def clip(text, n=60):
+        return _blocks_module().clip(text, n)
 
     def _state(self, repo_id):
         if repo_id not in self._blocks:
@@ -113,7 +122,8 @@ class _Origin:
                 self._blocks[repo_id] = {}
         return self._blocks[repo_id]
 
-    def line(self, ns, bid, v):
+    def line(self, ns, bid, v, extra=(), slots=None):
+        """The line; `slots` — the slots it names (None: every slot `tags` gives the block); `extra` — the marks after them."""
         clip = _blocks_module().clip
         repo = self.repo_of.get(ns)
         entry = (self._state(repo).get(bid) if repo else None) or {}
@@ -123,7 +133,9 @@ class _Origin:
         day = clip(entry.get("checked") or "", 40)[:10]
         if day:
             marks.append("станом на " + day)
-        return "> [" + " · ".join(marks) + "]"
+        for slot in self.tags.get((ns, bid), ()) if slots is None else slots:
+            marks.append("слот %s — %s" % (clip(slot, 60), clip((sl.slot_info(self.cat, slot) or {}).get("about") or "", 120)))
+        return "> [" + " · ".join(marks + list(extra)) + "]"
 
     def label(self, text):
         """`text` with the line put before each block of it."""
@@ -255,41 +267,100 @@ def _pick_product(products, wanted):
     return None, len(products) > 1
 
 
-def read_view(store, copies, skill, product=None, today=None, manifest=None, repos=None):
-    """The text of `ctx read --skill <skill>` and its result (records, missing, chars, tokens_est,
-    pending, needs_product). Reads only. `repos` are the registrations (ctx_repos.load_repos): they name the
-    repository of each block; without them a block is named by its namespace."""
+def read_view(store, copies, skill, product=None, today=None, manifest=None, repos=None, skipped=None, catalogue=None):
+    """The text of `ctx read --skill <skill>` and its result (records, missing, chars, tokens_est, pending,
+    needs_product, slots). Reads only: no lock, no network, nothing written. `repos` are the registrations
+    (ctx_repos.load_repos): they name the repository of each block and give its rank; without them a block is named by
+    its namespace. `skipped` — the registrations load_repos could not read, as (path, reason). `catalogue` — the slot
+    catalogue as ctx_slots.load_catalogue reads it (None: the plugin's own; one that cannot be read: no slots).
+
+    Since v3.15.0 every name the manifest reads from a product, a team or the profile that has a slot goes through the
+    resolver — ctx_resolve.candidates → resolve → render_slot — over the one assembly ctx_resolve.slot_context; a name
+    with no slot is read as v3.14.1 read it. A slot nothing answers is in «Відсутнє» with where it was looked for, while
+    `missing` keeps the short form (`Members`, `Members (Team: Beta (B))`). A block a slot of this view gave (in full or
+    as a «також» line) is one line in a record read whole (ctx_resolve.without_shown); a bound block's origin line names
+    its slot wherever it is printed. A registration not read that may own a block in the records, a slots memory and a
+    block state that cannot be read are one line each, before «Відсутнє». `slots` is {slot: {"shown", "also",
+    "diverges"}} — the sources, for `explain` and the tests."""
+    import ctx_resolve as rv                     # here: ctx_resolve imports this module
     spec = manifest_for(manifest or load_manifest(), skill)
     today = (today or datetime.date.today().isoformat())[:10]
     state = store.state()
     card = co._read(store.card_path) if os.path.isfile(store.card_path) else ""
-    recs, notes, pending = _live_view(store, copies, today + "T00:00:00")
-    origin = _Origin(store, repos)
+    if catalogue is None:
+        try:
+            catalogue = sl.load_catalogue()
+        except ValueError:
+            catalogue = {}                       # validator check 16 names it; meanwhile every name is read as in v3.14.1
+    sctx = rv.slot_context(store, copies, repos, product, today + "T00:00:00", cat=catalogue)
+    recs, notes, pending = sctx["records"], sctx["notes"], sctx["pending"]
+    origin = _Origin(store, repos, tags=rv.bound_slots(catalogue, recs, sctx["bindings"]), cat=catalogue)
     blocks, used, missing, sizes, unassigned = [], [], [], {}, []
     res = {"records": used, "missing": missing, "pending": pending, "needs_product": False,
-           "unassigned": unassigned, "over_budget": False, "largest": None}
+           "unassigned": unassigned, "over_budget": False, "largest": None, "slots": {}}
+    given, whole, unread, answers = {}, [], [], {}   # blocks a slot gave; records read whole (printed last); unread ones
 
     def add(rec, text):
         blocks.append(_head(rec, state, today, notes.get(rec["id"], "")) + "\n" + origin.label(text).rstrip("\n") + "\n")
         used.append(rec["id"])
         sizes[rec["id"]] = tokens_est(blocks[-1])
 
+    def add_whole(rec):
+        used.append(rec["id"])
+        whole.append((len(blocks), rec))
+        blocks.append(None)
+
     absent = []
 
-    def miss(name, required):
+    def miss(name, required, looked=None, base=None):
         missing.append(name)
-        absent.append("%s (обов'язкове)" % name if required else name)
+        absent.append((base or name) + (" (обов'язкове)" if required else "") + (" " + looked if looked else ""))
+
+    def entry_of(slot, field, place):
+        if (slot, field) not in answers:
+            answers[(slot, field)] = rv.slot_answers(sctx, slot, field=field)
+        return next((e for e in answers[(slot, field)] if e["place"] == place), None)
+
+    def looked(slot, rec):
+        return "(шукав: %s у %s; блоків із цим слотом немає)" % (
+            ", ".join(rv.looked_for(catalogue, slot, rec, sctx["mem"])), rec["title"])
+
+    def slot_text(rkind, rec, name, field):
+        """(the slot printed, None), (None, where it looked) — or None: the name has no slot."""
+        slot = sl.slot_for(catalogue, rkind, name)
+        if slot is None:
+            return None
+        found = entry_of(slot, field, rec["id"] if rkind in ("product", "team") else None)
+        if found is None:
+            return None, looked(slot, rec)
+        result = found["result"]
+        got = res["slots"].setdefault(slot, {"shown": [], "also": [], "diverges": []})
+        for key, items in (("shown", [c["source"] for c in result["shown"]]),
+                           ("also", [c["source"] for c in result["also"]]), ("diverges", result["diverges"])):
+            got[key] += [x for x in items if x not in got[key]]
+        for c in result["shown"] + result["also"]:
+            if c.get("ns") and c.get("block"):
+                given.setdefault((c["ns"], c["block"]), slot)
+            if rv.unread_registration(c):
+                unread.append(c)
+        return rv.render_slot(result, origin), None
+
+    def present(rkind, rec, name):
+        """(is it there, where it looked) of a required field of a record read whole."""
+        slot = sl.slot_for(catalogue, rkind, name)
+        if slot is None:
+            return _lookup(rec["body"], name)[0] is not None, None
+        return entry_of(slot, True, rec["id"] if rkind in ("product", "team") else None) is not None, looked(slot, rec)
 
     if spec.get("full"):
         blocks.append("Цей скіл редагує local-context.md і читає його цілком.")
     else:
         prod = None
         if spec.get("product") is not None or spec.get("team") is not None:
-            products = [r for r in recs if r["type"] == "product"]
-            prod, needs = _pick_product(products, product)
-            if needs:
+            prod = sctx["product"]
+            if sctx["needs_product"]:
                 res["needs_product"] = True
-                res["products"] = [p["title"].split(":", 1)[-1].strip() for p in products]
+                res["products"] = sctx["products"]
                 blocks = ["Продукти: %s. Повтори з назвою продукту із запиту, або спитай користувача (крок 0d):\n"
                           'python3 "<plugin root>/scripts/ctx.py" read --skill %s --product "<назва>"\n'
                           "Не читай local-context.md цілком." % (", ".join(res["products"]), skill)]
@@ -297,10 +368,11 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
             for kind in spec["records"]:
                 rec = next((r for r in recs if r["id"] == kind or r["type"] == kind), None)
                 if rec:
-                    add(rec, _without_heading(rec["body"]))
+                    add_whole(rec)
                     for f in ((spec.get(kind) or {}).get("required") or []):
-                        if _lookup(rec["body"], f)[0] is None:
-                            miss(f, True)
+                        there, where = present(kind, rec, f)
+                        if not there:
+                            miss(f, True, where)
                 else:
                     miss(kind, False)
             want = spec.get("product")
@@ -308,31 +380,43 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
                 if prod is None:
                     miss("продукт", bool(want.get("required")))
                 else:
-                    _parts(add, miss, prod, want, origin)
+                    _parts(add, miss, prod, want, origin, slot_text=lambda r, n, f: slot_text("product", r, n, f))
             want = spec.get("team")
             if want is not None:
-                teams = [r for r in recs if r["type"] == "team" and (prod is None or r.get("parent") == prod.get("parent"))]
+                teams = sctx["teams"]
                 for t in teams:
                     if want.get("whole"):
-                        add(t, _without_heading(t["body"]))
+                        add_whole(t)
                     else:
-                        _parts(add, miss, t, want, origin, where=t["title"] if len(teams) > 1 else None)
+                        _parts(add, miss, t, want, origin, where=t["title"] if len(teams) > 1 else None,
+                               slot_text=lambda r, n, f: slot_text("team", r, n, f))
             req = list(spec.get("required_settings") or [])
             for name in req + [n for n in spec["settings"] if n not in req]:
                 rec = next((r for r in recs if r["type"] == "setting" and r["title"].lower().startswith(name.lower())), None)
                 if rec:
-                    add(rec, _without_heading(rec["body"]))
+                    add_whole(rec)
                 else:
                     miss("налаштування %s" % name, name in req)
             for rec in recs:
                 who = readers(rec) if rec["type"] in ("custom", "setting") else None
                 if who and rec["id"] not in used and ("all" in who or skill.lower() in who):
-                    add(rec, _without_heading(rec["body"]))
+                    add_whole(rec)
             unassigned.extend(cs.unassigned_ids(recs))
             if unassigned:
                 byid = {r["id"]: r for r in recs}
                 blocks.append("Власні секції без призначення: %s — ctx get <id>, якщо запит їх стосується"
                               % ", ".join("%s (%s)" % (byid[i]["title"], i) for i in unassigned))
+            known = {r.get("namespace") or r["id"] for r in repos or ()}
+            stray = any(ns not in known for r in recs for ns, _, _, _, _ in _blocks(r.get("body") or ""))
+            if skipped and (unread or stray):
+                blocks += [rv.UNREAD_REGISTRATION % _Origin.clip(path, 200) for path, _ in skipped]
+            if sctx["mem_error"]:
+                blocks.append(rv.UNREAD_MEMORY % sctx["mem_error"])
+            blocks += sctx["problems"]
+    for at, rec in whole:
+        blocks[at] = (_head(rec, state, today, notes.get(rec["id"], "")) + "\n"
+                      + origin.label(rv.without_shown(_without_heading(rec["body"]), given)).rstrip("\n") + "\n")
+        sizes[rec["id"]] = tokens_est(blocks[at])
     if absent:
         blocks.append("Відсутнє: %s — для решти діють типові значення" % ", ".join(absent))
     head = "# Контекст для %s · записів %d · %s" % (skill, len(used), "%d правок не підхоплено — ctx sync" % pending if pending else "in sync")
@@ -347,29 +431,41 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
     return text, res
 
 
-def _parts(add, miss, rec, want, origin, where=None):
+def _parts(add, miss, rec, want, origin, where=None, slot_text=None):
     """The fields and subsections `want` names from `rec`; what it lacks goes to `miss` — a subsection too (since
-    v3.14.1), never as obligatory — named `<name> (<where>)` when `where` is given (one of several teams)."""
+    v3.14.1), never as obligatory — named `<name> (<where>)` when `where` is given (one of several teams). Since v3.15.0
+    `slot_text(rec, name, field)` answers a name that has a slot — (the slot as ctx_resolve.render_slot prints it, None) or
+    (None, where it looked) — and gives None for a name with no slot, which is read as v3.14.1 read it (ctx_read._lookup,
+    the origin line naming no slot: the text is not a slot's). `field` is the manifest's lookup mode: True for `required`
+    and `fields`, False for `sections`."""
     parts = []
 
     def shown(text, block):
-        return text.rstrip("\n") if block is None else origin.line(*block) + "\n" + text.rstrip("\n")
+        return text.rstrip("\n") if block is None else origin.line(*block, slots=()) + "\n" + text.rstrip("\n")
 
     def named(name):
         return "%s (%s)" % (name, where) if where else name
 
-    for name in (want.get("required") or []) + (want.get("fields") or []):
-        t, block = _lookup(rec["body"], name)
+    def one(name, field, required):
+        got = slot_text(rec, name, field) if slot_text else None
+        if got is not None:
+            text, looked = got
+            if text is None:
+                miss(named(name), required, looked, name)
+            else:
+                parts.append(text.rstrip("\n"))
+            return
+        t, block = _lookup(rec["body"], name, field)
         if t is None:
-            miss(named(name), name in (want.get("required") or []))
+            miss(named(name), required)
         else:
             parts.append(shown(t, block))
+
+    required = want.get("required") or []
+    for name in required + (want.get("fields") or []):
+        one(name, True, name in required)
     for name in want.get("sections") or []:
-        t, block = _lookup(rec["body"], name, field=False)
-        if t is None:
-            miss(named(name), False)
-        else:
-            parts.append(shown(t, block))
+        one(name, False, False)
     add(rec, "\n".join(parts) + "\n")
 
 
