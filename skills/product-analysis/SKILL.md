@@ -129,32 +129,17 @@ Interactive Q&A and Full Report modes follow the same analysis engine (Step 2) b
 
 ### Step 0.5: Vault Context Search (Optional)
 
-> Requires: `references/vault-protocol.md` → Step 0.5
+> Requires: `references/search-protocol.md` (since v3.16.0 — the search, the rating, what is taken silently, the block of variants; it asks nothing in the middle of the run)
 
-IF vault_level > L0 (detected during Step 0h):
+Follow `references/search-protocol.md` with `--skill product-analysis`. This skill's types — a weight, not a filter: `cjm-analysis`, `ab-test-results`, `metrics-review`, `post-release`, `hypothesis`; the request is the metric, the funnel stage or the test the user names.
 
-1. Search vault for relevant prior artifacts:
-   - Types: `cjm-analysis`, `ab-test-results`, `metrics-review`, `post-release`, `hypothesis`
-   - Product: active product
-   - Tags: metric names, analysis type keywords
-   - Status: `active`, `draft`
-   - Sort: `created DESC`, limit: 10
+What is taken is context for the analysis:
+- previous metrics reviews → compare trends, find recurring patterns;
+- prior A/B test results → referenced when related metrics are analysed;
+- CJM analyses → the funnel context of the current metrics;
+- hypotheses → metric changes linked to tested and untested hypotheses.
 
-2. IF results found:
-   - Display: "Found {N} related analysis artifacts in your knowledge base:"
-   - Show: title, type, date, key metrics or test results
-   - Ask: "Use as context? [Yes / Select specific / Skip]"
-
-3. IF user accepts:
-   - Read full content of selected artifacts
-   - Use as context:
-     - Previous metrics reviews → compare trends, identify recurring patterns
-     - Prior A/B test results → reference when analyzing related metrics
-     - CJM analyses → understand funnel context for current metrics
-     - Hypotheses → link metrics changes to tested/untested hypotheses
-   - Note in analysis: "Comparison with previous analysis from {date}"
-
-4. IF user skips OR no results → continue normally
+A number from a taken note is a previous value with its source and date — never the current one; the current values come from Step 1e and pass the Step 1.5 gate. Note in the analysis: "Comparison with previous analysis from {date}".
 
 ### Step 1.5 — Data Integrity Gate (MANDATORY, v0.9.0+)
 
@@ -378,6 +363,7 @@ The calling skill should incorporate these results into its workflow without re-
 - **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
 - **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
 - **`references/vault-protocol.md`** — vault integration protocol: storing, searching, and retrieving analysis artifacts
+- **`references/search-protocol.md`** — Step 0.5: the search, what is taken silently, the block of variants (since v3.16.0)
 - **`references/vault-schema.md`** — vault schema definition for analysis artifact types and metadata
 
 ## Routing

@@ -662,7 +662,7 @@ The plugin can optionally integrate with [Obsidian](https://obsidian.md/) to cre
 ### What it does
 - Saves results of every skill (research, concepts, requirements, analyses, meetings, decisions) as structured .md files in your Obsidian Vault
 - Links related artifacts with wikilinks (research → concept → requirements → A/B results)
-- Searches your accumulated knowledge before starting new tasks to provide historical context
+- Searches your accumulated knowledge before starting new tasks to provide historical context — since v3.16.0 by the words of your request, in several languages at once, taking silently only what is directly about it, with its source and date (see [Context store](#context-store-since-v3110) → Search)
 - Tracks hypothesis lifecycle: proposed → testing → validated/rejected
 - Auto-generates Maps of Content (Dashboard, Product MOC, Timeline) for navigation
 
@@ -716,8 +716,9 @@ The sixth contour, **Context**, groups `context-connect`, `context-navigator` an
 - **Lifecycle and freshness** (since v3.12.0) — `ctx invalidate` marks a record no longer current, `ctx archive` moves it out of the file, removed records wait 30 days in a trash, `ctx restore` brings any of them back; every record knows when it was last verified, the digest counts stale ones and skills state their facts "as of" that date; `ctx verify` or the configurator's "Review stale records" confirms them.
 - **Repositories and block merge** (since v3.13.0) — registrations v2 (`products`, `rank`, `core_root`, `endpoint`, `namespace`, `blocks_file`) list the repositories a product draws blocks from; `ctx repo list|status`; `ctx provider adopt` records what each block was when the repository last gave it, `plan` compares the three versions, `apply` writes one pass with a snapshot and a journal line; a stdlib MCP client calls only read tools. `references/context-provider-protocol.md` §12.
 - **Slots, the cascade and `ctx explain`** (since v3.15.0) — a skill asks for a *slot* (`team.members`, `product.key_metrics`; the catalogue is `references/context-slots.yaml`), not for a heading, so your `Team Members` answers a request for `Members`, two different things under one name are two slots, and what a skill cannot find is named with where it looked. The resolver in `ctx read` takes every text that may answer a slot — yours, and the core's blocks bound to it wherever they sit — decides by the cascade (a core rule, then yours, then repositories by rank) and says whose each text is on a provenance line; a block no slot takes keeps answering by its heading, as before. `ctx explain` shows where each slot came from and why it won; `ctx slot bind|map|prefer|decide|forget` keeps what you decided in `.state/slots.json` (a snapshot, a journal line, `ctx undo`); `ctx validate` names bindings that do nothing, divergences between repositories and bindings worth making. `references/context-protocol.md` §5f.
+- **Search** (since v3.16.0) — Step 0.5 of every skill looks for what your base already holds about the request: the model writes 3–4 variants of it (Ukrainian, Russian, English, a synonym), and `ctx search` asks every source at once — its own section index of your plugin folders and the cores on this machine (`~/.grow-pm/index/`, outside the vault), a local index you registered, and the server of a repository that is not on disk — then merges, weighs and folds the duplicates (the same page twice, your hub and the core page, older versions). The model rates the candidates and takes silently at most three sections that are *directly* about the request, saying so in one line with source and date; something partial, outdated, a hub, a sensitive note outside the People contour, or two sources that disagree is never taken silently. When the search was unsure, the skill may look into live sources (Confluence, Jira…) and ends its answer with a short block of variants — your choice is remembered (`ctx search remember`, `ctx undo` takes it back) and makes the next search better. `ctx search eval` measures it on your golden set. The old "Use as context?" question is gone. Protocol: `references/search-protocol.md`.
 - **Your own sections** (since v3.12.1) — a custom or setting record names the skills that read it (`read_by`: `all` or skill names; `ctx assign`, or the Obsidian property); `ctx read` gives it to them whole and names the unassigned ones; the digest counts them (`· N custom unassigned`).
-- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify`, since v3.12.1 `assign`, since v3.13.0 `repo list|status`, `provider adopt|plan|apply`, since v3.14.0 `provider sync`, and since v3.15.0 `explain` and `slot bind|map|prefer|decide|forget` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
+- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify`, since v3.12.1 `assign`, since v3.13.0 `repo list|status`, `provider adopt|plan|apply`, since v3.14.0 `provider sync`, since v3.15.0 `explain` and `slot bind|map|prefer|decide|forget`, and since v3.16.0 `search` (with `--get`, `remember`, `forget`, `eval`) and `index status|rebuild` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
 
 ## Multilingual Artifact Templates
 
@@ -944,7 +945,8 @@ codex plugin add grow-product-manager@grow-product-manager-plugins
 
 The plugin includes reference materials for product management best practices and frameworks:
 
-**Key reference files in `references/` (41 total — see the folder for the full list):**
+**Key reference files in `references/` (43 total — see the folder for the full list):**
+- `search-protocol.md` — Step 0.5 of every skill (since v3.16.0): the request and its variants, `ctx search`, the rating, what is taken silently and what never is, doubt and conflict, live sources, the block of variants and the memory of your choices
 - `context-provider-protocol.md` — shared-context providers (since v3.10.0): the `vault/v1` contract, provider manifest and registration, routing across providers, freshness, the write boundary, the provider kit and the index schema
 - `judgment-points.md` — the judgment points (since v3.7.0): where the "your estimate first" question is asked and how it is switched off, the confidence-and-falsifier line and its scale, the decision-record fields, the resulting check
 - `vocabulary-sets.md` — read-only role vocabulary sets for headings and option labels, lowest precedence below the team glossary (since v3.6.0)
@@ -988,7 +990,7 @@ See the plugin's `references/` folder for the complete list of available materia
 Two validators gate every push and PR (`.github/workflows/validate.yml`), and a third — the two-host smoke test — gates every release (it needs a logged-in Claude and an installed Codex, so it runs on the release machine, not in CI):
 
 ```bash
-bash testing/validate-consistency.sh   # 15 checks: versions, frontmatter, paths, components, hooks, cross-host packaging (agent ↔ Codex port), thin core
+bash testing/validate-consistency.sh   # 19 checks: versions, frontmatter, paths, components, hooks, cross-host packaging (agent ↔ Codex port), thin core, the context manifest, the MCP allow-list, fixture regions, search types
 python3 testing/skill_lint.py          # 25 named checks
 bash testing/host-smoke.sh             # loads the tree on Claude Code AND its HEAD on Codex CLI — release blocker, run locally after the commit
 ```

@@ -41,32 +41,17 @@ Key context used by this skill:
 
 ### Step 0.5: Vault Context Search (Optional)
 
-> Requires: `references/vault-protocol.md` → Step 0.5
+> Requires: `references/search-protocol.md` (since v3.16.0 — the search, the rating, what is taken silently, the block of variants; it asks nothing in the middle of the run)
 
-IF vault_level > L0 (detected during Step 0h):
+Follow `references/search-protocol.md` with `--skill write-concept`. This skill's types — a weight, not a filter: `competitive-analysis`, `market-research`, `ux-benchmark`, `hypothesis`, `decision`, `requirements`; and since v3.9.0, only while `judgment.build_first` is `on`, `walkthrough`, `ab-test-results`, `prototype` — they can suppress the Step 1 build-first line (`references/judgment-blocks.md` §2) and on their own never raise the block of variants (search-protocol §11).
 
-1. Search vault for relevant prior artifacts:
-   - Types: `competitive-analysis`, `market-research`, `ux-benchmark`, `hypothesis`, `decision`, `requirements`, and since v3.9.0, only while `judgment.build_first` is `on`, `walkthrough`, `ab-test-results`, `prototype` (they can suppress the Step 1 build-first line, `references/judgment-blocks.md` §2)
-   - Product: active product
-   - Tags: keywords from user's feature idea or problem statement
-   - Status: `active`, `draft`
-   - Sort: `created DESC`, limit: 10
+What is taken feeds the concept:
+- research findings → Problem Statement and Proposed Solution;
+- prior hypotheses → the basis of the concept;
+- decisions → respected, referenced in the rationale;
+- existing requirements → no duplication, referenced as related work.
 
-2. IF results found (hits of only those three v3.9.0 types do not count — they then only suppress the build-first line, and join the list below only when other hits already show it):
-   - Display: "Found {N} related artifacts in your knowledge base that may inform this concept:"
-   - Show: title, type, date, brief summary
-   - Ask: "Use as context? [Yes / Select specific / Skip]"
-
-3. IF user accepts:
-   - Read full content of selected artifacts
-   - Use as input for the concept:
-     - Research findings → feed into Problem Statement and Proposed Solution
-     - Prior hypotheses → reference as basis for the concept
-     - Decisions → respect previous decisions, reference in rationale
-     - Existing requirements → avoid duplication, reference as related work
-   - Include "Informed by" section in concept metadata
-
-4. IF user skips OR no results → continue normally
+The taken notes go into an "Informed by" section of the concept metadata.
 
 ## Step T — Template Resolution
 
@@ -354,6 +339,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 - **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
 - **`references/vault-protocol.md`** — vault context search and save protocols
+- **`references/search-protocol.md`** — Step 0.5: the search, what is taken silently, the block of variants (since v3.16.0)
 - **`references/vault-schema.md`** — vault artifact schema and metadata structure
 - **`references/prd-structure.md`** — detailed templates for each PRD block
 - **`references/judgment-blocks.md`** — skill-local (since v3.9.0): the riskiest assumption, the Step 1 build-first line and its paths, the Step 4 pre-mortem and kill criteria, Step 8 with a build-first prototype
