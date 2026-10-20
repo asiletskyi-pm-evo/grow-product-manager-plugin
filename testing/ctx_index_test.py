@@ -520,6 +520,28 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = env.run("index", "status")
     check("ctx index status on a damaged index: built again, exit 0", rc == 0 and res and res.get("files") == len(live)
           and "built again" in out and os.path.isfile(db + ".broken"), (rc, out[-400:]))
+    heads = ctx_index.Index(env.home).headings()
+    check("headings(): (section id, path, heading) of every section", len(heads) == ctx_index.Index(env.home).status()["sections"]
+          and all(isinstance(s, int) and isinstance(p, str) and isinstance(h, str) for s, p, h in heads)
+          and any(p == "Notes/Кошик — графік роботи продавця.md" and h.endswith("› Рішення") for _, p, h in heads), heads[:3])
+    idx_d = ctx_index.Index(env.home)
+    con = sqlite3.connect(idx_d.db_path)
+    try:
+        pages = [r[0] for r in con.execute("SELECT pageno FROM dbstat WHERE name = 'sections_fts_data' AND pagetype = 'leaf'")]
+        size = con.execute("PRAGMA page_size").fetchone()[0]
+    except sqlite3.Error:
+        pages = []
+    con.close()
+    if pages:
+        with open(idx_d.db_path, "r+b") as f:
+            for pg in pages:
+                f.seek((pg - 1) * size + 100)
+                f.write(b"\xff" * (size - 200))
+        idx_d.query(q("кошик продавця"), 5)
+        check("an FTS5 corruption is a damaged index (rebuild), not an expression the index did not take",
+              (idx_d.problem or "").startswith("індекс пошуку не читається (") and "fts5" in idx_d.problem, idx_d.problem)
+    else:
+        print("⚠️  skipped: this SQLite has no dbstat — the FTS5-corruption check needs it")
     import ctx as ctx_cli  # noqa: E402
     a = ctx_cli.build_parser().parse_args(["index", "status"])
     check("index is no writing command of the store", "index" not in ctx_cli.WRITING and not ctx_cli.writes(a))

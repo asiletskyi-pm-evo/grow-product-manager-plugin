@@ -14,7 +14,7 @@ Stdlib only; run from the repo root:
 
   env -u GROW_PM_CONTEXT_PATH -u GROW_PM_PROVIDER_PATHS python3 testing/ctx_search_test.py
 """
-import datetime, json, os, shutil, sqlite3, sys, tempfile, time
+import datetime, hashlib, json, os, shutil, sqlite3, sys, tempfile, time, unicodedata
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -562,6 +562,225 @@ with tempfile.TemporaryDirectory() as d:
     errs = cr.check_search_types(ROOT, map_path=proto)
     check("…a row that is not a list of type names is an error naming the skill",
           len(errs) == 1 and errs[0].startswith("knowledge-library:"), errs)
+
+# ------------------------------------------------------------------ Task 7: without duplicates — the five keys of dedup
+def entry(path, heading="", score=1.0, source="own", sid=None, flags=(), **kw):
+    """An entry as run hands it to dedup: one (path, heading) of the fused lists, weighed by the priors — its score, its
+    marks, the hits that found it and, for an own section, its id."""
+    h = cs_.Hit(path, heading, source, 1, section_id=sid, list="%s|v0" % source, terms=None, asked=1)
+    e = {"path": path, "heading": heading, "score": score, "flags": list(flags), "hits": [h], "section_id": sid,
+         "title": path.rsplit("/", 1)[-1][:-3], "type": "", "product": "", "date": ""}
+    e.update(kw)
+    return e
+
+
+def meta_of(path, **kw):
+    m = {"path": path, "title": path.rsplit("/", 1)[-1][:-3], "date": "2026-10-01", "confluence_id": "", "hash": path,
+         "size": 100, "links": [], "version_key": None, "sensitive": False}
+    m.update(kw)
+    return m
+
+
+P = "Notes/Кошик — графік роботи продавця.md"
+check("candidate_id: the first 10 hex digits of sha1(path#heading)", cs_.candidate_id(P, "A › B")
+      == hashlib.sha1((P + "#A › B").encode("utf-8")).hexdigest()[:10] and len(cs_.candidate_id("a.md", "")) == 10)
+out = cs_.dedup([entry(P, "K › Рішення", 0.05, sid=1), entry(P, "K › Проблема", 0.04, sid=2),
+                 entry(P, "K › Метрики", 0.03, sid=3), entry(unicodedata.normalize("NFD", P), "", 0.02, source="zorg-brain"),
+                 entry("Notes/b.md", "", 0.06, sid=9)], {})
+k = next((c for c in out if c["path"] == P), None)
+check("key 1: one candidate per file (NFC), whatever the source or the section; best first",
+      [c["path"] for c in out] == [P, "Notes/b.md"], [(c["path"], c["score"]) for c in out])
+check("…its sources a list, the own index first", k and k["source"] == ["own", "zorg-brain"], k and k["source"])
+check("…its heading the best own section; at most two sections of one note",
+      k and k["heading"] == "K › Рішення" and [s["heading"] for s in k["sections"]] == ["K › Рішення", "K › Проблема"],
+      k and k["sections"])
+check("…its score the sum of what it keeps: two sections and the other source's note", k and abs(k["score"] - 0.11) < 1e-9,
+      k and k["score"])
+g = entry("g.md", "A", 0.02, sid=1, flags=["лише глосарій"])
+g["hits"][0]["list"] = "own|g0"
+out = cs_.dedup([g, entry("g.md", "B", 0.01, sid=2)], {})
+check("…a mark of the hits is the whole note's: found by a variant too, it is not «лише глосарій»", out[0]["flags"] == [],
+      out[0]["flags"])
+out = cs_.dedup([entry("s.md", "A", 0.02, sid=1, sensitive=True), entry("s.md", "", 0.01, source="zorg-brain")], {})
+check("…sensitive when any source says so", out[0].get("sensitive") is True, out[0])
+
+D1, D2 = "Notes/Knowledge/Delivery slots (900100200).md", "ZorgCore/Pages/Delivery slots (900100200).md"
+metas = [meta_of(D1, confluence_id="900100200", date="2026-10-05", size=300),
+         meta_of(D2, confluence_id="900100200", date="2026-09-01", size=120)]
+out = cs_.dedup([entry(D2, "Delivery slots", 0.05, sid=1), entry(D1, "Delivery slots", 0.02, sid=2)], metas)
+check("key 2: one Confluence page twice on disk — the newer stays, at the better place, the other named its twin",
+      [c["path"] for c in out] == [D1] and out[0]["flags"] == ["двійник " + D2] and abs(out[0]["score"] - 0.05) < 1e-9, out)
+M1, M2 = "Notes/Mobile cart notes.md", "Notes/Archive/Mobile cart notes (copy).md"
+out = cs_.dedup([entry(M1, "", 0.03, sid=1), entry(M2, "", 0.02, sid=2)],
+                {M1: meta_of(M1, hash="h"), M2: meta_of(M2, hash="h")})
+check("key 3: the same content twice — the better one stays, the other named its twin",
+      [c["path"] for c in out] == [M1] and out[0]["flags"] == ["двійник " + M2], out)
+E1, E2 = "Notes/Epics/Epic — PROJ-77.md", "ZorgCore/Epics/Epic — PROJ-77.md"
+metas = {E1: meta_of(E1, title="Epic — PROJ-77", links=["epic — proj-77"], size=180, date="2026-10-01"),
+         E2: meta_of(E2, title="Epic — PROJ-77", size=640, date="2026-09-28")}
+out = cs_.dedup([entry(E1, "", 0.04, sid=1), entry(E2, "Epic — PROJ-77 › Goal", 0.03, sid=2)], metas)
+check("key 4: the hub of your layer and the core page it links — the one with more text stays, the other its twin",
+      [c["path"] for c in out] == [E2] and out[0]["flags"] == ["двійник " + E1] and abs(out[0]["score"] - 0.04) < 1e-9, out)
+metas[E1]["links"] = []
+out = cs_.dedup([entry(E1, "", 0.04, sid=1), entry(E2, "Epic — PROJ-77 › Goal", 0.03, sid=2)], metas)
+check("…the same title with no link between them is two notes", sorted(c["path"] for c in out) == sorted([E1, E2]), out)
+R1, R2, R3 = ("Notes/Roadmap Q4 — draft v1.md", "Notes/Roadmap Q4 — draft v2.md", "Notes/Roadmap Q4 — draft v3.md")
+metas = {R2: meta_of(R2, version_key="Notes/roadmap q4", date="2026-09-10"),
+         R3: meta_of(R3, version_key="Notes/roadmap q4", date="2026-10-05")}
+out = cs_.dedup([entry(R2, "Themes", 0.05, sid=1), entry(R3, "Themes", 0.01, sid=2)], metas)
+check("key 5: versions — the newer stays, at the better place, and says how many older ones there are",
+      [c["path"] for c in out] == [R3] and out[0]["flags"] == ["є старіші версії: 1"] and abs(out[0]["score"] - 0.05) < 1e-9, out)
+metas[R1] = meta_of(R1, version_key="Notes/roadmap q4", date="2026-08-01")
+out = cs_.dedup([entry(R2, "Themes", 0.05, sid=1)], metas)
+check("…an older version found alone is named the older version of the newest, and its own older ones are counted",
+      [c["path"] for c in out] == [R2] and out[0]["flags"] == ["старіша версія " + R3, "є старіші версії: 1"], out)
+S1, S2 = "Notes/Meetings/Standup 2026-10-01.md", "Notes/Meetings/Standup 2026-10-08.md"
+out = cs_.dedup([entry(S1, "", 0.02, sid=1), entry(S2, "", 0.01, sid=2)],
+                {S1: meta_of(S1, date="2026-10-01"), S2: meta_of(S2, date="2026-10-08")})
+check("…a series by date is no set of versions: both stay", [c["path"] for c in out] == [S1, S2], out)
+
+# ------------------------------------------------------------------ Task 7: the snippet
+long_text = (("Вступ без потрібних слів. " * 30) + "Показувати графік роботи продавця прямо в кошику мобільного застосунку. "
+             + ("Хвіст тексту без них. " * 40))
+s = cs_.snippet(long_text, st.query_terms("кошик мобільний"))
+check("snippet: a window around the first match, ≤ 300 characters, the matches in «», a cut end marked",
+      len(s) <= 300 and s.startswith("…") and s.endswith("…") and "«кошику» «мобільного»" in s, s)
+check("…the window starts near the match, not at the text's start", s.find("«кошику»") < 120, s)
+check("…a narrower width holds", len(cs_.snippet(long_text, st.query_terms("кошик"), width=60)) <= 60)
+check("…no match: the start of the text, whole when it is short", cs_.snippet("Перше речення. Друге.", ["зовсім"])
+      == "Перше речення. Друге.")
+check("…the lines folded into one", cs_.snippet("Рядок один.\n\n- кошик тут\n", ["кошик"]) == "Рядок один. - «кошик» тут")
+check("…a word written decomposed (NFD) is matched", "«Мій»" in cs_.snippet(unicodedata.normalize("NFD", "Це Мій кошик"),
+                                                                          st.query_terms("мій")))
+check("…a short term matches a whole word only, as the index matched it", cs_.snippet("q4 q42 x", ["q4"]) == "«q4» q42 x")
+check("last_path: <home>/.grow-pm/index/last.json", cs_.last_path("/h") == os.path.join("/h", ".grow-pm", "index", "last.json"))
+
+# ------------------------------------------------------------------ Task 7: run, last.json, get
+FIELDS = ("id", "path", "heading", "title", "type", "product", "date", "source", "flags", "matched", "snippet", "score")
+
+
+def damage(idx, table, inside=False):
+    """Overwrite the pages of one table of the index (SQLite's dbstat names them); [] when this SQLite has no dbstat."""
+    con = sqlite3.connect(idx.db_path)
+    try:
+        pages = [r[0] for r in con.execute("SELECT pageno FROM dbstat WHERE name = ? AND pagetype = 'leaf'", (table,))]
+        size = con.execute("PRAGMA page_size").fetchone()[0]
+    except sqlite3.Error:
+        pages, size = [], 0
+    con.close()
+    with open(idx.db_path, "r+b") as f:
+        for pg in pages:
+            f.seek((pg - 1) * size + (100 if inside else 0))
+            f.write(b"\xff" * (size - 200 if inside else size))
+    return pages
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    build_brain(env.brain, env.vault, BRAIN_NOTES)
+    sx = env.sctx()
+    before_vault = tree(env.vault)
+    check("(no index before the first search)", not os.path.exists(os.path.join(env.home, ".grow-pm", "index", "sections.sqlite")))
+    res = cs_.run(sx, ["графік роботи продавця", "seller working hours"], now=NOW)
+    check("run: candidates, notes, sources, index", {"candidates", "notes", "sources", "index"} <= set(res), sorted(res))
+    check("…the index is refreshed first", (res.get("index") or {}).get("files") == 19, res.get("index"))
+    check("…the sources asked, each with whether it answered", res["sources"] == [
+        {"id": "own", "kind": "own", "answered": True}, {"id": "zorg-brain", "kind": "local", "answered": True}], res["sources"])
+    cands = res["candidates"]
+    check("…every candidate has its fields", cands and all(set(FIELDS) <= set(c) for c in cands), cands[:1])
+    check("…one candidate per file", len({c["path"] for c in cands}) == len(cands), [c["path"] for c in cands])
+    k = next((c for c in cands if c["path"] == P), None)
+    check("…the note of both sources is one candidate of both, its heading an own section",
+          k and k["source"] == ["own", "zorg-brain"] and k["heading"].startswith("Кошик — графік роботи продавця › "), k)
+    check("…its id the hash of its path and heading", k and k["id"] == cs_.candidate_id(P, k["heading"]), k)
+    check("…its snippet from the section, the matches in «», ≤ 300", k and "«" in k["snippet"] and len(k["snippet"]) <= 300, k)
+    check("…the variants that found it, counted from 1", k and k["matched"] == [1, 2], k)
+    check("…its title, type, product and date from the own index", k and (k["title"], k["type"], k["product"], k["date"][:10])
+          == ("Кошик — графік роботи продавця", "concept", "Zorg App", "2026-09-15"), k)
+    gc = next((c for c in cands if c["path"] == "Growth/Cart experiments.md"), None)
+    check("…a note only the local index knows: its source, no heading, the snippet the index gave",
+          gc and gc["source"] == ["zorg-brain"] and gc["heading"] == "" and "«" in gc["snippet"], gc)
+    check("…the scores best first", [c["score"] for c in cands] == sorted((c["score"] for c in cands), reverse=True))
+    last = res.get("last") or {}
+    check("…the ids of the search for last.json: source, path, heading, kind", k and k["id"] in last
+          and all({"source", "path", "heading", "kind"} <= set(v) for v in last.values())
+          and last[k["id"]]["kind"] == "own" and gc and last[gc["id"]]["kind"] == "local", last)
+    check("…limit", len(cs_.run(sx, ["seller working hours"], limit=2, now=NOW)["candidates"]) == 2)
+    stop = cs_.run(sx, ["що і як?"], now=NOW)
+    check("…an all-stop query: no candidates, no error", stop["candidates"] == [] and stop["notes"] == []
+          and all(s["answered"] for s in stop["sources"]), stop)
+
+    cs_.save_last(env.home, last)
+    check("save_last writes <home>/.grow-pm/index/last.json", json.load(open(cs_.last_path(env.home), encoding="utf-8")) == last)
+    header, text = cs_.get(sx, k["id"])
+    check("get: the provenance line `> [own · <path> › <heading> · <day>]` and the section's text",
+          header == "> [own · %s › %s · 2026-09-15]" % (P, k["heading"]) and text.strip()
+          and text.strip() in read(env.vault, *P.split("/")), (header, text))
+    check("…the second section of the note too", len(k["sections"]) == 2
+          and cs_.get(sx, k["sections"][1]["id"])[0].startswith("> [own · %s › " % P), k["sections"])
+    hg, tg = cs_.get(sx, gc["id"])
+    check("…a note only the local index knows is read from the vault", hg == "> [zorg-brain · Growth/Cart experiments.md · 2026-08-01]"
+          and "seller's hours" in tg and "type:" not in tg, (hg, tg))
+    cs_.save_last(env.home, {})
+    check("…an own section another search listed is found in the index by its id", cs_.get(sx, k["id"]) == (header, text))
+    try:
+        cs_.get(sx, "0000000000")
+        got = None
+    except cs_.GetError as e:
+        got = e
+    check("…an unknown id: GetError, code 3, one line", got is not None and got.code == 3 and "\n" not in str(got), got)
+    check("run, save_last and get write nothing to the vault", tree(env.vault) == before_vault)
+
+    idx = ci.Index(env.home)
+    for table, inside in (("sections_fts_idx", False), ("sections_fts_data", True)):
+        ci.Index(env.home).rebuild(sx["roots"], sx["store_rel"], sx["blocks_rels"])
+        if not damage(idx, table, inside):
+            print("⚠️  skipped: this SQLite has no dbstat — the damaged-index check needs it")
+            break
+        idx.refresh(sx["roots"], sx["store_rel"], sx["blocks_rels"])
+        idx.query(st.fts_or(st.query_terms("кошик")), 5)
+        check("(%s damaged: the refresh does not see it, a query does)" % table,
+              (idx.problem or "").startswith("індекс пошуку не читається ("), idx.problem)
+        res_b = cs_.run(sx, ["графік роботи продавця"], now=NOW)
+        check("a damaged index (%s): run rebuilds it once and answers, one line says so" % table,
+              any(c["path"] == P for c in res_b["candidates"]) and cs_.REBUILT_NOTE in res_b["notes"]
+              and not any(n.startswith("індекс пошуку не читається") for n in res_b["notes"]), res_b["notes"])
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    NOTE = ("---\ntype: ab-test-results\nupdated: 2026-08-01\n---\n# Cart experiments\n\n## Result\n\n"
+            "The mobile cart test lifted the paid orders.\n")
+    with FakeMcp(tree={"Growth/Cart experiments.md": NOTE}) as s:
+        s.handlers["vault_search"] = lambda args: ([{"path": "Growth/Cart experiments.md", "title": "Cart experiments",
+                                                     "updated": "2026-08-01", "snippet": "the «mobile cart» test"}], False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        res = cs_.run(sx, ["mobile cart test"], which=("mcp",), now=NOW)
+        c = next((x for x in res["candidates"] if x["path"] == "@zorg-growth/Cart experiments.md"), None)
+        check("run, MCP only: the server's note is a candidate of its repository", c and c["source"] == ["zorg-growth"]
+              and res["sources"] == [{"id": "zorg-growth", "kind": "mcp", "answered": True}] and res["index"] is None,
+              (res["sources"], res["candidates"], res.get("index")))
+        cs_.save_last(env.home, res["last"])
+        header, text = cs_.get(sx, c["id"])
+        check("get of an MCP candidate: vault_get_note, the note's text without its frontmatter",
+              header == "> [zorg-growth · @zorg-growth/Cart experiments.md · 2026-08-01]" and text.startswith("# Cart experiments")
+              and "lifted the paid orders" in text and "type:" not in text, (header, text))
+        asked = [json.dumps(x.get("body"), ensure_ascii=False) for x in s.seen]
+        check("…asked for the path exactly as the server gave it",
+              any("vault_get_note" in b and "Growth/Cart experiments.md" in b for b in asked), asked[-2:])
+    try:
+        cs_.get(sx, c["id"])
+        got = None
+    except cs_.GetError as e:
+        got = e
+    check("…a server that does not answer: GetError, code 5, naming the repository", got is not None and got.code == 5
+          and "zorg-growth" in str(got), got)
+    with FakeMcp(fail_status=503) as s:
+        env.reg("zorg-growth", growth_reg(s.url))
+        res = cs_.run(env.sctx(), ["mobile cart test"], which=("mcp",), now=NOW)
+        check("run: a source that does not answer is marked so, with its line", res["sources"] == [
+            {"id": "zorg-growth", "kind": "mcp", "answered": False}] and res["notes"] == ["zorg-growth не відповів — без нього"]
+              and res["candidates"] == [], res)
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

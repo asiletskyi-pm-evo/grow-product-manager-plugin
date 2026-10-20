@@ -153,8 +153,24 @@
                                 не переглянуто" when the refresh ran out of time. No vault and no core folder: exit 3; rebuild
                                 while another process holds index.lock: exit 4. CTX_RESULT: action, schema, updated, files,
                                 sections, pending, skipped_dataless
+  search --q TEXT [--q TEXT …] [--skill S] [--product P] [--limit N] [--sources own,local,mcp] [--no-hints] [--json]
+                                (since v3.16.0; scripts/ctx_search.py) the first --q is the question, the others its
+                                variants: the section index (refreshed first, 30 s), the local indexes and the MCP of a
+                                repository with no folder on disk, every variant × source; RRF, the priors, one candidate per
+                                note (at most two sections), the best N (50). Lines: `Пошук: <n> варіант(и) · джерела: <ids> ·
+                                кандидатів <k>`, per candidate `N. <title> › <heading> · <sources> · <type> · <date>[ ·
+                                <mark>…]`, its snippet, `id <id> · варіанти <i,…>`, then the notes (a source that did not
+                                answer, the index's state). --json: CTX_RESULT only. CTX_RESULT: candidates, notes, sources
+                                [{id, kind, answered}], index, counts. No --q (and no --get), a bad --sources/--limit/--skill,
+                                or nothing to search (no vault, no repository, no source): exit 3; no source answered: exit 5;
+                                0 candidates is exit 0. No store needed. The ids go to <home>/.grow-pm/index/last.json.
+  search --get ID [--json]      one section of the last search (or of the section index, by its id):
+                                `> [<source> · <path> › <heading> · <day>]` and its text (an MCP note through vault_get_note).
+                                An unknown id, note or section: exit 3; the server did not answer: exit 5. --json: the header
+                                and the text in CTX_RESULT only
 
-`read` and `explain` take no lock and write nothing; `index` takes no store lock and writes only its own folder.
+`read` and `explain` take no lock and write nothing; `index` and `search` take no store lock and write only the index's
+folder.
 Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
 registration is not read in time — 3 s each, 6 s for all: the boundary cannot be checked, exit 4), imports direct
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
@@ -168,7 +184,8 @@ a summary that cannot be saved never changes the exit code. The last stdout line
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
 unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists) ·
 5 a repository is unreachable, or its blocks file is no source (empty, cut, foreign, or none of your based blocks)
-— nothing written (provider commands). `provider apply`: 2 also means answers are awaited.
+— nothing written (provider commands); for `search`, no source answered. `provider apply`: 2 also means answers are
+awaited.
 Semantics: references/context-protocol.md. Stdlib only.
 """
 import argparse
@@ -975,6 +992,60 @@ def cmd_index(a, c):
                "sections": s["sections"], "pending": s["pending"], "skipped_dataless": s["skipped_dataless"]}
 
 
+def _search_kinds(value):
+    """The kinds of `--sources own,local,mcp` (all three when not given); an unknown or empty one is bad usage."""
+    if value is None:
+        return cs_.KINDS
+    kinds = [k.strip() for k in value.split(",") if k.strip()]
+    bad = [k for k in kinds if k not in cs_.KINDS]
+    if not kinds or bad:
+        raise Usage("--sources takes %s, comma-separated%s" % (", ".join(cs_.KINDS), ": not %s" % ", ".join(bad) if bad else ""))
+    return tuple(dict.fromkeys(kinds))
+
+
+def cmd_search(a, c):
+    """`search`: the question and its variants through the section index, the local indexes and MCP
+    (ctx_search.run), or `--get ID`: one section with its line of provenance (ctx_search.get). Reads only — no store
+    lock, no import, the store need not exist; writes only `<home>/.grow-pm/index/` (the index, last.json)."""
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    if a.get is not None:
+        if a.q:
+            raise Usage("search takes --q or --get, not both")
+        try:
+            header, text = cs_.get(sctx, a.get)
+        except cs_.GetError as e:
+            print("search: %s" % e)
+            return e.code, {"command": "search", "action": "get", "id": a.get, "error": str(e)}
+        if not a.json:
+            print(header)
+            print(text)
+        return 0, {"command": "search", "action": "get", "id": a.get, "header": header, "text": text if a.json else None}
+    if not a.q:
+        raise Usage("search takes --q TEXT (once or more) or --get ID")
+    which = _search_kinds(a.sources)
+    if a.limit < 1:
+        raise Usage("--limit takes a number from 1")
+    if a.skill:
+        try:
+            cr.manifest_for(cr.load_manifest(), a.skill)
+        except KeyError:
+            raise Usage("no such skill: %s" % a.skill)
+    res = cs_.run(sctx, a.q, skill=a.skill, product=a.product, limit=a.limit, which=which, use_hints=not a.no_hints)
+    last = res.pop("last", {})
+    said = sum(1 for s in res["sources"] if s["answered"])
+    res = dict(res, command="search", counts={"candidates": len(res["candidates"]), "sources": said,
+                                              "skipped": len(res["sources"]) - said})
+    if not res["sources"]:
+        print("search: nothing to search — no vault in local-context.md, no registered repository with a folder on disk, "
+              "no local index or MCP%s" % (" of the kinds asked (%s)" % ",".join(which) if a.sources else ""))
+        return 3, dict(res, error="nothing to search")
+    if said:
+        cs_.save_last(c.home, last)
+    if not a.json:
+        sys.stdout.write(cs_.render(res, a.q))
+    return (0 if said else 5), res
+
+
 def _unread(skipped):
     """The registrations that could not be read, as `<path> (<reason>)`, for a message."""
     return "; ".join("%s (%s)" % (p, why) for p, why in skipped)
@@ -1461,6 +1532,9 @@ def build_parser():
     ip = sub.add_parser("index").add_subparsers(dest="action", required=True, parser_class=Parser)
     ip.add_parser("status", parents=[common])
     ip.add_parser("rebuild", parents=[common])
+    sp = sub.add_parser("search", parents=[common]); sp.add_argument("--q", action="append"); sp.add_argument("--get")
+    sp.add_argument("--skill"); sp.add_argument("--product"); sp.add_argument("--limit", type=int, default=cs_.LIST_LIMIT)
+    sp.add_argument("--sources"); sp.add_argument("--no-hints", action="store_true"); sp.add_argument("--json", action="store_true")
     kp = sub.add_parser("slot").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = kp.add_parser("bind", parents=[common]); sp.add_argument("repo"); sp.add_argument("target"); sp.add_argument("slot")
     sp.add_argument("--team")
@@ -1486,7 +1560,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
-            "index": cmd_index}
+            "index": cmd_index, "search": cmd_search}
 
 
 def emit(result, conflict=None):

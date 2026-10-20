@@ -19,11 +19,21 @@ priors then weigh a candidate by what it is — the skill's artifact types × 1.
 - fuse              RRF over the lists.
 - priors            the weights and the marks of the candidates.
 - skill_types       a skill's artifact types: `search_types` of references/context-manifest.yaml.
+- dedup             one candidate per note (the five keys of spec §6: the same path, Confluence page, content, a twin
+                    of your layer and the core, versions), at most two sections of a note.
+- candidate_id      a section's stable id: sha1(`path#heading`)[:10].
+- snippet           ≤ 300 characters around the first match, the matches in «».
+- run               a whole search: the index refreshed, gather → fuse → priors → dedup → the best `limit`.
+- last_path / save_last / get   the ids of the last search beside the index, and `--get`: one section with its line
+                    of provenance `> [<source> · <path> › <heading> · <day>]`.
+- render            the human output of `ctx search`.
 
-Reads only — the vaults, the cores, the index under <home>/.grow-pm/index/, a local index (mode=ro), the glossary, the
-block states of the store; the network only for an MCP source. Writes nothing. Stdlib only.
+Reads the vaults, the cores, the index under <home>/.grow-pm/index/, a local index (mode=ro), the glossary, the block
+states of the store; the network only for an MCP source. Writes only <home>/.grow-pm/index/ — the index (run refreshes
+it) and last.json (save_last) — never the store or a vault. Stdlib only.
 """
 import datetime
+import hashlib
 import json
 import os
 import sqlite3
@@ -42,6 +52,7 @@ import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_repos as crp  # noqa: E402
 import ctx_stem as st  # noqa: E402
+import ctx_store as cst  # noqa: E402
 
 N = cc.N
 KINDS = ("own", "local", "mcp")
@@ -58,6 +69,15 @@ SCHEMA_NOTE = "індекс %s має незнайому схему — без �
 PENDING_NOTE = "індекс оновлюється: %d файлів ще не переглянуто"
 GLOSSARY_NOTE = "глосарій прочитано не весь: %s"
 HUB, STALE, SNAPSHOT, GLOSSARY_ONLY, ONE_WORD = "хаб", "застаріле", "знімок від %s", "лише глосарій", "одне слово"
+TWIN, OLDER, NEWER_EXISTS, SENSITIVE = "двійник %s", "є старіші версії: %d", "старіша версія %s", "sensitive"
+REBUILT_NOTE = "індекс пошуку був зіпсований або старий — збудовано наново"
+REFRESH_NOTE = "індекс пошуку не оновлено (%s) — пошук по тому, що є"
+COMMAND_S = 60.0                # the whole search
+SNIPPET_W = 300                 # a snippet's characters at most
+MAX_SECTIONS = 2                # sections of one note in the list
+LAST_NAME = "last.json"
+_META = ("title", "type", "product", "status", "date", "ttl_date")
+_BROKEN = ci.BROKEN_NOTE.split("%s")[0]      # Index.problem of a file SQLite cannot read (a busy one is BUSY_NOTE)
 _CLASS_DIR = {"teams": "team_card_dir", "people": "people_dir"}     # any other class: `<class>_dir`
 _FM_DATES = ci.DATE_KEYS      # a local hit's date from its frontmatter, in the index's order
 
@@ -684,13 +704,22 @@ def priors(cands, skill_types, product, now, ttl, snaps=None):
         snap = _longest(path, snaps)
         if snap:
             _flag(c, SNAPSHOT % snap)
-        hits = c.get("hits") or []
-        if hits and all(_glossary_key(h.get("list")) for h in hits):
-            _flag(c, GLOSSARY_ONLY)
-        known = [h for h in hits if not _glossary_key(h.get("list")) and isinstance(h.get("terms"), int)]
-        if known and max(h["terms"] for h in known) == 1 and max(h.get("asked") or 0 for h in known) >= 2:
-            _flag(c, ONE_WORD)
+        for mark in _hit_marks(c.get("hits") or []):
+            _flag(c, mark)
         c["score"] = score
+
+
+def _hit_marks(hits):
+    """The marks a candidate owes to the hits that found it: `лише глосарій` when every hit came from a glossary list;
+    `одне слово` when the variants' hits held one term at best of an expression of two or more (hits whose `terms` is
+    not known do not count)."""
+    out = []
+    if hits and all(_glossary_key(h.get("list")) for h in hits):
+        out.append(GLOSSARY_ONLY)
+    known = [h for h in hits if not _glossary_key(h.get("list")) and isinstance(h.get("terms"), int)]
+    if known and max(h["terms"] for h in known) == 1 and max(h.get("asked") or 0 for h in known) >= 2:
+        out.append(ONE_WORD)
+    return out
 
 
 def skill_types(skill):
@@ -704,3 +733,472 @@ def skill_types(skill):
         return []
     v = entry.get("search_types") if isinstance(entry, dict) else None
     return [str(x) for x in v] if isinstance(v, list) else []
+
+
+# ------------------------------------------------------------------ one candidate per note
+def candidate_id(path, heading):
+    """A candidate's id: the first 10 hex digits of sha1(`path#heading`) — a section has the same id in every search."""
+    return hashlib.sha1(("%s#%s" % (path, heading or "")).encode("utf-8")).hexdigest()[:10]
+
+
+def _entries(lists, fused):
+    """One entry per key of the fusion (NFC path, heading), for the priors and dedup: its score, the hits that found it
+    and what the sources said of the note — the own index's word first (the local copy), else the first that said it;
+    an own section's id and text, an MCP hit's server path (`remote`), the first snippet a source gave."""
+    by = {}
+    for hits in (lists or {}).values():
+        for h in hits or []:
+            by.setdefault((N(h["path"]), h.get("heading") or ""), []).append(h)
+    out = []
+    for (path, heading), score in fused.items():
+        hits = by.get((path, heading), [])
+        own = next((h for h in hits if h.get("section_id") is not None), None)
+        said = ([own] if own else []) + [h for h in hits if h is not own]
+        e = {"path": path, "heading": heading, "score": score, "hits": hits, "flags": [],
+             "section_id": own["section_id"] if own else None, "text": own.get("text") if own else None,
+             "hub": own.get("hub") if own else next((h["hub"] for h in hits if h.get("hub") is not None), None),
+             "sensitive": any(h.get("sensitive") is True for h in hits),
+             "remote": next((h["remote"] for h in hits if h.get("remote")), None),
+             "snippet": next((h["snippet"] for h in hits if h.get("snippet")), None)}
+        for k in _META:
+            e[k] = next((h[k] for h in said if h.get(k)), "")
+        out.append(e)
+    return out
+
+
+def _metas(notes_meta):
+    """{NFC path: metadata} of Index.notes() (a list) or of a dict by path."""
+    if isinstance(notes_meta, dict):
+        return {N(p): m for p, m in notes_meta.items() if isinstance(m, dict)}
+    return {N(m["path"]): m for m in notes_meta or [] if isinstance(m, dict) and m.get("path")}
+
+
+def _order(c):
+    return (-c["score"], c["path"], c.get("heading") or "")
+
+
+def _merge(path, entries):
+    """Key 1 — the entries of one file are one candidate: its heading the best own section (the local copy), at most
+    MAX_SECTIONS sections of it kept, its score the sum of what it keeps (those sections and the note as another source
+    found it), its sources a list (`own` first), its marks those of its entries — the marks of the hits counted again
+    over all of them — and `sensitive` when any source says so."""
+    entries = sorted(entries, key=_order)
+    secs = [e for e in entries if e.get("section_id") is not None]
+    rest = [e for e in entries if e.get("section_id") is None]
+    kept = secs[:MAX_SECTIONS] + rest
+    c = dict((secs or rest)[0])
+    for k in _META:
+        c[k] = next((e[k] for e in [c] + entries if e.get(k)), "")
+    hits = [h for e in entries for h in e.get("hits") or []]
+    names = []
+    for h in hits:
+        if h.get("source") and h["source"] not in names:
+            names.append(h["source"])
+    flags = []
+    for e in entries:
+        flags += [f for f in e.get("flags") or [] if f not in flags and f not in (GLOSSARY_ONLY, ONE_WORD)]
+    c.update(path=path, score=sum(e["score"] for e in kept), hits=hits, source=sorted(names, key=lambda s: (s != "own", s)),
+             flags=flags + _hit_marks(hits), sensitive=any(e.get("sensitive") for e in entries),
+             sections=[{"heading": e["heading"], "section_id": e["section_id"]} for e in secs[:MAX_SECTIONS]]
+             or [{"heading": c["heading"], "section_id": None}],
+             remote=next((e["remote"] for e in entries if e.get("remote")), None),
+             snippet=c.get("snippet") or next((e["snippet"] for e in entries if e.get("snippet")), None))
+    return c
+
+
+def _title_key(title):
+    return " ".join(N(str(title or "")).split()).casefold()
+
+
+def dedup(cands, notes_meta):
+    """The candidates without duplicates, best first — the keys of the spec (§6) in turn:
+    1. the same path (NFC) — one candidate (`_merge`);
+    2. the same `confluence_id` in two files of the index — the newer by its date stays, marked `двійник <path>` of
+       the other;
+    3. the same `hash` — the better one stays, marked `двійник <path>`;
+    4. the same title (normalised) when the `links` of one hold the file name of the other (a hub of your layer and
+       the core page) — the one with more text (`size`) stays, marked `двійник <path>`;
+    5. the same `version_key` — the newer by its date stays, marked `є старіші версії: N` (the older ones the index
+       holds); a version that is not the newest the index holds is marked `старіша версія <path of the newest>`.
+    A candidate that stays keeps the best score of those it stands for. `cands` are entries (one per path and heading,
+    weighed by the priors: path, heading, score, flags, hits, section_id, title, …); `notes_meta` Index.notes() — the
+    keys 2–5 read hash, size, links, version_key, confluence_id and date there, so they hold for files of the index.
+    `sensitive` (any source, or the index) is a mark too."""
+    groups = {}
+    for e in cands or []:
+        groups.setdefault(N(e["path"]), []).append(e)
+    out = sorted((_merge(p, es) for p, es in groups.items()), key=_order)
+    metas = _metas(notes_meta)
+    gone = set()
+
+    def meta(c):
+        return metas.get(c["path"]) or {}
+
+    def when(c):
+        return str(meta(c).get("date") or c.get("date") or "")
+
+    def fold(keep, others, mark=None):
+        for o in others:
+            if o is not keep and id(o) not in gone:
+                gone.add(id(o))
+                keep["score"] = max(keep["score"], o["score"])
+                if mark:
+                    _flag(keep, mark % o["path"])
+
+    def grouped(key):
+        by = {}
+        for c in out:
+            k = key(c) if id(c) not in gone else None
+            if k:
+                by.setdefault(k, []).append(c)
+        return [g for g in by.values() if len(g) > 1]
+
+    for g in grouped(lambda c: str(meta(c).get("confluence_id") or "").strip()):
+        fold(max(g, key=lambda c: (when(c), c["score"])), g, TWIN)
+    for g in grouped(lambda c: meta(c).get("hash")):
+        fold(g[0], g, TWIN)
+    for g in grouped(lambda c: _title_key(meta(c).get("title") or c.get("title"))):
+        comp = {id(c): id(c) for c in g}
+
+        def root(i):
+            while comp[i] != i:
+                i = comp[i]
+            return i
+        for a in g:
+            for b in g:
+                if a is not b and ci.name_key(b["path"]) in (meta(a).get("links") or []):
+                    comp[root(id(a))] = root(id(b))
+        parts = {}
+        for c in g:
+            parts.setdefault(root(id(c)), []).append(c)
+        for part in parts.values():
+            if len(part) > 1:
+                fold(max(part, key=lambda c: (meta(c).get("size") or 0, c["score"])), part, TWIN)
+    for g in grouped(lambda c: meta(c).get("version_key")):
+        fold(max(g, key=lambda c: (when(c), c["score"])), g)
+    live = [c for c in out if id(c) not in gone]
+    for c in live:
+        vk = meta(c).get("version_key")
+        if vk:
+            mine = when(c)
+            versions = [m for m in metas.values() if m.get("version_key") == vk]
+            newest = max(versions, key=lambda m: (str(m.get("date") or ""), N(m.get("path") or "")))
+            if str(newest.get("date") or "") > mine:
+                _flag(c, NEWER_EXISTS % N(newest["path"]))
+            older = sum(1 for m in versions if str(m.get("date") or "") < mine)
+            if older:
+                _flag(c, OLDER % older)
+        if c.get("sensitive") or meta(c).get("sensitive"):
+            c["sensitive"] = True
+            _flag(c, SENSITIVE)
+    return sorted(live, key=_order)
+
+
+# ------------------------------------------------------------------ the snippet
+def _fits(word, keys):
+    """Does the word's stem meet one of the keys as the index matched it: equal, or starting with a key of 4 letters
+    or more (the diacritics folded, as FTS5's remove_diacritics does)?"""
+    s = _fold(st.stem(word))
+    return any(s == k or (len(k) >= 4 and s.startswith(k)) for k in keys)
+
+
+def _cut(text, room):
+    """`text` cut to `room` characters at a space, with `…` (room counts it)."""
+    if len(text) <= room:
+        return text
+    part = text[:max(0, room - 1)]
+    space = part.rfind(" ")
+    return (part[:space] if space > 0 else part).rstrip() + "…"
+
+
+def snippet(text, terms, width=SNIPPET_W):
+    """At most `width` characters of `text` on one line (its whitespace folded, NFC): a window that starts a little before
+    the first word whose stem begins with one of `terms` (a term shorter than 4 letters: the whole stem), every such
+    word in the window in «»; `…` where the text is cut. No word matches: the start of the text."""
+    flat = " ".join(N(text or "").split())
+    if not flat or width < 1:
+        return ""
+    keys = [k for k in dict.fromkeys(_fold(st.norm(t)) for t in terms or [] if t) if k]
+    spans = [(m.start(), m.end()) for m in st._TOKEN.finditer(flat) if keys and _fits(m.group(), keys)]
+    start = 0
+    if spans and spans[0][0] > width // 4:
+        space = flat.find(" ", spans[0][0] - width // 4)
+        start = spans[0][0] if space < 0 or space >= spans[0][0] else space + 1
+    out, pos = ("…" if start else ""), start
+    for s, e in spans:
+        if s < pos:
+            continue
+        piece = flat[pos:s] + "«" + flat[s:e] + "»"
+        if len(out) + len(piece) + (1 if e < len(flat) else 0) > width:
+            break
+        out, pos = out + piece, e
+    return out + _cut(flat[pos:], width - len(out))
+
+
+# ------------------------------------------------------------------ run
+def _note(notes, more):
+    for n in more or []:
+        if n not in notes:
+            notes.append(n)
+
+
+def _kind(c):
+    """(kind, source) of the text a candidate is read from: `own` (an own section), `local` (the file on disk a local
+    index named) or `mcp` (the server)."""
+    if c.get("section_id") is not None:
+        return "own", "own"
+    hits = c.get("hits") or []
+    local = next((h for h in hits if not h.get("remote")), None)
+    if local is not None:
+        return "local", local["source"]
+    return "mcp", next((h["source"] for h in hits if h.get("remote")), (c.get("source") or [""])[0])
+
+
+def _public(c, terms):
+    """A candidate as the search prints it."""
+    path = c["path"]
+    if c.get("text") is not None:
+        snip = snippet(c["text"], terms)
+    else:
+        snip = _cut(" ".join(N(c.get("snippet") or "").split()), SNIPPET_W)
+    return {"id": candidate_id(path, c["heading"]), "path": path, "heading": c["heading"], "title": c.get("title") or "",
+            "type": c.get("type") or "", "product": c.get("product") or "", "date": c.get("date") or "",
+            "source": list(c["source"]), "flags": list(c["flags"]),
+            "matched": sorted({h.get("variant", 0) + 1 for h in c.get("hits") or []}), "snippet": snip,
+            "score": round(c["score"], 6),
+            "sections": [{"id": candidate_id(path, s["heading"]), "heading": s["heading"]} for s in c["sections"]]}
+
+
+def _last(c):
+    """The last.json entries of a candidate: {id: {source, path, heading, kind, title, date[, section_id][, remote]}}
+    — one per section it lists."""
+    kind, src = _kind(c)
+    base = {"source": src, "path": c["path"], "kind": kind, "title": c.get("title") or "", "date": c.get("date") or ""}
+    if c.get("remote"):
+        base["remote"] = c["remote"]
+    if kind != "own":
+        return {candidate_id(c["path"], c["heading"]): dict(base, heading=c["heading"])}
+    return {candidate_id(c["path"], s["heading"]): dict(base, heading=s["heading"], section_id=s["section_id"])
+            for s in c["sections"]}
+
+
+def _refresh(idx, sctx, budget, notes):
+    """Index.refresh within `budget`; what it did, or None when SQLite could not do it (a line says so)."""
+    try:
+        res = idx.refresh(sctx["roots"], sctx["store_rel"], sctx["blocks_rels"], budget=budget)
+    except (sqlite3.Error, OSError) as e:
+        _note(notes, [REFRESH_NOTE % e])
+        return None
+    if res.get("rebuilt"):
+        _note(notes, [REBUILT_NOTE])
+    return res
+
+
+def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, use_hints=True, now=None):
+    """One search: {candidates, notes, sources, index, last}.
+    - The own index is refreshed first (ctx_index.REFRESH_S, never past the command's COMMAND_S); then every query ×
+      source (`gather`, the sources of `which`), RRF (`fuse`), the priors (`skill`'s types, `product`, the classes'
+      TTL and the repositories' snapshots), `dedup`, the best `limit`.
+    - A query that finds the own index damaged (Index.problem: a file SQLite cannot read, never a busy one) rebuilds
+      it once and asks the own index again; REBUILT_NOTE says so.
+    - candidates: {id, path, heading, title, type, product, date, source [ids], flags, matched [the queries that
+      found it, from 1], snippet, score, sections [{id, heading}: the candidate's own first, at most MAX_SECTIONS]}.
+    - notes: the lines to print under the list; sources: [{id, kind, answered}] (none answered: the caller exits 5;
+      none at all: there is no place to search); index: the own index's state and what the refresh did (None when the
+      own index was not asked); last: what save_last keeps for `--get`.
+    `use_hints` is for the remembered picks (not yet: it changes nothing). Writes only the index; nothing else."""
+    start = time.monotonic()
+    deadline = start + COMMAND_S
+    queries = [q for q in queries or [] if isinstance(q, str)]
+    if product:
+        sctx = dict(sctx, product=product)
+    srcs = sources(sctx["text"], sctx["repos"], tuple(which or KINDS))
+    notes, index, done = [], None, None
+    idx = ci.Index(sctx["home"])
+    own = [s for s in srcs if s["kind"] == "own"]
+    if own:
+        done = _refresh(idx, sctx, max(0.0, min(ci.REFRESH_S, deadline - time.monotonic())), notes)
+    lists, more = gather(sctx, queries, srcs, deadline) if srcs else ({}, [])
+    if own and any(n.startswith(_BROKEN) for n in more):
+        try:
+            idx.rebuild(sctx["roots"], sctx["store_rel"], sctx["blocks_rels"],
+                        budget=max(0.0, min(ci.REFRESH_S, deadline - time.monotonic())))
+            again, more2 = gather(sctx, queries, own, deadline)
+        except (sqlite3.Error, OSError):
+            again, more2 = None, []
+        if again is not None and not any(n.startswith(_BROKEN) for n in more2):
+            lists = dict({k: v for k, v in lists.items() if not k.startswith("own|")}, **again)
+            more = [n for n in more if not n.startswith(_BROKEN)] + [REBUILT_NOTE] + more2
+    _note(notes, more)
+    answered = {k.split("|", 1)[0] for k in lists}
+    entries = _entries(lists, fuse(lists))
+    priors(entries, skill_types(skill), product, now, class_ttl(sctx["repos"], sctx["vaults"]), snapshots(sctx, now))
+    metas = idx.notes() if os.path.isfile(idx.db_path) else []
+    cands = dedup(entries, metas)[:max(1, int(limit))]
+    terms = list(dict.fromkeys(t for q in queries for t in st.query_terms(q)))
+    last = {}
+    for c in cands:
+        last.update(_last(c))
+    if own:
+        index = dict(idx.status(), **{k: (done or {}).get(k, 0) for k in ("added", "changed", "removed")},
+                     locked=bool((done or {}).get("locked")), rebuilt=bool((done or {}).get("rebuilt")) or REBUILT_NOTE in notes)
+    return {"candidates": [_public(c, terms) for c in cands], "notes": notes,
+            "sources": [{"id": s["id"], "kind": s["kind"], "answered": s["id"] in answered} for s in srcs],
+            "index": index, "last": last}
+
+
+def last_path(home):
+    """`<home>/.grow-pm/index/last.json` — the ids of the last search: {id: {source, path, heading, kind, …}}."""
+    return os.path.join(ci.index_dir(home), LAST_NAME)
+
+
+def save_last(home, last):
+    """Keep `run`'s `last` beside the index (the only file the search writes outside the index itself)."""
+    cst.atomic_write(last_path(home), json.dumps(last or {}, ensure_ascii=False, indent=1) + "\n")
+
+
+# ------------------------------------------------------------------ --get
+class GetError(Exception):
+    """`--get` cannot print the section: `code` 3 (no such candidate, no such note or section) or 5 (its server did
+    not answer); the message is one line."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+def _load_last(home):
+    try:
+        with open(last_path(home), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _in_index(idx, cid):
+    """The last.json entry of an own section whose id is `cid`, found among the sections of the index; else None."""
+    for sid, path, heading in idx.headings():
+        if candidate_id(N(path), heading) == cid:
+            return {"source": "own", "path": N(path), "heading": heading, "kind": "own", "section_id": sid}
+    return None
+
+
+def _section_of(text, heading):
+    """The text under `heading` (a heading path as ctx_index.split_sections names it); "" — the note without its
+    frontmatter. None when the note has no such heading."""
+    if not heading:
+        return ci._frontmatter((text or "").replace("\r\n", "\n"))[1].strip("\n")
+    return next((body for h, body in ci.split_sections(text) if h == heading), None)
+
+
+def _inside(path, folders):
+    real = os.path.realpath(path)
+    return any(real == f or real.startswith(f.rstrip(os.sep) + os.sep) for f in (os.path.realpath(x) for x in folders if x))
+
+
+def _from_disk(sctx, entry):
+    """(text, date) of a note on disk, by its index name: a vault's file, or `@<repository>/…` under its core folder.
+    Only a `.md` file inside a vault or a core folder is read."""
+    path = entry["path"]
+    folders = list(sctx.get("vaults") or []) + [_folder(r) for r in sctx.get("repos") or []]
+    if path.startswith("@"):
+        rid, _, rest = path[1:].partition("/")
+        repo = next((r for r in sctx.get("repos") or [] if r.get("id") == rid), None)
+        files = [os.path.join(_folder(repo), *rest.split("/"))] if repo and _folder(repo) and rest else []
+    else:
+        files = [os.path.join(v, *path.split("/")) for v in sctx.get("vaults") or []]
+    found = next((f for f in files if f.lower().endswith(".md") and _inside(f, folders) and os.path.isfile(f)), None)
+    if not found:
+        raise GetError(3, "the note is not on disk: %s" % path)
+    try:
+        text = cst.read_text(found)
+    except (OSError, UnicodeError, cst.StoreError) as e:
+        raise GetError(3, "the note cannot be read: %s (%s)" % (path, e))
+    return text, ci.note_meta(path, text).get("date") or ""
+
+
+def _from_mcp(sctx, entry):
+    """(text, date) of an MCP candidate: vault_get_note on the path as the server gave it."""
+    repo = next((r for r in sctx.get("repos") or [] if r.get("id") == entry.get("source")), None)
+    ep = (repo or {}).get("endpoint") or {}
+    if not ep.get("url") or not entry.get("remote"):
+        raise GetError(3, "%s: no MCP endpoint to read %s" % (entry.get("source"), entry["path"]))
+    try:
+        client = cm.McpClient(ep["url"], headers=cm.headers_from_env(ep["headers_env"]) if ep.get("headers_env") else {},
+                              deadline=time.monotonic() + SOURCE_S)
+        note = client.call("vault_get_note", {"path": entry["remote"]})
+    except Exception:  # noqa: BLE001 — a server that fails is one line, as in the search
+        raise GetError(5, SILENT_NOTE % entry.get("source"))
+    content = note.get("content")
+    if not isinstance(content, str):
+        raise GetError(3, "%s has no note %s" % (entry.get("source"), entry["remote"]))
+    fm = note.get("frontmatter") if isinstance(note.get("frontmatter"), dict) else {}
+    return content, _first_date(fm, ci.DATE_KEYS) or ""
+
+
+def get(sctx, cid):
+    """(header, text) of a candidate's section: the header `> [<source> · <path> › <heading> · <day>]`, the text under
+    the heading (a note-level candidate: the note without its frontmatter). The id is looked up in last.json (the last
+    search), else among the sections of the own index. An own section is read from the index (from its file when the
+    note changed since); a note only a local index knows from the vault; an MCP one through vault_get_note. GetError:
+    3 — no such id, note or section; 5 — the server did not answer. Reads only."""
+    cid = str(cid or "").strip().lower()
+    idx = ci.Index(sctx["home"])
+    entry = _load_last(sctx["home"]).get(cid)
+    if not isinstance(entry, dict) or not entry.get("path"):
+        entry = _in_index(idx, cid)
+    if not entry:
+        raise GetError(3, "no candidate %s in the last search or the section index — search again" % cid)
+    heading, date, text = entry.get("heading") or "", entry.get("date") or "", None
+    if entry.get("kind") == "own":
+        sec = idx.section(entry.get("section_id")) if entry.get("section_id") is not None else None
+        if sec and N(sec["path"]) == entry["path"] and (sec.get("heading") or "") == heading:
+            text, date = sec.get("text") or "", sec.get("date") or date
+    if text is None:
+        body, day = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
+        text, date = _section_of(body, heading), date or day
+        if text is None:
+            raise GetError(3, "no section %s in %s" % (heading, entry["path"]))
+    return "> [%s · %s%s · %s]" % (entry.get("source") or "own", entry["path"], " › " + heading if heading else "",
+                                   (date or "—")[:10]), text
+
+
+# ------------------------------------------------------------------ the human output
+def _variants_word(n):
+    if n % 10 == 1 and n % 100 != 11:
+        return "варіант"
+    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return "варіанти"
+    return "варіантів"
+
+
+def _shown(title, heading):
+    """A heading as the list shows it: without its first part when that is the note's title."""
+    parts = [p for p in (heading or "").split(" › ") if p]
+    if parts and title and parts[0].casefold() == str(title).casefold():
+        parts = parts[1:]
+    return " › ".join(parts)
+
+
+def render(res, queries):
+    """The human output of `run`'s result: `Пошук: <n> варіант(и) · джерела: <ids> · кандидатів <k>`; per candidate
+    `N. <title> › <heading> · <sources> · <type> · <date>[ · <mark>…]`, its snippet, `id <id> · варіанти <i,…>` and,
+    for a second section of the note, `також: <heading> · id <id>`; then the notes."""
+    n = len(queries or [])
+    said = [s["id"] for s in res.get("sources") or [] if s.get("answered")]
+    cands = res.get("candidates") or []
+    lines = ["Пошук: %d %s · джерела: %s · кандидатів %d" % (n, _variants_word(n), ", ".join(said) or "—", len(cands))]
+    for i, c in enumerate(cands, 1):
+        head = c["title"] or c["path"]
+        shown = _shown(c["title"], c["heading"])
+        parts = [head + (" › " + shown if shown else ""), ", ".join(c["source"]), c["type"] or "—",
+                 (c["date"] or "")[:10] or "—"] + list(c["flags"])
+        lines.append("%d. %s" % (i, " · ".join(parts)))
+        if c["snippet"]:
+            lines.append("   " + c["snippet"])
+        lines.append("   id %s · варіанти %s" % (c["id"], ",".join(str(v) for v in c["matched"]) or "—"))
+        for s in c.get("sections", [])[1:]:
+            lines.append("   також: %s · id %s" % (_shown(c["title"], s["heading"]) or s["heading"] or "—", s["id"]))
+    lines.extend(res.get("notes") or [])
+    return "\n".join(lines) + "\n"

@@ -61,6 +61,7 @@ COUNTS = ("added", "changed", "removed", "pending", "skipped_dataless", "skipped
 BROKEN_NOTE = "індекс пошуку не читається (%s) — ctx index rebuild збудує його наново"
 BUSY_NOTE = "індекс пошуку зайнятий іншим процесом — цього разу без нього"
 QUERY_NOTE = "індекс пошуку не прийняв вираз (%s)"
+DAMAGE_WORDS = ("corrupt", "malformed", "missing row")    # an FTS5 error that is a damaged file, not a bad expression
 N = cc.N
 
 DDL = """
@@ -631,8 +632,9 @@ class Index:
     # -------------------------------------------------- reading
     def _read(self, fn, empty):
         """fn(read-only connection), or `empty` when there is no index yet or SQLite cannot read it — then `problem`
-        says why, as a line the caller prints (a damaged file: `ctx index rebuild`; a busy one; an expression FTS5 did
-        not take). `problem` is None after a read that worked."""
+        says why, as a line the caller prints (a damaged file: `ctx index rebuild` — an FTS5 error that names a
+        corruption, a malformed page or a missing row is one too; a busy one; an expression FTS5 did not take).
+        `problem` is None after a read that worked."""
         self.problem = None
         try:
             con = self._ro()
@@ -645,7 +647,7 @@ class Index:
         except sqlite3.DatabaseError as e:
             if _busy(e):
                 self.problem = BUSY_NOTE
-            elif "fts5" in str(e).lower():
+            elif "fts5" in str(e).lower() and not any(w in str(e).lower() for w in DAMAGE_WORDS):
                 self.problem = QUERY_NOTE % e
             else:
                 self.problem = BROKEN_NOTE % e
@@ -677,6 +679,13 @@ class Index:
             return None
         r = self._read(lambda con: con.execute(ROW_SQL + " WHERE s.id = ?", (sid,)).fetchone(), None)
         return self._section_dict(r) if r else None
+
+    def headings(self):
+        """(section id, path, heading) of every section — how `ctx search --get` finds a section by its id when the
+        last search did not list it; `problem` as for `query`."""
+        rows = self._read(lambda con: con.execute("SELECT s.id, n.path, s.heading FROM sections s "
+                                                  "JOIN notes n ON n.id = s.note_id").fetchall(), [])
+        return [(r[0], r[1], r[2] or "") for r in rows]
 
     def notes(self):
         """The metadata of every note, by path (id, path, source, title, type, product, status, date, ttl_date,
