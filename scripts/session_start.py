@@ -18,6 +18,8 @@ Design rules (see references/harness-map.md → hooks):
   `.grow-pm` folder (`.ctx-summary.json`, since v3.13.1), and the two `export` lines
   (GROW_PM_CONTEXT_PATH, GROW_PM_PROVIDER_PATHS) appended to the file CLAUDE_ENV_FILE
   names, when the host sets it.
+- The search index (since v3.16.0) is read from its `index.json` alone, within 0.2 s: the
+  hook never opens its sqlite and never refreshes it.
 """
 import datetime
 import glob
@@ -27,6 +29,7 @@ import re
 import shlex
 import sqlite3
 import sys
+import threading
 import time
 import urllib.parse
 
@@ -39,6 +42,7 @@ except Exception:
 MAX_LINES = 25
 REG_READ_S = 1.0     # seconds one provider registration may take to read (an iCloud download); ctx allows 3
 REG_DEADLINE_S = 2.0  # …and all of them together (since v3.14): N evicted files never cost N seconds of the hook
+INDEX_READ_S = 0.2    # seconds the search index's index.json may take to read (since v3.16.0)
 ROLE_ENUM = {"pm", "head_of_product", "cpo", "product_designer", "product_analyst",
              "ux_researcher", "eng_lead", "business_owner", "other"}  # == references/role-profiles.md §2
 
@@ -222,6 +226,34 @@ def providers_info(text, extra_dirs=None, skipped=None, checked=None, daily=None
     return labels, roots, bundle
 
 
+def index_info(home=None):
+    """(sections, day) of the search index (since v3.16.0) from `<home>/.grow-pm/index/index.json` alone, read in a
+    daemon thread within INDEX_READ_S; None when it is not there, not read in time, not an index state, or its count or
+    day cannot be read. The index's sqlite is never opened here."""
+    path = os.path.join(home or os.path.expanduser("~"), ".grow-pm", "index", "index.json")
+    if not os.path.exists(path):
+        return None
+    box = {}
+
+    def work():
+        try:
+            with open(path, encoding="utf-8") as f:
+                box["data"] = json.load(f)
+        except Exception:  # noqa: BLE001 — no line, never a failed digest
+            pass
+
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    t.join(INDEX_READ_S)
+    data = box.get("data") if not t.is_alive() else None
+    if not isinstance(data, dict) or not str(data.get("schema") or "").startswith("search-index/"):
+        return None
+    sections, day = data.get("sections"), _day(data.get("updated"))
+    if not isinstance(sections, int) or isinstance(sections, bool) or sections < 0 or day is None:
+        return None
+    return sections, day.isoformat()
+
+
 def _store_summary(path, budget_s=2.0, dates_s=0.5):
     """The context store's summary (since v3.11.0), counted within a time budget so an iCloud download can never hold
     the session start; any failure → None (no line). Since v3.13.1 one helper does it for the digest and for `ctx`
@@ -240,8 +272,8 @@ def _store_summary(path, budget_s=2.0, dates_s=0.5):
         return None
 
 
-def parse(path, extra_dirs=None):
-    """Header-level facts only."""
+def parse(path, extra_dirs=None, home=None):
+    """Header-level facts only. `home` (since v3.16.0) is where the search index is looked for (`~` by default)."""
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
     # since v3.10.0: provider blocks (managed regions) repeat `### Team:` / `### Product:`
@@ -287,6 +319,10 @@ def parse(path, extra_dirs=None):
             daily=facts["daily_sync"])
     except Exception:
         facts["providers"], facts["provider_roots"], facts["bundle"] = [], [], None
+    try:
+        facts["index"] = index_info(home)
+    except Exception:  # noqa: BLE001
+        facts["index"] = None
     facts["cjm_section"] = bool(re.search(r"^## CJM Configuration\s*\n(?:.*\n){1,6}?.*(?:stages|funnel|template)", text, re.M | re.I))
     facts["terminology_section"] = bool(re.search(r"^### Terminology & Style", text, re.M))
     return facts
@@ -401,6 +437,8 @@ def digest(path, facts, searched, version):
     if cc is not None:
         prov = facts.get("providers") or []
         lines.append("  providers: %s" % (", ".join(prov[:6]) if prov else "none declared"))
+        if facts.get("index"):                      # since v3.16.0: the search index, from its index.json
+            lines.append("  index: секцій %d · оновлено %s" % facts["index"])
         bad = facts.get("unreadable_registrations") or []
         if bad:
             lines.append("  provider registration unreadable: %s" % "; ".join(

@@ -1,0 +1,9 @@
+schema: provider-registration/2
+id: zorg-core
+title: Zorg shared core
+kind: folder
+authority: org
+core_root: {{VAULT}}/ZorgCore
+blocks_file: _System/context-blocks.md
+stale_after_days: 30
+status: active

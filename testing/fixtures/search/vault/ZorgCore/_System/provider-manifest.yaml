@@ -1,0 +1,13 @@
+schema: provider-manifest/1
+id: zorg-core
+title: Zorg shared core
+namespace: zorg-core
+plugin_folder: .
+contract: vault/v1
+authority: org
+mode: snapshot
+product_name: Zorg App
+blocks_file: _System/context-blocks.md
+team_card_dir: Teams
+ttl_days:
+  teams: 14

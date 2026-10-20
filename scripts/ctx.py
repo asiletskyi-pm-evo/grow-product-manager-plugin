@@ -145,8 +145,17 @@
                                 `decide` with no divergence ("no divergence for SLOT") or for a REPO that is not one of
                                 the sides, and a memory that cannot be read ("slots memory not readable|not valid:
                                 .state/slots.json (…)") are exit 3. CTX_RESULT: action, slot, changed, snapshot, memory (after)
+  index status|rebuild          the section index of the search (since v3.16.0; scripts/ctx_index.py): the plugin folder of
+                                every vault and the core folder of every registration that has one on disk, in
+                                `<home>/.grow-pm/index/` — no store lock, nothing written anywhere else. status: an
+                                incremental refresh (30 s; a held index.lock: none, the index as it is), then the counts;
+                                rebuild: the index built again from nothing, no time limit. "індекс оновлюється: N файлів ще
+                                не переглянуто" when the refresh ran out of time. No vault and no core folder: exit 3; rebuild
+                                while another process holds index.lock: exit 4. CTX_RESULT: action, schema, updated, files,
+                                sections, pending, skipped_dataless
 
-`read` and `explain` take no lock and write nothing. Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
+`read` and `explain` take no lock and write nothing; `index` takes no store lock and writes only its own folder.
+Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
 registration is not read in time — 3 s each, 6 s for all: the boundary cannot be checked, exit 4), imports direct
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
 writes only the block state under `.state/blocks/` and the card's Repos line; `slot` imports first too, and then
@@ -167,12 +176,14 @@ import datetime
 import json
 import os
 import re
+import sqlite3
 import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_blocks as cb  # noqa: E402
 import ctx_common as cc  # noqa: E402
+import ctx_index as ci  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
@@ -918,6 +929,65 @@ def cmd_repo(a, c):
     raise Usage("repo takes list or status")
 
 
+def _index_scope(c):
+    """(roots, store_rel, blocks_rels) of the section index for this context: the roots of `ci.scope`, the store's
+    folder and the blocks file of every repository that is a root (the registration's, else its core manifest's), each
+    as the index names a file."""
+    repos = crp.load_repos(c.text, c.home)
+    roots = ci.scope(c.text, repos)
+    vaults = [v for v, _ in cc.vault_entries(c.text)]
+    store_rel = ci.rel_path(co.store_root_for(c.text, c.home), vaults)
+    by_source = {r["source"]: r for r in roots}
+    blocks = []
+    for r in repos:
+        root = by_source.get(r["id"])
+        if not root:
+            continue
+        name = r["blocks_file"]
+        if not name:
+            manifest, _ = crp._manifest(root["path"])
+            name = manifest.s("blocks_file") if manifest is not None else ""
+        if name:
+            blocks.append(ci.rel_path(os.path.join(root["path"], name), vaults, root))
+    return roots, store_rel, blocks
+
+
+def cmd_index(a, c):
+    roots, store_rel, blocks = _index_scope(c)
+    if not roots:
+        print("index: nothing to index — no vault in local-context.md and no registered repository with a folder on disk")
+        return 3, {"command": "index", "action": a.action, "error": "no vault and no repository folder"}
+    idx = ci.Index(c.home)
+    try:
+        if a.action == "rebuild":
+            res = idx.rebuild(roots, store_rel, blocks)
+            if res["locked"]:
+                raise co.Busy("another process is updating the index (%s)" % idx.lock_path)
+        else:
+            res = idx.refresh(roots, store_rel, blocks)
+    except sqlite3.Error as e:
+        print("index: %s — %s" % (idx.db_path, e))
+        return 3, {"command": "index", "action": a.action, "error": str(e)}
+    s = idx.status()
+    print("index: %s" % idx.dir)
+    for r in roots:
+        print("  %s  %s" % (r["source"], r["path"]))
+    print("  files %d · sections %d · schema %s · updated %s" % (s["files"], s["sections"], s["schema"] or "—",
+                                                                (s["updated"] or "—")[:16].replace("T", " ")))
+    if res["locked"]:
+        print("  another process is updating it — the index as it is")
+    if res["rebuilt"] and a.action != "rebuild":
+        print("  the index could not be read or had another schema — built again (the old one: %s.broken)" % idx.db_path)
+    if s["skipped_dataless"]:
+        print("  not downloaded (iCloud), not read: %d" % s["skipped_dataless"])
+    if res["skipped_large"]:
+        print("  over %d bytes, not indexed: %d" % (ci.MAX_BYTES, res["skipped_large"]))
+    if s["pending"]:
+        print("індекс оновлюється: %d файлів ще не переглянуто" % s["pending"])
+    return 0, {"command": "index", "action": a.action, "schema": s["schema"], "updated": s["updated"], "files": s["files"],
+               "sections": s["sections"], "pending": s["pending"], "skipped_dataless": s["skipped_dataless"]}
+
+
 def _unread(skipped):
     """The registrations that could not be read, as `<path> (<reason>)`, for a message."""
     return "; ".join("%s (%s)" % (p, why) for p, why in skipped)
@@ -1401,6 +1471,9 @@ def build_parser():
     rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
+    ip = sub.add_parser("index").add_subparsers(dest="action", required=True, parser_class=Parser)
+    ip.add_parser("status", parents=[common])
+    ip.add_parser("rebuild", parents=[common])
     kp = sub.add_parser("slot").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = kp.add_parser("bind", parents=[common]); sp.add_argument("repo"); sp.add_argument("target"); sp.add_argument("slot")
     sp.add_argument("--team")
@@ -1425,7 +1498,8 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot}
+            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
+            "index": cmd_index}
 
 
 def emit(result, conflict=None):

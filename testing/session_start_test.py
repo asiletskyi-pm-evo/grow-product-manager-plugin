@@ -624,5 +624,52 @@ with tempfile.TemporaryDirectory() as d:
           facts["unreadable_registrations"] == [(f, NOT_LOCAL) for f in slow]
           and all("%s (%s)" % (os.path.basename(f), NOT_LOCAL) in line for f in slow[:3]), line)
 
+# --- v3.16.0 Task 3: the index line, from <home>/.grow-pm/index/index.json only (never the sqlite), read within 0.2 s
+import json  # noqa: E402
+
+def index_digest(home, text=example):
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(text); path = f.name
+    try:
+        return ss.digest(path, ss.parse(path, extra_dirs=[], home=home), [], "test")
+    finally:
+        os.unlink(path)
+
+with tempfile.TemporaryDirectory() as d:
+    home = os.path.join(d, "home"); idx = os.path.join(home, ".grow-pm", "index"); os.makedirs(idx)
+    out = index_digest(home)
+    check("no index.json: no index line", not any(l.startswith("  index:") for l in out.splitlines()), out)
+    open(os.path.join(idx, "index.json"), "w", encoding="utf-8").write(json.dumps(
+        {"schema": "search-index/1", "updated": "2026-10-20T09:15:00+03:00", "files": 12, "sections": 34,
+         "skipped_dataless": 0, "pending": 0}))
+    open(os.path.join(idx, "sections.sqlite"), "wb").write(b"not a database: the hook must never open it")
+    opened = []
+    real_connect = ss.sqlite3.connect
+    ss.sqlite3.connect = lambda *a, **k: opened.append(a[0] if a else k.get("database")) or real_connect(*a, **k)
+    before = sorted(os.listdir(idx))
+    try:
+        out = index_digest(home)
+    finally:
+        ss.sqlite3.connect = real_connect
+    lines = out.splitlines()
+    at = next((i for i, l in enumerate(lines) if l.startswith("  providers:")), None)
+    check("index.json: the index line right after the providers line",
+          at is not None and lines[at + 1] == "  index: секцій 34 · оновлено 2026-10-20", out)
+    check("…the hook opens no sqlite of the index and writes nothing there",
+          not any("sections.sqlite" in str(p) for p in opened) and sorted(os.listdir(idx)) == before, (opened, os.listdir(idx)))
+    open(os.path.join(idx, "index.json"), "w", encoding="utf-8").write("{ not json")
+    out = index_digest(home)
+    check("an index.json that cannot be read: no index line", not any(l.startswith("  index:") for l in out.splitlines()), out)
+    os.remove(os.path.join(idx, "index.json"))
+    os.mkfifo(os.path.join(idx, "index.json"))         # a read that never ends
+    try:
+        t0 = time.time()
+        out = index_digest(home)
+        took = time.time() - t0
+    finally:
+        release(os.path.join(idx, "index.json"))
+    check("an index.json not read within 0.2 s: no line, the digest in time",
+          not any(l.startswith("  index:") for l in out.splitlines()) and took < 1.5 and "providers:" in out, "%.2f s" % took)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)
