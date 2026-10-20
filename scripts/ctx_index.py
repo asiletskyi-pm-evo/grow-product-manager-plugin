@@ -53,8 +53,12 @@ BM25 = (10.0, 6.0, 4.0, 4.0, 1.0)   # title, heading, tags, aliases, body
 HUB_TYPES = frozenset(("glossary", "moc", "people", "person", "focus-brief", "daily-summary"))
 HUB_TITLE = re.compile(r"style guide|глосарій|glossary|абревіатури", re.I)
 TRUE = ("true", "yes", "1")
-DATE_KEYS = ("updated", "modified", "date", "created")
+DATE_KEYS = ("updated", "modified", "snapshot", "generated", "date", "created")
 COMMIT_EVERY = 50                   # files written between two commits of a refresh
+COUNTS = ("added", "changed", "removed", "pending", "skipped_dataless", "skipped_large")
+BROKEN_NOTE = "індекс пошуку не читається (%s) — ctx index rebuild збудує його наново"
+BUSY_NOTE = "індекс пошуку зайнятий іншим процесом — цього разу без нього"
+QUERY_NOTE = "індекс пошуку не прийняв вираз (%s)"
 N = cc.N
 
 DDL = """
@@ -238,7 +242,8 @@ def _fm_value(v):
 
 def _read_frontmatter(lines):
     """{key (lower case): text | [texts]} of the frontmatter lines, or None when they are not YAML this reader trusts:
-    a tab in the indentation, or a line at the margin that is no `key: value`. A nested mapping is not read."""
+    a tab in the indentation, or a line at the margin that is neither `key: value` nor an item `- x` of the list a key
+    with no value opened (`tags:` then `- a` at the margin is how PyYAML writes a list). A nested mapping is not read."""
     data, cur = {}, None
     for raw in lines:
         raw = raw.rstrip("\r")
@@ -247,14 +252,6 @@ def _read_frontmatter(lines):
         lead = raw[:len(raw) - len(raw.lstrip(" \t"))]
         if "\t" in lead:
             return None
-        if not lead:
-            m = _FM_KEY.match(raw.rstrip())
-            if not m:
-                return None
-            key, val = m.group(1).strip().lower(), (m.group(2) or "").strip()
-            data[key] = _fm_value(val) if val else ""
-            cur = None if val else key
-            continue
         item = raw.strip()
         if cur is not None and (item == "-" or item.startswith("- ")):
             v = _fm_value(item[1:])
@@ -262,6 +259,14 @@ def _read_frontmatter(lines):
                 data[cur] = []
             if isinstance(v, str) and v:
                 data[cur].append(v)
+            continue
+        if not lead:
+            m = _FM_KEY.match(raw.rstrip())
+            if not m:
+                return None
+            key, val = m.group(1).strip().lower(), (m.group(2) or "").strip()
+            data[key] = _fm_value(val) if val else ""
+            cur = None if val else key
     return data
 
 
@@ -379,7 +384,8 @@ def version_key(title, folder):
 
 def note_meta(rel, text, mtime=None):
     """The metadata of a note: title (frontmatter `title`, else the first `# `, else the file name), type and status
-    (lower case), product, date (`updated` | `modified` | `date` | `created`, else `mtime`), confluence_id (frontmatter,
+    (lower case), product, date (`updated` | `modified` | `snapshot` | `generated` | `date` | `created`, else `mtime`),
+    confluence_id (frontmatter,
     else `(<6+ digits>).md`), aliases, tags, sensitive, hub, version_key and links (name_key of every wiki-link target
     and of `core_page`). A frontmatter that is never closed or cannot be read gives no metadata — the note is text."""
     t = (text or "").replace("\r\n", "\n")
@@ -425,6 +431,12 @@ def _now():
     return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+def _busy(error):
+    """Is this SQLite error a database another connection holds (locked, busy) — a live writer, never a broken file?"""
+    text = str(error).lower()
+    return "locked" in text or "busy" in text
+
+
 def _count(v):
     return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0
 
@@ -449,6 +461,7 @@ class Index:
         self.db_path = os.path.join(self.dir, DB_NAME)
         self.state_path = os.path.join(self.dir, STATE_NAME)
         self.lock_path = os.path.join(self.dir, LOCK_NAME)
+        self.problem = None              # what the last read could not do, as a line for the caller to print
 
     # -------------------------------------------------- state and lock
     def _state(self):
@@ -527,8 +540,11 @@ class Index:
                 con.execute("SELECT rowid FROM sections_fts LIMIT 1").fetchone()
                 if row and row[0] == SCHEMA:
                     return con, False
-            except sqlite3.DatabaseError:
-                pass
+            except sqlite3.DatabaseError as e:
+                if _busy(e):
+                    if con is not None:
+                        con.close()
+                    raise
             if con is not None:
                 con.close()
             self._set_aside(broken=True)
@@ -578,13 +594,16 @@ class Index:
             con, rebuilt = self._open_rw()
             res["rebuilt"] = rebuilt or fresh
             try:
-                walk = _Walk(con, roots, store_rel, blocks_rels, deadline, res)
-                queue = walk.run(None if res["rebuilt"] else self._state().get("queue"))
-                when = _now()
-                con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('updated', ?)", (when,))
-                con.commit()
-                files = con.execute("SELECT count(*) FROM notes").fetchone()[0]
-                sections = con.execute("SELECT count(*) FROM sections").fetchone()[0]
+                files, sections, queue, when = self._walk(con, roots, store_rel, blocks_rels, deadline, res,
+                                                          None if res["rebuilt"] else self._state().get("queue"))
+            except sqlite3.DatabaseError as e:      # damage the open checks did not see: put it aside, walk once more
+                con.close()
+                if _busy(e):
+                    raise
+                self._set_aside(broken=True)
+                res.update({k: 0 for k in COUNTS}, rebuilt=True)
+                con = self._create()
+                files, sections, queue, when = self._walk(con, roots, store_rel, blocks_rels, deadline, res, None)
             finally:
                 con.close()
             self._save_state({"schema": SCHEMA, "updated": when, "files": files, "sections": sections,
@@ -593,23 +612,48 @@ class Index:
             self._drop_lock()
         return res
 
+    @staticmethod
+    def _walk(con, roots, store_rel, blocks_rels, deadline, res, saved):
+        """One walk into `con`, then the day and the counts: (files, sections, queue, when)."""
+        queue = _Walk(con, roots, store_rel, blocks_rels, deadline, res).run(saved)
+        when = _now()
+        con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('updated', ?)", (when,))
+        con.commit()
+        files = con.execute("SELECT count(*) FROM notes").fetchone()[0]
+        sections = con.execute("SELECT count(*) FROM sections").fetchone()[0]
+        return files, sections, queue, when
+
     # -------------------------------------------------- reading
-    def query(self, expr, limit):
-        """The sections an FTS5 expression matches, best first (bm25: title 10, heading 6, tags 4, aliases 4, body 1):
-        dicts with the section's id, heading, ord and raw text, the note's metadata and `rank`. A blank expression, no
-        index, or an index SQLite cannot read (the next refresh rebuilds it) answer []."""
-        if not (expr or "").strip():
-            return []
+    def _read(self, fn, empty):
+        """fn(read-only connection), or `empty` when there is no index yet or SQLite cannot read it — then `problem`
+        says why, as a line the caller prints (a damaged file: `ctx index rebuild`; a busy one; an expression FTS5 did
+        not take). `problem` is None after a read that worked."""
+        self.problem = None
         try:
             con = self._ro()
             if con is None:
-                return []
+                return empty
             try:
-                rows = con.execute(QUERY_SQL, (expr, int(limit))).fetchall()
+                return fn(con)
             finally:
                 con.close()
-        except sqlite3.DatabaseError:
+        except sqlite3.DatabaseError as e:
+            if _busy(e):
+                self.problem = BUSY_NOTE
+            elif "fts5" in str(e).lower():
+                self.problem = QUERY_NOTE % e
+            else:
+                self.problem = BROKEN_NOTE % e
+            return empty
+
+    def query(self, expr, limit):
+        """The sections an FTS5 expression matches, best first (bm25: title 10, heading 6, tags 4, aliases 4, body 1):
+        dicts with the section's id, heading, ord and raw text, the note's metadata and `rank`. A blank expression or no
+        index answer []; so does an index SQLite cannot read, and then `problem` says so."""
+        if not (expr or "").strip():
+            self.problem = None
             return []
+        rows = self._read(lambda con: con.execute(QUERY_SQL, (expr, int(limit))).fetchall(), [])
         return [self._section_dict(r) for r in rows]
 
     @staticmethod
@@ -621,32 +665,19 @@ class Index:
         return d
 
     def section(self, sid):
-        """One section with its note's metadata, or None."""
+        """One section with its note's metadata, or None (`problem` says why when the index cannot be read)."""
         try:
-            con = self._ro()
-            if con is None:
-                return None
-            try:
-                r = con.execute(ROW_SQL + " WHERE s.id = ?", (int(sid),)).fetchone()
-            finally:
-                con.close()
-        except (sqlite3.DatabaseError, ValueError, TypeError):
+            sid = int(sid)
+        except (ValueError, TypeError):
             return None
+        r = self._read(lambda con: con.execute(ROW_SQL + " WHERE s.id = ?", (sid,)).fetchone(), None)
         return self._section_dict(r) if r else None
 
     def notes(self):
         """The metadata of every note, by path (id, path, source, title, type, product, status, date, confluence_id,
-        aliases, tags, sensitive, hub, version_key, links, hash, mtime, size)."""
-        try:
-            con = self._ro()
-            if con is None:
-                return []
-            try:
-                rows = con.execute("SELECT id, %s FROM notes ORDER BY path" % ", ".join(NOTE_COLS)).fetchall()
-            finally:
-                con.close()
-        except sqlite3.DatabaseError:
-            return []
+        aliases, tags, sensitive, hub, version_key, links, hash, mtime, size); `problem` as for `query`."""
+        rows = self._read(lambda con: con.execute("SELECT id, %s FROM notes ORDER BY path" % ", ".join(NOTE_COLS))
+                          .fetchall(), [])
         return [dict(_note_dict(r), id=r["id"]) for r in rows]
 
     def status(self):
@@ -655,20 +686,16 @@ class Index:
         state = self._state()
         out = {"schema": None, "updated": state.get("updated"), "files": 0, "sections": 0,
                "pending": _count(state.get("pending")), "skipped_dataless": _count(state.get("skipped_dataless"))}
-        try:
-            con = self._ro()
-            if con is not None:
-                try:
-                    row = con.execute("SELECT value FROM meta WHERE key='schema'").fetchone()
-                    out["schema"] = row[0] if row else None
-                    row = con.execute("SELECT value FROM meta WHERE key='updated'").fetchone()
-                    out["updated"] = row[0] if row else out["updated"]
-                    out["files"] = con.execute("SELECT count(*) FROM notes").fetchone()[0]
-                    out["sections"] = con.execute("SELECT count(*) FROM sections").fetchone()[0]
-                finally:
-                    con.close()
-        except sqlite3.DatabaseError:
-            pass
+
+        def fill(con):
+            row = con.execute("SELECT value FROM meta WHERE key='schema'").fetchone()
+            out["schema"] = row[0] if row else None
+            row = con.execute("SELECT value FROM meta WHERE key='updated'").fetchone()
+            out["updated"] = row[0] if row else out["updated"]
+            out["files"] = con.execute("SELECT count(*) FROM notes").fetchone()[0]
+            out["sections"] = con.execute("SELECT count(*) FROM sections").fetchone()[0]
+
+        self._read(fill, None)
         return out
 
 
@@ -695,20 +722,37 @@ class _Walk:
         for r in self.roots:
             r["rel"] = rel_path(r["path"], vaults, r)
         self.root_paths = {N(r["path"]) for r in self.roots}
+        self.by_rel = sorted(range(len(self.roots)), key=lambda i: -len(self.roots[i]["rel"]))
         self.store_rel = _slash(N(store_rel or "")).rstrip("/")
         self.blocks = [_slash(N(b)) for b in blocks_rels or ()]
         self.rows = {}
-        for nid, path, mtime, size, digest in con.execute("SELECT id, path, mtime, size, hash FROM notes"):
-            self.rows[path] = {"id": nid, "mtime": mtime, "size": size, "hash": digest}
+        for nid, path, mtime, size, digest, source in con.execute("SELECT id, path, mtime, size, hash, source FROM notes"):
+            self.rows[path] = {"id": nid, "mtime": mtime, "size": size, "hash": digest, "source": source}
         self.children = collections.defaultdict(set)
         for path in self.rows:
             self._know(path)
         self.writes = 0
 
+    def _outside(self, path):
+        """Is this index name one of a root outside every vault (`@<its source>/…`)? A vault's own `@Name.md` is not."""
+        row = self.rows.get(path)
+        return bool(row) and path.startswith("@%s/" % row["source"])
+
     def _know(self, path):
+        """Remember every folder → name step of an index name, the vault's top level ("") too — but not for a name
+        outside every vault: no vault's listing can miss it."""
         parts = path.split("/")
-        for i in range(1, len(parts)):
+        for i in range(1 if self._outside(path) else 0, len(parts)):
             self.children["/".join(parts[:i])].add(parts[i])
+
+    def _owner(self, path):
+        """The root an index name belongs to: the one with the longest name that holds it (a vault walked whole holds
+        every name but those outside every vault), or None."""
+        for i in self.by_rel:
+            rel = self.roots[i]["rel"]
+            if (path == rel or path.startswith(rel + "/")) if rel else not self._outside(path):
+                return i
+        return None
 
     def _due(self):
         return self.deadline is not None and _clock() >= self.deadline
@@ -745,9 +789,13 @@ class _Walk:
             if kind == "f":
                 names.add(rel)
                 continue
-            lo = bisect.bisect_left(paths, rel + "/")
-            hi = bisect.bisect_left(paths, rel + "/\U0010ffff")
-            names.update(paths[lo:hi] or ["%s/" % rel])
+            if rel:
+                lo = bisect.bisect_left(paths, rel + "/")
+                hi = bisect.bisect_left(paths, rel + "/\U0010ffff")
+                under = paths[lo:hi]
+            else:                                    # a root that is a vault itself: all its names but the outside ones
+                under = [p for p in paths if not self._outside(p)]
+            names.update(under or ["%s/" % rel])
         return len(names)
 
     def _list(self, ri, path, rel):
@@ -774,7 +822,7 @@ class _Walk:
             except OSError:
                 present.add(name)                    # cannot tell what it is: keep what the index holds of it
         for name in sorted(self.children.get(rel, set()) - present):
-            self._remove(rel + "/" + name if rel else name)
+            self._remove(rel + "/" + name if rel else name, owner=ri)
         return files + dirs
 
     def _file(self, ri, path, rel):
@@ -829,8 +877,9 @@ class _Walk:
             nid = con.execute("INSERT INTO notes(%s) VALUES (%s)" % (", ".join(NOTE_COLS), ", ".join("?" * len(NOTE_COLS))),
                               values).lastrowid
             self.res["added"] += 1
+        self.rows[rel] = {"id": nid, "mtime": info.st_mtime, "size": info.st_size, "hash": digest, "source": source}
+        if not row:
             self._know(rel)
-        self.rows[rel] = {"id": nid, "mtime": info.st_mtime, "size": info.st_size, "hash": digest}
         name = rel.rsplit("/", 1)[-1]
         name = name[:-3] if name.lower().endswith(".md") else name
         title = meta["title"] if name_key(name) == name_key(meta["title"]) else meta["title"] + " " + name
@@ -848,14 +897,18 @@ class _Walk:
         self.con.execute("DELETE FROM sections_fts WHERE rowid IN (SELECT id FROM sections WHERE note_id=?)", (nid,))
         self.con.execute("DELETE FROM sections WHERE note_id=?", (nid,))
 
-    def _remove(self, prefix):
-        """The rows of the file `prefix`, or of every file under the folder `prefix`. The names the index knew under it
-        are forgotten (a name left behind elsewhere only costs a removal that finds nothing)."""
-        for path in [p for p in self.rows if p == prefix or p.startswith(prefix + "/")]:
+    def _remove(self, prefix, owner=None):
+        """The rows of the file `prefix`, or of every file under the folder `prefix` — with `owner`, only those that root
+        owns (a second vault walked by another root may hold the same names). The names the index knew under it are
+        forgotten (a name left behind elsewhere only costs a removal that finds nothing)."""
+        for path in [p for p in self.rows if (p == prefix or p.startswith(prefix + "/"))
+                     and (owner is None or self._owner(p) == owner)]:
             nid = self.rows.pop(path)["id"]
             self._drop_sections(nid)
             self.con.execute("DELETE FROM notes WHERE id=?", (nid,))
             self.res["removed"] += 1
+        if any(p == prefix or p.startswith(prefix + "/") for p in self.rows):
+            return                                   # another root's rows by the same name: their names stay known
         parent, _, child = prefix.rpartition("/")
         self.children[parent].discard(child)
         for folder in [f for f in self.children if f == prefix or f.startswith(prefix + "/")]:

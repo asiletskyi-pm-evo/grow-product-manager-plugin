@@ -152,6 +152,15 @@ m = ctx_index.note_meta("Notes/a.md", "---\ncreated: 2026-01-01\ndate: 2026-02-0
 check("date: updated before modified, date, created", m["date"] == "2026-04-04", m)
 m = ctx_index.note_meta("Notes/a.md", "---\ncreated: 2026-01-01\ndate: 2026-02-02\n---\nx")
 check("…date before created", m["date"] == "2026-02-02", m)
+m = ctx_index.note_meta("Notes/a.md", "---\ncreated: 2026-01-01\ndate: 2026-02-02\ngenerated: 2026-03-03\nsnapshot: 2026-04-04\n---\nx")
+check("…snapshot before generated, generated before date (fix round 1: the class TTL reads them)", m["date"] == "2026-04-04"
+      and ctx_index.note_meta("Notes/a.md", "---\ndate: 2026-02-02\ngenerated: 2026-03-03\n---\nx")["date"] == "2026-03-03"
+      and ctx_index.note_meta("Notes/a.md", "---\nsnapshot: 2026-04-04\nmodified: 2026-05-05\n---\nx")["date"] == "2026-05-05", m)
+m = ctx_index.note_meta("Notes/m.md", "---\ntype: meeting\nsensitive: true\ntags:\n- cart\n- pricing\naliases:\n- One\n---\n# M\nbody\n")
+check("a YAML list at the margin (PyYAML's own style) keeps every key", m["type"] == "meeting" and m["sensitive"] is True
+      and m["tags"] == ["cart", "pricing"] and m["aliases"] == ["One"], m)
+check("…a margin list item after a key that has a value is still no YAML",
+      ctx_index.note_meta("Notes/m.md", "---\ntype: meeting\n- stray\n---\n# M\n")["type"] in ("", None))
 m = ctx_index.note_meta("Notes/a.md", "no frontmatter", mtime=time.mktime((2026, 5, 6, 12, 0, 0, 0, 0, -1)))
 check("…none of them: the file's mtime", str(m["date"]).startswith("2026-05-06"), m)
 check("confluence_id from the frontmatter, else (digits).md",
@@ -412,6 +421,60 @@ with tempfile.TemporaryDirectory() as d:
           and {n["path"] for n in idx.notes()} == live, r)
     r = idx.rebuild(roots, store_rel, blocks_rels)
     check("rebuild: everything again", r["rebuilt"] is True and r["added"] == len(live) and r["pending"] == 0, r)
+
+    # --- fix round 1: damage inside the file that the open checks do not see, met by the walk or a query
+    def damage_notes_table():
+        """Overwrite the notes table's own page (not its path index): counts still answer, reading the rows does not."""
+        con = sqlite3.connect(db)
+        page = con.execute("PRAGMA page_size").fetchone()[0]
+        root_page = con.execute("SELECT rootpage FROM sqlite_master WHERE name='notes'").fetchone()[0]
+        con.close()
+        with open(db, "r+b") as f:
+            f.seek((root_page - 1) * page)
+            f.write(b"\x55" * page)
+
+    def malformed_rows():
+        con = sqlite3.connect(db)
+        try:
+            con.execute("SELECT count(*) FROM notes").fetchone()
+            try:
+                con.execute("SELECT id, path, mtime, size, hash FROM notes").fetchall()
+                return False
+            except sqlite3.DatabaseError:
+                return True
+        finally:
+            con.close()
+
+    os.remove(db + ".broken")
+    damage_notes_table()
+    check("(the damage passes the counts and breaks the rows)", malformed_rows())
+    hits = idx.query(q("графік роботи"), 5)
+    check("a query on a damaged index answers nothing and says so", hits == [] and idx.problem
+          and "ctx index rebuild" in idx.problem, (hits, idx.problem))
+    r = idx.refresh(roots, store_rel, blocks_rels)
+    check("a damaged index met during the walk is put aside and built again in the same run",
+          r["rebuilt"] is True and os.path.isfile(db + ".broken") and r["added"] == len(live)
+          and {n["path"] for n in idx.notes()} == live and json.loads(read(env.index, "index.json"))["files"] == len(live), r)
+    check("…and the query works again, with no problem to report", idx.query(q("графік роботи"), 5) and idx.problem is None)
+    real_file = ctx_index._Walk._file
+    os.remove(db + ".broken")
+    open(env.note("Notes/Mobile cart notes.md"), "a", encoding="utf-8").write("\nbusy edit\n")
+
+    def busy(self, ri, path, rel):
+        raise sqlite3.OperationalError("database is locked")
+
+    ctx_index._Walk._file = busy
+    try:
+        idx.refresh(roots, store_rel, blocks_rels)
+        raised = None
+    except sqlite3.OperationalError as e:
+        raised = str(e)
+    ctx_index._Walk._file = real_file
+    check("a busy database is no broken one: the error goes up, nothing is put aside, the lock is released",
+          raised == "database is locked" and not os.path.exists(db + ".broken") and not os.path.exists(lock)
+          and {n["path"] for n in idx.notes()} == live, raised)
+    r = idx.refresh(roots, store_rel, blocks_rels)
+    check("…the next run goes on as usual", r["rebuilt"] is False and r["changed"] == 1, r)
     check("no index file ever lands in the vault",
           not any(os.path.basename(p) in ("sections.sqlite", "sections.sqlite.broken", "index.json", "index.lock")
                   for p in tree(env.vault)))
@@ -433,9 +496,38 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = env.run("index", "status")
     check("status while it is held: exit 0, the index as it is", rc == 0 and res.get("files") == len(live), (rc, out[-300:]))
     os.remove(lock)
+    damage_notes_table()
+    rc, out, res = env.run("index", "status")
+    check("ctx index status on a damaged index: built again, exit 0", rc == 0 and res and res.get("files") == len(live)
+          and "built again" in out and os.path.isfile(db + ".broken"), (rc, out[-400:]))
     import ctx as ctx_cli  # noqa: E402
     a = ctx_cli.build_parser().parse_args(["index", "status"])
     check("index is no writing command of the store", "index" not in ctx_cli.WRITING and not ctx_cli.writes(a))
+
+# --- fix round 1: a root that is the vault itself (its index names have no top folder) and a core outside every vault
+with tempfile.TemporaryDirectory() as d:
+    v, outside = os.path.join(d, "vault"), os.path.join(d, "outside-core")
+    for rel, text in (("a.md", "# A\nalpha\n"), ("Sub/b.md", "# B\nbeta\n"), ("keep.md", "# K\nkeep\n"),
+                      ("keep2.md", "# K2\nkeep two\n"), ("@Bea Two.md", "# Bea Two\nA people note named the Obsidian way.\n")):
+        write(os.path.join(v, *rel.split("/")), text)
+    write(os.path.join(outside, "c.md"), "# C\ngamma\n")
+    vtext = "## Obsidian Vaults\n\n- path: %s\n" % v
+    roots = ctx_index.scope(vtext, []) + [ctx_index.Root("zorg-x", outside, "")]
+    check("(the root is the vault itself)", [r["path"] for r in roots][:1] == [v] and ctx_index.rel_path(v, [v]) == "")
+    idx = ctx_index.Index(os.path.join(d, "home"))
+    r = idx.refresh(roots, "_System/context", [])
+    check("a vault-level root names its files without a top folder",
+          {n["path"] for n in idx.notes()} == {"a.md", "Sub/b.md", "keep.md", "keep2.md", "@Bea Two.md", "@zorg-x/c.md"},
+          idx.notes())
+    os.remove(os.path.join(v, "a.md"))
+    os.remove(os.path.join(v, "@Bea Two.md"))
+    shutil.rmtree(os.path.join(v, "Sub"))
+    r = idx.refresh(roots, "_System/context", [], budget=0.0)
+    check("…out of time it counts the files it holds there, not one folder",
+          r["pending"] == 6 and r["removed"] == 0, r)
+    r = idx.refresh(roots, "_System/context", [])
+    check("…files (an @-named one too) and a folder deleted at its top level leave the index; the core outside stays",
+          r["removed"] == 3 and {n["path"] for n in idx.notes()} == {"keep.md", "keep2.md", "@zorg-x/c.md"}, (r, idx.notes()))
 
 with tempfile.TemporaryDirectory() as d:
     home = os.path.join(d, "home"); os.makedirs(os.path.join(home, ".grow-pm"))
