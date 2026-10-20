@@ -126,11 +126,25 @@ check("brackets: each abbreviation without a space is a member, a gloss with spa
       gl.load(odd)[0] == [["a", "cart", "pdp", "пдп", "single"]], gl.load(odd))
 shutil.rmtree(odd)
 
-odd = temp_home(("_org.yaml", "terms:\n  - term: a\n    en: x\n    status: approved\n"),
-                ("p.yaml", "terms:\n  - term: A\n    en: y\n    status: deprecated\n"))
-check("a product entry of the same term hides the _org one whatever its status",
-      gl.load(odd, product_id="p")[0] == [], gl.load(odd, product_id="p"))
-shutil.rmtree(odd)
+ORG_A = ("_org.yaml", "terms:\n  - term: a\n    en: x\n    status: approved\n  - term: other\n    en: z\n    status: approved\n")
+
+
+def over(status, term="A"):
+    """The _org glossary (a, other) with a product file that holds one entry of `term` in the given status."""
+    home = temp_home(ORG_A, ("p.yaml", "terms:\n  - term: %s\n    en: y\n    status: %s\n" % (term, status)))
+    try:
+        return gl.load(home, product_id="p")
+    finally:
+        shutil.rmtree(home)
+
+
+check("a product candidate never hides an approved _org term: the _org group stays", over("candidate") == ([["a", "x"], ["other", "z"]], None), over("candidate"))
+check("…nor does an entry with another or no status", over("draft")[0] == [["a", "x"], ["other", "z"]] and over("")[0] == [["a", "x"], ["other", "z"]], (over("draft"), over("")))
+check("a product approved term replaces the _org one of the same term, in place", over("approved") == ([["a", "y"], ["other", "z"]], None), over("approved"))
+check("a product deprecated term retires the _org one: its group is gone, the others stay", over("deprecated") == ([["other", "z"]], None), over("deprecated"))
+check("a product candidate or deprecated term of a term _org does not have adds nothing",
+      over("candidate", "new") == ([["a", "x"], ["other", "z"]], None) and over("deprecated", "new") == ([["a", "x"], ["other", "z"]], None))
+check("a product approved term _org does not have is added after the _org ones", over("approved", "new") == ([["a", "x"], ["other", "z"], ["new", "y"]], None), over("approved", "new"))
 
 # --- expand ------------------------------------------------------------------------------------------------------
 exp = gl.expand(st.query_terms("порожній кошик"), groups)

@@ -10,12 +10,14 @@ found as well (as a list of its own, at half weight — that is the caller's bus
             groups of names, plus the reason when a file could not be read.
 - expand    the stems of the other names of every group a question names.
 
-The product's file is `<product_id>.yaml`, else `slugify(product).yaml`, else the only file that is not `_org.yaml`;
-a product term replaces the `_org` term of the same `term`, whatever its status. A group is the `term`, the `en` (and
-every abbreviation in its brackets — "product detail page (PDP)" is "product detail page" and "pdp"), the `variants` and
-the `avoid` phrasings: a phrasing the team does not use is still one a source may use. Only `status: approved` entries
-count; the `phrases:` list is the lint's. A file that cannot be read or is broken loses only itself: the other file is
-loaded, and the reason names the broken one. Reads only; no network. Stdlib only.
+The product's file is `<product_id>.yaml`, else `slugify(product).yaml`, else the only file that is not `_org.yaml`.
+A product term of the same `term` as an `_org` one replaces it when it is `approved` and retires it when it is
+`deprecated` (the product has dropped the word); a product `candidate` is a suggestion and never hides an approved
+`_org` term. A group is the `term`, the `en` (and every abbreviation in its brackets — "product detail page (PDP)" is
+"product detail page" and "pdp"), the `variants` and the `avoid` phrasings: a phrasing the team does not use is still
+one a source may use. Only `status: approved` entries count; the `phrases:` list is the lint's. A file that cannot be
+read or is broken loses only itself: the other file is loaded, and the reason names the broken one. Reads only; no
+network. Stdlib only.
 """
 import functools
 import os
@@ -116,8 +118,11 @@ def load(home, product=None, product_id=None):
             continue
         for rec in records:
             term = (_texts(rec.get("term")) or [""])[0]
-            if _name(term):
-                merged[_name(term)] = rec                       # a later file (the product's) replaces, in place
+            status = _name((_texts(rec.get("status")) or [""])[0])
+            if not _name(term):
+                continue
+            if file == ORG or status in ("approved", "deprecated"):
+                merged[_name(term)] = rec                       # the product's replaces (approved) or retires (deprecated)
     groups = []
     for key, rec in merged.items():
         if _name((_texts(rec.get("status")) or [""])[0]) == "approved":
