@@ -162,9 +162,11 @@
                                 <mark>…]`, its snippet, `id <id> · варіанти <i,…>`, then the notes (a source that did not
                                 answer, the index's state). --json: CTX_RESULT only. CTX_RESULT: candidates, notes, sources
                                 [{id, kind, answered}], index, counts. No --q (and no --get), a bad --sources/--limit/--skill,
-                                or nothing to search (no vault, no repository, no source): exit 3; no source answered: exit 5;
-                                0 candidates is exit 0. No store needed. The ids go to <home>/.grow-pm/index/last.json.
-  search --get ID [--json]      one section of the last search (or of the section index, by its id):
+                                or nothing to search (no vault, no repository, no source): exit 3; no source answered (the
+                                own index busy or damaged counts as not answered): exit 5; 0 candidates is exit 0. No store
+                                needed. The ids are merged into <home>/.grow-pm/index/last.json (a save that fails is a line,
+                                never the exit code). A candidate's sources name the repository of a core page.
+  search --get ID [--json]      one section of the last searches (or of the section index, by its id):
                                 `> [<source> · <path> › <heading> · <day>]` and its text (an MCP note through vault_get_note).
                                 An unknown id, note or section: exit 3; the server did not answer: exit 5. --json: the header
                                 and the text in CTX_RESULT only
@@ -1039,8 +1041,9 @@ def cmd_search(a, c):
         print("search: nothing to search — no vault in local-context.md, no registered repository with a folder on disk, "
               "no local index or MCP%s" % (" of the kinds asked (%s)" % ",".join(which) if a.sources else ""))
         return 3, dict(res, error="nothing to search")
-    if said:
-        cs_.save_last(c.home, last)
+    why = cs_.save_last(c.home, last) if said else None     # a failed save is one line, never the exit code
+    if why:
+        res["notes"].append(cs_.LAST_NOTE % why)
     if not a.json:
         sys.stdout.write(cs_.render(res, a.q))
     return (0 if said else 5), res

@@ -38,6 +38,7 @@ import json
 import os
 import sqlite3
 import sys
+import tempfile
 import threading
 import time
 import unicodedata
@@ -76,7 +77,10 @@ COMMAND_S = 60.0                # the whole search
 SNIPPET_W = 300                 # a snippet's characters at most
 MAX_SECTIONS = 2                # sections of one note in the list
 LAST_NAME = "last.json"
+LAST_KEEP = 1000                # ids last.json keeps — the newest; ids are stable, so the searches merge into it
+LAST_NOTE = "ідентифікатори пошуку не збережено (%s) — --get знайде лише секції свого індексу"
 _META = ("title", "type", "product", "status", "date", "ttl_date")
+STATUS_KEYS = ("schema", "updated", "files", "sections", "pending", "skipped_dataless")
 _BROKEN = ci.BROKEN_NOTE.split("%s")[0]      # Index.problem of a file SQLite cannot read (a busy one is BUSY_NOTE)
 _CLASS_DIR = {"teams": "team_card_dir", "people": "people_dir"}     # any other class: `<class>_dir`
 _FM_DATES = ci.DATE_KEYS      # a local hit's date from its frontmatter, in the index's order
@@ -244,7 +248,10 @@ def sources(context_text, repos, which=KINDS):
 
 # ------------------------------------------------------------------ hits
 def Hit(path, heading, source, rank, section_id=None, title=None, date=None, snippet=None, variant=0, list="", **extra):
-    """One section (the own index) or note (a local index, MCP) a list gave: `rank` its place in the list (1 first),
+    """One section (the own index) or note (a local index, MCP) a list gave: `source` the source that holds it — for the
+    own index the source of the root its file lies in (`own` for a plugin folder, a repository id for a core folder;
+    the list's key still names the source asked, `own|…`), else the local index's or the repository's id; `rank` its
+    place in the list (1 first),
     `variant` the variant's number, `list` the list's key. Optional extras: type, product, status, hub and sensitive
     (None: the source did not say), ttl_date (the note's own `updated` | `snapshot` | `generated`, what a class TTL
     counts from; "" when it has none or the source did not say), text (an own hit's section), terms (how many of the
@@ -343,7 +350,7 @@ def _own(sctx, src, plans, until, box):
                 words = st.stem_text(" ".join([r.get("title") or "", r.get("heading") or "", r.get("text") or ""]
                                               + list(r.get("tags") or []) + list(r.get("aliases") or []))).split()
                 extra["terms"] = _held(terms, words)
-            hits.append(Hit(rel, r.get("heading") or "", src["id"], 0, section_id=r.get("id"), title=r.get("title"),
+            hits.append(Hit(rel, r.get("heading") or "", r.get("source") or src["id"], 0, section_id=r.get("id"), title=r.get("title"),
                             date=r.get("date"), variant=i, list=key, **extra))
         _add(lists, key, hits)
 
@@ -756,6 +763,7 @@ def _entries(lists, fused):
         said = ([own] if own else []) + [h for h in hits if h is not own]
         e = {"path": path, "heading": heading, "score": score, "hits": hits, "flags": [],
              "section_id": own["section_id"] if own else None, "text": own.get("text") if own else None,
+             "own_source": own["source"] if own else None,
              "hub": own.get("hub") if own else next((h["hub"] for h in hits if h.get("hub") is not None), None),
              "sensitive": any(h.get("sensitive") is True for h in hits),
              "remote": next((h["remote"] for h in hits if h.get("remote")), None),
@@ -780,8 +788,9 @@ def _order(c):
 def _merge(path, entries):
     """Key 1 — the entries of one file are one candidate: its heading the best own section (the local copy), at most
     MAX_SECTIONS sections of it kept, its score the sum of what it keeps (those sections and the note as another source
-    found it), its sources a list (`own` first), its marks those of its entries — the marks of the hits counted again
-    over all of them — and `sensitive` when any source says so."""
+    found it), its sources a list (those of the own index first — `own` or the core's repository — then the others,
+    each by name), its marks those of its entries — the marks of the hits counted again over all of them — and
+    `sensitive` when any source says so."""
     entries = sorted(entries, key=_order)
     secs = [e for e in entries if e.get("section_id") is not None]
     rest = [e for e in entries if e.get("section_id") is None]
@@ -790,14 +799,12 @@ def _merge(path, entries):
     for k in _META:
         c[k] = next((e[k] for e in [c] + entries if e.get(k)), "")
     hits = [h for e in entries for h in e.get("hits") or []]
-    names = []
-    for h in hits:
-        if h.get("source") and h["source"] not in names:
-            names.append(h["source"])
+    mine = sorted({h["source"] for h in hits if h.get("section_id") is not None and h.get("source")})
+    names = mine + sorted({h["source"] for h in hits if h.get("source")} - set(mine))
     flags = []
     for e in entries:
         flags += [f for f in e.get("flags") or [] if f not in flags and f not in (GLOSSARY_ONLY, ONE_WORD)]
-    c.update(path=path, score=sum(e["score"] for e in kept), hits=hits, source=sorted(names, key=lambda s: (s != "own", s)),
+    c.update(path=path, score=sum(e["score"] for e in kept), hits=hits, source=names,
              flags=flags + _hit_marks(hits), sensitive=any(e.get("sensitive") for e in entries),
              sections=[{"heading": e["heading"], "section_id": e["section_id"]} for e in secs[:MAX_SECTIONS]]
              or [{"heading": c["heading"], "section_id": None}],
@@ -820,7 +827,7 @@ def dedup(cands, notes_meta):
        the core page) — the one with more text (`size`) stays, marked `двійник <path>`;
     5. the same `version_key` — the newer by its date stays, marked `є старіші версії: N` (the older ones the index
        holds); a version that is not the newest the index holds is marked `старіша версія <path of the newest>`.
-    A candidate that stays keeps the best score of those it stands for. `cands` are entries (one per path and heading,
+    A candidate that stays keeps the best score of those it stands for, and their `sensitive`. `cands` are entries (one per path and heading,
     weighed by the priors: path, heading, score, flags, hits, section_id, title, …); `notes_meta` Index.notes() — the
     keys 2–5 read hash, size, links, version_key, confluence_id and date there, so they hold for files of the index.
     `sensitive` (any source, or the index) is a mark too."""
@@ -842,6 +849,8 @@ def dedup(cands, notes_meta):
             if o is not keep and id(o) not in gone:
                 gone.add(id(o))
                 keep["score"] = max(keep["score"], o["score"])
+                if o.get("sensitive") or meta(o).get("sensitive"):
+                    keep["sensitive"] = True            # what it stands for is sensitive: the mark stays (spec §7.4)
                 if mark:
                     _flag(keep, mark % o["path"])
 
@@ -943,10 +952,10 @@ def _note(notes, more):
 
 
 def _kind(c):
-    """(kind, source) of the text a candidate is read from: `own` (an own section), `local` (the file on disk a local
-    index named) or `mcp` (the server)."""
+    """(kind, source) of the text a candidate is read from: `own` (an own section; its source the root's — `own` or the
+    core's repository), `local` (the file on disk a local index named) or `mcp` (the server)."""
     if c.get("section_id") is not None:
-        return "own", "own"
+        return "own", c.get("own_source") or "own"
     hits = c.get("hits") or []
     local = next((h for h in hits if not h.get("remote")), None)
     if local is not None:
@@ -1000,9 +1009,11 @@ def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, 
       source (`gather`, the sources of `which`), RRF (`fuse`), the priors (`skill`'s types, `product`, the classes'
       TTL and the repositories' snapshots), `dedup`, the best `limit`.
     - A query that finds the own index damaged (Index.problem: a file SQLite cannot read, never a busy one) rebuilds
-      it once and asks the own index again; REBUILT_NOTE says so.
+      it once and asks the own index again; REBUILT_NOTE says so. An own index that stays unread — busy (BUSY_NOTE;
+      never rebuilt) or still damaged — has not answered: its lists are dropped, and its line stays.
     - candidates: {id, path, heading, title, type, product, date, source [ids], flags, matched [the queries that
-      found it, from 1], snippet, score, sections [{id, heading}: the candidate's own first, at most MAX_SECTIONS]}.
+      found it, from 1], snippet, score, sections [{id, heading}: the candidate's own first, at most MAX_SECTIONS]};
+      a source of the own index is the root's (`own` for a plugin folder, the repository's id for a core folder).
     - notes: the lines to print under the list; sources: [{id, kind, answered}] (none answered: the caller exits 5;
       none at all: there is no place to search); index: the own index's state and what the refresh did (None when the
       own index was not asked); last: what save_last keeps for `--get`.
@@ -1029,18 +1040,22 @@ def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, 
         if again is not None and not any(n.startswith(_BROKEN) for n in more2):
             lists = dict({k: v for k, v in lists.items() if not k.startswith("own|")}, **again)
             more = [n for n in more if not n.startswith(_BROKEN)] + [REBUILT_NOTE] + more2
+    busy = own and ci.BUSY_NOTE in more
+    if own and (busy or any(n.startswith(_BROKEN) for n in more)):
+        lists = {k: v for k, v in lists.items() if not k.startswith("own|")}     # the base was not read: no answer
     _note(notes, more)
     answered = {k.split("|", 1)[0] for k in lists}
     entries = _entries(lists, fuse(lists))
     priors(entries, skill_types(skill), product, now, class_ttl(sctx["repos"], sctx["vaults"]), snapshots(sctx, now))
-    metas = idx.notes() if os.path.isfile(idx.db_path) else []
+    metas = idx.notes() if os.path.isfile(idx.db_path) and not busy else []
     cands = dedup(entries, metas)[:max(1, int(limit))]
     terms = list(dict.fromkeys(t for q in queries for t in st.query_terms(q)))
     last = {}
     for c in cands:
         last.update(_last(c))
     if own:
-        index = dict(idx.status(), **{k: (done or {}).get(k, 0) for k in ("added", "changed", "removed")},
+        state = idx.status() if not busy else {k: idx._state().get(k) for k in STATUS_KEYS}   # busy: no second wait
+        index = dict(state, **{k: (done or {}).get(k, 0) for k in ("added", "changed", "removed")},
                      locked=bool((done or {}).get("locked")), rebuilt=bool((done or {}).get("rebuilt")) or REBUILT_NOTE in notes)
     return {"candidates": [_public(c, terms) for c in cands], "notes": notes,
             "sources": [{"id": s["id"], "kind": s["kind"], "answered": s["id"] in answered} for s in srcs],
@@ -1053,8 +1068,33 @@ def last_path(home):
 
 
 def save_last(home, last):
-    """Keep `run`'s `last` beside the index (the only file the search writes outside the index itself)."""
-    cst.atomic_write(last_path(home), json.dumps(last or {}, ensure_ascii=False, indent=1) + "\n")
+    """Merge `run`'s `last` into last.json beside the index (the only file the search writes outside the index itself):
+    ids are stable, so one session's search keeps another's ids for `--get`; the newest LAST_KEEP stay. Written through
+    a temp file of its own in the same folder (`.last.json.<random>.tmp`, the shape ctx_store sweeps), then replaced —
+    two searches at once never take each other's temp file. Returns None, or why it could not save: the search's
+    result and exit code never depend on it."""
+    path, tmp = last_path(home), None
+    try:
+        cst.check_target(path)
+        folder = os.path.dirname(path)
+        os.makedirs(folder, exist_ok=True)
+        merged = _load_last(home)
+        for k, v in (last or {}).items():
+            merged.pop(k, None)
+            merged[k] = v
+        fd, tmp = tempfile.mkstemp(prefix=".%s." % LAST_NAME, suffix=".tmp", dir=folder)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(dict(list(merged.items())[-LAST_KEEP:]), f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        os.replace(tmp, path)
+        return None
+    except (OSError, ValueError, cst.PathRefused) as e:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        return str(e) or e.__class__.__name__
 
 
 # ------------------------------------------------------------------ --get
@@ -1138,7 +1178,8 @@ def _from_mcp(sctx, entry):
 
 
 def get(sctx, cid):
-    """(header, text) of a candidate's section: the header `> [<source> · <path> › <heading> · <day>]`, the text under
+    """(header, text) of a candidate's section: the header `> [<source> · <path> › <heading> · <day>]` (an own section
+    names the index's source of its note: `own`, or the repository of a core page), the text under
     the heading (a note-level candidate: the note without its frontmatter). The id is looked up in last.json (the last
     search), else among the sections of the own index. An own section is read from the index (from its file when the
     note changed since); a note only a local index knows from the vault; an MCP one through vault_get_note. GetError:
@@ -1155,6 +1196,7 @@ def get(sctx, cid):
         sec = idx.section(entry.get("section_id")) if entry.get("section_id") is not None else None
         if sec and N(sec["path"]) == entry["path"] and (sec.get("heading") or "") == heading:
             text, date = sec.get("text") or "", sec.get("date") or date
+            entry = dict(entry, source=sec.get("source") or entry.get("source"))
     if text is None:
         body, day = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
         text, date = _section_of(body, heading), date or day

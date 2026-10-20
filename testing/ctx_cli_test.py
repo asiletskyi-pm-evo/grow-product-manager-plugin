@@ -4360,6 +4360,10 @@ with tempfile.TemporaryDirectory() as d:
     e3 = by_title(res3, "Epic — PROJ-77")
     check("…the one with more text stays, the hub named as its twin", e3 and e3["path"] == "ZorgCore/Epics/Epic — PROJ-77.md"
           and "двійник Notes/Epics/Epic — PROJ-77.md" in e3["flags"], e3)
+    check("…a core page names its repository as its source", e3 and e3["source"] == ["zorg-core"], e3)
+    rc, out, _ = run_ok(env, "search", "--get", e3["id"]) if e3 else (None, "", None)
+    check("…and so does its --get line", rc == 0 and out.startswith("> [zorg-core · ZorgCore/Epics/Epic — PROJ-77.md › "),
+          (rc, out[:200]))
     check("search writes nothing to the store", tree(env.store) == before)
     rc4, out4, res4 = run_ok(env, "search", "--q", "що і як?")
     check("an all-stop query is exit 0 with no candidates", rc4 == 0 and res4 and res4["candidates"] == [], (rc4, out4[-300:]))
@@ -4459,6 +4463,53 @@ with tempfile.TemporaryDirectory() as d:
         {"id": "own", "kind": "own", "answered": True}] and by_path(res, KOSHYK), (rc, res and res["sources"]))
     rc, out, _ = run_ok(env, "search", "--get", by_path(res, KOSHYK)["id"])
     check("…and --get of what it found", rc == 0 and out.startswith("> [own · %s › " % KOSHYK), (rc, out[:300]))
+
+with tempfile.TemporaryDirectory() as d:            # fix round 1: searches at once; a save that fails; a busy index
+    env = SearchEnv(d)
+    run_ok(env, "search", "--q", "seller")             # the index built once
+    penv = dict(os.environ)
+    penv.pop("GROW_PM_CONTEXT_PATH", None)
+    runs = []
+    for _ in range(2):
+        ps = [subprocess.Popen([sys.executable, CTX, "search", "--q", q, "--json", "--home", env.home, "--context", env.ctx],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=penv)
+              for q in ("seller working hours", "графік роботи продавця", "delivery slot", "mobile cart", "Epic PROJ-77",
+                        "standup")]
+        runs += [p.communicate(timeout=120) + (p.returncode,) for p in ps]
+    check("six searches at the same moment, twice: every one exits 0 with its CTX_RESULT",
+          all(rc == 0 and so.strip().splitlines()[-1].startswith("CTX_RESULT ") for so, se, rc in runs),
+          [(rc, so[-200:], se[-200:]) for so, se, rc in runs if rc != 0][:2])
+    check("…last.json parses and no temp file is left beside it",
+          isinstance(json.load(open(os.path.join(env.index, "last.json"), encoding="utf-8")), dict)
+          and not [n for n in os.listdir(env.index) if n.endswith(".tmp")], os.listdir(env.index))
+    rc, out, res = run_ok(env, "search", "--q", "cart experiments", "--json")
+    gx = by_path(res, "Growth/Cart experiments.md")
+    run_ok(env, "search", "--q", "standup")
+    rc, out, _ = run_ok(env, "search", "--get", gx["id"]) if gx else (None, "", None)
+    check("one search keeps another's ids: --get of a zorg-brain note an earlier search found still works",
+          rc == 0 and out.startswith("> [zorg-brain · Growth/Cart experiments.md · "), (rc, out[:200]))
+    os.remove(os.path.join(env.index, "last.json"))
+    os.makedirs(os.path.join(env.index, "last.json"))
+    rc, out, res = run_ok(env, "search", "--q", "seller working hours", "--json")
+    check("last.json that cannot be written: the search still exits 0 with its candidates, one line says so",
+          rc == 0 and res["candidates"] and any(n.startswith("ідентифікатори пошуку не збережено (") for n in res["notes"]),
+          (rc, res and res["notes"]))
+    os.rmdir(os.path.join(env.index, "last.json"))
+    db = os.path.join(env.index, "sections.sqlite")
+    hold = sqlite3.connect(db, timeout=1)
+    hold.execute("BEGIN EXCLUSIVE")
+    try:
+        rc, out, res = run_ok(env, "search", "--q", "seller", "--sources", "own")
+    finally:
+        hold.rollback()
+        hold.close()
+    check("the own index busy (another process writes it) as the only source: exit 5 and the busy line, no rebuild",
+          rc == 5 and "індекс пошуку зайнятий іншим процесом — цього разу без нього" in out and res
+          and res["sources"] == [{"id": "own", "kind": "own", "answered": False}] and not os.path.exists(db + ".broken"),
+          (rc, out[-500:]))
+    rc, out, res = run_ok(env, "search", "--q", "seller", "--sources", "own", "--json")
+    check("…once it is free the same index answers", rc == 0 and res["candidates"] and res["index"]["files"] == 19,
+          (rc, res and res.get("index")))
 
 with tempfile.TemporaryDirectory() as d:
     env = SearchEnv(d, brain=False)

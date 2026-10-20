@@ -14,7 +14,7 @@ Stdlib only; run from the repo root:
 
   env -u GROW_PM_CONTEXT_PATH -u GROW_PM_PROVIDER_PATHS python3 testing/ctx_search_test.py
 """
-import datetime, hashlib, json, os, shutil, sqlite3, sys, tempfile, time, unicodedata
+import datetime, hashlib, json, os, shutil, sqlite3, subprocess, sys, tempfile, time, unicodedata
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -266,6 +266,9 @@ with tempfile.TemporaryDirectory() as d:
     lists_cut, _ = cs_.gather(no_core, ["seller working hours"], [cs_.Source("own", "own")], deadline())
     check("the core answers while it is registered", any(p.startswith("ZorgCore/") for p in paths(lists_all, "own|v0")),
           paths(lists_all, "own|v0"))
+    check("…an own hit names the source of its root: own for the plugin folder, the repository for the core",
+          all(h["source"] == ("zorg-core" if h["path"].startswith("ZorgCore/") else "own") for h in lists_all["own|v0"]),
+          [(h["path"], h["source"]) for h in lists_all["own|v0"]])
     check("index rows of a root no longer in scope do not answer",
           paths(lists_cut, "own|v0") and not any(p.startswith("ZorgCore/") for p in paths(lists_cut, "own|v0")),
           paths(lists_cut, "own|v0"))
@@ -634,6 +637,16 @@ metas[R1] = meta_of(R1, version_key="Notes/roadmap q4", date="2026-08-01")
 out = cs_.dedup([entry(R2, "Themes", 0.05, sid=1)], metas)
 check("…an older version found alone is named the older version of the newest, and its own older ones are counted",
       [c["path"] for c in out] == [R2] and out[0]["flags"] == ["старіша версія " + R3, "є старіші версії: 1"], out)
+out = cs_.dedup([entry(D2, "Delivery slots", 0.05, sid=1), entry(D1, "Delivery slots", 0.02, sid=2)],
+                [meta_of(D1, confluence_id="900100200", date="2026-10-05"),
+                 meta_of(D2, confluence_id="900100200", date="2026-09-01", sensitive=True)])
+check("key 2: a folded twin the index calls sensitive leaves the mark on the one that stays",
+      [c["path"] for c in out] == [D1] and out[0]["flags"] == ["двійник " + D2, "sensitive"] and out[0]["sensitive"], out)
+out = cs_.dedup([entry(R2, "Themes", 0.05, sid=1, sensitive=True), entry(R3, "Themes", 0.01, sid=2)],
+                {R2: meta_of(R2, version_key="Notes/roadmap q4", date="2026-09-10"),
+                 R3: meta_of(R3, version_key="Notes/roadmap q4", date="2026-10-05")})
+check("key 5: an older version its source called sensitive leaves the mark on the newer", [c["path"] for c in out] == [R3]
+      and out[0]["flags"] == ["є старіші версії: 1", "sensitive"], out)
 S1, S2 = "Notes/Meetings/Standup 2026-10-01.md", "Notes/Meetings/Standup 2026-10-08.md"
 out = cs_.dedup([entry(S1, "", 0.02, sid=1), entry(S2, "", 0.01, sid=2)],
                 {S1: meta_of(S1, date="2026-10-01"), S2: meta_of(S2, date="2026-10-08")})
@@ -721,8 +734,15 @@ with tempfile.TemporaryDirectory() as d:
     hg, tg = cs_.get(sx, gc["id"])
     check("…a note only the local index knows is read from the vault", hg == "> [zorg-brain · Growth/Cart experiments.md · 2026-08-01]"
           and "seller's hours" in tg and "type:" not in tg, (hg, tg))
-    cs_.save_last(env.home, {})
-    check("…an own section another search listed is found in the index by its id", cs_.get(sx, k["id"]) == (header, text))
+    os.remove(cs_.last_path(env.home))
+    check("…an own section no search listed is found in the index by its id", cs_.get(sx, k["id"]) == (header, text))
+    ep = cs_.run(sx, ["Epic PROJ-77"], now=NOW)
+    core = next((c for c in ep["candidates"] if c["path"] == "ZorgCore/Epics/Epic — PROJ-77.md"), None)
+    check("a core page's candidate names its repository as its source", core and core["source"] == ["zorg-core"]
+          and ep["last"][core["id"]]["source"] == "zorg-core", core)
+    cs_.save_last(env.home, ep["last"])
+    check("…and so does its --get line", core and cs_.get(sx, core["id"])[0].startswith(
+        "> [zorg-core · ZorgCore/Epics/Epic — PROJ-77.md › "), core and cs_.get(sx, core["id"])[0])
     try:
         cs_.get(sx, "0000000000")
         got = None
@@ -730,6 +750,67 @@ with tempfile.TemporaryDirectory() as d:
         got = e
     check("…an unknown id: GetError, code 3, one line", got is not None and got.code == 3 and "\n" not in str(got), got)
     check("run, save_last and get write nothing to the vault", tree(env.vault) == before_vault)
+
+    # ---------------------------------------------------------- last.json: merged, trimmed, never a failure
+    home2 = os.path.join(d, "home2")
+    check("save_last merges: the ids of an earlier search stay", cs_.save_last(home2, {"a": {"path": "1"}}) is None
+          and cs_.save_last(home2, {"b": {"path": "2"}}) is None
+          and json.load(open(cs_.last_path(home2), encoding="utf-8")) == {"a": {"path": "1"}, "b": {"path": "2"}})
+    keep = cs_.LAST_KEEP
+    cs_.LAST_KEEP = 3
+    try:
+        cs_.save_last(home2, {"a": {"path": "1b"}, "c": {}, "d": {}})
+    finally:
+        cs_.LAST_KEEP = keep
+    check("…the newest LAST_KEEP ids stay, an id seen again is new", list(json.load(open(cs_.last_path(home2), encoding="utf-8")))
+          == ["a", "c", "d"], json.load(open(cs_.last_path(home2), encoding="utf-8")))
+    os.remove(cs_.last_path(home2))
+    os.makedirs(cs_.last_path(home2))
+    why = cs_.save_last(home2, {"x": {}})
+    check("…a save that cannot be done returns why, it raises nothing and leaves no temp file", isinstance(why, str) and why
+          and not [n for n in os.listdir(os.path.dirname(cs_.last_path(home2))) if n.endswith(".tmp")], why)
+    home3 = os.path.join(d, "home3")
+    code = ("import sys; sys.path.insert(0, %r); import ctx_search as cs_\n"
+            "bad = [w for w in (cs_.save_last(sys.argv[1], {'%%s-%%d' %% (sys.argv[2], i): {'path': 'x' * 2000}})"
+            " for i in range(150)) if w]\nprint(len(bad))\n" % os.path.join(ROOT, "scripts"))
+    procs = [subprocess.Popen([sys.executable, "-c", code, home3, str(n)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              text=True) for n in range(4)]
+    outs = [p.communicate(timeout=120) + (p.returncode,) for p in procs]
+    check("four writers of last.json at once: none fails, the file parses, no temp file is left",
+          all(rc == 0 and so.strip() == "0" for so, se, rc in outs)
+          and isinstance(json.load(open(cs_.last_path(home3), encoding="utf-8")), dict)
+          and not [n for n in os.listdir(os.path.dirname(cs_.last_path(home3))) if n.endswith(".tmp")],
+          [(so.strip(), se[-200:], rc) for so, se, rc in outs])
+
+    # ---------------------------------------------------------- an own index that was not read is no answer
+    calls = []
+    real_query, real_rebuild = ci.Index.query, ci.Index.rebuild
+
+    def problem_query(note):
+        def query(self, expr, limit):
+            self.problem = note
+            return []
+        return query
+
+    ci.Index.rebuild = lambda self, *a, **kw: calls.append(1) or real_rebuild(self, *a, **kw)
+    try:
+        ci.Index.query = problem_query(ci.BUSY_NOTE)
+        busy = cs_.run(sx, ["графік роботи продавця"], which=("own",), now=NOW)
+        both = cs_.run(sx, ["графік роботи продавця"], now=NOW)
+        rebuilt_before = len(calls)
+        ci.Index.query = problem_query(ci.BROKEN_NOTE % "database disk image is malformed")
+        broken = cs_.run(sx, ["графік роботи продавця"], which=("own",), now=NOW)
+    finally:
+        ci.Index.query, ci.Index.rebuild = real_query, real_rebuild
+    check("a busy own index has not answered: its line, no candidates, never a rebuild",
+          busy["sources"] == [{"id": "own", "kind": "own", "answered": False}] and ci.BUSY_NOTE in busy["notes"]
+          and busy["candidates"] == [] and rebuilt_before == 0, (busy, calls))
+    check("…beside zorg-brain, the other source still answers", both["sources"] == [
+        {"id": "own", "kind": "own", "answered": False}, {"id": "zorg-brain", "kind": "local", "answered": True}]
+          and both["candidates"] and all(c["source"] == ["zorg-brain"] for c in both["candidates"]), both["sources"])
+    check("an own index still damaged after its one rebuild has not answered, its line stays",
+          broken["sources"] == [{"id": "own", "kind": "own", "answered": False}] and len(calls) == 1
+          and any(n.startswith("індекс пошуку не читається (") for n in broken["notes"]), (broken["notes"], calls))
 
     idx = ci.Index(env.home)
     for table, inside in (("sections_fts_idx", False), ("sections_fts_data", True)):
