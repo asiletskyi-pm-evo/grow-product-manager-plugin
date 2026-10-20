@@ -14,6 +14,8 @@ Semantics: references/context-protocol.md.
 - load_manifest / manifest_for    the manifest
 - read_view                       the text of `ctx read --skill <name>` and its result
 - check_manifest                  validator check 16: the manifest against the skills, the schema and the slot catalogue
+- skill_context_map / check_search_types   validator check 19 (since v3.16.0): the `search_types` of every skill equal
+                                  to its row of SKILL_CONTEXT_MAP (references/vault-protocol.md)
 
 Stdlib only.
 """
@@ -32,6 +34,7 @@ import ctx_slots as sl  # noqa: E402
 
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST_PATH = os.path.join(PLUGIN_ROOT, "references", "context-manifest.yaml")
+MAP_PATH = os.path.join(PLUGIN_ROOT, "references", "vault-protocol.md")       # SKILL_CONTEXT_MAP (since v3.16.0)
 _INVALID = re.compile(r"> ⚠ Неактуально з [0-9-]+: (.*)")
 # "Which Skills Read What" required context → where the manifest must carry it
 REQUIRED_MAP = {"product.name": ("product", None), "jira_project_key": ("product", "Jira Project Key"),
@@ -540,6 +543,10 @@ def check_manifest(root, manifest_path=None, catalogue_path=None):
     for e in entries.values():
         names += list((e or {}).get("settings") or []) + list((e or {}).get("required_settings") or [])
     errs += ["setting %r starts no known setting title" % n for n in sorted(set(names)) if n.lower() not in titles]
+    for skill, e in sorted(entries.items()):           # since v3.16.0: the artifact types `ctx search --skill` weighs
+        types = (e or {}).get("search_types") if isinstance(e, dict) else None
+        if types is not None and not (isinstance(types, list) and all(isinstance(t, str) and t.strip() for t in types)):
+            errs.append("%s: search_types must be a list of artifact type names, not %r" % (skill, types))
     for skill, toks in _table_rows(root).items():
         if skill not in skills:
             errs.append("Which Skills Read What row %s is not a skill" % skill)
@@ -567,4 +574,79 @@ def check_manifest(root, manifest_path=None, catalogue_path=None):
     errs += ["context-slots.yaml: %s" % e for e in sl.check_catalogue(cat)]
     errs += ["%s: %s name %r has no slot in context-slots.yaml" % (skill, record, name)
              for skill, record, name in _manifest_names(man) if sl.slot_for(cat, record, name) is None]
+    return errs
+
+
+# ------------------------------------------------------------------ SKILL_CONTEXT_MAP (validator check 19, since v3.16.0)
+_MAP_ROW = re.compile(r"^\|\s*([a-z][a-z0-9-]*)\s*\|(.*)\|\s*$", re.M)
+_TYPE_NAME = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
+
+
+def _map_types(cell):
+    """The artifact types of one SKILL_CONTEXT_MAP cell, or None when it is not a list of type names. `(none …)` is [];
+    what follows a `;` is a condition, not a main type (write-concept's build-first types, context-navigator's provider
+    notes), and a remark in brackets is dropped (`knowledge-source (own vault)`)."""
+    cell = cell.strip()
+    if cell.lower().startswith("(none"):
+        return []
+    main = re.sub(r"\([^)]*\)", " ", cell.split(";", 1)[0]).replace("`", "")
+    types = [t.strip() for t in main.split(",") if t.strip()]
+    return types if types and all(_TYPE_NAME.match(t) for t in types) else None
+
+
+def skill_context_map(path=None):
+    """{skill: [artifact types] | None} — the rows of the SKILL_CONTEXT_MAP table of references/vault-protocol.md
+    (`path`), in table order; None for a row whose cell is not a list of type names (_map_types). No table: {}."""
+    text = co._read(path or MAP_PATH)
+    if "### SKILL_CONTEXT_MAP" not in text:
+        return {}
+    sec = text.split("### SKILL_CONTEXT_MAP", 1)[1]
+    sec = re.split(r"^#{1,3} ", sec, maxsplit=1, flags=re.M)[0]
+    rows = {}
+    for m in _MAP_ROW.finditer(sec):
+        name = m.group(1)
+        if name != "skill" and "|" not in m.group(2):
+            rows.setdefault(name, _map_types(m.group(2)))
+    return rows
+
+
+def check_search_types(root, manifest_path=None, map_path=None):
+    """Errors of validator check 19: every skill's `search_types` in the manifest equals the types of its
+    SKILL_CONTEXT_MAP row (the same names, in the same order) — a skill without the field, with other types, without a
+    row or with a row that is not a list of type names is an error that starts with the skill's name; a row or an entry
+    that names no skill is one too. The table is for people and for hosts without a shell, the manifest for `ctx
+    search --skill`: this keeps the two the same."""
+    try:
+        man = load_manifest(manifest_path or os.path.join(root, "references", "context-manifest.yaml"))
+    except (OSError, ValueError) as e:
+        return ["context-manifest.yaml: %s" % e]
+    try:
+        table = skill_context_map(map_path or os.path.join(root, "references", "vault-protocol.md"))
+    except OSError as e:
+        return ["vault-protocol.md: %s" % e]
+    if not table:
+        return ["vault-protocol.md: no SKILL_CONTEXT_MAP table"]
+    entries = man.get("skills") or {}
+    skills = sorted(n for n in os.listdir(os.path.join(root, "skills")) if os.path.isdir(os.path.join(root, "skills", n)))
+    errs = []
+    for skill in sorted(set(skills) | set(entries) | set(table)):
+        if skill not in skills:
+            errs.append("%s: %s names it, but it is not a skill" % (
+                skill, "SKILL_CONTEXT_MAP" if skill in table else "context-manifest.yaml"))
+            continue
+        if skill not in table:
+            errs.append("%s: no row in SKILL_CONTEXT_MAP (references/vault-protocol.md)" % skill)
+            continue
+        want = table[skill]
+        if want is None:
+            errs.append("%s: the SKILL_CONTEXT_MAP row is not a list of artifact type names" % skill)
+            continue
+        if skill not in entries:
+            continue                                    # check 16 names a skill without an entry
+        e = entries[skill] if isinstance(entries[skill], dict) else {}
+        if "search_types" not in e:
+            errs.append("%s: no search_types in context-manifest.yaml — SKILL_CONTEXT_MAP has %s" % (skill, want))
+        elif e["search_types"] != want:
+            errs.append("%s: search_types %s in context-manifest.yaml, SKILL_CONTEXT_MAP has %s"
+                        % (skill, e["search_types"], want))
     return errs

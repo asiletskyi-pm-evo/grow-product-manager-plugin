@@ -189,6 +189,7 @@ import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_repos as crp  # noqa: E402
 import ctx_resolve as rv  # noqa: E402
+import ctx_search as cs_  # noqa: E402
 import ctx_schema as sc  # noqa: E402
 import ctx_slots as sl  # noqa: E402
 import ctx_synced as sy  # noqa: E402
@@ -930,26 +931,12 @@ def cmd_repo(a, c):
 
 
 def _index_scope(c):
-    """(roots, store_rel, blocks_rels) of the section index for this context: the roots of `ci.scope`, the store's
-    folder and the blocks file of every repository that is a root (the registration's, else its core manifest's), each
-    as the index names a file."""
-    repos = crp.load_repos(c.text, c.home)
-    roots = ci.scope(c.text, repos)
-    vaults = [v for v, _ in cc.vault_entries(c.text)]
-    store_rel = ci.rel_path(co.store_root_for(c.text, c.home), vaults)
-    by_source = {r["source"]: r for r in roots}
-    blocks = []
-    for r in repos:
-        root = by_source.get(r["id"])
-        if not root:
-            continue
-        name = r["blocks_file"]
-        if not name:
-            manifest, _ = crp._manifest(root["path"])
-            name = manifest.s("blocks_file") if manifest is not None else ""
-        if name:
-            blocks.append(ci.rel_path(os.path.join(root["path"], name), vaults, root))
-    return roots, store_rel, blocks
+    """(roots, store_rel, blocks_rels) of the section index for this context — the search context of
+    `ctx_search.context_for` (since v3.16.0 one function for `ctx index` and `ctx search`): the roots of `ci.scope`,
+    the store's folder and the blocks file of every repository (the registration's, else, for a root, its core
+    manifest's), each as the index names a file."""
+    s = cs_.context_for(c.home, c.text)
+    return s["roots"], s["store_rel"], s["blocks_rels"]
 
 
 def cmd_index(a, c):

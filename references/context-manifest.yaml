@@ -8,6 +8,9 @@
 #   profile: required — fields of the User Profile, which is always read whole (every_skill).
 #   settings / required_settings: setting records by the start of their title (case-insensitive), read whole.
 #   full: true — the skill edits local-context.md and reads it whole; `ctx read` gives the card only.
+#   search_types (since v3.16.0): the artifact types `ctx search --skill <name>` weighs × 1.2 — the main types of the
+#     skill's SKILL_CONTEXT_MAP row (references/vault-protocol.md; a `(none …)` row is []); validator check 19 keeps
+#     the two the same. `ctx read` does not use it.
 schema: context-manifest/1
 every_skill:
   records:
@@ -16,6 +19,13 @@ every_skill:
     - Judgment
 skills:
   brainstorm-features:
+    search_types:
+      - cjm-analysis
+      - competitive-analysis
+      - ab-test-results
+      - ux-benchmark
+      - decision
+      - debate
     product:
       fields:
         - Description
@@ -24,6 +34,12 @@ skills:
         - Competitors
         - Current OKRs
   cjm-research:
+    search_types:
+      - cjm-analysis
+      - cjm-health-check
+      - funnel-anomaly
+      - ab-test-results
+      - hypothesis
     product:
       sections:
         - Analytics Dashboards
@@ -32,46 +48,91 @@ skills:
     settings:
       - Knowledge Library
   context-connect:
+    search_types: []
     full: true
     profile:
       required:
         - Email
   context-navigator:
+    search_types:
+      - decision
+      - meeting-notes
+      - knowledge-source
     team:
       whole: true
     settings:
       - Obsidian Vaults
   decision-log:
+    search_types:
+      - decision
+      - meeting-notes
+      - hypothesis
+      - debate
     product:
       fields:
         - Description
   delegation-coach:
+    search_types:
+      - people
+      - delegation-audit
+      - goal-letter
     settings:
       - People
   design-bridge:
+    search_types:
+      - concept
+      - requirements
+      - competitive-analysis
+      - presentation
+      - prototype
+      - handoff
     product:
       sections:
         - Design System
   diagram-prototyper:
+    search_types:
+      - diagram
+      - concept
+      - requirements
     product:
       sections:
         - Design System
   experiment-tracker:
+    search_types:
+      - hypothesis
+      - ab-test-results
+      - requirements
+      - decision
     product:
       fields:
         - Description
     settings:
       - Experiments
   feedback-triage:
+    search_types:
+      - feedback-triage
+      - hypothesis
+      - cjm-analysis
     settings:
       - Feedback
   flow-walkthrough:
+    search_types:
+      - walkthrough
+      - ux-benchmark
+      - cjm-analysis
+      - requirements
     product:
       fields:
         - Platforms
       sections:
         - Test Accounts
   focus-advisor:
+    search_types:
+      - focus-brief
+      - roadmap
+      - ops-report
+      - decision
+      - hypothesis
     product:
       fields:
         - Description
@@ -80,6 +141,10 @@ skills:
     settings:
       - Focus
   goal-setter:
+    search_types:
+      - goal-letter
+      - people
+      - report-3t5f
     product:
       sections:
         - Current OKRs
@@ -87,43 +152,86 @@ skills:
       - People
       - Planning
   hiring-designer:
+    search_types:
+      - vacancy-profile
+      - goal-letter
+      - people
     team:
       sections:
         - Members
     settings:
       - People
   knowledge-library:
+    search_types:
+      - knowledge-source
     settings:
       - Knowledge Library
       - Terminology & Style
   meeting-processor:
+    search_types:
+      - meeting-notes
+      - decision
+      - concept
+      - requirements
     product:
       fields:
         - Confluence Space
   offboarding-guide:
+    search_types:
+      - people
+      - performance-review
+      - report-3t5f
+      - offboarding-plan
     settings:
       - People
   one-on-one:
+    search_types:
+      - people
+      - one-on-one-notes
+      - goal-letter
     settings:
       - People
   performance-review:
+    search_types:
+      - people
+      - report-3t5f
+      - one-on-one-notes
+      - goal-letter
+      - performance-review
     settings:
       - People
   plugin-configurator:
+    search_types: []
     full: true
   product-analysis:
+    search_types:
+      - cjm-analysis
+      - ab-test-results
+      - metrics-review
+      - post-release
+      - hypothesis
     product:
       sections:
         - Analytics Dashboards
         - Key Metrics
         - Current OKRs
   product-landscape:
+    search_types:
+      - landscape
+      - competitive-analysis
+      - ux-benchmark
+      - walkthrough
     product:
       sections:
         - Competitors
     settings:
       - Landscape
   product-reporter:
+    search_types:
+      - ops-report
+      - report-3t5f
+      - roadmap
+      - goal-letter
     product:
       required:
         - Jira Project Key
@@ -133,6 +241,11 @@ skills:
     settings:
       - People
   product-research:
+    search_types:
+      - competitive-analysis
+      - market-research
+      - ux-benchmark
+      - knowledge-source
     product:
       fields:
         - URL
@@ -142,6 +255,10 @@ skills:
     settings:
       - Knowledge Library
   project-planning:
+    search_types:
+      - roadmap
+      - project-overview
+      - ops-report
     product:
       fields:
         - Jira Project Key
@@ -151,6 +268,10 @@ skills:
     required_settings:
       - Planning
   quarterly-planning:
+    search_types:
+      - roadmap
+      - ops-report
+      - decision
     product:
       sections:
         - Current OKRs
@@ -160,9 +281,18 @@ skills:
     required_settings:
       - Planning
   release-manager:
+    search_types:
+      - decision
     settings:
       - Release
   requirements-creator:
+    search_types:
+      - concept
+      - hypothesis
+      - competitive-analysis
+      - decision
+      - ab-test-results
+      - walkthrough
     product:
       required:
         - Jira Project Key
@@ -177,12 +307,19 @@ skills:
       - Templates
       - Terminology & Style
   roadmap-architect:
+    search_types:
+      - roadmap
+      - project-overview
     product:
       sections:
         - Current OKRs
     settings:
       - Planning
   sprint-planning:
+    search_types:
+      - roadmap
+      - ops-report
+      - task-breakdown
     product:
       fields:
         - Jira Project Key
@@ -191,6 +328,10 @@ skills:
     settings:
       - People
   task-creator:
+    search_types:
+      - requirements
+      - concept
+      - task-breakdown
     product:
       required:
         - Jira Project Key
@@ -204,9 +345,17 @@ skills:
     settings:
       - Terminology & Style
   template-library:
+    search_types: []
     settings:
       - Templates
   write-concept:
+    search_types:
+      - competitive-analysis
+      - market-research
+      - ux-benchmark
+      - hypothesis
+      - decision
+      - requirements
     product:
       fields:
         - Confluence Space
