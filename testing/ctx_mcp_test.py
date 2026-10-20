@@ -275,9 +275,7 @@ for label, raw, want in [
         ("a single hit as one text object with more fields", TEXT('{"path": "a.md", "score": 2}'), ["a.md"]),
         ("an empty content (nothing found)", {"content": []}, []),
         ("an empty content with isError false written out", {"content": [], "isError": False}, []),
-        ("an empty content and a null structuredContent", {"content": [], "structuredContent": None}, []),
-        ("a content with no text item in it (nothing found)", {"content": [{"type": "image", "data": "x"}]}, []),
-        ("a content of items that are not text (nothing found)", {"content": [None, 3, {"type": "resource"}]}, [])]:
+        ("an empty content and a null structuredContent", {"content": [], "structuredContent": None}, [])]:
     with FakeMcp(raw_result=raw) as fake:
         rows, err = None, None
         try:
@@ -357,7 +355,11 @@ for label, raw in (("no content at all", {"isError": False}),
                    ("a structuredContent that is a string", {"content": [], "structuredContent": SECRET}),
                    ("many texts, none an object", TEXT("[1]", "five", "null")),
                    ("an unusable structuredContent and an empty content", {"content": [], "structuredContent": {"count": 1}}),
-                   ("a text that is a JSON string and an item that is not text", {"content": [None, {"type": "text", "text": '"a.md"'}]})):
+                   ("a text that is a JSON string and an item that is not text", {"content": [None, {"type": "text", "text": '"a.md"'}]}),
+                   ("a content with only an image item", {"content": [{"type": "image", "data": "x"}]}),
+                   ("a content with only a resource_link item", {"content": [{"type": "resource_link", "uri": "file:///" + SECRET, "name": "a.md"}]}),
+                   ("a content with only an embedded resource", {"content": [{"type": "resource", "resource": {"uri": "file:///a.md", "text": SECRET}}]}),
+                   ("a content of items that are not text", {"content": [None, 3, {"type": "resource"}]})):
     with FakeMcp(raw_result=raw) as fake:
         err = raises(lambda: McpClient(fake.url, headers={"X-Zorg-Key": SECRET}).call_list("vault_search", {"query": "x"}), McpError)
         check("call_list: %s → McpError with a fixed message, no value, no url, no header in it" % label,

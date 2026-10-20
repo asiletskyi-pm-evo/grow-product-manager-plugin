@@ -189,17 +189,19 @@ def _result_list(result):
     """The list of results in a tools/call result, in the first shape that fits, or None:
     `structuredContent` (a list, or an object with a `results` list); one text item — such a list or object as JSON,
     or a single result (a JSON object with no `results` key); several text items, each a JSON object (one result
-    each). A server that found nothing sends no text at all (a `content` list with no text item in it, and no
-    `structuredContent`): an empty list — it answered. A `content` that is not a list is no answer."""
+    each). A server that found nothing sends an empty `content` list and no `structuredContent`: an empty list — it
+    answered. Any other content with no text in it (an image, a resource, a link: results this client cannot read) and
+    a `content` that is not a list are no answer."""
     structured = result.get("structuredContent")
     found = _listed(structured)
     if found is not None:
         return found
-    if not isinstance(result.get("content"), list):
+    content = result.get("content")
+    if not isinstance(content, list):
         return None
     texts = _texts_of(result)
     if not texts:
-        return [] if structured is None else None
+        return [] if not content and structured is None else None   # only an empty answer is nothing found
     if len(texts) == 1:
         ok, value = _loads(texts[0])
         found = _listed(value) if ok else None
@@ -400,7 +402,7 @@ class McpClient:
         retries, deadline and errors as `call`. The first of these shapes that fits: `structuredContent` (a list, or an
         object with a `results` list); one text item holding such a list or object as JSON, or one result (a JSON
         object with no `results` key); several text items, each a JSON object (one result each). An element that is
-        not an object is dropped; an empty list is a list, and so is an answer with no text in it (nothing found).
+        not an object is dropped; an empty list is a list, and so is an empty `content` with no `structuredContent` (nothing found).
         No shape fits → McpError("<name> returned no list of results"), a message that carries nothing of the answer."""
         found = _result_list(self._tool_result(name, args))
         if found is None:
