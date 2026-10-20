@@ -33,12 +33,13 @@ _TOKEN = re.compile(r"[0-9A-Za-zА-Яа-яЁёЇїІіЄєҐґ'ʼ’]+")
 _CYRILLIC = re.compile(r"[а-яіїєґ]")
 _APOSTROPHES = ("'", "ʼ", "’")
 
-# The endings of the 2026-10-20 spike (recon_scripts/lex.py), longest first: the longest that matches and leaves at
-# least 3 letters is the one that goes. Ukrainian and Russian side by side — a Russian ending cannot be mistaken for a
-# Ukrainian word's, and a mixed note is the usual case.
+# The noun, adjective and case endings of the 2026-10-20 spike (recon_scripts/lex.py), longest first: the longest that
+# matches and leaves at least 3 letters is the one that goes. Ukrainian and Russian side by side — a Russian ending
+# cannot be mistaken for a Ukrainian word's, and a mixed note is the usual case. No verb endings (-ти -ть -ться -ся -ла
+# -ли -ло) and no -ння: they would cut the plurals «клієнти», «продукти», «запити», «роботи» to a stem the singular does
+# not start with, and prefix matching only works from the shorter stem to the longer.
 ENDS = tuple(sorted(set("""
 ами ями ові еві ого ому ими іми ій ий их іх им ім ою ею ої ей ів їв ах ях ом ем єм ам ям
-ння ться ся ти ть ла ли ло
 его ему ыми ая яя ое ее ые ие ой ый ов ев
 а я у ю і ї и е є о ь ы
 """.split()), key=lambda e: (-len(e), e)))

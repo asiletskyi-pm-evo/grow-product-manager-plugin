@@ -25,7 +25,10 @@ def check(name, cond, detail=""):
 # --- the stemmer: forms of one word meet in one stem ---------------------------------------------------------------
 same = [("компенсація", "компенсації"), ("кабінеті", "кабінет"), ("конверсія", "конверсії"), ("кошику", "кошик"),
         ("продавцями", "продавця"), ("корзина", "корзины"), ("заказов", "заказы"), ("reviews", "review"),
-        ("зв'язки", "звʼязки")]
+        ("зв'язки", "звʼязки"),
+        # noun plurals and case forms must not be cut as if they were verb forms (-ти, -ть, -ться, -ся, -ла, -ли, -ло, -ння)
+        ("клієнт", "клієнти"), ("продукт", "продукти"), ("запит", "запити"), ("тест", "тести"), ("робота", "роботи"),
+        ("замовлення", "замовленням")]
 for a, b in same:
     check("same stem: %s ~ %s" % (a, b), st.stem(a) == st.stem(b), (st.stem(a), st.stem(b)))
 check("a different word keeps a different stem", st.stem("відгук") != st.stem("відхід") and st.stem("кошик") != st.stem("кабінет"),
