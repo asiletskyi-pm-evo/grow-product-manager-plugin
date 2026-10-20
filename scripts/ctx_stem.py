@@ -36,8 +36,10 @@ _APOSTROPHES = ("'", "ʼ", "’")
 # The noun, adjective and case endings of the 2026-10-20 spike (recon_scripts/lex.py), longest first: the longest that
 # matches and leaves at least 3 letters is the one that goes. Ukrainian and Russian side by side — a Russian ending
 # cannot be mistaken for a Ukrainian word's, and a mixed note is the usual case. No verb endings (-ти -ть -ться -ся -ла
-# -ли -ло) and no -ння: they would cut the plurals «клієнти», «продукти», «запити», «роботи» to a stem the singular does
-# not start with, and prefix matching only works from the shorter stem to the longer.
+# -ли -ло): they would cut the plurals «клієнти», «продукти», «запити», «роботи» to a stem the singular does not start
+# with, and prefix matching only works from the shorter stem to the longer. No -ння either: «замовлення» loses its -я
+# like any noun, and stem() then drops one н of the doubled нн, so that «замовлення», «замовлень», «замовленням» and
+# «замовленнях» are one stem «замовлен» (the genitive plural has no second н), as «щоденний» and «щоденна» are «щоден».
 ENDS = tuple(sorted(set("""
 ами ями ові еві ого ому ими іми ій ий их іх им ім ою ею ої ей ів їв ах ях ом ем єм ам ям
 его ему ыми ая яя ое ее ые ие ой ый ов ев
@@ -61,12 +63,14 @@ def norm(word):
 
 def stem(word):
     """The stem of one word (norm first). A Cyrillic word longer than 3 letters loses the longest ending of ENDS that
-    leaves 3 letters at least; a Latin word longer than 4 letters loses a final `s`; digits and short words stay."""
+    leaves 3 letters at least, and if what is left ends in a doubled «нн» (only after a cut) one «н» goes too; a Latin
+    word longer than 4 letters loses a final `s`; digits and short words stay."""
     w = norm(word)
     if len(w) > 3 and _CYRILLIC.search(w):
         for e in ENDS:
             if w.endswith(e) and len(w) - len(e) >= 3:
-                return w[:-len(e)]
+                w = w[:-len(e)]
+                return w[:-1] if w.endswith("нн") else w
         return w
     if len(w) > 4 and w.endswith("s"):
         return w[:-1]

@@ -28,7 +28,10 @@ same = [("компенсація", "компенсації"), ("кабінеті
         ("зв'язки", "звʼязки"),
         # noun plurals and case forms must not be cut as if they were verb forms (-ти, -ть, -ться, -ся, -ла, -ли, -ло, -ння)
         ("клієнт", "клієнти"), ("продукт", "продукти"), ("запит", "запити"), ("тест", "тести"), ("робота", "роботи"),
-        ("замовлення", "замовленням")]
+        ("замовлення", "замовленням"),
+        # a doubled н of -ення / -ений forms is one н once an ending is cut: the singular meets the genitive plural
+        ("замовлення", "замовлень"), ("завдання", "завдань"), ("рішення", "рішень"), ("замовлення", "замовленнях"),
+        ("щоденний", "щоденна")]
 for a, b in same:
     check("same stem: %s ~ %s" % (a, b), st.stem(a) == st.stem(b), (st.stem(a), st.stem(b)))
 check("a different word keeps a different stem", st.stem("відгук") != st.stem("відхід") and st.stem("кошик") != st.stem("кабінет"),
@@ -42,6 +45,12 @@ check("the longest ending goes: -ами off «рамами», not only -и", st.
 check("an ending that would leave under 3 letters is not cut; a shorter one that leaves 3 still is",
       st.stem("мами") == "мам" and st.stem("води") == "вод" and st.stem("зона") == "зон",
       (st.stem("мами"), st.stem("води"), st.stem("зона")))
+check("a doubled н is one н after a cut: -ення nouns and -енний adjectives give the stem of the genitive plural",
+      [st.stem(w) for w in ("замовлення", "замовлень", "замовленням", "замовленнях", "рішення", "рішень", "щоденний", "щоденна")]
+      == ["замовлен"] * 4 + ["рішен"] * 2 + ["щоден"] * 2,
+      [st.stem(w) for w in ("замовлення", "замовлень", "замовленням", "замовленнях", "рішення", "рішень", "щоденний", "щоденна")])
+check("a doubled н is left alone where no ending was cut", st.stem("ванн") == "ванн" and st.stem("гривня") == "гривн",
+      (st.stem("ванн"), st.stem("гривня")))
 check("a word with no ending of the list is as it is", st.stem("кабінет") == "кабінет" and st.stem("відгук") == "відгук",
       (st.stem("кабінет"), st.stem("відгук")))
 check("a Latin word loses a final s only when longer than 4 letters", st.stem("reviews") == "review" and st.stem("tests") == "test"
@@ -138,7 +147,8 @@ try:
     # --- the two halves meet: stem_text into an index, fts_or out of it ---------------------------------------------
     db.execute("CREATE VIRTUAL TABLE s USING fts5(body, tokenize='unicode61 remove_diacritics 2')")
     DOCS = {1: "Компенсація продавцям за фейкові відгуки", 2: "Налаштування кабінету продавця", 3: "Корзина покупця і заказы",
-            4: "Reviews of the seller: ZORG-3930.2", 5: "Щотижневий 1:1 з командою", 6: "Зв'язки з клієнтами"}
+            4: "Reviews of the seller: ZORG-3930.2", 5: "Щотижневий 1:1 з командою", 6: "Зв'язки з клієнтами",
+            7: "Список замовлень і рішень за тиждень", 8: "Клієнти та продукти"}
     for i, text in DOCS.items():
         db.execute("INSERT INTO s(rowid, body) VALUES (?, ?)", (i, st.stem_text(text)))
 
@@ -154,6 +164,10 @@ try:
     check("a Jira key is found by its number: «ZORG-3930» -> 4", 4 in hits("ZORG-3930"), hits("ZORG-3930"))
     check("«1:1» finds the note with that digit", hits("1:1") == [5], hits("1:1"))
     check("the apostrophe forms meet: «зв'язки» and «звʼязки» -> 6", hits("зв'язки") == [6] and hits("звʼязки") == [6], (hits("зв'язки"), hits("звʼязки")))
+    check("a noun in the singular finds the genitive plural: «замовлення» and «рішення» -> 7",
+          hits("замовлення") == [7] and hits("рішення") == [7], (hits("замовлення"), hits("рішення")))
+    check("a noun in the singular finds the plural: «клієнт» -> 6 and 8, «продукт» -> 8",
+          hits("клієнт") == [6, 8] and hits("продукт") == [8], (hits("клієнт"), hits("продукт")))
     check("an OR expression finds a note for any one word", set(hits("фейкові кабінету")) == {1, 2}, hits("фейкові кабінету"))
     check("a query of stop words finds nothing and does not fail", hits("що і як?") == [], hits("що і як?"))
 except sqlite3.OperationalError as err:
