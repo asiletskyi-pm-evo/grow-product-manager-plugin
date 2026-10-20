@@ -1,0 +1,47 @@
+# Zorg team glossary — organisation-wide terms (a fixture of the section-search tests).
+# status: approved drives the search; candidate and deprecated entries are left out.
+
+terms:
+  - term: "кошик"                       # the product file of Zorg App replaces this entry
+    en: "basket"
+    variants: ["торба"]
+    avoid: []
+    definition: "Wording of the whole organisation"
+    source: "fixture"
+    status: approved
+    added: 2026-01-10
+
+  - term: замовлення
+    en: order
+    variants: ['покупка']
+    avoid: [заказ, "order form"]
+    definition: Те, що клієнт оформив у кошику  # an unquoted value with a comment
+    source: "fixture"
+    status: approved
+    added: 2026-01-12
+
+  # a comment between two entries
+
+  - term: "відгук"
+    en: "review"
+    variants: ["рев'ю"]
+    avoid:
+      - "фідбек"
+      - 'ревью'
+    definition: "What a buyer writes about a purchase"
+    source: "fixture"
+    status: approved
+    added: 2026-01-15
+
+  - term: "гаджет"
+    en: "gadget"
+    variants: []
+    avoid: []
+    definition: "Not used any more"
+    source: "fixture"
+    status: deprecated
+    added: 2026-01-20
+
+phrases:                                # read by the glossary lint, not by the search
+  - avoid: "виконати реалізацію"
+    use: "реалізувати"

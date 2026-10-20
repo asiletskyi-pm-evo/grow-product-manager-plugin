@@ -7,6 +7,8 @@ provider_bundle.py (bundle builder). Semantics: references/context-provider-prot
 - read_yaml_subset    manifests and registrations: scalars, lists, one nesting level.
                       Deliberately NOT PyYAML: the same file must parse the same way
                       on every host (CI has PyYAML, a user's sandbox may not).
+- read_yaml_records   a list of mappings under one top-level key (the team glossary, the search golden set):
+                      scalars, inline lists and block lists of scalars as the values (since v3.16.0).
 - strip_managed_regions  blank out <!-- <ns>:begin … --> … <!-- <ns>:end … --> regions,
                       keeping line numbers, so headings inside them are never counted.
 - vault_entries / vault_search_bullets  the two local-context.md sections providers use.
@@ -205,6 +207,182 @@ def _tree_scalar(v, lineno):
     if v[:1] in ("[", "{") and v != "[]":
         raise ValueError("line %d: unsupported YAML (flow style)" % lineno)
     return _scalar(v, lineno)
+
+
+def _strip_value_comment(s):
+    """_strip_comment for lines that hold words: a quote opens only where a value or a list item starts, so the
+    apostrophe of «зв'язок» is text and does not swallow a `# comment` after it; inside single quotes a doubled ''
+    is one apostrophe, inside double quotes a backslash escapes the next character."""
+    out, q, i, n = [], None, 0, len(s)
+    while i < n:
+        ch = s[i]
+        if q:
+            if q == '"' and ch == "\\":
+                out.append(s[i:i + 2]); i += 2
+                continue
+            out.append(ch)
+            if ch == q:
+                if q == "'" and s[i + 1:i + 2] == "'":
+                    out.append("'"); i += 1
+                else:
+                    q = None
+        elif ch in "\"'" and (i == 0 or s[i - 1] in " \t[,"):
+            q = ch; out.append(ch)
+        elif ch == "#" and (i == 0 or s[i - 1] in " \t"):
+            break
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out).rstrip()
+
+
+def _rec_scalar(v, lineno):
+    try:
+        return _scalar(v, lineno)
+    except json.JSONDecodeError:
+        raise ValueError("line %d: unsupported YAML (bad escape in a quoted string)" % lineno)
+
+
+def _inline_list(v, lineno):
+    """`[a, "b", 'c']` — scalars only, on one line; a quote opens only at the start of an item."""
+    if not v.endswith("]"):
+        raise ValueError("line %d: unsupported YAML (an inline list must close on its line)" % lineno)
+    body, parts, cur, q, i = v[1:-1], [], [], None, 0
+    while i < len(body):
+        ch = body[i]
+        if q:
+            cur.append(ch)
+            if q == '"' and ch == "\\" and i + 1 < len(body):
+                cur.append(body[i + 1]); i += 2
+                continue
+            if ch == q:
+                if q == "'" and body[i + 1:i + 2] == "'":
+                    cur.append("'"); i += 1
+                else:
+                    q = None
+        elif ch == ",":
+            parts.append("".join(cur)); cur = []
+        elif ch in "\"'" and not "".join(cur).strip():
+            q = ch; cur.append(ch)
+        else:
+            cur.append(ch)
+        i += 1
+    if q:
+        raise ValueError("line %d: unsupported YAML (unterminated string)" % lineno)
+    parts.append("".join(cur))
+    items = [p.strip() for p in parts]
+    if items and not items[-1]:
+        items.pop()                                  # a trailing comma
+    if any(not it for it in items):
+        raise ValueError("line %d: unsupported YAML (empty item in a list)" % lineno)
+    if any(it[0] in "[{" for it in items):
+        raise ValueError("line %d: unsupported YAML (a list inside a list)" % lineno)
+    return [_rec_scalar(it, lineno) for it in items]
+
+
+def _rec_field(text):
+    """`key: value` -> (key, value or None); None when the text is no mapping line (a quoted scalar that has a colon
+    in it is none)."""
+    m = _TREE_KEY.match(text)
+    if not m:
+        return None
+    k = m.group("key").strip()
+    if k[:1] in ("'", '"'):
+        if len(k) < 2 or k[-1] != k[0]:
+            return None
+        k = k[1:-1]
+    return k, m.group("val")
+
+
+def _rec_put(rec, k, val, lineno):
+    """Set a field of the open entry; returns the key when its value is empty (a block list may follow), else None."""
+    if k in rec:
+        raise ValueError("line %d: unsupported YAML (the key %r twice in one entry)" % (lineno, k))
+    val = (val or "").strip()
+    if not val:
+        rec[k] = ""
+        return k
+    rec[k] = _inline_list(val, lineno) if val[0] == "[" else _rec_scalar(val, lineno)
+    return None
+
+
+def read_yaml_records(text, key):
+    """The list of mappings under the top-level `key:` — `- k: v` entries, a value being a scalar (quoted or not), an
+    inline list `["a", b]` or, under an empty `k:`, a block list of scalars (`- "a"`, indented deeper than the entry's
+    dash or as the key). Other top-level keys are skipped; `#` starts a comment outside quotes; no such key, or `key: []`,
+    gives []. Tabs, a mapping inside a list, a list inside a list, an unterminated string or list, a repeated key, an
+    indent that matches no level, and a `key` that is not a list of mappings raise
+    ValueError('line N: unsupported YAML (…)')."""
+    out, seen, active = [], False, False
+    item_ind = key_col = list_ind = rec = pend = None
+    for lineno, raw in enumerate((text or "").replace("\r\n", "\n").split("\n"), 1):
+        line = _strip_value_comment(raw)
+        body = line.strip()
+        if not body or body in ("---", "..."):
+            continue
+        lead = line[:len(line) - len(line.lstrip(" \t"))]
+        if "\t" in lead:
+            raise ValueError("line %d: unsupported YAML (tab indentation)" % lineno)
+        indent = len(lead)
+        is_item = body == "-" or body.startswith("- ")
+        if indent == 0 and not is_item:
+            fld = _rec_field(body)
+            if fld is None:
+                raise ValueError("line %d: unsupported YAML" % lineno)
+            active = False
+            if fld[0] == key:
+                if seen:
+                    raise ValueError("line %d: unsupported YAML (the key %r twice)" % (lineno, key))
+                seen = True
+                val = (fld[1] or "").strip()
+                if not val:
+                    active, item_ind, key_col, list_ind, rec, pend = True, None, None, None, None, None
+                elif val != "[]":
+                    raise ValueError("line %d: unsupported YAML (%r must be a list of mappings)" % (lineno, key))
+            continue
+        if not active:
+            continue
+        if rec is None or (is_item and indent == item_ind):         # a new entry
+            if not is_item:
+                raise ValueError("line %d: unsupported YAML (%r must be a list of mappings)" % (lineno, key))
+            item_ind = indent
+            rest = body[1:]
+            first = rest.strip()
+            rec, pend, list_ind = {}, None, None
+            out.append(rec)
+            if not first:
+                key_col = None                                      # the keys follow on the next lines
+                continue
+            fld = _rec_field(first)
+            if fld is None:
+                raise ValueError("line %d: unsupported YAML (a list of mappings expected)" % lineno)
+            key_col = indent + 1 + len(rest) - len(rest.lstrip(" "))
+            pend = _rec_put(rec, fld[0], fld[1], lineno)
+            continue
+        if indent <= item_ind:
+            raise ValueError("line %d: unsupported YAML (indent matches no open level)" % lineno)
+        if is_item:                                                 # an item of the block list of the last field
+            if pend is None:
+                raise ValueError("line %d: unsupported YAML (list item without a key)" % lineno)
+            if indent < key_col or (list_ind is not None and indent != list_ind):
+                raise ValueError("line %d: unsupported YAML (indent matches no open level)" % lineno)
+            list_ind = indent
+            item = body[1:].strip()
+            if _rec_field(item) is not None:
+                raise ValueError("line %d: unsupported YAML (mapping inside a list)" % lineno)
+            if not isinstance(rec[pend], list):
+                rec[pend] = []
+            rec[pend].append(_rec_scalar(item, lineno))
+            continue
+        if key_col is None:
+            key_col = indent
+        elif indent != key_col:
+            raise ValueError("line %d: unsupported YAML (indent matches no open level)" % lineno)
+        fld = _rec_field(body)
+        if fld is None:
+            raise ValueError("line %d: unsupported YAML" % lineno)
+        pend, list_ind = _rec_put(rec, fld[0], fld[1], lineno), None
+    return out
 
 
 # --------------------------------------------------------- managed regions
