@@ -187,15 +187,25 @@ def _listed(value):
 
 def _result_list(result):
     """The list of results in a tools/call result, in the first shape that fits, or None:
-    `structuredContent` (a list, or an object with a `results` list); one text item (the same, as JSON);
-    several text items, each a JSON object (one result each)."""
-    found = _listed(result.get("structuredContent"))
+    `structuredContent` (a list, or an object with a `results` list); one text item — such a list or object as JSON,
+    or a single result (a JSON object with no `results` key); several text items, each a JSON object (one result
+    each). A server that found nothing sends no text at all (a `content` list with no text item in it, and no
+    `structuredContent`): an empty list — it answered. A `content` that is not a list is no answer."""
+    structured = result.get("structuredContent")
+    found = _listed(structured)
     if found is not None:
         return found
+    if not isinstance(result.get("content"), list):
+        return None
     texts = _texts_of(result)
+    if not texts:
+        return [] if structured is None else None
     if len(texts) == 1:
         ok, value = _loads(texts[0])
-        return _listed(value) if ok else None
+        found = _listed(value) if ok else None
+        if found is None and isinstance(value, dict) and "results" not in value:
+            found = [value]
+        return found
     objects = [value for ok, value in map(_loads, texts) if ok and isinstance(value, dict)]
     return objects or None
 
@@ -388,9 +398,10 @@ class McpClient:
     def call_list(self, name, args=None):
         """The list of results a tool returned (`vault_search`), as a list of objects — the same allow-list, handshake,
         retries, deadline and errors as `call`. The first of these shapes that fits: `structuredContent` (a list, or an
-        object with a `results` list); one text item holding such a list or object as JSON; several text items, each a
-        JSON object (one result each). An element that is not an object is dropped; an empty list is a list. No shape
-        fits → McpError("<name> returned no list of results"), a message that carries nothing of the answer."""
+        object with a `results` list); one text item holding such a list or object as JSON, or one result (a JSON
+        object with no `results` key); several text items, each a JSON object (one result each). An element that is
+        not an object is dropped; an empty list is a list, and so is an answer with no text in it (nothing found).
+        No shape fits → McpError("<name> returned no list of results"), a message that carries nothing of the answer."""
         found = _result_list(self._tool_result(name, args))
         if found is None:
             raise McpError("%s returned no list of results" % name)

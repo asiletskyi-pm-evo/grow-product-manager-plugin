@@ -269,14 +269,32 @@ for label, raw, want in [
         ("a non-object item among many dropped", TEXT('{"path": "a.md"}', "3 results", "[1]", '{"path": "b.md"}'), ["a.md", "b.md"]),
         ("a non-text item beside the text ignored",
          {"content": [{"type": "image", "data": "x"}, {"type": "text", "text": '[{"path": "a.md"}]'}]}, ["a.md"]),
-        ("isError false written out", dict(TEXT('[{"path": "a.md"}]'), isError=False), ["a.md"])]:
+        ("isError false written out", dict(TEXT('[{"path": "a.md"}]'), isError=False), ["a.md"]),
+        # a server that found one thing, or nothing: neither is a server that did not answer
+        ("a single hit as one text object", TEXT('{"path": "a.md"}'), ["a.md"]),
+        ("a single hit as one text object with more fields", TEXT('{"path": "a.md", "score": 2}'), ["a.md"]),
+        ("an empty content (nothing found)", {"content": []}, []),
+        ("an empty content with isError false written out", {"content": [], "isError": False}, []),
+        ("an empty content and a null structuredContent", {"content": [], "structuredContent": None}, []),
+        ("a content with no text item in it (nothing found)", {"content": [{"type": "image", "data": "x"}]}, []),
+        ("a content of items that are not text (nothing found)", {"content": [None, 3, {"type": "resource"}]}, [])]:
     with FakeMcp(raw_result=raw) as fake:
         rows, err = None, None
         try:
             rows = McpClient(fake.url).call_list("vault_search", {"query": "x"})
         except McpError as e:
             err = e
-        check("call_list reads " + label, isinstance(rows, list) and paths(rows) == want, (repr(err), rows))
+        check("call_list reads " + label, isinstance(rows, list) and [r.get("path") for r in rows] == want, (repr(err), rows))
+for label, raw, want in (("a single hit is the object as it came", TEXT('{"count": 1}'), [{"count": 1}]),
+                         ("an empty answer is an empty list, a new one each time", {"content": []}, [])):
+    with FakeMcp(raw_result=raw) as fake:
+        rows = McpClient(fake.url).call_list("vault_search", {"query": "x"})
+        check("call_list: " + label, rows == want and type(rows) is list, rows)
+with FakeMcp(raw_result={"content": []}) as fake:
+    c = McpClient(fake.url)
+    a, b = c.call_list("vault_search", {}), c.call_list("vault_search", {})
+    a.append({"path": "kept.md"})
+    check("…and nothing is shared between two answers", b == [] and c.call_list("vault_search", {}) == [], (a, b))
 with FakeMcp(raw_result={"content": [], "structuredContent": [{"path": "a.md", "score": 2, "tags": ["x"]}]}) as fake:
     rows = McpClient(fake.url).call_list("vault_search", {"query": "x"})
     check("…a result keeps all of its fields, as the server sent them", rows == [{"path": "a.md", "score": 2, "tags": ["x"]}], rows)
@@ -328,15 +346,18 @@ with FakeMcp(raw_result={"content": 5, "isError": True}) as fake:
     check("call_list: isError with a content that is a number → McpError too", err is not None and type(err) is McpError, repr(err))
 
 SECRET = "zorgtok-list-77"
-for label, raw in (("no content at all", {"isError": False}), ("empty content", {"content": []}),
+for label, raw in (("no content at all", {"isError": False}),
                    ("content that is a number", {"content": 5}), ("content that is a string", {"content": "[]"}),
                    ("null", {"content": None, "structuredContent": None}),
                    ("a text that is a number", TEXT("5")), ("a text that is null", TEXT("null")), ("a text that is a JSON string", TEXT('"a.md"')),
-                   ("a text object with no results", TEXT('{"count": 1}')), ("a text object whose results is no list", TEXT('{"results": "' + SECRET + '"}')),
+                   ("a text object whose results is no list", TEXT('{"results": "' + SECRET + '"}')),
+                   ("a text object whose results is null", TEXT('{"results": null, "q": "' + SECRET + '"}')),
+                   ("a text object whose results is a list of strings", TEXT('{"results": ["' + SECRET + '"]}')),
                    ("a list of strings", TEXT('["' + SECRET + '", "b.md"]')), ("a list of numbers", {"content": [], "structuredContent": [1, 2]}),
                    ("a structuredContent that is a string", {"content": [], "structuredContent": SECRET}),
                    ("many texts, none an object", TEXT("[1]", "five", "null")),
-                   ("an item that is not a dict", {"content": [None, 3, "[]"]})):
+                   ("an unusable structuredContent and an empty content", {"content": [], "structuredContent": {"count": 1}}),
+                   ("a text that is a JSON string and an item that is not text", {"content": [None, {"type": "text", "text": '"a.md"'}]})):
     with FakeMcp(raw_result=raw) as fake:
         err = raises(lambda: McpClient(fake.url, headers={"X-Zorg-Key": SECRET}).call_list("vault_search", {"query": "x"}), McpError)
         check("call_list: %s → McpError with a fixed message, no value, no url, no header in it" % label,
