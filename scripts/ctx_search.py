@@ -24,9 +24,11 @@ priors then weigh a candidate by what it is — the skill's artifact types × 1.
 - candidate_id      a section's stable id: sha1(`path#heading`)[:10].
 - snippet           ≤ 300 characters around the first match, the matches in «».
 - run               a whole search: the index refreshed, gather → fuse → priors → dedup → the remembered picks
-                    (ctx_hints) → the best `limit`.
+                    (ctx_hints) → the best `limit`; an own index not built yet (or being built by another process)
+                    has not answered.
 - last_path / save_last / get   the ids of the last search beside the index, and `--get`: one section with its line
-                    of provenance `> [<source> · <path> › <heading> · <day>]`.
+                    of provenance `> [<source> · <path> › <heading> · <day>]` — for a note of a local index or a
+                    server, followed by what its frontmatter says (` · sensitive`, ` · застаріле`, its type).
 - render            the human output of `ctx search`.
 
 Reads the vaults, the cores, the index under <home>/.grow-pm/index/, a local index (mode=ro), the glossary, the block
@@ -76,6 +78,9 @@ HUB, STALE, SNAPSHOT, GLOSSARY_ONLY, ONE_WORD = "хаб", "застаріле", 
 TWIN, OLDER, NEWER_EXISTS, SENSITIVE = "двійник %s", "є старіші версії: %d", "старіша версія %s", "sensitive"
 REBUILT_NOTE = "індекс пошуку був зіпсований або старий — збудовано наново"
 REFRESH_NOTE = "індекс пошуку не оновлено (%s) — пошук по тому, що є"
+BUILDING_NOTE = "індекс пошуку ще будується (інший процес) — цього разу без нього"
+NO_INDEX_NOTE = "індексу пошуку ще немає (%s) — ctx index rebuild"
+NO_DB_WHY, UNFINISHED_WHY = "немає файлу індексу", "індекс не добудовано"    # the <why> of NO_INDEX_NOTE without an error
 COMMAND_S = 60.0                # the whole search
 SNIPPET_W = 300                 # a snippet's characters at most
 MAX_SECTIONS = 2                # sections of one note in the list
@@ -265,19 +270,11 @@ def Hit(path, heading, source, rank, section_id=None, title=None, date=None, sni
 
 
 def _fold(word):
-    """A word as FTS5's unicode61 with remove_diacritics 2 compares it: the combining marks gone («й» is «и»)."""
+    """A word with every combining mark gone (NFD): «é» is «e», as FTS5's unicode61 remove_diacritics 2 has it — but
+    also «й» is «и» and «ї» is «і», which that tokenizer does not fold (SQLite 3.54 keeps the Cyrillic letters whole).
+    Only `snippet` uses it, on both sides of every comparison — the text and the terms — so it stays consistent with
+    itself: a snippet may mark a word that differs from a term only by such a letter."""
     return "".join(c for c in unicodedata.normalize("NFD", word) if not unicodedata.combining(c))
-
-
-def _held(terms, words):
-    """How many of the distinct `terms` the `words` hold, as an FTS5 prefix query matches them: a word equal to the
-    term, or starting with it when the term has 4 letters or more."""
-    words = {_fold(w) for w in words}
-    n = 0
-    for t in dict.fromkeys(_fold(t) for t in terms if t):
-        if t in words or (len(t) >= 4 and any(w.startswith(t) for w in words)):
-            n += 1
-    return n
 
 
 def _glossary_expr(members):
@@ -338,7 +335,8 @@ def _own(sctx, src, plans, until, box):
     lists, problems = {}, []
 
     def ask(key, expr, i, terms):
-        rows = idx.query(expr, LIST_LIMIT) if expr else []
+        held = [st.fts_or([t]) for t in dict.fromkeys(terms) if t]      # what a hit holds, as the index matches it
+        rows = idx.query(expr, LIST_LIMIT, held=held) if expr else []
         if idx.problem and idx.problem not in problems:
             problems.append(idx.problem)
         hits = []
@@ -350,9 +348,7 @@ def _own(sctx, src, plans, until, box):
                      "hub": bool(r.get("hub")), "sensitive": bool(r.get("sensitive")),
                      "ttl_date": r.get("ttl_date") or "", "text": r.get("text") or "", "terms": None, "asked": len(terms)}
             if terms:
-                words = st.stem_text(" ".join([r.get("title") or "", r.get("heading") or "", r.get("text") or ""]
-                                              + list(r.get("tags") or []) + list(r.get("aliases") or []))).split()
-                extra["terms"] = _held(terms, words)
+                extra["terms"] = r.get("held", 0)
             hits.append(Hit(rel, r.get("heading") or "", r.get("source") or src["id"], 0, section_id=r.get("id"), title=r.get("title"),
                             date=r.get("date"), variant=i, list=key, **extra))
         _add(lists, key, hits)
@@ -909,7 +905,7 @@ def dedup(cands, notes_meta):
 # ------------------------------------------------------------------ the snippet
 def _fits(word, keys):
     """Does the word's stem meet one of the keys as the index matched it: equal, or starting with a key of 4 letters
-    or more (the diacritics folded, as FTS5's remove_diacritics does)?"""
+    or more (both sides folded by `_fold`)?"""
     s = _fold(st.stem(word))
     return any(s == k or (len(k) >= 4 and s.startswith(k)) for k in keys)
 
@@ -995,35 +991,50 @@ def _last(c):
 
 
 def _refresh(idx, sctx, budget, notes):
-    """Index.refresh within `budget`; what it did, or None when SQLite could not do it (a line says so)."""
+    """Index.refresh within `budget`: (what it did, None), or (None, why) when SQLite or the file system could not do
+    it — the caller says why in one line (REFRESH_NOTE, or NO_INDEX_NOTE when there is no index to read). A refresh
+    that rebuilt the index adds REBUILT_NOTE."""
     try:
         res = idx.refresh(sctx["roots"], sctx["store_rel"], sctx["blocks_rels"], budget=budget)
     except (sqlite3.Error, OSError) as e:
-        _note(notes, [REFRESH_NOTE % e])
-        return None
+        return None, str(e) or e.__class__.__name__
     if res.get("rebuilt"):
         _note(notes, [REBUILT_NOTE])
-    return res
+    return res, None
 
 
-def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, use_hints=True, now=None):
+def _saved_state(idx):
+    """The own index's state as index.json keeps it, in the shape of Index.status() (a count it does not keep is 0) —
+    for an index another process holds busy, which is not waited for a second time."""
+    state = idx._state()
+    return dict({k: state.get(k) for k in ("schema", "updated")},
+                **{k: ci._count(state.get(k)) for k in STATUS_KEYS if k not in ("schema", "updated")})
+
+
+def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, use_hints=True, now=None, refresh=True):
     """One search: {candidates, notes, sources, index, last}.
-    - The own index is refreshed first (ctx_index.REFRESH_S, never past the command's COMMAND_S); then every query ×
-      source (`gather`, the sources of `which`), RRF (`fuse`), the priors (`skill`'s types, `product`, the classes'
-      TTL and the repositories' snapshots), `dedup`, the best `limit`.
+    - The own index is refreshed first (ctx_index.REFRESH_S, never past the command's COMMAND_S; with `refresh` False
+      it is read as it is — `ctx search eval` refreshes it once, not at every search); then every query × source
+      (`gather`, the sources of `which`), RRF (`fuse`), the priors (`skill`'s types, `product`, the classes' TTL and
+      the repositories' snapshots), `dedup`, the best `limit`.
+    - An own index that is not there to read — no database, or one a first build (or a rebuild) is still filling: no
+      `updated` row in its meta (Index.built) — has not answered and is not asked: `індекс пошуку ще будується (інший
+      процес) — цього разу без нього` while another process holds its lock (`index.locked`), else `індексу пошуку ще
+      немає (<why>) — ctx index rebuild`, <why> the refresh's error when it failed.
     - The remembered picks (ctx_hints) of the request — the first query, not its variants — weigh the candidates
       after dedup and before the best `limit` are cut, so a pick can rise into them: a `good` note × 1.5 and
       `твій вибір від <день>`, a `bad` one `ти казав «не те»`; with `use_hints` False they are not read. A memory that
       cannot be read in OPEN_S is no hint and one line, `пам'ять пошуку не прочитано (<why>) — без підказок`.
     - A query that finds the own index damaged (Index.problem: a file SQLite cannot read, never a busy one) rebuilds
-      it once and asks the own index again; REBUILT_NOTE says so. An own index that stays unread — busy (BUSY_NOTE;
+      it once and asks the own index again; REBUILT_NOTE says so. A rebuild another process's lock refuses is no
+      rebuild: the building line, and the index is not asked again. An own index that stays unread — busy (BUSY_NOTE;
       never rebuilt) or still damaged — has not answered: its lists are dropped, and its line stays.
     - candidates: {id, path, heading, title, type, product, date, source [ids], flags, matched [the queries that
       found it, from 1], snippet, score, sections [{id, heading}: the candidate's own first, at most MAX_SECTIONS]};
       a source of the own index is the root's (`own` for a plugin folder, the repository's id for a core folder).
     - notes: the lines to print under the list; sources: [{id, kind, answered}] (none answered: the caller exits 5;
-      none at all: there is no place to search); index: the own index's state and what the refresh did (None when the
-      own index was not asked); last: what save_last keeps for `--get`.
+      none at all: there is no place to search); index: the own index's state and what the refresh did, `locked` when
+      another process held it (None when `own` is not among the sources); last: what save_last keeps for `--get`.
     Writes only the index; nothing else."""
     start = time.monotonic()
     deadline = start + COMMAND_S
@@ -1031,20 +1042,36 @@ def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, 
     if product:
         sctx = dict(sctx, product=product)
     srcs = sources(sctx["text"], sctx["repos"], tuple(which or KINDS))
-    notes, index, done = [], None, None
+    notes, index, done, why, unbuilt, locked = [], None, None, None, None, False
     idx = ci.Index(sctx["home"])
     own = [s for s in srcs if s["kind"] == "own"]
+    asked = srcs
     if own:
-        done = _refresh(idx, sctx, max(0.0, min(ci.REFRESH_S, deadline - time.monotonic())), notes)
-    lists, more = gather(sctx, queries, srcs, deadline) if srcs else ({}, [])
+        if refresh:
+            done, why = _refresh(idx, sctx, max(0.0, min(ci.REFRESH_S, deadline - time.monotonic())), notes)
+        locked = bool((done or {}).get("locked"))
+        if idx.built() is False:            # no database, or one still being filled: there is no base to read yet
+            locked = locked or idx.lock_held()
+            unbuilt = BUILDING_NOTE if locked else NO_INDEX_NOTE % (
+                why or (UNFINISHED_WHY if os.path.isfile(idx.db_path) else NO_DB_WHY))
+            _note(notes, [unbuilt])
+            asked = [s for s in srcs if s["kind"] != "own"]
+        elif why:
+            _note(notes, [REFRESH_NOTE % why])
+    lists, more = gather(sctx, queries, asked, deadline) if asked else ({}, [])
     if own and any(n.startswith(_BROKEN) for n in more):
+        again, more2, redo = None, [], {}
         try:
-            idx.rebuild(sctx["roots"], sctx["store_rel"], sctx["blocks_rels"],
-                        budget=max(0.0, min(ci.REFRESH_S, deadline - time.monotonic())))
-            again, more2 = gather(sctx, queries, own, deadline)
+            redo = idx.rebuild(sctx["roots"], sctx["store_rel"], sctx["blocks_rels"],
+                               budget=max(0.0, min(ci.REFRESH_S, deadline - time.monotonic())))
+            if not redo.get("locked"):
+                again, more2 = gather(sctx, queries, own, deadline)
         except (sqlite3.Error, OSError):
-            again, more2 = None, []
-        if again is not None and not any(n.startswith(_BROKEN) for n in more2):
+            pass
+        if redo.get("locked"):              # another process holds the index: no rebuild, and it is not asked again
+            locked = True
+            more = more + [BUILDING_NOTE]
+        elif again is not None and not any(n.startswith(_BROKEN) for n in more2):
             lists = dict({k: v for k, v in lists.items() if not k.startswith("own|")}, **again)
             more = [n for n in more if not n.startswith(_BROKEN)] + [REBUILT_NOTE] + more2
     busy = own and ci.BUSY_NOTE in more
@@ -1060,7 +1087,7 @@ def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, 
     answered = {k.split("|", 1)[0] for k in lists}
     entries = _entries(lists, fuse(lists))
     priors(entries, skill_types(skill), product, now, class_ttl(sctx["repos"], sctx["vaults"]), snapshots(sctx, now))
-    metas = idx.notes() if os.path.isfile(idx.db_path) and not busy else []
+    metas = idx.notes() if os.path.isfile(idx.db_path) and not busy and not unbuilt else []
     cands = dedup(entries, metas)
     if hints:
         ch.apply(cands, hints, _today(now))
@@ -1071,9 +1098,9 @@ def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, 
     for c in cands:
         last.update(_last(c))
     if own:
-        state = idx.status() if not busy else {k: idx._state().get(k) for k in STATUS_KEYS}   # busy: no second wait
+        state = idx.status() if not busy else _saved_state(idx)       # busy: no second wait
         index = dict(state, **{k: (done or {}).get(k, 0) for k in ("added", "changed", "removed")},
-                     locked=bool((done or {}).get("locked")), rebuilt=bool((done or {}).get("rebuilt")) or REBUILT_NOTE in notes)
+                     locked=locked, rebuilt=bool((done or {}).get("rebuilt")) or REBUILT_NOTE in notes)
     return {"candidates": [_public(c, terms) for c in cands], "notes": notes,
             "sources": [{"id": s["id"], "kind": s["kind"], "answered": s["id"] in answered} for s in srcs],
             "index": index, "last": last}
@@ -1155,8 +1182,8 @@ def _inside(path, folders):
 
 
 def _from_disk(sctx, entry):
-    """(text, date) of a note on disk, by its index name: a vault's file, or `@<repository>/…` under its core folder.
-    Only a `.md` file inside a vault or a core folder is read."""
+    """(text, date, meta) of a note on disk, by its index name: a vault's file, or `@<repository>/…` under its core
+    folder; meta is what its frontmatter says (`_marks`). Only a `.md` file inside a vault or a core folder is read."""
     path = entry["path"]
     folders = list(sctx.get("vaults") or []) + [_folder(r) for r in sctx.get("repos") or []]
     if path.startswith("@"):
@@ -1172,11 +1199,13 @@ def _from_disk(sctx, entry):
         text = cst.read_text(found)
     except (OSError, UnicodeError, cst.StoreError) as e:
         raise GetError(3, "the note cannot be read: %s (%s)" % (path, e))
-    return text, ci.note_meta(path, text).get("date") or ""
+    meta = ci.note_meta(path, text)
+    return text, meta.get("date") or "", meta
 
 
 def _from_mcp(sctx, entry):
-    """(text, date) of an MCP candidate: vault_get_note on the path as the server gave it."""
+    """(text, date, meta) of an MCP candidate: vault_get_note on the path as the server gave it; meta is what the
+    note's frontmatter says — the server's `frontmatter`, else what its `content` starts with."""
     repo = next((r for r in sctx.get("repos") or [] if r.get("id") == entry.get("source")), None)
     ep = (repo or {}).get("endpoint") or {}
     if not ep.get("url") or not entry.get("remote"):
@@ -1191,7 +1220,28 @@ def _from_mcp(sctx, entry):
     if not isinstance(content, str):
         raise GetError(3, "%s has no note %s" % (entry.get("source"), entry["remote"]))
     fm = note.get("frontmatter") if isinstance(note.get("frontmatter"), dict) else {}
-    return content, _first_date(fm, ci.DATE_KEYS) or ""
+    inner = ci.note_meta(entry.get("remote") or "", content)
+
+    def said(key):
+        v = fm.get(key)
+        return "" if v is None or isinstance(v, (list, dict)) else N(str(v)).strip()
+
+    meta = {"type": said("type") or inner["type"], "status": said("status") or inner["status"],
+            "sensitive": _yes(fm.get("sensitive")) or inner["sensitive"]}
+    return content, _first_date(fm, ci.DATE_KEYS) or "", meta
+
+
+def _marks(meta):
+    """What a note's frontmatter says that the list of a local index or a server could not: ` · sensitive`, ` ·
+    застаріле` (its status is one of OUTDATED) and its type — the tail of a `--get` line."""
+    meta = meta or {}
+    status, ntype = str(meta.get("status") or "").strip().lower(), str(meta.get("type") or "").strip().lower()
+    out = [SENSITIVE] if meta.get("sensitive") else []
+    if status in OUTDATED:
+        out.append(STALE)
+    if ntype:
+        out.append(ntype)
+    return "".join(" · " + m for m in out)
 
 
 def get(sctx, cid):
@@ -1199,8 +1249,10 @@ def get(sctx, cid):
     names the index's source of its note: `own`, or the repository of a core page), the text under
     the heading (a note-level candidate: the note without its frontmatter). The id is looked up in last.json (the last
     search), else among the sections of the own index. An own section is read from the index (from its file when the
-    note changed since); a note only a local index knows from the vault; an MCP one through vault_get_note. GetError:
-    3 — no such id, note or section; 5 — the server did not answer. Reads only."""
+    note changed since); a note only a local index knows from the vault; an MCP one through vault_get_note. The
+    header of a local or an MCP note goes on with what its frontmatter says (`_marks`: ` · sensitive`, ` · застаріле`,
+    its type) — what the list of such a source does not carry, so its flags are complete only here. GetError: 3 — no
+    such id, note or section; 5 — the server did not answer. Reads only."""
     cid = str(cid or "").strip().lower()
     idx = ci.Index(sctx["home"])
     entry = _load_last(sctx["home"]).get(cid)
@@ -1208,19 +1260,21 @@ def get(sctx, cid):
         entry = _in_index(idx, cid)
     if not entry:
         raise GetError(3, "no candidate %s in the last search or the section index — search again" % cid)
-    heading, date, text = entry.get("heading") or "", entry.get("date") or "", None
+    heading, date, text, marks = entry.get("heading") or "", entry.get("date") or "", None, ""
     if entry.get("kind") == "own":
         sec = idx.section(entry.get("section_id")) if entry.get("section_id") is not None else None
         if sec and N(sec["path"]) == entry["path"] and (sec.get("heading") or "") == heading:
             text, date = sec.get("text") or "", sec.get("date") or date
             entry = dict(entry, source=sec.get("source") or entry.get("source"))
     if text is None:
-        body, day = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
+        body, day, meta = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
         text, date = _section_of(body, heading), date or day
         if text is None:
             raise GetError(3, "no section %s in %s" % (heading, entry["path"]))
-    return "> [%s · %s%s · %s]" % (entry.get("source") or "own", entry["path"], " › " + heading if heading else "",
-                                   (date or "—")[:10]), text
+        if entry.get("kind") in ("local", "mcp"):
+            marks = _marks(meta)
+    return "> [%s · %s%s · %s%s]" % (entry.get("source") or "own", entry["path"], " › " + heading if heading else "",
+                                     (date or "—")[:10], marks), text
 
 
 # ------------------------------------------------------------------ the human output

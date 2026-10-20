@@ -108,7 +108,7 @@ Nothing to search (L0 and no registered repository or local index), an empty `SK
      (search-protocol.md §12)
 3. Rate the candidates; read the "direct" ones (ctx search --get <id>)
 4. Take at most 3 direct sections silently, with one provenance line
-5. A doubt or a conflict → maybe live sources (level 2); the block of variants at the end
+5. A doubt or a conflict → maybe live sources (level 2; triggers in search-protocol §8); the block of variants at the end
 6. The user's choice → ctx search remember
 ```
 

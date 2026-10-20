@@ -36,9 +36,9 @@ With SHELL:
 `python3 "<plugin root>/scripts/ctx.py" search --q "<request>" --q "<variant 1>" … --skill <this skill> --product "<active product>" --json`
 
 - `--product` is the active product of Step 0d; leave it out when there is none. `--skill` is the skill's own name — `ctx search` weighs the types of its `search_types` (`references/context-manifest.yaml`, the same list as its `SKILL_CONTEXT_MAP` row) × 1.2; a type is a weight, never a filter, so a note without a type is found too. Do not pass `--limit` or `--sources`: the pool of 50 and every kind of source are the design.
-- **`--json` prints only the `CTX_RESULT` line** — unlike `ctx read` and `ctx explain`, whose `--json` adds to the human output. `CTX_RESULT` holds `candidates`, `notes`, `sources` (`[{id, kind, answered}]`), `index` and `counts`.
+- **`--json` prints only the `CTX_RESULT` line** — unlike `ctx read` and `ctx explain`, whose `--json` adds to the human output. `CTX_RESULT` holds `candidates`, `notes`, `sources` (`[{id, kind, answered}]`), `index` (the section index's state; `index.locked` is true while another process holds it — building or refreshing it) and `counts`.
 - A candidate is **one note**: `id` (its best section), `path`, `heading`, `title`, `type`, `product`, `date`, `source` (the ids that hold it: `own` for your plugin folder, a repository id for a core page), `flags` (§5), `matched` (which `--q` found it, from 1), `snippet` (≤ 300 characters, the matches in «»), `score`, and `sections` — at most two sections of that note, each with its own `id`.
-- **`notes`** are lines to the user: `<id> не відповів — без нього`, `індекс <id> має незнайому схему — без нього`, `індекс оновлюється: N файлів ще не переглянуто`, `пам'ять пошуку не прочитано (…) — без підказок` and the index's own lines. Say each once per session, unchanged, right before the taken line (§6).
+- **`notes`** are lines to the user: `<id> не відповів — без нього`, `індекс <id> має незнайому схему — без нього`, `індекс оновлюється: N файлів ще не переглянуто`, `пам'ять пошуку не прочитано (…) — без підказок` and the index's own lines — among them `індекс пошуку ще будується (інший процес) — цього разу без нього` (no index yet, or one another process is still filling, `index.locked`) and `індексу пошуку ще немає (…) — ctx index rebuild` (no index, and nobody building it): either way the section index (`own`) has not answered. Say each once per session, unchanged, right before the taken line (§6).
 
 **What the exit code means — one action each:**
 
@@ -49,7 +49,7 @@ With SHELL:
 | 3, `nothing to search` | no vault, no repository, no index | skip Step 0.5 silently (§1) |
 | 3, `no such skill: <name>` | the skill has no manifest entry | run the same search again without `--skill` |
 | 3, anything else | a usage error | one line `Пошук не виконано: <помилка>`, then continue without context — never «У базі нічого прямо про це» |
-| 5 | **no source answered** — an own index that is busy, or still damaged after one rebuild, counts as not answered | the base was **not read**: nothing is taken, the line `Базу не прочитано: <нотатки ctx через «; »>`, and a doubt (§7) — never «У базі нічого прямо про це» |
+| 5 | **no source answered** — an own index that is busy, not built yet or being built by another process, or still damaged after one rebuild, counts as not answered | the base was **not read**: nothing is taken, the line `Базу не прочитано: <нотатки ctx через «; »>`, and a doubt (§7) — never «У базі нічого прямо про це» |
 | the command cannot run (no python, the plugin root not found) | — | follow the host without SHELL (§12) |
 
 **A source that did not answer** (`sources[].answered` is `false`) while others did: the search is still exit 0, but that part of the base was not read. When it is the section index (`own`) or a repository reached only through MCP (`mcp` — asked only when its folder is not on disk) it is a doubt (§7); a local index (`local`) that does not answer is only its line.
@@ -61,7 +61,7 @@ Read every candidate's line — title › heading, type, date, flags, snippet �
 - **частково** — it touches the topic, but the answer is not there (a neighbouring feature, a general overview, one mention in a meeting);
 - **ні** — anything else; a candidate you do not rate is «ні».
 
-Read each candidate you would rate «прямо» with `python3 "<plugin root>/scripts/ctx.py" search --get <id> --json` — the `id` of the candidate, or of the one of its `sections` that answers. `CTX_RESULT` then holds `header` — the provenance line `> [<джерело> · <шлях> › <заголовок> · <дата>]` — and `text`, the section alone. Reading may change the rating: a section that turns out not to answer is «частково». Read only those; the snippet is enough for the rest. `--get` exit 3 (an unknown id — the ids of the last searches were lost) → read the note's file by its `path`; exit 5 (an MCP note whose server did not answer) → the note was not read: it is not taken, and it is a doubt.
+Read each candidate you would rate «прямо» with `python3 "<plugin root>/scripts/ctx.py" search --get <id> --json` — the `id` of the candidate, or of the one of its `sections` that answers. `CTX_RESULT` then holds `header` — the provenance line `> [<джерело> · <шлях> › <заголовок> · <дата>]` — and `text`, the section alone. For a note a local index or a server gave (its source is a `local` or an `mcp` one), the header goes on with what the note's frontmatter says and the list could not: ` · sensitive`, ` · застаріле` (its status) and its type — `> [zorg-growth · @zorg-growth/Old sync.md · 2026-06-01 · sensitive · застаріле · meeting]`. Such a candidate's flags are complete only after `--get`: a header that carries ` · sensitive` or ` · застаріле` counts as that flag (§6) — the section is not used and its content is not repeated, and a people type there counts as `sensitive` outside the People contour. Reading may change the rating: a section that turns out not to answer is «частково». Read only those; the snippet is enough for the rest. `--get` exit 3 (an unknown id — the ids of the last searches were lost) → read the note's file by its `path`; exit 5 (an MCP note whose server did not answer) → the note was not read: it is not taken, and it is a doubt.
 
 The marks (`flags`) say what the search knows about a candidate:
 
@@ -78,6 +78,8 @@ The marks (`flags`) say what the search knows about a candidate:
 | `одне слово` | matched at best one word of a variant of several | if it is the best you have — a doubt; when the request itself is one word the mark says nothing, and is ignored |
 | `твій вибір від <день>` | the user picked it for a similar request (§10); it weighs × 1.5 | rate it as any other — the mark is evidence, not a pass |
 | `ти казав «не те»` | the user said it was not it for a similar request | never taken silently; in the block it keeps the mark |
+
+A version number in a title makes a version key just as a draft mark does — a product's (`API v2`, `API v3`) as much as a document's (`v3`, `draft`): of two notes in one folder whose titles differ only by it, the older is marked `старіша версія <шлях>` (or folded into the newer) and is never taken.
 
 A note you reached from a hub, a twin or a newer version is rated like a candidate and may be taken; its provenance is its path and its own date.
 
@@ -104,7 +106,7 @@ Each of them is a doubt (§7); level 2 may start (§8).
 **Never taken silently:**
 - a candidate rated «частково» or «ні», and one whose rating you are not sure of;
 - one marked `застаріле` or `старіша версія <шлях>`; at level 2, a copy behind its live page (§8). `знімок від <день>` alone does not forbid it;
-- **outside the People contour** (`goal-setter`, `one-on-one`, `performance-review`, `hiring-designer`, `offboarding-guide`, `delegation-coach`): a candidate marked `sensitive`, and one of the people types (`data-policy.md` → Search, rule 1). It is not read, its content is not repeated anywhere, and it can never be picked: in the block it may appear only as an unnumbered line with its title (§9). A candidate a server gave (its source is an `mcp` one in `sources`) carries no `sensitive` mark — the server does not say — so outside the People contour treat one whose path lies under a people folder (`People/`, the core's `people_dir`) as sensitive;
+- **outside the People contour** (`goal-setter`, `one-on-one`, `performance-review`, `hiring-designer`, `offboarding-guide`, `delegation-coach`): a candidate marked `sensitive`, and one of the people types (`data-policy.md` → Search, rule 1). It is not read, its content is not repeated anywhere, and it can never be picked: in the block it may appear only as an unnumbered line with its title (§9). A candidate a server gave (its source is an `mcp` one in `sources`) carries no `sensitive` mark in the list — the server's search does not say; its `--get` header does (§4) — so outside the People contour treat one whose path lies under a people folder (`People/`, the core's `people_dir`) as sensitive even before reading it;
 - a hub;
 - a candidate marked `ти казав «не те»`;
 - what contradicts another piece rated «прямо»: then **both** go to the block, the conflict named (§7), and the work goes on with the rest.
@@ -113,7 +115,8 @@ Each of them is a doubt (§7); level 2 may start (§8).
 
 **A doubt** is any of:
 - nothing rated «прямо» was taken — there was none, or every one was excluded (§6);
-- the base was not read, or a source of kind `own` or `mcp` did not answer (§3);
+- the base was not read, or a source of kind `own` or `mcp` did not answer (§3) — the section index not built yet (`індексу пошуку ще немає (…) — ctx index rebuild`) or being built by another process (`index.locked`, `індекс пошуку ще будується (інший процес) — цього разу без нього`) is one: the base was not read, never «У базі нічого прямо про це»;
+- nothing was taken while the index said `індекс оновлюється: N файлів ще не переглянуто` — the files it has not seen yet may hold the answer; its block line is `повторити пошук: за хвилину`;
 - all that was found is marked `застаріле`;
 - something marked `знімок від <день>` was taken;
 - the best candidate is marked `лише глосарій` or `одне слово`;
@@ -151,7 +154,7 @@ At the very end of the answer that delivers the skill's work — after the artif
 - `Цифра — повторю роботу з вибраним; «не те» — запам'ятаю.`
 
 Rules:
-- **Two to four numbered lines**, numbered from 1 in the order they are filled — the lines above show the kinds, not fixed places. There is no empty block: fill it in this order — the candidates worth choosing (each «прямо» not taken — but a sensitive one or a people type only as the unnumbered line below — then the best «частково», each with why it was not taken: `частково: …`, `застаріле`, `суперечить 2): …`, `ти казав «не те»`); `уточнити запит: «…»` — a narrower or a wider wording of the request (two different wordings may fill two lines); `живе джерело: …` for a source the session has that level 2 did not already search. When the base was not read (exit 5), one line may be `повторити пошук: <коли або як — за хвилину | ctx index rebuild>`.
+- **Two to four numbered lines**, numbered from 1 in the order they are filled — the lines above show the kinds, not fixed places. There is no empty block: fill it in this order — the candidates worth choosing (each «прямо» not taken — but a sensitive one or a people type only as the unnumbered line below — then the best «частково», each with why it was not taken: `частково: …`, `застаріле`, `суперечить 2): …`, `ти казав «не те»`); `уточнити запит: «…»` — a narrower or a wider wording of the request (two different wordings may fill two lines); `живе джерело: …` for a source the session has that level 2 did not already search. When the base was not read (exit 5), or nothing was taken while the index had files not yet seen (§7), one line may be `повторити пошук: <коли або як — за хвилину | ctx index rebuild>`.
 - **The `Пошук:` line** says the reason in the user's language: no «прямо» about «…»; the base was not read and why; two documents say different things about <the fact>; only outdated notes; the snapshot of <repo> is from <day>; <id> did not answer; the best match came only through the glossary; not sure that «…» is it.
 - **A sensitive candidate or a people type** outside the People contour: one **unnumbered** line, `· <назва> — <джерело, дата> — sensitive, зміст не показую` — no section, no snippet, and no number, so it cannot be picked; it does not count among the two to four numbered lines.
 - The fixed words of the block are printed exactly as written here; titles, sections and reasons are filled in.

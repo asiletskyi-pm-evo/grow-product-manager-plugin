@@ -1118,7 +1118,7 @@ def _search_hint(a, c):
         raise Usage("search %s takes --q TEXT: the request" % a.action)
     q = a.q[0]
     if not ch.terms(q):
-        raise Usage("the request %r has no words to remember (only stop words)" % q)
+        raise Usage("the request %r has no words to %s (only stop words)" % (q, a.action))
     good, bad = [], []
     if a.action == "remember":
         if not a.pick and not a.not_:
@@ -1167,8 +1167,9 @@ def _search_eval(a, c):
     (ctx_hints.evaluate) — the store's `search/golden.yaml` unless --golden names one (no store: --golden is needed),
     plus, without --no-hints, the hints of the store's memory as rows `source: choice`. Each row with an answer is
     searched with its frozen variants (`[q] + variants`, the first 50, its product and skill) and with its question
-    alone; the hints weigh both unless --no-hints. Writes nothing but the index (no last.json, no store). Exit 3: no
-    golden set, one that does not read, or nothing to search."""
+    alone; the hints weigh both unless --no-hints. The index is refreshed once, by the first search (again only while
+    it is not built — another process building it), not at each. Writes nothing but the index (no last.json, no
+    store). Exit 3: no golden set, one that does not read, or nothing to search."""
     which = _search_kinds(a.sources)
     golden = a.golden
     if not golden:
@@ -1198,9 +1199,14 @@ def _search_eval(a, c):
               "no local index or MCP")
         return 3, {"command": "search", "action": "eval", "golden": golden, "error": "nothing to search"}
 
+    built = []          # the index is refreshed once per eval: until one search finds it built, never after
+
     def ask(queries, row):
-        return cs_.run(sctx, queries, skill=row.get("skill") or None, product=row.get("product") or None,
-                       limit=cs_.LIST_LIMIT, which=which, use_hints=not a.no_hints)
+        res = cs_.run(sctx, queries, skill=row.get("skill") or None, product=row.get("product") or None,
+                      limit=cs_.LIST_LIMIT, which=which, use_hints=not a.no_hints, refresh=not built)
+        if not built and (res.get("index") is None or res["index"].get("updated")):
+            built.append(True)
+        return res
 
     res = ch.evaluate(rows + extra, ask)
     for n in res.pop("notes"):

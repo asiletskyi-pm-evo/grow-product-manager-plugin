@@ -732,7 +732,8 @@ with tempfile.TemporaryDirectory() as d:
     check("…the second section of the note too", len(k["sections"]) == 2
           and cs_.get(sx, k["sections"][1]["id"])[0].startswith("> [own · %s › " % P), k["sections"])
     hg, tg = cs_.get(sx, gc["id"])
-    check("…a note only the local index knows is read from the vault", hg == "> [zorg-brain · Growth/Cart experiments.md · 2026-08-01]"
+    check("…a note only the local index knows is read from the vault, its type from its frontmatter on the line",
+          hg == "> [zorg-brain · Growth/Cart experiments.md · 2026-08-01 · ab-test-results]"
           and "seller's hours" in tg and "type:" not in tg, (hg, tg))
     os.remove(cs_.last_path(env.home))
     check("…an own section no search listed is found in the index by its id", cs_.get(sx, k["id"]) == (header, text))
@@ -787,7 +788,7 @@ with tempfile.TemporaryDirectory() as d:
     real_query, real_rebuild = ci.Index.query, ci.Index.rebuild
 
     def problem_query(note):
-        def query(self, expr, limit):
+        def query(self, expr, limit, *a, **kw):
             self.problem = note
             return []
         return query
@@ -844,7 +845,8 @@ with tempfile.TemporaryDirectory() as d:
         cs_.save_last(env.home, res["last"])
         header, text = cs_.get(sx, c["id"])
         check("get of an MCP candidate: vault_get_note, the note's text without its frontmatter",
-              header == "> [zorg-growth · @zorg-growth/Cart experiments.md · 2026-08-01]" and text.startswith("# Cart experiments")
+              header == "> [zorg-growth · @zorg-growth/Cart experiments.md · 2026-08-01 · ab-test-results]"
+              and text.startswith("# Cart experiments")
               and "lifted the paid orders" in text and "type:" not in text, (header, text))
         asked = [json.dumps(x.get("body"), ensure_ascii=False) for x in s.seen]
         check("…asked for the path exactly as the server gave it",
@@ -862,6 +864,195 @@ with tempfile.TemporaryDirectory() as d:
         check("run: a source that does not answer is marked so, with its line", res["sources"] == [
             {"id": "zorg-growth", "kind": "mcp", "answered": False}] and res["notes"] == ["zorg-growth не відповів — без нього"]
               and res["candidates"] == [], res)
+
+# ------------------------------------------------------------------ final review fix wave
+BUILDING = "індекс пошуку ще будується (інший процес) — цього разу без нього"
+Q = ["графік роботи продавця"]
+OWN_UNREAD = [{"id": "own", "kind": "own", "answered": False}]
+COUNTS0 = {"files": 0, "sections": 0, "pending": 0, "skipped_dataless": 0}
+
+
+def index_file(home, name=""):
+    return os.path.join(home, ".grow-pm", "index", *([name] if name else []))
+
+
+def hold_lock(home):
+    """index.lock as a live process holds it: this test's own pid, now."""
+    write(index_file(home, "index.lock"), json.dumps({"pid": os.getpid(), "at": time.time()}))
+
+
+def ddl_db(home):
+    """A sections.sqlite with the schema's tables only (ctx_index.DDL): no meta row yet, as a first build has it."""
+    os.makedirs(index_file(home), exist_ok=True)
+    con = sqlite3.connect(index_file(home, "sections.sqlite"))
+    con.executescript(ci.DDL)
+    con.commit()
+    con.close()
+
+
+def unread(res, line):
+    return res["sources"] == OWN_UNREAD and res["candidates"] == [] and line in res["notes"]
+
+
+# C1: an own index that does not exist yet, or that another process is building, has not answered
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    sx = env.sctx()
+    hold_lock(env.home)
+    a = cs_.run(sx, Q, which=("own",), now=NOW)
+    check("C1: no index yet while another process holds its lock: own has not answered, the building line, index.locked",
+          unread(a, BUILDING) and (a["index"] or {}).get("locked") is True
+          and {k: (a["index"] or {}).get(k) for k in COUNTS0} == COUNTS0, (a["sources"], a["notes"], a["index"]))
+    ddl_db(env.home)
+    write(index_file(env.home, "index.json"), json.dumps({"schema": ci.SCHEMA, "updated": "2026-01-02T09:00:00+02:00",
+                                                          "files": 19, "sections": 60, "pending": 0, "skipped_dataless": 0}))
+    b = cs_.run(sx, Q, which=("own",), now=NOW)
+    check("…a database still being filled (no `updated` in its meta) beside an old index.json: not answered, and the index's "
+          "day is the database's own (none), not the old one", unread(b, BUILDING) and b["index"]["updated"] is None
+          and b["index"]["files"] == 0, (b["notes"], b["index"]))
+    os.remove(index_file(env.home, "index.lock"))
+    c = cs_.run(sx, Q, which=("own",), now=NOW)
+    check("…the lock gone, this search builds the index and answers", c["sources"] == [{"id": "own", "kind": "own", "answered": True}]
+          and any(x["path"] == P for x in c["candidates"]) and BUILDING not in c["notes"], (c["sources"], c["notes"]))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    sx = env.sctx()
+    write(index_file(env.home), "not a folder\n")       # <home>/.grow-pm/index is a file: the refresh cannot make the folder
+    e = cs_.run(sx, Q, which=("own",), now=NOW)
+    gone = [n for n in e["notes"] if n.startswith("індексу пошуку ще немає (") and n.endswith(") — ctx index rebuild")]
+    check("C1: a refresh that cannot make the index's folder: own has not answered, one line «індексу пошуку ще немає (<why>) — "
+          "ctx index rebuild», never «пошук по тому, що є»", e["sources"] == OWN_UNREAD and e["candidates"] == []
+          and len(gone) == 1 and not any(n.startswith("індекс пошуку не оновлено") for n in e["notes"]), e["notes"])
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    sx = env.sctx()
+    env.refresh(sx)
+    hold_lock(env.home)
+    real_query, seen = ci.Index.query, []
+
+    def broken_once(self, expr, limit, *a, **kw):
+        seen.append(expr)
+        if len(seen) == 1:
+            self.problem = ci.BROKEN_NOTE % "database disk image is malformed"
+            return []
+        return real_query(self, expr, limit, *a, **kw)
+
+    def busy_query(self, expr, limit, *a, **kw):
+        self.problem = ci.BUSY_NOTE
+        return []
+
+    ci.Index.query = broken_once
+    try:
+        r = cs_.run(sx, Q, which=("own",), now=NOW)
+    finally:
+        ci.Index.query = real_query
+    check("129: a damaged index whose rebuild another process's lock refused: never «збудовано наново», the building line, "
+          "own has not answered", cs_.REBUILT_NOTE not in r["notes"] and BUILDING in r["notes"] and r["sources"] == OWN_UNREAD
+          and r["index"]["locked"] is True and r["index"]["rebuilt"] is False, (r["notes"], r["index"]))
+    os.remove(index_file(env.home, "index.json"))
+    ci.Index.query = busy_query
+    try:
+        r = cs_.run(sx, Q, which=("own",), now=NOW)
+    finally:
+        ci.Index.query = real_query
+    check("137: own busy and no index.json: the counts of `index` are 0, never None", ci.BUSY_NOTE in r["notes"]
+          and {k: r["index"].get(k) for k in COUNTS0} == COUNTS0, r["index"])
+    os.remove(index_file(env.home, "index.lock"))
+    calls, real_refresh = [], ci.Index.refresh
+    ci.Index.refresh = lambda self, *a, **kw: calls.append(1) or real_refresh(self, *a, **kw)
+    try:
+        r = cs_.run(sx, Q, which=("own",), now=NOW, refresh=False)
+    finally:
+        ci.Index.refresh = real_refresh
+    check("154: run(refresh=False) reads the index as it is, without a refresh", calls == []
+          and r["sources"] == [{"id": "own", "kind": "own", "answered": True}] and any(x["path"] == P for x in r["candidates"])
+          and (r["index"]["added"], r["index"]["locked"]) == (0, False), (calls, r["sources"], r["index"]))
+
+# the own index counts the terms a hit holds as the index matched it — never by stemming a whole long section
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Notes/Long note.md"), "# Long note\n\n## Body\n\nzebrafish comes first. " + "lorem ipsum dolor sit amet " * 250
+          + "and quokkaland only at the end.\n")
+    sx = env.sctx()
+    env.refresh(sx)
+    lens, real_stem_text = [], cs_.st.stem_text
+    cs_.st.stem_text = lambda text: lens.append(len(text or "")) or real_stem_text(text)
+    try:
+        lists, notes = cs_.gather(sx, ["zebrafish quokkaland"], [{"id": "own", "kind": "own"}], deadline())
+    finally:
+        cs_.st.stem_text = real_stem_text
+    long_hit = next((h for h in lists.get("own|v0", []) if h["path"] == "Notes/Long note.md"), None)
+    check("_own: a section of ~7 000 characters holds both terms (the second at its end), counted without stemming it",
+          long_hit and long_hit["terms"] == 2 and long_hit["asked"] == 2 and max(lens or [0]) <= 2000,
+          (long_hit and long_hit["terms"], max(lens or [0])))
+
+# I1: --get of a note a local index or a server gave says what its frontmatter says
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Growth/Bea Two — 1-1.md"), "---\ntype: Person\nstatus: Archived\nsensitive: yes\nupdated: 2026-07-01\n---\n"
+          "# Bea Two\n\nNotes of the last 1-1.\n")
+    write(env.note("Growth/Plain.md"), "# Plain\n\nNothing marked here.\n")
+    sx = env.sctx()
+    cs_.save_last(env.home, {
+        "aaaaaaaaaa": {"source": "zorg-brain", "path": "Growth/Bea Two — 1-1.md", "heading": "", "kind": "local",
+                       "title": "Bea Two", "date": "2026-07-01"},
+        "bbbbbbbbbb": {"source": "zorg-brain", "path": "Growth/Plain.md", "heading": "", "kind": "local", "title": "Plain",
+                       "date": "2026-07-02"}})
+    h1, t1 = cs_.get(sx, "aaaaaaaaaa")
+    check("I1: --get of a local note: ` · sensitive`, ` · застаріле` (its status) and its type on the provenance line",
+          h1 == "> [zorg-brain · Growth/Bea Two — 1-1.md · 2026-07-01 · sensitive · застаріле · person]"
+          and "Notes of the last 1-1." in t1, h1)
+    check("…a note whose frontmatter says none of it: the line as it was",
+          cs_.get(sx, "bbbbbbbbbb")[0] == "> [zorg-brain · Growth/Plain.md · 2026-07-02]", cs_.get(sx, "bbbbbbbbbb")[0])
+    OLD = "# Old sync\n\nThe old sync notes.\n"
+    with FakeMcp(tree={"Growth/Old sync.md": OLD}) as s:
+        s.handlers["vault_get_note"] = lambda args: ({
+            "path": args.get("path"), "title": "Old sync", "tags": [], "headings": [], "content": OLD, "outgoing_links": [],
+            "frontmatter": {"sensitive": True, "status": "Superseded", "type": "Meeting", "updated": "2026-06-01"}}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        cs_.save_last(env.home, {"cccccccccc": {"source": "zorg-growth", "path": "@zorg-growth/Old sync.md", "heading": "",
+                                                "kind": "mcp", "title": "Old sync", "date": "", "remote": "Growth/Old sync.md"}})
+        h3, t3 = cs_.get(sx, "cccccccccc")
+    check("…of a server's note, from vault_get_note's frontmatter", h3 ==
+          "> [zorg-growth · @zorg-growth/Old sync.md · 2026-06-01 · sensitive · застаріле · meeting]" and "old sync notes" in t3, h3)
+
+# the protocols say what the fixes do
+import re  # noqa: E402
+
+
+def flat(*parts):
+    return re.sub(r"\s+", " ", read(ROOT, *parts))
+
+
+def section(text, n):
+    """The text of `## <n>.` up to the next `## `."""
+    m = re.search(r"## %d\. (.*?)(?= ## \d+\. |$)" % n, text)
+    return m.group(1) if m else ""
+
+
+SP = flat("references", "search-protocol.md")
+PP = flat("references", "context-provider-protocol.md")
+check("search-protocol §3: the building and the not-built lines, and index.locked",
+      all(x in section(SP, 3) for x in ("`індекс пошуку ще будується (інший процес) — цього разу без нього`",
+                                        "`індексу пошуку ще немає (…) — ctx index rebuild`", "`index.locked`")),
+      section(SP, 3)[-1500:])
+check("search-protocol §7: an own index being built or not built yet is the base not read; nothing taken while the index "
+      "reports files not yet seen is a doubt, with `повторити пошук`",
+      all(x in section(SP, 7) for x in ("`index.locked`", "`індекс оновлюється: N файлів ще не переглянуто`", "`повторити пошук")),
+      section(SP, 7))
+check("search-protocol §4: a --get header with sensitive or застаріле is the flag; a local/mcp candidate's flags are complete "
+      "only after --get; a product's version number makes a version key",
+      all(x in section(SP, 4) for x in ("` · sensitive`", "` · застаріле`", "complete only after `--get`", "`API v2`")),
+      section(SP, 4)[-1500:])
+check("context-provider-protocol §2: --get reads status and sensitive of a server's note; the OR expression is search-protocol §12",
+      "`ctx search --get` reads them from the note's frontmatter" in section(PP, 2)
+      and "joined by `OR` (`\"кошик\"* OR \"мобільний\"*`) — because plain words would be read as \"all of them\" "
+          "(`search-protocol.md` §12)" in section(PP, 2), section(PP, 2)[-1800:])
+check("vault-protocol «In short»: the level-2 triggers are in search-protocol §8",
+      "maybe live sources (level 2; triggers in search-protocol §8)" in read(ROOT, "references", "vault-protocol.md"))
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

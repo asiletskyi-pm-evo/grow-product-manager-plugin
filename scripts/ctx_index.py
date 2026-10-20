@@ -12,7 +12,8 @@ the vault (iCloud never syncs it): deleting the folder is safe, `ctx index rebui
                                 text); a frontmatter that cannot be read leaves the whole note as text, without metadata.
 - is_dataless                   a file iCloud has not downloaded: reading it would start the download, so it is skipped.
 - Index                         sections.sqlite (notes, sections, the FTS5 table sections_fts, meta), index.json (the
-                                state the session digest reads) and index.lock (one refresh at a time).
+                                state the session digest reads) and index.lock (one refresh at a time); `built` — has
+                                a walk ever finished into it (its meta `updated` row), `lock_held` — is one going on.
 
 The refresh is incremental. It walks the roots as os.walk(followlinks=False) would, one folder at a time so that it can
 stop and go on later: a file whose mtime and size did not change is not read, a changed one is read again (sha1 of its
@@ -483,18 +484,29 @@ class Index:
             json.dump(data, f, ensure_ascii=False)
         os.replace(tmp, self.state_path)
 
+    def _holder(self):
+        """(at, pid) of index.lock as its holder wrote them; (the file's mtime, None) when it cannot be read."""
+        try:
+            with open(self.lock_path, encoding="utf-8") as f:
+                held = json.load(f)
+            return float(held.get("at") or 0), held.get("pid")
+        except (OSError, ValueError, TypeError, AttributeError):
+            return self._lock_mtime(), None
+
+    def lock_held(self):
+        """Does a live process hold index.lock, younger than LOCK_STALE_S — a refresh or a build going on now?"""
+        if not os.path.exists(self.lock_path):
+            return False
+        at, pid = self._holder()
+        return time.time() - at < LOCK_STALE_S and (pid is None or _alive(pid))
+
     def _take_lock(self):
         """Take index.lock; False while another live process holds one younger than LOCK_STALE_S."""
         for attempt in (1, 2):
             try:
                 fd = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
             except FileExistsError:
-                try:
-                    with open(self.lock_path, encoding="utf-8") as f:
-                        held = json.load(f)
-                    at, pid = float(held.get("at") or 0), held.get("pid")
-                except (OSError, ValueError, TypeError, AttributeError):
-                    at, pid = self._lock_mtime(), None
+                at, pid = self._holder()
                 if attempt == 2 or (time.time() - at < LOCK_STALE_S and (pid is None or _alive(pid))):
                     return False
                 try:
@@ -653,15 +665,33 @@ class Index:
                 self.problem = BROKEN_NOTE % e
             return empty
 
-    def query(self, expr, limit):
+    def query(self, expr, limit, held=()):
         """The sections an FTS5 expression matches, best first (bm25: title 10, heading 6, tags 4, aliases 4, body 1):
-        dicts with the section's id, heading, ord and raw text, the note's metadata and `rank`. A blank expression or no
-        index answer []; so does an index SQLite cannot read, and then `problem` says so."""
+        dicts with the section's id, heading, ord and raw text, the note's metadata and `rank`. `held` — FTS5
+        expressions of one term each: every section then carries `held`, how many of them it matches, counted by the
+        index itself in the same read (never by reading the section's text). A blank expression or no index answer [];
+        so does an index SQLite cannot read, and then `problem` says so."""
         if not (expr or "").strip():
             self.problem = None
             return []
-        rows = self._read(lambda con: con.execute(QUERY_SQL, (expr, int(limit))).fetchall(), [])
-        return [self._section_dict(r) for r in rows]
+        terms = [e for e in held or () if (e or "").strip()]
+
+        def ask(con):
+            rows = con.execute(QUERY_SQL, (expr, int(limit))).fetchall()
+            ids, counts = [r["id"] for r in rows], {}
+            if terms and ids:
+                sql = "SELECT rowid FROM sections_fts WHERE sections_fts MATCH ? AND rowid IN (%s)" % ",".join("?" * len(ids))
+                for e in terms:
+                    for (sid,) in con.execute(sql, [e] + ids).fetchall():
+                        counts[sid] = counts.get(sid, 0) + 1
+            return rows, counts
+
+        rows, counts = self._read(ask, ([], {}))
+        out = [self._section_dict(r) for r in rows]
+        if held:
+            for d in out:
+                d["held"] = counts.get(d["id"], 0)
+        return out
 
     @staticmethod
     def _section_dict(r):
@@ -694,22 +724,34 @@ class Index:
                           .fetchall(), [])
         return [dict(_note_dict(r), id=r["id"]) for r in rows]
 
+    def built(self):
+        """Has a walk ever finished into this index — the database there, with its meta `updated` row? False when there
+        is no database yet, or while a first build (or a rebuild) is still filling one — it writes `updated` when its
+        walk ends; None when SQLite cannot read it (`problem` says why: busy or damaged). Reads the meta row itself,
+        never index.json."""
+        done = self._read(lambda con: con.execute("SELECT 1 FROM meta WHERE key='updated'").fetchone() is not None, None)
+        return False if done is None and self.problem is None else done
+
     def status(self):
-        """{schema, updated, files, sections, pending, skipped_dataless}: the counts from the index, the rest from
-        index.json; no index: schema None and zeros."""
+        """{schema, updated, files, sections, pending, skipped_dataless}: schema, the day and the counts are the index's
+        own (its meta and its tables; a database with no `updated` row — still being built — has no day); pending and
+        skipped_dataless are the last walk's, from index.json. No index: schema and day None, zeros. Only a database
+        SQLite cannot read now (`problem` says why) takes its day from index.json."""
         state = self._state()
-        out = {"schema": None, "updated": state.get("updated"), "files": 0, "sections": 0,
+        out = {"schema": None, "updated": None, "files": 0, "sections": 0,
                "pending": _count(state.get("pending")), "skipped_dataless": _count(state.get("skipped_dataless"))}
 
         def fill(con):
             row = con.execute("SELECT value FROM meta WHERE key='schema'").fetchone()
             out["schema"] = row[0] if row else None
             row = con.execute("SELECT value FROM meta WHERE key='updated'").fetchone()
-            out["updated"] = row[0] if row else out["updated"]
+            out["updated"] = row[0] if row else None
             out["files"] = con.execute("SELECT count(*) FROM notes").fetchone()[0]
             out["sections"] = con.execute("SELECT count(*) FROM sections").fetchone()[0]
 
         self._read(fill, None)
+        if self.problem:
+            out["updated"] = state.get("updated")
         return out
 
 

@@ -581,5 +581,27 @@ with tempfile.TemporaryDirectory() as d:
     check("no vault and no repository folder: exit 3, nothing created", p.returncode == 3
           and not os.path.exists(os.path.join(home, ".grow-pm", "index")), (p.returncode, p.stdout[-300:]))
 
+# --- final review: status() reports the database's own day, never index.json's for a database without one
+with tempfile.TemporaryDirectory() as d:
+    idx = ctx_index.Index(os.path.join(d, "home"))
+    write(idx.state_path, json.dumps({"schema": ctx_index.SCHEMA, "updated": "2026-01-02T09:00:00+02:00", "files": 19,
+                                      "sections": 60, "pending": 3, "skipped_dataless": 1}))
+    s0 = idx.status()
+    check("status(): no database beside an old index.json — no day, no schema, no counts of its own; pending from the queue",
+          (s0["updated"], s0["schema"], s0["files"], s0["sections"], s0["pending"]) == (None, None, 0, 0, 3), s0)
+    con = sqlite3.connect(idx.db_path)
+    con.executescript(ctx_index.DDL)
+    con.commit()
+    con.close()
+    s1 = idx.status()
+    check("…a database still being filled (no `updated` in its meta): its day is none, not index.json's",
+          s1["updated"] is None and s1["files"] == 0, s1)
+    check("built(): False with no `updated` row in the meta", idx.built() is False)
+    os.remove(idx.db_path)
+    check("…and with no database", idx.built() is False and idx.problem is None)
+    write(idx.db_path, "not a database at all, longer than one header of sixteen bytes\n" * 4)
+    check("…None for a file SQLite cannot read, with the problem said", idx.built() is None
+          and (idx.problem or "").startswith("індекс пошуку не читається ("), idx.problem)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

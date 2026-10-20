@@ -3746,7 +3746,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         members = slot_in(res, "team.members")
         check("…team.members: your Team Members and the core's Members, both shown (a list shows every candidate), the header says what it is",
               outcomes_of(members) == [("mine", "shown"), ("zorg-core", "shown")] and members["kind"] == "list" and members["record"] == "team.alpha-a"
-              and members["winner"] is None and members["why"] == "список — виводяться всі кандидати; склеювання пунктів — у v3.16"
+              and members["winner"] is None and members["why"] == "список — виводяться всі кандидати; склеювання пунктів — у v3.17"
               and "team.members · список · Team: Alpha (A)\n" in out and "  чому: список — виводяться всі кандидати" in out, (members, out[:1500]))
         mine_row, core_row = members["candidates"]
         check("…your row says where your text is; the block's — which block, which version, in which record, checked when",
@@ -4667,6 +4667,60 @@ with tempfile.TemporaryDirectory() as d:
           (p.returncode, p.stdout[-600:], p.stderr[-300:]))
     check("…the rows with no answer are counted apart, and a `bad` one taken is named", score.get("missing") == 9
           and score.get("bad_taken") == 1 and "precision_taken" in p.stdout and "без відповіді: 9" in p.stdout, score)
+
+# --- v3.16.0 final review: an own index not built yet, or being built by another process, has not answered (exit 5)
+import ctx_index as ci_mod  # noqa: E402
+
+BUILDING = "індекс пошуку ще будується (інший процес) — цього разу без нього"
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d, brain=False)
+    os.makedirs(env.index)
+    lock, db = os.path.join(env.index, "index.lock"), os.path.join(env.index, "sections.sqlite")
+    open(lock, "w", encoding="utf-8").write(json.dumps({"pid": os.getpid(), "at": time.time()}))   # a live process: this one
+    OWN_ONLY = ("search", "--q", "графік роботи продавця", "--sources", "own", "--json")
+
+    def own_unread(rc, res):
+        return (rc == 5 and res and res["sources"] == [{"id": "own", "kind": "own", "answered": False}]
+                and res["candidates"] == [] and BUILDING in res["notes"] and res["index"]["locked"] is True)
+
+    rc, out, res = run_ok(env, *OWN_ONLY)
+    check("C1 A: the index's lock held by a live process and no database: exit 5, own not answered, the building line",
+          own_unread(rc, res), (rc, res and res.get("notes"), res and res.get("index")))
+    con = sqlite3.connect(db)
+    con.executescript(ci_mod.DDL)
+    con.commit()
+    con.close()
+    rc, out, res = run_ok(env, *OWN_ONLY)
+    check("C1 B: …a database with the schema's tables only (no meta row) and no index.json: the same", own_unread(rc, res),
+          (rc, res and res.get("notes"), res and res.get("index")))
+    open(os.path.join(env.index, "index.json"), "w", encoding="utf-8").write(json.dumps(
+        {"schema": "search-index/1", "updated": "2026-01-02T09:00:00+02:00", "files": 19, "sections": 60, "pending": 0}))
+    rc, out, res = run_ok(env, *OWN_ONLY)
+    check("C1 D: …and an old index.json beside it: the same, and index.updated is the database's (none), not the old day",
+          own_unread(rc, res) and res["index"]["updated"] is None, (rc, res and res.get("notes"), res and res.get("index")))
+    rc, out, _ = run_ok(env, *OWN_ONLY[:-1])
+    check("…the human output says the building line", rc == 5 and BUILDING in out, (rc, out[-400:]))
+    os.remove(lock)
+    rc, out, res = run_ok(env, *OWN_ONLY)
+    check("C1 control: no lock — the search builds the index and finds the note", rc == 0 and res
+          and res["sources"] == [{"id": "own", "kind": "own", "answered": True}] and by_path(res, KOSHYK)
+          and BUILDING not in res["notes"], (rc, res and res.get("notes")))
+
+    # 154: eval refreshes the index once, not twice a row
+    calls, real_refresh = [], ci_mod.Index.refresh
+    ci_mod.Index.refresh = lambda self, *a, **kw: calls.append(1) or real_refresh(self, *a, **kw)
+    try:
+        rc, out, res = in_process(env, "search", "eval", "--golden", GOLDEN_ZORG, "--no-hints", "--json")
+    finally:
+        ci_mod.Index.refresh = real_refresh
+    check("154: eval refreshes the index once per eval, and its numbers stay the pinned ones", rc == 0 and len(calls) == 1
+          and res and (res["n"], round(res["recall50"], 3), round(res["recall50_q_only"], 3)) == PINNED,
+          (rc, len(calls), res and (res.get("n"), res.get("recall50"), res.get("recall50_q_only"))))
+
+    # 152: forget says forget
+    rc, out, res = run_ok(env, "search", "forget", "--q", "що і як")
+    check("152: forget of a request of stop words only: exit 3, a message about forgetting, not remembering",
+          rc == 3 and "forget" in out and "remember" not in out, (rc, out[-300:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
