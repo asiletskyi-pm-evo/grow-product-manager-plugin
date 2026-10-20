@@ -18,9 +18,10 @@ The refresh is incremental. It walks the roots as os.walk(followlinks=False) wou
 stop and go on later: a file whose mtime and size did not change is not read, a changed one is read again (sha1 of its
 bytes). A row goes only when its file is gone from a folder the walk listed; a file iCloud has not downloaded keeps its
 row. The walk stops at its time budget (30 s) and leaves the folders and files it did not reach in a queue in
-index.json, which the next run takes first. A sections.sqlite of another schema, or one SQLite cannot read, is put aside
-as sections.sqlite.broken and built again. While another process holds index.lock (younger than 600 s, its process
-alive) the refresh does nothing and the queries read the index as it is.
+index.json, which the next run takes first. A sections.sqlite of another schema (or whose notes table lacks a column
+of this build), or one SQLite cannot read, is put aside as sections.sqlite.broken and built again. While another
+process holds index.lock (younger than 600 s, its process alive) the refresh does nothing and the queries read the
+index as it is.
 
 Writes only under `<home>/.grow-pm/index/` (through ctx_store.check_target, so inside `ctx` the write guard holds);
 reads the vault and the core folders; no network. Stdlib only.
@@ -54,6 +55,7 @@ HUB_TYPES = frozenset(("glossary", "moc", "people", "person", "focus-brief", "da
 HUB_TITLE = re.compile(r"style guide|глосарій|glossary|абревіатури", re.I)
 TRUE = ("true", "yes", "1")
 DATE_KEYS = ("updated", "modified", "snapshot", "generated", "date", "created")
+TTL_DATE_KEYS = ("updated", "snapshot", "generated")   # the note's own date a class TTL is counted from (provider protocol §6)
 COMMIT_EVERY = 50                   # files written between two commits of a refresh
 COUNTS = ("added", "changed", "removed", "pending", "skipped_dataless", "skipped_large")
 BROKEN_NOTE = "індекс пошуку не читається (%s) — ctx index rebuild збудує його наново"
@@ -64,14 +66,14 @@ N = cc.N
 DDL = """
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE notes(id INTEGER PRIMARY KEY, path TEXT UNIQUE, source TEXT, title TEXT, type TEXT, product TEXT,
-                   status TEXT, date TEXT, confluence_id TEXT, aliases_json TEXT, tags_json TEXT, sensitive INTEGER,
-                   hub INTEGER, version_key TEXT, links_json TEXT, hash TEXT, mtime REAL, size INTEGER);
+                   status TEXT, date TEXT, ttl_date TEXT, confluence_id TEXT, aliases_json TEXT, tags_json TEXT,
+                   sensitive INTEGER, hub INTEGER, version_key TEXT, links_json TEXT, hash TEXT, mtime REAL, size INTEGER);
 CREATE TABLE sections(id INTEGER PRIMARY KEY, note_id INTEGER, heading TEXT, ord INTEGER, text TEXT);
 CREATE INDEX sections_note ON sections(note_id);
 CREATE VIRTUAL TABLE sections_fts USING fts5(title, heading, tags, aliases, body,
                                              tokenize='unicode61 remove_diacritics 2');
 """
-NOTE_COLS = ("path", "source", "title", "type", "product", "status", "date", "confluence_id", "aliases_json",
+NOTE_COLS = ("path", "source", "title", "type", "product", "status", "date", "ttl_date", "confluence_id", "aliases_json",
              "tags_json", "sensitive", "hub", "version_key", "links_json", "hash", "mtime", "size")
 ROW_SQL = ("SELECT s.id AS id, s.heading, s.ord, s.text, n.id AS note_id, %s FROM sections s "
            "JOIN notes n ON n.id = s.note_id" % ", ".join("n." + c for c in NOTE_COLS))
@@ -385,6 +387,7 @@ def version_key(title, folder):
 def note_meta(rel, text, mtime=None):
     """The metadata of a note: title (frontmatter `title`, else the first `# `, else the file name), type and status
     (lower case), product, date (`updated` | `modified` | `snapshot` | `generated` | `date` | `created`, else `mtime`),
+    ttl_date (the note's own date a class TTL counts from: `updated` | `snapshot` | `generated`, else ""),
     confluence_id (frontmatter,
     else `(<6+ digits>).md`), aliases, tags, sensitive, hub, version_key and links (name_key of every wiki-link target
     and of `core_page`). A frontmatter that is never closed or cannot be read gives no metadata — the note is text."""
@@ -395,6 +398,7 @@ def note_meta(rel, text, mtime=None):
     name = rel.rsplit("/", 1)[-1]
     title = _text(fm.get("title")) or _first_h1(body) or (name[:-3] if name.lower().endswith(".md") else name)
     date = next((d for d in (_date(fm.get(k)) for k in DATE_KEYS) if d), None)
+    ttl_date = next((d for d in (_date(fm.get(k)) for k in TTL_DATE_KEYS) if d), "")
     if date is None and mtime is not None:
         date = datetime.datetime.fromtimestamp(mtime).isoformat(timespec="seconds")
     cid = _text(fm.get("confluence_id"))
@@ -409,7 +413,7 @@ def note_meta(rel, text, mtime=None):
             links.append(k)
     return {
         "title": title, "type": ntype, "product": _text(fm.get("product")), "status": _text(fm.get("status")).lower(),
-        "date": date or "", "confluence_id": cid, "aliases": _items(fm.get("aliases") or fm.get("alias")),
+        "date": date or "", "ttl_date": ttl_date, "confluence_id": cid, "aliases": _items(fm.get("aliases") or fm.get("alias")),
         "tags": _items(fm.get("tags") or fm.get("tag"), tags=True),
         "sensitive": _text(fm.get("sensitive")).lower() in TRUE,
         "hub": ntype in HUB_TYPES or _text(fm.get("search_hub")).lower() in TRUE or bool(HUB_TITLE.search(title)),
@@ -538,7 +542,8 @@ class Index:
                 con.execute("SELECT count(*) FROM notes").fetchone()
                 con.execute("SELECT count(*) FROM sections").fetchone()
                 con.execute("SELECT rowid FROM sections_fts LIMIT 1").fetchone()
-                if row and row[0] == SCHEMA:
+                cols = {r[1] for r in con.execute("PRAGMA table_info(notes)").fetchall()}
+                if row and row[0] == SCHEMA and set(NOTE_COLS) <= cols:    # a column short (an earlier build): rebuilt
                     return con, False
             except sqlite3.DatabaseError as e:
                 if _busy(e):
@@ -674,8 +679,8 @@ class Index:
         return self._section_dict(r) if r else None
 
     def notes(self):
-        """The metadata of every note, by path (id, path, source, title, type, product, status, date, confluence_id,
-        aliases, tags, sensitive, hub, version_key, links, hash, mtime, size); `problem` as for `query`."""
+        """The metadata of every note, by path (id, path, source, title, type, product, status, date, ttl_date,
+        confluence_id, aliases, tags, sensitive, hub, version_key, links, hash, mtime, size); `problem` as for `query`."""
         rows = self._read(lambda con: con.execute("SELECT id, %s FROM notes ORDER BY path" % ", ".join(NOTE_COLS))
                           .fetchall(), [])
         return [dict(_note_dict(r), id=r["id"]) for r in rows]
@@ -865,7 +870,7 @@ class _Walk:
     def _write(self, row, rel, source, meta, sections, digest, info):
         con = self.con
         values = (rel, source, meta["title"], meta["type"], meta["product"], meta["status"], meta["date"],
-                  meta["confluence_id"], json.dumps(meta["aliases"], ensure_ascii=False),
+                  meta["ttl_date"], meta["confluence_id"], json.dumps(meta["aliases"], ensure_ascii=False),
                   json.dumps(meta["tags"], ensure_ascii=False), int(meta["sensitive"]), int(meta["hub"]),
                   meta["version_key"], json.dumps(meta["links"], ensure_ascii=False), digest, info.st_mtime, info.st_size)
         if row:

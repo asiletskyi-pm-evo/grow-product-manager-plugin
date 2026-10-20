@@ -128,13 +128,15 @@ def build_brain(path, vault, rels, form="wild", junk=()):
         text = read(vault, *rel.split("/"))
         m = ci.note_meta(rel, text)
         if form == "wild":
-            con.execute("INSERT INTO notes(path, top, title, type, date, status) VALUES (?, ?, ?, ?, ?, ?)",
-                        (rel, rel.split("/")[0], m["title"], m["type"], m["date"], m["status"]))
+            con.execute("INSERT INTO notes(path, top, title, type, date, status, fm_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (rel, rel.split("/")[0], m["title"], m["type"], m["date"], m["status"],
+                         json.dumps({"updated": m["ttl_date"]}) if m["ttl_date"] else None))
             con.execute("INSERT INTO notes_fts(path, title, aliases, tags, headings, body) VALUES (?, ?, '', '', '', ?)",
                         (rel, m["title"], text))
         else:
             con.execute("INSERT INTO notes(id, path, vault, title, type, frontmatter_json) VALUES (?, ?, 'Zorg', ?, ?, ?)",
-                        (i, rel, m["title"], m["type"], json.dumps({"date": m["date"], "status": m["status"]})))
+                        (i, rel, m["title"], m["type"], json.dumps(dict({"date": m["date"], "status": m["status"]},
+                                                                         **({"updated": m["ttl_date"]} if m["ttl_date"] else {})))))
             con.execute("INSERT INTO notes_fts(rowid, title, headings, body) VALUES (?, ?, '', ?)", (i, m["title"], text))
     for p in junk:
         con.execute("INSERT INTO notes_fts(path, title, aliases, tags, headings, body) VALUES (?, 'junk', '', '', '', ?)",
@@ -230,6 +232,9 @@ with tempfile.TemporaryDirectory() as d:
           and concept["type"] == "concept" and concept["date"].startswith("2026-09-15"), concept)
     check("…and how many of the variant's terms it holds", concept and concept["terms"] == 2 and concept["asked"] == 2,
           concept)
+    korzyna = next((h for h in lists["own|g0"] if h["path"] == "Notes/Корзина 2.0 (mobile).md"), None)
+    check("…and the date a class TTL reads: its own updated; a note dated by `date` alone has none",
+          concept and concept.get("ttl_date") == "2026-09-15" and korzyna and korzyna.get("ttl_date") == "", (concept, korzyna))
     style = next((h for h in lists["own|v0"] if h["path"] == "Notes/Zorg Style Guide.md"), None)
     check("…one of two for a note that names only the cart", style and style["terms"] == 1 and style["asked"] == 2, style)
     brain = next((h for h in lists["zorg-brain|v0"] if h["path"] == "Notes/Кошик — графік роботи продавця.md"), None)
@@ -239,6 +244,9 @@ with tempfile.TemporaryDirectory() as d:
     check("…a snippet with the match in «»", brain and "«" in (brain["snippet"] or ""), brain)
     check("…the terms it holds, as the local index matches them (unstemmed words, prefix)",
           brain and brain["terms"] == 1 and brain["asked"] == 2, brain)
+    brain_k = next((h for h in lists["zorg-brain|v1"] if h["path"] == "Notes/Корзина 2.0 (mobile).md"), None)
+    check("…the TTL date from its frontmatter JSON (updated | snapshot | generated only)", brain.get("ttl_date") == "2026-09-15"
+          and brain_k and brain_k.get("ttl_date") == "" and brain_k["date"].startswith("2026-08-20"), (brain, brain_k))
     check("own paths are in scope only: Notes/ and ZorgCore/", all(h["path"].split("/")[0] in ("Notes", "ZorgCore")
                                                                    for k, l in lists.items() if k.startswith("own|")
                                                                    for h in l))
@@ -276,7 +284,8 @@ with tempfile.TemporaryDirectory() as d:
           ({k: paths(lists10, k) for k in lists10 if k.startswith("zorg-brain")}, notes10))
     b10 = next((h for h in lists10["zorg-brain|v0"] if h["path"] == "Notes/Кошик — графік роботи продавця.md"), None)
     check("…title and type from notes, the date from its frontmatter", b10 and b10["title"] == "Кошик — графік роботи продавця"
-          and b10["type"] == "concept" and (b10["date"] or "").startswith("2026-09-15"), b10)
+          and b10["type"] == "concept" and (b10["date"] or "").startswith("2026-09-15") and b10.get("ttl_date") == "2026-09-15",
+          b10)
 
     # ---------------------------------------------------------- an index of another shape
     build_brain(env.brain, env.vault, [], form="foreign")
@@ -300,6 +309,30 @@ with tempfile.TemporaryDirectory() as d:
     lists_b, notes_b = cs_.gather(sx, VARIANTS[:1], [cs_.Source("own", "own")], deadline())
     check("a glossary file that cannot be read: one line, the _org groups still widen",
           len([n for n in notes_b if "zorg-app.yaml" in n]) == 1 and "own|g0" in lists_b, (notes_b, sorted(lists_b)))
+
+# ------------------------------------------------------------------ a vault-wide own root (Task 6 fix round 1)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    text = env.text.replace("| %s | Notes |" % env.vault, "| %s | . |" % env.vault)
+    ext = os.path.join(d, "ext-core")
+    write(os.path.join(ext, "Seller hours.md"), "---\ntype: page\n---\n# Seller hours\n\nThe seller hours in the cart.\n")
+    reg = os.path.join(env.home, ".grow-pm", "providers", "zorg-ext.yaml")
+    write(reg, "schema: provider-registration/2\nid: zorg-ext\ntitle: Zorg external core\nkind: folder\nauthority: org\n"
+               "core_root: %s\nstatus: active\n" % ext)
+    sx = cs_.context_for(env.home, text)
+    check("plugin folder `.`: the own root is the whole vault, the external core a root of its own",
+          [(r["source"], r["path"]) for r in sx["roots"]] == [("own", env.vault), ("zorg-ext", ext)], sx["roots"])
+    ci.Index(env.home).refresh(sx["roots"], sx["store_rel"], sx["blocks_rels"])
+    own = [cs_.Source("own", "own")]
+    before, _ = cs_.gather(sx, ["seller hours"], own, deadline())
+    check("…the external core answers while it is registered", "@zorg-ext/Seller hours.md" in paths(before, "own|v0"),
+          paths(before, "own|v0"))
+    os.remove(reg)
+    sx2 = cs_.context_for(env.home, text)
+    after, _ = cs_.gather(sx2, ["seller hours"], own, deadline())
+    check("…a vault-wide root does not keep a removed core's rows: no @<repository>/… name answers",
+          paths(after, "own|v0") and not any(p.startswith(("@", "/")) for p in paths(after, "own|v0")),
+          paths(after, "own|v0"))
 
 # ------------------------------------------------------------------ MCP sources
 def growth_reg(url, core_root=""):
@@ -435,13 +468,29 @@ with tempfile.TemporaryDirectory() as d:
     check("class_ttl: the folder of a class the core's manifest names → its days", ttl == {"ZorgCore/Teams": 14}, ttl)
     check("…without the vaults the folder is named as outside every vault", cs_.class_ttl(sx["repos"])
           == {"@zorg-core/Teams": 14}, cs_.class_ttl(sx["repos"]))
-    team = cand("ZorgCore/Teams/team-alpha.md", type="team", date="2026-01-01")
-    fresh = cand("ZorgCore/Teams/team-beta.md", type="team", date="2026-10-10")
-    person = cand("ZorgCore/People/bea-two.md", type="note", date="2025-01-01")
-    cs_.priors([team, fresh, person], [], None, NOW, ttl)
+    team = cand("ZorgCore/Teams/team-alpha.md", type="team", date="2026-01-01", ttl_date="2026-01-01")
+    fresh = cand("ZorgCore/Teams/team-beta.md", type="team", date="2026-10-10", ttl_date="2026-10-10")
+    person = cand("ZorgCore/People/bea-two.md", type="note", date="2025-01-01", ttl_date="2025-01-01")
+    created = cand("ZorgCore/Teams/team-gamma.md", type="team", date="2025-01-01", ttl_date="")
+    cs_.priors([team, fresh, person, created], [], None, NOW, ttl)
     check("a team card older than 14 days is outdated", team["score"] == 0.5 and team["flags"] == ["застаріле"], team)
     check("…a fresh one is not, nor a note of a class with no TTL", fresh["flags"] == [] and person["flags"] == [],
           (fresh, person))
+    check("…nor one with no updated | snapshot | generated, however old its date", created["flags"] == []
+          and created["score"] == 1.0, created)
+    write(env.note("ZorgCore/Teams/team-beta.md"), "---\ntype: team\ncreated: 2025-01-01\n---\n# Team Beta\n\nOwns the delivery slots.\n")
+    env.refresh(sx)
+    found, _ = cs_.gather(sx, ["team owns"], [cs_.Source("own", "own")], deadline())
+    cards = {}
+    for h in found.get("own|v0", []):
+        cards.setdefault(h["path"], dict({k: h.get(k) for k in ("path", "heading", "type", "product", "status", "hub",
+                                                                 "title", "date", "ttl_date")},
+                                         score=1.0, flags=[], hits=[h]))
+    cs_.priors(list(cards.values()), [], None, NOW, ttl)
+    alpha, beta = cards.get("ZorgCore/Teams/team-alpha.md"), cards.get("ZorgCore/Teams/team-beta.md")
+    check("from the index: the card with an old `updated` is outdated, the one dated only by an old `created` is not",
+          alpha and alpha["flags"] == ["застаріле"] and beta and beta["flags"] == [] and beta["date"] == "2025-01-01",
+          (alpha, beta))
     os.remove(os.path.join(env.vault, "ZorgCore", "_System", "provider-manifest.yaml"))
     check("no manifest: no class TTL", cs_.class_ttl(sx["repos"], sx["vaults"]) == {})
 

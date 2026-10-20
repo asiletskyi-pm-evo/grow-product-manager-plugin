@@ -156,6 +156,14 @@ m = ctx_index.note_meta("Notes/a.md", "---\ncreated: 2026-01-01\ndate: 2026-02-0
 check("…snapshot before generated, generated before date (fix round 1: the class TTL reads them)", m["date"] == "2026-04-04"
       and ctx_index.note_meta("Notes/a.md", "---\ndate: 2026-02-02\ngenerated: 2026-03-03\n---\nx")["date"] == "2026-03-03"
       and ctx_index.note_meta("Notes/a.md", "---\nsnapshot: 2026-04-04\nmodified: 2026-05-05\n---\nx")["date"] == "2026-05-05", m)
+check("ttl_date (Task 6 fix round 1): the note's own updated, else snapshot, else generated — never another date",
+      ctx_index.note_meta("Notes/a.md", "---\ncreated: 2026-01-01\nupdated: 2026-04-04\nsnapshot: 2026-05-05\n---\nx")["ttl_date"]
+      == "2026-04-04"
+      and ctx_index.note_meta("Notes/a.md", "---\ngenerated: 2026-03-03\nsnapshot: 2026-04-04\n---\nx")["ttl_date"] == "2026-04-04"
+      and ctx_index.note_meta("Notes/a.md", "---\ndate: 2026-02-02\ngenerated: 2026-03-03\n---\nx")["ttl_date"] == "2026-03-03"
+      and ctx_index.note_meta("Notes/a.md", "---\ncreated: 2026-01-01\ndate: 2026-02-02\nmodified: 2026-03-03\n---\nx")["ttl_date"]
+      == ""
+      and ctx_index.note_meta("Notes/a.md", "no frontmatter", mtime=time.time())["ttl_date"] == "")
 m = ctx_index.note_meta("Notes/m.md", "---\ntype: meeting\nsensitive: true\ntags:\n- cart\n- pricing\naliases:\n- One\n---\n# M\nbody\n")
 check("a YAML list at the margin (PyYAML's own style) keeps every key", m["type"] == "meeting" and m["sensitive"] is True
       and m["tags"] == ["cart", "pricing"] and m["aliases"] == ["One"], m)
@@ -256,6 +264,12 @@ with tempfile.TemporaryDirectory() as d:
           and k["hash"] and k["size"] > 0 and k["mtime"] > 0, k)
     check("the core's notes carry the repository id", notes["ZorgCore/Teams/team-alpha.md"]["source"] == "zorg-core"
           and notes["ZorgCore/Teams/team-alpha.md"]["date"] == "2026-01-01")
+    check("ttl_date is kept: the team card's updated; a note dated by `date` alone has none",
+          notes["ZorgCore/Teams/team-alpha.md"]["ttl_date"] == "2026-01-01"
+          and notes["Notes/Корзина 2.0 (mobile).md"]["ttl_date"] == "" and notes["Notes/Корзина 2.0 (mobile).md"]["date"]
+          == "2026-08-20", (notes["ZorgCore/Teams/team-alpha.md"], notes["Notes/Корзина 2.0 (mobile).md"]))
+    check("…and a query row carries it too", any(x["ttl_date"] == "2026-01-01" for x in idx.query(q("team alpha"), 5)
+                                                 if x["path"] == "ZorgCore/Teams/team-alpha.md"))
     check("sensitive, hub, outdated", notes["Notes/Meetings/Pricing review 2026-09-30.md"]["sensitive"] is True
           and notes["ZorgCore/People/bea-two.md"]["hub"] is True and notes["Notes/Zorg Style Guide.md"]["hub"] is True
           and notes["Notes/Checkout flow (old).md"]["status"] == "outdated")
@@ -419,6 +433,12 @@ with tempfile.TemporaryDirectory() as d:
     r = idx.refresh(roots, store_rel, blocks_rels)
     check("another schema is rebuilt too", r["rebuilt"] is True and idx.status()["schema"] == "search-index/1"
           and {n["path"] for n in idx.notes()} == live, r)
+    os.remove(db)                                        # an index of an earlier build: the same schema name, no ttl_date
+    con = sqlite3.connect(db); con.executescript(ctx_index.DDL.replace(" ttl_date TEXT,", ""))
+    con.execute("INSERT INTO meta(key, value) VALUES ('schema', 'search-index/1')"); con.commit(); con.close()
+    r = idx.refresh(roots, store_rel, blocks_rels)
+    check("an index whose notes table lacks a column is rebuilt (Task 6 fix round 1: ttl_date)", r["rebuilt"] is True
+          and {n["path"] for n in idx.notes()} == live and all("ttl_date" in n for n in idx.notes()), r)
     r = idx.rebuild(roots, store_rel, blocks_rels)
     check("rebuild: everything again", r["rebuilt"] is True and r["added"] == len(live) and r["pending"] == 0, r)
 

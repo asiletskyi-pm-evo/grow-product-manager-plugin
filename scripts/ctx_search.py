@@ -59,7 +59,7 @@ PENDING_NOTE = "індекс оновлюється: %d файлів ще не �
 GLOSSARY_NOTE = "глосарій прочитано не весь: %s"
 HUB, STALE, SNAPSHOT, GLOSSARY_ONLY, ONE_WORD = "хаб", "застаріле", "знімок від %s", "лише глосарій", "одне слово"
 _CLASS_DIR = {"teams": "team_card_dir", "people": "people_dir"}     # any other class: `<class>_dir`
-_FM_DATES = ("updated", "modified", "snapshot", "generated", "date", "created")
+_FM_DATES = ci.DATE_KEYS      # a local hit's date from its frontmatter, in the index's order
 
 
 # ------------------------------------------------------------------ the search context
@@ -226,9 +226,10 @@ def sources(context_text, repos, which=KINDS):
 def Hit(path, heading, source, rank, section_id=None, title=None, date=None, snippet=None, variant=0, list="", **extra):
     """One section (the own index) or note (a local index, MCP) a list gave: `rank` its place in the list (1 first),
     `variant` the variant's number, `list` the list's key. Optional extras: type, product, status, hub and sensitive
-    (None: the source did not say), text (an own hit's section), terms (how many of the expression's terms the hit
-    holds; None when not known — an MCP hit, a glossary list), asked (how many terms the expression had), remote (an
-    MCP hit's path on the server, for vault_get_note)."""
+    (None: the source did not say), ttl_date (the note's own `updated` | `snapshot` | `generated`, what a class TTL
+    counts from; "" when it has none or the source did not say), text (an own hit's section), terms (how many of the
+    expression's terms the hit holds; None when not known — an MCP hit, a glossary list), asked (how many terms the
+    expression had), remote (an MCP hit's path on the server, for vault_get_note)."""
     return dict(extra, path=path, heading=heading, source=source, rank=rank, section_id=section_id, title=title,
                 date=date, snippet=snippet, variant=variant, list=list)
 
@@ -281,7 +282,10 @@ def _keep(sctx, rel):
 
 
 def _in_scope(rel, prefixes):
-    return any(p == "" or rel == p or rel.startswith(p + "/") for p in prefixes)
+    """Is the index name `rel` under one of the roots' names? A root that is a whole vault (its name "") holds the
+    vault's names only — never `@<repository>/…` or an absolute path, the names of a core outside every vault that may
+    no longer be registered."""
+    return any((rel == p or rel.startswith(p + "/")) if p else not rel.startswith(("@", "/")) for p in prefixes)
 
 
 def _add(lists, key, hits):
@@ -313,8 +317,8 @@ def _own(sctx, src, plans, until, box):
             if not _usable(rel) or not _in_scope(rel, prefixes) or not _keep(sctx, rel):
                 continue
             extra = {"type": r.get("type") or "", "product": r.get("product") or "", "status": r.get("status") or "",
-                     "hub": bool(r.get("hub")), "sensitive": bool(r.get("sensitive")), "text": r.get("text") or "",
-                     "terms": None, "asked": len(terms)}
+                     "hub": bool(r.get("hub")), "sensitive": bool(r.get("sensitive")),
+                     "ttl_date": r.get("ttl_date") or "", "text": r.get("text") or "", "terms": None, "asked": len(terms)}
             if terms:
                 words = st.stem_text(" ".join([r.get("title") or "", r.get("heading") or "", r.get("text") or ""]
                                               + list(r.get("tags") or []) + list(r.get("aliases") or []))).split()
@@ -398,6 +402,11 @@ def _text_or_none(v):
     return N(v).strip() if isinstance(v, str) and v.strip() else None
 
 
+def _first_date(data, keys):
+    """The first of `keys` that `data` (a frontmatter or a result, as a dict) gives a value for, as text; else None."""
+    return next((_text_or_none(str(data[k])) for k in keys if data.get(k) not in (None, "")), None)
+
+
 def _yes(v):
     """A frontmatter yes (`true`, `yes`, `1`, any case — as the index reads `sensitive` and `search_hub`)."""
     return str(v).strip().lower() in ci.TRUE if v is not None else False
@@ -446,14 +455,13 @@ def _local(sctx, src, plans, until, box):
                 fm = _fm(r["fm"]) if "fm" in keys else {}
                 meta = {c: (_text_or_none(r[c]) if c in keys else None) or _text_or_none(fm.get(c))
                         for c in ("title", "type", "status", "product")}
-                date = (_text_or_none(r["date"]) if "date" in keys else None) or next(
-                    (_text_or_none(str(fm[k])) for k in _FM_DATES if fm.get(k) not in (None, "")), None)
+                date = (_text_or_none(r["date"]) if "date" in keys else None) or _first_date(fm, _FM_DATES)
                 h = Hit(rel, "", src["id"], 0, title=meta["title"], date=date,
                         snippet=_text_or_none(r["snip"]) if "snip" in keys else None, variant=i, list=key,
                         type=(meta["type"] or "").lower(), product=meta["product"] or "",
                         status=(meta["status"] or "").lower(), hub=True if _yes(fm.get("search_hub")) else None,
-                        sensitive=_yes(fm.get("sensitive")) if "sensitive" in fm else None, terms=None,
-                        asked=len(terms))
+                        sensitive=_yes(fm.get("sensitive")) if "sensitive" in fm else None,
+                        ttl_date=_first_date(fm, ci.TTL_DATE_KEYS) or "", terms=None, asked=len(terms))
                 hits.append(h)
                 by_rid.setdefault(r["rid"], []).append(h)
             if terms and by_rid:                        # what each hit holds, as the index itself matches it
@@ -522,7 +530,8 @@ def _mcp(sctx, src, plans, until, box):
             hits.append(Hit(rel, "", src["id"], 0, title=_text_or_none(r.get("title")), date=date,
                             snippet=_text_or_none(r.get("snippet")), variant=i, list=key,
                             type=(_text_or_none(r.get("type")) or "").lower(), product="", status="", hub=None,
-                            sensitive=None, terms=None, asked=asked, remote=N(r["path"])))
+                            sensitive=None, ttl_date=_first_date(r, ci.TTL_DATE_KEYS) or "", terms=None, asked=asked,
+                            remote=N(r["path"])))
         _add(lists, key, hits)
     box["lists"] = lists
 
@@ -635,12 +644,13 @@ def _flag(cand, mark):
 def priors(cands, skill_types, product, now, ttl, snaps=None):
     """Weigh the candidates in place — before the duplicates are folded (fuse → priors → dedup). A candidate is a dict
     with `path`, `score` and what its source said — `type`, `product`, `status`, `hub` (None or missing: decided here
-    from the type and the title, as the index decides it), `title`, `date` — plus `hits` (the Hits that found it) and
-    `flags` (made when missing). `score` is multiplied by:
+    from the type and the title, as the index decides it), `title`, `ttl_date` — plus `hits` (the Hits that found it)
+    and `flags` (made when missing). `score` is multiplied by:
     - TYPE_W when its type is one of `skill_types` (any case);
     - SAME_PRODUCT_W for the product asked, OTHER_PRODUCT_W for another (no product asked or none on the note: 1);
     - HUB_W for a hub, marked `хаб`;
-    - OUTDATED_W, marked `застаріле`, for a status of OUTDATED, or a date older than the TTL of the folder class it lies
+    - OUTDATED_W, marked `застаріле`, for a status of OUTDATED, or a `ttl_date` (the note's own `updated` | `snapshot`
+      | `generated`; a note with none of them is never outdated by age) older than the TTL of the folder class it lies
       in (`ttl`: class_ttl's {prefix: days}).
     Marks that leave the score as it is: `знімок від <день>` for a note under a repository of `snaps` (snapshots'
     {prefix: day}); `лише глосарій` when every hit came from a glossary list; `одне слово` when the variants' hits held
@@ -666,7 +676,7 @@ def priors(cands, skill_types, product, now, ttl, snaps=None):
             _flag(c, HUB)
         path = N(c.get("path") or "")
         days = _longest(path, ttl)
-        day = _day(c.get("date"))
+        day = _day(c.get("ttl_date"))
         if str(c.get("status") or "").lower() in OUTDATED or (days is not None and day is not None
                                                                 and (today - day).days > days):
             score *= OUTDATED_W
