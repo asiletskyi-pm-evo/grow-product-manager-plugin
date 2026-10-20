@@ -244,6 +244,117 @@ with FakeMcp(raw_result={"isError": False}) as fake:
     err = raises(lambda: McpClient(fake.url).call("vault_get_note", {"path": "a"}), McpError)
     check("a result with no content at all → McpError", err is not None and type(err) is McpError, repr(err))
 
+# --- call_list (since v3.16.0): the result list of vault_search in every shape a server sends; call() stays strict
+def paths(rows):
+    return [r["path"] for r in rows]
+
+
+TEXT = lambda *items: {"content": [{"type": "text", "text": t} for t in items]}   # noqa: E731
+for label, raw, want in [
+        ("structuredContent list", {"content": [], "structuredContent": [{"path": "a.md"}]}, ["a.md"]),
+        ("structuredContent results", {"content": [], "structuredContent": {"results": [{"path": "a.md"}]}}, ["a.md"]),
+        ("one text list", TEXT('[{"path": "a.md"}]'), ["a.md"]),
+        ("one text results", TEXT('{"results": [{"path": "a.md"}]}'), ["a.md"]),
+        ("many text items", TEXT('{"path": "a.md"}', '{"path": "b.md"}'), ["a.md", "b.md"]),
+        ("an empty structuredContent list", {"content": [], "structuredContent": []}, []),
+        ("an empty text list", TEXT("[]"), []),
+        ("an empty text results", TEXT('{"results": []}'), []),
+        ("structuredContent first, text beside it ignored",
+         {"content": [{"type": "text", "text": '[{"path": "z.md"}]'}], "structuredContent": [{"path": "a.md"}]}, ["a.md"]),
+        ("a structuredContent that is no list, the text then",
+         {"content": [{"type": "text", "text": '[{"path": "a.md"}]'}], "structuredContent": {"count": 1}}, ["a.md"]),
+        ("a structuredContent whose results is no list, the text then",
+         {"content": [{"type": "text", "text": '[{"path": "a.md"}]'}], "structuredContent": {"results": "none"}}, ["a.md"]),
+        ("a non-object element dropped", TEXT('[{"path": "a.md"}, "b.md", null, 3, ["c.md"], {"path": "d.md"}]'), ["a.md", "d.md"]),
+        ("a non-object item among many dropped", TEXT('{"path": "a.md"}', "3 results", "[1]", '{"path": "b.md"}'), ["a.md", "b.md"]),
+        ("a non-text item beside the text ignored",
+         {"content": [{"type": "image", "data": "x"}, {"type": "text", "text": '[{"path": "a.md"}]'}]}, ["a.md"]),
+        ("isError false written out", dict(TEXT('[{"path": "a.md"}]'), isError=False), ["a.md"])]:
+    with FakeMcp(raw_result=raw) as fake:
+        rows, err = None, None
+        try:
+            rows = McpClient(fake.url).call_list("vault_search", {"query": "x"})
+        except McpError as e:
+            err = e
+        check("call_list reads " + label, isinstance(rows, list) and paths(rows) == want, (repr(err), rows))
+with FakeMcp(raw_result={"content": [], "structuredContent": [{"path": "a.md", "score": 2, "tags": ["x"]}]}) as fake:
+    rows = McpClient(fake.url).call_list("vault_search", {"query": "x"})
+    check("…a result keeps all of its fields, as the server sent them", rows == [{"path": "a.md", "score": 2, "tags": ["x"]}], rows)
+
+with FakeMcp() as fake:
+    fake.handlers["vault_search"] = lambda args: ({"results": [{"path": "a.md", "q": args.get("query")}]}, False)
+    c = McpClient(fake.url)
+    rows = c.call_list("vault_search", {"query": "zorg"})
+    check("call_list sends the arguments, after a handshake of its own", rows == [{"path": "a.md", "q": "zorg"}]
+          and fake.methods()[:2] == ["initialize", "notifications/initialized"] and fake.methods().count("tools/call") == 1, (rows, fake.methods()))
+    c.call_list("vault_search", {"query": "zorg"})
+    check("…and the second call reuses the session (one handshake)", fake.methods().count("initialize") == 1, fake.methods())
+    sent = [s for s in fake.seen if s["method"] == "tools/call"][-1]["body"]["params"]
+    check("…the request is a plain tools/call of the tool", sent == {"name": "vault_search", "arguments": {"query": "zorg"}}, sent)
+    c.call_list("vault_search")
+    sent = [s for s in fake.seen if s["method"] == "tools/call"][-1]["body"]["params"]
+    check("…no arguments are sent as an empty object", sent == {"name": "vault_search", "arguments": {}}, sent)
+    fake.handlers["vault_search"] = lambda args: ([{"path": "a.md"}], False)
+    check("call_list reads a list from the text of a handler", paths(McpClient(fake.url).call_list("vault_search", {})) == ["a.md"])
+    n_before = len(fake.seen)
+    check("…while call() still refuses that list: it is for an object only",
+          type(raises(lambda: McpClient(fake.url).call("vault_search", {}), McpError)) is McpError
+          and "not an object" in str(raises(lambda: McpClient(fake.url).call("vault_search", {}), McpError)), n_before)
+
+with FakeMcp() as fake:
+    c = McpClient(fake.url)
+    before = len(fake.seen)
+    refused = {}
+    for name in ("vault_create_note", "vault_write_note", "", "VAULT_SEARCH", "vault_search ", None, 7, ["vault_search"]):
+        refused[repr(name)] = raises(lambda n=name: c.call_list(n, {"query": "x"}), McpError)
+    check("call_list refuses a tool outside the allow-list before any request, as call() does",
+          all(type(e) is McpRefused for e in refused.values()) and len(fake.seen) == before and fake.methods() == [],
+          {k: type(v).__name__ for k, v in refused.items()})
+    fake.handlers["vault_search"] = lambda args: ("index offline", True)
+    n0 = calls(fake)
+    err = raises(lambda: c.call_list("vault_search", {"query": "x"}), McpError)
+    check("call_list: isError → McpError with the server's words, not retried",
+          err is not None and type(err) is McpError and "index offline" in str(err) and calls(fake) - n0 == 1, (repr(err), calls(fake) - n0))
+    fake.handlers["vault_search"] = lambda args: ("plain words, not JSON", False)
+    err = raises(lambda: c.call_list("vault_search", {"query": "x"}), McpError)
+    check("call_list: a text that is not JSON → McpError with a fixed message, none of the text in it",
+          err is not None and type(err) is McpError and str(err) == "vault_search returned no list of results", repr(err))
+
+with FakeMcp(raw_result={"content": [{"type": "text", "text": "boom"}], "isError": True, "structuredContent": [{"path": "a.md"}]}) as fake:
+    err = raises(lambda: McpClient(fake.url).call_list("vault_search", {}), McpError)
+    check("call_list: isError wins over a list beside it", err is not None and "boom" in str(err), repr(err))
+with FakeMcp(raw_result={"content": 5, "isError": True}) as fake:
+    err = raises(lambda: McpClient(fake.url).call_list("vault_search", {}), McpError)
+    check("call_list: isError with a content that is a number → McpError too", err is not None and type(err) is McpError, repr(err))
+
+SECRET = "zorgtok-list-77"
+for label, raw in (("no content at all", {"isError": False}), ("empty content", {"content": []}),
+                   ("content that is a number", {"content": 5}), ("content that is a string", {"content": "[]"}),
+                   ("null", {"content": None, "structuredContent": None}),
+                   ("a text that is a number", TEXT("5")), ("a text that is null", TEXT("null")), ("a text that is a JSON string", TEXT('"a.md"')),
+                   ("a text object with no results", TEXT('{"count": 1}')), ("a text object whose results is no list", TEXT('{"results": "' + SECRET + '"}')),
+                   ("a list of strings", TEXT('["' + SECRET + '", "b.md"]')), ("a list of numbers", {"content": [], "structuredContent": [1, 2]}),
+                   ("a structuredContent that is a string", {"content": [], "structuredContent": SECRET}),
+                   ("many texts, none an object", TEXT("[1]", "five", "null")),
+                   ("an item that is not a dict", {"content": [None, 3, "[]"]})):
+    with FakeMcp(raw_result=raw) as fake:
+        err = raises(lambda: McpClient(fake.url, headers={"X-Zorg-Key": SECRET}).call_list("vault_search", {"query": "x"}), McpError)
+        check("call_list: %s → McpError with a fixed message, no value, no url, no header in it" % label,
+              err is not None and type(err) is McpError and str(err) == "vault_search returned no list of results"
+              and SECRET not in str(err) and fake.url not in str(err) and err.__context__ is None, repr(err))
+
+# call_list rides the same machinery: a failure of the network is retried, a server's answer is not; the deadline holds
+with FakeMcp(drop=1, raw_result=TEXT('[{"path": "a.md"}]')) as fake:
+    rows = McpClient(fake.url, retries=2).call_list("vault_search", {})
+    check("call_list: a dropped connection is retried like call()'s", paths(rows) == ["a.md"], rows)
+with FakeMcp(rpc_error="no such index") as fake:
+    err = raises(lambda: McpClient(fake.url).call_list("vault_search", {}), McpError)
+    check("call_list: a JSON-RPC error → McpError with its message, not retried",
+          err is not None and "no such index" in str(err) and calls(fake) == 1, (repr(err), calls(fake)))
+with FakeMcp(raw_result=TEXT('[{"path": "a.md"}]')) as fake:
+    err = raises(lambda: McpClient(fake.url, deadline=time.monotonic() - 1).call_list("vault_search", {}), McpError)
+    check("call_list: once the deadline has passed no request is made", err is not None and str(err) == "deadline reached" and fake.seen == [], (repr(err), fake.seen))
+
 with FakeMcp(rpc_error="no such index") as fake:
     c = McpClient(fake.url)
     err = raises(lambda: c.call("vault_get_note", {"path": "a"}), McpError)
