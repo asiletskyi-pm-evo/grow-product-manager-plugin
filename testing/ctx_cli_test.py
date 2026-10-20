@@ -4518,6 +4518,156 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = run_ok(env, "search", "--q", "seller")
     check("no vault, no repository and no source: exit 3", rc == 3 and res and res.get("ok") is False, (rc, out[-300:]))
 
+# --- v3.16.0 Task 8: remembered picks (ctx search remember|forget), the golden set and ctx search eval
+GOLDEN_ZORG = os.path.join(SEARCH_FIX, "golden.zorg.yaml")
+AGENT_EVAL = os.path.join(ROOT, "testing", "search_agent_eval.py")
+# (n, recall50, recall50_q_only) of `ctx search eval` on golden.zorg.yaml without hints — pinned once, when the set was
+# built (13 rows with an answer; with their variants only «плата за продаж» misses, the question alone also misses
+# «години відкриття магазину», «Беа Ту аналітик», «чекаут таймаут» and «слоти»). Re-pinned only deliberately, with a line
+# in the run's journal.
+PINNED = (13, 0.923, 0.615)
+MOBILE = "Notes/Mobile cart notes.md"
+
+
+def memory_of(env):
+    return json.loads(read(env.store, ".state", "search.json"))
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d)
+    rc, out, res = run_ok(env, "search", "remember", "--q", "мобільний кошик", "--pick", MOBILE)
+    check("no store: remember exits 3 «немає сховища — підказку не збережено»", rc == 3 and res and res.get("ok") is False
+          and "немає сховища — підказку не збережено" in out and not os.path.exists(os.path.join(env.store, ".state")), (rc, out[-300:]))
+    rc, out, res = run_ok(env, "search", "eval", "--json")
+    check("no store and no --golden: eval exits 3", rc == 3 and res and res.get("ok") is False and "--golden" in out, (rc, out[-300:]))
+    shutil.rmtree(os.path.join(env.store, "records"))
+    rc, out, _ = run_ok(env, "migrate", "--apply")
+    check("(the fixture's store migrated)", rc == 0, out[-300:])
+
+    rc, _, res = run_ok(env, "search", "remember", "--q", "мобільний кошик", "--pick", "Notes/Mobile cart notes.md")
+    check("remember writes the memory, a snapshot and a journal line", rc == 0 and last_journal(env)["op"] == "search")
+    j = last_journal(env)
+    check("…the journal line: op search, action, q, source ctx-search, the snapshot",
+          (j.get("action"), j.get("q"), j.get("source")) == ("remember", "мобільний кошик", "ctx-search")
+          and j.get("snapshot") and os.path.isdir(j["snapshot"]) and res.get("snapshot") == j["snapshot"], j)
+    mem = memory_of(env)
+    check("….state/search.json: context-search-memory/1, the request's stems sorted, good, the day", mem["schema"]
+          == "context-search-memory/1" and len(mem["hints"]) == 1 and mem["hints"][0]["terms"] == ["кошик", "мобільн"]
+          and mem["hints"][0]["good"] == [MOBILE] and mem["hints"][0]["bad"] == []
+          and re.match(r"^\d{4}-\d{2}-\d{2}$", mem["hints"][0]["at"]), mem)
+    c = by_path(run_ok(env, "search", "--q", "мобільний кошик", "--json")[2], "Notes/Mobile cart notes.md")
+    check("a remembered pick is boosted and named", c and any(f.startswith("твій вибір від ") for f in c["flags"]))
+    n = len(read(env.store, ".state", "journal.jsonl").splitlines())
+    rc, out, res = run_ok(env, "search", "remember", "--q", "кошик мобільний", "--pick", MOBILE)
+    check("the same pick again: unchanged, no snapshot, no journal line", rc == 0 and res.get("changed") is False
+          and "unchanged" in out and len(read(env.store, ".state", "journal.jsonl").splitlines()) == n, (rc, out[-300:]))
+    check("undo takes the hint back", run_ok(env, "undo")[0] == 0 and not os.path.exists(os.path.join(env.store, ".state", "search.json")))
+
+    before_vault = tree(env.vault)
+    home_before = {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index)}
+    last_before = read(env.index, "last.json")
+    res = run_ok(env, "search", "eval", "--golden", GOLDEN_ZORG, "--no-hints", "--json")[2]
+    check("eval on the Zorg set gives the pinned numbers", (res["n"], round(res["recall50"], 3), round(res["recall50_q_only"], 3)) == PINNED,
+          res and (res.get("n"), res.get("recall50"), res.get("recall50_q_only"), [r for r in res.get("rows", []) if r.get("rank") is None]))
+    check("…CTX_RESULT {command search, action eval, mrr, by_class, the empty rows}", res.get("command") == "search"
+          and res.get("action") == "eval" and isinstance(res.get("mrr"), float) and res.get("empty_n") == 2
+          and isinstance(res.get("empty_top5_mean"), float) and set(res.get("by_class") or {}) == {
+              "форма", "синонім", "англ", "рос", "питання", "абревіатура", "транслітерація", "ключ", "коротко", "справжній"}
+          and res["by_class"]["синонім"]["n"] == 2 and res.get("hints") == 0, res and {k: res.get(k) for k in ("mrr", "empty_n", "by_class")})
+    check("…eval writes nothing but the index: the vault (the store in it) and the home as they were, last.json too",
+          tree(env.vault) == before_vault and {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index)}
+          == home_before and read(env.index, "last.json") == last_before)
+    rc, out, _ = run_ok(env, "search", "eval", "--golden", GOLDEN_ZORG, "--no-hints")
+    check("…the human output: the set, recall@50 with the variants and of the question alone, MRR, a line per class",
+          rc == 0 and "recall@50" in out and "лише q" in out and "MRR" in out and "\n  синонім: 2 · " in out
+          and "порожні: 2" in out, out[-900:])
+    rc, out, res = run_ok(env, "search", "eval", "--json")
+    check("eval without --golden reads <store>/search/golden.yaml: none there is exit 3", rc == 3
+          and "search/golden.yaml" in out, (rc, out[-300:]))
+    os.makedirs(os.path.join(env.store, "search"))
+    shutil.copy(GOLDEN_ZORG, os.path.join(env.store, "search", "golden.yaml"))
+    rc, out, res = run_ok(env, "search", "eval", "--json")
+    check("…with it there, the same numbers", rc == 0 and (res["n"], round(res["recall50"], 3), round(res["recall50_q_only"], 3))
+          == PINNED, (rc, out[-300:]))
+
+    found = run_ok(env, "search", "--q", "корзина мобильная", "--json")[2]
+    kz = by_path(found, "Notes/Корзина 2.0 (mobile).md")
+    rc, out, res = run_ok(env, "search", "remember", "--q", "мобільна корзина", "--pick", kz["id"], "--not", MOBILE,
+                          "--product", "Zorg App")
+    hint = next((h for h in memory_of(env)["hints"] if h["q"] == "мобільна корзина"), {})
+    check("remember --pick ID: the id of the last search is its section, `path#heading`; --not and --product kept",
+          rc == 0 and hint.get("good") == ["Notes/Корзина 2.0 (mobile).md#" + kz["heading"]] and hint.get("bad") == [MOBILE]
+          and hint.get("product") == "Zorg App", (rc, hint, out[-300:]))
+    res = run_ok(env, "search", "--q", "мобільна корзина", "--product", "Zorg App", "--json")[2]
+    check("…a `--not` note is marked `ти казав «не те»`, the pick `твій вибір від <день>`",
+          "ти казав «не те»" in (by_path(res, MOBILE) or {}).get("flags", [])
+          and any(f.startswith("твій вибір від ") for f in (by_path(res, "Notes/Корзина 2.0 (mobile).md") or {}).get("flags", [])),
+          res and [(c["path"], c["flags"]) for c in res["candidates"][:4]])
+    rc, out, res = run_ok(env, "search", "eval", "--golden", GOLDEN_ZORG, "--json")
+    check("eval with the hints: each hint with a pick is one more row `source: choice`, class вибір",
+          rc == 0 and res["n"] == PINNED[0] + 1 and res["hints"] == 1 and res["by_class"]["вибір"]["n"] == 1
+          and any(r["source"] == "choice" for r in res["rows"]), res and (res.get("n"), res.get("hints")))
+    rc, out, res = run_ok(env, "search", "forget", "--q", "корзина мобільна")
+    j = last_journal(env)
+    check("forget removes the hint of the request: snapshot, journal line action forget", rc == 0 and res.get("changed") is True
+          and (j.get("op"), j.get("action"), j.get("q")) == ("search", "forget", "корзина мобільна")
+          and not [h for h in memory_of(env)["hints"] if h["q"] == "мобільна корзина"], (rc, j, out[-300:]))
+    rc, out, res = run_ok(env, "search", "forget", "--q", "корзина мобільна")
+    check("…nothing left to forget: unchanged, exit 0", rc == 0 and res.get("changed") is False and "unchanged" in out, (rc, out[-300:]))
+    for args, why in ((("search", "remember", "--q", "кошик"), "remember without --pick or --not"),
+                      (("search", "remember", "--q", "кошик", "--pick", "fedcba9876"), "an id no search gave"),
+                      (("search", "remember", "--q", "що і як", "--pick", MOBILE), "a request with no words to remember"),
+                      (("search", "forget", "--q", "кошик", "--pick", MOBILE), "forget with --pick"),
+                      (("search", "eval", "--q", "кошик"), "eval with --q"),
+                      (("search", "--q", "кошик", "--pick", MOBILE), "a plain search with --pick"),
+                      (("search", "remember", "--q", "кошик", "--pick", MOBILE, "--store", env.store), "remember with --store")):
+        rc, out, res = run_ok(env, *args)
+        check("search: %s is exit 3" % why, rc == 3 and res and res.get("ok") is False, (rc, out[-300:]))
+    import ctx as ctx_cli  # noqa: E402
+    p = ctx_cli.build_parser()
+    check("writes(): search remember and forget write the store; eval and a plain search do not",
+          ctx_cli.writes(p.parse_args(["search", "remember", "--q", "x", "--pick", "a.md"]))
+          and ctx_cli.writes(p.parse_args(["search", "forget", "--q", "x"]))
+          and not ctx_cli.writes(p.parse_args(["search", "eval"])) and not ctx_cli.writes(p.parse_args(["search", "--q", "x"])))
+
+    # the model level: search_agent_eval.py prepares the batches and scores the answers (criteria 1–3 of the spec)
+    out_dir = os.path.join(d, "batches")
+    penv = dict(os.environ)
+    penv.pop("GROW_PM_CONTEXT_PATH", None)
+    p = subprocess.run([sys.executable, AGENT_EVAL, "prepare", "--golden", GOLDEN_ZORG, "--out", out_dir, "--home", env.home,
+                        "--context", env.ctx, "--batch", "6"], capture_output=True, text=True, env=penv, timeout=600)
+    files = sorted(os.listdir(out_dir)) if os.path.isdir(out_dir) else []
+    items = [x for f in files for x in json.load(open(os.path.join(out_dir, f), encoding="utf-8"))]
+    check("prepare: the rows in batches of --batch, each {q, variants, candidates}", p.returncode == 0
+          and files == ["batch-001.json", "batch-002.json", "batch-003.json"] and len(items) == 15
+          and all({"q", "variants", "candidates"} <= set(x) for x in items), (p.returncode, files, p.stdout[-300:], p.stderr[-300:]))
+    check("…never the answers: no good, ok or bad in a batch", not any({"good", "ok", "bad"} & set(x) for x in items))
+    first = next((x for x in items if x["q"] == "графіком роботи продавців"), {})
+    check("…the candidates of `ctx search --json` for the question and its variants",
+          first.get("variants") == ["графік роботи продавця", "график работы продавца", "seller working hours"]
+          and any(c["path"] == "Notes/Кошик — графік роботи продавця.md" for c in first.get("candidates", [])), first)
+    answers = os.path.join(d, "answers")
+    os.makedirs(answers)
+    open(os.path.join(answers, "a.json"), "w", encoding="utf-8").write(json.dumps({
+        "графіком роботи продавців": {"taken": ["Notes/Кошик — графік роботи продавця.md#Кошик — графік роботи продавця › Рішення"],
+                                      "variants": [], "nothing": False},
+        "години відкриття магазину": {"taken": ["Notes/Checkout flow (old).md"], "variants": [MOBILE], "nothing": False},
+        "seller hours in the cart": {"taken": [], "variants": [], "nothing": True},
+        "програма лояльності для покупців": {"taken": [], "variants": [], "nothing": True}}, ensure_ascii=False))
+    open(os.path.join(answers, "b.json"), "w", encoding="utf-8").write(json.dumps({
+        "інтеграція з бухгалтерією 1С": {"taken": ["Notes/Inbox.md"], "variants": [], "nothing": False},
+        "Q4": {"taken": ["Notes/Roadmap Q4 — draft v3.md", "Notes/Roadmap Q4 — draft v2.md"], "variants": [], "nothing": False}},
+        ensure_ascii=False))
+    p = subprocess.run([sys.executable, AGENT_EVAL, "score", "--golden", GOLDEN_ZORG, "--answers", answers],
+                       capture_output=True, text=True, env=penv, timeout=120)
+    last = (p.stdout.strip().splitlines() or [""])[-1]
+    score = json.loads(last[len("SCORE "):]) if last.startswith("SCORE ") else {}
+    check("score: precision_taken 2/5, empty_clean 1/2, hit 3/4 on the synthetic answers",
+          p.returncode == 0 and (score.get("precision_taken"), score.get("empty_clean"), score.get("hit")) == (0.4, 0.5, 0.75),
+          (p.returncode, p.stdout[-600:], p.stderr[-300:]))
+    check("…the rows with no answer are counted apart, and a `bad` one taken is named", score.get("missing") == 9
+          and score.get("bad_taken") == 1 and "precision_taken" in p.stdout and "без відповіді: 9" in p.stdout, score)
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

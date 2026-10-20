@@ -23,14 +23,16 @@ priors then weigh a candidate by what it is — the skill's artifact types × 1.
                     of your layer and the core, versions), at most two sections of a note.
 - candidate_id      a section's stable id: sha1(`path#heading`)[:10].
 - snippet           ≤ 300 characters around the first match, the matches in «».
-- run               a whole search: the index refreshed, gather → fuse → priors → dedup → the best `limit`.
+- run               a whole search: the index refreshed, gather → fuse → priors → dedup → the remembered picks
+                    (ctx_hints) → the best `limit`.
 - last_path / save_last / get   the ids of the last search beside the index, and `--get`: one section with its line
                     of provenance `> [<source> · <path> › <heading> · <day>]`.
 - render            the human output of `ctx search`.
 
 Reads the vaults, the cores, the index under <home>/.grow-pm/index/, a local index (mode=ro), the glossary, the block
-states of the store; the network only for an MCP source. Writes only <home>/.grow-pm/index/ — the index (run refreshes
-it) and last.json (save_last) — never the store or a vault. Stdlib only.
+states and the search memory (`.state/search.json`) of the store; the network only for an MCP source. Writes only
+<home>/.grow-pm/index/ — the index (run refreshes it) and last.json (save_last) — never the store or a vault. Stdlib
+only.
 """
 import datetime
 import hashlib
@@ -47,6 +49,7 @@ import urllib.parse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
 import ctx_glossary as gl  # noqa: E402
+import ctx_hints as ch  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_ops as co  # noqa: E402
@@ -1008,6 +1011,10 @@ def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, 
     - The own index is refreshed first (ctx_index.REFRESH_S, never past the command's COMMAND_S); then every query ×
       source (`gather`, the sources of `which`), RRF (`fuse`), the priors (`skill`'s types, `product`, the classes'
       TTL and the repositories' snapshots), `dedup`, the best `limit`.
+    - The remembered picks (ctx_hints) of the request — the first query, not its variants — weigh the candidates
+      after dedup and before the best `limit` are cut, so a pick can rise into them: a `good` note × 1.5 and
+      `твій вибір від <день>`, a `bad` one `ти казав «не те»`; with `use_hints` False they are not read. A memory that
+      cannot be read in OPEN_S is no hint and one line, `пам'ять пошуку не прочитано (<why>) — без підказок`.
     - A query that finds the own index damaged (Index.problem: a file SQLite cannot read, never a busy one) rebuilds
       it once and asks the own index again; REBUILT_NOTE says so. An own index that stays unread — busy (BUSY_NOTE;
       never rebuilt) or still damaged — has not answered: its lists are dropped, and its line stays.
@@ -1017,7 +1024,7 @@ def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, 
     - notes: the lines to print under the list; sources: [{id, kind, answered}] (none answered: the caller exits 5;
       none at all: there is no place to search); index: the own index's state and what the refresh did (None when the
       own index was not asked); last: what save_last keeps for `--get`.
-    `use_hints` is for the remembered picks (not yet: it changes nothing). Writes only the index; nothing else."""
+    Writes only the index; nothing else."""
     start = time.monotonic()
     deadline = start + COMMAND_S
     queries = [q for q in queries or [] if isinstance(q, str)]
@@ -1044,11 +1051,21 @@ def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, 
     if own and (busy or any(n.startswith(_BROKEN) for n in more)):
         lists = {k: v for k, v in lists.items() if not k.startswith("own|")}     # the base was not read: no answer
     _note(notes, more)
+    hints = []
+    if use_hints and queries and sctx.get("store_root"):
+        try:
+            hints = ch.match(ch.load(cst.Store(sctx["store_root"]), timeout=OPEN_S), queries[0], product)
+        except cst.StoreError as e:
+            _note(notes, [ch.UNREAD_NOTE % e])
     answered = {k.split("|", 1)[0] for k in lists}
     entries = _entries(lists, fuse(lists))
     priors(entries, skill_types(skill), product, now, class_ttl(sctx["repos"], sctx["vaults"]), snapshots(sctx, now))
     metas = idx.notes() if os.path.isfile(idx.db_path) and not busy else []
-    cands = dedup(entries, metas)[:max(1, int(limit))]
+    cands = dedup(entries, metas)
+    if hints:
+        ch.apply(cands, hints, _today(now))
+        cands.sort(key=_order)
+    cands = cands[:max(1, int(limit))]
     terms = list(dict.fromkeys(t for q in queries for t in st.query_terms(q)))
     last = {}
     for c in cands:
