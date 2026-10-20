@@ -547,11 +547,13 @@ def slot_context(store, copies, repos, product, now, mem=None, cat=None):
     product (`product` — a name or id, or None: the one there is), its teams (the team records under the same parent, as
     ctx_read.read_view takes them), the registrations `repos` (ctx_repos.load_repos, as given), the slots memory (`mem`
     when a writing command already holds it, else read here) and the bindings. Returns {"store", "cat", "records", "notes",
-    "pending", "product", "needs_product", "products", "teams", "repos", "mem", "mem_error", "bindings", "problems", "regs"}:
+    "pending", "product", "needs_product", "products", "teams", "repos", "mem", "mem_error", "bindings", "dropped",
+    "problems", "regs"}:
     `needs_product` is True (and `product` None) when several products and none asked for, or none that matches, `products`
     then being their names; a memory that cannot be read is an empty one and `mem_error` the line that says why (a reader
     goes on without it; a writing command stops on it). `cat` is the catalogue (a file that cannot be read is a
-    ValueError) — `cat` when the caller already holds one; `problems` are the lines of ctx_slots.bindings_of; `regs` the one
+    ValueError) — `cat` when the caller already holds one; `dropped` the bindings to a slot the catalogue lacks, which bind
+    nothing (ctx_slots.bindings_of); `problems` are the lines of ctx_slots.bindings_of; `regs` the one
     _Repos everything built on this assembly shares (the bindings, the candidates, the origin lines): each block state and
     each base is read once."""
     cat = sl.load_catalogue() if cat is None else cat
@@ -565,11 +567,12 @@ def slot_context(store, copies, repos, product, now, mem=None, cat=None):
             mem = sl.load_memory(store)
         except cs.StoreError as e:
             mem, mem_error = sl.empty_memory(), str(e)
-    regs = _Repos(store, repos, recs)
-    bindings, problems = sl.bindings_of(store, repos, mem, reads=regs)
+    regs, dropped = _Repos(store, repos, recs), []
+    bindings, problems = sl.bindings_of(store, repos, mem, reads=regs, cat=cat, dropped=dropped)
     return {"store": store, "cat": cat, "records": recs, "notes": notes, "pending": pending, "product": prod,
             "needs_product": needs, "products": [p["title"].split(":", 1)[-1].strip() for p in products], "teams": teams,
-            "repos": repos, "mem": mem, "mem_error": mem_error, "bindings": bindings, "problems": problems, "regs": regs}
+            "repos": repos, "mem": mem, "mem_error": mem_error, "bindings": bindings, "dropped": dropped,
+            "problems": problems, "regs": regs}
 
 
 def slot_answers(sctx, slot, field=None, unplaced=None):
@@ -779,7 +782,8 @@ def binding_problems(sctx):
     reason that follows the binding in `ctx validate`. `kind`:
 
       "unknown"       the binding (yours, or the `slot=` attribute of the block's base) names a slot the catalogue lacks — a
-                      catalogue that changed, a publisher ahead of the plugin; nothing else is judged of it
+                      catalogue that changed, a publisher ahead of the plugin; it binds nothing (the next source binds the
+                      block: `dropped` of the slot_context) and nothing else is judged of it
       "unregistered"  your binding names a repository nobody registered (or whose registration was not read)
       "missing"       your binding names a block that is in none of the records — the core took it away, the binding stayed
       "broken"        the block is there but is not one sound region (repeated, nested, a marker broken): no binding applies
@@ -802,6 +806,10 @@ def binding_problems(sctx):
     def add(kind, slot, repo, bid, sub, how, text, why):
         out.append({"kind": kind, "slot": slot, "repo": repo, "block": bid, "sub": sub, "how": how, "text": text, "why": why})
 
+    for d in sctx.get("dropped") or ():
+        reg = regs.reg(d["ns"])
+        repo, where = reg["id"] if reg else d["ns"], d["block"] + ("#" + d["sub"] if d.get("sub") else "")
+        add("unknown", d["slot"], repo, d["block"], d.get("sub"), d["how"], UNKNOWN_SLOT % (repo, where, d["slot"]), WHY_UNKNOWN)
     for (ns, bid), tied in (sctx["bindings"] or {}).items():
         reg = regs.reg(ns)
         repo = reg["id"] if reg else ns
@@ -1055,15 +1063,23 @@ def _slot_lines(s):
     return out
 
 
+def _held(sctx):
+    """{(namespace, block id)} — the blocks some binding names: those it binds (`bindings`) and those bound only to a slot the
+    catalogue lacks (`dropped`, which bind nothing). A block in it is never proposed nor listed as no slot's: the `unknown`
+    line of `validate` and `explain` already says what is wrong with its binding."""
+    return set(sctx["bindings"] or ()) | {(d["ns"], d["block"]) for d in sctx.get("dropped") or ()}
+
+
 def _unmapped(sctx):
     """The blocks of a registered repository that no slot takes — [{"repo", "block", "record", "version", "heading"}], once each,
-    in the order of the records: regions with an id and no binding at all (the plugin's own binding of the `team` block counts)."""
+    in the order of the records: regions with an id and no binding at all (the plugin's own binding of the `team` block counts,
+    and so does a binding to a slot the catalogue lacks: _held)."""
     regs = sctx.get("regs") or _Repos(sctx["store"], sctx["repos"], sctx["records"])
-    out, seen = [], set()
+    out, seen, held = [], set(), _held(sctx)
     for rec in sctx["records"]:
         for ns, bid, v, _, inner in cr._blocks(rec.get("body") or ""):
             reg = regs.reg(ns)
-            if bid and reg is not None and (ns, bid) not in sctx["bindings"] and (ns, bid) not in seen:
+            if bid and reg is not None and (ns, bid) not in held and (ns, bid) not in seen:
                 seen.add((ns, bid))
                 out.append({"repo": reg["id"], "block": bid, "record": rec["id"], "version": v or None, "heading": _heading(inner)})
     return out
@@ -1221,7 +1237,7 @@ def _validate_slots(store, copies, repos, skipped, now, cat):
                 repo, where = named(c["source"], c["block"], c.get("sub"))
                 why = UNPLACED_WHY + (" (%s)" % teams if teams else "") + " — " + BIND_COMMAND % (repo, _shell_arg(where), slot, "<запис>")
                 put(bound, BINDING_WARNING % (repo, where, slot, why))
-    found = sl.proposals(first["records"], repos, first["bindings"], cat)
+    found = sl.proposals(first["records"], repos, _held(first), cat)
     proposed = [PROPOSAL_WARNING % (clip(q["repo"], 60), _shell_arg(clip(q["block"] + ("#" + q["sub"] if q["sub"] else ""), 120)), q["slot"])
                 for q in found]
     return [], unread_lines(first, skipped) + bound + diverging + proposed, found

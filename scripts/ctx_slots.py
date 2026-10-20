@@ -357,11 +357,14 @@ def marker_slots(region_text):
     return out
 
 
-def bindings_of(store, repos, mem, reads=None):
+def bindings_of(store, repos, mem, reads=None, cat=None, dropped=None):
     """(bindings, problems): which block of which repository answers which slot, and what could not be read.
 
     `bindings` is {(namespace, block id): [{"slot", "sub", "team", "how"}]}. Per block the first source found binds it,
-    and the others do not apply to it (spec §4.2):
+    and the others do not apply to it (spec §4.2) — a source counts only with a slot of the catalogue `cat` (None: the
+    plugin's, load_catalogue): a binding to a slot the catalogue lacks is no binding (a publisher ahead of the plugin, a
+    slot your memory names that this catalogue has not), so the next source binds the block; `dropped`, when a list, gets
+    each such binding as {"ns", "block", "slot", "sub", "team", "how"} — what `ctx validate` names as unknown:
       "memory"  your bindings in `mem` (load_memory); a binding names the repository, and the block is keyed by that
                 registration's namespace (else by the repository id itself, as an unregistered namespace is named)
       "marker"  the `slot=` attribute (marker_slots) of the block's base — the repository's text the store keeps
@@ -380,30 +383,40 @@ def bindings_of(store, repos, mem, reads=None):
     import ctx_blocks as cb                     # here: ctx_blocks imports ctx_read, which imports this module
     load_state = reads.load_state if reads is not None else (lambda repo_id: cb.load_state(store, repo_id))
     get_base = reads.get_base if reads is not None else (lambda repo_id, sha: cb.get_base(store, repo_id, sha))
+    cat = load_catalogue() if cat is None else cat
+    aside = dropped if isinstance(dropped, list) else []
     ns_of = {}
     for r in repos or ():
         ns_of.setdefault(r["id"], r.get("namespace") or r["id"])
     out, problems = {}, []
     for b in (mem or {}).get("bindings") or ():
-        out.setdefault((ns_of.get(b["repo"], b["repo"]), b["block"]), []).append(
-            {"slot": b["slot"], "sub": b.get("sub"), "team": b.get("team"), "how": "memory"})
+        key = (ns_of.get(b["repo"], b["repo"]), b["block"])
+        one = {"slot": b["slot"], "sub": b.get("sub"), "team": b.get("team"), "how": "memory"}
+        if slot_info(cat, b["slot"]) is None:
+            aside.append(dict(ns=key[0], block=key[1], **one))
+        else:
+            out.setdefault(key, []).append(one)
     for r in repos or ():
-        ns, marked = ns_of[r["id"]], {}
+        ns, marked, unknown = ns_of[r["id"]], {}, []
         try:
             state = load_state(r["id"])
             for bid in sorted(state["blocks"]):
                 if (ns, bid) in out:
                     continue
-                slots = marker_slots(get_base(r["id"], state["blocks"][bid].get("base_sha")))
-                if slots:
-                    marked[(ns, bid)] = [{"slot": s, "sub": None, "team": None, "how": "marker"} for s in slots]
+                for s in marker_slots(get_base(r["id"], state["blocks"][bid].get("base_sha"))):
+                    one = {"slot": s, "sub": None, "team": None, "how": "marker"}
+                    if slot_info(cat, s) is None:
+                        unknown.append(dict(ns=ns, block=bid, **one))
+                    else:
+                        marked.setdefault((ns, bid), []).append(one)
         except (cs.StoreError, OSError):
             line = STATE_UNREAD % r["id"]
             if line not in problems:
                 problems.append(line)
-            marked = {}
+            marked, unknown = {}, []
         for key, found in marked.items():
             out.setdefault(key, found)
+        aside += unknown
         key = (ns, PLUGIN_BLOCK)
         if key not in out:
             out[key] = [{"slot": s, "sub": sub, "team": None, "how": "plugin"} for s, sub in PLUGIN_BINDINGS]
