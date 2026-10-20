@@ -1,10 +1,10 @@
 # Search protocol — Step 0.5 (since v3.16.0)
 
-What a skill does between Step 0 and Step 1 to bring in what the user's base already knows about the request: the user's own vault, the cores of the registered repositories, a local index the user registered and, when the base is not enough, the live sources of the session. This file is the single home of these rules: `vault-protocol.md` (Step 0.5), `local-context-protocol.md` (Step 0.5) and the skills that once carried their own step point here. The engine is `ctx search` (`scripts/ctx.py`, `scripts/ctx_search.py`); what it reads and how it merges is `context-provider-protocol.md` §5 and §10, the command itself `context-protocol.md` §3.
+What a skill does between Step 0 and Step 1 to bring in what the user's base already knows about the request: the user's own vault, the cores of the registered repositories, a local index the user registered and, when the base is not enough, the live sources of the session. This file is the single home of these rules: `vault-protocol.md` (Step 0.5), `local-context-protocol.md` (Step 0.5) and the skills that once carried their own step point here. The engine is `ctx search`: what it reads and how it merges is `context-provider-protocol.md` §5 and §10; the command, what it writes, the memory of choices and the golden set are `context-protocol.md` §3, §1 and §5g.
 
 **The goal.** What the skill takes into its work is exactly what the base holds **directly** about the request, each piece with its source and its date. **The anti-goal** is the one this protocol exists to prevent: wrong context taken silently and becoming the source of wrong conclusions. Everything below serves one rule: when the search is not sure, or two sources disagree, nothing is taken silently — the skill does its work, then shows what it was unsure about and how to improve the search, and the user's choice is remembered for next time.
 
-The question of earlier versions — "Found N artifacts… Use as context? [Yes / Select specific / Skip]" — is gone. Step 0.5 asks nothing in the middle of a run; its only question is the level-2 one in §8, and only in the cases named there.
+Step 0.5 asks nothing in the middle of a run; its only question is the level-2 one in §8, and only in the cases named there.
 
 `<plugin root>` is resolved as in `local-context-protocol.md` (`${PLUGIN_ROOT}` → `${CLAUDE_PLUGIN_ROOT}` → the directory that contains `skills/`).
 
@@ -12,6 +12,7 @@ The question of earlier versions — "Found N artifacts… Use as context? [Yes 
 
 - **The skill's row in `SKILL_CONTEXT_MAP` is empty** (`vault-protocol.md`): `template-library`, `plugin-configurator`, `context-connect`.
 - **The request has no topic** — nothing the artifact or the answer is *about*: a feature, a problem, a metric, a decision, a meeting, a person (People contour). «покажи мій конфіг», «статус плагіна», «зарелізь плагін» name an action on the plugin, not a topic. A routine request whose only subject is a period or the product as a whole — «сплануй спринт», «на чому сфокусуватись сьогодні», «звіт по кварталу» — has a topic only when it names something within it («спринт: графік роботи продавця»), or when the skill's own step names the request for that mode (cjm-research's health-check). A skill whose own steps read its previous artifacts (cjm-research's previous health-check, focus-advisor's board) keeps reading them there; Step 0.5 does not replace those steps.
+- **A note the skill's own step reads directly** — context-navigator's route to a card, a People skill's profile (Step P, `people-context-protocol.md`), focus-advisor's own briefs — is neither taken by Step 0.5 nor counted as a doubt: it comes in through that step. context-navigator runs Step 0.5 only for its "anything else" route.
 - **Nothing to search** — no vault in `## Obsidian Vaults`, no registered repository with a folder on disk, no local index and no MCP repository (`ctx search` exit 3 `nothing to search`; on a host without SHELL: vault level L0 and no provider). Skip silently, as L0 always did.
 
 Step 0.5 runs once per skill run — and once more only when the skill's own questions, asked before the work starts, change or narrow the topic: then what was taken for the old topic is dropped and Step 0.5 runs again with the new request, before the work, and only its result counts. A skill invoked by another skill runs its own Step 0.5 for its own types (an automated run when it only returns a payload, §11).
@@ -35,7 +36,7 @@ With SHELL:
 `python3 "<plugin root>/scripts/ctx.py" search --q "<request>" --q "<variant 1>" … --skill <this skill> --product "<active product>" --json`
 
 - `--product` is the active product of Step 0d; leave it out when there is none. `--skill` is the skill's own name — `ctx search` weighs the types of its `search_types` (`references/context-manifest.yaml`, the same list as its `SKILL_CONTEXT_MAP` row) × 1.2; a type is a weight, never a filter, so a note without a type is found too. Do not pass `--limit` or `--sources`: the pool of 50 and every kind of source are the design.
-- **`--json` prints only the `CTX_RESULT` line** — unlike `ctx read` and `ctx explain`, whose `--json` adds to the human output. The list of 50 is read at every skill start, and printing it twice would double those tokens. `CTX_RESULT` holds `candidates`, `notes`, `sources` (`[{id, kind, answered}]`), `index` and `counts`.
+- **`--json` prints only the `CTX_RESULT` line** — unlike `ctx read` and `ctx explain`, whose `--json` adds to the human output. `CTX_RESULT` holds `candidates`, `notes`, `sources` (`[{id, kind, answered}]`), `index` and `counts`.
 - A candidate is **one note**: `id` (its best section), `path`, `heading`, `title`, `type`, `product`, `date`, `source` (the ids that hold it: `own` for your plugin folder, a repository id for a core page), `flags` (§5), `matched` (which `--q` found it, from 1), `snippet` (≤ 300 characters, the matches in «»), `score`, and `sections` — at most two sections of that note, each with its own `id`.
 - **`notes`** are lines to the user: `<id> не відповів — без нього`, `індекс <id> має незнайому схему — без нього`, `індекс оновлюється: N файлів ще не переглянуто`, `пам'ять пошуку не прочитано (…) — без підказок` and the index's own lines. Say each once per session, unchanged, right before the taken line (§6).
 
@@ -98,12 +99,12 @@ A note you reached from a hub, a twin or a newer version is rated like a candida
 - «прямо» there was, but every one is excluded below → `З бази нічого не взяв: <чому — застаріле | sensitive | суперечність | …> — варіанти наприкінці`. The base does hold something on the request, so «У базі нічого…» would be false;
 - no source answered (exit 5) → `Базу не прочитано: …` (§3) — the base cannot be said to hold nothing when it was not read.
 
-Each of them is a doubt (§7), and the skill decides about level 2 (§8).
+Each of them is a doubt (§7); level 2 may start (§8).
 
 **Never taken silently:**
 - a candidate rated «частково» or «ні», and one whose rating you are not sure of;
 - one marked `застаріле` or `старіша версія <шлях>`; at level 2, a copy behind its live page (§8). `знімок від <день>` alone does not forbid it;
-- **outside the People contour** (`goal-setter`, `one-on-one`, `performance-review`, `hiring-designer`, `offboarding-guide`, `delegation-coach`): a candidate marked `sensitive`, and one of the people types — `people`, `one-on-one-notes`, `performance-review`, `offboarding-plan` (`data-policy.md`, the note under `SKILL_CONTEXT_MAP`). It is not read and its content is not repeated anywhere; in the block it may appear by its title only. A candidate a server gave (its source is an `mcp` one in `sources`) carries no `sensitive` mark — the server does not say — so outside the People contour treat one whose path lies under a people folder (`People/`, the core's `people_dir`) as sensitive;
+- **outside the People contour** (`goal-setter`, `one-on-one`, `performance-review`, `hiring-designer`, `offboarding-guide`, `delegation-coach`): a candidate marked `sensitive`, and one of the people types (`data-policy.md` → Search, rule 1). It is not read, its content is not repeated anywhere, and it can never be picked: in the block it may appear only as an unnumbered line with its title (§9). A candidate a server gave (its source is an `mcp` one in `sources`) carries no `sensitive` mark — the server does not say — so outside the People contour treat one whose path lies under a people folder (`People/`, the core's `people_dir`) as sensitive;
 - a hub;
 - a candidate marked `ти казав «не те»`;
 - what contradicts another piece rated «прямо»: then **both** go to the block, the conflict named (§7), and the work goes on with the rest.
@@ -121,11 +122,11 @@ Each of them is a doubt (§7), and the skill decides about level 2 (§8).
 
 **A conflict**: two pieces found say different things about one fact — a number, a decision, an owner, a date — or a copy lags behind its live page (§8). Two «прямо» from different documents that disagree are both a conflict and a doubt.
 
-A doubt or a conflict changes two things: the skill may go to level 2 (§8), and its answer ends with the block of variants (§9). Neither stops the work or asks in the middle of it. A doubt that level 2 settled — a live piece rated «прямо» was taken for what the base lacked — raises no block; a conflict always does.
+A doubt or a conflict ends the answer with the block of variants (§9) and may start level 2 (§8, which names every case that may). Neither stops the work or asks in the middle of it. A doubt that level 2 settled — a live piece rated «прямо» was taken for what the base lacked — raises no block; a conflict always does.
 
 ## 8. Live sources — level 2
 
-- **When.** The skill decides, and only on a doubt: go when the work needs a fact the taken does not give — a number, a decision, an owner, a status, a page's current content — and a live source in the session can hold it; otherwise do not. Level 2 is not part of every run.
+- **When.** The skill decides. Level 2 may start on a doubt, on a conflict, when what was taken lacks a fact the work needs — a number, a decision, an owner, a status, a page's current content — or when nothing was found; and only when a live source in the session can hold what is missing. Otherwise it does not start: it is not part of every run.
 - **Where.** What the session has (`integration-strategy.md`, pattern detection): Confluence (CQL `text ~ "<variant>"` for each variant), Jira (JQL `text ~ "<variant>"`), Fireflies, Drive, mail. The routing of `context-provider-protocol.md` §5 still applies: an organisation question starts at the provider whose `playbook` covers it.
 - **When to ask the user first** — one question in `user.language`, naming the source and the reason, in an interactive run only:
   - the source needs a VPN or a login the session does not have now;
@@ -134,7 +135,7 @@ A doubt or a conflict changes two things: the skill may go to level 2 (§8), and
 
   Otherwise go, and say so in one line before the taken line: `Живі джерела: <Confluence, Jira, …> — <чому, одним рядком>`.
 - **The mark.** A piece found live carries `живе · <день>` (§5) and is rated like a candidate; at most three pieces are taken in all, base and live together.
-- **A copy against its live page.** A core page and its live Confluence page are matched by the page id — `confluence_id` in the copy's frontmatter, else the number of six or more digits in brackets before `.md` in its path. Compare the copy's `modified` (or its date) with the live page's `lastModified` / `version` — never the bytes: two exports of one page always differ. When the live page is newer, take the live one; the copy is marked `копія відстала` and the line `копія відстала: <шлях>` is said once; it is never taken silently again in this run, and it is a conflict (§7).
+- **A copy against its live page.** A core page and its live Confluence page are matched by the page id — `confluence_id` in the copy's frontmatter, else the number of six or more digits in brackets before `.md` in its path. Compare the copy's `modified` (or its date) with the live page's `lastModified` / `version` — never the bytes. When the live page is newer, take the live one; the copy is marked `копія відстала` and the line `копія відстала: <шлях>` is said once; it is never taken silently again in this run, and it is a conflict (§7).
 - **Nothing is written.** What level 2 finds goes into no index, no record and no store: it lives in this session.
 - **Data boundaries.** Everything stays in the session and in the user's own connectors (`data-policy.md`).
 
@@ -150,17 +151,17 @@ At the very end of the answer that delivers the skill's work — after the artif
 - `Цифра — повторю роботу з вибраним; «не те» — запам'ятаю.`
 
 Rules:
-- **Two to four numbered lines**, numbered from 1 in the order they are filled — the lines above show the kinds, not fixed places. There is no empty block: fill it in this order — the candidates worth choosing (each «прямо» not taken, then the best «частково», each with why it was not taken: `частково: …`, `застаріле`, `суперечить 2): …`, `ти казав «не те»`); `уточнити запит: «…»` — a narrower or a wider wording of the request (two different wordings may fill two lines); `живе джерело: …` for a source the session has that level 2 did not already search. When the base was not read (exit 5), one line may be `повторити пошук: <коли або як — за хвилину | ctx index rebuild>`.
+- **Two to four numbered lines**, numbered from 1 in the order they are filled — the lines above show the kinds, not fixed places. There is no empty block: fill it in this order — the candidates worth choosing (each «прямо» not taken — but a sensitive one or a people type only as the unnumbered line below — then the best «частково», each with why it was not taken: `частково: …`, `застаріле`, `суперечить 2): …`, `ти казав «не те»`); `уточнити запит: «…»` — a narrower or a wider wording of the request (two different wordings may fill two lines); `живе джерело: …` for a source the session has that level 2 did not already search. When the base was not read (exit 5), one line may be `повторити пошук: <коли або як — за хвилину | ctx index rebuild>`.
 - **The `Пошук:` line** says the reason in the user's language: no «прямо» about «…»; the base was not read and why; two documents say different things about <the fact>; only outdated notes; the snapshot of <repo> is from <day>; <id> did not answer; the best match came only through the glossary; not sure that «…» is it.
-- **A sensitive candidate** outside the People contour: `<назва> — <джерело, дата> — sensitive, зміст не показую` — no section, no snippet.
+- **A sensitive candidate or a people type** outside the People contour: one **unnumbered** line, `· <назва> — <джерело, дата> — sensitive, зміст не показую` — no section, no snippet, and no number, so it cannot be picked; it does not count among the two to four numbered lines.
 - The fixed words of the block are printed exactly as written here; titles, sections and reasons are filled in.
 
 ## 10. The user's choice
 
 The user answers with a number, with «не те», or both («2, а 1 — не те»):
 - **A candidate's number** → `python3 "<plugin root>/scripts/ctx.py" search remember --q "<request>" --pick <id> [--product "<product>"]` — the request exactly as the first `--q` of the search, the same product. Then the skill does its work again with that piece taken (read with `--get`) and says in one line what changed.
-- **«не те»** (about a numbered line, or about a piece that was taken) → `search remember --q "<request>" --not <id>`, and the work is done again without it. «не те» with no number means what was taken: one piece — that one; several — ask which, in one short question (the run is over, so it is the user's turn anyway). Both in one answer → one call with `--pick` and `--not`.
-- **A sensitive candidate picked by number** outside the People contour: the user's explicit choice lets this run read and use a note marked `sensitive`, its facts cited like any other; a people type (`people`, `one-on-one-notes`, `performance-review`, `offboarding-plan`) is never used outside the People contour, even when picked — say so in one line, name the People skill that reads it, and remember nothing.
+- **A live piece's number** (found at level 2, §8) → the work again with it taken; it has no id, so nothing is remembered — unless a local copy of that page exists (the same page id, §8): then `search remember --q "<request>" --pick "<the copy's path>"`.
+- **«не те»** (about a numbered line, or about a piece that was taken) → `search remember --q "<request>" --not <id>`, and the work is done again without it. «не те» with no number means what was taken: one piece — that one; several — ask which, in one short question. Both in one answer → one call with `--pick` and `--not`.
 - **`уточнити запит`** → Step 0.5 again with the new wording as the request; nothing is remembered.
 - **`живе джерело`** → level 2 (§8) on that source, then the work again.
 - **`повторити пошук`** → `ctx index rebuild` when the note asked for it, then Step 0.5 again.
@@ -188,13 +189,3 @@ A remembered choice is a hint for every later request whose stems are similar (J
 **FS without SHELL.** No index and no `ctx`: for each variant, look through the plugin folder of each vault and the core folder of each registration (`core_root`, else its `paths`) for notes whose title, headings or text hold its words — the words of the request, never "the 10 newest of a type". Leave out what `ctx` would: `_System/context/`, the blocks file and `_System/providers/`, `.obsidian/`, `.trash/`, folders that start with `_backup`, non-`.md` files. Treat the skill's `SKILL_CONTEXT_MAP` types as a weight, not a filter. Read the frontmatter for the marks of §4 that it gives (`status`, `sensitive`, `type`, a hub's type or title, the date), rate, take, raise the block as above, and cite path and date. When the session also has the server of a repository whose folder is not on disk, ask it as under "MCP only" below and merge its list with yours by reciprocal-rank fusion. A choice cannot be remembered: say `Вибір не збережено: тут немає оболонки — пізніше: ctx search remember --q "<запит>" --pick "<шлях>"`.
 
 **MCP only.** For each variant, `vault_search` on every reachable provider (`context-provider-protocol.md` §2): the variant's words without stop words, as written (no stemming), each in double quotes with `*` after a word of four letters or more, joined by ` OR ` (`"кошик"* OR "мобільний"*`) — plain words would be read as "all of them". Merge the lists by reciprocal-rank fusion (k = 60), one entry per path; read «прямо» with `vault_get_note` and take the section that answers. The same rating, taking, block and level 2; a choice is not remembered — say the same line as on a host without SHELL.
-
-## 13. Measuring the search
-
-- **The golden set** — `{store}/search/golden.yaml` (schema `search-golden/1`): requests with their frozen `variants`, a `class`, and the paths that are `good`, `ok` and `bad` for them (a row with no answer has `good: []` and class `порожній`). It is the user's file in the vault: `ctx` only reads it, the section index does not index it, and no snapshot holds it.
-- **`ctx search eval [--golden PATH] [--no-hints]`** measures level 1 without a model: the share of requests whose right answer is among the first 50 candidates (with the frozen variants, and with the request alone), MRR, a line per class, the empty rows. The remembered choices count as rows `source: choice` unless `--no-hints`. It writes nothing but the index.
-- **The model level** — the taken, the empty answers and the hits — is measured in an acceptance run, not by the plugin's users (`testing/search_agent_eval.py`).
-
-## 14. What the search reads and writes
-
-`ctx search`, `--get` and `eval` only read the user's data: no store lock, no import of edits, nothing written to the store or a vault. They write only `<home>/.grow-pm/index/` — the section index, rebuilt from the files at any time and never the only copy of anything, and `last.json`, the ids of the last searches. `ctx search remember|forget` write only the store's `.state/search.json` (snapshot, journal, `ctx undo`). The network is used only for the MCP of a repository with no folder on disk (`host-profiles.md` §4).

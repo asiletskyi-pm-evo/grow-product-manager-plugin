@@ -187,7 +187,7 @@ Every skill carries a three-line block that points here; its first line is alway
 3. **SHELL available:** `python3 "<plugin root>/scripts/ctx.py" search --q "<request>" --q "<variant>" … --skill <this skill's name> --product "<name>" --json` — it prints only its `CTX_RESULT` line. Exit 5 means the base was not read: never say it holds nothing. Without SHELL: the same search in prose (§12 there).
 4. **Rate** the candidates «прямо / частково / ні»; read the «прямо» ones with `ctx.py search --get <id>`.
 5. **Take** at most three «прямо» sections silently and say so in one line — `Взяв із бази: <назва › секція> (<джерело>, <дата>) · …`, or, when nothing was taken, `У базі нічого прямо про це` (or another line of §6 there: never that the base holds nothing when it was not read). Never silently: «частково», outdated or older versions, a hub, `sensitive` and people types outside the People contour, what contradicts another piece.
-6. **A doubt or a conflict** → the skill may search live sources (level 2), and its answer ends with the block of variants; the user's choice → `ctx.py search remember`.
+6. **A doubt or a conflict** ends the answer with the block of variants; the user's choice → `ctx.py search remember`. Live sources (level 2) may be searched on a doubt, a conflict, a fact the work needs that the taken lacks, or when nothing was found (§8 there).
 
 **Important:** this step asks nothing in the middle of a run — the "Use as context? [Yes / Select specific / Skip]" question of earlier versions is gone. It reads sections, not whole notes: the candidates' lines, then only the sections it rates «прямо».
 
