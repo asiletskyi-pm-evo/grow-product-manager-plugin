@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.15.1
+**Version:** 3.15.2
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.15.2** — **A binding to a slot the catalogue lacks sets no other binding aside** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Per block the first binding counts — yours, the publisher's `slot=`, the plugin's `team#Members` — and a binding to a slot this plugin does not know still took that place: a core ahead of the plugin could set the plugin's `team#Members` aside and drop the core's half of a team's members. Such a binding now does nothing — the next source binds the block — and `ctx validate` still names it as `unknown`.
 
 **New in v3.15.1** — **A binding to a slot the catalogue lacks no longer hides a block** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). A block that you or its publisher bound only to a slot `references/context-slots.yaml` does not have (a `slot=` naming an unknown slot, or a binding to a slot a later catalogue removed) was kept out of every by-name answer; such a binding does nothing, so the block answers by its heading again, and `ctx validate` still names the binding as `unknown`. No real core publishes `slot=` yet: nothing changed for anyone today.
 
@@ -1061,5 +1063,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.15.1  
+**Version:** 3.15.2  
 **Last Updated:** October 2026

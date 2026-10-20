@@ -12,6 +12,27 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.15.2 (2026-10-20)
+
+**A binding to a slot the catalogue lacks sets no other binding aside.** v3.15.1 stopped such a binding from hiding a block from the by-name answer; it still decided which source binds the block. Per block the first source counts — yours, then the publisher's `slot=`, then the plugin's `team#Members` — and a binding to an unknown slot still took that place. So a core ahead of the plugin that marks its `team` block `slot=<a slot this plugin does not know>` set the plugin's `team#Members` aside, and a skill that reads a team's members, with your own `Team Members` table, lost the core's half; a binding of yours to a slot the catalogue no longer has set the publisher's `slot=` aside in the same way. Decided with the user: such a binding does nothing, and the next source binds the block.
+
+PATCH: a resolver fix; no new command, no skill changed.
+
+### Fixed
+
+- **A binding to a slot the catalogue lacks is no binding.** `ctx_slots.bindings_of` counts a source only with a slot of the catalogue: yours with only unknown slots leaves the publisher's `slot=` (then the plugin's binding) in force; the publisher's `slot=` with only unknown slots leaves the plugin's `team#Members` in force; a source with known and unknown slots binds the known ones. `ctx read`, `ctx explain` and `ctx validate` follow from it: with your own `Team Members` table and the core's team block marked with a slot this plugin does not know, `team.members` again shows both halves.
+- **`ctx validate` and `ctx explain` still name every such binding** as `unknown`. A publisher's `slot=` is now named «ignored» only when your binding of the block names a slot of the catalogue.
+- **Unchanged:** like any block with a binding, a block bound only to an unknown slot is not proposed again and not listed among the blocks no slot takes; the `unknown` line says what is wrong with it.
+- Protocols: `context-protocol.md` §5f (a binding to an unknown slot is no binding; candidate 3 reads «any slot of the catalogue») and `context-provider-protocol.md` §12.2 (neither the attribute nor your binding to such a slot sets the next source aside).
+- Tests: `ctx_resolve_test.py` 223 checks — 12 new. 9 failed before the fix: the order of the sources, the list of bindings set aside, the team-members case. 3 hold v3.15.0 rules this patch keeps: validate names the publisher's unknown slots; such a block is not proposed and not listed as no slot's. The golden test still matches all 99 read views of v3.14.1.
+
+### Backwards compatibility
+
+- Your context, the records, the manifest, the catalogue and `.state/slots.json` are unchanged; nothing new is written. A read differs from v3.15.1 only for a block whose binding names a slot the catalogue lacks: the next source binds it.
+- No skill renamed, no description changed: routing is as in v3.15.1.
+
+---
+
 ## v3.15.1 (2026-10-19)
 
 **A binding to a slot the catalogue lacks no longer hides a block.** Left over from the v3.15.0 final review: the resolver kept a block out of every by-name answer as soon as you or its publisher bound it to any slot — including a slot `references/context-slots.yaml` does not have (a publisher's `slot=org.nowhere`, or a binding of yours to a slot a later catalogue removed). The protocol says such a binding does nothing (`context-provider-protocol.md` §12.2, and `ctx validate` names it `unknown`), so the block should still answer by its heading, as in v3.14.1. No real core publishes `slot=` yet, so nothing changed for anyone today.

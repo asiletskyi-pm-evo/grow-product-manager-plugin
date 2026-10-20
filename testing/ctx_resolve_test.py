@@ -673,7 +673,7 @@ check("a slot the catalogue lacks has no kind, and is read as a text: no excepti
 
 # ------------------------------------------------------------------ slot_context and slot_answers (shared by read, explain, decide)
 SCTX_KEYS = {"store", "cat", "records", "notes", "pending", "product", "needs_product", "products", "teams", "repos", "mem",
-             "mem_error", "bindings", "problems", "regs"}
+             "mem_error", "bindings", "dropped", "problems", "regs"}
 with tempfile.TemporaryDirectory() as d:
     e = Env(d)
     before = tree(e.home, e.vault)
@@ -838,6 +838,11 @@ with tempfile.TemporaryDirectory() as d:
     text, res = explain(e)
     check("…a block you bound is not unmapped any more; a region of nobody's repository is never listed",
           "scope" not in [b_["block"] for b_ in res["unmapped_blocks"]], res["unmapped_blocks"])
+    remember(e, memory(("zorg-core", "scope", None, "product.retired_metrics", None)))
+    text, res = explain(e)
+    check("…v3.15.2: a block bound only to a slot the catalogue lacks is still not listed as no slot's — its unknown line says what is wrong",
+          "scope" not in [b_["block"] for b_ in res["unmapped_blocks"]], res["unmapped_blocks"])
+    remember(e, memory(("zorg-core", "scope", None, "product.scope", None)))
     text, res = explain(e, repos=[REPOS[0]])
     check("…a repository that is not registered owns no unmapped block", [b_["repo"] for b_ in res["unmapped_blocks"]] == ["zorg-core"], res["unmapped_blocks"])
 
@@ -968,6 +973,55 @@ with tempfile.TemporaryDirectory() as d:
     check("…and validate still names that binding as unknown", [(p_["kind"], p_["slot"], p_["how"]) for p_ in problems(e, mem)]
           == [("unknown", "product.retired_metrics", "memory")], problems(e, mem))
 
+# ------------------------------------------------------------------ v3.15.2: a binding to a slot the catalogue lacks is no binding — the next source binds
+PLUGIN_TEAM = [{"slot": "team.members", "sub": "Members", "team": None, "how": "plugin"}]
+SCOPE_MARKED = SCOPE.replace("v=0.4 -->", "v=0.4 slot=product.scope -->")
+TEAM_AHEAD = TEAM.replace("v=0.2 -->", "v=0.2 slot=team.rituals -->")
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    e.state("zorg-core", {"scope": ("0.4", [SCOPE_MARKED]), "team": ("0.2", [TEAM])})
+    mem = memory(("zorg-core", "scope", None, "product.retired_metrics", None))
+    binds, _ = sl.bindings_of(e.store, REPOS, mem)
+    check("v3.15.2: your binding to a slot the catalogue lacks does not set the publisher's slot= aside — the marker binds the block",
+          binds.get(("zorg-core", "scope")) == [{"slot": "product.scope", "sub": None, "team": None, "how": "marker"}], binds)
+    check("…so the block answers that slot through the publisher's binding",
+          [(c["how"], c["block"]) for c in cands(e, "product.scope", mem=mem)] == [("marker", "scope")], cands(e, "product.scope", mem=mem))
+    check("…and validate names your binding unknown, with no «ignored» line for the publisher's slot=",
+          [(p_["kind"], p_["slot"], p_["how"]) for p_ in problems(e, mem)] == [("unknown", "product.retired_metrics", "memory")], problems(e, mem))
+    mem = memory(("zorg-core", "scope", None, "product.retired_metrics", None), ("zorg-core", "scope", None, "product.key_metrics", None))
+    binds, _ = sl.bindings_of(e.store, REPOS, mem)
+    check("…your bindings of one block to a known and an unknown slot: only the known one binds, and yours still wins over slot=",
+          binds.get(("zorg-core", "scope")) == [{"slot": "product.key_metrics", "sub": None, "team": None, "how": "memory"}], binds)
+    mem = memory(("zorg-core", "team", None, "team.retired", None))
+    binds, _ = sl.bindings_of(e.store, REPOS, mem)
+    check("…your binding of the team block to a slot the catalogue lacks leaves the plugin's team#Members in force",
+          binds.get(("zorg-core", "team")) == PLUGIN_TEAM, binds)
+    dropped = []
+    try:
+        sl.bindings_of(e.store, REPOS, memory(("zorg-core", "scope", None, "product.retired_metrics", None)), dropped=dropped)
+    except TypeError as x:
+        dropped = x
+    check("…bindings_of hands back the bindings it set aside as unknown (`dropped`), so validate can name them",
+          dropped == [{"ns": "zorg-core", "block": "scope", "slot": "product.retired_metrics", "sub": None, "team": None, "how": "memory"}], dropped)
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d)
+    e.state("zorg-core", {"scope": ("0.4", [SCOPE.replace("v=0.4 -->", "v=0.4 slot=product.scope,org.nowhere -->")]),
+                          "team": ("0.2", [TEAM_AHEAD])})
+    binds, _ = sl.bindings_of(e.store, REPOS, memory())
+    check("v3.15.2: the publisher's slot= naming a known and an unknown slot binds the known one only",
+          binds.get(("zorg-core", "scope")) == [{"slot": "product.scope", "sub": None, "team": None, "how": "marker"}], binds)
+    check("…a core ahead of the plugin (slot=team.rituals on the team block) leaves the plugin's team#Members in force",
+          binds.get(("zorg-core", "team")) == PLUGIN_TEAM, binds)
+    check("…and validate names both unknown slots of the publisher",
+          sorted((p_["kind"], p_["slot"], p_["how"]) for p_ in problems(e, memory()))
+          == [("unknown", "org.nowhere", "marker"), ("unknown", "team.rituals", "marker")], problems(e, memory()))
+with tempfile.TemporaryDirectory() as d:
+    e = Env(d, edits=[TEAM_MEMBERS])
+    e.state("zorg-core", {"team": ("0.2", [TEAM_AHEAD])})
+    got = cands(e, "team.members")
+    check("v3.15.2: with your own Team Members table, a core ahead of the plugin no longer drops the core's half of team.members",
+          [(c["source"], c["how"]) for c in got] == [("mine", None), ("zorg-core", "plugin")], got)
+
 # ------------------------------------------------------------------ unread_lines
 with tempfile.TemporaryDirectory() as d:
     e = Env(d)
@@ -1039,6 +1093,10 @@ with tempfile.TemporaryDirectory() as d:
     check("validate_slots → (errors, warnings, proposals); a proposal is a warning line and an item", errors == [] and props == [SCOPE_P]
           and warnings == ["proposal: ctx slot bind zorg-core scope product.scope"], (errors, warnings, props))
     check("…it writes nothing", tree(e.home, e.vault) == before, "")
+    errors, warnings, props = validated(e, mem=memory(("zorg-core", "scope", None, "product.retired_metrics", None)))
+    check("…v3.15.2: a block bound only to a slot the catalogue lacks binds nothing, yet is not proposed again — the unknown line says what is wrong",
+          props == [] and "slot binding: zorg-core scope → product.retired_metrics — " + rv.WHY_UNKNOWN in warnings, (props, warnings))
+    remember(e, memory())
     errors, warnings, props = validated(e, mem=memory(("zorg-core", "gone", None, "product.nowhere", None), ("zorg-nowhere", "scope", None, "product.scope", None),
                                                       ("zorg-core", "team", "Nowhere", "team.members", None), ("zorg-core", "gone2", None, "product.scope", None)))
     check("bindings that do nothing, one line each — «slot binding: <repo> <block>[#<sub>] → <slot> — <why>» (the unknown slot, the repository nobody registered, the subsection the block lacks, the block that is gone)", sorted(w_ for w_ in warnings if w_.startswith("slot binding: ")) == sorted([
