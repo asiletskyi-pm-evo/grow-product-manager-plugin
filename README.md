@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.15.0
+**Version:** 3.15.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.15.1** — **A binding to a slot the catalogue lacks no longer hides a block** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). A block that you or its publisher bound only to a slot `references/context-slots.yaml` does not have (a `slot=` naming an unknown slot, or a binding to a slot a later catalogue removed) was kept out of every by-name answer; such a binding does nothing, so the block answers by its heading again, and `ctx validate` still names the binding as `unknown`. No real core publishes `slot=` yet: nothing changed for anyone today.
 
 **New in v3.15.0** — **A skill gets its slot, says what it lacks, and `ctx explain` says where each piece came from** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx read` now answers every name a skill asks for through a **slot** of a catalogue (`references/context-slots.yaml`, 22 slots — `team.members`, `product.key_metrics`, `org.key_metrics` …), whatever the heading is called and whichever record holds it. A repository's block fills a slot only when it is bound — by you (`ctx slot bind`), by its publisher (`slot=` in the marker) or, for the team block, by the plugin — and the cascade decides: a core rule, then your text, then the repositories by rank. A list shows both halves with their sources, the rest is one `також` line, nothing is repeated, and the missing line says where it looked. `ctx explain` shows the winner and why for every slot; `ctx validate` names broken bindings and divergences and proposes bindings, which `context-connect` offers in one message. Without any binding every skill reads what it read in v3.14.1 (a golden test of 99 views).
 
@@ -1059,5 +1061,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.15.0  
+**Version:** 3.15.1  
 **Last Updated:** October 2026

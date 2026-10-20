@@ -12,6 +12,24 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.15.1 (2026-10-19)
+
+**A binding to a slot the catalogue lacks no longer hides a block.** Left over from the v3.15.0 final review: the resolver kept a block out of every by-name answer as soon as you or its publisher bound it to any slot — including a slot `references/context-slots.yaml` does not have (a publisher's `slot=org.nowhere`, or a binding of yours to a slot a later catalogue removed). The protocol says such a binding does nothing (`context-provider-protocol.md` §12.2, and `ctx validate` names it `unknown`), so the block should still answer by its heading, as in v3.14.1. No real core publishes `slot=` yet, so nothing changed for anyone today.
+
+PATCH: a resolver fix; no new command, no skill changed, no protocol text changed.
+
+### Fixed
+
+- **`ctx read` and `ctx explain`: only a binding to a slot of the catalogue says what a block is.** A block of a product, team or profile record that you or its publisher bound to an unknown slot answers by name again (`за назвою, без прив'язки`), where your text has nothing for the slot; `ctx validate` still warns about the binding as `unknown`. A binding to a slot the catalogue has keeps the block out of every by-name answer, as before (`context-protocol.md` §5f, candidate 3).
+- Tests: `ctx_resolve_test.py` 211 checks — 4 new (the publisher's `slot=org.nowhere`, your binding to a removed slot, and `validate` naming both), the two by-name checks failed before the fix; the golden test still matches all 99 read views of v3.14.1.
+
+### Backwards compatibility
+
+- Your context, the records, the manifest, the catalogue and `.state/slots.json` are unchanged; nothing new is written. A read differs from v3.15.0 only for a block bound solely to a slot the catalogue lacks: it is found by name again.
+- No skill renamed, no description changed: routing is as in v3.15.0.
+
+---
+
 ## v3.15.0 (2026-10-19)
 
 **A skill gets its slot, says what it lacks, and `ctx explain` says where each piece came from.** Until now `ctx read` found a field or a subsection by the exact start of its heading, in the record the manifest named, and mixed a repository's block into a skill's context with nothing to say which text won or why. A read-only look at a real store showed what that hides: a skill that silently got no team members because the heading had another name, two `Key Metrics` sections that meant different things, and the two halves of one team list in two records. v3.15.0 is the resolver: every name a skill asks for is a **slot**, every candidate text for it is found wherever it sits, and one cascade decides what the skill gets — and says so.
