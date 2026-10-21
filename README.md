@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.16.1
+**Version:** 3.16.2
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.16.2** — **«Пошук», другий патч: nothing swaps in another note silently** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Two cards that differ only by a list of owners no longer fold into one; your remembered pick of a note folded as a twin weighs its survivor, and a «не те» crosses only a fold of the same text; the excluded folders are the same in the index, the search and `--get`; every name a search lists reads back from the source that holds it — a server's note outside its root is `@<repo>/:/…`, a core gone from disk is read through its server; the «нотатка довга» line names exactly the sections `--get` takes back. `ctx search eval` finds a golden note folded as a twin at its survivor's place.
 
 **New in v3.16.1** — **«Пошук», патч: your whole plugin folder reaches the search, and `--get` gives a long note in measured parts** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx index rebuild --download` brings down the notes iCloud offloaded from your plugin folder — only those the index reads, never a core or the rest of the vault, nothing else ever downloads — and indexes them: on a real vault 1 820 of 1 821 came down and the right note among the first 50 rose to 100 %. Every `ctx search --get` gives at most 20 000 characters with a line naming the headings past the cut (`--full` — 60 000, for a note the model rated «прямо»), and reads a link as a hub writes it: embeds, nested headings, block references, a folder in the link — never another note with the same tail silently.
 
@@ -1069,5 +1071,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.16.1  
+**Version:** 3.16.2  
 **Last Updated:** October 2026

@@ -12,6 +12,32 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.16.2 (2026-10-22)
+
+**«Пошук», другий патч: nothing swaps in another note silently.** What v3.16.1 deferred, done in one night with the user's consent to merge: two cards that differ only by a list of owners no longer fold into one; a remembered pick is no longer lost — nor a «не те» spread to the wrong note — when its note is folded; the excluded folders are the same in the index, the search and `--get`; every name a search lists reads back from the source that holds it; the «нотатка довга» line names exactly the sections `--get` takes back, and fast. Measured on a copy of the user's real vault (95 reviewed requests, old = v3.16.1 and new on the same vault state): the search ranks every request alike (a sample's top 15 identical); `ctx search eval` now counts a golden note folded as a twin at its survivor's place — top-1 good 49 → 51, MRR 0,629 → 0,649, each change through such a fold (a project note and the Confluence page it links, a library copy and its original); near-copy groups 51 = 51.
+
+PATCH: fixes of the search and its index; no new command, no skill changed.
+
+### Fixed
+
+- **Near copies:** a list item of links alone (`- [[Bea Two]]`, in a callout too) is the note's content, so two cards that differ only in their owners or attendees no longer fold; a dated bullet (`- [[2026-03-01]]`) is still set aside. An index of the earlier rules gets its keys again from its own sections at the next refresh — no file read, the schema unchanged (meta `near_version`; a later build's keys are left alone).
+- **Folds remember what they stand for:** every fold (the same page, content, near copy, title and link, version) records on the survivor the paths it stands for (`twins` in the candidate). A remembered pick of a twin weighs its survivor and marks it «твій вибір від <день>»; a «не те» is carried only across a fold of the same text — never from an older version to the newer one —, and a verdict on the candidate itself outranks a carried one. `ctx search eval` finds a golden note folded as a twin at its survivor's place; its rows say `via_twin` / `good_via_twin`.
+- **Exclusions alike everywhere:** `.obsidian`, `.trash`, `_backup…`, `_System/providers|_scratch` are compared case-folded in the walk too (`_Backup 2025`, `.Trash`), so a stale backup no longer competes with — or replaces — the original; a symbolic link to a file is not followed; the real-path re-check of `--get` names a file by the innermost core folder that holds it.
+- **Names read back from their source:** a server's hit outside `endpoint.root` is `@<repo>/:/<path as given>` (no Obsidian name holds a `:`) — no longer the name of the note under the root, which made one of them vanish from the list and a path read return the other; a path under a registered core folder gone from disk is read through its server — by id under the server's line and day — and the index drops the rows no root owns at every walk (a resumed one too), so neither the index's nor a local index's old copy is served as current; a local index rooted in a subfolder is asked only by its own relative paths; a local index outside every vault reads its `@<id>/…` notes back from its own text. By id, a vault file deleted since the search is «not on disk», not a local copy.
+- **The «нотатка довга» line:** the heading lines with nothing under them are left out as the sections leave them out, so a file read and the own index's render name the same headings and each reads back; the names are found through one map of the note's headings (4 000 headings: 4,7 s → 0,03 s); the section the cut falls under is named only when `--get` of it shows 2 000 characters more; after `--full` the hint carries `--full`. `[[Name#Delivery#C# tips]]` joins the parts back with `#`.
+- After `rebuild --download` the status line's plugin-folder count comes from the download.
+- Protocols: `search-protocol.md` §3 (`twins` serve picks and eval — read what a mark names), §4 (the read order, `@<repo>/:/…`, the link forms, the line); `context-protocol.md`, `context-provider-protocol.md` §5 (key 3a), §10 (not indexed).
+- Tests: `ctx_index_test.py`, `ctx_search_test.py`, `ctx_hints_test.py` — each new check failed before its code (some pin a behaviour an earlier task already gave).
+
+### Backwards compatibility
+
+- The index schema is unchanged (`search-index/1`); the near keys are redone once, from the index itself.
+- A server's note outside its root has a new name, `@<repo>/:/…`: a v3.16.1 path string or a remembered pick of such a note no longer matches it (an honest «no note»); every other name is as before.
+- `ctx search --json` candidates may carry `twins`; `ctx search eval` rows carry `via_twin` and `good_via_twin`.
+- No skill renamed, no description changed: routing is as in v3.16.1.
+
+---
+
 ## v3.16.1 (2026-10-21)
 
 **«Пошук», патч: your whole plugin folder reaches the search, and `--get` gives a long note in measured parts.** On a Mac that offloads iCloud files, 1 821 notes of the user's own layer were not on disk: the section index skipped them (reading one would start its download), so they reached Step 0.5 only through a local index, as whole notes. `ctx index rebuild --download` now brings them down — only the plugin folder, only what the index would read — and indexes them. Measured on a copy of the user's real vault with the reviewed set of 95 requests: 1 820 of 1 821 notes came down in 13 minutes; the right note among the first 50 rose from 98,9 % to 100 % (the one miss of the v3.16.0 acceptance, a real request about a CJM status meeting, is now 7th), among the first 5 from 83 to 85, MRR from 0,623 to 0,629; the old and the new code rank every request alike on the same vault state. `--get` no longer hands a skill a 45 000-character note whole — 228 notes of that local index were over 20 000 — and now reads a link the way a hub writes it: of 300 folder links sampled from the user's notes it read 207 before, 298 now.
