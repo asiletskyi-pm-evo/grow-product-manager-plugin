@@ -4740,6 +4740,16 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = run_ok(env, "search", "eval", "--golden", golden, "--no-hints", "--json")
     check("B2: eval still reads the first 50 — an answer at place 35 is found", rc == 0 and res and res["n"] == 1
           and res["recall50"] == 1.0 and res["rows"][0].get("rank") == 35, (rc, res and res.get("rows"), out[-300:]))
+    last_before = os.path.exists(os.path.join(env.index, "last.json")) and read(env.index, "last.json")
+    rc, out, res = run_ok(env, "search", "--get", "Notes/Zebra/Zebra note 07.md", "--json")
+    check("T1: --get takes a note's path: exit 0, the whole note under `> [own · <path> · <day>]`, last.json as it was",
+          rc == 0 and res and res["header"].startswith("> [own · Notes/Zebra/Zebra note 07.md · ")
+          and res["text"].startswith("# Zebra note 07\n\nThe zebrafish of the cart.")
+          and (os.path.exists(os.path.join(env.index, "last.json")) and read(env.index, "last.json")) == last_before,
+          (rc, res, out[-300:]))
+    rc, out, res = run_ok(env, "search", "--get", "Notes/Zebra/No such note.md")
+    check("…an unknown path: exit 3, one line", rc == 3 and "search: no candidate Notes/Zebra/No such note.md" in out,
+          (rc, out[-300:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

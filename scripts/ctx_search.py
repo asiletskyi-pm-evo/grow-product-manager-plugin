@@ -1271,6 +1271,20 @@ def _inside(path, folders):
     return any(real == f or real.startswith(f.rstrip(os.sep) + os.sep) for f in (os.path.realpath(x) for x in folders if x))
 
 
+def _file_of(sctx, path):
+    """The file of an index name — a vault's file, or `@<repository>/…` under its core folder — when it is a `.md` file
+    on disk inside a vault or a core folder; else None. Only stat calls: a file iCloud has not downloaded is not
+    opened."""
+    folders = list(sctx.get("vaults") or []) + [_folder(r) for r in sctx.get("repos") or []]
+    if path.startswith("@"):
+        rid, _, rest = path[1:].partition("/")
+        repo = next((r for r in sctx.get("repos") or [] if r.get("id") == rid), None)
+        files = [os.path.join(_folder(repo), *rest.split("/"))] if repo and _folder(repo) and rest else []
+    else:
+        files = [os.path.join(v, *path.split("/")) for v in sctx.get("vaults") or []]
+    return next((f for f in files if f.lower().endswith(".md") and _inside(f, folders) and os.path.isfile(f)), None)
+
+
 def _from_disk(sctx, entry):
     """(text, date, meta, said) of a note on disk, by its index name: a vault's file, or `@<repository>/…` under its
     core folder; meta is what its frontmatter says (`_marks`), said a line to print above the text (None). Only a `.md`
@@ -1280,14 +1294,7 @@ def _from_disk(sctx, entry):
     that holds it, said so (`файл не завантажено з iCloud — текст із локального індексу <id>`), else GetError 3
     (`файл не завантажено з iCloud: <шлях> — відкрий його в Obsidian або ctx index rebuild пізніше`)."""
     path = entry["path"]
-    folders = list(sctx.get("vaults") or []) + [_folder(r) for r in sctx.get("repos") or []]
-    if path.startswith("@"):
-        rid, _, rest = path[1:].partition("/")
-        repo = next((r for r in sctx.get("repos") or [] if r.get("id") == rid), None)
-        files = [os.path.join(_folder(repo), *rest.split("/"))] if repo and _folder(repo) and rest else []
-    else:
-        files = [os.path.join(v, *path.split("/")) for v in sctx.get("vaults") or []]
-    found = next((f for f in files if f.lower().endswith(".md") and _inside(f, folders) and os.path.isfile(f)), None)
+    found = _file_of(sctx, path)
     if not found:
         raise GetError(3, "the note is not on disk: %s" % path)
     if ci.is_dataless(found):
@@ -1376,11 +1383,75 @@ def _fill(text, following):
     if not got:
         return text
     parts = [text.strip("\n"), SHORT_NOTE % " · ".join(h for h, _ in got)]
-    for heading, body in got:
-        names = heading.split(" › ")
-        head = "%s %s" % ("#" * min(len(names), 6), names[-1]) if heading else ""
-        parts.append("\n\n".join(p for p in (head, body.strip("\n")) if p))
+    parts += [_as_markdown(h, body) for h, body in got]
     return "\n\n".join(p for p in parts if p)
+
+
+def _as_markdown(heading, body):
+    """A section as Markdown again: its heading (as many `#` as its heading path has parts, the last part), its text."""
+    names = heading.split(" › ")
+    head = "%s %s" % ("#" * min(len(names), 6), names[-1]) if heading else ""
+    return "\n\n".join(p for p in (head, body.strip("\n")) if p)
+
+
+def _is_path(arg):
+    """Is a `--get` argument a note's path (a `/` in it, or a name that ends in `.md`) rather than a candidate id?"""
+    return "/" in arg or arg.lower().endswith(".md")
+
+
+def _root_source(sctx, path):
+    """The source of the root of the index that holds `path` (the longest): `own` or a repository id; None outside."""
+    best = None
+    for r in sctx.get("roots") or []:
+        prefix = ci.rel_path(r["path"], sctx.get("vaults") or [], r)
+        if _in_scope(path, [prefix]) and (best is None or len(prefix) > len(best[0])):
+            best = (prefix, r["source"])
+    return best[1] if best else None
+
+
+def _get_path(sctx, arg):
+    """(header, text) of a whole note by its path (an index name, NFC or NFD): the note without its frontmatter, under
+    the provenance line `> [<source> · <path> · <day>]` and what its metadata says (`_marks`). Read, in this order:
+    the own section index (its sections joined under their headings); a registered local index's body (said so first,
+    `ICLOUD_LOCAL`, when the file is one iCloud has not downloaded); the file itself through the time-budgeted reader,
+    only when it is on disk and downloaded. GetError 3 — no such note (`no candidate …`), a file not downloaded that no
+    local index holds (`ICLOUD_MISSING`), or one not read in time. Reads only; last.json is not touched."""
+    path = N(arg).strip().replace("\\", "/")
+    path = path[2:] if path.startswith("./") else path
+    got = ci.Index(sctx["home"]).note(path)
+    if got:
+        meta, secs = got
+        return (_header(meta.get("source") or "own", path, "", meta.get("date"), _marks(meta)),
+                "\n\n".join(p for p in (_as_markdown(h, t) for h, t in secs) if p))
+    found = _file_of(sctx, path)
+    dataless = bool(found) and ci.is_dataless(found)
+    try:
+        mtime = os.stat(found).st_mtime if found else None
+    except OSError:
+        mtime = None
+    local = _local_body(sctx, path, found or os.path.join((sctx.get("vaults") or [""])[0], *path.split("/")))
+    if local:
+        meta = ci.note_meta(path, local[1], mtime=mtime)
+        text = _section_of(local[1], "")
+        return (_header(local[0], path, "", meta.get("date"), _marks(meta)),
+                (ICLOUD_LOCAL % local[0] + "\n\n" + text) if dataless else text)
+    if found and dataless:
+        raise GetError(3, ICLOUD_MISSING % path)
+    if not found:
+        raise GetError(3, "no candidate %s in the last search or the section index — search again" % path)
+    try:
+        body = cst.read_text(found)
+    except (OSError, UnicodeError, cst.StoreError) as e:
+        raise GetError(3, "the note cannot be read: %s (%s)" % (path, e))
+    meta = ci.note_meta(path, body, mtime=mtime)
+    return (_header(_root_source(sctx, path) or "vault", path, "", meta.get("date"), _marks(meta)),
+            _section_of(body, ""))
+
+
+def _header(source, path, heading, date, marks=""):
+    """The provenance line `> [<source> · <path> › <heading> · <day>]` (no ` › ` for a whole note), then the marks."""
+    return "> [%s · %s%s · %s%s]" % (source or "own", path, " › " + heading if heading else "", (date or "—")[:10],
+                                     marks)
 
 
 def _from_mcp(sctx, entry):
@@ -1425,18 +1496,22 @@ def _marks(meta):
 
 
 def get(sctx, cid):
-    """(header, text) of a candidate's section: the header `> [<source> · <path> › <heading> · <day>]` (an own section
-    names the index's source of its note: `own`, or the repository of a core page), the text under
-    the heading (a note-level candidate: the note without its frontmatter). The id is looked up in last.json (the last
-    search), else among the sections of the own index. An own section is read from the index (from its file when the
-    note changed since); a note only a local index knows from the vault; an MCP one through vault_get_note. A file is
-    read only through the time-budgeted reader, and never one iCloud has not downloaded (`_from_disk`: the text of a
-    local index then, its line first — the whole note when that copy has no such section). A section shorter than 200
-    characters goes on with the next ones (`_fill`). The header of a local or an MCP note goes on with what its
-    frontmatter says (`_marks`: ` · sensitive`, ` · застаріле`, its type) — what the list of such a source does not
-    carry, so its flags are complete only here. GetError: 3 — no such id, note or section, a file not read in time or
-    not downloaded; 5 — the server did not answer. Reads only."""
-    cid = str(cid or "").strip().lower()
+    """(header, text) of a candidate's section — or, for an argument that is a note's path (`_is_path`), of the whole
+    note (`_get_path`: a twin, a newer version, a note a hub links to). For an id: the header `> [<source> · <path> ›
+    <heading> · <day>]` (an own section names the index's source of its note: `own`, or the repository of a core
+    page), the text under the heading (a note-level candidate: the note without its frontmatter). The id is looked up
+    in last.json (the last search), else among the sections of the own index. An own section is read from the index
+    (from its file when the note changed since); a note only a local index knows from the vault; an MCP one through
+    vault_get_note. A file is read only through the time-budgeted reader, and never one iCloud has not downloaded
+    (`_from_disk`: the text of a local index then, its line first — the whole note when that copy has no such
+    section). A section shorter than 200 characters goes on with the next ones (`_fill`). The header of a local or an
+    MCP note goes on with what its frontmatter says (`_marks`: ` · sensitive`, ` · застаріле`, its type) — what the
+    list of such a source does not carry, so its flags are complete only here. GetError: 3 — no such id, note or
+    section, a file not read in time or not downloaded; 5 — the server did not answer. Reads only."""
+    arg = str(cid or "").strip()
+    if _is_path(arg):
+        return _get_path(sctx, arg)
+    cid = arg.lower()
     idx = ci.Index(sctx["home"])
     entry = _load_last(sctx["home"]).get(cid)
     if not isinstance(entry, dict) or not entry.get("path"):
@@ -1462,8 +1537,7 @@ def get(sctx, cid):
         if entry.get("kind") in ("local", "mcp"):
             marks = _marks(meta)
     text = _fill(text, following)
-    return "> [%s · %s%s · %s%s]" % (entry.get("source") or "own", entry["path"], " › " + heading if heading else "",
-                                     (date or "—")[:10], marks), (said + "\n\n" + text if said else text)
+    return _header(entry.get("source"), entry["path"], heading, date, marks), (said + "\n\n" + text if said else text)
 
 
 # ------------------------------------------------------------------ the human output

@@ -810,6 +810,20 @@ class Index:
 
         return self._read(read, [])
 
+    def note(self, path):
+        """(metadata, sections) of the note named `path` (an index name, compared in NFC): what Index.notes() says of it
+        and its sections [(heading, text)] in the note's order; None when the index holds no such note — `ctx search
+        --get <path>`. `problem` as for `query`."""
+        def read(con):
+            row = con.execute("SELECT id, %s FROM notes WHERE path = ?" % ", ".join(NOTE_COLS),
+                              (N(path or ""),)).fetchone()
+            if not row:
+                return None
+            secs = con.execute("SELECT heading, text FROM sections WHERE note_id = ? ORDER BY ord", (row["id"],))
+            return dict(_note_dict(row), id=row["id"]), [(h or "", t or "") for h, t in secs]
+
+        return self._read(read, None)
+
     def headings(self):
         """(section id, path, heading) of every section — how `ctx search --get` finds a section by its id when the
         last search did not list it; `problem` as for `query`."""

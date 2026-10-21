@@ -1315,6 +1315,61 @@ with tempfile.TemporaryDirectory() as d:
     check("A5 run: two short notes with the same words never fold", {"Notes/Short a.md", "Notes/Short b.md"}
           <= {c["path"] for c in res["candidates"]}, [(c["path"], c["flags"]) for c in res["candidates"]])
 
+# T1/T3 (fix round 4): --get takes a note's path too — a twin, a newer version, a note a hub links to can be read
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    build_brain(env.brain, env.vault, BRAIN_NOTES)
+    write(env.note("Growth/Only on disk.md"), "---\ntype: note\nupdated: 2026-10-02\n---\n# Only on disk\n\nA zebra note no index holds.\n")
+    sx = env.sctx()
+    env.refresh(sx)
+    D2 = "ZorgCore/Pages/Delivery slots (900100200).md"
+    reads, real_read, real_dataless = [], cs_.cst.read_text, ci.is_dataless
+    cs_.cst.read_text = lambda p_, *a, **kw: reads.append(p_) or real_read(p_, *a, **kw)
+    try:
+        def get_or(code_of, arg):
+            try:
+                return cs_.get(sx, arg)
+            except cs_.GetError as e:
+                code_of.append(e.code)
+                return None, str(e)
+        h1, t1 = cs_.get(sx, D2)
+        check("T1: --get <a twin's path> gives the whole note from the own index, its provenance and its marks, no file read",
+              h1 == "> [zorg-core · %s · 2026-09-01 · page]" % D2 and t1.startswith("# Delivery slots\n\n")
+              and "Shoppers pick a two-hour delivery slot at checkout." in t1 and "confluence_id" not in t1 and reads == [],
+              (h1, t1, reads))
+        h1n, t1n = cs_.get(sx, unicodedata.normalize("NFD", P))
+        check("…a path written decomposed (NFD) is the same note", h1n.startswith("> [own · %s · 2026-09-15" % P)
+              and "## Рішення" in t1n and reads == [], (h1n, t1n[:200]))
+        h2, t2 = cs_.get(sx, "Growth/Cart experiments.md")
+        check("T1: …a path only a local index knows: its body there (before the file), no file read",
+              h2 == "> [zorg-brain · Growth/Cart experiments.md · 2026-08-01 · ab-test-results]"
+              and "seller's hours under each block" in t2 and "type:" not in t2 and reads == [], (h2, t2, reads))
+        h3, t3 = cs_.get(sx, "Growth/Only on disk.md")
+        check("T1: …a path no index holds: the file, through the time-budgeted reader",
+              h3 == "> [vault · Growth/Only on disk.md · 2026-10-02 · note]" and "A zebra note no index holds." in t3
+              and len(reads) == 1 and reads[0].endswith("Only on disk.md"), (h3, t3, reads))
+        reads[:] = []
+        ci.is_dataless = lambda p_: unicodedata.normalize("NFC", p_).endswith(("Cart experiments.md", "Only on disk.md"))
+        h4, t4 = cs_.get(sx, "Growth/Cart experiments.md")
+        check("T1: …a dataless file a local index holds: the ICLOUD_LOCAL line, then its text; the file never opened",
+              t4.startswith("файл не завантажено з iCloud — текст із локального індексу zorg-brain\n\n")
+              and "seller's hours under each block" in t4 and reads == [], (h4, t4, reads))
+        codes = []
+        h5, t5 = get_or(codes, "Growth/Only on disk.md")
+        check("T1: …a dataless file nothing else holds: exit 3, ICLOUD_MISSING, the file never opened",
+              codes == [3] and t5 == cs_.ICLOUD_MISSING % "Growth/Only on disk.md" and reads == [], (codes, t5, reads))
+    finally:
+        cs_.cst.read_text, ci.is_dataless = real_read, real_dataless
+    codes = []
+    h6, t6 = get_or(codes, "Notes/No such note.md")
+    check("T1: …an unknown path: exit 3, one line naming it", codes == [3] and "Notes/No such note.md" in t6 and "\n" not in t6,
+          (codes, t6))
+    sid = next(s_ for s_, p_, h_ in ci.Index(env.home).headings() if p_ == P and h_.endswith("Рішення"))
+    hid, tid = cs_.get(sx, cs_.candidate_id(P, ci.Index(env.home).section(sid)["heading"]))
+    check("T1: …an id still gives its section", hid.startswith("> [own · %s › " % P) and hid.endswith("Рішення · 2026-09-15]")
+          and tid.startswith("Показувати графік роботи продавця"), (hid, tid[:200]))
+    check("T1: a path --get writes nothing: no last.json", not os.path.exists(cs_.last_path(env.home)))
+
 # the protocols say what the fixes do
 import re  # noqa: E402
 
@@ -1374,6 +1429,11 @@ check("fix round 2 — provider §5: your layer first, then the older; the headi
                                         "a copy with no date never wins over a dated one", "the headings do not count"))
       and "is a section of its own, a mirror page's breadcrumb too" in section(PP, 10)
       and "so a breadcrumb is never the snippet" in section(SP, 3), section(PP, 10)[-1500:])
+check("fix round 4 — search-protocol §4: a twin, a newer version and a hub's link are read with `ctx search --get <шлях>`; "
+      "context-protocol §3: --get ID|PATH", all(x in section(SP, 4) for x in (
+          "read the newer one with `ctx search --get \"<шлях>\" --json`", "read the twin too (`ctx search --get \"<шлях>\" --json`)",
+          "a note it links to is read with `ctx search --get \"<шлях>\" --json`", "Never open a vault file by its path yourself"))
+      and "from its path" not in section(SP, 4) and "`search --get ID\\|PATH [--json]`" in section(CP, 3), section(SP, 4)[-1200:])
 check("vault-protocol «In short»: the level-2 triggers are in search-protocol §8",
       "maybe live sources (level 2; triggers in search-protocol §8)" in read(ROOT, "references", "vault-protocol.md"))
 

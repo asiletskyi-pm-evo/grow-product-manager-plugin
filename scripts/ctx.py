@@ -166,7 +166,10 @@
                                 own index busy or damaged counts as not answered): exit 5; 0 candidates is exit 0. No store
                                 needed. The ids are merged into <home>/.grow-pm/index/last.json (a save that fails is a line,
                                 never the exit code). A candidate's sources name the repository of a core page.
-  search --get ID [--json]      one section of the last searches (or of the section index, by its id):
+  search --get ID|PATH [--json] one section of the last searches (or of the section index, by its id), or for a note's
+                                path (`/` in it, or `.md` at its end) the whole note without its frontmatter — from the
+                                section index, else a local index's body, else its file (never one iCloud has not
+                                downloaded):
                                 `> [<source> · <path> › <heading> · <day>]` and its text (an MCP note through vault_get_note).
                                 A section under 200 characters goes on with the next ones, up to 1 500, after
                                 the line `секція коротка — додано наступні: <headings>`. A file is read within the read
@@ -1057,7 +1060,7 @@ def _search_options(a):
 
 def cmd_search(a, c):
     """`search`: the question and its variants through the section index, the local indexes and MCP
-    (ctx_search.run), or `--get ID`: one section with its line of provenance (ctx_search.get). Reads only — no store
+    (ctx_search.run), or `--get ID|PATH`: one section, or a whole note, with its line of provenance (ctx_search.get). Reads only — no store
     lock, no import, the store need not exist; writes only `<home>/.grow-pm/index/` (the index, last.json).
     `search remember|forget` (since v3.16.0) write the store's search memory (`_search_hint`); `search eval` measures
     the search on a golden set (`_search_eval`) and writes nothing but the index."""
@@ -1080,7 +1083,7 @@ def cmd_search(a, c):
             print(text)
         return 0, {"command": "search", "action": "get", "id": a.get, "header": header, "text": text if a.json else None}
     if not a.q:
-        raise Usage("search takes --q TEXT (once or more) or --get ID")
+        raise Usage("search takes --q TEXT (once or more) or --get ID|PATH")
     which = _search_kinds(a.sources)
     limit = cs_.LIMIT if a.limit is None else a.limit
     if limit < 1:
