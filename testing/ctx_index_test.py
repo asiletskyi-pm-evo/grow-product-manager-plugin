@@ -302,6 +302,21 @@ with tempfile.TemporaryDirectory() as d:
           notes["Notes/Knowledge/sources/Cart study.md"]["near"] == notes["Notes/Research/Cart study.md"]["near"] == near(COPY_A)
           and notes["Notes/Mobile cart notes.md"]["near"] is None, {p: n.get("near") for p, n in notes.items()})
 
+# ------------------------------------------------------------------ S2: following() stops at what the fill needs
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    BIG = "Notes/Knowledge/Big page (900100400).md"
+    write(env.note(BIG), CRUMB + "\n\n# Big page\n\n" + "".join("## Part %02d\n\n%s\n\n" % (i, "w" * 500) for i in range(40)))
+    idx = ctx_index.Index(env.home)
+    idx.refresh(*env.scope())
+    sid = next(s_ for s_, p_, h_ in idx.headings() if p_ == BIG and h_ == "")
+    sec = idx.section(sid)
+    every, capped = idx.following(sec["note_id"], sec["ord"]), idx.following(sec["note_id"], sec["ord"], chars=1500)
+    check("S2: following() with chars= stops once the text it gathered (link-only lines aside) holds that many",
+          len(every) == 40 and len(capped) == 3 and sum(len(t) for _, t in capped) == 1500, (len(every), len(capped)))
+    check("…a cap of nothing is no cap; an unknown note is none", len(idx.following(sec["note_id"], sec["ord"], chars=None)) == 40
+          and idx.following(999999, 0, chars=1500) == [])
+
 # ------------------------------------------------------------------ A4: the walk never enters _System/_scratch/
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)

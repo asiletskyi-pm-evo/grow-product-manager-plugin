@@ -518,7 +518,7 @@ def _local(sctx, src, plans, until, box):
                         status=(meta["status"] or "").lower(), hub=True if _yes(fm.get("search_hub")) else None,
                         sensitive=_yes(fm.get("sensitive")) if "sensitive" in fm else None,
                         ttl_date=_first_date(fm, ci.TTL_DATE_KEYS) or "", terms=None, asked=len(terms), near=near_of(r))
-                if snip and _clean(snip) != snip and isinstance(body, str):     # the index's snippet shows a breadcrumb
+                if snip and isinstance(body, str) and _lost(snip):    # the match was in a breadcrumb or a link line
                     h["preview"] = _preview(ci.split_sections(body))
                 hits.append(h)
                 by_rid.setdefault(r["rid"], []).append(h)
@@ -998,6 +998,14 @@ def _clean(text):
     return "\n".join(line for line in lines if not ci.link_only(line.strip().strip("…").strip())).strip("\n")
 
 
+def _lost(snip):
+    """Does a local index's snippet hold nothing once its link-only lines go (`_clean`) — its match marks «…» gone with
+    them (the match lived in a breadcrumb or a link line), or no text left at all? Then the note's opening stands in
+    for it (`_preview`); any other window is kept, without its link-only lines."""
+    left = _clean(snip)
+    return ("«" in snip and "«" not in left) or not left.strip().strip("…").strip()
+
+
 def _preview(sections):
     """The text a candidate's snippet is taken from, given its best section and the ones after it ([(heading, text)]):
     their text without link-only lines — the best section's alone when that holds ctx_index.STUB_CHARS characters or
@@ -1017,7 +1025,7 @@ def _following(idx, c):
     if len(ci.strip_links(c.get("text") or "").strip()) >= ci.STUB_CHARS:
         return []
     sec = idx.section(c["section_id"])
-    return idx.following(sec["note_id"], sec["ord"]) if sec else []
+    return idx.following(sec["note_id"], sec["ord"], chars=FILL_CHARS) if sec else []
 
 
 # ------------------------------------------------------------------ run
@@ -1442,7 +1450,7 @@ def get(sctx, cid):
         if sec and N(sec["path"]) == entry["path"] and (sec.get("heading") or "") == heading:
             text, date = sec.get("text") or "", sec.get("date") or date
             entry = dict(entry, source=sec.get("source") or entry.get("source"))
-            following = idx.following(sec["note_id"], sec["ord"])
+            following = idx.following(sec["note_id"], sec["ord"], chars=FILL_CHARS)
     if text is None:
         body, day, meta, said = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
         text, date = _section_of(body, heading), date or day

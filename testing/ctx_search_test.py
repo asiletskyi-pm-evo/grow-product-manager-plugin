@@ -1180,6 +1180,43 @@ with tempfile.TemporaryDirectory() as d:
     check("Q2: …a server's snippet loses its breadcrumb lines", cs_._public(mcp_c, [])["snippet"]
           == "The slots of a closed seller are hidden.", cs_._public(mcp_c, [])["snippet"])
 
+# S1: a local hit keeps the index's window when its match is in the text — only a match that lived in link-only lines
+# (a breadcrumb) gives the note's opening
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    PRICING = "Growth/Pricing notes.md"
+    INTRO = "The pricing team met to talk about many unrelated topics of the quarter, one after another. " * 4
+    write(env.note(PRICING), "# Pricing notes\n\n" + INTRO + "\n\n---\n\n## Decisions\n\n"
+          "We chose the zebrafish commission for small sellers.\n\n---\n\nMore text later.\n")
+    build_brain(env.brain, env.vault, [PRICING])
+    sx = env.sctx()
+    res = cs_.run(sx, ["zebrafish"], which=("local",), now=NOW)
+    pn = next((c for c in res["candidates"] if c["path"] == PRICING), None)
+    check("S1: a match in `## Decisions` beside a `---` rule keeps the index's window, the match marked, the rule gone",
+          pn and "«zebrafish» commission" in pn["snippet"] and "---" not in pn["snippet"], pn)
+
+# S2: the snippet and --get of a short section ask the index only for what the fill needs
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    BIG = "Notes/Knowledge/Big page (900100400).md"
+    write(env.note(BIG), CRUMB + "\n\n# Big page\n\n" + "".join("## Part %02d\n\n%s\n\n" % (i, "w" * 500) for i in range(40)))
+    sx = env.sctx()
+    env.refresh(sx)
+    got, real_following = [], ci.Index.following
+    ci.Index.following = lambda self, *a, **kw: (lambda out: got.append(len(out)) or out)(real_following(self, *a, **kw))
+    try:
+        hb, tb = cs_.get(sx, cs_.candidate_id(BIG, ""))
+        got_get, got[:] = list(got), []
+        res = cs_.run(sx, ["Delivery"], which=("own",), now=NOW)
+    finally:
+        ci.Index.following = real_following
+    big = next((c for c in res["candidates"] if c["path"] == BIG), None)
+    check("S2: --get of a breadcrumb before 40 long sections reads 3 of them — 1 500 characters — and gives the same fill",
+          got_get == [3] and "секція коротка — додано наступні: Big page › Part 00 · Big page › Part 01 · "
+          "Big page › Part 02" in tb and "Part 03" not in tb, (got_get, tb[:200]))
+    check("…and so does the snippet of a search whose best section is that breadcrumb", big and big["heading"] == ""
+          and got and max(got) == 3 and big["snippet"].startswith("w" * 20), (got, big))
+
 # A3: a local hit with no date in its frontmatter takes the local index's file time, as a day
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)
