@@ -28,7 +28,8 @@ priors then weigh a candidate by what it is — the skill's artifact types × 1.
                     has not answered.
 - last_path / save_last / get   the ids of the last search beside the index, and `--get`: one section with its line
                     of provenance `> [<source> · <path> › <heading> · <day>]` — for a note of a local index or a
-                    server, followed by what its frontmatter says (` · sensitive`, ` · застаріле`, its type).
+                    server, followed by what its frontmatter says (` · sensitive`, ` · застаріле`, its type); a short
+                    section goes on with the next ones; a file iCloud has not downloaded is never read.
 - render            the human output of `ctx search`.
 
 Reads the vaults, the cores, the index under <home>/.grow-pm/index/, a local index (mode=ro), the glossary, the block
@@ -87,6 +88,10 @@ MAX_SECTIONS = 2                # sections of one note in the list
 LAST_NAME = "last.json"
 LAST_KEEP = 1000                # ids last.json keeps — the newest; ids are stable, so the searches merge into it
 LAST_NOTE = "ідентифікатори пошуку не збережено (%s) — --get знайде лише секції свого індексу"
+FILL_CHARS = 1500               # --get: a short section goes on with the next ones up to this many characters
+SHORT_NOTE = "секція коротка — додано наступні: %s"
+ICLOUD_LOCAL = "файл не завантажено з iCloud — текст із локального індексу %s"
+ICLOUD_MISSING = "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index rebuild пізніше"
 _META = ("title", "type", "product", "status", "date", "ttl_date")
 STATUS_KEYS = ("schema", "updated", "files", "sections", "pending", "skipped_dataless")
 _BROKEN = ci.BROKEN_NOTE.split("%s")[0]      # Index.problem of a file SQLite cannot read (a busy one is BUSY_NOTE)
@@ -1182,8 +1187,13 @@ def _inside(path, folders):
 
 
 def _from_disk(sctx, entry):
-    """(text, date, meta) of a note on disk, by its index name: a vault's file, or `@<repository>/…` under its core
-    folder; meta is what its frontmatter says (`_marks`). Only a `.md` file inside a vault or a core folder is read."""
+    """(text, date, meta, said) of a note on disk, by its index name: a vault's file, or `@<repository>/…` under its
+    core folder; meta is what its frontmatter says (`_marks`), said a line to print above the text (None). Only a `.md`
+    file inside a vault or a core folder is read, and only through the time-budgeted reader (ctx_store.read_text): a
+    file that does not arrive in time is one line, GetError 3, never a hang. A file iCloud has not downloaded
+    (ctx_index.is_dataless) is never read — that would start its download: its text comes from a registered local index
+    that holds it, said so (`файл не завантажено з iCloud — текст із локального індексу <id>`), else GetError 3
+    (`файл не завантажено з iCloud: <шлях> — відкрий його в Obsidian або ctx index rebuild пізніше`)."""
     path = entry["path"]
     folders = list(sctx.get("vaults") or []) + [_folder(r) for r in sctx.get("repos") or []]
     if path.startswith("@"):
@@ -1195,17 +1205,102 @@ def _from_disk(sctx, entry):
     found = next((f for f in files if f.lower().endswith(".md") and _inside(f, folders) and os.path.isfile(f)), None)
     if not found:
         raise GetError(3, "the note is not on disk: %s" % path)
+    if ci.is_dataless(found):
+        local = _local_body(sctx, path, found)
+        if local is None:
+            raise GetError(3, ICLOUD_MISSING % path)
+        meta = ci.note_meta(path, local[1])
+        return local[1], meta.get("date") or "", meta, ICLOUD_LOCAL % local[0]
     try:
         text = cst.read_text(found)
     except (OSError, UnicodeError, cst.StoreError) as e:
         raise GetError(3, "the note cannot be read: %s (%s)" % (path, e))
     meta = ci.note_meta(path, text)
-    return text, meta.get("date") or "", meta
+    return text, meta.get("date") or "", meta, None
+
+
+def _local_names(path, found, vaults, folder):
+    """The spellings a local index may keep the note under: its index name, its file's absolute path, the path from
+    each vault and from the index's own root that holds it — NFC and NFD."""
+    real = os.path.realpath(found)
+    names = {path, found, real}
+    for root in list(vaults or []) + ([folder] if folder else []):
+        top = os.path.realpath(root)
+        if real.startswith(top.rstrip(os.sep) + os.sep):
+            names.add(os.path.relpath(real, top).replace(os.sep, "/"))
+    return sorted({f(n) for n in names for f in (N, lambda x: unicodedata.normalize("NFD", x))})
+
+
+def _local_body(sctx, path, found):
+    """(id, text) of a note in the first registered local index whose `body` holds it (either shape of `_local_sql`),
+    opened read only as a search opens it (OPEN_S to open, SOURCE_S for the query); None when none does. `path` is the
+    note's index name, `found` its file."""
+    for src in sources(sctx["text"], sctx["repos"], ("local",)):
+        try:
+            con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=OPEN_S)
+        except sqlite3.Error:
+            continue
+        until = time.monotonic() + SOURCE_S
+        con.set_progress_handler(lambda: time.monotonic() > until, 10000)
+        try:
+            fts, notes = _columns(con, "notes_fts"), _columns(con, "notes")
+            names = _local_names(path, found, sctx.get("vaults"), _local_root(con))
+            marks = ",".join("?" * len(names))
+            if "body" not in fts:
+                row = None
+            elif "path" in fts:
+                row = con.execute("SELECT body FROM notes_fts WHERE path IN (%s)" % marks, names).fetchone()
+            elif "id" in notes and "path" in notes:
+                row = con.execute("SELECT notes_fts.body FROM notes_fts JOIN notes ON notes.id = notes_fts.rowid "
+                                  "WHERE notes.path IN (%s)" % marks, names).fetchone()
+            else:
+                row = None
+        except sqlite3.Error:
+            row = None
+        finally:
+            con.close()
+        if row and isinstance(row[0], str) and row[0].strip():
+            return src["id"], row[0]
+    return None
+
+
+def _after(body, heading):
+    """The sections of a note's text (ctx_index.split_sections) after the one named `heading`; [] for the whole note
+    ("") or a heading it does not have."""
+    if not heading:
+        return []
+    secs = ci.split_sections(body)
+    i = next((i for i, (h, _) in enumerate(secs) if h == heading), None)
+    return [] if i is None else secs[i + 1:]
+
+
+def _fill(text, following):
+    """A section shorter than ctx_index.STUB_CHARS without its breadcrumb lines (ctx_index.link_only) — an image, a
+    breadcrumb, one line — goes on with the sections after it (`following`, [(heading, text)]) until the text holds
+    FILL_CHARS characters or the note ends: one line `секція коротка — додано наступні: <headings>`, then each section
+    under its heading (as many `#` as its heading path has parts). Anything else is given as it is."""
+    size = len(ci.strip_links(text).strip())
+    if size >= ci.STUB_CHARS:
+        return text
+    got = []
+    for heading, body in following or []:
+        if size >= FILL_CHARS:
+            break
+        got.append((heading, body))
+        size += len(ci.strip_links(body).strip())
+    if not got:
+        return text
+    parts = [text.strip("\n"), SHORT_NOTE % " · ".join(h for h, _ in got)]
+    for heading, body in got:
+        names = heading.split(" › ")
+        head = "%s %s" % ("#" * min(len(names), 6), names[-1]) if heading else ""
+        parts.append("\n\n".join(p for p in (head, body.strip("\n")) if p))
+    return "\n\n".join(p for p in parts if p)
 
 
 def _from_mcp(sctx, entry):
-    """(text, date, meta) of an MCP candidate: vault_get_note on the path as the server gave it; meta is what the
-    note's frontmatter says — the server's `frontmatter`, else what its `content` starts with."""
+    """(text, date, meta, said) of an MCP candidate: vault_get_note on the path as the server gave it; meta is what the
+    note's frontmatter says — the server's `frontmatter`, else what its `content` starts with; said is None."""
     repo = next((r for r in sctx.get("repos") or [] if r.get("id") == entry.get("source")), None)
     ep = (repo or {}).get("endpoint") or {}
     if not ep.get("url") or not entry.get("remote"):
@@ -1228,7 +1323,7 @@ def _from_mcp(sctx, entry):
 
     meta = {"type": said("type") or inner["type"], "status": said("status") or inner["status"],
             "sensitive": _yes(fm.get("sensitive")) or inner["sensitive"]}
-    return content, _first_date(fm, ci.DATE_KEYS) or "", meta
+    return content, _first_date(fm, ci.DATE_KEYS) or "", meta, None
 
 
 def _marks(meta):
@@ -1249,10 +1344,12 @@ def get(sctx, cid):
     names the index's source of its note: `own`, or the repository of a core page), the text under
     the heading (a note-level candidate: the note without its frontmatter). The id is looked up in last.json (the last
     search), else among the sections of the own index. An own section is read from the index (from its file when the
-    note changed since); a note only a local index knows from the vault; an MCP one through vault_get_note. The
+    note changed since); a note only a local index knows from the vault; an MCP one through vault_get_note. A file is
+    read only through the time-budgeted reader, and never one iCloud has not downloaded (`_from_disk`: the text of a
+    local index then, its line first). A section shorter than 200 characters goes on with the next ones (`_fill`). The
     header of a local or an MCP note goes on with what its frontmatter says (`_marks`: ` · sensitive`, ` · застаріле`,
     its type) — what the list of such a source does not carry, so its flags are complete only here. GetError: 3 — no
-    such id, note or section; 5 — the server did not answer. Reads only."""
+    such id, note or section, a file not read in time or not downloaded; 5 — the server did not answer. Reads only."""
     cid = str(cid or "").strip().lower()
     idx = ci.Index(sctx["home"])
     entry = _load_last(sctx["home"]).get(cid)
@@ -1261,20 +1358,24 @@ def get(sctx, cid):
     if not entry:
         raise GetError(3, "no candidate %s in the last search or the section index — search again" % cid)
     heading, date, text, marks = entry.get("heading") or "", entry.get("date") or "", None, ""
+    said, following = None, []
     if entry.get("kind") == "own":
         sec = idx.section(entry.get("section_id")) if entry.get("section_id") is not None else None
         if sec and N(sec["path"]) == entry["path"] and (sec.get("heading") or "") == heading:
             text, date = sec.get("text") or "", sec.get("date") or date
             entry = dict(entry, source=sec.get("source") or entry.get("source"))
+            following = idx.following(sec["note_id"], sec["ord"])
     if text is None:
-        body, day, meta = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
+        body, day, meta, said = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
         text, date = _section_of(body, heading), date or day
         if text is None:
             raise GetError(3, "no section %s in %s" % (heading, entry["path"]))
+        following = _after(body, heading)
         if entry.get("kind") in ("local", "mcp"):
             marks = _marks(meta)
+    text = _fill(text, following)
     return "> [%s · %s%s · %s%s]" % (entry.get("source") or "own", entry["path"], " › " + heading if heading else "",
-                                     (date or "—")[:10], marks), text
+                                     (date or "—")[:10], marks), (said + "\n\n" + text if said else text)
 
 
 # ------------------------------------------------------------------ the human output

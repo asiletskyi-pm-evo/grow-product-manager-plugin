@@ -168,8 +168,13 @@
                                 never the exit code). A candidate's sources name the repository of a core page.
   search --get ID [--json]      one section of the last searches (or of the section index, by its id):
                                 `> [<source> · <path> › <heading> · <day>]` and its text (an MCP note through vault_get_note).
-                                An unknown id, note or section: exit 3; the server did not answer: exit 5. --json: the header
-                                and the text in CTX_RESULT only
+                                A section under 200 characters goes on with the next ones, up to 1 500, after the line
+                                `секція коротка — додано наступні: <headings>`. A file is read within the read budget, and
+                                one iCloud has not downloaded never: the text of a registered local index, after the line
+                                `файл не завантажено з iCloud — текст із локального індексу <id>`, else exit 3
+                                (`файл не завантажено з iCloud: <path> — відкрий його в Obsidian або ctx index rebuild
+                                пізніше`). An unknown id, note or section, a file not read in time: exit 3; the server did
+                                not answer: exit 5. --json: the header and the text in CTX_RESULT only
   search remember --q REQUEST --pick ID|PATH [--not ID|PATH] [--product P]
   search forget --q REQUEST [--product P]
                                 (since v3.16.0; scripts/ctx_hints.py) your choices in a search's block of options, kept in

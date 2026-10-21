@@ -1032,6 +1032,89 @@ with tempfile.TemporaryDirectory() as d:
     check("…of a server's note, from vault_get_note's frontmatter", h3 ==
           "> [zorg-growth · @zorg-growth/Old sync.md · 2026-06-01 · sensitive · застаріле · meeting]" and "old sync notes" in t3, h3)
 
+# ------------------------------------------------------------------ acceptance fix wave
+CRUMB = "↑ [[Delivery (900100100)|Delivery]]  ·  `Zorg / Delivery / Slot rules`"
+SLOTS = "Notes/Knowledge/Slot rules (900100300).md"
+WHO = "A shopper sees the two-hour slots of a seller who is open. " * 12
+CLOSED = "The slots of a closed seller are hidden until it opens again. " * 20
+SLOT_PAGE = ("---\ntype: page\nconfluence_id: 900100300\nmodified: 2026-10-05\n---\n" + CRUMB + "\n\n# Slot rules\n\n"
+             "![[slot-diagram.png]]\n\n## Who sees a slot\n\n" + WHO + "\n\n## Closed sellers\n\n" + CLOSED + "\n\n"
+             "## Appendix\n\n" + "Tail text that is never reached. " * 10 + "\n")
+SHORT = "секція коротка — додано наступні: Slot rules › Who sees a slot · Slot rules › Closed sellers"
+
+# A1: a Confluence-like page — the breadcrumb is no section, --get of its image-only first section goes on
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note(SLOTS), SLOT_PAGE)
+    sx = env.sctx()
+    env.refresh(sx)
+    idx = ci.Index(env.home)
+    secs = [(sid, h) for sid, p, h in idx.headings() if p == SLOTS]
+    check("A1: the breadcrumb before the H1 is no section; the image-only H1 section is", [h for _, h in secs]
+          == ["Slot rules", "Slot rules › Who sees a slot", "Slot rules › Closed sellers", "Slot rules › Appendix"], secs)
+    top = cs_.candidate_id(SLOTS, "Slot rules")
+    head, text = cs_.get(sx, top)
+    check("A1: --get of a section under 200 characters goes on with the next ones up to 1 500, under the same "
+          "provenance line, with one line naming them", head == "> [own · %s › Slot rules · 2026-10-05]" % SLOTS
+          and text.startswith("![[slot-diagram.png]]") and SHORT in text and WHO.strip() in text and CLOSED.strip() in text
+          and "Tail text" not in text and text.count("секція коротка") == 1, (head, text[:400]))
+    marks = (SHORT, "## Who sees a slot\n\n", "## Closed sellers\n\n")
+    check("…each added section under its heading, in the note's order", all(m in text for m in marks)
+          and text.index(marks[0]) < text.index(marks[1]) < text.index(marks[2]), text[:600])
+    head2, text2 = cs_.get(sx, cs_.candidate_id(SLOTS, "Slot rules › Who sees a slot"))
+    check("…a section of 200 characters or more is given as it is", text2.strip() == WHO.strip() and "секція коротка" not in text2,
+          text2[:200])
+    head3, text3 = cs_.get(sx, cs_.candidate_id(SLOTS, "Slot rules › Appendix"))
+    check("…a short last section has nothing to add: as it is, no line", "секція коротка" not in text3, text3)
+    cs_.save_last(env.home, {top: {"source": "own", "path": SLOTS, "heading": "Slot rules", "kind": "own",
+                                   "section_id": 999999, "title": "Slot rules", "date": "2026-10-05"}})
+    head4, text4 = cs_.get(sx, top)
+    check("…read from its file (the index's section gone): the same text", (head4, text4) == (head, text), text4[:300])
+
+    # A2: --get never reads a file iCloud has not downloaded; every other read is time-budgeted
+    reads, real_read, real_dataless = [], cs_.cst.read_text, ci.is_dataless
+    cs_.cst.read_text = lambda p, *a, **kw: reads.append(p) or real_read(p, *a, **kw)
+    ci.is_dataless = lambda p: unicodedata.normalize("NFC", p).endswith("Slot rules (900100300).md")
+    try:
+        try:
+            cs_.get(sx, top)
+            got = None
+        except cs_.GetError as e:
+            got = e
+        check("A2: a dataless file with no local index: exit 3 and the one line, the file never opened", got is not None
+              and got.code == 3 and str(got) == "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index "
+              "rebuild пізніше" % SLOTS and reads == [], (got, reads))
+        build_brain(env.brain, env.vault, [SLOTS])
+        reads[:] = []
+        head5, text5 = cs_.get(sx, top)
+        check("A2: …with a registered local index that holds it: its text from there, said in one line",
+              head5 == head and text5.startswith("файл не завантажено з iCloud — текст із локального індексу zorg-brain\n\n")
+              and "![[slot-diagram.png]]" in text5 and SHORT in text5 and reads == [], (head5, text5[:300], reads))
+    finally:
+        cs_.cst.read_text, ci.is_dataless = real_read, real_dataless
+    real_open, old_timeout = cs_.cst.__dict__.get("open"), os.environ.get("GROW_PM_CTX_READ_TIMEOUT")
+    cs_.cst.open = lambda *a, **kw: (time.sleep(3), open(*a, **kw))[1]
+    os.environ["GROW_PM_CTX_READ_TIMEOUT"] = "0.3"
+    t0 = time.monotonic()
+    try:
+        try:
+            cs_.get(sx, top)
+            got = None
+        except cs_.GetError as e:
+            got = e
+    finally:
+        if real_open is None:
+            del cs_.cst.open
+        else:
+            cs_.cst.open = real_open
+        if old_timeout is None:
+            os.environ.pop("GROW_PM_CTX_READ_TIMEOUT", None)
+        else:
+            os.environ["GROW_PM_CTX_READ_TIMEOUT"] = old_timeout
+    took = time.monotonic() - t0
+    check("A2: a file that does not arrive within the read budget is one line (exit 3), never a hang", got is not None
+          and got.code == 3 and "\n" not in str(got) and SLOTS in str(got) and took < 2.0, (got, took))
+
 # the protocols say what the fixes do
 import re  # noqa: E402
 

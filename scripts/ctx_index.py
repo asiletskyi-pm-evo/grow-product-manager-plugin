@@ -743,6 +743,17 @@ class Index:
         r = self._read(lambda con: con.execute(ROW_SQL + " WHERE s.id = ?", (sid,)).fetchone(), None)
         return self._section_dict(r) if r else None
 
+    def following(self, note_id, order):
+        """(heading, text) of the sections of a note after its section `order`, in the note's order — what `ctx search
+        --get` adds to a short section; `problem` as for `query`."""
+        try:
+            note_id, order = int(note_id), int(order)
+        except (ValueError, TypeError):
+            return []
+        rows = self._read(lambda con: con.execute("SELECT heading, text FROM sections WHERE note_id = ? AND ord > ? "
+                                                  "ORDER BY ord", (note_id, order)).fetchall(), [])
+        return [(r[0] or "", r[1] or "") for r in rows]
+
     def headings(self):
         """(section id, path, heading) of every section — how `ctx search --get` finds a section by its id when the
         last search did not list it; `problem` as for `query`."""
