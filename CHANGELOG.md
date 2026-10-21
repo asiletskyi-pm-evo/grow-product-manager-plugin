@@ -12,6 +12,36 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.16.1 (2026-10-21)
+
+**«Пошук», патч: your whole plugin folder reaches the search, and `--get` gives a long note in measured parts.** On a Mac that offloads iCloud files, 1 821 notes of the user's own layer were not on disk: the section index skipped them (reading one would start its download), so they reached Step 0.5 only through a local index, as whole notes. `ctx index rebuild --download` now brings them down — only the plugin folder, only what the index would read — and indexes them. Measured on a copy of the user's real vault with the reviewed set of 95 requests: 1 820 of 1 821 notes came down in 13 minutes; the right note among the first 50 rose from 98,9 % to 100 % (the one miss of the v3.16.0 acceptance, a real request about a CJM status meeting, is now 7th), among the first 5 from 83 to 85, MRR from 0,623 to 0,629; the old and the new code rank every request alike on the same vault state. `--get` no longer hands a skill a 45 000-character note whole — 228 notes of that local index were over 20 000 — and now reads a link the way a hub writes it: of 300 folder links sampled from the user's notes it read 207 before, 298 now.
+
+PATCH: one option of an existing command (`ctx index rebuild --download`), one of `ctx search --get` (`--full`), `--get` fixes; no skill changed, no description changed.
+
+### Added
+
+- **`ctx index rebuild --download`** — brings down the files iCloud evicted from the plugin folder of every vault, only those the index would read (never a core folder, the rest of a vault, the store, `_System/_scratch|providers`, `.trash`, `_backup…`, `.obsidian`, a file over 2 MB or not `.md`, a symbolic link), each read once in a child process (30 s a file, 4 at once, no limit on the run; the child stops itself shortly after its time), then rebuilds the index. Lines: `iCloud: N з M…` every 100 files and at least once a minute, then `iCloud: завантажено N з M` (`, лишилось K (не встигли за 30 с: T; не прочитано: F)` — a reason only when it is not zero) or `iCloud: нічого завантажувати`. The index lock is checked first (exit 4 before any download); Ctrl-C at any moment stops it (`…, зупинено (Ctrl-C) — індекс не перебудовано`, exit 130): the running reads are killed, what came down stays. Nothing else ever downloads — no search, no `--get`, no `ctx index status` (decided with the user: opt-in, no limit on the run).
+- **`ctx search --get … --full`** — for a candidate the model rated «прямо» whose part lies past the cut, or a skill that works on that whole document: the cut is 60 000 characters instead of 20 000 (decided with the user: the model, which has already rated the candidate, decides). `search-protocol.md` §4 says when; never for a hub, a twin's check or a candidate not rated «прямо». Bad usage without `--get`.
+
+### Changed
+
+- **Every form of `--get` is cut at 20 000 characters** — an id too (a local-index or MCP note came whole before), a section after `#` too (it was never cut; a section of 276 000 characters exists in a real vault). The line after a cut says how much of how many and names the headings past it — `нотатка довга — показано 20 000 знаків із 45 491; далі: Part 9 · Part 10 · … — --get "<шлях>#<заголовок>" або --full (до 60 000)` — each by the shortest end of its heading path that `--get` takes back to that very section (a heading the note's sections leave out, or one another heading shadows, is not named); `заголовків далі немає` when none follows.
+- **`ctx index status`** names `--download` only for the plugin folder's evicted files: `not downloaded (iCloud), not read: N (plugin folder: K — ctx index rebuild --download)`. A `--get` of an evicted note no local index holds says `… — відкрий його в Obsidian або ctx index rebuild --download` for a plugin-folder note, `… — відкрий його в Obsidian` for any other.
+
+### Fixed
+
+- **`--get` reads a link as a hub writes it:** an embed `![[Name]]` / `![[Name#H]]`; nested headings `[[Name#H1#H2]]` and `Name#H1 › H2` (the section whose heading path ends in them — a bare `#H` is still the first one; a whole heading path asked is that section before the end of a longer one); a block reference `#^id` (the section that holds the block, else the whole note); a heading with `#` in it tried whole first; `İ` before `.md#` no longer shifts the heading.
+- **A link with a folder** (`[[People/zorg-one|Zorg One]]`, `[[Concepts/Name]]`, `[[../Concepts/Name]]`) that no source holds as a path is the note whose path ends in it: the own and the local indexes asked together, `<plugin folder>/<link>` first, else a plugin-folder file on disk by that name — an evicted note is never swapped silently for another with the same tail; several are `кілька нотаток, чий шлях закінчується на «<посилання>»: … — --get один зі шляхів`. The exact path still wins; an `@<repo>/…` name is never the end of another path.
+- Protocols: `search-protocol.md` §4 (the cut and `--full`, the link forms, the lines), `context-protocol.md` (`index`, `search --get`); the usage of `ctx`.
+- Tests: `ctx_index_test.py` 166 checks (+28: the download's scope and counts, `_fetch`'s time bound on a FIFO, Ctrl-C at random moments in 30 runs and a handler that takes no lock, the lock first, the hint), `ctx_search_test.py` 321 (+46: the cut of every form, the names past it read back, `--full`, the link forms, the tail lookup's never-silent rule, nothing ever downloading), `ctx_cli_test.py` 719 (+4). Each new check failed before its code. Deferred to v3.17: copies that differ only by a bare `- [[…]]` or date line still fold as near copies (re-measured after the download: 0 such groups in the user's vault), a remembered pick of a note folded as a twin, and the minors of the final review.
+
+### Backwards compatibility
+
+- The index schema is unchanged (`search-index/1`); nothing is downloaded unless you run `ctx index rebuild --download`. A `--get` text longer than 20 000 characters is now cut with a line — a skill reads the section it names, or adds `--full`.
+- No skill renamed, no description changed: routing is as in v3.16.0.
+
+---
+
 ## v3.16.0 (2026-10-21)
 
 **«Пошук»: Step 0.5 finds what your base already holds about the request.** Until now Step 0.5 of a skill matched every word of the request at once (AND), in the language it was typed in, gave the newest notes of the skill's types, and asked «Use as context?» in the middle of the run. Measured on a copy of a real vault with a reviewed set of 105 requests: a user's own local index as it was put the right note among the first five for 44 % of the requests with an answer, and for 2 of 24 requests taken from real work; the type-and-date list, for 2 of 17. The anti-goal of this release is the opposite failure — a wrong note taken silently, which becomes the source of wrong conclusions — so what is taken is rated, marked and cited.

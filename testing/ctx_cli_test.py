@@ -4777,6 +4777,24 @@ with tempfile.TemporaryDirectory() as d:
     check("…and its bare name is that path first", rc == 0 and res and res["header"].startswith("> [vault · Root memo.md · "),
           (rc, res, out[-300:]))
 
+# --- v3.16.1 Task 2: --get is cut at 20 000 characters, --full at 60 000; --full goes with --get alone
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d, brain=False)
+    env.add("Notes/Long/Long parts.md", "# Long parts\n\n" + "".join("## Part %d\n\n%s\n\n" % (i, "p" * 2200) for i in range(1, 21)))
+    rc, out, res = run_ok(env, "search", "--get", "Notes/Long/Long parts.md", "--json")
+    check("C6: ctx search --get of a 45 000-character note — the first 20 000 and the line with --full",
+          rc == 0 and res and "\n\nнотатка довга — показано 20 000 знаків із " in res["text"] and "## Part 20" not in res["text"]
+          and res["text"].endswith(" або --full (до 60 000)"), (rc, res and res["text"][-300:]))
+    rc, out, res = run_ok(env, "search", "--get", "Notes/Long/Long parts.md", "--full", "--json")
+    check("…--full: the whole note, no line", rc == 0 and res and "## Part 20" in (res.get("text") or "")
+          and "нотатка довга" not in res["text"], (rc, res and (res.get("text") or out)[-200:]))
+    rc, out, res = run_ok(env, "search", "--q", "parts", "--full")
+    check("…--full without --get is bad usage (exit 3)", rc == 3 and "--full" in out, (rc, out[-300:]))
+    rc, out, res = run_ok(env, "search", "eval", "--full")
+    rc2, out2, res2 = run_ok(env, "search", "forget", "--q", "parts", "--full")
+    check("Task 2 fix M2: eval and forget take no --full either (exit 3, the flag named)", rc == 3 and rc2 == 3
+          and "--full" in out and "--full" in out2, (rc, out[-200:], rc2, out2[-200:]))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

@@ -1116,7 +1116,7 @@ with tempfile.TemporaryDirectory() as d:
             got = e
         check("A2: a dataless file with no local index: exit 3 and the one line, the file never opened", got is not None
               and got.code == 3 and str(got) == "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index "
-              "rebuild пізніше" % SLOTS and reads == [], (got, reads))
+              "rebuild --download" % SLOTS and reads == [], (got, reads))
         build_brain(env.brain, env.vault, [SLOTS])
         reads[:] = []
         head5, text5 = cs_.get(sx, top)
@@ -1360,7 +1360,7 @@ with tempfile.TemporaryDirectory() as d:
         codes = []
         h5, t5 = get_or(codes, "Growth/Only on disk.md")
         check("T1: …a dataless file nothing else holds: exit 3, ICLOUD_MISSING, the file never opened",
-              codes == [3] and t5 == cs_.ICLOUD_MISSING % "Growth/Only on disk.md" and reads == [], (codes, t5, reads))
+              codes == [3] and t5 == getattr(cs_, "ICLOUD_OPEN", "-") % "Growth/Only on disk.md" and reads == [], (codes, t5, reads))
     finally:
         cs_.cst.read_text, ci.is_dataless = real_read, real_dataless
     codes = []
@@ -1438,10 +1438,12 @@ with tempfile.TemporaryDirectory() as d:
         check("U5: …a name whose only note a local index holds under _System/_scratch/: the same line, nothing read",
               codes == [3] and tz == "шлях виключено з пошуку: " + SCRATCH5 and len(reads) == 1, (codes, tz, reads))
         hg, tg = cs_.get(sx, LONG)
-        check("U6: a whole note is cut at 20 000 characters, then one line naming the path and the --get of a section",
-              hg == "> [own · %s · 2026-10-03 · note]" % LONG and tg.startswith("## Part 1\n\n") and len(tg) == cs_.GET_CHARS
-              + len("\n\n" + cs_.LONG_NOTE % LONG) and tg.endswith("нотатка довга — показано перші 20 000 знаків; "
-                                                                    "секцію — --get \"%s#<заголовок>\"" % LONG), (hg, len(tg), tg[-200:]))
+        whole6 = cs_._note_of(sx, LONG)[5]
+        check("U6 (v3.16.1): a whole note is cut at 20 000 characters, then how much of how many, the heading the cut falls "
+              "under and the --get of a section or --full",
+              hg == "> [own · %s · 2026-10-03 · note]" % LONG and tg.startswith("## Part 1\n\n") and tg == whole6[:20000]
+              + "\n\nнотатка довга — показано 20 000 знаків із %s; далі: Part 2 — --get \"%s#<заголовок>\" або --full "
+              "(до 60 000)" % ("{:,}".format(len(whole6)).replace(",", " "), LONG), (hg, len(tg), tg[-200:]))
         hp, tp = cs_.get(sx, LONG + "#Part 2")
         check("…a section of it is whole, with no such line", hp == "> [own · %s › Long zebra › Part 2 · 2026-10-03 · note]" % LONG
               and tp == "y" * 10000 and cs_.get(sx, "[[Long zebra#Part 2]]") == (hp, tp), (hp, len(tp), tp[-100:]))
@@ -1638,7 +1640,7 @@ check("acceptance fix wave — search-protocol §3: the pool of 30; §4: `зас
       and "| `застаріле` | `status` outdated, archived, deprecated, former or superseded |" in section(SP, 4)
       and "| `%s` |" % (cs_.AS_OF % "<день>") in section(SP, 4)
       and all("`%s`" % x in section(SP, 4) for x in (cs_.SHORT_NOTE % "<заголовки>", cs_.ICLOUD_LOCAL % "<id>",
-                                                    cs_.ICLOUD_MISSING % "<шлях>"))
+                                                    cs_.ICLOUD_MISSING % "<шлях>", getattr(cs_, "ICLOUD_OPEN", "-") % "<шлях>"))
       and "`(<джерело>, станом на <день>)`" in section(SP, 5)
       and "`знімок від <день>` or `станом на <день>` alone does not forbid it" in section(SP, 6), section(SP, 4)[:1200])
 check("…context-provider-protocol §5: near copies are key 3a, an outdated status × 0.5; §6: a class TTL marks "
@@ -1668,7 +1670,7 @@ check("fix round 5 — search-protocol §4: a hub's link by name or path, the na
       all(x in section(SP, 4) for x in (
           "`Name`, `Name.md`, `[[Name]]`, `[[Name|alias]]`, `[[Name#Heading]]`",
           "`%s`" % (cs_.SEVERAL_NOTE % ("<назва>", "<шлях> · <шлях> …")), "`%s`" % (cs_.EXCLUDED_NOTE % "<шлях>"),
-          "`%s`" % (cs_.LONG_NOTE % "<шлях>"), "`vault` for a file outside every root", "read through its server (exit 5",
+          "`vault` for a file outside every root", "read through its server (exit 5",
           "Never open a vault file by its path yourself in Step 0.5 on a host with SHELL", "without SHELL §12 applies"))
       and "`vault` is a file outside every root" in section(SP, 5), section(SP, 4)[-2600:])
 check("fix round 5 — provider §2 (U3): a server's note is `застаріле` by status only, `станом на <день>` by its class age; §5: key 4 "
@@ -1685,6 +1687,383 @@ check("round 5b — search-protocol §4 (V6): a --get of a twin, a newer version
                                         "a hub's link you could not read is not taken", "tried as a path first")), section(SP, 4)[-1800:])
 check("vault-protocol «In short»: the level-2 triggers are in search-protocol §8",
       "maybe live sources (level 2; triggers in search-protocol §8)" in read(ROOT, "references", "vault-protocol.md"))
+
+# v3.16.1 Task 2: every --get form is cut at 20 000 characters (60 000 with --full), a line saying how much of how many
+# and naming the headings past the cut
+def heading_names_after(text, cut, dup_full=None):
+    """The names the line should carry, worked out from the text alone: the heading the cut falls under, then every
+    heading line that starts past the cut (the last part; the full path for a last part that repeats)."""
+    import re as _re
+    pos, names, stack, last_before = 0, [], [], None
+    for line in text.split("\n"):
+        m = _re.match(r"^(#{1,3})[ \t]+(.+?)[ \t]*$", line)
+        if m:
+            level = len(m.group(1))
+            stack = [s for s in stack if s[0] < level] + [(level, m.group(2))]
+            name = " › ".join(s[1] for s in stack) if dup_full and m.group(2) in dup_full else m.group(2)
+            if pos >= cut:
+                names.append(name)
+            else:
+                last_before = name
+        pos += len(line) + 1
+    return ([last_before] if last_before else []) + names
+
+
+def long_line(path, shown, total, names, full):
+    n = lambda v: "{:,}".format(v).replace(",", " ")
+    head = "нотатка довга — показано %s знаків із %s; " % (n(shown), n(total))
+    more = "" if full else " або --full (до 60 000)"
+    if names:
+        return head + "далі: " + " · ".join(names) + " — --get \"%s#<заголовок>\"" % path + more
+    return head + "заголовків далі немає" + (" — --full (до 60 000)" if not full else "")
+
+
+PARTS = "Notes/Long/Long parts.md"          # 20 sections, ~45 000 characters
+HUGE = "Notes/Long/Huge parts.md"           # 32 sections, ~70 000
+MANY = "Notes/Long/Many parts.md"           # 40 short sections past the cut
+DUP = "Notes/Long/Dup parts.md"             # two `Notes` under two parents past the cut
+SEC = "Notes/Long/Long section.md"          # one 30 000-character section
+FLAT = "Notes/Long/Flat zebra.md"           # no heading, 34 000 characters
+OUT = "Growth/Zebra long.md"                # outside the plugin folder: only the local index knows it
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note(PARTS), "---\ntype: note\nupdated: 2026-10-05\n---\n# Long parts\n\n"
+          + "".join("## Part %d\n\n%s\n\n" % (i, "p" * 2200) for i in range(1, 21)))
+    write(env.note(HUGE), "# Huge parts\n\n" + "".join("## Chunk %d\n\n%s\n\n" % (i, "h" * 2200) for i in range(1, 33)))
+    write(env.note(MANY), "# Many parts\n\n" + "m" * 20500 + "\n\n" + "".join("## Bit %d\n\nshort\n\n" % i for i in range(1, 41)))
+    write(env.note(DUP), "# Dup parts\n\n" + "d" * 20500 + "\n\n## Alpha\n\nalpha text\n\n### Notes\n\na\n\n## Beta\n\nbeta text\n\n### Notes\n\nb\n")
+    write(env.note(SEC), "# Long section\n\n## Big\n\n" + "b" * 30000 + "\n\n## Small\n\nsmall text\n")
+    write(env.note(FLAT), "Flat zebra stripes of the cart. " + "f" * 34000 + "\n")
+    write(env.note(OUT), "---\ntype: note\nupdated: 2026-09-09\n---\n# Zebra long\n\nLong zebra stripes of the cart.\n\n"
+          + "".join("## Leg %d\n\n%s\n\n" % (i, "o" * 2200) for i in range(1, 21)))
+    build_brain(env.brain, env.vault, BRAIN_NOTES + [OUT])
+    sx = env.sctx()
+    env.refresh(sx)
+
+    def cut_of(arg, full=False):
+        try:
+            return cs_.get(sx, arg, full=full)
+        except TypeError as e:              # no `full` yet
+            return None, "TypeError %s" % e
+
+    h, t = cut_of(PARTS)
+    full_text = cs_._note_of(sx, PARTS)[5]
+    want = full_text[:20000] + "\n\n" + long_line(PARTS, 20000, len(full_text), heading_names_after(full_text, 20000), False)
+    check("v3.16.1 C6: --get <path> of a 45 000-character note — 20 000 characters, then how much of how many and the headings "
+          "from the one the cut falls under", t == want, (len(t or ""), (t or "")[-400:], want[-400:]))
+    h, t = cut_of(PARTS, full=True)
+    check("…--full: the whole 45 000, no line", t == full_text, (len(t or ""), (t or "")[-200:]))
+    huge = cs_._note_of(sx, HUGE)[5]
+    h, t = cut_of(HUGE, full=True)
+    check("…--full of a 70 000-character note: 60 000, the line without the --full hint",
+          t == huge[:60000] + "\n\n" + long_line(HUGE, 60000, len(huge), heading_names_after(huge, 60000), True),
+          (len(t or ""), (t or "")[-300:]))
+    many = cs_._note_of(sx, MANY)[5]
+    h, t = cut_of(MANY)
+    names = heading_names_after(many, 20000)
+    check("…more than 20 names: the first 20, then `· ще N`", t is not None and t.endswith(
+        "далі: " + " · ".join(names[:20]) + " · ще %d — --get \"%s#<заголовок>\" або --full (до 60 000)" % (len(names) - 20, MANY)),
+        (t or "")[-500:])
+    dup = cs_._note_of(sx, DUP)[5]
+    h, t = cut_of(DUP)
+    check("…a last part that repeats (Task 2 fix: by the shortest end of its path that `--get` takes back to it)",
+          t == dup[:20000] + "\n\n" + long_line(DUP, 20000, len(dup), ["Dup parts", "Alpha", "Notes", "Beta", "Beta › Notes"],
+                                                False), (t or "")[-300:])
+    h, t = cut_of(SEC + "#Big")
+    check("…a section after `#` is cut too: 20 000, the line (no headings past the cut inside it)",
+          t == "b" * 20000 + "\n\n" + long_line(SEC, 20000, 30000, [], False), (len(t or ""), (t or "")[-200:]))
+    h, t = cut_of(SEC + "#Big", full=True)
+    check("…with --full the 30 000-character section is whole", t == "b" * 30000, (len(t or ""), (t or "")[-100:]))
+    res = cs_.run(sx, ["flat zebra stripes"], now=NOW)
+    flat = next((c for c in res["candidates"] if c["path"] == FLAT), None)
+    h, t = cut_of(flat["id"]) if flat else (None, "")
+    flat_text = cs_._note_of(sx, FLAT)[5]
+    check("…--get <id> of an own section with no heading, 34 000 characters: 20 000, «заголовків далі немає»",
+          flat and len(flat_text) > 34000 and t == flat_text[:20000] + "\n\n" + long_line(FLAT, 20000, len(flat_text), [], False),
+          (len(t or ""), (t or "")[-200:]))
+    res = cs_.run(sx, ["long zebra stripes"], now=NOW)
+    cs_.save_last(env.home, res["last"])
+    out = next((c for c in res["candidates"] if c["path"] == OUT), None)
+    h, t = cut_of(out["id"]) if out else (None, "")
+    body = cs_._note_of(sx, OUT)[5]
+    check("…--get <id> of a note-level local-index candidate: the same cut and line",
+          out and out["source"] == ["zorg-brain"] and t == body[:20000] + "\n\n"
+          + long_line(OUT, 20000, len(body), heading_names_after(body, 20000), False), (out, len(t or ""), (t or "")[-300:]))
+    real_dataless = ci.is_dataless
+    ci.is_dataless = lambda p_: unicodedata.normalize("NFC", p_).endswith("Zebra long.md")
+    try:
+        h, t = cut_of(OUT)
+        body_l = cs_._note_of(sx, OUT)[5]
+    finally:
+        ci.is_dataless = real_dataless
+    said = cs_.ICLOUD_LOCAL % "zorg-brain" + "\n\n"
+    check("…the ICLOUD_LOCAL line comes first and is not counted", t == said + body_l[:20000] + "\n\n"
+          + long_line(OUT, 20000, len(body_l), heading_names_after(body_l, 20000), False), (t or "")[:200])
+    h, t = cut_of(PARTS + "#Part 2")
+    check("…a text within the cut: no line", t == "p" * 2200, (len(t or ""), (t or "")[-100:]))
+
+check("v3.16.1 C6 — search-protocol §4: every --get form is cut at 20 000, the line's two shapes, --full up to 60 000 for a "
+      "candidate taken as «прямо» and when, never for a hub, a twin's check or one not rated «прямо»; context-protocol §3",
+      all(x in section(SP, 4) for x in (
+          "`%s`" % cs_.long_note("<шлях>", 20000, "<усього>", ["<заголовок>", "…"], False),
+          "`%s`" % cs_.long_note("<шлях>", 20000, "<усього>", [], False),
+          "Any form of `--get`", "a section after `#` too", "`--full`", "60 000", "rated «прямо»",
+          "never for a hub, a twin's check or a candidate not rated «прямо»"))
+      and "--full" in section(CP, 3), section(SP, 4)[-2600:])
+
+# v3.16.1 Task 3: --get reads a link as a hub writes it — an embed, nested headings, a block reference, a folder in the link
+CONCEPT = "Notes/Concepts/Zorg cart concept.md"
+IZMIR = "Notes/İzmir notes.md"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    para = lambda w: (" ".join([w] * 60)) + "."              # a section long enough to be given alone (no fill)
+    write(env.note(CONCEPT), "---\ntype: concept\nupdated: 2026-10-04\n---\n# Zorg cart concept\n\n" + para("intro")
+          + "\n\n## Pricing\n\n" + para("pricing") + "\n\n### Fees\n\n" + para("pricefee")
+          + "\n\n## Delivery\n\n" + para("delivery") + "\n\n### Fees\n\n" + para("deliveryfee") + " ^a1b2c3"
+          + "\n\n## C# tips\n\n" + para("sharp") + "\n")
+    write(env.note(IZMIR), "# İzmir notes\n\n## Plan\n\n" + para("plan") + "\n\n## lan\n\n" + para("other") + "\n")
+    write(env.note("Notes/A/Shared/Dup end.md"), "# Dup end\n\n" + para("dupa") + "\n")
+    write(env.note("Notes/B/Shared/Dup end.md"), "# Dup end\n\n" + para("dupb") + "\n")
+    write(env.note("Notes/_System/_scratch/Tail only.md"), "# Tail only\n\n" + para("scratch") + "\n")
+    write(env.note("Growth/Deep/Local only.md"), "---\ntype: note\n---\n# Local only\n\n" + para("localonly") + "\n")
+    write(env.note("Concepts/Other.md"), "# Other\n\n" + para("rootother") + "\n")
+    write(env.note("Notes/Concepts/Other.md"), "# Other\n\n" + para("notesother") + "\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/Deep/Local only.md", "Notes/_System/_scratch/Tail only.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+
+    def got(arg):
+        try:
+            return cs_.get(sx, arg)
+        except cs_.GetError as e:
+            return "exit %d" % e.code, str(e)
+
+    whole = cs_.get(sx, "[[Zorg cart concept]]")
+    pricing = cs_.get(sx, "[[Zorg cart concept#Pricing]]")
+    check("v3.16.1 C8: an embed `![[Name]]` is the note, `![[Name#H]]` its section",
+          got("![[Zorg cart concept]]") == whole and got("![[Zorg cart concept#Pricing]]") == pricing
+          and whole[0].startswith("> [own · %s · 2026-10-04" % CONCEPT), (got("![[Zorg cart concept]]")[0], whole[0]))
+    h, t = got("[[Zorg cart concept#Delivery#Fees]]")
+    check("…`#H1#H2` is the end of a heading path: Delivery › Fees, not the first Fees",
+          h == "> [own · %s › Zorg cart concept › Delivery › Fees · 2026-10-04 · concept]" % CONCEPT
+          and t.startswith("deliveryfee"), (h, t[:80]))
+    check("…` › ` in the asked heading is a path too", got("Zorg cart concept#Delivery › Fees") == (h, t),
+          got("Zorg cart concept#Delivery › Fees")[0])
+    h1, t1 = got("[[Zorg cart concept#Fees]]")
+    check("…a bare `#Fees` is still the first one (Pricing › Fees)", h1.endswith("› Zorg cart concept › Pricing › Fees · 2026-10-04 · concept]")
+          and t1.startswith("pricefee"), h1)
+    check("…a block reference `#^id` is the section that holds the block (round 3b), an unknown one the whole note; "
+          "`#H#^id` that section", got("[[Zorg cart concept#^a1b2c3]]") == got("[[Zorg cart concept#Delivery#Fees]]")
+          and got("[[Zorg cart concept#^zzz999]]") == whole and got("[[Zorg cart concept#Pricing#^a1b2c3]]") == pricing,
+          (got("[[Zorg cart concept#^a1b2c3]]")[0], got("[[Zorg cart concept#Pricing#^a1b2c3]]")[0]))
+    h2, t2 = got("[[Zorg cart concept#C# tips]]")
+    check("…a heading with `#` in it is tried whole first", h2.endswith("› Zorg cart concept › C# tips · 2026-10-04 · concept]")
+          and t2.startswith("sharp"), h2)
+    h3, t3 = got(IZMIR + "#Plan")
+    check("…`İ` (U+0130) before `.md#` does not shift the heading: Plan, not «lan»",
+          h3.startswith("> [own · %s › İzmir notes › Plan · " % IZMIR) and t3.startswith("plan"), (h3, t3[:40]))
+    h4, t4 = got("[[Concepts/Zorg cart concept]]")
+    check("v3.16.1 C7: a link with a folder that no source holds as a path — the one note whose path ends in it",
+          (h4, t4) == whole, h4)
+    check("…`../` before it is dropped; a heading after it works",
+          got("[[../Concepts/Zorg cart concept]]") == whole and got("[[Concepts/Zorg cart concept#Pricing]]") == pricing,
+          got("[[../Concepts/Zorg cart concept]]")[0])
+    check("…case and NFD do not matter", got("[[concepts/zorg CART concept]]") == whole
+          and got(unicodedata.normalize("NFD", "[[Concepts/Zorg cart concept]]")) == whole, got("[[concepts/zorg CART concept]]")[0])
+    h5, t5 = got("[[Shared/Dup end]]")
+    check("…two notes end in it: exit 3, the line naming both (round 3b: a path's own line)", h5 == "exit 3"
+          and t5 == getattr(cs_, "SEVERAL_TAIL", "%s %s") % ("Shared/Dup end", "Notes/A/Shared/Dup end.md · Notes/B/Shared/Dup end.md")
+          and t5.startswith("кілька нотаток, чий шлях закінчується на «Shared/Dup end»"), (h5, t5))
+    h6, t6 = got("[[_scratch/Tail only]]")
+    check("…only an excluded note ends in it: exit 3 `шлях виключено з пошуку`",
+          (h6, t6) == ("exit 3", cs_.EXCLUDED_NOTE % "Notes/_System/_scratch/Tail only.md"), (h6, t6))
+    h7, t7 = got("[[Deep/Local only]]")
+    check("…a note only a local index knows ends in it: read through it",
+          h7.startswith("> [vault · Growth/Deep/Local only.md · ") and "localonly" in t7,
+          (h7, t7[:80]))
+    h8, t8 = got("[[Concepts/Other]]")
+    check("…the exact path wins over the end of a path", h8.startswith("> [vault · Concepts/Other.md · ") and "rootother" in t8,
+          (h8, t8[:60]))
+    h9, t9 = got("[[Nowhere/Zorg cart concept]]")
+    check("…nothing ends in it: exit 3 `no candidate`", h9 == "exit 3" and "Nowhere/Zorg cart concept" in t9, (h9, t9))
+    check("…`../` never reads a file outside the vault", got("[[../../outside]]")[0] == "exit 3", got("[[../../outside]]"))
+
+check("v3.16.1 C7/C8 — search-protocol §4: the link forms as a hub writes them — an embed, `#H1#H2`, `#^block`, a folder in "
+      "the link tried as a path, then as the end of one; context-protocol §3 and the usage name them",
+      all(x in section(SP, 4) for x in ("`![[Name]]`", "`[[Name#H1#H2]]`", "`[[Name#^block]]`",
+                                        "a link with a folder in it is tried as a path, then as the end of one",
+                                        "`%s`" % cs_.SEVERAL_TAIL % ("<посилання>", "<шлях> · <шлях> …"),
+                                        "the plugin folder's `<папка плагіна>/<посилання>` first",
+                                        "the section that holds the block, else the whole note"))
+      and "`![[Name]]`" in section(CP, 3) and "as the end of a path" in read(ROOT, "scripts", "ctx.py"),
+      section(SP, 4)[-2600:])
+
+# Task 2 review fix: every name the LONG_NOTE line gives is one `--get "<path>#<name>"` takes back to that very section;
+# --full by id
+def line_names(t):
+    """The names a LONG_NOTE line gives (without `ще N`)."""
+    tail = (t or "").rsplit("\n\n", 1)[-1]
+    if "; далі: " not in tail:
+        return []
+    listed = tail.split("; далі: ", 1)[1].rsplit(" — --get ", 1)[0]
+    return [n for n in listed.split(" · ") if not n.startswith("ще ")]
+
+
+LOG = "Notes/Long/Zorg log.md"                # empty date headings: split_sections drops them
+LOGF = "Growth/Zorg log file.md"              # the same note read from its file (a local index's note)
+CASE = "Notes/Long/Case dup.md"               # `Action Items` before the cut, `Action items` past it
+TWO = "Notes/Long/Two bigs.md"                # `Early › Big` and `Late › Big`; the short `Late` fills into `Late › Big`
+SAME = "Notes/Long/Same path.md"              # the same full path twice; a heading with `|`
+FENCE = "Notes/Long/Fenced.md"                # past the cut: a `##` inside a code fence and a `####` heading
+log_text = ("# Zorg log\n\n" + "l" * 20500 + "\n\n## 2026-10-01\n\n### Action items\n\n" + "one " * 60
+            + "\n\n## 2026-10-08\n\n### Action items\n\n" + "two " * 60 + "\n")
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note(LOG), log_text)
+    write(env.note(LOGF), log_text.replace("# Zorg log\n\n", "# Zorg log\n\nThe file copy of the log, read through a local index.\n\n", 1))
+    write(env.note(CASE), "# Case dup\n\n## Action Items\n\n" + "early " * 60 + "\n\n## Body\n\n" + "c" * 20500
+          + "\n\n## Action items\n\n" + "late " * 60 + "\n")
+    write(env.note(TWO), "# Two bigs\n\n## Early\n\n### Big\n\n" + "e" * 500 + "\n\n## Late\n\nshort\n\n### Big\n\n"
+          + "b" * 30000 + "\n")
+    write(env.note(SAME), "# Same path\n\n## Dup\n\n" + "first " * 60 + "\n\n## Body\n\n" + "s" * 20500
+          + "\n\n## Dup\n\n" + "second " * 60 + "\n\n## A | B\n\n" + "pipe " * 60 + "\n")
+    write(env.note(FENCE), "# Fenced\n\n" + "f" * 20500 + "\n\n```\n## Not a heading\n```\n\n#### Deep\n\n" + "deep " * 60
+          + "\n\n## Real\n\n" + "real " * 60 + "\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + [LOGF])
+    sx = env.sctx()
+    env.refresh(sx)
+
+    def back(path, name):
+        try:
+            return cs_.get(sx, "%s#%s" % (path, name))
+        except cs_.GetError as e:
+            return "exit %d" % e.code, str(e)
+
+    for label, path in (("an own note", LOG), ("the same note from its file", LOGF)):
+        h, t = cs_.get(sx, path)
+        names = line_names(t)
+        got = [back(path, n) for n in names]
+        check("Task 2 fix I1(a/b): %s whose date headings have no text — every name the line gives is read back by "
+              "`--get \"<path>#<name>\"`, each a section of its own" % label,
+              names and all(not g[0].startswith("exit") for g in got) and len({g[1] for g in got}) == len(got)
+              and any(g[1].startswith("two ") for g in got), (names, [g[0] for g in got]))
+    h, t = cs_.get(sx, CASE)
+    names = line_names(t)
+    check("Task 2 fix I1(c): a past-the-cut heading another one of the note shadows (`Action Items` / `Action items`) "
+          "is not named — no name brings back the earlier section",
+          all(not back(CASE, n)[1].startswith("early ") for n in names) and "Action items" not in names, names)
+    sid = cs_.candidate_id(TWO, "Two bigs › Late")
+    h, t = cs_.get(sx, sid)
+    names = line_names(t)
+    check("Task 2 fix I1(d): a filled section past the cut is named by the suffix that reaches it (`Late › Big`, not "
+          "`Big`, the earlier one)", "Late › Big" in names and "Big" not in names
+          and back(TWO, "Late › Big")[1].startswith("b"), (h, names))
+    h, t = cs_.get(sx, SAME)
+    names = line_names(t)
+    check("Task 2 fix I1(e): a section no name reaches (the same full path twice, `|` in its heading) is left out",
+          "Dup" not in names and "Same path › Dup" not in names and not any("|" in n for n in names)
+          and all(not back(SAME, n)[0].startswith("exit") for n in names), names)
+    h, t = cs_.get(sx, FENCE)
+    names = line_names(t)
+    check("Task 2 fix M3: a `##` inside a code fence and a `####` heading past the cut are not named; `Real` is",
+          names == ["Fenced", "Real"], names)
+    flat = "Notes/Long/Flat full.md"
+    write(env.note(flat), "Flat full stripes. " + "g" * 34000 + "\n")
+    env.refresh(sx)
+    fid = cs_.candidate_id(flat, "")
+    h1, t1 = cs_.get(sx, fid)
+    h2, t2 = cs_.get(sx, fid, full=True)
+    check("Task 2 fix I2: `--get <id> --full` of a 34 000-character own section — whole, no line (20 000 and the line without)",
+          len(t1) > 20000 and "нотатка довга" in t1 and "нотатка довга" not in t2 and len(t2) > 34000, (len(t1), len(t2)))
+    res = cs_.run(sx, ["zorg log"], now=NOW)
+    cs_.save_last(env.home, res["last"])
+    loc = next((c for c in res["candidates"] if c["path"] == LOGF), None)
+    h3, t3 = cs_.get(sx, loc["id"], full=True) if loc else (None, "")
+    check("…`--get <id> --full` of a note-level local-index candidate: whole, no line",
+          loc and loc["source"] == ["zorg-brain"] and "two " in t3 and "нотатка довга" not in t3, (loc, len(t3 or "")))
+
+check("Task 2 fix M5 — search-protocol §4: the 600-character bound of the names; the by-id paragraph points at the cut; "
+      "context-protocol has no «server ;»",
+      "the first 20 or 600 characters of them" in section(SP, 4)
+      and "is cut at 20 000 characters" in section(SP, 4).split("`--get` also takes a note's path")[0]
+      and "server ;" not in read(ROOT, "references", "context-protocol.md"), section(SP, 4)[:600])
+
+# Task 3 review, round 3b: the end of a path never silently swaps in another note; an exact heading path first
+PLAN, ARCH = "Notes/Concepts/Zorg plan.md", "Notes/Archive/Concepts/Zorg plan.md"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    para3 = lambda w: (" ".join([w] * 60)) + "."
+    write(env.note(PLAN), "---\ntype: concept\n---\n# Zorg plan\n\n" + para3("current") + "\n")
+    write(env.note(ARCH), "---\ntype: concept\n---\n# Zorg plan\n\n" + para3("archived") + "\n")
+    write(env.note("Notes/xa/Zorg tail.md"), "# Zorg tail\n\n" + para3("xa") + "\n")
+    write(env.note("Notes/@zorg/Zorg at.md"), "# Zorg at\n\n" + para3("atfolder") + "\n")
+    write(env.note("Notes/Nest.md"), "# X\n\n## A\n\n### B\n\n" + para3("xab") + "\n\n# A\n\n## B\n\n" + para3("ab") + "\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + [PLAN])
+    sx = env.sctx()
+
+    def got3(arg):
+        try:
+            return cs_.get(sx, arg)
+        except cs_.GetError as e:
+            return "exit %d" % e.code, str(e)
+
+    real_dataless = ci.is_dataless
+    ci.is_dataless = lambda p_: unicodedata.normalize("NFC", p_).endswith("Notes/Concepts/Zorg plan.md")
+    try:
+        env.refresh(sx)                                  # the current plan evicted: never indexed, the local index holds it
+        hb, tb = got3("[[Concepts/Zorg plan]]")
+        build_brain(env.brain, env.vault, BRAIN_NOTES)   # …and no local index holds it either
+        hc, tc = got3("[[Concepts/Zorg plan]]")
+    finally:
+        ci.is_dataless = real_dataless
+    check("round 3b I1: an evicted plugin-folder note only a local index holds — `[[Concepts/Zorg plan]]` is that note "
+          "(through the local index), never the archived one", hb.startswith("> [own · %s · " % PLAN) and "current" in tb
+          and "archived" not in tb, (hb, tb[:120]))
+    check("…held by no index at all: the iCloud line for that note, never the archived one",
+          hc == "exit 3" and tc == cs_.ICLOUD_MISSING % PLAN, (hc, tc))
+    build_brain(env.brain, env.vault, BRAIN_NOTES + [PLAN])
+    env.refresh(sx)
+    ha, ta = got3("[[Concepts/Zorg plan]]")
+    check("…both indexed: the link is the plugin folder's path, not «кілька нотаток»", ha.startswith("> [own · %s · " % PLAN)
+          and "current" in ta, (ha, ta[:120]))
+    check("round 3b M2: the end of a path starts at a `/` — `[[a/Zorg tail]]` is not `Notes/xa/Zorg tail.md`",
+          got3("[[a/Zorg tail]]")[0] == "exit 3", got3("[[a/Zorg tail]]"))
+    check("…an `@<repo>/…` name is never the end of another path (a vault folder named `@zorg` too)",
+          got3("[[@zorg/Zorg at]]")[0] == "exit 3", got3("[[@zorg/Zorg at]]"))
+    hn, tn = got3("Notes/Nest.md#A › B")
+    hx, tx = got3("Notes/Nest.md#B")
+    check("round 3b M1: a whole heading path asked is that section before an end of a longer one (`A › B`, not `X › A › B`); "
+          "a bare `#B` is still the first one (`X › A › B`)", "Nest.md › A › B ·" in hn and tn.startswith("ab")
+          and "Nest.md › X › A › B ·" in hx and tx.startswith("xab"), (hn, hx))
+
+# v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    build_brain(env.brain, env.vault, BRAIN_NOTES)
+    sx = env.sctx()
+    env.refresh(sx)
+    pulled, real_download, real_fetch, real_dataless = [], ci.download, ci._fetch, ci.is_dataless
+    ci.download = lambda *a, **k: pulled.append(("download", a)) or real_download(*a, **k)
+    ci._fetch = lambda *a, **k: pulled.append(("fetch", a)) or "ok"
+    ci.is_dataless = lambda p_: True                  # every file evicted
+    try:
+        res = cs_.run(sx, ["графік роботи продавця"], now=NOW)
+        ids = [c["id"] for c in res["candidates"]][:3]
+        for arg in ids + [P, "Кошик — графік роботи продавця", "[[Кошик — графік роботи продавця#Рішення]]",
+                          "Growth/Cart experiments.md", "![[Кошик — графік роботи продавця]]", "[[Knowledge/Slot rules]]",
+                          "[[Notes/Mobile cart notes#^blk]]"]:
+            try:
+                cs_.get(sx, arg)
+            except cs_.GetError:
+                pass
+        check("v3.16.1: a search and --get by id, path, name and link, every file evicted — nothing brought down from iCloud",
+              pulled == [] and res["candidates"], pulled[:3])
+    finally:
+        ci.download, ci._fetch, ci.is_dataless = real_download, real_fetch, real_dataless
+check("v3.16.1: ICLOUD_MISSING names ctx index rebuild --download — a note of the plugin folder, the one it brings down; "
+      "fix I2: ICLOUD_OPEN for any other path names Obsidian alone",
+      cs_.ICLOUD_MISSING == "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index rebuild --download"
+      and getattr(cs_, "ICLOUD_OPEN", None) == "файл не завантажено з iCloud: %s — відкрий його в Obsidian")
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)
