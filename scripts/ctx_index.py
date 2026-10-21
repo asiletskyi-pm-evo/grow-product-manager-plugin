@@ -20,7 +20,8 @@ the vault (iCloud never syncs it): deleting the folder is safe, `ctx index rebui
                                 state the session digest reads) and index.lock (one refresh at a time); `built` — has
                                 a walk ever finished into it (its meta `updated` row), `lock_held` — is one going on.
 
-The refresh is incremental. It walks the roots as os.walk(followlinks=False) would, one folder at a time so that it can
+The refresh is incremental. It walks the roots as os.walk(followlinks=False) would — and, since v3.16.2, follows no
+link to a file either, and compares the excluded folder names case-folded — one folder at a time so that it can
 stop and go on later: a file whose mtime and size did not change is not read, a changed one is read again (sha1 of its
 bytes). A row goes only when its file is gone from a folder the walk listed; a file iCloud has not downloaded keeps its
 row. The walk stops at its time budget (30 s) and leaves the folders and files it did not reach in a queue in
@@ -229,7 +230,7 @@ _DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}(?::\d{2})?))?")
 _MARK = re.compile(r"\b(?:v\d+|draft|драфт(?:\s*№\s*\d+)?|rev\d+|ревізія\s*\d+)\b", re.I)
 _DATES = re.compile(r"\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}(?:\.\d{2,4})?")
 _LINK = re.compile(r"!?\[\[[^\]\n]*\]\]|!?\[[^\]\n]*\]\([^)\n]*\)")
-_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\S")
+_LIST_ITEM = re.compile(r"^\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+\S")    # a list item, in a callout too
 _CODE = re.compile(r"`([^`\n]*)`")
 _SEPARATORS = re.compile(r"^[\s·•|/\\<>‹›«»←→↑↓\-–—*_=~,;.:]*$")
 _NAV = (r"(?:up|moc|parent|related|back|source|index|hub|пов[ʼ'’]?язан[еі]|зв[ʼ'’]?язки|назад|батьківська|джерело)")
@@ -358,11 +359,13 @@ def strip_links(text, label=False):
 
 
 def _near_aside(line):
-    """Does near_key set the line aside: a breadcrumb or a line of links (with a navigation label or none) that is no
-    list item of links alone, or a date line."""
+    """Does near_key set the line aside: a date line (a dated bullet, `- [[2026-03-01]]`, too), or a breadcrumb or a
+    line of links (with a navigation label or none) that is no list item of links alone."""
+    if _DATE_LINE.match(line):
+        return True
     if _LIST_ITEM.match(line) and link_only(line):
         return False
-    return link_only(line, label=True) or bool(_DATE_LINE.match(line))
+    return link_only(line, label=True)
 
 
 def near_key(sections):
@@ -822,10 +825,14 @@ class Index:
 
     @staticmethod
     def _near_again(con):
-        """The near keys of an index whose `near_version` is not NEAR_VERSION, again from its own sections — no file
-        read, the schema unchanged — then the version."""
+        """The near keys of an index whose `near_version` is lower than NEAR_VERSION (or none), again from its own
+        sections — no file read, the schema unchanged — then the version; a later build's keys are left alone."""
         row = con.execute("SELECT value FROM meta WHERE key='near_version'").fetchone()
-        if row and row[0] == str(NEAR_VERSION):
+        try:
+            stored = int(row[0]) if row else 0
+        except (TypeError, ValueError):
+            stored = 0
+        if stored >= NEAR_VERSION:                  # this build's rules, or a later build's: left as they are
             return
         for nid, in con.execute("SELECT id FROM notes").fetchall():
             secs = con.execute("SELECT heading, text FROM sections WHERE note_id = ? ORDER BY ord", (nid,)).fetchall()
@@ -1188,7 +1195,7 @@ class _Walk:
                 self._remove(rel)
             return
         try:
-            info = os.stat(path)
+            info = os.stat(path, follow_symlinks=False)    # a link to a file is not followed, a queued one neither
         except OSError:
             return
         if not stat.S_ISREG(info.st_mode):

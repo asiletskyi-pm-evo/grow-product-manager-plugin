@@ -794,6 +794,38 @@ check("v3.16.2 C3: `excluded` compares the folder names case-folded without `fol
       and not ctx_index.excluded("Notes/_system/Context/x.md", "Notes/_System/context", [])
       and ctx_index.excluded("Notes/_system/Context/x.md", "Notes/_System/context", [], fold=True))
 
+# --- v3.16.2 Task 1 review fixes
+check("v3.16.2 review M1: a dated-link bullet (`- [[2026-03-01]]`, a daily note) is still a date — set aside",
+      near("# Team card\n\n- [[2026-03-01]]\n\n" + FACTS) == near("# Team card\n\n- [[2026-09-30]]\n\n" + FACTS))
+check("v3.16.2 review M7: a list of links inside a callout (`> - [[Bea Two]]`) is content too",
+      near("# Team card\n\n> - [[Bea Two]]\n\n" + FACTS) != near("# Team card\n\n> - [[Cy Three]]\n\n" + FACTS))
+check("v3.16.2 review M5: `local-context.md` in any case is left out",
+      ctx_index.excluded("Notes/_System/Local-Context.md", "Notes/_System/context", [])
+      and ctx_index.excluded("Notes/LOCAL-CONTEXT.md", "Notes/_System/context", []))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET near = 'from-a-later-build'")
+    con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('near_version', ?)", (str(ctx_index.NEAR_VERSION + 1),))
+    con.commit()
+    con.close()
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    nears = {n for n, in con.execute("SELECT near FROM notes")}
+    con.close()
+    check("v3.16.2 review M4: the keys of a later build (a higher `near_version`) are left as they are — redone only "
+          "when the stored version is lower", nears == {"from-a-later-build"}, nears)
+    os.symlink(env.note("ZorgCore/Teams/team-alpha.md"), env.note("Notes/Team link2.md"))
+    state = json.loads(read(env.index, "index.json"))
+    state["queue"] = [["f", roots[0]["path"], env.note("Notes/Team link2.md"), "Notes/Team link2.md"]]
+    write(os.path.join(env.index, "index.json"), json.dumps(state))
+    idx.refresh(roots, store_rel, blocks_rels)
+    check("v3.16.2 review M2: a symbolic link a saved queue still names is not indexed either",
+          "Notes/Team link2.md" not in {n["path"] for n in idx.notes()}, sorted(n["path"] for n in idx.notes())[:4])
+
 # ------------------------------------------------------------------ v3.16.1: ctx index rebuild --download
 import contextlib, io, signal, threading  # noqa: E401,E402
 import ctx as ctx_cli  # noqa: E402
