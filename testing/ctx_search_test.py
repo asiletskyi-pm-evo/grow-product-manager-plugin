@@ -1116,7 +1116,7 @@ with tempfile.TemporaryDirectory() as d:
             got = e
         check("A2: a dataless file with no local index: exit 3 and the one line, the file never opened", got is not None
               and got.code == 3 and str(got) == "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index "
-              "rebuild пізніше" % SLOTS and reads == [], (got, reads))
+              "rebuild --download" % SLOTS and reads == [], (got, reads))
         build_brain(env.brain, env.vault, [SLOTS])
         reads[:] = []
         head5, text5 = cs_.get(sx, top)
@@ -1685,6 +1685,32 @@ check("round 5b — search-protocol §4 (V6): a --get of a twin, a newer version
                                         "a hub's link you could not read is not taken", "tried as a path first")), section(SP, 4)[-1800:])
 check("vault-protocol «In short»: the level-2 triggers are in search-protocol §8",
       "maybe live sources (level 2; triggers in search-protocol §8)" in read(ROOT, "references", "vault-protocol.md"))
+
+# v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    build_brain(env.brain, env.vault, BRAIN_NOTES)
+    sx = env.sctx()
+    env.refresh(sx)
+    pulled, real_download, real_fetch, real_dataless = [], ci.download, ci._fetch, ci.is_dataless
+    ci.download = lambda *a, **k: pulled.append(("download", a)) or real_download(*a, **k)
+    ci._fetch = lambda *a, **k: pulled.append(("fetch", a)) or "ok"
+    ci.is_dataless = lambda p_: True                  # every file evicted
+    try:
+        res = cs_.run(sx, ["графік роботи продавця"], now=NOW)
+        ids = [c["id"] for c in res["candidates"]][:3]
+        for arg in ids + [P, "Кошик — графік роботи продавця", "[[Кошик — графік роботи продавця#Рішення]]",
+                          "Growth/Cart experiments.md"]:
+            try:
+                cs_.get(sx, arg)
+            except cs_.GetError:
+                pass
+        check("v3.16.1: a search and --get by id, path, name and link, every file evicted — nothing brought down from iCloud",
+              pulled == [] and res["candidates"], pulled[:3])
+    finally:
+        ci.download, ci._fetch, ci.is_dataless = real_download, real_fetch, real_dataless
+check("v3.16.1: ICLOUD_MISSING names ctx index rebuild --download",
+      cs_.ICLOUD_MISSING == "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index rebuild --download")
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

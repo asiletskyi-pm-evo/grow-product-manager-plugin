@@ -97,7 +97,7 @@ LAST_NOTE = "ідентифікатори пошуку не збережено (
 FILL_CHARS = 1500               # --get: a short section goes on with the next ones up to this many characters
 SHORT_NOTE = "секція коротка — додано наступні: %s"
 ICLOUD_LOCAL = "файл не завантажено з iCloud — текст із локального індексу %s"
-ICLOUD_MISSING = "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index rebuild пізніше"
+ICLOUD_MISSING = "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index rebuild --download"
 GET_CHARS = 20000               # --get of a whole note (by its path or its name, no heading): its characters at most
 LONG_NOTE = "нотатка довга — показано перші 20 000 знаків; секцію — --get \"%s#<заголовок>\""
 EXCLUDED_NOTE = "шлях виключено з пошуку: %s"
@@ -1314,7 +1314,7 @@ def _from_disk(sctx, entry):
     file that does not arrive in time is one line, GetError 3, never a hang. A file iCloud has not downloaded
     (ctx_index.is_dataless) is never read — that would start its download: its text comes from a registered local index
     that holds it, said so (`файл не завантажено з iCloud — текст із локального індексу <id>`), else GetError 3
-    (`файл не завантажено з iCloud: <шлях> — відкрий його в Obsidian або ctx index rebuild пізніше`)."""
+    (`файл не завантажено з iCloud: <шлях> — відкрий його в Obsidian або ctx index rebuild --download`)."""
     path = entry["path"]
     found = _file_of(sctx, path)
     if not found:

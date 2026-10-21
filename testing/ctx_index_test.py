@@ -728,5 +728,166 @@ with tempfile.TemporaryDirectory() as d:
     check("…None for a file SQLite cannot read, with the problem said", idx.built() is None
           and (idx.problem or "").startswith("індекс пошуку не читається ("), idx.problem)
 
+# ------------------------------------------------------------------ v3.16.1: ctx index rebuild --download
+import contextlib, io, signal, threading  # noqa: E401,E402
+import ctx as ctx_cli  # noqa: E402
+
+
+def in_process(env, *args):
+    """A `ctx` run in this process (so a function can be replaced): (exit code, output, CTX_RESULT)."""
+    saved = os.environ.pop("GROW_PM_CONTEXT_PATH", None)
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            try:
+                rc = ctx_cli.main(list(args) + ["--home", env.home, "--context", env.ctx])
+            except SystemExit as e:
+                rc = e.code
+    finally:
+        if saved is not None:
+            os.environ["GROW_PM_CONTEXT_PATH"] = saved
+    out = buf.getvalue()
+    last = [l for l in out.splitlines() if l.startswith("CTX_RESULT ")]
+    return rc, out, json.loads(last[-1][len("CTX_RESULT "):]) if last else None
+
+
+OWN = sorted(p for p in INDEXED if p.startswith("Notes/"))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Notes/Big.md"), "# Big\n\n" + "x" * ctx_index.MAX_BYTES)
+    write(env.note("Notes/picture.txt"), "not a note")
+    write(env.note("Notes/.trash/gone.md"), "# Gone\n")
+    write(env.note("Notes/_System/_scratch/s.md"), "# Scratch\n")
+    os.symlink(env.note("ZorgCore/Teams/team-alpha.md"), env.note("Notes/Linked team.md"))
+    roots, store_rel, blocks_rels = env.scope()
+    every = {unicodedata.normalize("NFC", os.path.join(dp, n)) for dp, _, ns in os.walk(env.vault) for n in ns}
+    evicted = set(every)
+    real_dataless = ctx_index.is_dataless
+    ctx_index.is_dataless = lambda p: unicodedata.normalize("NFC", p) in evicted
+    calls, live, peak, lock = [], [0], [0], threading.Lock()
+    status = {env.note("Notes/Inbox.md"): "timeout", env.note("Notes/Zorg Style Guide.md"): "failed",
+              env.note("Notes/Mobile cart notes.md"): "ok-but-evicted"}
+
+    def fake_fetch(path, timeout):
+        with lock:
+            calls.append((unicodedata.normalize("NFC", path), timeout))
+            live[0] += 1
+            peak[0] = max(peak[0], live[0])
+        time.sleep(0.05)
+        with lock:
+            live[0] -= 1
+        got = status.get(path, "ok")
+        if got == "ok":
+            evicted.discard(unicodedata.normalize("NFC", path))
+        return "ok" if got == "ok-but-evicted" else got
+
+    seen = []
+    before = tree(env.vault)
+    try:
+        r = ctx_index.download(roots, store_rel, blocks_rels, fetch=fake_fetch, workers=3, per_file=7.5,
+                               progress=lambda done, total: seen.append((done, total)))
+    except AttributeError as e:
+        r = {"error": str(e)}
+    want = sorted(unicodedata.normalize("NFC", env.note(p)) for p in OWN)
+    check("download: every evicted file of the plugin folder the index would read, once — never the core, the store, "
+          "_System/_scratch|providers, .trash, _backup, .obsidian, a file over 2 MB, one not .md, a symbolic link",
+          sorted(p for p, _ in calls) == want, sorted(set(p for p, _ in calls) ^ set(want))[:6])
+    check("download: each read gets the per-file time", {t for _, t in calls} == {7.5}, {t for _, t in calls})
+    check("download: workers at once, more than one", 1 < peak[0] <= 3, peak[0])
+    check("download: the counts — downloaded, left, timed out, failed", r == {
+        "candidates": len(OWN), "downloaded": len(OWN) - 3, "left": 3, "timed_out": 1, "failed": 1,
+        "interrupted": False}, r)
+    check("download: progress after every file, the last one (total, total)",
+          [x for x, _ in seen] == list(range(1, len(OWN) + 1)) and {t for _, t in seen} == {len(OWN)}, seen[-3:])
+    check("download: the vault is not written", tree(env.vault) == before)
+
+    evicted.clear()
+    calls[:] = []
+    r = ctx_index.download(roots, store_rel, blocks_rels, fetch=fake_fetch)
+    check("download: nothing evicted — nothing read, zero counts", calls == [] and r["candidates"] == 0
+          and r["downloaded"] == 0 and r["left"] == 0, r)
+
+    # --- Ctrl-C: the reads stop, what came down stays, the result says so
+    evicted.update(every)
+    calls[:] = []
+
+    def interrupting(path, timeout):
+        with lock:
+            calls.append((path, timeout))
+            n = len(calls)
+        if n == 2:
+            os.kill(os.getpid(), signal.SIGINT)
+        time.sleep(0.2)
+        evicted.discard(unicodedata.normalize("NFC", path))
+        return "ok"
+
+    r = ctx_index.download(roots, store_rel, blocks_rels, fetch=interrupting, workers=1)
+    check("download: Ctrl-C stops it — interrupted, fewer reads than files, the counts of what came down",
+          r["interrupted"] is True and len(calls) < len(OWN) and r["downloaded"] + r["left"] == r["candidates"]
+          and r["candidates"] == len(OWN), (r, len(calls)))
+
+    # --- the command line: only `rebuild --download` downloads
+    real_download = ctx_index.download
+    dl_calls = []
+
+    def recording(*a, **k):
+        dl_calls.append(k)
+        return real_download(*a, **dict(k, fetch=fake_fetch))
+
+    ctx_index.download = recording
+    try:
+        evicted.clear()
+        evicted.update(every)
+        rc, out, res = in_process(env, "index", "status")
+        rc2, out2, res2 = in_process(env, "index", "rebuild")
+        check("ctx index status and plain rebuild download nothing", dl_calls == [] and rc == 0 and rc2 == 0
+              and "rebuild --download" in out, (dl_calls, rc, rc2, out[-300:]))
+        rc, out, res = in_process(env, "index", "rebuild", "--download")
+        lines = out.splitlines()
+        icloud = [l for l in lines if l.startswith("iCloud: ")]
+        check("ctx index rebuild --download: the iCloud line, then the rebuild; exit 0; `download` in the result",
+              rc == 0 and len(dl_calls) == 1 and icloud and icloud[-1] == "iCloud: завантажено %d з %d, лишилось 3 "
+              "(не встигли за 30 с: 1; не прочитано: 1)" % (len(OWN) - 3, len(OWN))
+              and lines.index(icloud[-1]) < next(i for i, l in enumerate(lines) if l.startswith("index: "))
+              and res and res.get("download", {}).get("downloaded") == len(OWN) - 3, (rc, out[-700:]))
+        check("…the files that came down are indexed by the rebuild",
+              {n["path"] for n in ctx_index.Index(env.home).notes()} >= set(OWN) - {"Notes/Inbox.md",
+              "Notes/Zorg Style Guide.md", "Notes/Mobile cart notes.md"}, res)
+        evicted.clear()
+        rc, out, res = in_process(env, "index", "rebuild", "--download")
+        check("…nothing to download: its own line", rc == 0 and "iCloud: нічого завантажувати" in out.splitlines(), out[-400:])
+        evicted.update(set(env.note(p) for p in ("Notes/Inbox.md",)))
+        status.pop(env.note("Notes/Inbox.md"))
+        rc, out, res = in_process(env, "index", "rebuild", "--download")
+        check("…all of it came down: «iCloud: завантажено N з N»", rc == 0 and "iCloud: завантажено 1 з 1" in out.splitlines(),
+              out[-400:])
+        rc, out, res = in_process(env, "index", "status", "--download")
+        check("ctx index status --download is bad usage (exit 3, as every usage error of ctx)", rc == 3
+              and "unrecognized arguments: --download" in out, (rc, out[-300:]))
+
+        def stop(*a, **k):
+            return {"candidates": 5, "downloaded": 2, "left": 3, "timed_out": 0, "failed": 0, "interrupted": True}
+
+        ctx_index.download = stop
+        built = ctx_index.Index(env.home).status()["updated"]
+        rc, out, res = in_process(env, "index", "rebuild", "--download")
+        check("…Ctrl-C: the line says stopped, the index is not rebuilt, exit 130",
+              rc == 130 and "iCloud: завантажено 2 з 5, зупинено (Ctrl-C) — індекс не перебудовано" in out.splitlines()
+              and ctx_index.Index(env.home).status()["updated"] == built, (rc, out[-400:]))
+    finally:
+        ctx_index.download = real_download
+        ctx_index.is_dataless = real_dataless
+
+# --- the real read: a child process, its time bounded
+with tempfile.TemporaryDirectory() as d:
+    f = os.path.join(d, "note.md")
+    write(f, "# Note\n\ntext\n")
+    fifo = os.path.join(d, "blocks.md")
+    os.mkfifo(fifo)
+    t0 = time.time()
+    got = (ctx_index._fetch(f, 10), ctx_index._fetch(fifo, 0.5), ctx_index._fetch(os.path.join(d, "none.md"), 10))
+    check("_fetch: a file on disk → ok; one whose read hangs (a FIFO) → timeout, the child killed; a missing one → failed",
+          got == ("ok", "timeout", "failed") and time.time() - t0 < 8, (got, time.time() - t0))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

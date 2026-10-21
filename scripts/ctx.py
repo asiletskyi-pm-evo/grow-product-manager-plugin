@@ -145,14 +145,20 @@
                                 `decide` with no divergence ("no divergence for SLOT") or for a REPO that is not one of
                                 the sides, and a memory that cannot be read ("slots memory not readable|not valid:
                                 .state/slots.json (…)") are exit 3. CTX_RESULT: action, slot, changed, snapshot, memory (after)
-  index status|rebuild          the section index of the search (since v3.16.0; scripts/ctx_index.py): the plugin folder of
+  index status|rebuild [--download]
+                                the section index of the search (since v3.16.0; scripts/ctx_index.py): the plugin folder of
                                 every vault and the core folder of every registration that has one on disk, in
                                 `<home>/.grow-pm/index/` — no store lock, nothing written anywhere else. status: an
                                 incremental refresh (30 s; a held index.lock: none, the index as it is), then the counts;
                                 rebuild: the index built again from nothing, no time limit. "індекс оновлюється: N файлів ще
-                                не переглянуто" when the refresh ran out of time. No vault and no core folder: exit 3; rebuild
-                                while another process holds index.lock: exit 4. CTX_RESULT: action, schema, updated, files,
-                                sections, pending, skipped_dataless
+                                не переглянуто" when the refresh ran out of time. rebuild --download (since v3.16.1) first
+                                brings down the plugin folder's files iCloud evicted that the index would read — never a
+                                core folder or the rest of a vault; no limit on the run, 30 s a file, 4 at once, minutes for
+                                a large vault — then «iCloud: завантажено N з M[, лишилось K (не встигли за 30 с: T; не
+                                прочитано: F)]» or «iCloud: нічого завантажувати», then the rebuild; Ctrl-C: «…, зупинено
+                                (Ctrl-C) — індекс не перебудовано», exit 130. Nothing else ever downloads. No vault and no
+                                core folder: exit 3; rebuild while another process holds index.lock: exit 4. CTX_RESULT:
+                                action, schema, updated, files, sections, pending, skipped_dataless, download (with it)
   search --q TEXT [--q TEXT …] [--skill S] [--product P] [--limit N] [--sources own,local,mcp] [--no-hints] [--json]
                                 (since v3.16.0; scripts/ctx_search.py) the first --q is the question, the others its
                                 variants: the section index (refreshed first, 30 s), the local indexes and the MCP of a
@@ -182,7 +188,7 @@
                                 budget, and one iCloud has not downloaded never: the text of a registered local index,
                                 after the line `файл не завантажено з iCloud — текст із локального індексу <id>`, else
                                 exit 3 (`файл не завантажено з iCloud: <path> — відкрий його в Obsidian або ctx index
-                                rebuild пізніше`). An unknown id, note, name or section, a file not read in time, a
+                                rebuild --download`). An unknown id, note, name or section, a file not read in time, a
                                 name several notes carry (`кілька нотаток із назвою «<назва>»: <шляхи> — --get один зі
                                 шляхів`) or a path the search excludes (`шлях виключено з пошуку: <шлях>`): exit 3;
                                 the server did not answer: exit 5. --json: the header and the text in CTX_RESULT only
@@ -1003,11 +1009,36 @@ def _index_scope(c):
     return s["roots"], s["store_rel"], s["blocks_rels"]
 
 
+def _download_line(dl):
+    """The line of `ctx index rebuild --download`: what came down from iCloud, what is left and why."""
+    if not dl["candidates"]:
+        return "iCloud: нічого завантажувати"
+    head = "iCloud: завантажено %d з %d" % (dl["downloaded"], dl["candidates"])
+    if dl["interrupted"]:
+        return head + ", зупинено (Ctrl-C) — індекс не перебудовано"
+    if not dl["left"]:
+        return head
+    why = (["не встигли за %d с: %d" % (ci.DOWNLOAD_S, dl["timed_out"])] if dl["timed_out"] else []) \
+        + (["не прочитано: %d" % dl["failed"]] if dl["failed"] else [])
+    return head + ", лишилось %d" % dl["left"] + (" (%s)" % "; ".join(why) if why else "")
+
+
+def _download_progress(done, total):
+    if done % 100 == 0 and done < total:
+        print("iCloud: %d з %d…" % (done, total), flush=True)
+
+
 def cmd_index(a, c):
     roots, store_rel, blocks = _index_scope(c)
     if not roots:
         print("index: nothing to index — no vault in local-context.md and no registered repository with a folder on disk")
         return 3, {"command": "index", "action": a.action, "error": "no vault and no repository folder"}
+    dl = None
+    if getattr(a, "download", False):
+        dl = ci.download(roots, store_rel, blocks, progress=_download_progress)
+        print(_download_line(dl))
+        if dl["interrupted"]:
+            return 130, {"command": "index", "action": a.action, "download": dl}
     idx = ci.Index(c.home)
     try:
         if a.action == "rebuild":
@@ -1030,13 +1061,14 @@ def cmd_index(a, c):
     if res["rebuilt"] and a.action != "rebuild":
         print("  the index could not be read or had another schema — built again (the old one: %s.broken)" % idx.db_path)
     if s["skipped_dataless"]:
-        print("  not downloaded (iCloud), not read: %d" % s["skipped_dataless"])
+        print("  not downloaded (iCloud), not read: %d — ctx index rebuild --download" % s["skipped_dataless"])
     if res["skipped_large"]:
         print("  over %d bytes, not indexed: %d" % (ci.MAX_BYTES, res["skipped_large"]))
     if s["pending"]:
         print("індекс оновлюється: %d файлів ще не переглянуто" % s["pending"])
-    return 0, {"command": "index", "action": a.action, "schema": s["schema"], "updated": s["updated"], "files": s["files"],
-               "sections": s["sections"], "pending": s["pending"], "skipped_dataless": s["skipped_dataless"]}
+    out = {"command": "index", "action": a.action, "schema": s["schema"], "updated": s["updated"], "files": s["files"],
+           "sections": s["sections"], "pending": s["pending"], "skipped_dataless": s["skipped_dataless"]}
+    return 0, dict(out, download=dl) if dl else out
 
 
 def _search_kinds(value):
@@ -1733,7 +1765,7 @@ def build_parser():
     sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
     ip = sub.add_parser("index").add_subparsers(dest="action", required=True, parser_class=Parser)
     ip.add_parser("status", parents=[common])
-    ip.add_parser("rebuild", parents=[common])
+    ip.add_parser("rebuild", parents=[common]).add_argument("--download", action="store_true")
     sp = sub.add_parser("search", parents=[common]); sp.add_argument("action", nargs="?", choices=SEARCH_ACTIONS)
     sp.add_argument("--q", action="append"); sp.add_argument("--get")
     sp.add_argument("--skill"); sp.add_argument("--product"); sp.add_argument("--limit", type=int)
