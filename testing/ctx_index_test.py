@@ -1151,6 +1151,23 @@ with tempfile.TemporaryDirectory() as d:
     check("final M5: the index fails after a download — exit 3, and the result still says what came down",
           rc == 3 and res and res.get("download", {}).get("downloaded") == 2, (rc, res))
 
+# --- v3.16.2 C10 (final M4): after --download the status hint takes the count from the download — no second walk
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    evicted_set = {unicodedata.normalize("NFC", env.note("Notes/Inbox.md"))}
+    real_dataless, real_evicted, real_fetch = ctx_index.is_dataless, ctx_index.evicted, ctx_index._fetch
+    walks = []
+    ctx_index.is_dataless = lambda p: unicodedata.normalize("NFC", p) in evicted_set
+    ctx_index.evicted = lambda *a, **k: walks.append(1) or real_evicted(*a, **k)
+    ctx_index._fetch = lambda path, timeout: "timeout"
+    try:
+        rc, out, res = in_process(env, "index", "rebuild", "--download")
+    finally:
+        ctx_index.is_dataless, ctx_index.evicted, ctx_index._fetch = real_dataless, real_evicted, real_fetch
+    check("v3.16.2 C10: rebuild --download walks the plugin folder for evicted files once — the status hint's count comes "
+          "from the download", rc == 0 and len(walks) == 1
+          and "not downloaded (iCloud), not read: 1 (plugin folder: 1 — ctx index rebuild --download)" in out, (rc, walks, out[-300:]))
+
 # --- the real read: a child process, its time bounded
 with tempfile.TemporaryDirectory() as d:
     f = os.path.join(d, "note.md")

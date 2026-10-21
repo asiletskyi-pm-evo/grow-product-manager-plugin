@@ -44,6 +44,7 @@ only.
 """
 import datetime
 import hashlib
+import itertools
 import json
 import os
 import posixpath
@@ -109,6 +110,7 @@ LONG_NEXT = "далі: %s — --get \"%s#<заголовок>\""
 LONG_NONE = "заголовків далі немає"
 LONG_FULL = "--full (до 60 000)"
 LONG_NAMES, LONG_NAMES_CHARS = 20, 600      # the headings LONG_NOTE names at most, and their characters
+LONG_GAIN = 2000                # the section the cut falls under is named only when --get of it shows this much more
 EXCLUDED_NOTE = "шлях виключено з пошуку: %s"
 SEVERAL_NOTE = "кілька нотаток із назвою «%s»: %s — --get один зі шляхів"
 SEVERAL_TAIL = "кілька нотаток, чий шлях закінчується на «%s»: %s — --get один зі шляхів"
@@ -1652,10 +1654,28 @@ def _parts(heading):
     return [" ".join(p.split()).casefold() for p in N(heading).split("›")]
 
 
-def _heading_of(secs, want):
+def _heading_index(secs):
+    """{exact, suffix}: the first section of each whole heading path and of each end of one, parts as `_parts` folds
+    them — what `_heading_of` finds by scanning, in one map (`_names_past` asks it for every heading of a note)."""
+    exact, suffix = {}, {}
+    for h, _ in secs:
+        if h:
+            parts = tuple(_parts(h))
+            exact.setdefault(parts, h)
+            for n in range(1, len(parts) + 1):
+                suffix.setdefault(parts[-n:], h)
+    return {"exact": exact, "suffix": suffix}
+
+
+def _heading_of(secs, want, index=None):
     """The heading path of the first section whose path ends in `want` — its last part, its last parts (`Delivery ›
     Fees`) or the whole path (spaces collapsed, case folded): how `[[Name#Heading]]` and `<path>#<heading>` name a
-    section; None when the note has none."""
+    section; None when the note has none. `index` (`_heading_index`) answers the same without a scan."""
+    if index is not None:
+        key = tuple(_parts(want))
+        if len(key) > 1 and key in index["exact"]:
+            return index["exact"][key]
+        return index["suffix"].get(key)
     key = _parts(want)
     if len(key) > 1:                          # a whole path asked is that section before the end of a longer one
         exact = next((h for h, _ in secs if h and _parts(h) == key), None)
@@ -1669,12 +1689,13 @@ def _heading_of(secs, want):
     return None
 
 
-def _heading_for(secs, heading):
+def _heading_for(secs, heading, index=None):
     """The heading path a `#…` after a note names: the whole of it as one heading first (`C# tips`), then its parts
     between `#` as the end of a heading path (`#H1#H2` → `… › H1 › H2`) with a `^block` part dropped; a block alone
     (`#^a1b2c3`) is the section whose text holds that block id at the end of a line, else "" (the whole note); None
-    when no section has it."""
-    hp = _heading_of(secs, heading)
+    when no section has it; since v3.16.2, when neither finds it, the parts joined back with `#` where a heading
+    holds one (`#Delivery#C# tips` → `Delivery › C# tips`)."""
+    hp = _heading_of(secs, heading, index)
     if hp is not None:
         return hp
     parts = [p.strip() for p in heading.split("#") if p.strip() and not p.strip().startswith("^")]
@@ -1685,7 +1706,19 @@ def _heading_for(secs, heading):
             return next((h for h, t in secs if h and mark.search(t or "")), "")
         return ""
     joined = " › ".join(parts)
-    return _heading_of(secs, joined) if joined != heading.strip() else None
+    hp = _heading_of(secs, joined, index) if joined != heading.strip() else None
+    if hp is not None:
+        return hp
+    pieces = [p for p in heading.split("#") if not p.strip().startswith("^")]
+    if 2 < len(pieces) <= 8:                         # «C# tips» inside a nested link: join neighbours back with `#`
+        for cuts in range(len(pieces) - 2, 0, -1):
+            for at in itertools.combinations(range(1, len(pieces)), cuts):
+                groups = ["#".join(pieces[a:b]).strip() for a, b in zip((0,) + at, at + (len(pieces),))]
+                if all(groups):
+                    hp = _heading_of(secs, " › ".join(groups), index)
+                    if hp is not None:
+                        return hp
+    return None
 
 
 def _index_name(sctx, abs_path):
@@ -1816,9 +1849,10 @@ def long_note(path, shown, total, names, full):
 
 
 def _heading_lines(text):
-    """[(offset, last part)] of the heading lines of `text` that ctx_index.split_sections reads as headings: level 1–3,
-    none in a code fence."""
-    out, pos, fence = [], 0, None
+    """[(offset, heading path parts, level)] of the heading lines of `text` that ctx_index.split_sections reads as
+    headings: level 1–3, none in a code fence; the path within the text, by the same stack of levels (a text that
+    starts in the middle of a note has the end of the note's path)."""
+    out, pos, fence, stack = [], 0, None, []
     for line in text.split("\n"):
         f = ci._FENCE.match(line)
         if fence:
@@ -1829,7 +1863,9 @@ def _heading_lines(text):
         else:
             m = ci._HEADING.match(line)
             if m and len(m.group(1)) <= 3:
-                out.append((pos, m.group(2).strip()))
+                level = len(m.group(1))
+                stack = [(lv, t) for lv, t in stack if lv < level] + [(level, m.group(2).strip())]
+                out.append((pos, [t for _, t in stack], level))
         pos += len(line) + 1
     return out
 
@@ -1840,22 +1876,33 @@ def _names_past(text, cut, path, secs, start=0):
     left out, one with nothing under it, is skipped): the section the cut falls under, then every one after it, each by
     the shortest end of its heading path (its last part, else more of it) that `--get "<path>#<name>"` — `_parse`, then
     `_heading_for` — takes back to that very section; one no name reaches (a heading another one shadows, `|` in it)
-    is left out."""
+    is left out. Since v3.16.2 a heading line is matched by its path (an empty `## Notes` before the cut does not take
+    the place of a `### Notes` after it), the names are found through one map of the note's headings, and the section
+    the cut falls under is named only when --get of it shows LONG_GAIN characters more than the cut text does."""
+    folded = [_parts(h) if h else [] for h, _ in secs]
     lines, aligned, k = _heading_lines(text), [], start
-    for pos, part in lines:
-        key = _parts(part)[-1]
-        nxt = next((i for i in range(k, len(secs)) if secs[i][0] and _parts(secs[i][0])[-1] == key), None)
+    for pos, line, level in lines:
+        key = _parts(" › ".join(line))
+        nxt = next((i for i in range(k, len(secs)) if folded[i] and folded[i][-len(key):] == key), None)
+        if nxt is None:                              # a rendered note leaves out the empty headings above: its last
+            nxt = next((i for i in range(k, len(secs))   # part at the depth of its level
+                        if folded[i] and folded[i][-1] == key[-1] and len(folded[i]) == level), None)
         if nxt is not None:
             aligned.append((pos, nxt))
             k = nxt + 1
     before = [a for a in aligned if a[0] < cut][-1:]
+    if before and min(len(secs[before[0][1]][1]), cut) - (cut - before[0][0]) < LONG_GAIN:
+        before = []                                  # --get of it would show little more than the cut text does
+    index, first = _heading_index(secs), {}
+    for x, (h, _) in enumerate(secs):
+        first.setdefault(h, x)
     out = []
     for _, i in before + [a for a in aligned if a[0] >= cut]:
         parts = secs[i][0].split(" › ")
         for n in range(1, len(parts) + 1):
             name = " › ".join(parts[-n:])
-            hp = _heading_for(secs, _parse("%s#%s" % (path, name))[1])
-            if hp and next(x for x, (h, _) in enumerate(secs) if h == hp) == i:
+            hp = _heading_for(secs, _parse("%s#%s" % (path, name))[1], index)
+            if hp and first.get(hp) == i:
                 out.append(name)
                 break
     return out

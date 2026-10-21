@@ -1692,22 +1692,29 @@ check("vault-protocol «In short»: the level-2 triggers are in search-protocol 
 # v3.16.1 Task 2: every --get form is cut at 20 000 characters (60 000 with --full), a line saying how much of how many
 # and naming the headings past the cut
 def heading_names_after(text, cut, dup_full=None):
-    """The names the line should carry, worked out from the text alone: the heading the cut falls under, then every
-    heading line that starts past the cut (the last part; the full path for a last part that repeats)."""
+    """The names the line should carry, worked out from the text alone: the heading the cut falls under — only when
+    --get of it would show 2 000 characters more than the cut text does (v3.16.2) —, then every heading line that
+    starts past the cut (the last part; the full path for a last part that repeats)."""
     import re as _re
-    pos, names, stack, last_before = 0, [], [], None
+    pos, names, stack, last_before, heads = 0, [], [], None, []
     for line in text.split("\n"):
         m = _re.match(r"^(#{1,3})[ \t]+(.+?)[ \t]*$", line)
         if m:
             level = len(m.group(1))
             stack = [s for s in stack if s[0] < level] + [(level, m.group(2))]
             name = " › ".join(s[1] for s in stack) if dup_full and m.group(2) in dup_full else m.group(2)
+            heads.append(pos)
             if pos >= cut:
                 names.append(name)
             else:
-                last_before = name
+                last_before = (name, pos, len(line) + 1)
         pos += len(line) + 1
-    return ([last_before] if last_before else []) + names
+    if last_before:
+        name, at, head = last_before
+        nxt = next((h for h in heads if h > at), len(text))
+        if min(nxt - at - head, cut) - (cut - at) >= 2000:
+            return [name] + names
+    return names
 
 
 def long_line(path, shown, total, names, full):
@@ -1768,7 +1775,7 @@ with tempfile.TemporaryDirectory() as d:
     dup = cs_._note_of(sx, DUP)[5]
     h, t = cut_of(DUP)
     check("…a last part that repeats (Task 2 fix: by the shortest end of its path that `--get` takes back to it)",
-          t == dup[:20000] + "\n\n" + long_line(DUP, 20000, len(dup), ["Dup parts", "Alpha", "Notes", "Beta", "Beta › Notes"],
+          t == dup[:20000] + "\n\n" + long_line(DUP, 20000, len(dup), ["Alpha", "Notes", "Beta", "Beta › Notes"],
                                                 False), (t or "")[-300:])
     h, t = cut_of(SEC + "#Big")
     check("…a section after `#` is cut too: 20 000, the line (no headings past the cut inside it)",
@@ -1956,9 +1963,9 @@ with tempfile.TemporaryDirectory() as d:
     sid = cs_.candidate_id(TWO, "Two bigs › Late")
     h, t = cs_.get(sx, sid)
     names = line_names(t)
-    check("Task 2 fix I1(d): a filled section past the cut is named by the suffix that reaches it (`Late › Big`, not "
-          "`Big`, the earlier one)", "Late › Big" in names and "Big" not in names
-          and back(TWO, "Late › Big")[1].startswith("b"), (h, names))
+    check("Task 2 fix I1(d): a filled section past the cut is never named `Big` (the earlier one); it begins near the top "
+          "of the text, so (v3.16.2 C8) it is not named at all", "Big" not in names and "Late › Big" not in names
+          and "заголовків далі немає" in t and back(TWO, "Late › Big")[1].startswith("b"), (h, names))
     h, t = cs_.get(sx, SAME)
     names = line_names(t)
     check("Task 2 fix I1(e): a section no name reaches (the same full path twice, `|` in its heading) is left out",
@@ -1967,7 +1974,7 @@ with tempfile.TemporaryDirectory() as d:
     h, t = cs_.get(sx, FENCE)
     names = line_names(t)
     check("Task 2 fix M3: a `##` inside a code fence and a `####` heading past the cut are not named; `Real` is",
-          names == ["Fenced", "Real"], names)
+          names == ["Real"], names)
     flat = "Notes/Long/Flat full.md"
     write(env.note(flat), "Flat full stripes. " + "g" * 34000 + "\n")
     env.refresh(sx)
@@ -2304,6 +2311,40 @@ with tempfile.TemporaryDirectory() as d:
     hg, tg = got3b(sx, gc["id"]) if gc else (None, "")
     check("v3.16.2 review M2: by id, a vault file deleted since the search is exit 3 «not on disk» — a local index's copy "
           "of it is not served", gc and hg == "exit 3" and "not on disk" in tg, (gc, hg, tg))
+
+# v3.16.2 Task 4: the LONG_NOTE names aligned by heading path, found by a map, the cut-under one only when it helps;
+# `#H#C# tips`
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    EMPTYF = "Growth/Zorg empty notes.md"                 # read from its file: an empty `## Notes` before the cut
+    write(env.note(EMPTYF), "# Zorg empty notes\n\n" + "z" * 12000 + "\n\n## Notes\n\n## B\n\n" + "b" * 12000
+          + "\n\n### Notes\n\n" + "n " * 200 + "\n")
+    TOPF = "Notes/Long/Zorg top heavy.md"                 # one section from the top, past the cut
+    write(env.note(TOPF), "# Zorg top heavy\n\n## A\n\n" + "a" * 30000 + "\n")
+    MANYH = "Notes/Long/Zorg many headings.md"
+    write(env.note(MANYH), "# Zorg many headings\n\n" + "".join("## H%d\n\n%s\n\n" % (i, "h" * 480) for i in range(4000)))
+    TIPS = "Notes/Zorg tips.md"
+    write(env.note(TIPS), "# Zorg tips\n\n## Delivery\n\n" + "d " * 120 + "\n\n### C# tips\n\n" + "sharp " * 60 + "\n")
+    sx = env.sctx()
+    env.refresh(sx)
+    h, t = cs_.get(sx, EMPTYF)
+    names = line_names(t)
+    check("v3.16.2 C8 (final M1): an empty heading before the cut named like a sub-heading past it does not take that "
+          "sub-heading's place — the section the cut falls under (`B`) is named", "B" in names and "B › Notes" in names
+          or ("B" in names and "Notes" in names), names)
+    h, t = cs_.get(sx, TOPF)
+    check("v3.16.2 C8 (Task 2 review M4): the section the cut falls under is named only when --get of it shows 2 000 "
+          "characters more — a section from the top of the note is not", "заголовків далі немає" in t and "далі: A" not in t,
+          t[-200:])
+    whole_many = cs_._note_of(sx, MANYH)[5]
+    t0 = time.monotonic()
+    capped = cs_._cap(whole_many, MANYH, False, cs_._note_of(sx, MANYH)[4])
+    took = time.monotonic() - t0
+    check("v3.16.2 C8 (final M2): the names past the cut of a note with 4 000 headings in well under a second (a map, not "
+          "a scan per name)", took < 1.5 and "· ще " in capped, (round(took, 2), capped[-160:]))
+    ht, tt = got3b(sx, "[[Zorg tips#Delivery#C# tips]]")
+    check("v3.16.2 C9 (Task 3 review M4): `[[Name#Delivery#C# tips]]` — parts joined back with `#` — is `Delivery › C# tips`",
+          ht.endswith("› Zorg tips › Delivery › C# tips · " + ht.rsplit(" · ", 1)[-1]) and tt.startswith("sharp"), (ht, tt[:40]))
 
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:

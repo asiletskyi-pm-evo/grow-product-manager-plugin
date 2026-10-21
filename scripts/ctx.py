@@ -1084,7 +1084,7 @@ def cmd_index(a, c):
     if res["rebuilt"] and a.action != "rebuild":
         print("  the index could not be read or had another schema — built again (the old one: %s.broken)" % idx.db_path)
     if s["skipped_dataless"]:
-        own = len(ci.evicted(roots, store_rel, blocks))     # what --download brings down: the plugin folder's
+        own = dl["left"] if dl else len(ci.evicted(roots, store_rel, blocks))   # the plugin folder's: --download's
         print("  not downloaded (iCloud), not read: %d%s" % (s["skipped_dataless"], " (plugin folder: %d — ctx index "
                                                               "rebuild --download)" % own if own else ""))
     if res["skipped_large"]:
