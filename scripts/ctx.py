@@ -1096,8 +1096,9 @@ def _search_kinds(value):
 
 SEARCH_ACTIONS = ("remember", "forget", "eval")
 _SEARCH_OPTS = {"q": "--q", "get": "--get", "skill": "--skill", "product": "--product", "limit": "--limit",
-                "sources": "--sources", "no_hints": "--no-hints", "pick": "--pick", "not_": "--not", "golden": "--golden"}
-_SEARCH_TAKES = {None: ("q", "get", "skill", "product", "limit", "sources", "no_hints"),
+                "sources": "--sources", "no_hints": "--no-hints", "pick": "--pick", "not_": "--not", "golden": "--golden",
+                "full": "--full"}
+_SEARCH_TAKES = {None: ("q", "get", "skill", "product", "limit", "sources", "no_hints", "full"),
                  "remember": ("q", "product", "pick", "not_"), "forget": ("q", "product"),
                  "eval": ("golden", "no_hints", "sources")}
 

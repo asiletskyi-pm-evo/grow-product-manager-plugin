@@ -1671,9 +1671,9 @@ def _get_path(sctx, arg, full=False):
         raise GetError(3, "no section %s in %s" % (heading, path))
     if hp:
         i = next(i for i, (h, _) in enumerate(secs) if h == hp)
-        text = _cap(_fill(secs[i][1], secs[i + 1:]), path, full)
+        text = _cap(_fill(secs[i][1], secs[i + 1:]), path, full, secs, hp)
     else:
-        text = _cap(whole, path, full)
+        text = _cap(whole, path, full, secs)
     return _header(source, path, hp, date, marks), (said + "\n\n" + text) if said else text
 
 
@@ -1700,12 +1700,10 @@ def long_note(path, shown, total, names, full):
     return LONG_NOTE % (_thousands(shown), _thousands(total), tail)
 
 
-def _past_cut(text, cut):
-    """The headings of `text` from the one the character `cut` falls under: the heading lines of level 1–3 (none in a
-    code fence — as ctx_index.split_sections reads them) that start before it, the last of them, then every one that
-    starts at or after it; each by its last part, or by its whole path (`H1 › H2`) when another heading of the text
-    ends in the same part."""
-    heads, stack, pos, fence = [], [], 0, None
+def _heading_lines(text):
+    """[(offset, last part)] of the heading lines of `text` that ctx_index.split_sections reads as headings: level 1–3,
+    none in a code fence."""
+    out, pos, fence = [], 0, None
     for line in text.split("\n"):
         f = ci._FENCE.match(line)
         if fence:
@@ -1716,22 +1714,48 @@ def _past_cut(text, cut):
         else:
             m = ci._HEADING.match(line)
             if m and len(m.group(1)) <= 3:
-                level = len(m.group(1))
-                stack = [(lv, t) for lv, t in stack if lv < level] + [(level, m.group(2).strip())]
-                heads.append((pos, stack[-1][1], " › ".join(t for _, t in stack)))
+                out.append((pos, m.group(2).strip()))
         pos += len(line) + 1
-    last = [h[1] for h in heads]
-    named = [(p, path if last.count(part) > 1 else part) for p, part, path in heads]
-    before = [n for p, n in named if p < cut][-1:]
-    return before + [n for p, n in named if p >= cut]
+    return out
 
 
-def _cap(text, path, full=False):
-    """`text` as `--get` gives it: GET_CHARS characters at most (FULL_CHARS with --full), then the LONG_NOTE line."""
+def _names_past(text, cut, path, secs, start=0):
+    """The names LONG_NOTE gives for what lies past `cut` of `text` — the note's sections `secs` (ctx_index.
+    split_sections) from `start` on, each matched in order to a heading line of the text (a heading the note's sections
+    left out, one with nothing under it, is skipped): the section the cut falls under, then every one after it, each by
+    the shortest end of its heading path (its last part, else more of it) that `--get "<path>#<name>"` — `_parse`, then
+    `_heading_for` — takes back to that very section; one no name reaches (a heading another one shadows, `|` in it)
+    is left out."""
+    lines, aligned, k = _heading_lines(text), [], start
+    for pos, part in lines:
+        key = _parts(part)[-1]
+        nxt = next((i for i in range(k, len(secs)) if secs[i][0] and _parts(secs[i][0])[-1] == key), None)
+        if nxt is not None:
+            aligned.append((pos, nxt))
+            k = nxt + 1
+    before = [a for a in aligned if a[0] < cut][-1:]
+    out = []
+    for _, i in before + [a for a in aligned if a[0] >= cut]:
+        parts = secs[i][0].split(" › ")
+        for n in range(1, len(parts) + 1):
+            name = " › ".join(parts[-n:])
+            hp = _heading_for(secs, _parse("%s#%s" % (path, name))[1])
+            if hp and next(x for x, (h, _) in enumerate(secs) if h == hp) == i:
+                out.append(name)
+                break
+    return out
+
+
+def _cap(text, path, full=False, secs=None, heading=""):
+    """`text` as `--get` gives it: GET_CHARS characters at most (FULL_CHARS with --full), then the LONG_NOTE line with
+    the names of what lies past the cut (`_names_past` over the note's sections `secs` — a list, or a function that
+    reads them, called only for a text that is cut — from the section `heading` the text begins with; "" the note)."""
     limit = FULL_CHARS if full else GET_CHARS
     if len(text) <= limit:
         return text
-    return text[:limit] + "\n\n" + long_note(path, limit, len(text), _past_cut(text, limit), full)
+    secs = (secs() if callable(secs) else secs) or []
+    start = next((i for i, (h, _) in enumerate(secs) if h == heading), 0) if heading else 0
+    return text[:limit] + "\n\n" + long_note(path, limit, len(text), _names_past(text, limit, path, secs, start), full)
 
 
 def _header(source, path, heading, date, marks=""):
@@ -1811,6 +1835,7 @@ def get(sctx, cid, full=False):
         return _get_path(sctx, arg, full)       # a note named like an id; else NO_CANDIDATE, as for a name
     heading, date, text, marks = entry.get("heading") or "", entry.get("date") or "", None, ""
     said, following = None, []
+    secs = lambda: (idx.note(entry["path"]) or (None, []))[1]  # noqa: E731 — the note's sections, for a cut text
     if entry.get("kind") == "own":
         sec = idx.section(entry.get("section_id")) if entry.get("section_id") is not None else None
         if sec and N(sec["path"]) == entry["path"] and (sec.get("heading") or "") == heading:
@@ -1820,6 +1845,7 @@ def get(sctx, cid, full=False):
     if text is None:
         body, day, meta, said = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
         text, date = _section_of(body, heading), date or day
+        secs = ci.split_sections(body)
         following = _after(body, heading)
         if text is None and said:           # a local index's copy without that section: the whole note, never the file
             text, following = _section_of(body, ""), []
@@ -1827,7 +1853,7 @@ def get(sctx, cid, full=False):
             raise GetError(3, "no section %s in %s" % (heading, entry["path"]))
         if entry.get("kind") in ("local", "mcp"):
             marks = _marks(meta)
-    text = _cap(_fill(text, following), entry["path"], full)
+    text = _cap(_fill(text, following), entry["path"], full, secs, heading)
     return _header(entry.get("source"), entry["path"], heading, date, marks), (said + "\n\n" + text if said else text)
 
 

@@ -1766,9 +1766,9 @@ with tempfile.TemporaryDirectory() as d:
         (t or "")[-500:])
     dup = cs_._note_of(sx, DUP)[5]
     h, t = cut_of(DUP)
-    check("…a last part that repeats is named by its full path", t == dup[:20000] + "\n\n"
-          + long_line(DUP, 20000, len(dup), heading_names_after(dup, 20000, dup_full={"Notes"}), False)
-          and "· Dup parts › Alpha › Notes · Beta · Dup parts › Beta › Notes —" in t, (t or "")[-300:])
+    check("…a last part that repeats (Task 2 fix: by the shortest end of its path that `--get` takes back to it)",
+          t == dup[:20000] + "\n\n" + long_line(DUP, 20000, len(dup), ["Dup parts", "Alpha", "Notes", "Beta", "Beta › Notes"],
+                                                False), (t or "")[-300:])
     h, t = cut_of(SEC + "#Big")
     check("…a section after `#` is cut too: 20 000, the line (no headings past the cut inside it)",
           t == "b" * 20000 + "\n\n" + long_line(SEC, 20000, 30000, [], False), (len(t or ""), (t or "")[-200:]))
@@ -1892,6 +1892,96 @@ check("v3.16.1 C7/C8 — search-protocol §4: the link forms as a hub writes the
                                         "a link with a folder in it is tried as a path, then as the end of one"))
       and "`![[Name]]`" in section(CP, 3) and "as the end of a path" in read(ROOT, "scripts", "ctx.py"),
       section(SP, 4)[-2600:])
+
+# Task 2 review fix: every name the LONG_NOTE line gives is one `--get "<path>#<name>"` takes back to that very section;
+# --full by id
+def line_names(t):
+    """The names a LONG_NOTE line gives (without `ще N`)."""
+    tail = (t or "").rsplit("\n\n", 1)[-1]
+    if "; далі: " not in tail:
+        return []
+    listed = tail.split("; далі: ", 1)[1].rsplit(" — --get ", 1)[0]
+    return [n for n in listed.split(" · ") if not n.startswith("ще ")]
+
+
+LOG = "Notes/Long/Zorg log.md"                # empty date headings: split_sections drops them
+LOGF = "Growth/Zorg log file.md"              # the same note read from its file (a local index's note)
+CASE = "Notes/Long/Case dup.md"               # `Action Items` before the cut, `Action items` past it
+TWO = "Notes/Long/Two bigs.md"                # `Early › Big` and `Late › Big`; the short `Late` fills into `Late › Big`
+SAME = "Notes/Long/Same path.md"              # the same full path twice; a heading with `|`
+FENCE = "Notes/Long/Fenced.md"                # past the cut: a `##` inside a code fence and a `####` heading
+log_text = ("# Zorg log\n\n" + "l" * 20500 + "\n\n## 2026-10-01\n\n### Action items\n\n" + "one " * 60
+            + "\n\n## 2026-10-08\n\n### Action items\n\n" + "two " * 60 + "\n")
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note(LOG), log_text)
+    write(env.note(LOGF), log_text.replace("# Zorg log\n\n", "# Zorg log\n\nThe file copy of the log, read through a local index.\n\n", 1))
+    write(env.note(CASE), "# Case dup\n\n## Action Items\n\n" + "early " * 60 + "\n\n## Body\n\n" + "c" * 20500
+          + "\n\n## Action items\n\n" + "late " * 60 + "\n")
+    write(env.note(TWO), "# Two bigs\n\n## Early\n\n### Big\n\n" + "e" * 500 + "\n\n## Late\n\nshort\n\n### Big\n\n"
+          + "b" * 30000 + "\n")
+    write(env.note(SAME), "# Same path\n\n## Dup\n\n" + "first " * 60 + "\n\n## Body\n\n" + "s" * 20500
+          + "\n\n## Dup\n\n" + "second " * 60 + "\n\n## A | B\n\n" + "pipe " * 60 + "\n")
+    write(env.note(FENCE), "# Fenced\n\n" + "f" * 20500 + "\n\n```\n## Not a heading\n```\n\n#### Deep\n\n" + "deep " * 60
+          + "\n\n## Real\n\n" + "real " * 60 + "\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + [LOGF])
+    sx = env.sctx()
+    env.refresh(sx)
+
+    def back(path, name):
+        try:
+            return cs_.get(sx, "%s#%s" % (path, name))
+        except cs_.GetError as e:
+            return "exit %d" % e.code, str(e)
+
+    for label, path in (("an own note", LOG), ("the same note from its file", LOGF)):
+        h, t = cs_.get(sx, path)
+        names = line_names(t)
+        got = [back(path, n) for n in names]
+        check("Task 2 fix I1(a/b): %s whose date headings have no text — every name the line gives is read back by "
+              "`--get \"<path>#<name>\"`, each a section of its own" % label,
+              names and all(not g[0].startswith("exit") for g in got) and len({g[1] for g in got}) == len(got)
+              and any(g[1].startswith("two ") for g in got), (names, [g[0] for g in got]))
+    h, t = cs_.get(sx, CASE)
+    names = line_names(t)
+    check("Task 2 fix I1(c): a past-the-cut heading another one of the note shadows (`Action Items` / `Action items`) "
+          "is not named — no name brings back the earlier section",
+          all(not back(CASE, n)[1].startswith("early ") for n in names) and "Action items" not in names, names)
+    sid = cs_.candidate_id(TWO, "Two bigs › Late")
+    h, t = cs_.get(sx, sid)
+    names = line_names(t)
+    check("Task 2 fix I1(d): a filled section past the cut is named by the suffix that reaches it (`Late › Big`, not "
+          "`Big`, the earlier one)", "Late › Big" in names and "Big" not in names
+          and back(TWO, "Late › Big")[1].startswith("b"), (h, names))
+    h, t = cs_.get(sx, SAME)
+    names = line_names(t)
+    check("Task 2 fix I1(e): a section no name reaches (the same full path twice, `|` in its heading) is left out",
+          "Dup" not in names and "Same path › Dup" not in names and not any("|" in n for n in names)
+          and all(not back(SAME, n)[0].startswith("exit") for n in names), names)
+    h, t = cs_.get(sx, FENCE)
+    names = line_names(t)
+    check("Task 2 fix M3: a `##` inside a code fence and a `####` heading past the cut are not named; `Real` is",
+          names == ["Fenced", "Real"], names)
+    flat = "Notes/Long/Flat full.md"
+    write(env.note(flat), "Flat full stripes. " + "g" * 34000 + "\n")
+    env.refresh(sx)
+    fid = cs_.candidate_id(flat, "")
+    h1, t1 = cs_.get(sx, fid)
+    h2, t2 = cs_.get(sx, fid, full=True)
+    check("Task 2 fix I2: `--get <id> --full` of a 34 000-character own section — whole, no line (20 000 and the line without)",
+          len(t1) > 20000 and "нотатка довга" in t1 and "нотатка довга" not in t2 and len(t2) > 34000, (len(t1), len(t2)))
+    res = cs_.run(sx, ["zorg log"], now=NOW)
+    cs_.save_last(env.home, res["last"])
+    loc = next((c for c in res["candidates"] if c["path"] == LOGF), None)
+    h3, t3 = cs_.get(sx, loc["id"], full=True) if loc else (None, "")
+    check("…`--get <id> --full` of a note-level local-index candidate: whole, no line",
+          loc and loc["source"] == ["zorg-brain"] and "two " in t3 and "нотатка довга" not in t3, (loc, len(t3 or "")))
+
+check("Task 2 fix M5 — search-protocol §4: the 600-character bound of the names; the by-id paragraph points at the cut; "
+      "context-protocol has no «server ;»",
+      "the first 20 or 600 characters of them" in section(SP, 4)
+      and "is cut at 20 000 characters" in section(SP, 4).split("`--get` also takes a note's path")[0]
+      and "server ;" not in read(ROOT, "references", "context-protocol.md"), section(SP, 4)[:600])
 
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:

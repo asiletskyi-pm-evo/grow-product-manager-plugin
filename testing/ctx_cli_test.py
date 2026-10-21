@@ -4790,6 +4790,10 @@ with tempfile.TemporaryDirectory() as d:
           and "нотатка довга" not in res["text"], (rc, res and (res.get("text") or out)[-200:]))
     rc, out, res = run_ok(env, "search", "--q", "parts", "--full")
     check("…--full without --get is bad usage (exit 3)", rc == 3 and "--full" in out, (rc, out[-300:]))
+    rc, out, res = run_ok(env, "search", "eval", "--full")
+    rc2, out2, res2 = run_ok(env, "search", "forget", "--q", "parts", "--full")
+    check("Task 2 fix M2: eval and forget take no --full either (exit 3, the flag named)", rc == 3 and rc2 == 3
+          and "--full" in out and "--full" in out2, (rc, out[-200:], rc2, out2[-200:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
