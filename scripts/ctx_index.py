@@ -10,6 +10,8 @@ the vault (iCloud never syncs it): deleting the folder is safe, `ctx index rebui
                                 top folder (`Notes/…`, `ZorgCore/…`), or `@<repository>/…` outside every vault.
 - split_sections / note_meta / version_key / name_key   a note's sections and its metadata (the frontmatter, else the
                                 text); a frontmatter that cannot be read leaves the whole note as text, without metadata.
+                                A stub before the first heading — a breadcrumb, a short preamble — is no section.
+- link_only / strip_links       a breadcrumb line or a line of links alone, and a text without such lines.
 - is_dataless                   a file iCloud has not downloaded: reading it would start the download, so it is skipped.
 - Index                         sections.sqlite (notes, sections, the FTS5 table sections_fts, meta), index.json (the
                                 state the session digest reads) and index.lock (one refresh at a time); `built` — has
@@ -58,6 +60,7 @@ TRUE = ("true", "yes", "1")
 DATE_KEYS = ("updated", "modified", "snapshot", "generated", "date", "created")
 TTL_DATE_KEYS = ("updated", "snapshot", "generated")   # the note's own date a class TTL is counted from (provider protocol §6)
 COMMIT_EVERY = 50                   # files written between two commits of a refresh
+STUB_CHARS = 200                    # a preamble shorter than this (its breadcrumb lines aside) is no section of its own
 COUNTS = ("added", "changed", "removed", "pending", "skipped_dataless", "skipped_large")
 BROKEN_NOTE = "індекс пошуку не читається (%s) — ctx index rebuild збудує його наново"
 BUSY_NOTE = "індекс пошуку зайнятий іншим процесом — цього разу без нього"
@@ -167,8 +170,9 @@ def rel_path(abs_path, vaults, root=None):
 
 
 def _skip_folder(rel, store_rel):
-    """A folder (or a file in it) the index never enters: the store, `_System/providers/`, `.obsidian`, `.trash`,
-    a name that starts with `_backup`."""
+    """A folder (or a file in it) the index never enters: the store, `_System/providers/`, `_System/_scratch/` (the
+    plugin's scratch files — per-person digests among them), `.obsidian`, `.trash`, a name that starts with
+    `_backup`."""
     if store_rel:
         s = _slash(N(store_rel)).rstrip("/")
         if s and (rel == s or rel.startswith(s + "/")):
@@ -177,14 +181,15 @@ def _skip_folder(rel, store_rel):
     for i, part in enumerate(parts):
         if part in (".obsidian", ".trash") or part.startswith("_backup"):
             return True
-        if part == "_System" and i + 1 < len(parts) and parts[i + 1] == "providers":
+        if part == "_System" and i + 1 < len(parts) and parts[i + 1] in ("providers", "_scratch"):
             return True
     return False
 
 
 def excluded(rel, store_rel, blocks_rels):
-    """Is the file `rel` (an index name) left out: under the store or `_System/providers/`, a blocks file of a
-    registration, in a `.obsidian`, `.trash` or `_backup…` folder, not `.md`, or `local-context.md` itself."""
+    """Is the file `rel` (an index name) left out: under the store, `_System/providers/` or `_System/_scratch/`, a
+    blocks file of a registration, in a `.obsidian`, `.trash` or `_backup…` folder, not `.md`, or `local-context.md`
+    itself. Every source's hits go through it, not only the walk."""
     rel = _slash(N(rel or ""))
     if _skip_folder(rel, store_rel) or rel in {_slash(N(b)) for b in blocks_rels or ()}:
         return True
@@ -201,6 +206,9 @@ _CID = re.compile(r"\((\d{6,})\)\.md$", re.I)
 _DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}(?::\d{2})?))?")
 _MARK = re.compile(r"\b(?:v\d+|draft|драфт(?:\s*№\s*\d+)?|rev\d+|ревізія\s*\d+)\b", re.I)
 _DATES = re.compile(r"\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}(?:\.\d{2,4})?")
+_LINK = re.compile(r"!?\[\[[^\]\n]*\]\]|!?\[[^\]\n]*\]\([^)\n]*\)|`[^`\n]*`")
+_SEPARATORS = re.compile(r"^[\s·•|/\\<>‹›«»←→↑↓\-–—*_=~,;.:]*$")
+_LABEL = re.compile(r"^[\s*_>\-]*[^\W\d_][\w ʼ'’\-]{0,23}::?")
 
 
 def _split_flow(s):
@@ -290,10 +298,30 @@ def _frontmatter(text):
     return data, "\n".join(lines[end + 1:])
 
 
+def link_only(line, label=False):
+    """Is the line a breadcrumb — it starts with `↑ [[` (a Confluence mirror's way up) — or nothing but wiki links,
+    embeds (`![[x.png]]`), Markdown links, backticked paths and separators (`·`, `|`, `/`, `›`, `—`, `---` …)? With
+    `label`, a short `Label:` or `Label::` before the links counts too (`Up:: [[Zorg MOC]]`, `**MOC:** [[Research]]`).
+    An empty line is not one."""
+    s = (line or "").strip()
+    if s.startswith("↑ [["):
+        return True
+    if label and _LINK.search(s):
+        s = _LABEL.sub("", s, count=1)
+    return bool(s) and bool(_SEPARATORS.match(_LINK.sub(" ", s)))
+
+
+def strip_links(text, label=False):
+    """The text without its `link_only` lines."""
+    return "\n".join(line for line in (text or "").split("\n") if not link_only(line, label))
+
+
 def split_sections(text):
     """[(heading path "H1 › H2 › H3", body)] for the headings of level 1–3 (a deeper heading stays in the body, a `#` in
-    a code fence is no heading). The frontmatter is cut; text before the first heading is a section of its own when
-    it has any; a heading with nothing under it is left out unless every one is empty. No heading: [("", text)]."""
+    a code fence is no heading). The frontmatter is cut. Text before the first heading is a section of its own when
+    what is left of it without its breadcrumb lines (`link_only`) is STUB_CHARS characters or more; a shorter one is no
+    section: what is left of it starts the first heading's section, and nothing is left of a breadcrumb alone. A
+    heading with nothing under it is left out unless every one is empty. No heading: [("", text)]."""
     _, body = _frontmatter((text or "").replace("\r\n", "\n"))
     out, stack, head, buf, fence, seen = [], [], "", [], None, False
     for line in body.split("\n"):
@@ -319,6 +347,11 @@ def split_sections(text):
     if not seen:
         return [("", out[0][1])]
     pre, headed = out[0], out[1:]
+    left = strip_links(pre[1]).strip("\n")
+    if len(left.strip()) < STUB_CHARS:            # a stub: no section of its own
+        if left.strip():
+            headed[0] = (headed[0][0], (left + "\n\n" + headed[0][1]).strip("\n"))
+        pre = ("", "")
     full = [s for s in headed if s[1].strip()]
     return ([pre] if pre[1].strip() else []) + (full or headed)
 

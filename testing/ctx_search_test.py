@@ -337,6 +337,19 @@ with tempfile.TemporaryDirectory() as d:
           paths(after, "own|v0") and not any(p.startswith(("@", "/")) for p in paths(after, "own|v0")),
           paths(after, "own|v0"))
 
+# ------------------------------------------------------------------ A4: _System/_scratch/ answers from no source
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    SCRATCH = "Notes/_System/_scratch/people_digests/bea-two.md"
+    write(env.note(SCRATCH), "---\ntype: note\n---\n# Bea Two\n\nThe mobile cart: what Bea said in the 1-1s.\n")
+    build_brain(env.brain, env.vault, [SCRATCH, "Notes/Mobile cart notes.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    lists_s, _ = cs_.gather(sx, ["mobile cart"], cs_.sources(env.text, sx["repos"]), deadline())
+    check("A4: a per-person digest under <plugin folder>/_System/_scratch/ is no candidate of any source",
+          paths(lists_s, "zorg-brain|v0") == ["Notes/Mobile cart notes.md"]
+          and not any(h["path"] == SCRATCH for l in lists_s.values() for h in l), {k: paths(lists_s, k) for k in lists_s})
+
 # ------------------------------------------------------------------ MCP sources
 def growth_reg(url, core_root=""):
     return ("schema: provider-registration/2\nid: zorg-growth\ntitle: Zorg growth\nkind: mcp\nauthority: team\n"

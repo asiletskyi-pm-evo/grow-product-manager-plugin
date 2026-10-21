@@ -128,8 +128,32 @@ check("the frontmatter is cut", ctx_index.split_sections("---\ntype: x\n---\n# A
 check("a heading path skips a missing level", [h for h, _ in ctx_index.split_sections("## B\nb\n# A\na\n### C\nc\n")]
       == ["B", "A", "A › C"], ctx_index.split_sections("## B\nb\n# A\na\n### C\nc\n"))
 check("a # inside a code fence is no heading", [h for h, _ in ctx_index.split_sections("# A\n```\n# not\n```\nx\n")] == ["A"])
-check("text before the first heading is its own section", ctx_index.split_sections("intro\n# A\nx\n")
-      == [("", "intro"), ("A", "x")], ctx_index.split_sections("intro\n# A\nx\n"))
+LONG_INTRO = ("An introduction long enough to stand alone. " * 6).strip()
+check("text before the first heading is its own section when it holds 200 characters or more",
+      ctx_index.split_sections(LONG_INTRO + "\n# A\nx\n") == [("", LONG_INTRO), ("A", "x")],
+      ctx_index.split_sections(LONG_INTRO + "\n# A\nx\n"))
+
+# A1: a stub before the first heading (a Confluence mirror's breadcrumb, a short preamble) is no section of its own
+CRUMB = "↑ [[Delivery (900100100)|Delivery]]  ·  `Zorg / Delivery / Slots`"
+check("link_only: a breadcrumb, a line of links, an embed, a backticked path, a line of separators",
+      all(ctx_index.link_only(x) for x in (CRUMB, "[[A]] · [[B|b]]", "![[diagram.png]]", "![](att/x.png)",
+                                           "`Zorg / Delivery`", "---", "[Doc](https://x.test/a) | [[B]]")), CRUMB)
+check("…not a line with words of its own, nor an empty one; a `Label:` before the links only with label=True",
+      not any(ctx_index.link_only(x) for x in ("See [[A]] for the rules", "Owner: [[Bea Two]]", "plain words", ""))
+      and ctx_index.link_only("Up:: [[Zorg MOC]]", label=True) and ctx_index.link_only("**MOC:** [[Research]]", label=True)
+      and not ctx_index.link_only("See [[A]] for the rules", label=True))
+check("a short preamble is folded into the first heading's section", ctx_index.split_sections("intro\n# A\nx\n")
+      == [("A", "intro\n\nx")], ctx_index.split_sections("intro\n# A\nx\n"))
+check("…a breadcrumb alone is dropped", ctx_index.split_sections(CRUMB + "\n\n# Slots\n\nThe slots.\n")
+      == [("Slots", "The slots.")], ctx_index.split_sections(CRUMB + "\n\n# Slots\n\nThe slots.\n"))
+check("…a breadcrumb and a short line: the line folded, the breadcrumb dropped",
+      ctx_index.split_sections("---\ntype: page\n---\n" + CRUMB + "\nDraft of the team.\n# Slots\n\nThe slots.\n")
+      == [("Slots", "Draft of the team.\n\nThe slots.")],
+      ctx_index.split_sections("---\ntype: page\n---\n" + CRUMB + "\nDraft of the team.\n# Slots\n\nThe slots.\n"))
+check("…folded into a first heading that is empty, which is then kept", ctx_index.split_sections("intro\n# A\n## B\ny\n")
+      == [("A", "intro"), ("A › B", "y")], ctx_index.split_sections("intro\n# A\n## B\ny\n"))
+check("…a breadcrumb does not count towards the 200 characters", ctx_index.split_sections(
+    CRUMB + "\n" + "x" * 150 + "\n# A\nbody\n") == [("A", "x" * 150 + "\n\nbody")])
 
 check("a draft mark makes a version key, a date series does not",
       ctx_index.version_key("Roadmap Q4 — draft v2", "Notes") == ctx_index.version_key("Roadmap Q4 — draft v3", "Notes")
@@ -200,9 +224,14 @@ check("….obsidian, .trash, _backup*, not .md, local-context.md",
       all(ctx_index.excluded(p, "Notes/_System/context", []) for p in (
           "Notes/.obsidian/x.md", "Notes/a/.trash/x.md", "_backup_x/y.md", "Notes/_backup 2/y.md", "Notes/a.txt",
           "Notes/_System/local-context.md")))
+check("A4: anything under a `_System/_scratch/` folder (per-person digests) is left out",
+      all(ctx_index.excluded(p, "Notes/_System/context", []) for p in (
+          "Notes/_System/_scratch/people_digests/bea-two.md", "ZorgCore/_System/_scratch/x.md", "_System/_scratch/y.md",
+          "@zorg-ext/_System/_scratch/z.md")))
 check("…and nothing else", not any(ctx_index.excluded(p, "Notes/_System/context", ["ZorgCore/_System/context-blocks.md"])
                                    for p in ("Notes/a.md", "Notes/_System/other.md", "Notes/backup/a.md",
-                                             "Notes/_System/contexts/a.md", "ZorgCore/_System/x.md", "Notes/A.MD")))
+                                             "Notes/_System/contexts/a.md", "ZorgCore/_System/x.md", "Notes/A.MD",
+                                             "Notes/_scratch/a.md", "Notes/_System/scratch/a.md")))
 
 nfd = unicodedata.normalize("NFD", "/v/Notes/Йогурт і їжа.md")
 check("rel_path: from the vault's root with the top folder, NFC, /",
@@ -210,6 +239,16 @@ check("rel_path: from the vault's root with the top folder, NFC, /",
 check("…outside every vault: @<source>/<path from the root>",
       ctx_index.rel_path("/core/zx/a/b.md", ["/v"], ctx_index.Root("zorg-x", "/core/zx", "")) == "@zorg-x/a/b.md")
 check("is_dataless is false for a file on disk", ctx_index.is_dataless(os.path.abspath(__file__)) is False)
+
+# ------------------------------------------------------------------ A4: the walk never enters _System/_scratch/
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Notes/_System/_scratch/people_digests/bea-two.md"), "---\ntype: note\n---\n# Bea Two\n\nDigest of the 1-1s.\n")
+    write(env.note("ZorgCore/_System/_scratch/x.md"), "# Scratch\n\nA draft of the core.\n")
+    idx = ctx_index.Index(env.home)
+    idx.refresh(*env.scope())
+    paths = {n["path"] for n in idx.notes()}
+    check("A4: a note under <plugin folder>/_System/_scratch/ or a core's is not indexed", paths == INDEXED, sorted(paths ^ INDEXED))
 
 # ------------------------------------------------------------------ the index over the fixture
 with tempfile.TemporaryDirectory() as d:
