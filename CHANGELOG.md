@@ -12,6 +12,63 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.16.0 (2026-10-21)
+
+**«Пошук»: Step 0.5 finds what your base already holds about the request.** Until now Step 0.5 of a skill matched every word of the request at once (AND), in the language it was typed in, gave the newest notes of the skill's types, and asked «Use as context?» in the middle of the run. Measured on a copy of a real vault with a reviewed set of 105 requests: a user's own local index as it was put the right note among the first five for 44 % of the requests with an answer, and for 2 of 24 requests taken from real work; the type-and-date list, for 2 of 17. The anti-goal of this release is the opposite failure — a wrong note taken silently, which becomes the source of wrong conclusions — so what is taken is rated, marked and cited.
+
+MINOR: a new protocol, two new commands of `ctx` (`search`, `index`), a new memory file in the store, a new index outside it; Step 0.5 of four skills rewritten. No skill renamed, no description changed.
+
+### Added
+
+- **`references/search-protocol.md`** — Step 0.5 of every skill: the model writes 3–4 variants of the request (Ukrainian, Russian, English, a synonym or the team's term), runs `ctx search`, rates each candidate «прямо» / «частково» / «ні», takes silently at most three that are directly about the request — with their source and date in one line «Взяв із бази: …» — and asks nothing in the middle of the run. A doubt (only partial matches, an outdated or older note, a hub, a glossary-only hit, a snapshot) or a conflict between taken notes goes into a numbered **block of variants after the work**; nothing found is «У базі нічого прямо про це». When what was taken lacks a fact the work needs, or nothing was found, level 2 may ask a live source (Confluence, Jira) — never in the middle of the run without the user's OK. `sensitive` notes and people types stay out of product skills (in the block by title only). An automated run (`health-check`) writes its doubt as one `Пошук:` line in the report.
+- **`ctx search --q TEXT [--q TEXT …] [--skill S] [--product P] [--limit N] [--sources own,local,mcp] [--no-hints] [--json]`** — read only, no store lock. Every variant goes to every source at once, each its own ranked list:
+  - **its own section index** of the plugin folder of each vault and the core folder of each registration — `<home>/.grow-pm/index/sections.sqlite` (schema `search-index/1`), one row per section (headings 1–3), FTS5 with bm25 weights title 10 · heading 6 · tags 4 · aliases 4 · body 1; refreshed incrementally on each search within 30 s (a queue carries over, a lock, a broken or older index is rebuilt and says so in one line); files over 2 MB, not Markdown, under `.obsidian`/`.trash`/`_backup*`, the store and `_System/_scratch/` are not indexed; **a file iCloud has not downloaded is never read** (it would start a download) — it is counted in `ctx index status`;
+  - **a local compatible index** of yours (sqlite read with `mode=ro`, both shapes of `context-provider-protocol.md` §10), within 5 s to open;
+  - **a repository's MCP server** only when the repository has no folder on disk (`McpClient.call_list` reads `vault_search` in every shape a server sends, including `structuredContent: {"result": [...]}`).
+  
+  A light Ukrainian/Russian stemmer and OR semantics; the team glossary's approved other names of a word as a list of weight 0.5 (`лише глосарій` when that is all that matched); reciprocal rank fusion (k = 60); priors — the skill's types × 1.2 (a weight, not a filter, from `search_types` in `references/context-manifest.yaml`), the same product × 1.1, another × 0.7, a hub × 0.5, outdated × 0.5, your earlier pick × 1.5. Limits: 20 s a source, 60 s the command; a source that does not answer is one line `<id> не відповів — без нього`, and a base that was not read is never «nothing found» (exit 5, «Базу не прочитано»).
+- **Folding and marks.** One candidate per note with at most two of its sections; the same note found twice (the same path in NFC, the same Confluence id — the newer stays, the same content hash, a near copy — the same text but for a back-link, a navigation line, a date stamp or a «Повʼязане» block: your layer's copy stays, then the original (the older), the same title and link) is folded into one with `двійник <шлях>`; versions (`v2`, `draft`, `№2.1`) fold into the newest with `старіша версія <шлях>` / `є старіші версії: N`. Marks: `застаріле` (status outdated, archived, deprecated, former, superseded), `станом на <день>` (a card older than its class's `ttl_days` — taken, cited with that day), `знімок від <день>`, `sensitive` (also from a folded copy), `хаб`, `лише глосарій`, `одне слово`, `твій вибір від <день>`, `ти казав «не те»`. Every candidate carries its source, path and date (a local index's file day when the note has none).
+- **`ctx search --get ID|PATH|NAME`** — a section with its provenance line `> [<джерело> · <шлях> › <заголовок> · <дата>]`; a section shorter than 200 characters goes on with the next ones up to 1 500 (`секція коротка — додано наступні: …`), so a Confluence navigation line is never all you get; a note by its path (`Notes/x.md`, `@repo/x.md`) or by its name (`Назва`, `[[Назва]]`, `[[Назва#Розділ]]`) — to read a twin, a newer version or a hub's link; a note iCloud has not downloaded is read from a local index (`файл не завантажено з iCloud — текст із локального індексу <id>`) or not at all; at most 20 000 characters of a whole note.
+- **`ctx search remember|forget`** — your picks from the block of variants (`<store>/.state/search.json`, schema `context-search-memory/1`): a writing command (lock, snapshot `search`, journal `op: search`, `ctx undo`); a similar request (Jaccard ≥ 0.6) weighs the pick × 1.5 or marks a rejected note.
+- **`ctx search eval --golden <file>`** — the golden set `<store>/search/golden.yaml` (schema `search-golden/1`, frozen variants): the right answer among the first 50, by class, the same by the request alone, MRR, and the empty requests; `testing/search_agent_eval.py prepare|score` measures the model level (precision of what is taken, empty requests clean, the right answer taken or offered).
+- **`ctx index status|rebuild`**; the SessionStart digest line `index: секцій N · оновлено <день>` (read from `index.json` alone, no sqlite at session start).
+- Validator check 19: every skill's `search_types` in the manifest equals the types its `SKILL_CONTEXT_MAP` row names.
+
+### Changed
+
+- **Step 0.5 of `write-concept` 0.16.0, `product-analysis` 0.18.0, `cjm-research` 0.13.0 (its Step 1.5)** follows `search-protocol.md`: no «Use as context?» question; what is taken feeds the work as before (the concept's "Informed by", a previous value with its source and date, the CJM baseline).
+- **`context-navigator` 0.2.0** — its "anything else" route uses `ctx search` → `--get` with SHELL; a card or note one of its own routes reads directly is neither taken by Step 0.5 nor counted as a doubt.
+- Protocols: `vault-protocol.md` (L1/L2 point to `search-protocol.md`), `local-context-protocol.md`, `context-protocol.md` §3 and §5g, `context-provider-protocol.md` §2, §5, §6 (a class's age gives «станом на», only a status gives `застаріле`), §10, §12.8, `host-profiles.md`, `data-policy.md` (the index stays on the machine; a search goes to a server only for a repository with no folder).
+
+### Acceptance
+
+On a copy of a real vault, read only (the index and every write target in a scratch folder, a guard before every call), on the reviewed set of 105 requests (71 simulated in ten classes, 24 from real work, 10 the base has nothing on) — `Context-Core-v3.16-Acceptance` in the programme folder:
+- `ctx search eval`: the right note among the first 50 for **98.9 %** (criterion ≥ 85 %), first for 49 of 95, MRR 0.621; the right note among the 30 a skill reads — 94 of 95.
+- The model level (agents following the protocol, an independent judge on what was taken outside the set): **95.8 %** of what was taken silently was right, no wrong note taken silently, nothing taken on **10 of 10** empty requests, the right note taken or offered for **96.8 %**.
+- No note twice in a list; every candidate has a source, a path and a date.
+- The first fix wave after the acceptance lowered the top place (the right note first for 39 instead of 48 requests) — found by measuring the old and the new code on the same state of the vault, fixed before release (a navigation line stays a section of its own; of two near copies the original stays).
+
+### Tests
+
+`ctx_stem_test.py` 67, `ctx_index_test.py` 138, `ctx_glossary_test.py` 48, `ctx_search_test.py` 275, `ctx_hints_test.py` 80 (all new), `ctx_mcp_test.py` 244, `ctx_cli_test.py` 715, `session_start_test.py` 130; the golden read test still matches all 99 read views; a fictional fixture vault (`testing/fixtures/search/`) with a core folder, a local index built by the tests, a broken frontmatter, NFD names and a pinned eval. Every new check failed before its code.
+
+| File | Change |
+|---|---|
+| `references/search-protocol.md` | new — Step 0.5 |
+| `scripts/ctx_stem.py`, `ctx_index.py`, `ctx_glossary.py`, `ctx_search.py`, `ctx_hints.py` | new |
+| `scripts/ctx.py`, `ctx_mcp.py`, `ctx_common.py`, `ctx_read.py`, `ctx_resolve.py`, `session_start.py` | `search`, `index`; `call_list`; the digest line |
+| `references/context-manifest.yaml` | `search_types` per skill |
+| `skills/write-concept` 0.15.1 → 0.16.0, `product-analysis` 0.17.1 → 0.18.0, `cjm-research` 0.12.1 → 0.13.0, `context-navigator` 0.1.1 → 0.2.0 | Step 0.5 by the protocol |
+| `testing/validate-consistency.sh` | check 19 |
+
+### Backwards compatibility
+
+- Your context, the records, the manifest's reading and the registrations are unchanged; `ctx read` gives what it gave in v3.15.2. The index lives in `~/.grow-pm/index/` and is built on the first search (or `ctx index rebuild`); deleting it loses nothing.
+- Without SHELL (no `ctx`), Step 0.5 works as before through the vault server's search, with the protocol's rating and block of variants.
+- A note iCloud has evicted is not in the own index until it is downloaded; until then it reaches the search through a local index of yours, if you have one. An option to download such notes is planned for v3.16.1.
+
+---
+
 ## v3.15.2 (2026-10-20)
 
 **A binding to a slot the catalogue lacks sets no other binding aside.** v3.15.1 stopped such a binding from hiding a block from the by-name answer; it still decided which source binds the block. Per block the first source counts — yours, then the publisher's `slot=`, then the plugin's `team#Members` — and a binding to an unknown slot still took that place. So a core ahead of the plugin that marks its `team` block `slot=<a slot this plugin does not know>` set the plugin's `team#Members` aside, and a skill that reads a team's members, with your own `Team Members` table, lost the core's half; a binding of yours to a slot the catalogue no longer has set the publisher's `slot=` aside in the same way. Decided with the user: such a binding does nothing, and the next source binds the block.

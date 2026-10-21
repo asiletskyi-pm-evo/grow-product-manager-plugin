@@ -385,7 +385,7 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
 LEVEL_ORDER = {"rule": 0, "mine": 1, "repo": 2}
 WHY_RULE = "правило ядра"
 WHY_MINE = "твоє перемагає (блок не є правилом ядра)"
-WHY_LIST = "список — виводяться всі кандидати; склеювання пунктів — у v3.16"
+WHY_LIST = "список — виводяться всі кандидати; склеювання пунктів — у v3.17"
 WHY_ONLY = "єдиний кандидат"
 WHY_UNREAD = "реєстрацію не прочитано — показано без каскаду"
 

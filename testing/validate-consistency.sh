@@ -403,6 +403,20 @@ else
   ok "fixture regions: ${FIXTURE_SUM:-no fixtures} read clean by ctx_blocks.find_regions"
 fi
 
+# --- 19. search_types of the manifest = SKILL_CONTEXT_MAP (v3.16.0) ---------
+# `ctx search --skill <name>` weighs the artifact types of `search_types` in references/context-manifest.yaml; the
+# SKILL_CONTEXT_MAP table of references/vault-protocol.md stays for people and for hosts without a shell. A type added
+# to one and not the other would make the two kinds of host search for different things: every skill's search_types
+# must be the main types of its row (none for a "(none ...)" row), in the same order.
+TYPES_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import ctx_read; print('\n'.join(ctx_read.check_search_types('.')))" 2>&1)
+if [ -n "$TYPES_ERRS" ]; then
+  while IFS= read -r line; do err "search_types: $line"; done <<EOF
+$TYPES_ERRS
+EOF
+else
+  ok "search_types: every skill's types in context-manifest.yaml match its SKILL_CONTEXT_MAP row"
+fi
+
 # --- 10. Component counts in the three public descriptions -------------------
 # "33 skills across six contours" lives in plugin.json, marketplace.json and
 # README. With agents/commands/connectors the counts multiply; grep them all.

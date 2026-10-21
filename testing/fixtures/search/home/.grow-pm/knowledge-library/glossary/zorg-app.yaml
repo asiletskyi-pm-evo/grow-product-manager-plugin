@@ -1,0 +1,43 @@
+# Zorg App glossary — a product term replaces the organisation one of the same `term`.
+
+terms:
+  - term: "кошик"
+    en: "cart"
+    variants: ["корзина"]
+    avoid:
+      - "basket"
+    definition: "Where the customer collects goods before checkout"
+    source: "fixture"
+    status: approved
+    added: 2026-02-01
+
+  - term: "картка товару"
+    en: "product detail page (PDP)"
+    variants: ["КТ", "сторінка товару"]
+    avoid: ["продуктова картка", "item card"]
+    definition: "The page of one product"
+    source: "fixture"
+    status: approved
+    added: 2026-02-02
+
+  - term: "слот доставки"
+    en: "delivery slot"
+    variants: []
+    avoid: []
+    definition: Зв'язок часу й адреси # the apostrophe is text, the hash starts a comment
+    source: "fixture"
+    status: approved
+    added: 2026-02-03
+
+  - term: "кандидат"
+    en: "candidate"
+    variants: ["претендент"]
+    avoid: []
+    definition: "Still a suggestion, not the team's word"
+    source: "fixture"
+    status: candidate
+    added: 2026-02-04
+
+phrases:
+  - avoid: "в рамках даного функціоналу"
+    use: "у цій фічі"

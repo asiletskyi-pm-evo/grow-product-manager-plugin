@@ -1,0 +1,126 @@
+# The golden set of the fictional Zorg vault (testing/fixtures/search/): one query per class, two empty ones, a few
+# more where the question alone misses and its variants find the note (spec §11). `ctx search eval` on it gives the
+# numbers ctx_cli_test.py pins; search_agent_eval.py score reads it for the model level (criteria 1–3).
+# Paths are the index names of the notes: the vault's folder first (Notes/…, ZorgCore/…); the first `good` is the
+# direct answer.
+schema: search-golden/1
+queries:
+  - q: "графіком роботи продавців"
+    variants: ["графік роботи продавця", "график работы продавца", "seller working hours"]
+    class: форма
+    product: Zorg App
+    good: ["Notes/Кошик — графік роботи продавця.md"]
+    ok: ["Notes/Корзина 2.0 (mobile).md", "ZorgCore/Epics/Epic — PROJ-77.md"]
+    bad: ["Notes/Checkout flow (old).md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "години відкриття магазину"
+    variants: ["графік роботи продавця", "часы работы продавца", "seller working hours"]
+    class: синонім
+    good: ["Notes/Кошик — графік роботи продавця.md"]
+    ok: ["Notes/Корзина 2.0 (mobile).md", "Notes/Mobile cart notes.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "seller hours in the cart"
+    variants: ["графік роботи продавця в кошику", "часы работы продавца в корзине", "seller schedule cart"]
+    class: англ
+    good: ["Notes/Кошик — графік роботи продавця.md"]
+    ok: ["ZorgCore/Epics/Epic — PROJ-77.md", "Notes/Mobile cart notes.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "часы работы продавца в корзине"
+    variants: ["графік роботи продавця в кошику", "seller working hours in the cart", "расписание продавца"]
+    class: рос
+    good: ["Notes/Корзина 2.0 (mobile).md"]
+    ok: ["Notes/Кошик — графік роботи продавця.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "чому замовлення з кошика чекає до понеділка?"
+    variants: ["замовлення чекає до понеділка", "почему заказ ждёт до понедельника", "order waits until Monday"]
+    class: питання
+    good: ["Notes/Кошик — графік роботи продавця.md#Кошик — графік роботи продавця › Проблема"]
+    ok: ["Notes/Mobile cart notes.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "хто аналітик у команді Alpha?"
+    variants: ["аналітик команди Alpha", "аналитик команды Alpha", "team Alpha data analyst"]
+    class: питання
+    good: ["ZorgCore/Teams/team-alpha.md"]
+    ok: ["ZorgCore/People/bea-two.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "Q4"
+    variants: ["roadmap Q4", "дорожня карта Q4", "план на четвертий квартал"]
+    class: абревіатура
+    good: ["Notes/Roadmap Q4 — draft v3.md"]
+    bad: ["Notes/Roadmap Q4 — draft v2.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "Беа Ту аналітик"
+    variants: ["Bea Two data analyst", "Bea Two", "Беа Ту аналитик"]
+    class: транслітерація
+    good: ["ZorgCore/People/bea-two.md"]
+    ok: ["ZorgCore/Teams/team-alpha.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "чекаут таймаут"
+    variants: ["checkout timeout", "таймаут оформлення замовлення", "тайм-аут оформления заказа"]
+    class: транслітерація
+    good: ["Notes/Tasks/ZORG-1234.2 checkout timeout.md"]
+    ok: ["Notes/Meetings/Standup 2026-10-08.md", "Notes/Broken frontmatter.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "ZORG-1234.2"
+    variants: ["ZORG-1234.2 checkout timeout", "ZORG-1234", "checkout stability task"]
+    class: ключ
+    good: ["Notes/Tasks/ZORG-1234.2 checkout timeout.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "слоти"
+    variants: ["delivery slots", "слоты доставки", "слот доставки"]
+    class: коротко
+    good: ["Notes/Knowledge/Delivery slots (900100200).md"]
+    ok: ["ZorgCore/Pages/Delivery slots (900100200).md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "плата за продаж"
+    variants: ["оплата за продаж", "плата за продажу", "sale fee"]
+    class: синонім
+    good: ["Notes/Meetings/Pricing review 2026-09-30.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "підготуй концепт показу графіка продавця в мобільному кошику"
+    variants: ["концепт графік продавця в кошику", "концепт часы работы продавца в корзине", "concept seller hours mobile cart"]
+    class: справжній
+    product: Zorg App
+    skill: write-concept
+    good: ["Notes/Кошик — графік роботи продавця.md"]
+    ok: ["Notes/Корзина 2.0 (mobile).md", "Notes/Mobile cart notes.md", "ZorgCore/Epics/Epic — PROJ-77.md"]
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "програма лояльності для покупців"
+    variants: ["лояльність покупців", "программа лояльности", "loyalty program"]
+    class: порожній
+    good: []
+    source: reviewed
+    added: 2026-10-20
+
+  - q: "інтеграція з бухгалтерією 1С"
+    variants: ["інтеграція з 1С", "интеграция с бухгалтерией", "accounting integration"]
+    class: порожній
+    good: []
+    source: reviewed
+    added: 2026-10-20

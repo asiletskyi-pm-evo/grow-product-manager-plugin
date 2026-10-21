@@ -69,6 +69,16 @@ When working with potentially confidential data, every skill must follow these r
 
 ---
 
+## Search (Step 0.5, since v3.16.0)
+
+Step 0.5 of every skill searches the user's own base and, when it is not enough, the live sources of the session (`references/search-protocol.md`). Three rules keep it inside this policy:
+
+1. **Sensitive notes stay with the People contour.** A note marked `sensitive: true`, and the people types (`people`, `one-on-one-notes`, `performance-review`, `offboarding-plan`), are taken into a skill's work only by the People-contour skills. Any other skill never takes one, never reads its section, and never repeats its content — in its block of variants it may name such a note by its title only.
+2. **Live sources are read in the session, with a question where the data is sensitive.** Level 2 reads Confluence, Jira, meeting transcripts, Drive or mail only through the user's own connectors, and asks the user first before it reads person profiles, private channels or mail. What it reads stays in the session, like any data under this policy.
+3. **Nothing from a live source is indexed or stored.** The search's own index (`~/.grow-pm/index/`, outside every vault) holds only the user's vault folders and the cores registered on this machine; what level 2 finds goes into no index, no record and no store, and the user's choices keep the request and the paths chosen, never a note's content. A remote repository's server is asked only for a repository whose folder is not on disk, and only with the words of the request.
+
+---
+
 ## Reference
 
 This policy applies in addition to (not instead of) the integration strategy described in `integration-strategy.md`. Both documents must be read and followed before any skill begins data gathering.

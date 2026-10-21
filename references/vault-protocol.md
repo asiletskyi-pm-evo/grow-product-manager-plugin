@@ -92,53 +92,29 @@ search_all_vaults(criteria):
 
 ## Step 0.5 — Vault Context Search (OPTIONAL)
 
-Vault context search is inserted between **Step 0** and **Step 1** of every skill execution. This optional step enriches the skill context with relevant knowledge from the vault.
+Vault context search is inserted between **Step 0** and **Step 1** of every skill execution: the skill brings in what the user's base already knows about the request. Since v3.16.0 the whole step is **`references/search-protocol.md`** — the request and its variants, `ctx search`, the rating «прямо / частково / ні», what is taken silently and what never is, doubt and conflict, live sources, the block of variants at the end and the memory of the user's choices. It asks nothing in the middle of a run: the "Use as context? [Yes / Select specific / Skip]" question of earlier versions is gone.
 
 ### Precondition
-If `vault_level == L0` → **skip silently**, continue to Step 1 normally.
+Nothing to search (L0 and no registered repository or local index), an empty `SKILL_CONTEXT_MAP` row, or a request with no topic → **skip silently**, continue to Step 1 normally (`search-protocol.md` §1).
 
-### Algorithm
+### In short
 
 ```
-1. Determine relevant artifact types
-   → Use SKILL_CONTEXT_MAP (see section below)
-   → Interpret user's input for product/topic keywords
-
-2. Build search criteria:
-   - artifact_types: from SKILL_CONTEXT_MAP
-   - product: from local-context or user input
-   - tags: inferred from skill topic + user keywords
-   - status: [active, draft]
-   - sort: created DESC
-   - limit: 10 results
-
-3. Execute search:
-   IF vault_level == L1:
-     → file_search(criteria)
-   ELSE IF vault_level == L2:
-     → mcp_search(criteria)          # own vault + every reachable provider
-
-4. Display results (if found):
-   - Show max 5 in summary; each names its source (own vault or provider id)
-     and, for a snapshot provider, the snapshot date
-   - A stale or unreachable provider gets one line, once per session
-     (context-provider-protocol.md §6)
-   - Ask user: "Use as context? [Yes / Select specific / Skip]"
-
-5. Handle user response:
-   IF user selects "Yes" OR "Select specific":
-     → read full content of selected artifacts
-     → include in prompt context as "Vault Context"
-   ELSE IF "Skip":
-     → continue normally to Step 1
-
-6. If no results found:
-   → continue silently to Step 1
+1. The request (the topic in the user's words) + 3–4 variants written before any result
+2. ctx search --q <request> --q <variant> … --skill <skill> --product <product> --json
+     (the section index of the plugin folders and the cores, a registered local index,
+      the MCP of a repository with no folder on disk; RRF, the priors, no duplicates)
+   No SHELL → the words of the request, file by file, or vault_search per variant
+     (search-protocol.md §12)
+3. Rate the candidates; read the "direct" ones (ctx search --get <id>)
+4. Take at most 3 direct sections silently, with one provenance line
+5. A doubt or a conflict → maybe live sources (level 2; triggers in search-protocol §8); the block of variants at the end
+6. The user's choice → ctx search remember
 ```
 
 ### SKILL_CONTEXT_MAP
 
-Defines which artifact types are relevant to each skill. `local-context-protocol.md` sends **every** skill to Step 0.5, so every skill needs a row; a skill with no entry silently skips vault context.
+Defines which artifact types are relevant to each skill. `local-context-protocol.md` sends **every** skill to Step 0.5, so every skill needs a row; a skill with no entry silently skips vault context. Since v3.16.0 the types are a **weight, not a filter**: `ctx search --skill <name>` weighs a candidate of these types × 1.2, and a note without a type is found as well. The search reads them from `search_types` in `references/context-manifest.yaml`; this table stays for people and for hosts without a shell, and validator check 19 keeps the two the same (the types before a `;` of a row, without a remark in brackets).
 
 | Skill | Relevant Types |
 |-------|---|
@@ -176,67 +152,30 @@ Defines which artifact types are relevant to each skill. `local-context-protocol
 | context-navigator | decision, meeting-notes, knowledge-source (own vault); provider notes through `vault/v1` |
 | release-manager | decision |
 
-> People types are only ever surfaced to People-contour skills. A product skill must not pull `people` / `one-on-one-notes` / `performance-review` into its context (`data-policy.md`).
+> People types are only ever surfaced to People-contour skills. A product skill must not pull a people type (the list: `data-policy.md` → Search, rule 1) into its context. Since v3.16.0 the same holds for any note marked `sensitive: true`: outside the People contour it is never taken and its content never shown — the block of variants may name it only by its title, on a line with no number (`search-protocol.md` §6, §9).
 
-> Since v3.9.0, while `judgment.build_first` is `on`, the write-concept row also carries `walkthrough`, `ab-test-results` and `prototype` — Step 0.5 hits of these suppress the build-first line (`judgment-points.md` §8), and a resumed run links the prototype it finds. On their own they never raise the "Use as context?" question: they join its list only when other hits already ask it, and otherwise only do those two things, silently. A prototype used as the spec reaches requirements-creator in design-bridge's payload, not through this map. A prototype is context, never validation: it stays `reported (file, frame)`.
+> Since v3.9.0, while `judgment.build_first` is `on`, the write-concept row also carries `walkthrough`, `ab-test-results` and `prototype` — Step 0.5 hits of these suppress the build-first line (`judgment-points.md` §8), and a resumed run links the prototype it finds. On their own they never raise the block of variants (since v3.16.0; until then the "Use as context?" question): they join it only when other candidates already raise it, and otherwise only do those two things, silently (`search-protocol.md` §11). They are not in the skill's `search_types`, so they carry no weight. A prototype used as the spec reaches requirements-creator in design-bridge's payload, not through this map. A prototype is context, never validation: it stays `reported (file, frame)`.
 
 ---
 
 ## File Search (L1)
 
-Detailed algorithm for searching vault via file system (no external tools required):
+Searching the vault through the file system alone (no external tools required). It has two callers:
+
+- **Step 0.5 on a host without SHELL** — by the **words of the request**, never "the 10 newest of a type" (since v3.16.0): `search-protocol.md` §12 is that procedure, and this section does not restate it.
+- **Vault Save step 7** (related artifacts) — by type and product:
 
 ```
-file_search(criteria: SearchCriteria) → [ArtifactSummary]:
+file_search(criteria: SearchCriteria) → [ArtifactSummary]:   # Vault Save step 7
 
-1. Map artifact types to folders
-   → Use TYPE_FOLDER_MAP from vault-schema.md
-
-2. Build glob patterns:
-   FOR each type in criteria.artifact_types:
-     glob_pattern = "{vault_path}/{TYPE_FOLDER_MAP[type]}/**/*.md"
-     IF criteria.product specified:
-       glob_pattern += "{vault_path}/{TYPE_FOLDER_MAP[type]}/{product_slug}/**/*.md"
-
-3. Find files:
-   files = glob(glob_pattern, recursive=true)
-
-4. Optimization - check MOC first:
-   IF file exists: {vault_path}/_MOC/Dashboard.md
-     → parse Recent Activity table
-     → collect artifact paths from recent items (if within date range)
-     → prioritize these files in next step
-
-5. Parse each file:
-   FOR each file in files:
-     a. Open file
-     b. Extract YAML frontmatter (up to closing ---)
-     c. Extract ## Summary section (next 2-5 paragraphs)
-     d. Parse frontmatter fields: type, product, tags, status, created
-
-6. Filter against criteria:
-   KEEP artifact IF:
-     - artifact.type in criteria.artifact_types
-     - artifact.status in criteria.status
-     - artifact.product == criteria.product (if specified)
-     - artifact.tags overlap with criteria.tags (if specified)
-
-7. Sort and limit:
-   - Sort by: created DESC
-   - Keep first N results (default N=10)
-
-8. Build summary:
-   FOR each artifact:
-     return {
-       path: file_path,
-       title: frontmatter.title,
-       type: frontmatter.type,
-       summary: extracted_summary,
-       created: frontmatter.created,
-       status: frontmatter.status
-     }
-
-9. Return results
+1. Folders: {vault_path}/{plugin_folder}/{TYPE_FOLDER_MAP[type]}/ for each type in
+   criteria.artifact_types (vault-schema.md); with criteria.product, its {product_slug}/
+2. files = glob("{folder}/**/*.md", recursive=true)
+3. Parse each file's frontmatter (type, product, status, created) and its ## Summary;
+   a frontmatter that does not parse leaves the file as text — never skip the file for it
+4. KEEP IF type in criteria.artifact_types, status in criteria.status,
+   product == criteria.product (if specified); sort by created DESC, first N (default 10)
+5. Return {path, title, type, status, created, summary} per file
 ```
 
 ---
@@ -245,41 +184,9 @@ file_search(criteria: SearchCriteria) → [ArtifactSummary]:
 
 Enhancement over L1 through the providers that speak `vault/v1` — the user's own local index and any shared-context provider (`context-provider-protocol.md` §2, §4–§6). Tool names are the contract's; a provider without one of them is skipped for that call.
 
-```
-mcp_search(criteria: SearchCriteria) → [ArtifactSummary]:
+Since v3.16.0 Step 0.5 searches at L1 and L2 alike as `search-protocol.md` says: with SHELL through `ctx search` (§3 there; which sources it asks and how it merges them: `context-provider-protocol.md` §5), without SHELL through `vault_search` per variant (§12 there). The rule "the own vault wins over a provider copy of the same note" still holds — for the same file (`context-provider-protocol.md` §5).
 
-1. Execute L1 file_search as baseline
-   baseline_results = file_search(criteria)          # source = "own vault"
-
-2. Build the query:
-   query  = FTS5 terms from criteria.tags + product keyword
-            (phrases and words with & - : / . in double quotes)
-   folder = "{plugin_folder}/" for the own index; the provider's routing folder otherwise
-
-3. For each reachable provider in routing order (§5: own index → snapshot → live):
-   TRY (3 s budget):
-     hits = vault_search(query, folder=folder, limit=10)
-   CATCH timeout / error:
-     → mark provider unreachable for the session, one line (§6), continue
-   tag every hit with provider id and, for a snapshot, synced_at
-
-4. Merge:
-   merged = deduplicate(baseline_results + all hits) by provider + path
-   when two ranked lists merge → reciprocal-rank fusion, k = 60
-   the own vault wins over a provider copy of the same note
-
-5. Backlinks for the top 5:
-   FOR each artifact in merged[0:5]:
-     links = vault_get_links(artifact.path, direction="in")   # on the artifact's provider
-     artifact.related_count = len(links.in)
-
-6. Re-sort by relevance + related_count
-   Sort by: (relevance_score * 0.7) + (related_count * 0.3)
-
-7. Return merged results (each with provider and, for a snapshot, its date)
-```
-
-A relational question (who owns what, what depends on what) may follow up with `vault_graph_context(entity, depth=1|2)` on the provider that holds the entity.
+A relational question (who owns what, what depends on what) may follow up with `vault_get_links(path, direction="in")` or `vault_graph_context(entity, depth=1|2)` on the provider that holds the entity.
 
 ---
 
@@ -365,7 +272,8 @@ vault_save(artifact, product, options):
      - Any item it mentions keeps its `simulated` / `assumed` label, a 6c claim
        keeps its "coincides with" wording, and `simulated` content is never stated
        as a finding (since v3.8.0) — Step 0.5
-       reads only frontmatter + Summary, so a label lost here re-enters later
+       may take the Summary as a section of its own (since v3.16.0 it takes
+       sections, search-protocol.md), so a label lost here re-enters later
        runs as evidence
    
    content = "## Summary\n\n{summary_text}\n\n{full_artifact_content}"
@@ -679,7 +587,7 @@ All vault errors are **NON-BLOCKING**. The main skill workflow must never fail d
 | Vault path doesn't exist | Log warning, fallback to L0 (no vault) |
 | No write permissions on vault | Log warning, fallback to L0 |
 | MCP unavailable (connection fails) | Log info, fallback to L1 (file search only) |
-| MCP timeout (>3s on any call) | Abort MCP call, use L1 results |
+| MCP timeout (>3s on any call) | Abort MCP call, use L1 results; `ctx search` (since v3.16.0) gives a source 20 s and the whole search 60 s, then says `<id> не відповів — без нього` and goes on (`search-protocol.md` §3) |
 | Frontmatter parse error in artifact | Log error with file path, skip broken file, continue search |
 | File write error (disk full, permissions) | Log error, inform user "Could not save to vault", skip vault save |
 | MOC update fails | Log warning, artifact still saved (MOC update non-critical) |
@@ -821,6 +729,7 @@ See **Vault Recovery Protocol (VR-1 through VR-3)** in `references/persistent-st
 - **vault-schema.md** — Frontmatter schema, artifact types, folder structure, templates
 - **local-context-protocol.md** — How skills read configuration and local context
 - **persistent-storage.md** — Persistent storage protocol, backup, mirror, and recovery protocols
+- **search-protocol.md** — Step 0.5: the search, the rating, what is taken, the block of variants (since v3.16.0)
 - **SKILL.md** — Individual skill documentation (includes Step 0.5 vault context integration)
 
 ---

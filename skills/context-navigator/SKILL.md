@@ -1,6 +1,6 @@
 ---
 name: context-navigator
-version: 0.1.1
+version: 0.2.0
 description: Answer from a shared organisational context (a team's core) — who owns what, team and module scope, rules, missions, people, terms. Not decisions (decision-log), not dashboards (product-analysis), not curated sources (knowledge-library). UA — «хто за що відповідає», «що робить команда X», «де описане правило».
 ---
 
@@ -15,6 +15,7 @@ Answers questions about the organisation from a connected **shared-context provi
 - `references/context-provider-protocol.md` — the contract (§2), routing across providers (§5), freshness and offline behaviour (§6), the write boundary (§7).
 - `references/data-integrity-protocol.md` — a number always carries its period and source.
 - `references/data-policy.md` — provider content is internal data.
+- `references/search-protocol.md` — Step 0.5 (since v3.16.0): with SHELL, the search below is `ctx search`; the rating, what is taken and the block of variants.
 
 > **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
 > judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
@@ -39,11 +40,13 @@ Follow the provider's `routing_hints` note when it exists; otherwise this defaul
 | a decision | the provider's public decisions note; the user's own decisions → `decision-log` |
 | a person | registry card in `people_dir` → their team card |
 | a term | the provider's glossary, then the user's own (knowledge library) |
-| anything else | `vault_search` → `vault_get_note` on the few notes that matter → `vault_get_links` / `vault_graph_context` (depth 1–2) when the question is relational |
+| anything else | SHELL: `ctx search` (below) → `ctx search --get` on the sections rated «прямо»; without SHELL: `vault_search` → `vault_get_note` on the few notes that matter. Then `vault_get_links` / `vault_graph_context` (depth 1–2) when the question is relational |
 
 Every answer carries: the note path; for a number, its period and source; for snapshot content, the snapshot date, and "(as of <date>)" when the note's class is past its `ttl_days`; a caveat for a note marked outdated or older than three years. A reference value on a card ("target", "benchmark") is never presented as the current value. A decision recorded without the core's confirmation mark is reported as unconfirmed.
 
-**Searching the server.** FTS5 syntax: words are AND; `OR` and `NOT` are operators; put a phrase, and any word with `&`, `-`, `:`, `/` or `.`, in double quotes. Copy paths exactly as returned. Entities typed in frontmatter (missions, modules, metrics) are listed by folder, not by tag. When both the local copy and the server hold a note, the local copy is primary; the server is for full-text search and graph traversal. A provider that does not answer (VPN off, server down) gets one line, then the local copy if there is one — never an answer from memory.
+**Searching with SHELL (since v3.16.0).** This skill runs Step 0.5 only for the "anything else" route: a card or note one of the routes above reads directly is neither taken by Step 0.5 nor counted as a doubt (`references/search-protocol.md` §1). There, the question is the request of `references/search-protocol.md`, and Step 0.5 is that one search — not a second one: `python3 "<plugin root>/scripts/ctx.py" search --q "<the question's topic>" --q "<variant>" … --skill context-navigator --json`. It asks the plugin's section index — which holds the core folder of every registered repository on this machine, so the local copy comes first by construction — the user's own local index, and the server only of a repository whose core folder is not on disk; plain words, no FTS5 syntax. Rate the candidates, read the «прямо» ones with `ctx search --get <id>` (its first line is the path and the date to cite), answer from what is taken, and end with the block of variants when the search was unsure or two notes disagree. Exit 5 means the core was not read: say so — never that the core holds nothing.
+
+**Searching the server** (without SHELL, or for the graph tools). FTS5 syntax: words are AND; `OR` and `NOT` are operators; put a phrase, and any word with `&`, `-`, `:`, `/` or `.`, in double quotes. Copy paths exactly as returned. Entities typed in frontmatter (missions, modules, metrics) are listed by folder, not by tag. When both the local copy and the server hold a note, the local copy is primary; the server is for full-text search and graph traversal. A provider that does not answer (VPN off, server down) gets one line, then the local copy if there is one — never an answer from memory.
 
 **A page outside the bundle** (a dead link in a selective copy): say that it is outside the bundle and offer to read it through the wiki connector (read-only) or to widen the bundle with `context-connect` (another team or role).
 

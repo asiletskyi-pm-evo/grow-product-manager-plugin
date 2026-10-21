@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.12.1
+version: 0.13.0
 description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами».
 ---
 
@@ -108,9 +108,9 @@ If mode is `health-check` or `full`:
 
 **1e. Detect vault level (for all modes):**
 
-Follow `references/vault-protocol.md` — Step 0.5:
-- Detect vault_level per `vault-protocol.md` → "Vault Level Detection" (L0, L1, L2)
-- If vault_level > L0 → note that vault context search will be available in Step 1.5
+Follow `references/vault-protocol.md` → "Vault Level Detection":
+- Detect vault_level (L0, L1, L2)
+- If vault_level > L0, or a repository is registered → the vault context search runs in Step 1.5
 - If vault_level = L0 or vault sync_mode = "off" → vault steps will be skipped
 
 **1f. Judgment contract (all modes):**
@@ -121,33 +121,17 @@ Follow `references/vault-protocol.md` — Step 0.5:
 
 ### Step 1.5: Vault Context Search (Optional)
 
-> Requires: `references/vault-protocol.md` → Step 0.5
+> Requires: `references/search-protocol.md` (since v3.16.0 — the search, the rating, what is taken silently, the block of variants; it asks nothing in the middle of the run). This skill runs it here, after Step 1, rather than as Step 0.5.
 
-IF vault_level > L0 (detected during Step 1e):
+Follow `references/search-protocol.md` with `--skill cjm-research`. This skill's types — a weight, not a filter: `cjm-analysis`, `cjm-health-check`, `funnel-anomaly`, `ab-test-results`, `hypothesis`; the request is the funnel, the stage or the anomaly the user names (in `health-check` mode: the product's funnel health).
 
-1. Search vault for relevant prior artifacts:
-   - Types: `cjm-analysis`, `cjm-health-check`, `funnel-anomaly`, `ab-test-results`, `hypothesis`
-   - Product: active product
-   - Tags: CJM-related tags from user's request
-   - Status: `active`, `draft`
-   - Sort: `created DESC`, limit: 10
+What is taken is baseline context:
+- previous health scores → compared with the current ones;
+- previous anomalies → still present or resolved;
+- tested hypotheses → marked as already tested, with their results;
+- prior CJM analyses → trends across time.
 
-2. IF results found:
-   - Display: "Found {N} related CJM artifacts in your knowledge base:"
-   - Show: title, type, date, health_score (if health-check), key tags
-   - Ask: "Use as context for this analysis? [Yes / Select specific / Skip]"
-   - **`health-check` mode (automated): do not ask** — silently use the top results as baseline context and note it in the report header, exactly as Step T and Step 2 already do for background runs. This was the last interactive point left in the scheduled path, so a weekly health-check would block on a question with nobody there to answer it.
-
-3. IF user accepts:
-   - Read full content of selected artifacts
-   - Use as baseline context:
-     - Previous health scores → compare with current
-     - Previous anomalies → check if still present or resolved
-     - Tested hypotheses → mark as already tested, show results
-     - Prior CJM analyses → identify trends across time
-   - Note in report header: "This analysis is informed by {N} previous artifacts from Vault"
-
-4. IF user skips OR no results → continue normally
+Note in the report header: "This analysis is informed by {N} previous artifacts from Vault". **`health-check` mode is an automated run** (search-protocol §11): the taken line goes into the report header, a doubt is one `Пошук:` line in the report's data notes, there is no block of variants and nothing to answer — a weekly health-check never waits on a person.
 
 ### Step 2 — Clarify scope with user
 
@@ -295,7 +279,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.12.1",
+     skill_version: "0.13.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
@@ -376,6 +360,7 @@ When chaining:
 - **`references/data-policy.md`** — data confidentiality rules
 - **`references/self-improvement.md`** — self-improvement protocol
 - **`references/vault-protocol.md`** — vault context search, artifact storage, and lifecycle management
+- **`references/search-protocol.md`** — Step 1.5: the search, what is taken silently, the block of variants (since v3.16.0)
 - **`references/vault-schema.md`** — vault artifact schema, metadata structure, and query syntax
 
 ## Routing

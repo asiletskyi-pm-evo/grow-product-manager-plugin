@@ -279,6 +279,93 @@ def _():
 def _():
     assert cc.read_yaml_tree('sections:\n  - "#### Key Metrics"  # a comment\n') == {"sections": ["#### Key Metrics"]}
 
+
+RECORDS = """# a team list
+note: ignored          # a scalar key outside the list
+terms:
+  # a comment between the key and the first entry
+  - term: "кошик"          # a trailing comment
+    en: cart
+    variants: ["корзина", 'cart #2', plain, "a, b"]
+    avoid:
+      - "basket"
+      - 'item card'  # a comment after a block item
+      - bare
+    empty:
+    status: approved
+    added: 2026-01-15
+    count: 3
+
+  - term: п'ятниця # the apostrophe in a word is text, the hash after a space is a comment
+    variants: [зв'язок, 'it''s', "q\\"uote"]
+    avoid: []
+    status: candidate
+phrases:
+  - avoid: x
+    use: y
+other: [1, 2]
+"""
+
+@case("read_yaml_records: inline and block lists, scalars, comments, other keys ignored")
+def _():
+    recs = cc.read_yaml_records(RECORDS, "terms")
+    assert recs == [
+        {"term": "кошик", "en": "cart", "variants": ["корзина", "cart #2", "plain", "a, b"],
+         "avoid": ["basket", "item card", "bare"], "empty": "", "status": "approved", "added": "2026-01-15", "count": 3},
+        {"term": "п'ятниця", "variants": ["зв'язок", "it's", 'q"uote'], "avoid": [], "status": "candidate"}], recs
+    assert cc.read_yaml_records(RECORDS, "phrases") == [{"avoid": "x", "use": "y"}]
+
+
+@case("read_yaml_records: the spec example")
+def _():
+    t = 'terms:\n  - term: "кошик"\n    en: "cart"\n    variants: ["корзина"]\n    avoid:\n      - "basket"\n    status: approved\nphrases:\n  - avoid: x\n'
+    assert cc.read_yaml_records(t, "terms") == [{"term": "кошик", "en": "cart", "variants": ["корзина"], "avoid": ["basket"], "status": "approved"}]
+
+
+@case("read_yaml_records: a list at the indent of its key, a bare dash, a block list at the indent of its field")
+def _():
+    t = "terms:\n- term: a\n  avoid:\n  - b\n  - c\n  status: approved\n-\n    term: d\n    avoid:\n      - e\n"
+    assert cc.read_yaml_records(t, "terms") == [{"term": "a", "avoid": ["b", "c"], "status": "approved"},
+                                                {"term": "d", "avoid": ["e"]}]
+
+
+@case("read_yaml_records: no such key, an empty list, an empty text, CRLF")
+def _():
+    assert cc.read_yaml_records("phrases:\n  - a: b\n", "terms") == []
+    assert cc.read_yaml_records("terms: []\nother: x\n", "terms") == []
+    assert cc.read_yaml_records("terms:\nother: x\n", "terms") == []
+    assert cc.read_yaml_records("", "terms") == [] and cc.read_yaml_records(None, "terms") == []
+    assert cc.read_yaml_records("terms:\r\n  - term: a\r\n    avoid: [b]\r\n", "terms") == [{"term": "a", "avoid": ["b"]}]
+
+
+def _bad(text, where, key="terms"):
+    try:
+        cc.read_yaml_records(text, key)
+    except ValueError as e:
+        assert str(e).startswith("line %d:" % where), (where, str(e))
+    else:
+        raise AssertionError("accepted: %r" % text)
+
+
+@case("read_yaml_records: a broken structure raises ValueError with the line number")
+def _():
+    _bad("terms:\n  - term: a\n\tavoid: b\n", 3)                                  # a tab
+    _bad("terms:\n  - term: a\n    avoid:\n      - x: y\n", 4)                    # a mapping inside a block list
+    _bad("terms:\n  - term: \"open\n", 2)                                            # an unterminated string
+    _bad("terms:\n  - term: a\n    avoid: [\"x\", \n", 3)                           # an unterminated inline list
+    _bad("terms:\n  - term: a\n    avoid: [[x]]\n", 3)                              # a list in a list
+    _bad("terms:\n  - term: a\n    avoid: {x: y}\n", 3)                            # a flow mapping
+    _bad("terms: some text\n", 1)                                                  # a scalar where a list should be
+    _bad("terms:\n  term: a\n", 2)                                                 # a mapping where a list should be
+    _bad("terms:\n  - just text\n", 2)                                             # a list of scalars
+    _bad("terms:\n  - term: a\n     avoid: b\n", 3)                              # a key at an indent no level has
+    _bad("terms:\n  - term: a\n    status: x\n    status: y\n", 4)                # a repeated key
+    _bad("terms:\n  - term: a\n    status: x\n      - y\n", 4)                    # a block item under a scalar
+    _bad("terms:\n  - term: a\nterms:\n  - term: b\n", 3)                          # the list key twice
+    _bad("terms:\n  - term: \"a\\qb\"\n", 2)                                       # a bad escape (JSON): still this line
+    _bad("just words\nterms:\n", 1)                                                # a top-level line that is no key
+
+
 fails = 0
 for name, fn in cases:
     try:

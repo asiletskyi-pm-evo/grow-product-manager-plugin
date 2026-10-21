@@ -48,7 +48,7 @@ After the Configurator finishes — return to the original skill and continue it
   - `⚠ розбіжність між репозиторіями — вирішити: ctx slot decide <slot> <repo>` — two repositories of the same rank say different things, and every one of them is printed. Rely on both and name both sources; do not choose between them and do not ask the user in the middle of the work — `context-connect` (a refresh) and the configurator (Validate) ask.
   - `твоя примітка до правила` — the rule above it is the answer; the user's text below it is a note on the rule, not a competing answer. Follow the rule, and mention the note when it bears on the result.
   - `> [блок <block> — у слоті <slot> вище]` or `> [блок <block> › <Підсекція> — у слоті <slot> вище]` — that text was printed above, under its slot; do not look for it here.
-  - In `Відсутнє:`, an item with `(шукав: …; блоків із цим слотом немає)` was looked for under those names in that record and found nowhere: say that it is missing and where it was looked for, and never fill it from memory. `є нерозміщений блок — ctx explain <slot>`: a block for the slot exists but cannot be given to one team — say so, and that `ctx slot bind … --team` places it. `є блок в іншому записі — ctx explain <slot>`: a required field of a record read whole is not in that record, and a block bound to its slot sits in another one — say it is missing there; the block is a fact only if its record is printed in this read.
+  - In `Відсутнє:`, an item with `(шукав: …; блоків із цим слотом немає)` was looked for under those names in that record and found nowhere: say that it is missing and where it was looked for, and never fill it from memory (since v3.16.0 Step 0.5 may look for it in the base and offer what it finds in the block of variants — never as the slot's value: `search-protocol.md` §11). `є нерозміщений блок — ctx explain <slot>`: a block for the slot exists but cannot be given to one team — say so, and that `ctx slot bind … --team` places it. `є блок в іншому записі — ctx explain <slot>`: a required field of a record read whole is not in that record, and a block bound to its slot sits in another one — say it is missing there; the block is a fact only if its record is printed in this read.
   - A line that says `реєстрацію … не прочитано`, `пам'ять слотів не прочитано` or `стан блоків … не прочитано` means that ranks, rules, bindings or decisions were unknown on this run: say so in one line; the texts shown are all there was.
 - **FS without SHELL:** read `{storage_root}/_System/context/INDEX.md` and the records `references/context-manifest.yaml` names for this skill, whole. Since v3.15.0 also read `references/context-slots.yaml`: look for each slot the skill needs under all the slot's `names` and in the blocks bound to it (`references/context-protocol.md` §9), and list what is not found with where it was looked for; there is no cascade, no `ctx explain` and no «також» line there.
 - A fact from a record marked `⚠ застаріле` is stated as "станом на <its verified date>"; a record marked `⚠ неактуально` is not used as current. Never ask about either mid-run — the configurator's "Review stale records" is where they are confirmed.
@@ -180,20 +180,16 @@ Every skill carries a three-line block that points here; its first line is alway
 
 ## Step 0.5 — Vault Context Search (OPTIONAL)
 
-**Applies to all skills.** Inserted between Step 0 and Step 1. If `vault_level == L0` — skip this step silently without any output.
+**Applies to all skills.** Inserted between Step 0 and Step 1. Since v3.16.0 the step is **`references/search-protocol.md`** — read it and follow it; `vault-protocol.md` → "Step 0.5" points there too. In short:
 
-Follow the full protocol from `references/vault-protocol.md` → "Step 0.5 — Vault Context Search":
+1. **Skip silently** when there is nothing to search (L0, no registered repository, no local index), the skill's `SKILL_CONTEXT_MAP` row is empty, or the request has no topic (§1 there).
+2. **The request** — the topic in the user's words — and **3–4 variants** (Ukrainian, Russian, English, a synonym or a title-style name), written before any result.
+3. **SHELL available:** `python3 "<plugin root>/scripts/ctx.py" search --q "<request>" --q "<variant>" … --skill <this skill's name> --product "<name>" --json` — it prints only its `CTX_RESULT` line. Exit 5 means the base was not read: never say it holds nothing. Without SHELL: the same search in prose (§12 there).
+4. **Rate** the candidates «прямо / частково / ні»; read the «прямо» ones with `ctx.py search --get <id>`.
+5. **Take** at most three «прямо» sections silently and say so in one line — `Взяв із бази: <назва › секція> (<джерело>, <дата>) · …`, or, when nothing was taken, `У базі нічого прямо про це` (or another line of §6 there: never that the base holds nothing when it was not read). Never silently: «частково», outdated or older versions, a hub, `sensitive` and people types outside the People contour, what contradicts another piece.
+6. **A doubt or a conflict** ends the answer with the block of variants; the user's choice → `ctx.py search remember`. Live sources (level 2) may be searched on a doubt, a conflict, a fact the work needs that the taken lacks, or when nothing was found (§8 there).
 
-1. Determine relevant artifact types for this skill (see `vault-protocol.md` → SKILL_CONTEXT_MAP)
-2. Search the vault for matching artifacts (product, types, tags, status: active/draft)
-3. If multi-vault: search all configured vaults, merge results
-4. If results found — present to user:
-   > "Found {N} related artifacts in your knowledge base: [brief list]. Use as context? [Yes / Select specific / Skip]"
-5. If user accepts — read full content of selected artifacts and include as additional context
-6. If user skips or no results — continue normally
-7. If `session.providers` is non-empty — search them as well (`vault-protocol.md` → MCP Search (L2)); each result names its provider and, for a snapshot, its date; a stale or unreachable provider gets one line, once per session (`context-provider-protocol.md` §6)
-
-**Important:** This step should be brief. Read only frontmatter + Summary section for preview. Full content is loaded only for artifacts the user selects.
+**Important:** this step asks nothing in the middle of a run — the "Use as context? [Yes / Select specific / Skip]" question of earlier versions is gone. It reads sections, not whole notes: the candidates' lines, then only the sections it rates «прямо».
 
 ## Context Enrichment
 

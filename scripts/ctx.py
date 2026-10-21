@@ -145,8 +145,76 @@
                                 `decide` with no divergence ("no divergence for SLOT") or for a REPO that is not one of
                                 the sides, and a memory that cannot be read ("slots memory not readable|not valid:
                                 .state/slots.json (…)") are exit 3. CTX_RESULT: action, slot, changed, snapshot, memory (after)
+  index status|rebuild          the section index of the search (since v3.16.0; scripts/ctx_index.py): the plugin folder of
+                                every vault and the core folder of every registration that has one on disk, in
+                                `<home>/.grow-pm/index/` — no store lock, nothing written anywhere else. status: an
+                                incremental refresh (30 s; a held index.lock: none, the index as it is), then the counts;
+                                rebuild: the index built again from nothing, no time limit. "індекс оновлюється: N файлів ще
+                                не переглянуто" when the refresh ran out of time. No vault and no core folder: exit 3; rebuild
+                                while another process holds index.lock: exit 4. CTX_RESULT: action, schema, updated, files,
+                                sections, pending, skipped_dataless
+  search --q TEXT [--q TEXT …] [--skill S] [--product P] [--limit N] [--sources own,local,mcp] [--no-hints] [--json]
+                                (since v3.16.0; scripts/ctx_search.py) the first --q is the question, the others its
+                                variants: the section index (refreshed first, 30 s), the local indexes and the MCP of a
+                                repository with no folder on disk, every variant × source; RRF, the priors, one candidate per
+                                note (at most two sections), the best N (30). Lines: `Пошук: <n> варіант(и) · джерела: <ids> ·
+                                кандидатів <k>`, per candidate `N. <title> › <heading> · <sources> · <type> · <date>[ ·
+                                <mark>…]`, its snippet, `id <id> · варіанти <i,…>`, then the notes (a source that did not
+                                answer, the index's state). --json: CTX_RESULT only. CTX_RESULT: candidates, notes, sources
+                                [{id, kind, answered}], index, counts. No --q (and no --get), a bad --sources/--limit/--skill,
+                                or nothing to search (no vault, no repository, no source): exit 3; no source answered (the
+                                own index busy or damaged counts as not answered): exit 5; 0 candidates is exit 0. No store
+                                needed. The ids are merged into <home>/.grow-pm/index/last.json (a save that fails is a line,
+                                never the exit code). A candidate's sources name the repository of a core page.
+  search --get ID|PATH|NAME [--json]
+                                one section of the last searches (or of the section index, by its id — an id neither
+                                has is tried as a name); for a note's path or its name, as a hub links it (`Name`,
+                                `Name.md`, `[[Name]]`, `[[Name|alias]]`; a path first — a note at a vault's root is
+                                `<name>.md` — a name when no source holds that path), the whole note without its
+                                frontmatter — from the section index,
+                                else its file when it is on disk and downloaded, else a local index's body, else (an
+                                `@<repo>/…` name of a repository with no folder on disk) its server — 20 000 characters
+                                at most, then the line `нотатка довга — показано перші 20 000 знаків; секцію — --get
+                                "<шлях>#<заголовок>"`; `<path>#<heading>` or `[[Name#Heading]]` gives that section:
+                                `> [<source> · <path> › <heading> · <day>]` and its text (an MCP note through vault_get_note).
+                                A section under 200 characters goes on with the next ones, up to 1 500, after
+                                the line `секція коротка — додано наступні: <headings>`. A file is read within the read
+                                budget, and one iCloud has not downloaded never: the text of a registered local index,
+                                after the line `файл не завантажено з iCloud — текст із локального індексу <id>`, else
+                                exit 3 (`файл не завантажено з iCloud: <path> — відкрий його в Obsidian або ctx index
+                                rebuild пізніше`). An unknown id, note, name or section, a file not read in time, a
+                                name several notes carry (`кілька нотаток із назвою «<назва>»: <шляхи> — --get один зі
+                                шляхів`) or a path the search excludes (`шлях виключено з пошуку: <шлях>`): exit 3;
+                                the server did not answer: exit 5. --json: the header and the text in CTX_RESULT only
+  search remember --q REQUEST --pick ID|PATH [--not ID|PATH] [--product P]
+  search forget --q REQUEST [--product P]
+                                (since v3.16.0; scripts/ctx_hints.py) your choices in a search's block of options, kept in
+                                the store's `.state/search.json` (context-search-memory/1): for the request (the first --q;
+                                its stems — the same words in another order or form are the same request) and the product,
+                                --pick is right and --not is not (an ID of the last searches is its section, `path#heading`;
+                                else a note's path). A later search whose request is similar (Jaccard of the stems ≥ 0.6) and
+                                whose product does not differ weighs a pick × 1.5, marked `твій вибір від <день>`, and marks a
+                                --not `ти казав «не те»`; --no-hints searches without them; a memory that cannot be read is
+                                one line («пам'ять пошуку не прочитано (…) — без підказок»), never the search. forget drops
+                                the request's hints (of P only, when named). Writing commands: snapshot, one journal line (op
+                                search, action, q), `ctx undo` takes it back; one that changes nothing says "unchanged". No
+                                store («немає сховища — підказку не збережено»), an id no search gave, a request of stop words
+                                only, no --pick and no --not, or a memory that cannot be read ("search memory not
+                                readable|not valid: .state/search.json (…)"; the file is never rewritten): exit 3. CTX_RESULT:
+                                action, q, product, good, bad, changed, hints, snapshot
+  search eval [--golden PATH] [--no-hints] [--sources …] [--json]
+                                the search measured on a golden set (search-golden/1): the store's `search/golden.yaml`
+                                unless --golden names one (no store: --golden is needed), plus the hints of the memory as rows
+                                `source: choice` (class вибір) unless --no-hints. Each row with an answer is searched with its
+                                frozen variants and with its question alone (the first 50, its product and skill); an empty
+                                row (class порожній) counts the candidates of its top 5. Lines: the set, recall@50 (q +
+                                варіанти, лише q), MRR, a line per class, the empty rows, the rows not found. Writes nothing
+                                but the index. No golden set, one that does not read, nothing to search: exit 3. CTX_RESULT:
+                                n, recall50, recall50_q_only, mrr, by_class, empty_n, empty_top5_mean, rows, hints, golden
 
-`read` and `explain` take no lock and write nothing. Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
+`read` and `explain` take no lock and write nothing; `index` and `search` (but `search remember|forget`) take no store
+lock and write only the index's folder.
+Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
 registration is not read in time — 3 s each, 6 s for all: the boundary cannot be checked, exit 4), imports direct
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
 writes only the block state under `.state/blocks/` and the card's Repos line; `slot` imports first too, and then
@@ -159,7 +227,8 @@ a summary that cannot be saved never changes the exit code. The last stdout line
 a conflict prints `CTX_CONFLICT {json}` before it. Exit: 0 ok · 2 conflict · 3 bad input, no store,
 unreadable record · 4 refused (managed region, provider boundary, busy lock, store exists) ·
 5 a repository is unreachable, or its blocks file is no source (empty, cut, foreign, or none of your based blocks)
-— nothing written (provider commands). `provider apply`: 2 also means answers are awaited.
+— nothing written (provider commands); for `search`, no source answered. `provider apply`: 2 also means answers are
+awaited.
 Semantics: references/context-protocol.md. Stdlib only.
 """
 import argparse
@@ -167,17 +236,21 @@ import datetime
 import json
 import os
 import re
+import sqlite3
 import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_blocks as cb  # noqa: E402
 import ctx_common as cc  # noqa: E402
+import ctx_hints as ch  # noqa: E402
+import ctx_index as ci  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_repos as crp  # noqa: E402
 import ctx_resolve as rv  # noqa: E402
+import ctx_search as cs_  # noqa: E402
 import ctx_schema as sc  # noqa: E402
 import ctx_slots as sl  # noqa: E402
 import ctx_synced as sy  # noqa: E402
@@ -195,9 +268,12 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
 
 
 def writes(a):
-    """Does this run write to the store? Every command of WRITING does, and `provider apply` and `provider sync`;
-    `migrate` and `provider adopt` only with --apply. (A `provider sync` that synced nothing saves no summary: `main`.)"""
+    """Does this run write to the store? Every command of WRITING does, and `provider apply`, `provider sync` and (since
+    v3.16.0) `search remember|forget`; `migrate` and `provider adopt` only with --apply. A plain search, `--get` and `search
+    eval` write no store. (A `provider sync` that synced nothing saves no summary: `main`.)"""
     if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) in ("apply", "sync")):
+        return True
+    if a.cmd == "search" and getattr(a, "action", None) in ("remember", "forget"):
         return True
     if a.cmd == "migrate" or (a.cmd == "provider" and getattr(a, "action", None) == "adopt"):
         return getattr(a, "apply", False)
@@ -918,6 +994,260 @@ def cmd_repo(a, c):
     raise Usage("repo takes list or status")
 
 
+def _index_scope(c):
+    """(roots, store_rel, blocks_rels) of the section index for this context — the search context of
+    `ctx_search.context_for` (since v3.16.0 one function for `ctx index` and `ctx search`): the roots of `ci.scope`,
+    the store's folder and the blocks file of every repository (the registration's, else, for a root, its core
+    manifest's), each as the index names a file."""
+    s = cs_.context_for(c.home, c.text)
+    return s["roots"], s["store_rel"], s["blocks_rels"]
+
+
+def cmd_index(a, c):
+    roots, store_rel, blocks = _index_scope(c)
+    if not roots:
+        print("index: nothing to index — no vault in local-context.md and no registered repository with a folder on disk")
+        return 3, {"command": "index", "action": a.action, "error": "no vault and no repository folder"}
+    idx = ci.Index(c.home)
+    try:
+        if a.action == "rebuild":
+            res = idx.rebuild(roots, store_rel, blocks)
+            if res["locked"]:
+                raise co.Busy("another process is updating the index (%s)" % idx.lock_path)
+        else:
+            res = idx.refresh(roots, store_rel, blocks)
+    except sqlite3.Error as e:
+        print("index: %s — %s" % (idx.db_path, e))
+        return 3, {"command": "index", "action": a.action, "error": str(e)}
+    s = idx.status()
+    print("index: %s" % idx.dir)
+    for r in roots:
+        print("  %s  %s" % (r["source"], r["path"]))
+    print("  files %d · sections %d · schema %s · updated %s" % (s["files"], s["sections"], s["schema"] or "—",
+                                                                (s["updated"] or "—")[:16].replace("T", " ")))
+    if res["locked"]:
+        print("  another process is updating it — the index as it is")
+    if res["rebuilt"] and a.action != "rebuild":
+        print("  the index could not be read or had another schema — built again (the old one: %s.broken)" % idx.db_path)
+    if s["skipped_dataless"]:
+        print("  not downloaded (iCloud), not read: %d" % s["skipped_dataless"])
+    if res["skipped_large"]:
+        print("  over %d bytes, not indexed: %d" % (ci.MAX_BYTES, res["skipped_large"]))
+    if s["pending"]:
+        print("індекс оновлюється: %d файлів ще не переглянуто" % s["pending"])
+    return 0, {"command": "index", "action": a.action, "schema": s["schema"], "updated": s["updated"], "files": s["files"],
+               "sections": s["sections"], "pending": s["pending"], "skipped_dataless": s["skipped_dataless"]}
+
+
+def _search_kinds(value):
+    """The kinds of `--sources own,local,mcp` (all three when not given); an unknown or empty one is bad usage."""
+    if value is None:
+        return cs_.KINDS
+    kinds = [k.strip() for k in value.split(",") if k.strip()]
+    bad = [k for k in kinds if k not in cs_.KINDS]
+    if not kinds or bad:
+        raise Usage("--sources takes %s, comma-separated%s" % (", ".join(cs_.KINDS), ": not %s" % ", ".join(bad) if bad else ""))
+    return tuple(dict.fromkeys(kinds))
+
+
+SEARCH_ACTIONS = ("remember", "forget", "eval")
+_SEARCH_OPTS = {"q": "--q", "get": "--get", "skill": "--skill", "product": "--product", "limit": "--limit",
+                "sources": "--sources", "no_hints": "--no-hints", "pick": "--pick", "not_": "--not", "golden": "--golden"}
+_SEARCH_TAKES = {None: ("q", "get", "skill", "product", "limit", "sources", "no_hints"),
+                 "remember": ("q", "product", "pick", "not_"), "forget": ("q", "product"),
+                 "eval": ("golden", "no_hints", "sources")}
+
+
+def _search_options(a):
+    """Refuse an option the search's action does not take (a usage error that names it)."""
+    takes = _SEARCH_TAKES[a.action]
+    given = [flag for key, flag in _SEARCH_OPTS.items() if key not in takes and getattr(a, key, None) not in (None, False, [])]
+    if given:
+        raise Usage("search%s takes no %s" % (" " + a.action if a.action else "", ", ".join(given)))
+
+
+def cmd_search(a, c):
+    """`search`: the question and its variants through the section index, the local indexes and MCP
+    (ctx_search.run), or `--get ID|PATH|NAME`: one section, or a whole note, with its line of provenance
+    (ctx_search.get). Reads only — no store lock, no import, the store need not exist; writes only
+    `<home>/.grow-pm/index/` (the index, last.json).
+    `search remember|forget` (since v3.16.0) write the store's search memory (`_search_hint`); `search eval` measures
+    the search on a golden set (`_search_eval`) and writes nothing but the index."""
+    _search_options(a)
+    if a.action in ("remember", "forget"):
+        return _search_hint(a, c)
+    if a.action == "eval":
+        return _search_eval(a, c)
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    if a.get is not None:
+        if a.q:
+            raise Usage("search takes --q or --get, not both")
+        try:
+            header, text = cs_.get(sctx, a.get)
+        except cs_.GetError as e:
+            print("search: %s" % e)
+            return e.code, {"command": "search", "action": "get", "id": a.get, "error": str(e)}
+        if not a.json:
+            print(header)
+            print(text)
+        return 0, {"command": "search", "action": "get", "id": a.get, "header": header, "text": text if a.json else None}
+    if not a.q:
+        raise Usage("search takes --q TEXT (once or more) or --get ID|PATH|NAME")
+    which = _search_kinds(a.sources)
+    limit = cs_.LIMIT if a.limit is None else a.limit
+    if limit < 1:
+        raise Usage("--limit takes a number from 1")
+    if a.skill:
+        try:
+            cr.manifest_for(cr.load_manifest(), a.skill)
+        except KeyError:
+            raise Usage("no such skill: %s" % a.skill)
+    res = cs_.run(sctx, a.q, skill=a.skill, product=a.product, limit=limit, which=which, use_hints=not a.no_hints)
+    last = res.pop("last", {})
+    said = sum(1 for s in res["sources"] if s["answered"])
+    res = dict(res, command="search", counts={"candidates": len(res["candidates"]), "sources": said,
+                                              "skipped": len(res["sources"]) - said})
+    if not res["sources"]:
+        print("search: nothing to search — no vault in local-context.md, no registered repository with a folder on disk, "
+              "no local index or MCP%s" % (" of the kinds asked (%s)" % ",".join(which) if a.sources else ""))
+        return 3, dict(res, error="nothing to search")
+    why = cs_.save_last(c.home, last) if said else None     # a failed save is one line, never the exit code
+    if why:
+        res["notes"].append(cs_.LAST_NOTE % why)
+    if not a.json:
+        sys.stdout.write(cs_.render(res, a.q))
+    return (0 if said else 5), res
+
+
+NO_STORE_HINT = "немає сховища — підказку не збережено"
+NO_STORE_FORGET = "немає сховища — підказок немає"
+
+
+def _search_hint(a, c):
+    """`search remember --q REQUEST --pick ID|PATH [--not ID|PATH] [--product P]` and `search forget --q REQUEST
+    [--product P]`: your choices, kept in the store's `.state/search.json` (ctx_hints). The request is the first --q (the
+    others, its variants, are not remembered); an id is one of the last searches (last.json), a path is the note's.
+    A writing command — the lock, the guard, the memory read (one that cannot be read stops the run before anything is
+    imported), the edits waiting imported, a snapshot, the memory written, one journal line {op search, action, q};
+    `ctx undo` takes it back. No record changes, so nothing is compiled. One that changes nothing writes nothing and
+    takes no snapshot. No store: exit 3."""
+    if not a.q:
+        raise Usage("search %s takes --q TEXT: the request" % a.action)
+    q = a.q[0]
+    if not ch.terms(q):
+        raise Usage("the request %r has no words to %s (only stop words)" % (q, a.action))
+    good, bad = [], []
+    if a.action == "remember":
+        if not a.pick and not a.not_:
+            raise Usage("search remember takes --pick ID|PATH (the right note), --not ID|PATH (one that is not it), or both")
+        try:
+            good = [ch.resolve(v, cs_.last_path(c.home)) for v in a.pick or []]
+            bad = [ch.resolve(v, cs_.last_path(c.home)) for v in a.not_ or []]
+        except ValueError as e:
+            raise Usage(str(e))
+    out = {"command": "search", "action": a.action, "q": q, "product": a.product or "", "good": good, "bad": bad}
+    if not c.store.exists():
+        line = NO_STORE_HINT if a.action == "remember" else NO_STORE_FORGET
+        print(line)
+        return 3, dict(out, error=line)
+    with co.lock(c.home):
+        c.guard()
+        mem = ch.load(c.store)
+        pre = c.import_first()
+        if a.action == "remember":
+            changed = ch.remember(mem, q, a.product, good, bad, now()[:10])
+        else:
+            changed = ch.forget(mem, q, a.product) > 0
+        out.update(changed=changed, snapshot=None, hints=len(mem["hints"]), imported=pre["changed"] + pre["added"])
+        if not changed:
+            print("unchanged — the memory already says so: «%s»" % q if a.action == "remember" else
+                  "unchanged — the memory holds no hint for «%s»" % q)
+            return 0, out
+        t = now()
+        snap = co.snapshot(c.store, c.copies, c.home, "search")
+        out["hints"] = len(ch.save(c.store, mem)["hints"])
+        out["snapshot"] = snap
+        c.store.journal({"ts": t, "op": "search", "action": a.action, "q": q, "product": a.product or "", "ids": [],
+                         "source": "ctx-search", "snapshot": snap})
+    what = " · ".join(p for p in ("так: " + ", ".join(good) if good else "", "не те: " + ", ".join(bad) if bad else "") if p)
+    print("search %s: «%s»%s%s · snapshot %s (back: ctx undo)" % (a.action, q, " (%s)" % a.product if a.product else "",
+                                                                  " → " + what if what else "", snap))
+    return 0, out
+
+
+def _share(x):
+    return "—" if x is None else "%.3f" % x
+
+
+def _search_eval(a, c):
+    """`search eval [--golden PATH] [--no-hints] [--json]`: the level-1 numbers of the search on a golden set
+    (ctx_hints.evaluate) — the store's `search/golden.yaml` unless --golden names one (no store: --golden is needed),
+    plus, without --no-hints, the hints of the store's memory as rows `source: choice`. Each row with an answer is
+    searched with its frozen variants (`[q] + variants`, the first 50, its product and skill) and with its question
+    alone; the hints weigh both unless --no-hints. The index is refreshed once, by the first search (again only while
+    it is not built — another process building it), not at each. Writes nothing but the index (no last.json, no
+    store). Exit 3: no golden set, one that does not read, or nothing to search."""
+    which = _search_kinds(a.sources)
+    golden = a.golden
+    if not golden:
+        if not c.store.exists():
+            print("eval: немає сховища — назви еталонний набір: --golden ШЛЯХ")
+            return 3, {"command": "search", "action": "eval", "error": "no store and no --golden"}
+        golden = os.path.join(c.store.root, "search", "golden.yaml")
+    try:
+        rows = ch.load_golden(golden)
+    except (OSError, ValueError) as e:
+        print("eval: the golden set %s cannot be read — %s" % (golden, getattr(e, "strerror", None) or e))
+        return 3, {"command": "search", "action": "eval", "golden": golden, "error": str(e)}
+    notes, extra = [], []
+    for skill in sorted({r["skill"] for r in rows if r.get("skill")}):
+        try:
+            cr.manifest_for(cr.load_manifest(), skill)
+        except KeyError:
+            notes.append("еталонний набір: скіла %s немає — його рядки без ваги типів" % skill)
+    if not a.no_hints and c.store.exists():
+        try:
+            extra = ch.hint_rows(ch.load(c.store))
+        except cs.StoreError as e:
+            notes.append(ch.UNREAD_NOTE % e)
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    if not cs_.sources(sctx["text"], sctx["repos"], which):
+        print("eval: nothing to search — no vault in local-context.md, no registered repository with a folder on disk, "
+              "no local index or MCP")
+        return 3, {"command": "search", "action": "eval", "golden": golden, "error": "nothing to search"}
+
+    built = []          # the index is refreshed once per eval: until one search finds it built, never after
+
+    def ask(queries, row):
+        res = cs_.run(sctx, queries, skill=row.get("skill") or None, product=row.get("product") or None,
+                      limit=cs_.LIST_LIMIT, which=which, use_hints=not a.no_hints, refresh=not built)
+        if not built and (res.get("index") is None or res["index"].get("updated")):
+            built.append(True)
+        return res
+
+    res = ch.evaluate(rows + extra, ask)
+    for n in res.pop("notes"):
+        if n not in notes:
+            notes.append(n)
+    out = dict(res, command="search", action="eval", golden=golden, hints=len(extra), notes=notes)
+    if not a.json:
+        print("eval: %s · запитів %d (+ порожніх %d) · підказок %d" % (golden, res["n"], res["empty_n"], len(extra)))
+        print("recall@50 %s (q + варіанти) · %s (лише q) · MRR %s" % (_share(res["recall50"]), _share(res["recall50_q_only"]),
+                                                                     _share(res["mrr"])))
+        for k in sorted(res["by_class"]):
+            v = res["by_class"][k]
+            print("  %s: %d · recall@50 %s · лише q %s · MRR %s" % (k, v["n"], _share(v["recall50"]),
+                                                                   _share(v["recall50_q_only"]), _share(v["mrr"])))
+        if res["empty_n"]:
+            print("порожні: %d · кандидатів у топ-5 у середньому %.1f" % (res["empty_n"], res["empty_top5_mean"]))
+        missed = [r["q"] for r in res["rows"] if "rank" in r and r["rank"] is None]
+        if missed:
+            print("не знайдено серед 50: " + "; ".join("«%s»" % q for q in missed))
+        for n in notes:
+            print(n)
+    return 0, out
+
+
 def _unread(skipped):
     """The registrations that could not be read, as `<path> (<reason>)`, for a message."""
     return "; ".join("%s (%s)" % (p, why) for p, why in skipped)
@@ -1401,6 +1731,16 @@ def build_parser():
     rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
+    ip = sub.add_parser("index").add_subparsers(dest="action", required=True, parser_class=Parser)
+    ip.add_parser("status", parents=[common])
+    ip.add_parser("rebuild", parents=[common])
+    sp = sub.add_parser("search", parents=[common]); sp.add_argument("action", nargs="?", choices=SEARCH_ACTIONS)
+    sp.add_argument("--q", action="append"); sp.add_argument("--get")
+    sp.add_argument("--skill"); sp.add_argument("--product"); sp.add_argument("--limit", type=int)
+    sp.add_argument("--sources"); sp.add_argument("--no-hints", action="store_true"); sp.add_argument("--json", action="store_true")
+    sp.add_argument("--pick", action="append", metavar="ID|PATH")
+    sp.add_argument("--not", dest="not_", action="append", metavar="ID|PATH")
+    sp.add_argument("--golden", metavar="PATH")
     kp = sub.add_parser("slot").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = kp.add_parser("bind", parents=[common]); sp.add_argument("repo"); sp.add_argument("target"); sp.add_argument("slot")
     sp.add_argument("--team")
@@ -1425,7 +1765,8 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot}
+            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
+            "index": cmd_index, "search": cmd_search}
 
 
 def emit(result, conflict=None):

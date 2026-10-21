@@ -14,6 +14,11 @@ What it will do, and nothing more:
     the two within `probe_timeout` of its own (since v3.14; not one shared remainder) — never an exception,
     never a retry;
   * `call()` handshakes first when no session is open (the same `probe_timeout` per step, retried like the call);
+    `call_list()` (since v3.16.0) is `call()` for a tool that answers with a list of results (`vault_search`) —
+    the same allow-list, handshake, retries, deadline and `isError`, only the answer is read in every shape a
+    server sends it (a list, or an object with `results`, or `result` — the wrapping a server built on the Python
+    MCP SDK gives a list it returns — in `structuredContent`; text items); `call()` itself stays strict: an object,
+    never a list;
     a network error (no connection, a timeout, a dropped connection) is retried `retries` times, a server's
     answer — an HTTP status, a JSON-RPC error, `isError` — never is;
   * keep a `deadline` when given one (since v3.14; a `time.monotonic()` moment): every request gets
@@ -142,14 +147,20 @@ def _reason(exc):
     return type(r).__name__
 
 
-def _text_of(result):
-    """The first text item of a tools/call result, or None — also when `content` is not a list at all
+def _texts_of(result):
+    """Every text item of a tools/call result, in order — none when `content` is not a list at all
     (a server may send a number there; the caller then raises its own fixed message)."""
     content = result.get("content")
-    for item in content if isinstance(content, list) else ():
-        if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str):
-            return item["text"]
-    return None
+    if not isinstance(content, list):
+        return []
+    return [item["text"] for item in content
+            if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str)]
+
+
+def _text_of(result):
+    """The first text item of a tools/call result, or None."""
+    texts = _texts_of(result)
+    return texts[0] if texts else None
 
 
 def _loads(text):
@@ -159,6 +170,58 @@ def _loads(text):
         return True, json.loads(text)
     except (ValueError, RecursionError):
         return False, None
+
+
+def _objects_of(value):
+    """The objects of `value` when it is a result list: a list, an empty one or one with an object in it (an element
+    that is not an object is dropped). A list with no object in it is no result list — it reads as no hits at all,
+    which is not what the server said — and so is anything that is not a list: None."""
+    if not isinstance(value, list):
+        return None
+    objects = [v for v in value if isinstance(v, dict)]
+    return objects if objects or not value else None
+
+
+def _listed(value):
+    """`value` as a result list: a list itself, or an object whose `results` is one; else None."""
+    return _objects_of(value.get("results") if isinstance(value, dict) else value)
+
+
+def _structured_list(value):
+    """`structuredContent` as a result list: a list itself, or an object whose `results` is one — or whose `result` is
+    (the wrapping a server built on the Python MCP SDK gives a list it returns: `{"result": [...]}`, `{"result": []}`
+    for no hits); else None. Only here: in a text item a `result` key may be a hit's own field."""
+    if isinstance(value, dict):
+        found = _objects_of(value.get("results"))
+        return found if found is not None else _objects_of(value.get("result"))
+    return _objects_of(value)
+
+
+def _result_list(result):
+    """The list of results in a tools/call result, in the first shape that fits, or None:
+    `structuredContent` (a list, or an object with a `results` or a `result` list); one text item — such a list or object as JSON,
+    or a single result (a JSON object with no `results` key); several text items, each a JSON object (one result
+    each). A server that found nothing sends an empty `content` list and no `structuredContent`: an empty list — it
+    answered. Any other content with no text in it (an image, a resource, a link: results this client cannot read) and
+    a `content` that is not a list are no answer."""
+    structured = result.get("structuredContent")
+    found = _structured_list(structured)
+    if found is not None:
+        return found
+    content = result.get("content")
+    if not isinstance(content, list):
+        return None
+    texts = _texts_of(result)
+    if not texts:
+        return [] if not content and structured is None else None   # only an empty answer is nothing found
+    if len(texts) == 1:
+        ok, value = _loads(texts[0])
+        found = _listed(value) if ok else None
+        if found is None and isinstance(value, dict) and "results" not in value:
+            found = [value]
+        return found
+    objects = [value for ok, value in map(_loads, texts) if ok and isinstance(value, dict)]
+    return objects or None
 
 
 def _sse_events(text):
@@ -319,18 +382,24 @@ class McpClient:
             self.last_error = "unexpected %s" % type(e).__name__
         return False
 
-    def call(self, name, args=None):
-        """The JSON object a tool returned in its text content. A tool outside ALLOWED → McpRefused, before any
-        request; the network, a timeout, a JSON-RPC error, `isError`, a text that is not JSON or JSON that is not
-        an object (a list, null, a number, a string) → McpError."""
+    def _tool_result(self, name, args):
+        """The `result` of a tools/call of an allowed tool — what `call` and `call_list` share. A tool outside ALLOWED →
+        McpRefused, before any request; the network, a timeout, a JSON-RPC error and `isError` → McpError."""
         if not isinstance(name, str) or name not in ALLOWED:
             raise McpRefused("tool %r is not on the allow-list (%s)" % (name, ", ".join(sorted(ALLOWED))))
         if not self._ready:
             self._handshake(self.retries)
         result, _ = self._rpc("tools/call", {"name": name, "arguments": {} if args is None else args}, self.call_timeout, self.retries)
-        text = _text_of(result)
         if result.get("isError"):
-            raise McpError("%s failed: %s" % (name, (text or "no detail")[:300]))
+            raise McpError("%s failed: %s" % (name, (_text_of(result) or "no detail")[:300]))
+        return result
+
+    def call(self, name, args=None):
+        """The JSON object a tool returned in its text content. A tool outside ALLOWED → McpRefused, before any
+        request; the network, a timeout, a JSON-RPC error, `isError`, a text that is not JSON or JSON that is not
+        an object (a list, null, a number, a string) → McpError."""
+        result = self._tool_result(name, args)
+        text = _text_of(result)
         if text is None:
             raise McpError("%s returned no text content" % name)
         ok, value = _loads(text)
@@ -339,3 +408,16 @@ class McpClient:
         if not isinstance(value, dict):
             raise McpError("%s returned JSON that is not an object" % name)
         return value
+
+    def call_list(self, name, args=None):
+        """The list of results a tool returned (`vault_search`), as a list of objects — the same allow-list, handshake,
+        retries, deadline and errors as `call`. The first of these shapes that fits: `structuredContent` (a list, or an
+        object with a `results` or a `result` list — the latter is how a server built on the Python MCP SDK wraps a
+        list); one text item holding such a list or object as JSON, or one result (a JSON
+        object with no `results` key); several text items, each a JSON object (one result each). An element that is
+        not an object is dropped; an empty list is a list, and so is an empty `content` with no `structuredContent` (nothing found).
+        No shape fits → McpError("<name> returned no list of results"), a message that carries nothing of the answer."""
+        found = _result_list(self._tool_result(name, args))
+        if found is None:
+            raise McpError("%s returned no list of results" % name)
+        return found

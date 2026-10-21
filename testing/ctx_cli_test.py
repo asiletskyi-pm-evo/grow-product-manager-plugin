@@ -3746,7 +3746,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         members = slot_in(res, "team.members")
         check("…team.members: your Team Members and the core's Members, both shown (a list shows every candidate), the header says what it is",
               outcomes_of(members) == [("mine", "shown"), ("zorg-core", "shown")] and members["kind"] == "list" and members["record"] == "team.alpha-a"
-              and members["winner"] is None and members["why"] == "список — виводяться всі кандидати; склеювання пунктів — у v3.16"
+              and members["winner"] is None and members["why"] == "список — виводяться всі кандидати; склеювання пунктів — у v3.17"
               and "team.members · список · Team: Alpha (A)\n" in out and "  чому: список — виводяться всі кандидати" in out, (members, out[:1500]))
         mine_row, core_row = members["candidates"]
         check("…your row says where your text is; the block's — which block, which version, in which record, checked when",
@@ -4183,7 +4183,7 @@ need_15 = [
             "One line, printed once before `Відсутнє:` and not under each candidate", "`jira_team_field` is a team's name, not a Jira Team ID",
             "a block id that is not an id (`bind` does not check that the block exists", "the publisher's `slot=` in the begin marker of the block's base",
             "Search — Step 0.5 across several repositories", "entities and cross-links, which also join the items of a list",
-            "the overlay, the person and the provider kit — v3.17", "the configurator as a loop", "— v3.18"]),
+            "the overlay, the person and the provider kit — v3.18", "the configurator as a loop", "— v3.18"]),
     (pp15, ["**A slot — `slot=`** (since v3.15.0)", "`<!-- <namespace>:begin id=<block> v=<version> slot=<slot> -->`", "`xslot=` is no attribute",
             "A holder's own binding of the block (`ctx slot bind`) wins over the attribute for the whole block",
             "the plugin binds the block itself", "nothing else of the block is bound",
@@ -4241,6 +4241,541 @@ check("test-cases.md has the v3.15.0 section above v3.14.0 with one TC-ctx-3150-
       head3150 in tc and 0 <= tc.index(head3150) < tc.index("## Release v3.14.0") and not [i for i in ids3150 if "**%s**" % i not in tc]
       and "testing/ctx_slots_test.py" in read(ROOT, "testing", "Testing-process.md") and "testing/ctx_resolve_test.py" in read(ROOT, "testing", "Testing-process.md"),
       [i for i in ids3150 if "**%s**" % i not in tc])
+
+# --- v3.16.0 Task 7: ctx search — one candidate per note, flags and provenance, --get for one section
+import socket, sqlite3, unicodedata  # noqa: E402
+
+SEARCH_FIX = os.path.join(ROOT, "testing", "fixtures", "search")
+BRAIN_RELS = ("Notes/Кошик — графік роботи продавця.md", "Notes/Roadmap Q4 — draft v3.md", "Notes/Mobile cart notes.md",
+              "Growth/Cart experiments.md")
+
+
+def search_brain(path, vault, rels, extra=()):
+    """A user's own local index (zorg-brain) in the shape it has in the wild: `path` in notes_fts, meta k/v `vault`.
+    `extra`: (path, text) pairs for notes whose file is not read here."""
+    if os.path.exists(path):
+        os.remove(path)
+    con = sqlite3.connect(path)
+    con.executescript("CREATE TABLE notes(path TEXT PRIMARY KEY, title TEXT, type TEXT, date TEXT, status TEXT, fm_json TEXT);"
+                      "CREATE VIRTUAL TABLE notes_fts USING fts5(path UNINDEXED, title, body,"
+                      " tokenize='unicode61 remove_diacritics 2');"
+                      "CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT);")
+    con.execute("INSERT INTO meta VALUES ('vault', ?)", (vault,))
+    for rel, text in [(r, read(vault, *r.split("/"))) for r in rels] + list(extra):
+        title = rel.rsplit("/", 1)[-1][:-3]
+        con.execute("INSERT INTO notes(path, title) VALUES (?, ?)", (rel, title))
+        con.execute("INSERT INTO notes_fts(path, title, body) VALUES (?, ?, ?)", (rel, title, text))
+    con.commit()
+    con.close()
+
+
+class SearchEnv(Env):
+    """The fictional Zorg vault of testing/fixtures/search/ (the plugin folder Notes/, the core ZorgCore/ registered as
+    zorg-core) and its home (the team glossary), a mirror-only note Growth/Cart experiments.md, and — unless brain is
+    False, then local-context.md has no Vault Search MCP line — a user's own local index zorg-brain over a part of it."""
+
+    def __init__(self, d, brain=True):
+        self.home, self.vault = os.path.join(d, "home"), os.path.join(d, "vault")
+        shutil.copytree(os.path.join(SEARCH_FIX, "home"), self.home)
+        shutil.copytree(os.path.join(SEARCH_FIX, "vault"), self.vault)
+        for dp, _, names in os.walk(self.vault):
+            for n in names:
+                text = read(dp, n) if n.endswith(".yaml") else ""
+                if "{{VAULT}}" in text:
+                    open(os.path.join(dp, n), "w", encoding="utf-8").write(text.replace("{{VAULT}}", self.vault))
+        self.add("Growth/Cart experiments.md", "---\ntype: ab-test-results\nproduct: Zorg App\ndate: 2026-08-01\n---\n"
+                 "# Cart experiments\n\nThe mobile cart test: the seller's hours under each block lifted the paid orders.\n")
+        text = read(SEARCH_FIX, "context.md").replace("{{VAULT}}", self.vault).replace("{{HOME}}", self.home)
+        self.text = text if brain else text[:text.index("### Vault Search MCP")]
+        self.ctx = os.path.join(self.home, ".grow-pm", "local-context.md")
+        open(self.ctx, "w", encoding="utf-8", newline="").write(self.text)
+        self.store = os.path.join(self.vault, "Notes", "_System", "context")
+        self.brain = os.path.join(self.home, "zorg-brain.sqlite")
+        self.index = os.path.join(self.home, ".grow-pm", "index")
+        if brain:
+            search_brain(self.brain, self.vault, BRAIN_RELS)
+
+    def add(self, rel, text):
+        p = os.path.join(self.vault, *rel.split("/"))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, "w", encoding="utf-8", newline="").write(text)
+
+
+def tree(top):
+    return tree_of(top)
+
+
+def by_title(res, title):
+    return next((c for c in (res or {}).get("candidates", []) if c["title"] == title), None)
+
+
+def by_path(res, path):
+    return next((c for c in (res or {}).get("candidates", []) if c["path"] == path), None)
+
+
+def closed_url():
+    """An MCP endpoint on a local port nothing listens on: the network is not there."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return "http://127.0.0.1:%d/mcp" % port
+
+
+KOSHYK = "Notes/Кошик — графік роботи продавця.md"
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d)
+    before = tree(env.store)
+    home_before = {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index)}
+    rc, out, res = run_ok(env, "search", "--q", "графік роботи продавця", "--q", "seller working hours", "--json")
+    check("ctx search --json: exit 0, nothing but the CTX_RESULT line", rc == 0 and res
+          and out.strip().startswith("CTX_RESULT ") and out.strip().count("\n") == 0, (rc, out[-500:]))
+    check("…CTX_RESULT: command search, candidates, notes, sources, index", res and res.get("command") == "search"
+          and {"candidates", "notes", "sources", "index"} <= set(res) and "last" not in res, res and sorted(res))
+    paths = [c["path"] for c in res["candidates"]]
+    check("one candidate per file across own index and zorg-brain", len(paths) == len(set(paths)), paths)
+    k = by_path(res, KOSHYK)
+    check("…the note both found is one candidate of both sources", k and k["source"] == ["own", "zorg-brain"], k)
+    check("…at most two sections of one note, the first its own heading", k and len(k["sections"]) == 2
+          and k["sections"][0] == {"id": k["id"], "heading": k["heading"]}
+          and all(1 <= len(c["sections"]) <= 2 for c in res["candidates"]), k and k["sections"])
+    c = by_title(res, "Roadmap Q4 — draft v3")
+    check("the newer draft stays, the older is named", c and "є старіші версії: 1" in c["flags"]
+          and not by_title(res, "Roadmap Q4 — draft v2"), [(x["title"], x["flags"]) for x in res["candidates"]])
+    check("every candidate: id, path, heading, title, type, product, date, source, flags, matched, snippet, score",
+          res["candidates"] and all({"id", "path", "heading", "title", "type", "product", "date", "source", "flags", "matched",
+                                     "snippet", "score"} <= set(x) for x in res["candidates"]), res["candidates"][:1])
+    check("…the id is the first 10 hex of sha1(path#heading)", all(x["id"] == hashlib.sha1(
+        ("%s#%s" % (x["path"], x["heading"])).encode("utf-8")).hexdigest()[:10] for x in res["candidates"]))
+    check("…the sources asked, each with whether it answered", res["sources"] == [
+        {"id": "own", "kind": "own", "answered": True}, {"id": "zorg-brain", "kind": "local", "answered": True}], res["sources"])
+    check("…the index state: refreshed before the search", (res.get("index") or {}).get("files") == 19
+          and (res.get("index") or {}).get("added") == 19, res.get("index"))
+    rc2, out2, res2 = run_ok(env, "search", "--q", "standup seller notice")
+    check("a date series is not folded", by_title(res2, "Standup 2026-10-01") and by_title(res2, "Standup 2026-10-08"),
+          res2 and [x["title"] for x in res2["candidates"]])
+    rc3, out3, res3 = run_ok(env, "search", "--q", "Epic PROJ-77")
+    check("the core page and its hub are one candidate", sum(1 for x in res3["candidates"] if x["title"] == "Epic — PROJ-77") == 1,
+          res3 and [(x["path"], x["flags"]) for x in res3["candidates"]])
+    e3 = by_title(res3, "Epic — PROJ-77")
+    check("…the one with more text stays, the hub named as its twin", e3 and e3["path"] == "ZorgCore/Epics/Epic — PROJ-77.md"
+          and "двійник Notes/Epics/Epic — PROJ-77.md" in e3["flags"], e3)
+    check("…a core page names its repository as its source", e3 and e3["source"] == ["zorg-core"], e3)
+    rc, out, _ = run_ok(env, "search", "--get", e3["id"]) if e3 else (None, "", None)
+    check("…and so does its --get line", rc == 0 and out.startswith("> [zorg-core · ZorgCore/Epics/Epic — PROJ-77.md › "),
+          (rc, out[:200]))
+    check("search writes nothing to the store", tree(env.store) == before)
+    rc4, out4, res4 = run_ok(env, "search", "--q", "що і як?")
+    check("an all-stop query is exit 0 with no candidates", rc4 == 0 and res4 and res4["candidates"] == [], (rc4, out4[-300:]))
+    h, t = run_ok(env, "search", "--get", res["candidates"][0]["id"])[1:3]
+    check("--get prints the provenance line and the section", "> [own · " in h, h[-400:])
+    check("…the line `> [<source> · <path> › <heading> · <day>]` first, then the section's text; CTX_RESULT action get",
+          re.match(r"^> \[own · %s › .+ · \d{4}-\d{2}-\d{2}\]\n" % re.escape(res["candidates"][0]["path"]), h)
+          and t and t.get("action") == "get" and t.get("id") == res["candidates"][0]["id"], (h[:300], t))
+    rc5, out5, res5 = run_ok(env, "search", "--get", res["candidates"][0]["id"], "--json")
+    check("…--get --json: the header and the text in CTX_RESULT", rc5 == 0 and res5 and res5.get("text")
+          and res5.get("header", "").startswith("> [own · ") and out5.strip().count("\n") == 0, (rc5, out5[-300:]))
+    rc, out, _ = run_ok(env, "search", "--get", "0000000000")
+    check("--get of an id no search gave: exit 3, one line why", rc == 3 and "0000000000" in out, (rc, out[-300:]))
+    check("search writes only <home>/.grow-pm/index/ — last.json beside the index",
+          {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index)} == home_before
+          and os.path.isfile(os.path.join(env.index, "last.json")))
+
+    rc, out, res = run_ok(env, "search", "--q", "графік роботи продавця", "--q", "seller working hours")
+    lines = out.splitlines()
+    k = by_path(res, KOSHYK)
+    check("human output: `Пошук: <n> варіант(и) · джерела: <ids> · кандидатів <k>` first", rc == 0
+          and lines[0] == "Пошук: 2 варіанти · джерела: own, zorg-brain · кандидатів %d" % len(res["candidates"]), lines[:2])
+    head = next((l for l in lines if l.startswith("%d. " % (res["candidates"].index(k) + 1))), "") if k else ""
+    check("…`N. <title> › <heading> · <sources> · <type> · <date>`", head.startswith("%d. Кошик — графік роботи продавця › "
+                                                                                       % (res["candidates"].index(k) + 1))
+          and head.endswith(" · own, zorg-brain · concept · 2026-09-15"), head)
+    i = lines.index(head) if head in lines else -1
+    check("…then the snippet in «» and `id <id> · варіанти <i,…>`", i >= 0 and "«" in lines[i + 1]
+          and lines[i + 2].strip() == "id %s · варіанти 1,2" % k["id"], lines[i:i + 4])
+    check("…and the CTX_RESULT line last", lines[-1].startswith("CTX_RESULT "))
+    rc, out, res = run_ok(env, "search", "--q", "seller working hours", "--limit", "3", "--json")
+    check("--limit 3 gives at most 3", rc == 0 and 0 < len(res["candidates"]) <= 3, res and len(res["candidates"]))
+    rc, out, res = run_ok(env, "search", "--q", "delivery slot", "--json")
+    ds = [x for x in res["candidates"] if x["title"] == "Delivery slots"]
+    check("key 2: the Confluence page twice on disk is one candidate, the newer, the other named its twin",
+          len(ds) == 1 and ds[0]["path"] == "Notes/Knowledge/Delivery slots (900100200).md"
+          and "двійник ZorgCore/Pages/Delivery slots (900100200).md" in ds[0]["flags"], ds)
+    rc, out, res = run_ok(env, "search", "--q", "commission small sellers", "--json")
+    pr = by_title(res, "Pricing review 2026-09-30")
+    check("a sensitive note is marked `sensitive`", pr and "sensitive" in pr["flags"], pr)
+    rc, out, res = run_ok(env, "search", "--q", "Bea Two data analyst", "--json")
+    bea = by_path(res, "ZorgCore/People/bea-two.md")
+    check("a person card is a hub", bea and "хаб" in bea["flags"], bea)
+    rc, out, res = run_ok(env, "search", "--q", "seller merchant tone", "--json")
+    sg = by_title(res, "Zorg Style Guide")
+    check("…and so is the Zorg Style Guide", sg and "хаб" in sg["flags"], sg)
+
+    env.add("Notes/Archive/Mobile cart notes (copy).md", read(env.vault, "Notes", "Mobile cart notes.md"))
+    rc, out, res = run_ok(env, "search", "--q", "mobile cart interviews", "--json")
+    mc = [x for x in res["candidates"] if x["title"] == "Mobile cart notes"]
+    check("key 3: the same content twice is one candidate, the other named its twin", len(mc) == 1
+          and mc[0]["path"] == "Notes/Mobile cart notes.md" and "двійник Notes/Archive/Mobile cart notes (copy).md" in mc[0]["flags"],
+          [(x["path"], x["flags"]) for x in res["candidates"]])
+
+    nfc = "Мій кошик — відгуки покупців.md"
+    nfd = unicodedata.normalize("NFD", nfc)
+    body = "# Мій кошик — відгуки покупців\n\nВідгуки покупців про мобільний кошик: графік продавця видно не всім.\n"
+    env.add("Notes/" + nfd, body)
+    search_brain(env.brain, env.vault, BRAIN_RELS, extra=[("Notes/" + nfc, body)])
+    check("(the file name is decomposed on disk)", nfd in os.listdir(os.path.join(env.vault, "Notes")) and nfd != nfc)
+    rc, out, res = run_ok(env, "search", "--q", "відгуки покупців", "--json")
+    mine = [x for x in res["candidates"] if unicodedata.normalize("NFC", x["path"]) == "Notes/" + nfc]
+    check("NFD on disk and NFC in zorg-brain: one candidate of both, its path NFC", len(mine) == 1
+          and mine[0]["path"] == "Notes/" + nfc and mine[0]["source"] == ["own", "zorg-brain"], mine)
+
+    for args, why in ((("search",), "neither --q nor --get"), (("search", "--q", "x", "--sources", "own,web"), "an unknown source"),
+                      (("search", "--q", "x", "--limit", "0"), "a limit below 1"), (("search", "--q", "x", "--skill", "no-such-skill"),
+                                                                                  "an unknown skill")):
+        rc, out, res = run_ok(env, *args)
+        check("search with %s: exit 3" % why, rc == 3 and res and res.get("ok") is False, (rc, out[-300:]))
+    rc, out, res = run_ok(env, "search", "--q", "seller", "--skill", "write-concept", "--product", "Zorg App", "--no-hints", "--json")
+    check("--skill, --product and --no-hints are taken", rc == 0 and res["candidates"], (rc, out[-300:]))
+
+    shutil.rmtree(env.store)
+    rc, out, res = run_ok(env, "search", "--q", "графік роботи продавця", "--json")
+    check("no store: search still works", rc == 0 and by_path(res, KOSHYK), (rc, out[-300:]))
+    import ctx as ctx_cli  # noqa: E402
+    a = ctx_cli.build_parser().parse_args(["search", "--q", "x"])
+    check("search is no writing command of the store", "search" not in ctx_cli.WRITING and not ctx_cli.writes(a))
+
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d)
+    open(os.path.join(env.vault, "Notes", "_System", "providers", "zorg-growth.yaml"), "w", encoding="utf-8").write(
+        "schema: provider-registration/2\nid: zorg-growth\ntitle: Zorg growth\nkind: mcp\nauthority: team\n"
+        "endpoint:\n  url: %s\n  root: \"Growth/\"\nstatus: active\n" % closed_url())
+    rc, out, res = run_ok(env, "search", "--q", "mobile cart", "--sources", "mcp")
+    check("--sources mcp with no network: exit 5, one line about the repository", rc == 5 and res and res.get("ok") is False
+          and "zorg-growth не відповів — без нього" in out, (rc, out[-400:]))
+    rc, out, res = run_ok(env, "search", "--q", "mobile cart", "--json")
+    check("…without --sources the other sources answer: exit 0 with the line", rc == 0 and res["candidates"]
+          and "zorg-growth не відповів — без нього" in res["notes"], (rc, res and res["notes"]))
+
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d, brain=False)
+    rc, out, res = run_ok(env, "search", "--q", "графік роботи продавця", "--q", "seller working hours", "--json")
+    check("without zorg-brain and without network: the section index alone", rc == 0 and res["sources"] == [
+        {"id": "own", "kind": "own", "answered": True}] and by_path(res, KOSHYK), (rc, res and res["sources"]))
+    rc, out, _ = run_ok(env, "search", "--get", by_path(res, KOSHYK)["id"])
+    check("…and --get of what it found", rc == 0 and out.startswith("> [own · %s › " % KOSHYK), (rc, out[:300]))
+
+with tempfile.TemporaryDirectory() as d:            # fix round 1: searches at once; a save that fails; a busy index
+    env = SearchEnv(d)
+    run_ok(env, "search", "--q", "seller")             # the index built once
+    penv = dict(os.environ)
+    penv.pop("GROW_PM_CONTEXT_PATH", None)
+    runs = []
+    for _ in range(2):
+        ps = [subprocess.Popen([sys.executable, CTX, "search", "--q", q, "--json", "--home", env.home, "--context", env.ctx],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=penv)
+              for q in ("seller working hours", "графік роботи продавця", "delivery slot", "mobile cart", "Epic PROJ-77",
+                        "standup")]
+        runs += [p.communicate(timeout=120) + (p.returncode,) for p in ps]
+    check("six searches at the same moment, twice: every one exits 0 with its CTX_RESULT",
+          all(rc == 0 and so.strip().splitlines()[-1].startswith("CTX_RESULT ") for so, se, rc in runs),
+          [(rc, so[-200:], se[-200:]) for so, se, rc in runs if rc != 0][:2])
+    check("…last.json parses and no temp file is left beside it",
+          isinstance(json.load(open(os.path.join(env.index, "last.json"), encoding="utf-8")), dict)
+          and not [n for n in os.listdir(env.index) if n.endswith(".tmp")], os.listdir(env.index))
+    rc, out, res = run_ok(env, "search", "--q", "cart experiments", "--json")
+    gx = by_path(res, "Growth/Cart experiments.md")
+    run_ok(env, "search", "--q", "standup")
+    rc, out, _ = run_ok(env, "search", "--get", gx["id"]) if gx else (None, "", None)
+    check("one search keeps another's ids: --get of a zorg-brain note an earlier search found still works",
+          rc == 0 and out.startswith("> [zorg-brain · Growth/Cart experiments.md · "), (rc, out[:200]))
+    os.remove(os.path.join(env.index, "last.json"))
+    os.makedirs(os.path.join(env.index, "last.json"))
+    rc, out, res = run_ok(env, "search", "--q", "seller working hours", "--json")
+    check("last.json that cannot be written: the search still exits 0 with its candidates, one line says so",
+          rc == 0 and res["candidates"] and any(n.startswith("ідентифікатори пошуку не збережено (") for n in res["notes"]),
+          (rc, res and res["notes"]))
+    os.rmdir(os.path.join(env.index, "last.json"))
+    db = os.path.join(env.index, "sections.sqlite")
+    hold = sqlite3.connect(db, timeout=1)
+    hold.execute("BEGIN EXCLUSIVE")
+    try:
+        rc, out, res = run_ok(env, "search", "--q", "seller", "--sources", "own")
+    finally:
+        hold.rollback()
+        hold.close()
+    check("the own index busy (another process writes it) as the only source: exit 5 and the busy line, no rebuild",
+          rc == 5 and "індекс пошуку зайнятий іншим процесом — цього разу без нього" in out and res
+          and res["sources"] == [{"id": "own", "kind": "own", "answered": False}] and not os.path.exists(db + ".broken"),
+          (rc, out[-500:]))
+    rc, out, res = run_ok(env, "search", "--q", "seller", "--sources", "own", "--json")
+    check("…once it is free the same index answers", rc == 0 and res["candidates"] and res["index"]["files"] == 19,
+          (rc, res and res.get("index")))
+
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d, brain=False)
+    env.text = env.text[:env.text.index("## Obsidian Vaults")]
+    open(env.ctx, "w", encoding="utf-8").write(env.text)
+    rc, out, res = run_ok(env, "search", "--q", "seller")
+    check("no vault, no repository and no source: exit 3", rc == 3 and res and res.get("ok") is False, (rc, out[-300:]))
+
+# --- v3.16.0 Task 8: remembered picks (ctx search remember|forget), the golden set and ctx search eval
+GOLDEN_ZORG = os.path.join(SEARCH_FIX, "golden.zorg.yaml")
+AGENT_EVAL = os.path.join(ROOT, "testing", "search_agent_eval.py")
+# (n, recall50, recall50_q_only) of `ctx search eval` on golden.zorg.yaml without hints — pinned once, when the set was
+# built (13 rows with an answer; with their variants only «плата за продаж» misses, the question alone also misses
+# «години відкриття магазину», «Беа Ту аналітик», «чекаут таймаут» and «слоти»). Re-pinned only deliberately, with a line
+# in the run's journal.
+PINNED = (13, 0.923, 0.615)
+MOBILE = "Notes/Mobile cart notes.md"
+
+
+def memory_of(env):
+    return json.loads(read(env.store, ".state", "search.json"))
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d)
+    rc, out, res = run_ok(env, "search", "remember", "--q", "мобільний кошик", "--pick", MOBILE)
+    check("no store: remember exits 3 «немає сховища — підказку не збережено»", rc == 3 and res and res.get("ok") is False
+          and "немає сховища — підказку не збережено" in out and not os.path.exists(os.path.join(env.store, ".state")), (rc, out[-300:]))
+    rc, out, res = run_ok(env, "search", "eval", "--json")
+    check("no store and no --golden: eval exits 3", rc == 3 and res and res.get("ok") is False and "--golden" in out, (rc, out[-300:]))
+    shutil.rmtree(os.path.join(env.store, "records"))
+    rc, out, _ = run_ok(env, "migrate", "--apply")
+    check("(the fixture's store migrated)", rc == 0, out[-300:])
+
+    rc, _, res = run_ok(env, "search", "remember", "--q", "мобільний кошик", "--pick", "Notes/Mobile cart notes.md")
+    check("remember writes the memory, a snapshot and a journal line", rc == 0 and last_journal(env)["op"] == "search")
+    j = last_journal(env)
+    check("…the journal line: op search, action, q, source ctx-search, the snapshot",
+          (j.get("action"), j.get("q"), j.get("source")) == ("remember", "мобільний кошик", "ctx-search")
+          and j.get("snapshot") and os.path.isdir(j["snapshot"]) and res.get("snapshot") == j["snapshot"], j)
+    mem = memory_of(env)
+    check("….state/search.json: context-search-memory/1, the request's stems sorted, good, the day", mem["schema"]
+          == "context-search-memory/1" and len(mem["hints"]) == 1 and mem["hints"][0]["terms"] == ["кошик", "мобільн"]
+          and mem["hints"][0]["good"] == [MOBILE] and mem["hints"][0]["bad"] == []
+          and re.match(r"^\d{4}-\d{2}-\d{2}$", mem["hints"][0]["at"]), mem)
+    c = by_path(run_ok(env, "search", "--q", "мобільний кошик", "--json")[2], "Notes/Mobile cart notes.md")
+    check("a remembered pick is boosted and named", c and any(f.startswith("твій вибір від ") for f in c["flags"]))
+    n = len(read(env.store, ".state", "journal.jsonl").splitlines())
+    rc, out, res = run_ok(env, "search", "remember", "--q", "кошик мобільний", "--pick", MOBILE)
+    check("the same pick again: unchanged, no snapshot, no journal line", rc == 0 and res.get("changed") is False
+          and "unchanged" in out and len(read(env.store, ".state", "journal.jsonl").splitlines()) == n, (rc, out[-300:]))
+    check("undo takes the hint back", run_ok(env, "undo")[0] == 0 and not os.path.exists(os.path.join(env.store, ".state", "search.json")))
+
+    before_vault = tree(env.vault)
+    home_before = {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index)}
+    last_before = read(env.index, "last.json")
+    res = run_ok(env, "search", "eval", "--golden", GOLDEN_ZORG, "--no-hints", "--json")[2]
+    check("eval on the Zorg set gives the pinned numbers", (res["n"], round(res["recall50"], 3), round(res["recall50_q_only"], 3)) == PINNED,
+          res and (res.get("n"), res.get("recall50"), res.get("recall50_q_only"), [r for r in res.get("rows", []) if r.get("rank") is None]))
+    check("…CTX_RESULT {command search, action eval, mrr, by_class, the empty rows}", res.get("command") == "search"
+          and res.get("action") == "eval" and isinstance(res.get("mrr"), float) and res.get("empty_n") == 2
+          and isinstance(res.get("empty_top5_mean"), float) and set(res.get("by_class") or {}) == {
+              "форма", "синонім", "англ", "рос", "питання", "абревіатура", "транслітерація", "ключ", "коротко", "справжній"}
+          and res["by_class"]["синонім"]["n"] == 2 and res.get("hints") == 0, res and {k: res.get(k) for k in ("mrr", "empty_n", "by_class")})
+    check("…eval writes nothing but the index: the vault (the store in it) and the home as they were, last.json too",
+          tree(env.vault) == before_vault and {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index)}
+          == home_before and read(env.index, "last.json") == last_before)
+    rc, out, _ = run_ok(env, "search", "eval", "--golden", GOLDEN_ZORG, "--no-hints")
+    check("…the human output: the set, recall@50 with the variants and of the question alone, MRR, a line per class",
+          rc == 0 and "recall@50" in out and "лише q" in out and "MRR" in out and "\n  синонім: 2 · " in out
+          and "порожні: 2" in out, out[-900:])
+    rc, out, res = run_ok(env, "search", "eval", "--json")
+    check("eval without --golden reads <store>/search/golden.yaml: none there is exit 3", rc == 3
+          and "search/golden.yaml" in out, (rc, out[-300:]))
+    os.makedirs(os.path.join(env.store, "search"))
+    shutil.copy(GOLDEN_ZORG, os.path.join(env.store, "search", "golden.yaml"))
+    rc, out, res = run_ok(env, "search", "eval", "--json")
+    check("…with it there, the same numbers", rc == 0 and (res["n"], round(res["recall50"], 3), round(res["recall50_q_only"], 3))
+          == PINNED, (rc, out[-300:]))
+
+    found = run_ok(env, "search", "--q", "корзина мобильная", "--json")[2]
+    kz = by_path(found, "Notes/Корзина 2.0 (mobile).md")
+    rc, out, res = run_ok(env, "search", "remember", "--q", "мобільна корзина", "--pick", kz["id"], "--not", MOBILE,
+                          "--product", "Zorg App")
+    hint = next((h for h in memory_of(env)["hints"] if h["q"] == "мобільна корзина"), {})
+    check("remember --pick ID: the id of the last search is its section, `path#heading`; --not and --product kept",
+          rc == 0 and hint.get("good") == ["Notes/Корзина 2.0 (mobile).md#" + kz["heading"]] and hint.get("bad") == [MOBILE]
+          and hint.get("product") == "Zorg App", (rc, hint, out[-300:]))
+    res = run_ok(env, "search", "--q", "мобільна корзина", "--product", "Zorg App", "--json")[2]
+    check("…a `--not` note is marked `ти казав «не те»`, the pick `твій вибір від <день>`",
+          "ти казав «не те»" in (by_path(res, MOBILE) or {}).get("flags", [])
+          and any(f.startswith("твій вибір від ") for f in (by_path(res, "Notes/Корзина 2.0 (mobile).md") or {}).get("flags", [])),
+          res and [(c["path"], c["flags"]) for c in res["candidates"][:4]])
+    rc, out, res = run_ok(env, "search", "eval", "--golden", GOLDEN_ZORG, "--json")
+    check("eval with the hints: each hint with a pick is one more row `source: choice`, class вибір",
+          rc == 0 and res["n"] == PINNED[0] + 1 and res["hints"] == 1 and res["by_class"]["вибір"]["n"] == 1
+          and any(r["source"] == "choice" for r in res["rows"]), res and (res.get("n"), res.get("hints")))
+    rc, out, res = run_ok(env, "search", "forget", "--q", "корзина мобільна")
+    j = last_journal(env)
+    check("forget removes the hint of the request: snapshot, journal line action forget", rc == 0 and res.get("changed") is True
+          and (j.get("op"), j.get("action"), j.get("q")) == ("search", "forget", "корзина мобільна")
+          and not [h for h in memory_of(env)["hints"] if h["q"] == "мобільна корзина"], (rc, j, out[-300:]))
+    rc, out, res = run_ok(env, "search", "forget", "--q", "корзина мобільна")
+    check("…nothing left to forget: unchanged, exit 0", rc == 0 and res.get("changed") is False and "unchanged" in out, (rc, out[-300:]))
+    for args, why in ((("search", "remember", "--q", "кошик"), "remember without --pick or --not"),
+                      (("search", "remember", "--q", "кошик", "--pick", "fedcba9876"), "an id no search gave"),
+                      (("search", "remember", "--q", "що і як", "--pick", MOBILE), "a request with no words to remember"),
+                      (("search", "forget", "--q", "кошик", "--pick", MOBILE), "forget with --pick"),
+                      (("search", "eval", "--q", "кошик"), "eval with --q"),
+                      (("search", "--q", "кошик", "--pick", MOBILE), "a plain search with --pick"),
+                      (("search", "remember", "--q", "кошик", "--pick", MOBILE, "--store", env.store), "remember with --store")):
+        rc, out, res = run_ok(env, *args)
+        check("search: %s is exit 3" % why, rc == 3 and res and res.get("ok") is False, (rc, out[-300:]))
+    import ctx as ctx_cli  # noqa: E402
+    p = ctx_cli.build_parser()
+    check("writes(): search remember and forget write the store; eval and a plain search do not",
+          ctx_cli.writes(p.parse_args(["search", "remember", "--q", "x", "--pick", "a.md"]))
+          and ctx_cli.writes(p.parse_args(["search", "forget", "--q", "x"]))
+          and not ctx_cli.writes(p.parse_args(["search", "eval"])) and not ctx_cli.writes(p.parse_args(["search", "--q", "x"])))
+
+    # the model level: search_agent_eval.py prepares the batches and scores the answers (criteria 1–3 of the spec)
+    out_dir = os.path.join(d, "batches")
+    penv = dict(os.environ)
+    penv.pop("GROW_PM_CONTEXT_PATH", None)
+    p = subprocess.run([sys.executable, AGENT_EVAL, "prepare", "--golden", GOLDEN_ZORG, "--out", out_dir, "--home", env.home,
+                        "--context", env.ctx, "--batch", "6"], capture_output=True, text=True, env=penv, timeout=600)
+    files = sorted(os.listdir(out_dir)) if os.path.isdir(out_dir) else []
+    items = [x for f in files for x in json.load(open(os.path.join(out_dir, f), encoding="utf-8"))]
+    check("prepare: the rows in batches of --batch, each {q, variants, candidates}", p.returncode == 0
+          and files == ["batch-001.json", "batch-002.json", "batch-003.json"] and len(items) == 15
+          and all({"q", "variants", "candidates"} <= set(x) for x in items), (p.returncode, files, p.stdout[-300:], p.stderr[-300:]))
+    check("…never the answers: no good, ok or bad in a batch", not any({"good", "ok", "bad"} & set(x) for x in items))
+    first = next((x for x in items if x["q"] == "графіком роботи продавців"), {})
+    check("…the candidates of `ctx search --json` for the question and its variants",
+          first.get("variants") == ["графік роботи продавця", "график работы продавца", "seller working hours"]
+          and any(c["path"] == "Notes/Кошик — графік роботи продавця.md" for c in first.get("candidates", [])), first)
+    answers = os.path.join(d, "answers")
+    os.makedirs(answers)
+    open(os.path.join(answers, "a.json"), "w", encoding="utf-8").write(json.dumps({
+        "графіком роботи продавців": {"taken": ["Notes/Кошик — графік роботи продавця.md#Кошик — графік роботи продавця › Рішення"],
+                                      "variants": [], "nothing": False},
+        "години відкриття магазину": {"taken": ["Notes/Checkout flow (old).md"], "variants": [MOBILE], "nothing": False},
+        "seller hours in the cart": {"taken": [], "variants": [], "nothing": True},
+        "програма лояльності для покупців": {"taken": [], "variants": [], "nothing": True}}, ensure_ascii=False))
+    open(os.path.join(answers, "b.json"), "w", encoding="utf-8").write(json.dumps({
+        "інтеграція з бухгалтерією 1С": {"taken": ["Notes/Inbox.md"], "variants": [], "nothing": False},
+        "Q4": {"taken": ["Notes/Roadmap Q4 — draft v3.md", "Notes/Roadmap Q4 — draft v2.md"], "variants": [], "nothing": False}},
+        ensure_ascii=False))
+    p = subprocess.run([sys.executable, AGENT_EVAL, "score", "--golden", GOLDEN_ZORG, "--answers", answers],
+                       capture_output=True, text=True, env=penv, timeout=120)
+    last = (p.stdout.strip().splitlines() or [""])[-1]
+    score = json.loads(last[len("SCORE "):]) if last.startswith("SCORE ") else {}
+    check("score: precision_taken 2/5, empty_clean 1/2, hit 3/4 on the synthetic answers",
+          p.returncode == 0 and (score.get("precision_taken"), score.get("empty_clean"), score.get("hit")) == (0.4, 0.5, 0.75),
+          (p.returncode, p.stdout[-600:], p.stderr[-300:]))
+    check("…the rows with no answer are counted apart, and a `bad` one taken is named", score.get("missing") == 9
+          and score.get("bad_taken") == 1 and "precision_taken" in p.stdout and "без відповіді: 9" in p.stdout, score)
+
+# --- v3.16.0 final review: an own index not built yet, or being built by another process, has not answered (exit 5)
+import ctx_index as ci_mod  # noqa: E402
+
+BUILDING = "індекс пошуку ще будується (інший процес) — цього разу без нього"
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d, brain=False)
+    os.makedirs(env.index)
+    lock, db = os.path.join(env.index, "index.lock"), os.path.join(env.index, "sections.sqlite")
+    open(lock, "w", encoding="utf-8").write(json.dumps({"pid": os.getpid(), "at": time.time()}))   # a live process: this one
+    OWN_ONLY = ("search", "--q", "графік роботи продавця", "--sources", "own", "--json")
+
+    def own_unread(rc, res):
+        return (rc == 5 and res and res["sources"] == [{"id": "own", "kind": "own", "answered": False}]
+                and res["candidates"] == [] and BUILDING in res["notes"] and res["index"]["locked"] is True)
+
+    rc, out, res = run_ok(env, *OWN_ONLY)
+    check("C1 A: the index's lock held by a live process and no database: exit 5, own not answered, the building line",
+          own_unread(rc, res), (rc, res and res.get("notes"), res and res.get("index")))
+    con = sqlite3.connect(db)
+    con.executescript(ci_mod.DDL)
+    con.commit()
+    con.close()
+    rc, out, res = run_ok(env, *OWN_ONLY)
+    check("C1 B: …a database with the schema's tables only (no meta row) and no index.json: the same", own_unread(rc, res),
+          (rc, res and res.get("notes"), res and res.get("index")))
+    open(os.path.join(env.index, "index.json"), "w", encoding="utf-8").write(json.dumps(
+        {"schema": "search-index/1", "updated": "2026-01-02T09:00:00+02:00", "files": 19, "sections": 60, "pending": 0}))
+    rc, out, res = run_ok(env, *OWN_ONLY)
+    check("C1 D: …and an old index.json beside it: the same, and index.updated is the database's (none), not the old day",
+          own_unread(rc, res) and res["index"]["updated"] is None, (rc, res and res.get("notes"), res and res.get("index")))
+    rc, out, _ = run_ok(env, *OWN_ONLY[:-1])
+    check("…the human output says the building line", rc == 5 and BUILDING in out, (rc, out[-400:]))
+    os.remove(lock)
+    rc, out, res = run_ok(env, *OWN_ONLY)
+    check("C1 control: no lock — the search builds the index and finds the note", rc == 0 and res
+          and res["sources"] == [{"id": "own", "kind": "own", "answered": True}] and by_path(res, KOSHYK)
+          and BUILDING not in res["notes"], (rc, res and res.get("notes")))
+
+    # 154: eval refreshes the index once, not twice a row
+    calls, real_refresh = [], ci_mod.Index.refresh
+    ci_mod.Index.refresh = lambda self, *a, **kw: calls.append(1) or real_refresh(self, *a, **kw)
+    try:
+        rc, out, res = in_process(env, "search", "eval", "--golden", GOLDEN_ZORG, "--no-hints", "--json")
+    finally:
+        ci_mod.Index.refresh = real_refresh
+    check("154: eval refreshes the index once per eval, and its numbers stay the pinned ones", rc == 0 and len(calls) == 1
+          and res and (res["n"], round(res["recall50"], 3), round(res["recall50_q_only"], 3)) == PINNED,
+          (rc, len(calls), res and (res.get("n"), res.get("recall50"), res.get("recall50_q_only"))))
+
+    # 152: forget says forget
+    rc, out, res = run_ok(env, "search", "forget", "--q", "що і як")
+    check("152: forget of a request of stop words only: exit 3, a message about forgetting, not remembering",
+          rc == 3 and "forget" in out and "remember" not in out, (rc, out[-300:]))
+
+# --- v3.16.0 acceptance fix wave B2: `ctx search` lists 30 candidates unless --limit says otherwise; eval reads 50
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d, brain=False)
+    for i in range(40):
+        env.add("Notes/Zebra/Zebra note %02d.md" % i, "# Zebra note %02d\n\nThe zebrafish of the cart. %s\n" % (i, "filler " * i))
+    rc, out, res = run_ok(env, "search", "--q", "zebrafish", "--no-hints", "--json")
+    check("B2: ctx search lists 30 candidates by default (40 notes match)", rc == 0 and res and len(res["candidates"]) == 30
+          and res["counts"]["candidates"] == 30, (rc, res and len(res.get("candidates") or [])))
+    rc, out, res = run_ok(env, "search", "--q", "zebrafish", "--no-hints", "--limit", "50", "--json")
+    check("…--limit 50 lists them all", rc == 0 and res and len(res["candidates"]) == 40, (rc, res and len(res.get("candidates") or [])))
+    far = res["candidates"][34]["path"] if res and len(res["candidates"]) == 40 else ""
+    golden = os.path.join(d, "golden.yaml")
+    open(golden, "w", encoding="utf-8").write(
+        "schema: search-golden/1\nqueries:\n  - q: \"zebrafish\"\n    variants: []\n    class: форма\n"
+        "    good: [\"%s\"]\n    source: reviewed\n    added: 2026-10-21\n" % far)
+    rc, out, res = run_ok(env, "search", "eval", "--golden", golden, "--no-hints", "--json")
+    check("B2: eval still reads the first 50 — an answer at place 35 is found", rc == 0 and res and res["n"] == 1
+          and res["recall50"] == 1.0 and res["rows"][0].get("rank") == 35, (rc, res and res.get("rows"), out[-300:]))
+    last_before = os.path.exists(os.path.join(env.index, "last.json")) and read(env.index, "last.json")
+    rc, out, res = run_ok(env, "search", "--get", "Notes/Zebra/Zebra note 07.md", "--json")
+    check("T1: --get takes a note's path: exit 0, the whole note under `> [own · <path> · <day>]`, last.json as it was",
+          rc == 0 and res and res["header"].startswith("> [own · Notes/Zebra/Zebra note 07.md · ")
+          and res["text"].startswith("# Zebra note 07\n\nThe zebrafish of the cart.")
+          and (os.path.exists(os.path.join(env.index, "last.json")) and read(env.index, "last.json")) == last_before,
+          (rc, res, out[-300:]))
+    rc, out, res = run_ok(env, "search", "--get", "Notes/Zebra/No such note.md")
+    check("…an unknown path: exit 3, one line", rc == 3 and "search: no candidate Notes/Zebra/No such note.md" in out,
+          (rc, out[-300:]))
+    # fix round 5: --get by a note's name, a section after `#`, an excluded path
+    TEAM5 = "ZorgCore/Teams/team-alpha.md"
+    rc, out, res = run_ok(env, "search", "--get", "[[team-alpha|the team]]", "--json")
+    check("U1: --get takes a note's name, as a hub links it: exit 0, the whole note under the repository's line",
+          rc == 0 and res and res["header"] == "> [zorg-core · %s · 2026-01-01 · team]" % TEAM5
+          and res["text"].startswith("# Team Alpha\n\n"), (rc, res, out[-300:]))
+    rc, out, res = run_ok(env, "search", "--get", TEAM5 + "#Members")
+    check("U6: …`<шлях>#<заголовок>` prints that section under its heading path", rc == 0
+          and out.startswith("> [zorg-core · %s › Team Alpha › Members · 2026-01-01 · team]\n- Alex One" % TEAM5), (rc, out[:300]))
+    rc, out, res = run_ok(env, "search", "--get", "Delivery slots (900100200)")
+    check("U1: a name two notes carry: exit 3, the line naming them", rc == 3 and out.startswith(
+        "search: кілька нотаток із назвою «Delivery slots (900100200)»: Notes/Knowledge/Delivery slots (900100200).md · "
+        "ZorgCore/Pages/Delivery slots (900100200).md — --get один зі шляхів") and res and res["error"].startswith("кілька нотаток"),
+        (rc, out[-300:]))
+    rc, out, res = run_ok(env, "search", "--get", "Notes/_System/context/records/x.md")
+    check("U5: a path under the store: exit 3 `шлях виключено з пошуку`", rc == 3
+          and out.startswith("search: шлях виключено з пошуку: Notes/_System/context/records/x.md"), (rc, out[-300:]))
+    # round 5b: a vault-root path with no `/` is a path first, never a name's lookup
+    env.add("Root memo.md", "# Root memo\n\nroot one\n")
+    env.add("Growth/Root memo.md", "# Root memo\n\ngrowth one\n")
+    rc, out, res = run_ok(env, "search", "--get", "Root memo.md", "--json")
+    check("V1: --get of a vault-root path with no `/`: exit 0, that note under `> [vault · Root memo.md · …]`",
+          rc == 0 and res and res["header"].startswith("> [vault · Root memo.md · ") and "root one" in res["text"], (rc, res, out[-300:]))
+    rc, out, res = run_ok(env, "search", "--get", "Root memo", "--json")
+    check("…and its bare name is that path first", rc == 0 and res and res["header"].startswith("> [vault · Root memo.md · "),
+          (rc, res, out[-300:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
