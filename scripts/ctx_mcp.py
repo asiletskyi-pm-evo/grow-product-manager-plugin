@@ -16,7 +16,9 @@ What it will do, and nothing more:
   * `call()` handshakes first when no session is open (the same `probe_timeout` per step, retried like the call);
     `call_list()` (since v3.16.0) is `call()` for a tool that answers with a list of results (`vault_search`) —
     the same allow-list, handshake, retries, deadline and `isError`, only the answer is read in every shape a
-    server sends it; `call()` itself stays strict: an object, never a list;
+    server sends it (a list, or an object with `results`, or `result` — the wrapping a server built on the Python
+    MCP SDK gives a list it returns — in `structuredContent`; text items); `call()` itself stays strict: an object,
+    never a list;
     a network error (no connection, a timeout, a dropped connection) is retried `retries` times, a server's
     answer — an HTTP status, a JSON-RPC error, `isError` — never is;
   * keep a `deadline` when given one (since v3.14; a `time.monotonic()` moment): every request gets
@@ -185,15 +187,25 @@ def _listed(value):
     return _objects_of(value.get("results") if isinstance(value, dict) else value)
 
 
+def _structured_list(value):
+    """`structuredContent` as a result list: a list itself, or an object whose `results` is one — or whose `result` is
+    (the wrapping a server built on the Python MCP SDK gives a list it returns: `{"result": [...]}`, `{"result": []}`
+    for no hits); else None. Only here: in a text item a `result` key may be a hit's own field."""
+    if isinstance(value, dict):
+        found = _objects_of(value.get("results"))
+        return found if found is not None else _objects_of(value.get("result"))
+    return _objects_of(value)
+
+
 def _result_list(result):
     """The list of results in a tools/call result, in the first shape that fits, or None:
-    `structuredContent` (a list, or an object with a `results` list); one text item — such a list or object as JSON,
+    `structuredContent` (a list, or an object with a `results` or a `result` list); one text item — such a list or object as JSON,
     or a single result (a JSON object with no `results` key); several text items, each a JSON object (one result
     each). A server that found nothing sends an empty `content` list and no `structuredContent`: an empty list — it
     answered. Any other content with no text in it (an image, a resource, a link: results this client cannot read) and
     a `content` that is not a list are no answer."""
     structured = result.get("structuredContent")
-    found = _listed(structured)
+    found = _structured_list(structured)
     if found is not None:
         return found
     content = result.get("content")
@@ -400,7 +412,8 @@ class McpClient:
     def call_list(self, name, args=None):
         """The list of results a tool returned (`vault_search`), as a list of objects — the same allow-list, handshake,
         retries, deadline and errors as `call`. The first of these shapes that fits: `structuredContent` (a list, or an
-        object with a `results` list); one text item holding such a list or object as JSON, or one result (a JSON
+        object with a `results` or a `result` list — the latter is how a server built on the Python MCP SDK wraps a
+        list); one text item holding such a list or object as JSON, or one result (a JSON
         object with no `results` key); several text items, each a JSON object (one result each). An element that is
         not an object is dropped; an empty list is a list, and so is an empty `content` with no `structuredContent` (nothing found).
         No shape fits → McpError("<name> returned no list of results"), a message that carries nothing of the answer."""
