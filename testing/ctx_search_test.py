@@ -2193,6 +2193,57 @@ with tempfile.TemporaryDirectory() as d:
           q and all("outside every vault" in t for _, t in out13) and not any("quokka" in r for r in reads13),
           (q, [h for h, _ in out13], [r for r in reads13 if "quokka" in r]))
 
+# v3.16.2 Task 2 review fixes: twin keys, transitive twins, the innermost core, the backup that could have won
+X, Y, Z = "Archive/Zorg plan x.md", "Archive/Zorg plan y.md", "Notes/Zorg plan z.md"
+out = cs_.dedup([entry(X, "", 0.05, source="zorg-brain", near="kz", date="2026-09-01"),
+                 entry(Y, "", 0.04, source="zorg-brain", date="2026-09-02"),
+                 entry(Z, "", 0.01, source="zorg-brain", near="kz", date="2026-10-01")],
+                {X: meta_of(X, hash="hh", near="kz"), Y: meta_of(Y, hash="hh")}, own=["Notes"])
+check("v3.16.2 review M2: twins are transitive — a survivor stands for the notes folded into what it folded",
+      [c["path"] for c in out] == [Z] and out[0].get("twins") == [X, Y], out)
+check("…each twin keeps the kind of fold that brought it (internal `twin_keys`: same text — hash, near)",
+      out[0].get("twin_keys") == {X: "near", Y: "near"} and "twin_keys" not in cs_._public(
+          dict(out[0], source={"zorg-brain"}, sections=[], text=None, snippet=""), []), out[0].get("twin_keys"))
+out = cs_.dedup([entry(V1, "", 0.03, sid=1), entry(V3, "", 0.01, sid=3)],
+                {V1: meta_of(V1, version_key="vk", date="2026-08-01"), V3: meta_of(V3, version_key="vk", date="2026-10-01")})
+check("…a version fold records `version`", out[0].get("twin_keys") == {V1: "version"}, out)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    a = os.path.join(d, "zorg-a")
+    b = os.path.join(a, "_backups", "zorg-b")
+    write(os.path.join(a, "Pages", "A page.md"), "# A page\n\nA page of core a.\n")
+    write(os.path.join(b, "Teams", "team-bilby.md"), "# Team Bilby\n\nThe bilby team of core b.\n")
+    for rid, folder in (("zorg-a", a), ("zorg-b", b)):
+        write(os.path.join(env.home, ".grow-pm", "providers", "%s.yaml" % rid),
+              "schema: provider-registration/2\nid: %s\ntitle: %s\nkind: folder\nauthority: org\ncore_root: %s\nstatus: active\n"
+              % (rid, rid, folder))
+    sx = env.sctx()
+    env.refresh(sx)
+    write(os.path.join(b, "Teams", "team-new.md"), "# Team New\n\nA team of core b added after the refresh.\n")
+    try:
+        hb, tb = cs_.get(sx, "@zorg-b/Teams/team-new.md")
+    except cs_.GetError as e:
+        hb, tb = "exit %d" % e.code, str(e)
+    check("v3.16.2 review M1: a core nested under another's `_backups/` — a note only its file holds reads by the innermost "
+          "core's name", "added after the refresh" in tb, (hb, tb))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    LONGP = "The kiwi plan of the cart: the seller's hours under each block, the paid orders after the test. " * 6
+    write(env.note("Growth/_Backup 2025/Kiwi plan.md"), "---\ntype: note\nupdated: 2025-01-01\n---\n# Kiwi plan\n\n" + LONGP + "\n")
+    write(env.note("Growth/Plans/Kiwi plan.md"), "---\ntype: note\nupdated: 2026-10-01\n---\n# Kiwi plan\n\n" + LONGP + "\n")
+    build_brain(env.brain, env.vault, ["Growth/_Backup 2025/Kiwi plan.md", "Growth/Plans/Kiwi plan.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    res = cs_.run(sx, ["kiwi plan"], now=NOW)
+    plan = next((c for c in res["candidates"] if c["path"] == "Growth/Plans/Kiwi plan.md"), None)
+    check("v3.16.2 review M3: an older near copy under `_Backup 2025/` no longer wins the fold as «the original» — the "
+          "current plan is listed, with no twin from the backup", plan and not any("_Backup" in f for f in plan["flags"])
+          and not any("_Backup" in c["path"] for c in res["candidates"]), [(c["path"], c["flags"]) for c in res["candidates"]])
+
+check("v3.16.2 review M6 — search-protocol §3: `twins` serve your picks and eval; what a mark names is what is read",
+      "`twins` serve your remembered picks and `ctx search eval`" in section(SP, 3)
+      and "never read a twin because it is listed there" in section(SP, 3), section(SP, 3)[-700:])
+
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)

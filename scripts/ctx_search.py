@@ -881,6 +881,17 @@ def _title_key(title):
     return " ".join(N(str(title or "")).split()).casefold()
 
 
+SAME_TEXT = ("hash", "near")     # the folds of the same text: a «не те» of one copy is of the other (ctx_hints)
+
+
+def _chain(outer, inner):
+    """The kind of a twin folded twice (into a candidate, then that one into another): the same text only when both
+    folds were (SAME_TEXT), else the one that was not."""
+    if outer in SAME_TEXT and inner in SAME_TEXT:
+        return outer
+    return outer if outer not in SAME_TEXT else inner
+
+
 def dedup(cands, notes_meta, own=None):
     """The candidates without duplicates, best first — the keys of the spec (§6) in turn:
     1. the same path (NFC) — one candidate (`_merge`);
@@ -900,7 +911,8 @@ def dedup(cands, notes_meta, own=None):
     5. the same `version_key` — the newer by its date stays, marked `є старіші версії: N` (the older ones the index
        holds); a version that is not the newest the index holds is marked `старіша версія <path of the newest>`.
     A candidate that stays keeps the best score of those it stands for, their `sensitive`, and their paths (`twins`,
-    since v3.16.2: a remembered pick of one of them weighs it, `ctx search eval` finds them there). `cands` are entries (one per path and heading,
+    since v3.16.2: a remembered pick of one of them weighs it, `ctx search eval` finds them there) with the kind of
+    fold that brought each (`twin_keys`, internal: page, hash, near, link, version). `cands` are entries (one per path and heading,
     weighed by the priors: path, heading, score, flags, hits, section_id, title, …); `notes_meta` Index.notes() — the
     keys 2–5 read hash, near, size, links, version_key, confluence_id and date there, so they hold for files of the
     index (key 3a also for a note only a local index knows, by the `near` its hits carry).
@@ -918,15 +930,18 @@ def dedup(cands, notes_meta, own=None):
     def when(c):
         return str(meta(c).get("date") or c.get("date") or "")
 
-    def fold(keep, others, mark=None):
+    def fold(keep, others, mark=None, key=""):
         for o in others:
             if o is not keep and id(o) not in gone:
                 gone.add(id(o))
                 keep["score"] = max(keep["score"], o["score"])
                 twins = keep.setdefault("twins", [])           # what it stands for: a pick of one weighs it (v3.16.2)
-                for t in [o["path"]] + list(o.get("twins") or []):
+                keys = keep.setdefault("twin_keys", {})         # by which fold — a «не те» crosses only the same text
+                inner = o.get("twin_keys") or {}
+                for t, k in [(o["path"], key)] + [(t, _chain(key, inner.get(t, key))) for t in o.get("twins") or []]:
                     if t != keep["path"] and t not in twins:
                         twins.append(t)
+                        keys[t] = k
                 if o.get("sensitive") or meta(o).get("sensitive"):
                     keep["sensitive"] = True            # what it stands for is sensitive: the mark stays (spec §7.4)
                 if mark:
@@ -941,9 +956,9 @@ def dedup(cands, notes_meta, own=None):
         return [g for g in by.values() if len(g) > 1]
 
     for g in grouped(lambda c: str(meta(c).get("confluence_id") or "").strip()):
-        fold(max(g, key=lambda c: (when(c), c["score"])), g, TWIN)
+        fold(max(g, key=lambda c: (when(c), c["score"])), g, TWIN, "page")
     for g in grouped(lambda c: meta(c).get("hash")):
-        fold(g[0], g, TWIN)
+        fold(g[0], g, TWIN, "hash")
     def yours(c):
         return "own" in (c.get("source") or []) or (own is not None and _in_scope(c["path"], own))
 
@@ -951,7 +966,7 @@ def dedup(cands, notes_meta, own=None):
         return bool(meta(c).get("hub") or c.get("hub") or HUB in (c.get("flags") or []))
 
     for g in grouped(lambda c: meta(c).get("near") or c.get("near")):    # yours first, then the original: the older day
-        fold(min(g, key=lambda c: (not yours(c), not when(c), when(c)[:10], -c["score"])), g, TWIN)
+        fold(min(g, key=lambda c: (not yours(c), not when(c), when(c)[:10], -c["score"])), g, TWIN, "near")
     for g in grouped(lambda c: _title_key(meta(c).get("title") or c.get("title"))):
         comp = {id(c): id(c) for c in g}
 
@@ -969,9 +984,10 @@ def dedup(cands, notes_meta, own=None):
         for part in parts.values():
             if len(part) > 1:
                 known = all(meta(c).get("size") is not None for c in part)       # a server's note has no size
-                fold(max(part, key=lambda c: (not hubbed(c), meta(c).get("size") if known else 0, c["score"])), part, TWIN)
+                fold(max(part, key=lambda c: (not hubbed(c), meta(c).get("size") if known else 0, c["score"])), part, TWIN,
+                     "link")
     for g in grouped(lambda c: meta(c).get("version_key")):
-        fold(max(g, key=lambda c: (when(c), c["score"])), g)
+        fold(max(g, key=lambda c: (when(c), c["score"])), g, None, "version")
     live = [c for c in out if id(c) not in gone]
     for c in live:
         vk = meta(c).get("version_key")
@@ -1676,12 +1692,11 @@ def _index_name(sctx, abs_path):
     name = ci.rel_path(abs_path, vaults)
     if not name.startswith("/"):
         return name
-    for r in sctx.get("repos") or []:
-        folder = _folder(r)
-        if folder and r.get("id"):
-            got = ci.rel_path(abs_path, vaults, ci.Root(r["id"], folder))
-            if got.startswith("@"):
-                return got
+    held = [r for r in sctx.get("repos") or [] if _folder(r) and r.get("id")]
+    for r in sorted(held, key=lambda r: -len(os.path.realpath(_folder(r)))):    # the innermost core, as the walk does
+        got = ci.rel_path(abs_path, vaults, ci.Root(r["id"], _folder(r)))
+        if got.startswith("@"):
+            return got
     return name
 
 
