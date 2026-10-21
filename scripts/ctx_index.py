@@ -1123,8 +1123,9 @@ class _Walk:
 
     # -------------------------------------------------- the walk
     def run(self, saved):
-        """Walk: the saved queue of an unfinished walk when there is one, else a new walk from the roots. Returns the
-        queue of what is left ([kind, root path, path, rel]); sets res["pending"]."""
+        """Walk: the saved queue of an unfinished walk when there is one, else a new walk from the roots — first dropping
+        the rows no root owns now (a core folder gone from disk, a registration removed: since v3.16.2, never served
+        as current). Returns the queue of what is left ([kind, root path, path, rel]); sets res["pending"]."""
         by_path = {r["path"]: i for i, r in enumerate(self.roots)}
         items = []
         for it in saved or []:
@@ -1132,6 +1133,8 @@ class _Walk:
                 items.append((it[0], by_path[it[1]], it[2], it[3]))
         if not items:
             items = [("d", i, r["path"], r["rel"]) for i, r in enumerate(self.roots)]
+            for path in [p for p in self.rows if self._owner(p) is None]:   # a vanished core, a removed registration
+                self._remove(path)
         stack = list(reversed(items))
         while stack and not self._due():
             kind, ri, path, rel = stack.pop()

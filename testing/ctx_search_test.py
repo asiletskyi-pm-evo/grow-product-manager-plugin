@@ -2123,15 +2123,15 @@ with tempfile.TemporaryDirectory() as d:
         sx = env.sctx()
         lists, _ = cs_.gather(sx, ["zorg pricing"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
         names5 = paths(lists, "zorg-growth|v0")
-        check("v3.16.2 C5 (5, N3): a server's hit outside endpoint.root is `@<repo>/~/<path as given>` — no collision with "
-              "the note under the root", names5 == ["@zorg-growth/Shared/Zorg pricing.md", "@zorg-growth/~/Shared/Zorg pricing.md"],
+        check("v3.16.2 C5 (5, N3): a server's hit outside endpoint.root is `@<repo>/:/<path as given>` — no collision with "
+              "the note under the root", names5 == ["@zorg-growth/Shared/Zorg pricing.md", "@zorg-growth/:/Shared/Zorg pricing.md"],
               names5)
         ha, ta = got3b(sx, "@zorg-growth/Shared/Zorg pricing.md")
-        hb, tb = got3b(sx, "@zorg-growth/~/Shared/Zorg pricing.md")
+        hb, tb = got3b(sx, "@zorg-growth/:/Shared/Zorg pricing.md")
         hc, tc = got3b(sx, "@zorg-growth/Shared/Zorg lonely.md")
         check("…each read back by its path with its own text", "under the root" in ta and "outside the root" in tb, (ta, tb))
-        check("…a name of an earlier build for a note outside the root: the server says no under the root, asked as given",
-              "only outside the root" in tc, (hc, tc))
+        check("…a v3.16.1 name of a note outside the root (no `:`) is an honest «no note» (review I1: no retry that could "
+              "swap in another note)", hc == "exit 3" and "only outside the root" not in tc, (hc, tc))
 
 OLD = "---\ntype: team\n---\n# Team Wombat\n\nAn OLD copy of the wombat team, ZORG-1.\n"
 NEW = "---\ntype: team\n---\n# Team Wombat\n\nThe wombat team as the server has it, ZORG-2.\n"
@@ -2243,6 +2243,67 @@ with tempfile.TemporaryDirectory() as d:
 check("v3.16.2 review M6 — search-protocol §3: `twins` serve your picks and eval; what a mark names is what is read",
       "`twins` serve your remembered picks and `ctx search eval`" in section(SP, 3)
       and "never read a twin because it is listed there" in section(SP, 3), section(SP, 3)[-700:])
+
+# v3.16.2 Task 3 review fixes: no retry that swaps a note; a vanished core's rows go; the id header names the server;
+# a real `~` folder; a deleted vault file is not served from a local index by id
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    with FakeMcp(tree={"Growth/~/Zorg tilde.md": "# Zorg tilde\n\nUnder the root, in a folder named ~.\n",
+                       "Zorg tilde.md": "# Zorg tilde\n\nOutside the root.\n",
+                       "Shared/Zorg readme.md": "# Zorg readme\n\nThe whole vault's readme, not the core's.\n"}) as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [{"path": "Growth/~/Zorg tilde.md", "title": "Zorg tilde"},
+                                                                {"path": "Zorg tilde.md", "title": "Zorg tilde"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, _ = cs_.gather(sx, ["zorg tilde"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        names_t = paths(lists, "zorg-growth|v0")
+        ht1, tt1 = got3b(sx, "@zorg-growth/~/Zorg tilde.md")
+        ht2, tt2 = got3b(sx, "@zorg-growth/:/Zorg tilde.md")
+        hr, tr = got3b(sx, "@zorg-growth/Shared/Zorg readme.md")
+    check("v3.16.2 review M1: a real folder named `~` under the root is its own name; outside the root is `@<repo>/:/…`",
+          names_t == ["@zorg-growth/~/Zorg tilde.md", "@zorg-growth/:/Zorg tilde.md"] and "folder named ~" in tt1
+          and "Outside the root" in tt2, (names_t, tt1[:60], tt2[:60]))
+    check("v3.16.2 review I1: no retry — an under-root name the server does not have is exit 3, never the whole vault's "
+          "note of that path", hr == "exit 3" and "whole vault" not in tr, (hr, tr))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    core = os.path.join(env.vault, "WombatCore")
+    write(os.path.join(core, "Teams", "team-wombat.md"), OLD)
+    with FakeMcp(tree={"Core/Teams/team-wombat.md": "---\ntype: team\nupdated: 2026-10-01\n---\n" + NEW.split("---\n", 2)[2]}) as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [{"path": "Core/Teams/team-wombat.md", "title": "Team Wombat"}]}, False)
+        env.reg("zorg-wombat", "schema: provider-registration/2\nid: zorg-wombat\ntitle: Zorg wombat\nkind: mcp\nauthority: team\n"
+                "core_root: %s\nendpoint:\n  url: %s\n  root: \"Core/\"\nstatus: active\n" % (core, s.url))
+        sx = env.sctx()
+        env.refresh(sx)                                  # the core indexed while it is on disk …
+        held = "WombatCore/Teams/team-wombat.md" in ci.Index(env.home).paths()
+        shutil.rmtree(core)                              # … then it moves away
+        sx = env.sctx()
+        env.refresh(sx)
+        gone = "WombatCore/Teams/team-wombat.md" not in ci.Index(env.home).paths()
+        hp, tp = got3b(sx, "WombatCore/Teams/team-wombat.md")
+        res = cs_.run(sx, ["team wombat"], now=NOW)
+        cs_.save_last(env.home, res["last"])
+        cand = next((c for c in res["candidates"] if c["path"] == "WombatCore/Teams/team-wombat.md"), None)
+        hi, ti = got3b(sx, cand["id"]) if cand else (None, "")
+    check("v3.16.2 review I2: a core indexed, then gone from disk — its rows leave the index at the next refresh, and its "
+          "path reads through the server", held and gone and "ZORG-2" in tp and "ZORG-1" not in tp, (held, gone, hp, tp[:80]))
+    check("v3.16.2 review I3: …by id too, under the server's line and day", cand and "ZORG-2" in ti
+          and hi.startswith("> [zorg-wombat · WombatCore/Teams/team-wombat.md · 2026-10-01"), (hi, ti[:60]))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Growth/Zorg gone.md"), "---\ntype: note\n---\n# Zorg gone\n\nA note that will be deleted from the vault.\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/Zorg gone.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    res = cs_.run(sx, ["zorg gone"], now=NOW)
+    cs_.save_last(env.home, res["last"])
+    gc = next((c for c in res["candidates"] if c["path"] == "Growth/Zorg gone.md"), None)
+    os.remove(env.note("Growth/Zorg gone.md"))
+    hg, tg = got3b(sx, gc["id"]) if gc else (None, "")
+    check("v3.16.2 review M2: by id, a vault file deleted since the search is exit 3 «not on disk» — a local index's copy "
+          "of it is not served", gc and hg == "exit 3" and "not on disk" in tg, (gc, hg, tg))
 
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:
