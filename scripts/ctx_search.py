@@ -848,16 +848,17 @@ def _title_key(title):
     return " ".join(N(str(title or "")).split()).casefold()
 
 
-def dedup(cands, notes_meta):
+def dedup(cands, notes_meta, own=None):
     """The candidates without duplicates, best first — the keys of the spec (§6) in turn:
     1. the same path (NFC) — one candidate (`_merge`);
     2. the same `confluence_id` in two files of the index — the newer by its date stays, marked `двійник <path>` of
        the other;
     3. the same `hash` — the better one stays, marked `двійник <path>`;
     3a. the same text but for what near copies differ by (ctx_index.near_key: frontmatter, back-link and date lines,
-       the trailing «Повʼязане» block; 400 characters at least) — the copy of your layer (a source `own`) stays, else
-       the newer by its date, marked `двійник <path>`; the key is the index's for its files, a local index's text for
-       a note only it knows;
+       the trailing «Повʼязане» block; 400 characters at least) — the copy of your layer stays (its path under one of
+       `own`, the index names of the plugin folders — whichever source found it; or a source `own`), else the newer by
+       its date, marked `двійник <path>`; the key is the index's for its files, a local index's text for a note only
+       it knows;
     4. the same title (normalised) when the `links` of one hold the file name of the other (a hub of your layer and
        the core page) — the one with more text (`size`) stays, marked `двійник <path>`;
     5. the same `version_key` — the newer by its date stays, marked `є старіші версії: N` (the older ones the index
@@ -902,8 +903,11 @@ def dedup(cands, notes_meta):
         fold(max(g, key=lambda c: (when(c), c["score"])), g, TWIN)
     for g in grouped(lambda c: meta(c).get("hash")):
         fold(g[0], g, TWIN)
+    def yours(c):
+        return "own" in (c.get("source") or []) or (own is not None and _in_scope(c["path"], own))
+
     for g in grouped(lambda c: meta(c).get("near") or c.get("near")):
-        fold(max(g, key=lambda c: ("own" in (c.get("source") or []), when(c), c["score"])), g, TWIN)
+        fold(max(g, key=lambda c: (yours(c), when(c), c["score"])), g, TWIN)
     for g in grouped(lambda c: _title_key(meta(c).get("title") or c.get("title"))):
         comp = {id(c): id(c) for c in g}
 
@@ -1127,7 +1131,8 @@ def run(sctx, queries, skill=None, product=None, limit=LIMIT, which=KINDS, use_h
     entries = _entries(lists, fuse(lists))
     priors(entries, skill_types(skill), product, now, class_ttl(sctx["repos"], sctx["vaults"]), snapshots(sctx, now))
     metas = idx.notes() if os.path.isfile(idx.db_path) and not busy and not unbuilt else []
-    cands = dedup(entries, metas)
+    mine = [ci.rel_path(r["path"], sctx.get("vaults") or [], r) for r in sctx.get("roots") or [] if r.get("source") == "own"]
+    cands = dedup(entries, metas, own=mine)
     if hints:
         ch.apply(cands, hints, _today(now))
         cands.sort(key=_order)
@@ -1380,7 +1385,7 @@ def get(sctx, cid):
     search), else among the sections of the own index. An own section is read from the index (from its file when the
     note changed since); a note only a local index knows from the vault; an MCP one through vault_get_note. A file is
     read only through the time-budgeted reader, and never one iCloud has not downloaded (`_from_disk`: the text of a
-    local index then, its line first). A section shorter than 200 characters goes on with the next ones (`_fill`). The
+    local index then, its line first — the whole note when that copy has no such section). A section shorter than 200 characters goes on with the next ones (`_fill`). The
     header of a local or an MCP note goes on with what its frontmatter says (`_marks`: ` · sensitive`, ` · застаріле`,
     its type) — what the list of such a source does not carry, so its flags are complete only here. GetError: 3 — no
     such id, note or section, a file not read in time or not downloaded; 5 — the server did not answer. Reads only."""
@@ -1402,9 +1407,11 @@ def get(sctx, cid):
     if text is None:
         body, day, meta, said = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
         text, date = _section_of(body, heading), date or day
+        following = _after(body, heading)
+        if text is None and said:           # a local index's copy without that section: the whole note, never the file
+            text, following = _section_of(body, ""), []
         if text is None:
             raise GetError(3, "no section %s in %s" % (heading, entry["path"]))
-        following = _after(body, heading)
         if entry.get("kind") in ("local", "mcp"):
             marks = _marks(meta)
     text = _fill(text, following)

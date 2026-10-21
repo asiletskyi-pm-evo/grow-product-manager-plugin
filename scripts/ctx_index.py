@@ -209,14 +209,19 @@ _CID = re.compile(r"\((\d{6,})\)\.md$", re.I)
 _DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}(?::\d{2})?))?")
 _MARK = re.compile(r"\b(?:v\d+|draft|драфт(?:\s*№\s*\d+)?|rev\d+|ревізія\s*\d+)\b", re.I)
 _DATES = re.compile(r"\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}(?:\.\d{2,4})?")
-_LINK = re.compile(r"!?\[\[[^\]\n]*\]\]|!?\[[^\]\n]*\]\([^)\n]*\)|`[^`\n]*`")
+_LINK = re.compile(r"!?\[\[[^\]\n]*\]\]|!?\[[^\]\n]*\]\([^)\n]*\)")
+_CODE = re.compile(r"`([^`\n]*)`")
 _SEPARATORS = re.compile(r"^[\s·•|/\\<>‹›«»←→↑↓\-–—*_=~,;.:]*$")
-_LABEL = re.compile(r"^[\s*_>\-]*[^\W\d_][\w ʼ'’\-]{0,23}::?")
+_NAV = (r"(?:up|moc|parent|related|back|source|index|hub|пов[ʼ'’]?язан[еі]|зв[ʼ'’]?язки|назад|батьківська|джерело)")
+_LABEL = re.compile(r"^[\s*_>\-]*%s[\s*_]*::?[\s*_]*" % _NAV, re.I)
 _RELATED_WORD = r"(?:пов[ʼ'’]?язан[еі](?:\s+нотатки)?|зв[ʼ'’]?язки|related(?:\s+notes)?)"
 _RELATED = re.compile(r"^%s$" % _RELATED_WORD, re.I)
 _RELATED_LINE = re.compile(r"^[\s*_#>\-]*%s[\s*_]*:?[\s*_]*$" % _RELATED_WORD, re.I)
-_DATE_LINE = re.compile(r"^[\s>*_\-–—•]*(?:[^\W\d_][\w ʼ'’\-]{0,23}::?[\s*_]*)?(?:\[\[)?"
-                        r"(?:\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?|\d{1,2}\.\d{1,2}\.\d{2,4})(?:\]\])?[\s*_.]*$")
+_WHEN = (r"(?:(?:last\s+)?(?:updated|modified)|created|date|generated|snapshot|оновлено|змінено|створено"
+         r"|дата(?:\s+оновлення)?|станом\s+на)")
+_DATE_LINE = re.compile(r"^[\s>*_\-–—•]*(?:%s[\s*_]*:{0,2}[\s*_]*)?(?:\[\[)?"
+                        r"(?:\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?|\d{1,2}\.\d{1,2}\.\d{2,4})(?:\]\])?[\s*_.]*$" % _WHEN,
+                        re.I)
 
 
 def _split_flow(s):
@@ -306,17 +311,25 @@ def _frontmatter(text):
     return data, "\n".join(lines[end + 1:])
 
 
+def _path_span(m):
+    """A backticked span that is a path — `a/b/c.md` (a `/`, no space) or `Space / Parent / Page` — as a space; any
+    other code span (`npm install zorg`) as it is."""
+    inner = m.group(1)
+    return " " if ("/" in inner and " " not in inner) or " / " in inner else m.group(0)
+
+
 def link_only(line, label=False):
     """Is the line a breadcrumb — it starts with `↑ [[` (a Confluence mirror's way up) — or nothing but wiki links,
-    embeds (`![[x.png]]`), Markdown links, backticked paths and separators (`·`, `|`, `/`, `›`, `—`, `---` …)? With
-    `label`, a short `Label:` or `Label::` before the links counts too (`Up:: [[Zorg MOC]]`, `**MOC:** [[Research]]`).
-    An empty line is not one."""
+    embeds (`![[x.png]]`), Markdown links, backticked paths (`_path_span`) and separators (`·`, `|`, `/`, `›`, `—`,
+    `---` …)? With `label`, a navigation label before the links counts too — Up, MOC, Parent, Related, Back, Source,
+    Index, Hub, Повʼязане, Зв'язки, Назад, Батьківська, Джерело (`Up:: [[Zorg MOC]]`, `**MOC:** [[Research]]`); any
+    other label (`Owner: [[Bea Two]]`) is text. An empty line is not one."""
     s = (line or "").strip()
     if s.startswith("↑ [["):
         return True
     if label and _LINK.search(s):
         s = _LABEL.sub("", s, count=1)
-    return bool(s) and bool(_SEPARATORS.match(_LINK.sub(" ", s)))
+    return bool(s) and bool(_SEPARATORS.match(_CODE.sub(_path_span, _LINK.sub(" ", s))))
 
 
 def strip_links(text, label=False):
@@ -326,11 +339,12 @@ def strip_links(text, label=False):
 
 def near_key(sections):
     """The key two near copies of a note share (`Knowledge/sources/x.md` and `Research/x.md`), from its sections
-    (split_sections: no frontmatter, no heading of level 1–3): sha1 of the first NEAR_CHARS characters of their text
-    without the trailing «Повʼязане» / «Зв'язки» / «Related» block (sections under such a heading at the end, or a
-    label line of that name in the last one and what follows it), the headings, the breadcrumb and link-only lines
-    (`link_only` with a label: `Up:: [[MOC]]`), the lines that are only a date (`2026-10-07`, `Оновлено: 07.10.2026`)
-    and the whitespace. None when fewer than NEAR_MIN characters are left — a short note never folds."""
+    (split_sections: no frontmatter): sha1 of the first NEAR_CHARS characters of their heading paths and text, without
+    the trailing «Повʼязане» / «Зв'язки» / «Related» block (sections under such a heading at the end, or a label line of
+    that name in the last one and what follows it), the breadcrumb and navigation link lines (`link_only` with a label:
+    `Up:: [[MOC]]` — never `Owner: [[X]]`), the lines that are only a date or the day a note was updated or made
+    (`2026-10-07`, `Оновлено: 07.10.2026` — never `Deadline: …`) and the whitespace. None when fewer than NEAR_MIN
+    characters are left — a short note never folds."""
     secs = [(h or "", b or "") for h, b in sections or []]
     while secs and any(_RELATED.match(p.strip(" *_:")) for p in secs[-1][0].split(" › ") if p):
         secs.pop()
@@ -339,8 +353,10 @@ def near_key(sections):
         cut = max((i for i, line in enumerate(blocks[-1]) if _RELATED_LINE.match(line)), default=None)
         if cut is not None:
             blocks[-1] = blocks[-1][:cut]
-    kept = [line for b in blocks for line in b
-            if not (link_only(line, label=True) or _DATE_LINE.match(line) or _HEADING.match(line))]
+    kept = []
+    for (heading, _), lines in zip(secs, blocks):
+        kept.append(heading)
+        kept.extend(line for line in lines if not (link_only(line, label=True) or _DATE_LINE.match(line)))
     text = " ".join(" ".join(kept).split())
     if len(text) < NEAR_MIN:
         return None

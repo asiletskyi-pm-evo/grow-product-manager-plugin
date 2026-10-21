@@ -142,6 +142,14 @@ check("…not a line with words of its own, nor an empty one; a `Label:` before 
       not any(ctx_index.link_only(x) for x in ("See [[A]] for the rules", "Owner: [[Bea Two]]", "plain words", ""))
       and ctx_index.link_only("Up:: [[Zorg MOC]]", label=True) and ctx_index.link_only("**MOC:** [[Research]]", label=True)
       and not ctx_index.link_only("See [[A]] for the rules", label=True))
+check("R6: a backticked span is a breadcrumb only when it is a path — `a/b/c.md`, or `Space / Parent / Page`",
+      ctx_index.link_only("`docs/zorg/slots.md`") and ctx_index.link_only("`Zorg / Delivery / Slots`")
+      and not ctx_index.link_only("`npm install zorg`") and not ctx_index.link_only("`zorg`")
+      and not ctx_index.link_only("`a / b` and `npm i`"))
+check("R6: …a preamble of a code span alone is folded into the first section, never dropped",
+      ctx_index.split_sections("`npm install zorg`\n# Setup\n\nThen run it.\n") == [("Setup", "`npm install zorg`\n\nThen run it.")]
+      and ctx_index.split_sections("`Zorg / Delivery / Slots`\n# Slots\n\nThe slots.\n") == [("Slots", "The slots.")],
+      ctx_index.split_sections("`npm install zorg`\n# Setup\n\nThen run it.\n"))
 check("a short preamble is folded into the first heading's section", ctx_index.split_sections("intro\n# A\nx\n")
       == [("A", "intro\n\nx")], ctx_index.split_sections("intro\n# A\nx\n"))
 check("…a breadcrumb alone is dropped", ctx_index.split_sections(CRUMB + "\n\n# Slots\n\nThe slots.\n")
@@ -261,6 +269,27 @@ check("…fewer than 400 characters left: no key (short notes never fold)",
       and near("# S\n\n" + "x" * 400 + "\n") is not None)
 check("…the first 20 000 characters count", near("# L\n\n" + "y" * 20000 + "a\n") == near("# L\n\n" + "y" * 20000 + "b\n")
       and near("# L\n\n" + "y" * 19990 + "a\n") != near("# L\n\n" + "y" * 19990 + "b\n"))
+FACTS = STUDY + "\n\n"
+check("R1: a labelled link line stays in the text unless its label is a navigation one — Owner A and Owner B are two notes",
+      near("# Cart study\n\nOwner: [[Alex One]]\n\n" + FACTS) != near("# Cart study\n\nOwner: [[Bea Two]]\n\n" + FACTS)
+      and near("# Cart study\n\nКоманда: [[Alpha]]\n\n" + FACTS) != near("# Cart study\n\n" + FACTS))
+check("R1: …a navigation label (Up, MOC, Parent, Related, Back, Source, Index, Hub, Повʼязане, Зв'язки, Назад, "
+      "Батьківська, Джерело) is still set aside", all(
+          near("# Cart study\n\n%s [[Research MOC]]\n\n" % lab + FACTS) == near("# Cart study\n\n" + FACTS)
+          for lab in ("Up::", "**MOC:**", "Parent:", "Related:", "Back:", "Source:", "Index:", "Hub:", "Пов'язане:",
+                      "Повʼязані:", "Зв'язки:", "Назад:", "Батьківська:", "**Джерело:**")))
+check("R2: a labelled date line stays unless its label says when the note was updated or made — Deadline A and B are two notes",
+      near("# Cart study\n\nDeadline: 2026-10-07\n\n" + FACTS) != near("# Cart study\n\nDeadline: 2026-12-01\n\n" + FACTS)
+      and near("# Cart study\n\nДедлайн: 01.12.2026\n\n" + FACTS) != near("# Cart study\n\n" + FACTS)
+      and near("# Cart study\n\n- Launch: 2026-11-15\n\n" + FACTS) != near("# Cart study\n\n" + FACTS))
+check("R2: …an update or creation date (any of the labels), or a bare date, is still set aside", all(
+          near("# Cart study\n\n%s\n\n" % line + FACTS) == near("# Cart study\n\n" + FACTS)
+          for line in ("Оновлено: 07.10.2026", "Оновлено: 08.10.2026", "**Updated:** 2026-10-07", "Last modified:: 2026-10-07",
+                       "Created: 2026-01-02", "Дата оновлення: 2026-10-07", "Станом на 07.10.2026", "Snapshot: 2026-10-01",
+                       "2026-10-07", "- 2026-10-07 10:30")))
+check("R5: the headings count — copies that differ only in a heading are two notes",
+      near("# Cart study\n\n" + FACTS + "## Findings\n\nShoppers wait less.\n")
+      != near("# Cart study\n\n" + FACTS + "## Results\n\nShoppers wait less.\n"))
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)
     write(env.note("Notes/Knowledge/sources/Cart study.md"), COPY_A)

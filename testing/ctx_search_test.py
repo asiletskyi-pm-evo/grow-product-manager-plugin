@@ -8,8 +8,9 @@ the shape of context-provider-protocol.md §10 (`notes_fts` + `notes`, `rowid = 
 source is a list of its own, a glossary list beside it; a local-index hit under the context store is dropped; MCP is
 asked only for a repository with no folder on disk, an unreachable or slow server is one line and the search goes on;
 an index of another shape is one line; RRF with the glossary at half weight; the priors (skill type, product, hub,
-outdated by status or by the class TTL of the core's manifest, the snapshot's day, glossary only, one word);
-`search_types` in the manifest and the check behind validator check 19. Nothing is written to the vault or the store.
+`застаріле` by status, `станом на <день>` by the class TTL of the core's manifest, the snapshot's day, glossary only,
+one word); without duplicates (the five keys, near copies among them); `--get`; `search_types` in the manifest and the
+check behind validator check 19. Nothing is written to the vault or the store.
 Stdlib only; run from the repo root:
 
   env -u GROW_PM_CONTEXT_PATH -u GROW_PM_PROVIDER_PATHS python3 testing/ctx_search_test.py
@@ -400,6 +401,15 @@ with tempfile.TemporaryDirectory() as d:
               st.fts_or(st.raw_terms("mobile cart")) in queries and all(a.get("limit") == 50 for a in seen), seen[:3])
         check("…and the glossary expression of each variant that names a group", "zorg-growth|g0" in lists
               and len(seen) == 6, (len(seen), sorted(lists)))
+    with FakeMcp() as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [
+            {"path": "Growth/_System/_scratch/people_digests/bea-two.md", "title": "Bea Two"},
+            {"path": "Growth/Cart experiments.md", "title": "Cart experiments"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, notes = cs_.gather(sx, ["mobile cart"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        check("R8 (A4): a server's hit under _System/_scratch/ is dropped too", paths(lists, "zorg-growth|v0")
+              == ["@zorg-growth/Cart experiments.md"] and notes == [], (paths(lists, "zorg-growth|v0"), notes))
     with FakeMcp() as s:
         s.handlers["vault_search"] = search
         env.reg("zorg-growth", growth_reg(s.url, core_root=os.path.join(env.vault, "Growth")))
@@ -1099,6 +1109,21 @@ with tempfile.TemporaryDirectory() as d:
         check("A2: …with a registered local index that holds it: its text from there, said in one line",
               head5 == head and text5.startswith("файл не завантажено з iCloud — текст із локального індексу zorg-brain\n\n")
               and "![[slot-diagram.png]]" in text5 and SHORT in text5 and reads == [], (head5, text5[:300], reads))
+        gone = "aaaaaaaaaa"
+        cs_.save_last(env.home, {gone: {"source": "own", "path": SLOTS, "heading": "Slot rules › Gone section",
+                                        "kind": "own", "section_id": 999999, "title": "Slot rules", "date": "2026-10-05"}})
+        try:
+            head6, text6 = cs_.get(sx, gone)
+        except cs_.GetError as e:
+            head6, text6 = None, "GetError %d: %s" % (e.code, e)
+        check("R3: …the local copy has no such section: the whole note from it, under the same line, never «no section»",
+              head6 and text6.startswith("файл не завантажено з iCloud — текст із локального індексу zorg-brain\n\n")
+              and "![[slot-diagram.png]]" in text6 and WHO.strip() in text6 and "Tail text" in text6
+              and "modified:" not in text6 and reads == [], (head6, text6[:300]))
+        build_brain(env.brain, env.vault, [SLOTS], form="s10")
+        head7, text7 = cs_.get(sx, top)
+        check("R8: …the local index in the §10 shape (notes_fts.rowid = notes.id) gives it the same way",
+              (head7, text7) == (head5, text5) and reads == [], (head7, text7[:300]))
     finally:
         cs_.cst.read_text, ci.is_dataless = real_read, real_dataless
     real_open, old_timeout = cs_.cst.__dict__.get("open"), os.environ.get("GROW_PM_CTX_READ_TIMEOUT")
@@ -1162,6 +1187,13 @@ COPY_A = ("---\ntype: research\nupdated: 2026-10-01\n---\n# Cart study\n\n" + ST
 COPY_B = ("# Cart study\n\nUp:: [[Research MOC]]\n2026-10-07\n\n" + STUDY + "\n\n## Findings\n\n"
           "Shoppers wait less when they see the hours.\n\nRelated:\n- [[Cart MOC]] — the map of the cart\n")
 N1, N2, C1 = "Notes/Knowledge/sources/Cart study.md", "Growth/Cart study.md", "ZorgCore/Pages/Cart study.md"
+out = cs_.dedup([entry(N1, "", 0.02, source="zorg-brain", near="k1", date="2026-09-01"),
+                 entry(N2, "", 0.05, source="zorg-brain", near="k1", date="2026-10-07")], {}, own=["Notes"])
+check("R4 dedup: your layer is where the path lies — a plugin-folder copy only the local index found beats a newer one",
+      [c["path"] for c in out] == [N1] and out[0]["flags"] == ["двійник " + N2], out)
+out = cs_.dedup([entry(N1, "", 0.02, source="zorg-brain", near="k1", date="2026-09-01"),
+                 entry(N2, "", 0.05, source="zorg-brain", near="k1", date="2026-10-07")], {}, own=[""])
+check("…a plugin folder that is the whole vault holds both: the newer stays", [c["path"] for c in out] == [N2], out)
 out = cs_.dedup([entry(N2, "", 0.05, source="zorg-brain", near="k1", date="2026-10-07"),
                  entry(N1, "Cart study", 0.02, sid=1)], {N1: meta_of(N1, near="k1", date="2026-09-01")})
 check("A5 dedup: near copies fold — your layer's copy stays, though older and lower, the other its twin",
@@ -1190,6 +1222,13 @@ with tempfile.TemporaryDirectory() as d:
     got = {c["path"]: c for c in res["candidates"]}
     check("A5 run: a copy only the local index knows folds into your layer's copy, named its twin",
           N1 in got and N2 not in got and "двійник " + N2 in got[N1]["flags"], [(c["path"], c["flags"]) for c in res["candidates"]])
+    write(env.note(N2), "---\nupdated: 2026-10-15\n---\n" + COPY_B)
+    build_brain(env.brain, env.vault, [N1, N2])
+    res = cs_.run(sx, ["seller working hours cart study"], which=("local",), now=NOW)
+    got = {c["path"]: c for c in res["candidates"]}
+    check("R4 run: the local index alone found both — the plugin-folder copy stays, though older, the other its twin",
+          N1 in got and N2 not in got and "двійник " + N2 in got[N1]["flags"] and got[N1]["source"] == ["zorg-brain"],
+          [(c["path"], c["source"], c["flags"]) for c in res["candidates"]])
     res = cs_.run(sx, ["zebra cart rule"], now=NOW)
     check("A5 run: two short notes with the same words never fold", {"Notes/Short a.md", "Notes/Short b.md"}
           <= {c["path"] for c in res["candidates"]}, [(c["path"], c["flags"]) for c in res["candidates"]])
@@ -1242,6 +1281,11 @@ check("…context-provider-protocol §5: near copies are key 3a, an outdated sta
       and "a note whose `status` says it is outdated × 0.5" in section(PP, 5)
       and "marks a search candidate `станом на <день>`" in section(PP, 6) and "its score is not lowered" in section(PP, 6)
       and "the best N (30; `search eval` reads 50)" in section(CP, 3), section(PP, 6)[-1200:])
+check("fix round 1 — provider §5: a navigation label only, an update date only, your layer by its path, headings count; "
+      "search-protocol §4: the whole note from a local copy without the section",
+      all(x in section(PP, 5) for x in ("`Owner: [[X]]` is text", "`Deadline: …` is text",
+                                        "its path under the plugin folder, whichever source found it", "the same headings and text"))
+      and "the whole note when that copy has no such section" in section(SP, 4), section(PP, 5)[-1500:])
 check("vault-protocol «In short»: the level-2 triggers are in search-protocol §8",
       "maybe live sources (level 2; triggers in search-protocol §8)" in read(ROOT, "references", "vault-protocol.md"))
 
