@@ -2101,6 +2101,98 @@ with tempfile.TemporaryDirectory() as d:
     check("…an in-vault link to a core's blocks file is excluded by its real name (`@zorg-dev/_System/context-blocks.md`)",
           hc == "exit 3" and tc.startswith("шлях виключено з пошуку"), (hc, tc))
 
+# v3.16.2 Task 3: every name a search lists is read back from the source that holds it
+def got3b(sx, arg):
+    try:
+        return cs_.get(sx, arg)
+    except cs_.GetError as e:
+        return "exit %d" % e.code, str(e)
+
+
+INROOT = "---\ntype: page\n---\n# Zorg pricing\n\nThe pricing page under the root.\n"
+OUTROOT = "---\ntype: page\n---\n# Zorg pricing\n\nThe pricing page outside the root.\n"
+ONLYOUT = "---\ntype: page\n---\n# Zorg lonely\n\nA page only outside the root.\n"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    with FakeMcp(tree={"Growth/Shared/Zorg pricing.md": INROOT, "Shared/Zorg pricing.md": OUTROOT,
+                       "Shared/Zorg lonely.md": ONLYOUT}) as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [
+            {"path": "Growth/Shared/Zorg pricing.md", "title": "Zorg pricing"},
+            {"path": "Shared/Zorg pricing.md", "title": "Zorg pricing"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, _ = cs_.gather(sx, ["zorg pricing"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        names5 = paths(lists, "zorg-growth|v0")
+        check("v3.16.2 C5 (5, N3): a server's hit outside endpoint.root is `@<repo>/~/<path as given>` — no collision with "
+              "the note under the root", names5 == ["@zorg-growth/Shared/Zorg pricing.md", "@zorg-growth/~/Shared/Zorg pricing.md"],
+              names5)
+        ha, ta = got3b(sx, "@zorg-growth/Shared/Zorg pricing.md")
+        hb, tb = got3b(sx, "@zorg-growth/~/Shared/Zorg pricing.md")
+        hc, tc = got3b(sx, "@zorg-growth/Shared/Zorg lonely.md")
+        check("…each read back by its path with its own text", "under the root" in ta and "outside the root" in tb, (ta, tb))
+        check("…a name of an earlier build for a note outside the root: the server says no under the root, asked as given",
+              "only outside the root" in tc, (hc, tc))
+
+OLD = "---\ntype: team\n---\n# Team Wombat\n\nAn OLD copy of the wombat team, ZORG-1.\n"
+NEW = "---\ntype: team\n---\n# Team Wombat\n\nThe wombat team as the server has it, ZORG-2.\n"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    core = os.path.join(env.vault, "WombatCore")
+    write(os.path.join(core, "Teams", "team-wombat.md"), OLD)
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["WombatCore/Teams/team-wombat.md"])
+    shutil.rmtree(core)                                  # the core folder is gone; the local index still holds the old copy
+    with FakeMcp(tree={"Core/Teams/team-wombat.md": NEW}) as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [{"path": "Core/Teams/team-wombat.md", "title": "Team Wombat"}]}, False)
+        env.reg("zorg-wombat", "schema: provider-registration/2\nid: zorg-wombat\ntitle: Zorg wombat\nkind: mcp\nauthority: team\n"
+                "core_root: %s\nendpoint:\n  url: %s\n  root: \"Core/\"\nstatus: active\n" % (core, s.url))
+        sx = env.sctx()
+        env.refresh(sx)
+        res = cs_.run(sx, ["team wombat"], now=NOW)
+        cs_.save_last(env.home, res["last"])
+        cand = next((c for c in res["candidates"] if c["path"] == "WombatCore/Teams/team-wombat.md"), None)
+        hi, ti = got3b(sx, cand["id"]) if cand else (None, "")
+        hp, tp = got3b(sx, "WombatCore/Teams/team-wombat.md")
+        hn, tn = got3b(sx, "team-wombat")
+    check("v3.16.2 C6 (6, N4): a core in the vault that is not on disk — id, path and name read through its server",
+          cand and "ZORG-2" in ti and "ZORG-2" in tp and "ZORG-2" in tn, (cand, ti[:80], tp[:80], tn[:80]))
+    check("…never the local index's old copy served as current; the header names the repository",
+          "ZORG-1" not in ti + tp + tn and hp.startswith("> [zorg-wombat · WombatCore/Teams/team-wombat.md"), (hi, hp, hn))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Notes/Zorg kiwi.md"), "---\ntype: note\n---\n# Zorg kiwi\n\nThe kiwi note of the plugin folder.\n")
+    build_brain(env.brain, os.path.join(env.vault, "Notes"), ["Zorg kiwi.md"])      # a local index rooted at Notes/
+    sx = env.sctx()
+    env.refresh(sx)
+    hk, tk = got3b(sx, "Zorg kiwi")
+    hk2, tk2 = got3b(sx, "Zorg kiwi.md")
+    check("v3.16.2 C7 (11): a local index rooted in a subfolder never answers a vault path by its own relative one — "
+          "`Zorg kiwi` is `Notes/Zorg kiwi.md`", hk.startswith("> [own · Notes/Zorg kiwi.md · ")
+          and hk2.startswith("> [own · Notes/Zorg kiwi.md · ") and "kiwi note" in tk, (hk, hk2))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    ext = os.path.join(d, "ext-notes")
+    write(os.path.join(ext, "Research", "Zorg quokka study.md"),
+          "---\ntype: research\n---\n# Zorg quokka study\n\nThe quokka study of the cart, outside every vault.\n")
+    build_brain(env.brain, ext, ["Research/Zorg quokka study.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    reads13, real_read13 = [], cs_.cst.read_text
+    cs_.cst.read_text = lambda p_, *a, **kw: reads13.append(p_) or real_read13(p_, *a, **kw)
+    try:
+        res = cs_.run(sx, ["quokka study"], now=NOW)
+        cs_.save_last(env.home, res["last"])
+        q = next((c for c in res["candidates"] if c["path"] == "@zorg-brain/Research/Zorg quokka study.md"), None)
+        out13 = [got3b(sx, a) for a in ((q or {}).get("id", "-"), "@zorg-brain/Research/Zorg quokka study.md", "Zorg quokka study",
+                                         "[[Zorg quokka study]]")]
+    finally:
+        cs_.cst.read_text = real_read13
+    check("v3.16.2 C7 (13): a local index outside every vault — its candidate read by id, path and name from the index's "
+          "own text; the file outside the vault is never opened",
+          q and all("outside every vault" in t for _, t in out13) and not any("quokka" in r for r in reads13),
+          (q, [h for h, _ in out13], [r for r in reads13 if "quokka" in r]))
+
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)

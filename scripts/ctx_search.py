@@ -114,6 +114,7 @@ SEVERAL_NOTE = "кілька нотаток із назвою «%s»: %s — --g
 SEVERAL_TAIL = "кілька нотаток, чий шлях закінчується на «%s»: %s — --get один зі шляхів"
 SEVERAL_MAX = 5                 # paths SEVERAL_NOTE names, then `· ще N`
 NO_CANDIDATE = "no candidate %s in the last search or the section index — search again"
+OUTSIDE_ROOT = "~"              # `@<repo>/~/<path>`: a server's note outside its endpoint.root (v3.16.2)
 _META = ("title", "type", "product", "status", "date", "ttl_date")
 STATUS_KEYS = ("schema", "updated", "files", "sections", "pending", "skipped_dataless")
 _BROKEN = ci.BROKEN_NOTE.split("%s")[0]      # Index.problem of a file SQLite cannot read (a busy one is BUSY_NOTE)
@@ -576,14 +577,15 @@ def _local(sctx, src, plans, until, box):
 # -- an MCP server
 def _remote_name(sctx, repo, path):
     """The index's name of a path a server gave: under `endpoint.root` it is the core's — through `core_root` the vault's
-    name of the file, `@<repo>/<path>` without one; outside `endpoint.root`, `@<repo>/<path as given>`."""
+    name of the file, `@<repo>/<path>` without one; outside `endpoint.root`, `@<repo>/~/<path as given>` (since v3.16.2:
+    a name of its own, never the one of a note under the root)."""
     p = N(path).strip().replace("\\", "/").lstrip("/")
     root = N(repo["endpoint"].get("root") or "").replace("\\", "/").strip("/")
     if not root:
         return _repo_name(repo, p, sctx.get("vaults") or [])
     if p == root or p.startswith(root + "/"):
         return _repo_name(repo, p[len(root):], sctx.get("vaults") or [])
-    return "@%s/%s" % (repo["id"], p)
+    return "@%s/%s/%s" % (repo["id"], OUTSIDE_ROOT, p)
 
 
 def _mcp(sctx, src, plans, until, box):
@@ -1356,15 +1358,43 @@ def _from_disk(sctx, entry):
     return text, meta.get("date") or "", meta, None
 
 
-def _local_names(path, found, vaults, folder):
-    """The spellings a local index may keep the note under: its index name, its file's absolute path, the path from
-    each vault and from the index's own root that holds it — NFC and NFD."""
+def _from_local(sctx, entry):
+    """(text, date, meta, said) of a candidate a local index named: its file (`_from_disk`) when it is on disk; else,
+    since v3.16.2, the server of a registered core whose folder is not on disk (`_mcp_entry` of a vault name under
+    it) — never a local index's old copy of it —, else the local index's own text (a note of an index outside every
+    vault, `@<id>/…`; the file itself is never opened); else GetError 3."""
+    path = entry["path"]
+    if _file_of(sctx, path):
+        return _from_disk(sctx, entry)
+    alt = _mcp_entry(sctx, path)
+    if alt:
+        return _from_mcp(sctx, alt)
+    local = _local_body(sctx, path, os.path.join((sctx.get("vaults") or [""])[0], *path.split("/")))
+    if local:
+        meta = ci.note_meta(path, local[1])
+        return local[1], meta.get("date") or "", meta, None
+    raise GetError(3, "the note is not on disk: %s" % path)
+
+
+def _local_names(path, found, vaults, folder, src_id=""):
+    """The spellings a local index may keep the note under: its file's absolute path; the index name and the path from
+    each vault that holds it — only for an index with no root or one rooted at a vault (since v3.16.2: an index rooted
+    in a subfolder keeps paths from that folder, and its `kiwi.md` is not the vault's); the path from the index's own
+    root; for its own `@<src_id>/<rest>` name (an index outside every vault), `<rest>` — NFC and NFD."""
     real = os.path.realpath(found)
-    names = {path, found, real}
-    for root in list(vaults or []) + ([folder] if folder else []):
-        top = os.path.realpath(root)
-        if real.startswith(top.rstrip(os.sep) + os.sep):
-            names.add(os.path.relpath(real, top).replace(os.sep, "/"))
+    names = {found, real}
+    tops = [os.path.realpath(v) for v in vaults or []]
+    own = os.path.realpath(folder) if folder else ""
+    if not own or own in tops:
+        names.add(path)
+        for top in tops:
+            if real.startswith(top.rstrip(os.sep) + os.sep):
+                names.add(os.path.relpath(real, top).replace(os.sep, "/"))
+    if own and real.startswith(own.rstrip(os.sep) + os.sep):
+        names.add(os.path.relpath(real, own).replace(os.sep, "/"))
+    if src_id and path.startswith("@%s/" % src_id):
+        rest = path[len(src_id) + 2:]
+        names.update({rest, os.path.join(folder, *rest.split("/"))} if folder else {rest})
     return sorted({f(n) for n in names for f in (N, lambda x: unicodedata.normalize("NFD", x))})
 
 
@@ -1381,7 +1411,7 @@ def _local_body(sctx, path, found):
         con.set_progress_handler(lambda: time.monotonic() > until, 10000)
         try:
             fts, notes = _columns(con, "notes_fts"), _columns(con, "notes")
-            names = _local_names(path, found, sctx.get("vaults"), _local_root(con))
+            names = _local_names(path, found, sctx.get("vaults"), _local_root(con), src["id"])
             marks = ",".join("?" * len(names))
             if "body" not in fts:
                 row = None
@@ -1566,18 +1596,35 @@ def _pick(sctx, name, found, missing=None, several=None):
 
 
 def _mcp_entry(sctx, path):
-    """A last.json-like entry for `_from_mcp` of an `@<repository>/<rest>` name of a repository with an endpoint and
-    no core folder on disk — the one a search asks over MCP: its server path is `endpoint.root/<rest>`, the inverse
-    of `_remote_name`; None for any other name."""
+    """A last.json-like entry for `_from_mcp` of a name a search asks over MCP — the inverse of `_remote_name`: an
+    `@<repository>/<rest>` name of a repository with an endpoint and no core folder on disk, its server path
+    `endpoint.root/<rest>` (and `retry`, `<rest>` as given, for a name of an earlier build); `@<repository>/~/<path>`
+    of a repository with an endpoint, the path as the server gave it (outside its root); since v3.16.2 also a vault's
+    name under the core folder of such a repository whose folder is not on disk (it moved, or did not sync yet) —
+    `endpoint.root/<the rest under the core>`. None for any other name."""
+    repos = sctx.get("repos") or []
     if not path.startswith("@"):
+        vaults = sctx.get("vaults") or []
+        for repo in repos:
+            ep, folder = repo.get("endpoint") or {}, _folder(repo)
+            if not ep.get("url") or not folder or os.path.isdir(folder):
+                continue
+            prefix = ci.rel_path(folder, vaults)
+            if prefix and not prefix.startswith("/") and path.startswith(prefix.rstrip("/") + "/"):
+                rest = path[len(prefix.rstrip("/")) + 1:]
+                root = N(ep.get("root") or "").replace("\\", "/").strip("/")
+                return {"source": repo["id"], "path": path, "remote": root + "/" + rest if root else rest}
         return None
     rid, _, rest = path[1:].partition("/")
-    repo = next((r for r in sctx.get("repos") or [] if r.get("id") == rid), None)
+    repo = next((r for r in repos if r.get("id") == rid), None)
     ep, folder = (repo or {}).get("endpoint") or {}, _folder(repo) if repo else ""
+    if rest.startswith(OUTSIDE_ROOT + "/") and ep.get("url"):
+        return {"source": rid, "path": path, "remote": rest[len(OUTSIDE_ROOT) + 1:]}
     if not rest or not ep.get("url") or (folder and os.path.isdir(folder)):
         return None
     root = N(ep.get("root") or "").replace("\\", "/").strip("/")
-    return {"source": rid, "path": path, "remote": root + "/" + rest if root else rest}
+    out = {"source": rid, "path": path, "remote": root + "/" + rest if root else rest}
+    return dict(out, retry=rest) if root else out
 
 
 def _parts(heading):
@@ -1671,6 +1718,10 @@ def _note_of(sctx, path):
         meta = ci.note_meta(path, body, mtime=mtime)
         return (_root_source(sctx, path) or "vault", meta.get("date"), _marks(meta), None, ci.split_sections(body),
                 _section_of(body, ""))
+    entry = None if found else _mcp_entry(sctx, path)      # the server before a local index's copy (v3.16.2)
+    if entry:
+        body, date, meta, _ = _from_mcp(sctx, entry)
+        return entry["source"], date, _marks(meta), None, ci.split_sections(body), _section_of(body, "")
     local = _local_body(sctx, path, found or os.path.join((sctx.get("vaults") or [""])[0], *path.split("/")))
     if local:
         meta = ci.note_meta(path, local[1], mtime=mtime)
@@ -1678,10 +1729,6 @@ def _note_of(sctx, path):
                 ICLOUD_LOCAL % local[0] if dataless else None, ci.split_sections(local[1]), _section_of(local[1], ""))
     if found and dataless:
         raise GetError(3, _icloud_missing(sctx, path))
-    entry = _mcp_entry(sctx, path)
-    if entry:
-        body, date, meta, _ = _from_mcp(sctx, entry)
-        return entry["source"], date, _marks(meta), None, ci.split_sections(body), _section_of(body, "")
     return None
 
 
@@ -1823,6 +1870,8 @@ def _from_mcp(sctx, entry):
         client = cm.McpClient(ep["url"], headers=cm.headers_from_env(ep["headers_env"]) if ep.get("headers_env") else {},
                               deadline=time.monotonic() + SOURCE_S)
         note = client.call("vault_get_note", {"path": entry["remote"]})
+        if not isinstance(note.get("content"), str) and entry.get("retry"):
+            note = client.call("vault_get_note", {"path": entry["retry"]})    # a name of an earlier build: as given
     except Exception:  # noqa: BLE001 — a server that fails is one line, as in the search
         raise GetError(5, SILENT_NOTE % entry.get("source"))
     content = note.get("content")
@@ -1890,7 +1939,7 @@ def get(sctx, cid, full=False):
             entry = dict(entry, source=sec.get("source") or entry.get("source"))
             following = idx.following(sec["note_id"], sec["ord"], chars=FILL_CHARS)
     if text is None:
-        body, day, meta, said = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
+        body, day, meta, said = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_local(sctx, entry)
         text, date = _section_of(body, heading), date or day
         secs = ci.split_sections(body)
         following = _after(body, heading)
