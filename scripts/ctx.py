@@ -182,16 +182,19 @@
                                 `Name.md`, `[[Name]]`, `[[Name|alias]]`, `![[Name]]`, `[[Name#H1#H2]]`, `[[Name#^block]]`;
                                 a link with a folder is a path, else taken as the end of a path — the plugin folder's
                                 first; a path first — a note at a vault's root is `<name>.md` — a name when no source
-                                holds that path), the whole note without its frontmatter — from the section index,
-                                else its file when it is on disk and downloaded, else a local index's body, else (an
-                                `@<repo>/…` name of a repository with no folder on disk) its server;
+                                holds that path), the whole note without its frontmatter — first from the server for
+                                a name only a server holds now (`@<repo>/…` of a repository with no folder on disk,
+                                `@<repo>/:/…` outside its root, a path under a registered core folder gone from disk;
+                                since v3.16.2), else the section index, else its file when it is on disk and
+                                downloaded, else a local index's body;
                                 `<path>#<heading>` or `[[Name#Heading]]` gives that section:
                                 `> [<source> · <path> › <heading> · <day>]` and its text (an MCP note through vault_get_note).
                                 A section under 200 characters goes on with the next ones, up to 1 500, after
                                 the line `секція коротка — додано наступні: <headings>`. Any form gives 20 000
                                 characters at most (since v3.16.1; --full: 60 000, for a note taken as «прямо»), then
                                 `нотатка довга — показано 20 000 знаків із <усього>; далі: <headings> — --get
-                                "<шлях>#<заголовок>" або --full (до 60 000)` (or `заголовків далі немає`); --full
+                                "<шлях>#<заголовок>" або --full (до 60 000)` (or `заголовків далі немає`; after --full
+                                the hint is `--get "<шлях>#<заголовок>" --full`); --full
                                 goes with --get alone (else exit 3). A file is read within the read
                                 budget, and one iCloud has not downloaded never: the text of a registered local index,
                                 after the line `файл не завантажено з iCloud — текст із локального індексу <id>`, else

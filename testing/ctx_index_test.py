@@ -826,6 +826,27 @@ with tempfile.TemporaryDirectory() as d:
     check("v3.16.2 review M2: a symbolic link a saved queue still names is not indexed either",
           "Notes/Team link2.md" not in {n["path"] for n in idx.notes()}, sorted(n["path"] for n in idx.notes())[:4])
 
+# --- v3.16.2 final review: the rows no root owns go on a resumed walk too; a queued link's row goes
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    write(env.note("Notes/Team link3.md"), "# Team link3\n\nA real file first.\n")
+    idx.refresh(roots, store_rel, blocks_rels)
+    os.remove(env.note("Notes/Team link3.md"))
+    os.symlink(env.note("ZorgCore/Teams/team-alpha.md"), env.note("Notes/Team link3.md"))
+    own = [r for r in roots if r["source"] == "own"]
+    state = json.loads(read(env.index, "index.json"))
+    state["queue"] = [["f", own[0]["path"], env.note("Notes/Team link3.md"), "Notes/Team link3.md"]]
+    write(os.path.join(env.index, "index.json"), json.dumps(state))
+    idx.refresh(own, store_rel, blocks_rels)            # the core no longer a root, the walk resumes a queue
+    left = {n["path"] for n in idx.notes()}
+    check("v3.16.2 final M1: a resumed walk drops the rows no root owns too (a core no longer a root)",
+          not any(p.startswith("ZorgCore/") for p in left), sorted(p for p in left if p.startswith("ZorgCore/"))[:3])
+    check("v3.16.2 final M3: a queued symbolic link's earlier row goes", "Notes/Team link3.md" not in left,
+          sorted(left)[:4])
+
 # ------------------------------------------------------------------ v3.16.1: ctx index rebuild --download
 import contextlib, io, signal, threading  # noqa: E401,E402
 import ctx as ctx_cli  # noqa: E402

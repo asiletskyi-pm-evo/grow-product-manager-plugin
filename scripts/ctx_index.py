@@ -1123,18 +1123,18 @@ class _Walk:
 
     # -------------------------------------------------- the walk
     def run(self, saved):
-        """Walk: the saved queue of an unfinished walk when there is one, else a new walk from the roots — first dropping
-        the rows no root owns now (a core folder gone from disk, a registration removed: since v3.16.2, never served
-        as current). Returns the queue of what is left ([kind, root path, path, rel]); sets res["pending"]."""
+        """Walk: the saved queue of an unfinished walk when there is one, else a new walk from the roots — either way
+        first dropping the rows no root owns now (a core folder gone from disk, a registration removed: since v3.16.2,
+        never served as current). Returns the queue of what is left ([kind, root path, path, rel]); sets
+        res["pending"]."""
         by_path = {r["path"]: i for i, r in enumerate(self.roots)}
         items = []
         for it in saved or []:
             if isinstance(it, list) and len(it) == 4 and it[0] in ("d", "f") and it[1] in by_path:
                 items.append((it[0], by_path[it[1]], it[2], it[3]))
+        self._drop_orphans()
         if not items:
             items = [("d", i, r["path"], r["rel"]) for i, r in enumerate(self.roots)]
-            for path in [p for p in self.rows if self._owner(p) is None]:   # a vanished core, a removed registration
-                self._remove(path)
         stack = list(reversed(items))
         while stack and not self._due():
             kind, ri, path, rel = stack.pop()
@@ -1146,6 +1146,20 @@ class _Walk:
         left = list(reversed(stack))
         self.res["pending"] = self._pending(left)
         return [[k, self.roots[ri]["path"], p, rel] for k, ri, p, rel in left]
+
+    def _drop_orphans(self):
+        """The rows no root owns, gone in one pass; then the folder → name steps the walk knows, again from the rows."""
+        orphans = [p for p in self.rows if self._owner(p) is None]
+        if not orphans:
+            return
+        for path in orphans:
+            nid = self.rows.pop(path)["id"]
+            self._drop_sections(nid)
+            self.con.execute("DELETE FROM notes WHERE id=?", (nid,))
+            self.res["removed"] += 1
+        self.children = collections.defaultdict(set)
+        for path in self.rows:
+            self._know(path)
 
     def _pending(self, left):
         """How many files the walk did not reach: the files left, and the files the index holds under each folder
@@ -1202,6 +1216,8 @@ class _Walk:
         except OSError:
             return
         if not stat.S_ISREG(info.st_mode):
+            if rel in self.rows:                             # a queued link to a file: its earlier row goes
+                self._remove(rel)
             return
         if is_dataless(path):
             self.res["skipped_dataless"] += 1
