@@ -178,8 +178,10 @@
   search --get ID|PATH|NAME [--json]
                                 one section of the last searches (or of the section index, by its id — an id neither
                                 has is tried as a name); for a note's path or its name, as a hub links it (`Name`,
-                                `Name.md`, `[[Name]]`, `[[Name|alias]]`; a path first — a note at a vault's root is
-                                `<name>.md` — a name when no source holds that path), the whole note without its
+                                `Name.md`, `[[Name]]`, `[[Name|alias]]`, `![[Name]]`, `[[Name#H1#H2]]`, `[[Name#^block]]`;
+                                a link with a folder is a path, else taken as the end of a path; a path first — a note
+                                at a vault's root is `<name>.md` — a name when no source holds that path), the whole
+                                note without its
                                 frontmatter — from the section index,
                                 else its file when it is on disk and downloaded, else a local index's body, else (an
                                 `@<repo>/…` name of a repository with no folder on disk) its server;

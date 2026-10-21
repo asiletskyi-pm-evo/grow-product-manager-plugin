@@ -1811,6 +1811,88 @@ check("v3.16.1 C6 — search-protocol §4: every --get form is cut at 20 000, th
           "never for a hub, a twin's check or a candidate not rated «прямо»"))
       and "--full" in section(CP, 3), section(SP, 4)[-2600:])
 
+# v3.16.1 Task 3: --get reads a link as a hub writes it — an embed, nested headings, a block reference, a folder in the link
+CONCEPT = "Notes/Concepts/Zorg cart concept.md"
+IZMIR = "Notes/İzmir notes.md"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    para = lambda w: (" ".join([w] * 60)) + "."              # a section long enough to be given alone (no fill)
+    write(env.note(CONCEPT), "---\ntype: concept\nupdated: 2026-10-04\n---\n# Zorg cart concept\n\n" + para("intro")
+          + "\n\n## Pricing\n\n" + para("pricing") + "\n\n### Fees\n\n" + para("pricefee")
+          + "\n\n## Delivery\n\n" + para("delivery") + "\n\n### Fees\n\n" + para("deliveryfee") + " ^a1b2c3"
+          + "\n\n## C# tips\n\n" + para("sharp") + "\n")
+    write(env.note(IZMIR), "# İzmir notes\n\n## Plan\n\n" + para("plan") + "\n\n## lan\n\n" + para("other") + "\n")
+    write(env.note("Notes/A/Shared/Dup end.md"), "# Dup end\n\n" + para("dupa") + "\n")
+    write(env.note("Notes/B/Shared/Dup end.md"), "# Dup end\n\n" + para("dupb") + "\n")
+    write(env.note("Notes/_System/_scratch/Tail only.md"), "# Tail only\n\n" + para("scratch") + "\n")
+    write(env.note("Growth/Deep/Local only.md"), "---\ntype: note\n---\n# Local only\n\n" + para("localonly") + "\n")
+    write(env.note("Concepts/Other.md"), "# Other\n\n" + para("rootother") + "\n")
+    write(env.note("Notes/Concepts/Other.md"), "# Other\n\n" + para("notesother") + "\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/Deep/Local only.md", "Notes/_System/_scratch/Tail only.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+
+    def got(arg):
+        try:
+            return cs_.get(sx, arg)
+        except cs_.GetError as e:
+            return "exit %d" % e.code, str(e)
+
+    whole = cs_.get(sx, "[[Zorg cart concept]]")
+    pricing = cs_.get(sx, "[[Zorg cart concept#Pricing]]")
+    check("v3.16.1 C8: an embed `![[Name]]` is the note, `![[Name#H]]` its section",
+          got("![[Zorg cart concept]]") == whole and got("![[Zorg cart concept#Pricing]]") == pricing
+          and whole[0].startswith("> [own · %s · 2026-10-04" % CONCEPT), (got("![[Zorg cart concept]]")[0], whole[0]))
+    h, t = got("[[Zorg cart concept#Delivery#Fees]]")
+    check("…`#H1#H2` is the end of a heading path: Delivery › Fees, not the first Fees",
+          h == "> [own · %s › Zorg cart concept › Delivery › Fees · 2026-10-04 · concept]" % CONCEPT
+          and t.startswith("deliveryfee"), (h, t[:80]))
+    check("…` › ` in the asked heading is a path too", got("Zorg cart concept#Delivery › Fees") == (h, t),
+          got("Zorg cart concept#Delivery › Fees")[0])
+    h1, t1 = got("[[Zorg cart concept#Fees]]")
+    check("…a bare `#Fees` is still the first one (Pricing › Fees)", h1.endswith("› Zorg cart concept › Pricing › Fees · 2026-10-04 · concept]")
+          and t1.startswith("pricefee"), h1)
+    check("…a block reference `#^id` is the whole note; `#H#^id` that section",
+          got("[[Zorg cart concept#^a1b2c3]]") == whole and got("[[Zorg cart concept#Pricing#^a1b2c3]]") == pricing,
+          (got("[[Zorg cart concept#^a1b2c3]]")[0], got("[[Zorg cart concept#Pricing#^a1b2c3]]")[0]))
+    h2, t2 = got("[[Zorg cart concept#C# tips]]")
+    check("…a heading with `#` in it is tried whole first", h2.endswith("› Zorg cart concept › C# tips · 2026-10-04 · concept]")
+          and t2.startswith("sharp"), h2)
+    h3, t3 = got(IZMIR + "#Plan")
+    check("…`İ` (U+0130) before `.md#` does not shift the heading: Plan, not «lan»",
+          h3.startswith("> [own · %s › İzmir notes › Plan · " % IZMIR) and t3.startswith("plan"), (h3, t3[:40]))
+    h4, t4 = got("[[Concepts/Zorg cart concept]]")
+    check("v3.16.1 C7: a link with a folder that no source holds as a path — the one note whose path ends in it",
+          (h4, t4) == whole, h4)
+    check("…`../` before it is dropped; a heading after it works",
+          got("[[../Concepts/Zorg cart concept]]") == whole and got("[[Concepts/Zorg cart concept#Pricing]]") == pricing,
+          got("[[../Concepts/Zorg cart concept]]")[0])
+    check("…case and NFD do not matter", got("[[concepts/zorg CART concept]]") == whole
+          and got(unicodedata.normalize("NFD", "[[Concepts/Zorg cart concept]]")) == whole, got("[[concepts/zorg CART concept]]")[0])
+    h5, t5 = got("[[Shared/Dup end]]")
+    check("…two notes end in it: exit 3, the line naming both", h5 == "exit 3" and t5 == cs_.SEVERAL_NOTE % (
+        "Shared/Dup end", "Notes/A/Shared/Dup end.md · Notes/B/Shared/Dup end.md"), (h5, t5))
+    h6, t6 = got("[[_scratch/Tail only]]")
+    check("…only an excluded note ends in it: exit 3 `шлях виключено з пошуку`",
+          (h6, t6) == ("exit 3", cs_.EXCLUDED_NOTE % "Notes/_System/_scratch/Tail only.md"), (h6, t6))
+    h7, t7 = got("[[Deep/Local only]]")
+    check("…a note only a local index knows ends in it: read through it",
+          h7.startswith("> [vault · Growth/Deep/Local only.md · ") and "localonly" in t7,
+          (h7, t7[:80]))
+    h8, t8 = got("[[Concepts/Other]]")
+    check("…the exact path wins over the end of a path", h8.startswith("> [vault · Concepts/Other.md · ") and "rootother" in t8,
+          (h8, t8[:60]))
+    h9, t9 = got("[[Nowhere/Zorg cart concept]]")
+    check("…nothing ends in it: exit 3 `no candidate`", h9 == "exit 3" and "Nowhere/Zorg cart concept" in t9, (h9, t9))
+    check("…`../` never reads a file outside the vault", got("[[../../outside]]")[0] == "exit 3", got("[[../../outside]]"))
+
+check("v3.16.1 C7/C8 — search-protocol §4: the link forms as a hub writes them — an embed, `#H1#H2`, `#^block`, a folder in "
+      "the link tried as a path, then as the end of one; context-protocol §3 and the usage name them",
+      all(x in section(SP, 4) for x in ("`![[Name]]`", "`[[Name#H1#H2]]`", "`[[Name#^block]]`",
+                                        "a link with a folder in it is tried as a path, then as the end of one"))
+      and "`![[Name]]`" in section(CP, 3) and "as the end of a path" in read(ROOT, "scripts", "ctx.py"),
+      section(SP, 4)[-2600:])
+
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)

@@ -45,6 +45,7 @@ import hashlib
 import json
 import os
 import posixpath
+import re
 import sqlite3
 import sys
 import tempfile
@@ -1435,22 +1436,27 @@ def _is_id(arg):
 
 
 def _parse(arg):
-    """(target, heading) of a `--get` argument that is no id — a path or a name, bare or as a wiki-link: `[[…]]` off,
-    `|alias` dropped, the heading after the `#` that follows the name or the `.md` (`[[Name#Heading]]`,
-    `<path>#<heading>`; a target that ends in `.md` carries no heading, so `Growth/C# notes.md` is a path); NFC, `/`,
-    the `.` and `..` segments of a path resolved (posixpath.normpath), no leading `./`."""
+    """(target, heading) of a `--get` argument that is no id — a path or a name, bare, as a wiki-link or as an embed:
+    `![[…]]` and `[[…]]` off, `|alias` dropped, the heading after the `#` that follows the name or the `.md`
+    (`[[Name#Heading]]`, `<path>#<heading>` — all of it, `#H1#H2` and `#^block` too, for `_heading_for`; a target that
+    ends in `.md` carries no heading, so `Growth/C# notes.md` is a path); NFC, `/`, the `.` and `..` segments of a path
+    resolved (posixpath.normpath), no leading `./` or `../` (a link relative to the note that holds it: `_by_tail`
+    finds it)."""
     s = N(arg).strip()
+    s = s[1:] if s.startswith("![[") and s.endswith("]]") else s
     s = s[2:-2] if s.startswith("[[") and s.endswith("]]") else s
     s = s.split("|", 1)[0].strip()
-    cut = s.lower().find(".md#")
+    md = re.search(r"\.md#", s, re.I)          # on `s` itself: a lowered copy can be longer (`İ`)
     if s.lower().endswith(".md"):
         target, heading = s, ""
-    elif cut >= 0:
-        target, heading = s[:cut + 3], s[cut + 4:]
+    elif md:
+        target, heading = s[:md.start() + 3], s[md.end():]
     else:
         target, _, heading = s.partition("#")
     target = target.strip().replace("\\", "/")
     target = posixpath.normpath(target) if "/" in target else target
+    while target.startswith("../"):
+        target = target[3:]
     return target[2:] if target.startswith("./") else target, heading.strip()
 
 
@@ -1468,10 +1474,10 @@ def _root_source(sctx, path):
     return best[1] if best else None
 
 
-def _local_paths(sctx, key):
-    """The index names of the notes of every registered local index whose file name is `key` (ctx_index.name_key),
-    each index opened read only as a search opens it (OPEN_S to open, SOURCE_S for the query); one that cannot be read
-    or has another shape gives none."""
+def _local_paths(sctx, match):
+    """The index names of the notes of every registered local index that `match(name)` takes (a file name's key, the
+    end of a path), each index opened read only as a search opens it (OPEN_S to open, SOURCE_S for the query); one that
+    cannot be read or has another shape gives none."""
     out = []
     for src in sources(sctx["text"], sctx["repos"], ("local",)):
         try:
@@ -1492,7 +1498,7 @@ def _local_paths(sctx, key):
         root = ci.Root(src["id"], folder) if folder else None
         for (p,) in rows:
             rel = _local_name(p, sctx.get("vaults") or [], folder, root) if _usable(p) else ""
-            if _usable(rel) and ci.name_key(rel) == key and rel not in out:
+            if _usable(rel) and match(rel) and rel not in out:
                 out.append(rel)
     return out
 
@@ -1506,10 +1512,30 @@ def _by_name(sctx, name):
     key = ci.name_key(name)
     found = [p for p in ci.Index(sctx["home"]).paths() if ci.name_key(p) == key] if key else []
     if key and not found:
-        found = _local_paths(sctx, key)
+        found = _local_paths(sctx, lambda rel: ci.name_key(rel) == key)
+    return _pick(sctx, name, found)
+
+
+def _by_tail(sctx, path):
+    """The path of the one note whose index name ends in `/<path>` — a link with a folder in it, as Obsidian writes one
+    when a name is not unique (`[[Concepts/Name]]`; `../` is dropped by `_parse`), NFC, case folded — among the own
+    index's notes, else among every registered local index's; picked as `_by_name` picks (`_pick`)."""
+    tail = "/" + N(path).casefold()
+    hit = lambda rel: ("/" + N(rel).casefold()).endswith(tail)  # noqa: E731
+    found = [p for p in ci.Index(sctx["home"]).paths() if hit(p)]
+    if not found:
+        found = _local_paths(sctx, hit)
+    return _pick(sctx, path[:-3] if path.lower().endswith(".md") else path, found, missing=path)
+
+
+def _pick(sctx, name, found, missing=None):
+    """The one path of `found` a `--get` of `name` means: a note the search excludes (`_keep`) does not count; exactly
+    one, or the one whose path is the name itself (`<name>.md` at a vault's root); else several → GetError 3 naming at
+    most SEVERAL_MAX and `ще N`; none → GetError 3 (NO_CANDIDATE of `missing` — the name when None —, or EXCLUDED_NOTE
+    when only excluded ones match)."""
     kept = sorted({N(p) for p in found if _keep(sctx, p)})
     if not kept:
-        raise GetError(3, EXCLUDED_NOTE % sorted(found)[0] if found else NO_CANDIDATE % name)
+        raise GetError(3, EXCLUDED_NOTE % sorted(found)[0] if found else NO_CANDIDATE % (missing or name))
     if N(name) + ".md" in kept:
         return N(name) + ".md"
     if len(kept) > 1:
@@ -1533,14 +1559,36 @@ def _mcp_entry(sctx, path):
     return {"source": rid, "path": path, "remote": root + "/" + rest if root else rest}
 
 
+def _parts(heading):
+    """A heading path's parts as `_heading_of` compares them: split at `›`, spaces collapsed, case folded."""
+    return [" ".join(p.split()).casefold() for p in N(heading).split("›")]
+
+
 def _heading_of(secs, want):
-    """The heading path of the first section whose last part — or whose whole path — is `want` (spaces collapsed, case
-    folded): how `[[Name#Heading]]` and `<path>#<heading>` name a section; None when the note has none."""
-    key = " ".join(N(want).split()).casefold()
+    """The heading path of the first section whose path ends in `want` — its last part, its last parts (`Delivery ›
+    Fees`) or the whole path (spaces collapsed, case folded): how `[[Name#Heading]]` and `<path>#<heading>` name a
+    section; None when the note has none."""
+    key = _parts(want)
     for h, _ in secs:
-        if h and key in (" ".join(h.split()).casefold(), " ".join(h.rsplit(" › ", 1)[-1].split()).casefold()):
-            return h
+        if h:
+            parts = _parts(h)
+            if len(key) <= len(parts) and parts[len(parts) - len(key):] == key:
+                return h
     return None
+
+
+def _heading_for(secs, heading):
+    """The heading path a `#…` after a note names: the whole of it as one heading first (`C# tips`), then its parts
+    between `#` as the end of a heading path (`#H1#H2` → `… › H1 › H2`) with a `^block` part dropped — "" (the whole
+    note) when nothing else is left (`#^a1b2c3`); None when no section has it."""
+    hp = _heading_of(secs, heading)
+    if hp is not None:
+        return hp
+    parts = [p.strip() for p in heading.split("#") if p.strip() and not p.strip().startswith("^")]
+    if not parts:
+        return ""
+    joined = " › ".join(parts)
+    return _heading_of(secs, joined) if joined != heading.strip() else None
 
 
 def _note_of(sctx, path):
@@ -1594,7 +1642,8 @@ def _get_path(sctx, arg, full=False):
     """(header, text) of a note by its path (an index name, NFC or NFD; `.md` added when it has none) or its name
     (`Name`, `Name.md`, `[[Name]]`, `[[Name|alias]]`), read as `_note_of` reads it. A target is a path first — a
     note at a vault's root is named `<name>.md`, with no `/`, as the list prints it — and a name only when no source
-    holds that path (`_by_name`); a link with a folder in it is a path alone. The whole note without its frontmatter
+    holds that path (`_by_name`); a link with a folder in it is a path, else the end of one (`_by_tail`; an
+    `@<repository>/…` name never). The whole note without its frontmatter
     under `> [<source> · <path> · <day>]` and its marks, cut by `_cap` (GET_CHARS, FULL_CHARS with `full`);
     with a heading after `#` (`[[Name#Heading]]`, `<path>#<heading>` — the section whose heading path ends in it,
     `_heading_of`) that section alone under `> [<source> · <path> › <heading> · <day>]`, a short one going on with
@@ -1606,20 +1655,24 @@ def _get_path(sctx, arg, full=False):
     if ci.excluded(path, sctx.get("store_rel"), sctx.get("blocks_rels"), fold=True):
         raise GetError(3, EXCLUDED_NOTE % path)
     note = _note_of(sctx, path)
-    if note is None and "/" not in target:
-        path = _by_name(sctx, target[:-3] if target.lower().endswith(".md") else target)
+    if note is None:
+        if "/" not in target:
+            path = _by_name(sctx, target[:-3] if target.lower().endswith(".md") else target)
+        elif not path.startswith("@"):              # a repository's own name is never the end of another path
+            path = _by_tail(sctx, path)
+        else:
+            raise GetError(3, NO_CANDIDATE % path)
         note = _note_of(sctx, path)
     if note is None:
         raise GetError(3, NO_CANDIDATE % path)
     source, date, marks, said, secs, whole = note
-    if heading:
-        hp = _heading_of(secs, heading)
-        if hp is None:
-            raise GetError(3, "no section %s in %s" % (heading, path))
+    hp = _heading_for(secs, heading) if heading else ""
+    if hp is None:
+        raise GetError(3, "no section %s in %s" % (heading, path))
+    if hp:
         i = next(i for i, (h, _) in enumerate(secs) if h == hp)
         text = _cap(_fill(secs[i][1], secs[i + 1:]), path, full)
     else:
-        hp = ""
         text = _cap(whole, path, full)
     return _header(source, path, hp, date, marks), (said + "\n\n" + text) if said else text
 
