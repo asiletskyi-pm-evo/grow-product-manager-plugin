@@ -239,21 +239,31 @@ def _flag(cand, mark):
         flags.append(mark)
 
 
+SAME_TEXT = ("hash", "near")     # ctx_search.SAME_TEXT: the folds of the same text
+
+
 def apply(cands, hints, today):
     """Weigh the candidates of a search in place by the hints that serve it (`match`): a note one of them names `good` —
-    any of its sections, or the note itself — gets × GOOD_W once, however many name it, and the mark `твій вибір від
-    <день>` (the latest day of those hints; `today` for a hint with none); a note one names `bad` gets the mark `ти
-    казав «не те»` and keeps its weight. The caller sorts again before it cuts the best N."""
+    any of its sections, or the note itself, or a note it stands for (its `twins`: folded into it, since v3.16.2) —
+    gets × GOOD_W once, however many name it, and the mark `твій вибір від <день>` (the latest day of those hints;
+    `today` for a hint with none); a note one names `bad` gets the mark `ти казав «не те»` and keeps its weight — a
+    `bad` of a twin only when it was folded as the same text (`twin_keys` hash or near: never an older version, a hub
+    or a page of the same title). A verdict on the candidate's own path outranks one carried from a twin. The caller
+    sorts again before it cuts the best N."""
     if not hints:
         return
     day = today.isoformat() if isinstance(today, (datetime.date, datetime.datetime)) else str(today or "")[:10]
+    def named(kind, paths):
+        return [h for h in hints if any(names(e, p) for e in h.get(kind) or [] for p in paths)]
+
     for c in cands or []:
-        path = c.get("path")
-        goods = [h for h in hints if any(names(e, path) for e in h.get("good") or [])]
+        path, twins, keys = c.get("path"), list(c.get("twins") or []), c.get("twin_keys") or {}
+        own_good, own_bad = named("good", [path]), named("bad", [path])
+        goods = own_good or ([] if own_bad else named("good", twins))      # its own verdict outranks a carried one
         if goods:
             c["score"] = float(c.get("score") or 0.0) * GOOD_W
             _flag(c, CHOICE % max(h.get("at") or day for h in goods))
-        if any(names(e, path) for h in hints for e in h.get("bad") or []):
+        if own_bad or (not own_good and named("bad", [t for t in twins if keys.get(t) in SAME_TEXT])):
             _flag(c, NOT_THAT)
 
 
@@ -407,12 +417,20 @@ def hint_rows(mem):
              "added": h.get("at") or ""} for h in (mem or {}).get("hints") or [] if h.get("good")]
 
 
-def _rank(cands, entries):
-    """The place (from 1) of the first of the first POOL candidates that one of `entries` names; None when none does."""
+def _found(cands, entries):
+    """(place, through a twin) of the first of the first POOL candidates that one of `entries` names — the candidate
+    or a note folded into it (`twins`, since v3.16.2); (None, False) when none does."""
     for i, c in enumerate((cands or [])[:POOL], 1):
         if any(names(e, c.get("path")) for e in entries):
-            return i
-    return None
+            return i, False
+        if any(names(e, p) for e in entries for p in c.get("twins") or []):
+            return i, True
+    return None, False
+
+
+def _rank(cands, entries):
+    """The place (from 1) of the first of the first POOL candidates that one of `entries` names (`_found`)."""
+    return _found(cands, entries)[0]
 
 
 def _share(rows, key):
@@ -424,7 +442,9 @@ def evaluate(rows, ask):
     `candidates` (best first), `notes` and `sources` are read. For each row with an answer: the question and its frozen
     variants (`[q] + variants`), and the question alone (one search when it has no variants); for each empty row the
     question and its variants. Returns {n, recall50, recall50_q_only, mrr, by_class {class: {n, recall50,
-    recall50_q_only, mrr}}, empty_n, empty_top5_mean, rows [{q, class, source, rank, rank_q_only, rank_good} | {q, class,
+    recall50_q_only, mrr}}, empty_n, empty_top5_mean, via_twin and good_via_twin (rows whose answer, or first `good`, was
+    found only through a twin, since v3.16.2), rows [{q, class, source, rank, rank_q_only, rank_good, via_twin,
+    good_via_twin} | {q, class,
     source, top5}], notes} — recall: a `good` or `ok` entry names one of the first 50; mrr: 1 / the place of the first
     `good` (0 when none); None for a number with no row behind it."""
     done, gone, every, notes = [], [], [], []
@@ -446,8 +466,10 @@ def evaluate(rows, ask):
         right = list(row["good"]) + list(row.get("ok") or [])
         cands = search([q] + variants, row)
         alone = search([q], row) if variants else cands
-        done.append({"q": q, "class": row["class"], "source": row.get("source") or "", "rank": _rank(cands, right),
-                     "rank_q_only": _rank(alone, right), "rank_good": _rank(cands, row["good"])})
+        rank, via = _found(cands, right)
+        good, good_via = _found(cands, row["good"])
+        done.append({"q": q, "class": row["class"], "source": row.get("source") or "", "rank": rank,
+                     "rank_q_only": _rank(alone, right), "rank_good": good, "via_twin": via, "good_via_twin": good_via})
         every.append(done[-1])
 
     def numbers(part):
@@ -459,6 +481,8 @@ def evaluate(rows, ask):
         by_class.setdefault(r["class"], []).append(r)
     out = numbers(done)
     out.update(by_class={k: numbers(v) for k, v in by_class.items()}, empty_n=len(gone),
+               via_twin=sum(1 for r in done if r.get("via_twin")),
+               good_via_twin=sum(1 for r in done if r.get("good_via_twin")),
                empty_top5_mean=sum(r["top5"] for r in gone) / len(gone) if gone else None,
                rows=every,
                notes=notes)

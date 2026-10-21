@@ -187,6 +187,53 @@ ch.apply(c, [{"good": ["Notes/C# guide.md#Intro"], "bad": []}], datetime.date(20
 check("…a note whose name has a # in it; a hint with no day: today", c[0]["score"] == 1.5
       and c[0]["flags"] == ["твій вибір від 2026-10-20"], c)
 
+# v3.16.2 Task 2 (M8, N7): a pick of a note folded as a twin weighs and marks its survivor; eval counts it there
+c = [{"path": "Notes/Research/Cart study.md", "heading": "", "score": 1.0, "flags": [],
+      "twins": ["Notes/Knowledge/Cart study.md"]},
+     {"path": "Notes/Other.md", "heading": "", "score": 1.0, "flags": [], "twins": ["Notes/Old other.md"],
+      "twin_keys": {"Notes/Old other.md": "near"}}]
+ch.apply(c, [{"good": ["Notes/Knowledge/Cart study.md#Findings"], "bad": ["Notes/Old other.md"], "at": "2026-10-10"}],
+         datetime.date(2026, 10, 20))
+check("v3.16.2 C2 (M8): `good` on a note folded as a twin — its survivor × 1.5 and «твій вибір від <день>»; `bad` — «ти казав «не те»»",
+      c[0]["score"] == 1.5 and c[0]["flags"] == ["твій вибір від 2026-10-10"] and c[1]["score"] == 1.0
+      and c[1]["flags"] == ["ти казав «не те»"], c)
+check("v3.16.2 C2 (N7): eval finds a golden note folded as a twin at its survivor's place",
+      ch._rank([{"path": "A.md"}, {"path": "B.md", "twins": ["C.md"]}], ["C.md"]) == 2
+      and ch._rank([{"path": "A.md"}], ["C.md"]) is None)
+
+# v3.16.2 Task 2 review fixes: a verdict on the candidate's own path outranks a carried one; `bad` crosses only a
+# same-text fold; eval says when it found an answer through a twin
+c = [{"path": "Notes/Roadmap v2.md", "score": 1.0, "flags": [], "twins": ["Notes/Roadmap v1.md"],
+      "twin_keys": {"Notes/Roadmap v1.md": "version"}},
+     {"path": "Notes/Copy A.md", "score": 1.0, "flags": [], "twins": ["Notes/Copy B.md"],
+      "twin_keys": {"Notes/Copy B.md": "near"}},
+     {"path": "Notes/Picked.md", "score": 1.0, "flags": [], "twins": ["Notes/Other twin.md"],
+      "twin_keys": {"Notes/Other twin.md": "hash"}},
+     {"path": "Notes/Refused.md", "score": 1.0, "flags": [], "twins": ["Notes/Liked twin.md"],
+      "twin_keys": {"Notes/Liked twin.md": "near"}}]
+hints = [{"good": [], "bad": ["Notes/Roadmap v1.md"], "at": "2026-10-01"},
+         {"good": [], "bad": ["Notes/Copy B.md"], "at": "2026-10-02"},
+         {"good": ["Notes/Picked.md"], "bad": ["Notes/Other twin.md"], "at": "2026-10-03"},
+         {"good": ["Notes/Liked twin.md"], "bad": ["Notes/Refused.md"], "at": "2026-10-04"}]
+ch.apply(c, hints, datetime.date(2026, 10, 20))
+check("v3.16.2 review I1: «не те» on an older version does not mark the newer one (a version fold carries no `bad`)",
+      c[0]["flags"] == [] and c[0]["score"] == 1.0, c[0])
+check("…«не те» crosses a same-text fold (a near copy, the same hash)", c[1]["flags"] == ["ти казав «не те»"], c[1])
+check("…your pick of the candidate itself outranks a «не те» carried from its twin", c[2]["score"] == 1.5
+      and c[2]["flags"] == ["твій вибір від 2026-10-03"], c[2])
+check("…your «не те» of the candidate itself outranks a pick carried from its twin", c[3]["score"] == 1.0
+      and c[3]["flags"] == ["ти казав «не те»"], c[3])
+ev = ch.evaluate([{"q": "zorg q", "class": "форма", "good": ["G.md"], "ok": []}],
+                 lambda qs, row: {"candidates": [{"path": "A.md", "twins": ["G.md"]}]})
+check("v3.16.2 review M4: an eval row found through a twin says so (`via_twin`), and the result counts them",
+      ev["rows"][0]["rank"] == 1 and ev["rows"][0].get("via_twin") is True and ev.get("via_twin") == 1, ev)
+
+ev = ch.evaluate([{"q": "zorg q2", "class": "форма", "good": ["G.md"], "ok": ["A.md"]}],
+                 lambda qs, row: {"candidates": [{"path": "A.md"}, {"path": "B.md", "twins": ["G.md"]}]})
+check("v3.16.2 (acceptance): the first `good` found through a twin is said too (`good_via_twin`), apart from the recall's",
+      ev["rows"][0]["rank"] == 1 and ev["rows"][0]["via_twin"] is False and ev["rows"][0].get("good_via_twin") is True
+      and ev.get("good_via_twin") == 1, ev)
+
 # ------------------------------------------------------------------ remember, forget, resolve
 mem = ch.empty()
 check("remember: a new hint", ch.remember(mem, "мобільний кошик", None, [MOBILE], [], "2026-10-19") is True
@@ -298,7 +345,8 @@ check("…by_class", m["by_class"] == {"A": {"n": 1, "recall50": 1.0, "recall50_
 check("…the empty rows: how many candidates their top 5 has, on average", (m["empty_n"], m["empty_top5_mean"]) == (1, 3.0), m)
 check("…a row with no variants is asked once", asked.count(("qb",)) == 1 and asked.count(("qf",)) == 1, asked)
 check("…each row's ranks, and the notes once", m["rows"][0] == {"q": "qa", "class": "A", "source": "reviewed", "rank": 2,
-                                                                "rank_q_only": None, "rank_good": 2}
+                                                                "rank_q_only": None, "rank_good": 2, "via_twin": False,
+                                                                "good_via_twin": False}
       and m["rows"][2] == {"q": "qe", "class": "порожній", "source": "reviewed", "top5": 3} and m["notes"] == ["n1"], m["rows"])
 check("…no rows: no numbers, no error", ch.evaluate([], ask)["recall50"] is None)
 

@@ -44,6 +44,7 @@ only.
 """
 import datetime
 import hashlib
+import itertools
 import json
 import os
 import posixpath
@@ -109,11 +110,14 @@ LONG_NEXT = "далі: %s — --get \"%s#<заголовок>\""
 LONG_NONE = "заголовків далі немає"
 LONG_FULL = "--full (до 60 000)"
 LONG_NAMES, LONG_NAMES_CHARS = 20, 600      # the headings LONG_NOTE names at most, and their characters
+LONG_GAIN = 2000                # the section the cut falls under is named only when --get of it shows this much more
 EXCLUDED_NOTE = "шлях виключено з пошуку: %s"
 SEVERAL_NOTE = "кілька нотаток із назвою «%s»: %s — --get один зі шляхів"
 SEVERAL_TAIL = "кілька нотаток, чий шлях закінчується на «%s»: %s — --get один зі шляхів"
 SEVERAL_MAX = 5                 # paths SEVERAL_NOTE names, then `· ще N`
 NO_CANDIDATE = "no candidate %s in the last search or the section index — search again"
+OUTSIDE_ROOT = ":"              # `@<repo>/:/<path>`: a server's note outside its endpoint.root (v3.16.2; no Obsidian
+                                # name holds a `:`, so no folder of the core can be taken for it)
 _META = ("title", "type", "product", "status", "date", "ttl_date")
 STATUS_KEYS = ("schema", "updated", "files", "sections", "pending", "skipped_dataless")
 _BROKEN = ci.BROKEN_NOTE.split("%s")[0]      # Index.problem of a file SQLite cannot read (a busy one is BUSY_NOTE)
@@ -576,14 +580,15 @@ def _local(sctx, src, plans, until, box):
 # -- an MCP server
 def _remote_name(sctx, repo, path):
     """The index's name of a path a server gave: under `endpoint.root` it is the core's — through `core_root` the vault's
-    name of the file, `@<repo>/<path>` without one; outside `endpoint.root`, `@<repo>/<path as given>`."""
+    name of the file, `@<repo>/<path>` without one; outside `endpoint.root`, `@<repo>/:/<path as given>` (since v3.16.2:
+    a name of its own, never the one of a note under the root)."""
     p = N(path).strip().replace("\\", "/").lstrip("/")
     root = N(repo["endpoint"].get("root") or "").replace("\\", "/").strip("/")
     if not root:
         return _repo_name(repo, p, sctx.get("vaults") or [])
     if p == root or p.startswith(root + "/"):
         return _repo_name(repo, p[len(root):], sctx.get("vaults") or [])
-    return "@%s/%s" % (repo["id"], p)
+    return "@%s/%s/%s" % (repo["id"], OUTSIDE_ROOT, p)
 
 
 def _mcp(sctx, src, plans, until, box):
@@ -879,6 +884,17 @@ def _title_key(title):
     return " ".join(N(str(title or "")).split()).casefold()
 
 
+SAME_TEXT = ("hash", "near")     # the folds of the same text: a «не те» of one copy is of the other (ctx_hints)
+
+
+def _chain(outer, inner):
+    """The kind of a twin folded twice (into a candidate, then that one into another): the same text only when both
+    folds were (SAME_TEXT), else the one that was not."""
+    if outer in SAME_TEXT and inner in SAME_TEXT:
+        return outer
+    return outer if outer not in SAME_TEXT else inner
+
+
 def dedup(cands, notes_meta, own=None):
     """The candidates without duplicates, best first — the keys of the spec (§6) in turn:
     1. the same path (NFC) — one candidate (`_merge`);
@@ -897,7 +913,9 @@ def dedup(cands, notes_meta, own=None):
        `двійник <path>`;
     5. the same `version_key` — the newer by its date stays, marked `є старіші версії: N` (the older ones the index
        holds); a version that is not the newest the index holds is marked `старіша версія <path of the newest>`.
-    A candidate that stays keeps the best score of those it stands for, and their `sensitive`. `cands` are entries (one per path and heading,
+    A candidate that stays keeps the best score of those it stands for, their `sensitive`, and their paths (`twins`,
+    since v3.16.2: a remembered pick of one of them weighs it, `ctx search eval` finds them there) with the kind of
+    fold that brought each (`twin_keys`, internal: page, hash, near, link, version). `cands` are entries (one per path and heading,
     weighed by the priors: path, heading, score, flags, hits, section_id, title, …); `notes_meta` Index.notes() — the
     keys 2–5 read hash, near, size, links, version_key, confluence_id and date there, so they hold for files of the
     index (key 3a also for a note only a local index knows, by the `near` its hits carry).
@@ -915,11 +933,18 @@ def dedup(cands, notes_meta, own=None):
     def when(c):
         return str(meta(c).get("date") or c.get("date") or "")
 
-    def fold(keep, others, mark=None):
+    def fold(keep, others, mark=None, key=""):
         for o in others:
             if o is not keep and id(o) not in gone:
                 gone.add(id(o))
                 keep["score"] = max(keep["score"], o["score"])
+                twins = keep.setdefault("twins", [])           # what it stands for: a pick of one weighs it (v3.16.2)
+                keys = keep.setdefault("twin_keys", {})         # by which fold — a «не те» crosses only the same text
+                inner = o.get("twin_keys") or {}
+                for t, k in [(o["path"], key)] + [(t, _chain(key, inner.get(t, key))) for t in o.get("twins") or []]:
+                    if t != keep["path"] and t not in twins:
+                        twins.append(t)
+                        keys[t] = k
                 if o.get("sensitive") or meta(o).get("sensitive"):
                     keep["sensitive"] = True            # what it stands for is sensitive: the mark stays (spec §7.4)
                 if mark:
@@ -934,9 +959,9 @@ def dedup(cands, notes_meta, own=None):
         return [g for g in by.values() if len(g) > 1]
 
     for g in grouped(lambda c: str(meta(c).get("confluence_id") or "").strip()):
-        fold(max(g, key=lambda c: (when(c), c["score"])), g, TWIN)
+        fold(max(g, key=lambda c: (when(c), c["score"])), g, TWIN, "page")
     for g in grouped(lambda c: meta(c).get("hash")):
-        fold(g[0], g, TWIN)
+        fold(g[0], g, TWIN, "hash")
     def yours(c):
         return "own" in (c.get("source") or []) or (own is not None and _in_scope(c["path"], own))
 
@@ -944,7 +969,7 @@ def dedup(cands, notes_meta, own=None):
         return bool(meta(c).get("hub") or c.get("hub") or HUB in (c.get("flags") or []))
 
     for g in grouped(lambda c: meta(c).get("near") or c.get("near")):    # yours first, then the original: the older day
-        fold(min(g, key=lambda c: (not yours(c), not when(c), when(c)[:10], -c["score"])), g, TWIN)
+        fold(min(g, key=lambda c: (not yours(c), not when(c), when(c)[:10], -c["score"])), g, TWIN, "near")
     for g in grouped(lambda c: _title_key(meta(c).get("title") or c.get("title"))):
         comp = {id(c): id(c) for c in g}
 
@@ -962,9 +987,10 @@ def dedup(cands, notes_meta, own=None):
         for part in parts.values():
             if len(part) > 1:
                 known = all(meta(c).get("size") is not None for c in part)       # a server's note has no size
-                fold(max(part, key=lambda c: (not hubbed(c), meta(c).get("size") if known else 0, c["score"])), part, TWIN)
+                fold(max(part, key=lambda c: (not hubbed(c), meta(c).get("size") if known else 0, c["score"])), part, TWIN,
+                     "link")
     for g in grouped(lambda c: meta(c).get("version_key")):
-        fold(max(g, key=lambda c: (when(c), c["score"])), g)
+        fold(max(g, key=lambda c: (when(c), c["score"])), g, None, "version")
     live = [c for c in out if id(c) not in gone]
     for c in live:
         vk = meta(c).get("version_key")
@@ -1091,7 +1117,8 @@ def _public(c, terms):
             "source": list(c["source"]), "flags": list(c["flags"]),
             "matched": sorted({h.get("variant", 0) + 1 for h in c.get("hits") or []}), "snippet": snip,
             "score": round(c["score"], 6),
-            "sections": [{"id": candidate_id(path, s["heading"]), "heading": s["heading"]} for s in c["sections"]]}
+            "sections": [{"id": candidate_id(path, s["heading"]), "heading": s["heading"]} for s in c["sections"]],
+            **({"twins": list(c["twins"])} if c.get("twins") else {})}
 
 
 def _last(c):
@@ -1350,15 +1377,47 @@ def _from_disk(sctx, entry):
     return text, meta.get("date") or "", meta, None
 
 
-def _local_names(path, found, vaults, folder):
-    """The spellings a local index may keep the note under: its index name, its file's absolute path, the path from
-    each vault and from the index's own root that holds it — NFC and NFD."""
+def _from_local(sctx, entry):
+    """(text, date, meta, said, source) of a candidate a local index named: its file (`_from_disk`) when it is on disk;
+    else, since v3.16.2, the server of a registered core whose folder is not on disk (`_mcp_entry` of a vault name
+    under it; `source` is that repository — never a local index's old copy of it); else, for a local index's own
+    `@<id>/…` name (an index outside every vault), that index's text (the file itself is never opened); else
+    GetError 3 — a vault file deleted since the search is not served from a local index's copy. `source` is None but
+    for the server."""
+    path = entry["path"]
+    if _file_of(sctx, path):
+        return _from_disk(sctx, entry) + (None,)
+    alt = _mcp_entry(sctx, path)
+    if alt:
+        return _from_mcp(sctx, alt) + (alt["source"],)
+    lid = path[1:].partition("/")[0] if path.startswith("@") else ""
+    if lid and any(src["id"] == lid for src in sources(sctx["text"], sctx["repos"], ("local",))):
+        local = _local_body(sctx, path, os.path.join((sctx.get("vaults") or [""])[0], *path.split("/")))
+        if local:
+            meta = ci.note_meta(path, local[1])
+            return local[1], meta.get("date") or "", meta, None, None
+    raise GetError(3, "the note is not on disk: %s" % path)
+
+
+def _local_names(path, found, vaults, folder, src_id=""):
+    """The spellings a local index may keep the note under: its file's absolute path; the index name and the path from
+    each vault that holds it — only for an index with no root or one rooted at a vault (since v3.16.2: an index rooted
+    in a subfolder keeps paths from that folder, and its `kiwi.md` is not the vault's); the path from the index's own
+    root; for its own `@<src_id>/<rest>` name (an index outside every vault), `<rest>` — NFC and NFD."""
     real = os.path.realpath(found)
-    names = {path, found, real}
-    for root in list(vaults or []) + ([folder] if folder else []):
-        top = os.path.realpath(root)
-        if real.startswith(top.rstrip(os.sep) + os.sep):
-            names.add(os.path.relpath(real, top).replace(os.sep, "/"))
+    names = {found, real}
+    tops = [os.path.realpath(v) for v in vaults or []]
+    own = os.path.realpath(folder) if folder else ""
+    if not own or own in tops:
+        names.add(path)
+        for top in tops:
+            if real.startswith(top.rstrip(os.sep) + os.sep):
+                names.add(os.path.relpath(real, top).replace(os.sep, "/"))
+    if own and real.startswith(own.rstrip(os.sep) + os.sep):
+        names.add(os.path.relpath(real, own).replace(os.sep, "/"))
+    if src_id and path.startswith("@%s/" % src_id):
+        rest = path[len(src_id) + 2:]
+        names.update({rest, os.path.join(folder, *rest.split("/"))} if folder else {rest})
     return sorted({f(n) for n in names for f in (N, lambda x: unicodedata.normalize("NFD", x))})
 
 
@@ -1375,7 +1434,7 @@ def _local_body(sctx, path, found):
         con.set_progress_handler(lambda: time.monotonic() > until, 10000)
         try:
             fts, notes = _columns(con, "notes_fts"), _columns(con, "notes")
-            names = _local_names(path, found, sctx.get("vaults"), _local_root(con))
+            names = _local_names(path, found, sctx.get("vaults"), _local_root(con), src["id"])
             marks = ",".join("?" * len(names))
             if "body" not in fts:
                 row = None
@@ -1560,17 +1619,33 @@ def _pick(sctx, name, found, missing=None, several=None):
 
 
 def _mcp_entry(sctx, path):
-    """A last.json-like entry for `_from_mcp` of an `@<repository>/<rest>` name of a repository with an endpoint and
-    no core folder on disk — the one a search asks over MCP: its server path is `endpoint.root/<rest>`, the inverse
-    of `_remote_name`; None for any other name."""
+    """A last.json-like entry for `_from_mcp` of a name a search asks over MCP — the inverse of `_remote_name`: an
+    `@<repository>/<rest>` name of a repository with an endpoint and no core folder on disk, its server path
+    `endpoint.root/<rest>` (never asked again elsewhere: that could be another note); `@<repository>/:/<path>` of a
+    repository whose endpoint has a root, the path as the server gave it (outside its root); since v3.16.2 also a vault's
+    name under the core folder of such a repository whose folder is not on disk (it moved, or did not sync yet) —
+    `endpoint.root/<the rest under the core>`. None for any other name."""
+    repos = sctx.get("repos") or []
     if not path.startswith("@"):
+        vaults = sctx.get("vaults") or []
+        for repo in repos:
+            ep, folder = repo.get("endpoint") or {}, _folder(repo)
+            if not ep.get("url") or not folder or os.path.isdir(folder):
+                continue
+            prefix = ci.rel_path(folder, vaults)
+            if prefix and not prefix.startswith("/") and path.startswith(prefix.rstrip("/") + "/"):
+                rest = path[len(prefix.rstrip("/")) + 1:]
+                root = N(ep.get("root") or "").replace("\\", "/").strip("/")
+                return {"source": repo["id"], "path": path, "remote": root + "/" + rest if root else rest}
         return None
     rid, _, rest = path[1:].partition("/")
-    repo = next((r for r in sctx.get("repos") or [] if r.get("id") == rid), None)
+    repo = next((r for r in repos if r.get("id") == rid), None)
     ep, folder = (repo or {}).get("endpoint") or {}, _folder(repo) if repo else ""
+    root = N(ep.get("root") or "").replace("\\", "/").strip("/")
+    if rest.startswith(OUTSIDE_ROOT + "/") and ep.get("url") and root:
+        return {"source": rid, "path": path, "remote": rest[len(OUTSIDE_ROOT) + 1:]}
     if not rest or not ep.get("url") or (folder and os.path.isdir(folder)):
         return None
-    root = N(ep.get("root") or "").replace("\\", "/").strip("/")
     return {"source": rid, "path": path, "remote": root + "/" + rest if root else rest}
 
 
@@ -1579,10 +1654,28 @@ def _parts(heading):
     return [" ".join(p.split()).casefold() for p in N(heading).split("›")]
 
 
-def _heading_of(secs, want):
+def _heading_index(secs):
+    """{exact, suffix}: the first section of each whole heading path and of each end of one, parts as `_parts` folds
+    them — what `_heading_of` finds by scanning, in one map (`_names_past` asks it for every heading of a note)."""
+    exact, suffix = {}, {}
+    for h, _ in secs:
+        if h:
+            parts = tuple(_parts(h))
+            exact.setdefault(parts, h)
+            for n in range(1, len(parts) + 1):
+                suffix.setdefault(parts[-n:], h)
+    return {"exact": exact, "suffix": suffix}
+
+
+def _heading_of(secs, want, index=None):
     """The heading path of the first section whose path ends in `want` — its last part, its last parts (`Delivery ›
     Fees`) or the whole path (spaces collapsed, case folded): how `[[Name#Heading]]` and `<path>#<heading>` name a
-    section; None when the note has none."""
+    section; None when the note has none. `index` (`_heading_index`) answers the same without a scan."""
+    if index is not None:
+        key = tuple(_parts(want))
+        if len(key) > 1 and key in index["exact"]:
+            return index["exact"][key]
+        return index["suffix"].get(key)
     key = _parts(want)
     if len(key) > 1:                          # a whole path asked is that section before the end of a longer one
         exact = next((h for h, _ in secs if h and _parts(h) == key), None)
@@ -1596,12 +1689,13 @@ def _heading_of(secs, want):
     return None
 
 
-def _heading_for(secs, heading):
+def _heading_for(secs, heading, index=None):
     """The heading path a `#…` after a note names: the whole of it as one heading first (`C# tips`), then its parts
     between `#` as the end of a heading path (`#H1#H2` → `… › H1 › H2`) with a `^block` part dropped; a block alone
     (`#^a1b2c3`) is the section whose text holds that block id at the end of a line, else "" (the whole note); None
-    when no section has it."""
-    hp = _heading_of(secs, heading)
+    when no section has it; since v3.16.2, when neither finds it, the parts joined back with `#` where a heading
+    holds one (`#Delivery#C# tips` → `Delivery › C# tips`)."""
+    hp = _heading_of(secs, heading, index)
     if hp is not None:
         return hp
     parts = [p.strip() for p in heading.split("#") if p.strip() and not p.strip().startswith("^")]
@@ -1612,27 +1706,62 @@ def _heading_for(secs, heading):
             return next((h for h, t in secs if h and mark.search(t or "")), "")
         return ""
     joined = " › ".join(parts)
-    return _heading_of(secs, joined) if joined != heading.strip() else None
+    hp = _heading_of(secs, joined, index) if joined != heading.strip() else None
+    if hp is not None:
+        return hp
+    raw = heading.split("#")
+    pieces = [] if any(p.strip().startswith("^") for p in raw[:-1]) else [p for p in raw if not p.strip().startswith("^")]
+    if 2 < len(pieces) <= 8:                         # never across a block part in the middle                         # «C# tips» inside a nested link: join neighbours back with `#`
+        for cuts in range(len(pieces) - 2, 0, -1):
+            for at in itertools.combinations(range(1, len(pieces)), cuts):
+                groups = ["#".join(pieces[a:b]).strip() for a, b in zip((0,) + at, at + (len(pieces),))]
+                if all(groups):
+                    hp = _heading_of(secs, " › ".join(groups), index)
+                    if hp is not None:
+                        return hp
+    return None
+
+
+def _index_name(sctx, abs_path):
+    """The index's name of a file on disk: its vault's name, else `@<repository>/…` under the core folder of the
+    registration that holds it (as the walk names it), else the absolute path — so that an exclusion is tested on
+    the name, never on the folders above a core."""
+    vaults = sctx.get("vaults") or []
+    name = ci.rel_path(abs_path, vaults)
+    if not name.startswith("/"):
+        return name
+    held = [r for r in sctx.get("repos") or [] if _folder(r) and r.get("id")]
+    for r in sorted(held, key=lambda r: -len(os.path.realpath(_folder(r)))):    # the innermost core, as the walk does
+        got = ci.rel_path(abs_path, vaults, ci.Root(r["id"], _folder(r)))
+        if got.startswith("@"):
+            return got
+    return name
 
 
 def _note_of(sctx, path):
-    """(source, date, marks, said, sections, whole) of a note by its index name, read in this order: the own section
-    index (its sections; the whole note is their text joined under their headings); the file itself, when it is on
-    disk and downloaded, through the time-budgeted reader (ctx_store.read_text); a registered local index's body
-    (`_local_body`; `said` is the ICLOUD_LOCAL line when the file is one iCloud has not downloaded — never opened);
-    the server, for an `@<repository>/…` name of a repository reached only over MCP (`_mcp_entry`, `_from_mcp`).
+    """(source, date, marks, said, sections, whole) of a note by its index name, read in this order: the server, for a
+    name only a server holds now (`_mcp_entry`: an `@<repository>/…` name of a repository reached only over MCP, an
+    `@<repository>/:/…` one outside its root, a vault name under a registered core folder gone from disk — since
+    v3.16.2 first, so that neither the index's rows nor a local copy of it is served as current); the own section index
+    (its sections; the whole note is their text joined under their headings); the file itself, when it is on disk and
+    downloaded, through the time-budgeted reader (ctx_store.read_text); a registered local index's body (`_local_body`;
+    `said` is the ICLOUD_LOCAL line when the file is one iCloud has not downloaded — never opened).
     `source` names the root the note lies under (`_root_source`: `own`, a repository id), else `vault` (a file outside
     every root) whichever source gave the text; `marks` is `_marks` of its frontmatter. None when nothing holds the
     note. GetError 3 — a file not downloaded that no local index holds (ICLOUD_MISSING), one not read in time, or a
     file that lies under an excluded folder after all (ctx_index.excluded of its real path, case-folded: a link, a
     spelling in another case); 5 — the server did not answer."""
+    entry = _mcp_entry(sctx, path)       # a name only a server holds now: never the index's or a local copy (v3.16.2)
+    if entry:
+        body, date, meta, _ = _from_mcp(sctx, entry)
+        return entry["source"], date, _marks(meta), None, ci.split_sections(body), _section_of(body, "")
     got = ci.Index(sctx["home"]).note(path)
     if got:
         meta, secs = got
         return (meta.get("source") or "own", meta.get("date"), _marks(meta), None, secs,
                 "\n\n".join(p for p in (_as_markdown(h, t) for h, t in secs) if p))
     found = _file_of(sctx, path)
-    if found and ci.excluded(ci.rel_path(os.path.realpath(found), sctx.get("vaults") or []), sctx.get("store_rel"),
+    if found and ci.excluded(_index_name(sctx, os.path.realpath(found)), sctx.get("store_rel"),
                              sctx.get("blocks_rels"), fold=True):
         raise GetError(3, EXCLUDED_NOTE % path)
     dataless = bool(found) and ci.is_dataless(found)
@@ -1655,10 +1784,6 @@ def _note_of(sctx, path):
                 ICLOUD_LOCAL % local[0] if dataless else None, ci.split_sections(local[1]), _section_of(local[1], ""))
     if found and dataless:
         raise GetError(3, _icloud_missing(sctx, path))
-    entry = _mcp_entry(sctx, path)
-    if entry:
-        body, date, meta, _ = _from_mcp(sctx, entry)
-        return entry["source"], date, _marks(meta), None, ci.split_sections(body), _section_of(body, "")
     return None
 
 
@@ -1690,7 +1815,7 @@ def _get_path(sctx, arg, full=False):
     if note is None:
         raise GetError(3, NO_CANDIDATE % path)
     source, date, marks, said, secs, whole = note
-    hp = _heading_for(secs, heading) if heading else ""
+    hp = _heading_for(secs, heading, _heading_index(secs)) if heading else ""
     if hp is None:
         raise GetError(3, "no section %s in %s" % (heading, path))
     if hp:
@@ -1718,16 +1843,17 @@ def long_note(path, shown, total, names, full):
             kept.append(name)
             size += len(name) + 3
         listed = " · ".join(kept + (["ще %d" % (len(names) - len(kept))] if len(kept) < len(names) else []))
-        tail = LONG_NEXT % (listed, path) + ("" if full else " або " + LONG_FULL)
+        tail = LONG_NEXT % (listed, path) + (" --full" if full else " або " + LONG_FULL)     # read as this one was
     else:
         tail = LONG_NONE + ("" if full else " — " + LONG_FULL)
     return LONG_NOTE % (_thousands(shown), _thousands(total), tail)
 
 
 def _heading_lines(text):
-    """[(offset, last part)] of the heading lines of `text` that ctx_index.split_sections reads as headings: level 1–3,
-    none in a code fence."""
-    out, pos, fence = [], 0, None
+    """[(offset, heading path parts, level)] of the heading lines of `text` that ctx_index.split_sections keeps as
+    sections: level 1–3, none in a code fence, and — as it does — none with nothing under it (unless every one is
+    empty); the path within the text, by the same stack of levels."""
+    out, pos, fence, stack = [], 0, None, []
     for line in text.split("\n"):
         f = ci._FENCE.match(line)
         if fence:
@@ -1738,9 +1864,16 @@ def _heading_lines(text):
         else:
             m = ci._HEADING.match(line)
             if m and len(m.group(1)) <= 3:
-                out.append((pos, m.group(2).strip()))
+                level = len(m.group(1))
+                stack = [(lv, t) for lv, t in stack if lv < level] + [(level, m.group(2).strip())]
+                out.append((pos, [t for _, t in stack], level))
         pos += len(line) + 1
-    return out
+    ends = [p for p, _, _ in out[1:]] + [len(text)]
+    filled = []
+    for (p, _, _), e in zip(out, ends):
+        nl = text.find("\n", p)
+        filled.append(bool(text[nl if 0 <= nl < e else e:e].strip()))
+    return [o for o, f in zip(out, filled) if f] if any(filled) else out
 
 
 def _names_past(text, cut, path, secs, start=0):
@@ -1749,22 +1882,31 @@ def _names_past(text, cut, path, secs, start=0):
     left out, one with nothing under it, is skipped): the section the cut falls under, then every one after it, each by
     the shortest end of its heading path (its last part, else more of it) that `--get "<path>#<name>"` — `_parse`, then
     `_heading_for` — takes back to that very section; one no name reaches (a heading another one shadows, `|` in it)
-    is left out."""
+    is left out. Since v3.16.2 the heading lines with nothing under them are left out as split_sections leaves them out
+    (an empty `## Notes` before the cut never takes the place of a `### Notes` after it), the names are found through
+    one map of the note's headings, and the section the cut falls under is named only when --get of it shows
+    LONG_GAIN characters more than the cut text does."""
+    folded = [_parts(h) if h else [] for h, _ in secs]
     lines, aligned, k = _heading_lines(text), [], start
-    for pos, part in lines:
-        key = _parts(part)[-1]
-        nxt = next((i for i in range(k, len(secs)) if secs[i][0] and _parts(secs[i][0])[-1] == key), None)
+    for pos, line, _ in lines:                       # the lines and the sections leave out the same empty headings:
+        key = _parts(line[-1])[-1]                   # in order, by the last part
+        nxt = next((i for i in range(k, len(secs)) if folded[i] and folded[i][-1] == key), None)
         if nxt is not None:
             aligned.append((pos, nxt))
             k = nxt + 1
     before = [a for a in aligned if a[0] < cut][-1:]
+    if before and min(len(secs[before[0][1]][1]), cut) - (cut - before[0][0]) < LONG_GAIN:
+        before = []                                  # --get of it would show little more than the cut text does
+    index, first = _heading_index(secs), {}
+    for x, (h, _) in enumerate(secs):
+        first.setdefault(h, x)
     out = []
     for _, i in before + [a for a in aligned if a[0] >= cut]:
         parts = secs[i][0].split(" › ")
         for n in range(1, len(parts) + 1):
             name = " › ".join(parts[-n:])
-            hp = _heading_for(secs, _parse("%s#%s" % (path, name))[1])
-            if hp and next(x for x, (h, _) in enumerate(secs) if h == hp) == i:
+            hp = _heading_for(secs, _parse("%s#%s" % (path, name))[1], index)
+            if hp and first.get(hp) == i:
                 out.append(name)
                 break
     return out
@@ -1867,7 +2009,12 @@ def get(sctx, cid, full=False):
             entry = dict(entry, source=sec.get("source") or entry.get("source"))
             following = idx.following(sec["note_id"], sec["ord"], chars=FILL_CHARS)
     if text is None:
-        body, day, meta, said = _from_mcp(sctx, entry) if entry.get("kind") == "mcp" else _from_disk(sctx, entry)
+        if entry.get("kind") == "mcp":
+            body, day, meta, said = _from_mcp(sctx, entry)
+        else:
+            body, day, meta, said, via = _from_local(sctx, entry)
+            if via:                                      # read through the server: its line and its day
+                entry, date = dict(entry, source=via, kind="mcp"), ""
         text, date = _section_of(body, heading), date or day
         secs = ci.split_sections(body)
         following = _after(body, heading)

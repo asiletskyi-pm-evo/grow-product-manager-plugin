@@ -270,7 +270,7 @@ check("A5: near_key — the same text without its frontmatter, back-link and dat
       (near(COPY_A), near(COPY_B)))
 check("…a word changed is another key", near(COPY_A.replace("moves", "ships")) not in (None, near(COPY_A)))
 check("…fewer than 400 characters left: no key (short notes never fold)",
-      near("# Short\n\nOnly a line.\n") is None and near("# S\n\n" + "x" * 390 + "\n\n- [[A MOC]]\n2026-10-01\n") is None
+      near("# Short\n\nOnly a line.\n") is None and near("# S\n\n" + "x" * 390 + "\n\n[[A MOC]]\n2026-10-01\n") is None
       and near("# S\n\n" + "x" * 400 + "\n") is not None)
 check("Q4: the headings go into the key but not into the 400 characters — long headings over a short text give no key",
       near("# " + "Heading of the cart study " * 12 + "\n\n## " + "Findings of the study " * 10 + "\n\nOnly a line.\n") is None
@@ -728,6 +728,125 @@ with tempfile.TemporaryDirectory() as d:
     check("…None for a file SQLite cannot read, with the problem said", idx.built() is None
           and (idx.problem or "").startswith("індекс пошуку не читається ("), idx.problem)
 
+# ------------------------------------------------------------------ v3.16.2 Task 1: near copies, exclusions, file links
+check("v3.16.2 C1 (M7): a list of links is the note's content — two cards that differ only in `- [[Bea Two]]` / "
+      "`- [[Cy Three]]` (or a Markdown link) are two keys",
+      near("# Team card\n\n## Owners\n\n- [[Bea Two]]\n\n" + FACTS) != near("# Team card\n\n## Owners\n\n- [[Cy Three]]\n\n" + FACTS)
+      and near("# Team card\n\n- [Bea Two](people/bea.md)\n\n" + FACTS) != near("# Team card\n\n- [Cy Three](people/cy.md)\n\n" + FACTS)
+      and near("# Team card\n\n- [[Bea Two]]\n- [[Cy Three]]\n\n" + FACTS) != near("# Team card\n\n- [[Bea Two]]\n\n" + FACTS))
+check("…a list item with a navigation label (`- Up:: [[MOC]]`), a breadcrumb and a bare back-link line are still set aside",
+      near("# Cart study\n\n- Up:: [[Research MOC]]\n\n" + FACTS) == near("# Cart study\n\n" + FACTS)
+      and near("# Cart study\n\n[[Research MOC]]\n\n" + FACTS) == near("# Cart study\n\n" + FACTS)
+      and near("↑ [[Research]] · `Space / Page`\n# Cart study\n\n" + FACTS) == near("# Cart study\n\n" + FACTS))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET near = 'stale-key'")
+    con.execute("DELETE FROM meta WHERE key = 'near_version'")
+    con.commit()
+    con.close()
+    r = idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    stored = {nid: near_ for nid, near_ in con.execute("SELECT id, near FROM notes")}
+    want = {}
+    for nid, in con.execute("SELECT id FROM notes"):
+        secs = [(h, t) for h, t in con.execute("SELECT heading, text FROM sections WHERE note_id = ? ORDER BY ord", (nid,))]
+        want[nid] = ctx_index.near_key(secs)
+    ver = con.execute("SELECT value FROM meta WHERE key = 'near_version'").fetchone()
+    con.close()
+    check("v3.16.2 C1: an index whose near keys are of an earlier build gets them again from its own sections — no file "
+          "read again, the schema unchanged, once (the meta `near_version`)", stored == want and r["changed"] == 0
+          and r["rebuilt"] is False and ver and ver[0] == str(ctx_index.NEAR_VERSION), (r, ver, [k for k in stored if stored[k] != want[k]][:3]))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    for rel in ("Notes/.Trash/gone a.md", "Notes/Archive/_BACKUP/gone b.md", "Notes/_Backup 2025/gone c.md",
+                "Notes/_system/_Scratch/gone d.md", "Notes/.Obsidian/gone e.md"):
+        write(env.note(rel), "# Gone\n\nA copy that must not be searched.\n")
+    os.symlink(env.note("ZorgCore/Teams/team-alpha.md"), env.note("Notes/Team link.md"))
+    roots, store_rel, blocks_rels = env.scope()
+    real_skip = ctx_index._skip_folder
+    ctx_index._skip_folder = lambda rel, s, fold=False: real_skip(rel, s, fold) if fold else (
+        any(p in (".obsidian", ".trash") or p.startswith("_backup") for p in rel.split("/"))
+        or "/_System/_scratch" in "/" + rel or "/_System/providers" in "/" + rel
+        or (s and (rel == s or rel.startswith(s + "/"))))            # the exact rule of v3.16.1
+    idx = ctx_index.Index(env.home)
+    try:
+        idx.refresh(roots, store_rel, blocks_rels)
+    finally:
+        ctx_index._skip_folder = real_skip
+    before = {n["path"] for n in idx.notes()}
+    idx.refresh(roots, store_rel, blocks_rels)
+    after = {n["path"] for n in idx.notes()}
+    gone = {p for p in before if "gone" in p}
+    check("v3.16.2 C3 (9): `.Trash`, `_BACKUP`, `_Backup 2025`, `_system/_Scratch`, `.Obsidian` — any case — are left out by "
+          "the walk too; the rows an earlier build kept go at the next refresh",
+          gone and not any("gone" in p for p in after), (sorted(gone), sorted(p for p in after if "gone" in p)))
+    check("v3.16.2 C4 (N6): a symbolic link to a file is not indexed (its target is, where it lies)",
+          "Notes/Team link.md" not in after and "ZorgCore/Teams/team-alpha.md" in after, sorted(after)[:5])
+check("v3.16.2 C3: `excluded` compares the folder names case-folded without `fold`; the store and a blocks file stay exact",
+      ctx_index.excluded("Notes/.Trash/x.md", "Notes/_System/context", [])
+      and ctx_index.excluded("Notes/_BACKUP 1/x.md", "Notes/_System/context", [])
+      and ctx_index.excluded("Notes/_System/_Scratch/x.md", "Notes/_System/context", [])
+      and not ctx_index.excluded("Notes/_system/Context/x.md", "Notes/_System/context", [])
+      and ctx_index.excluded("Notes/_system/Context/x.md", "Notes/_System/context", [], fold=True))
+
+# --- v3.16.2 Task 1 review fixes
+check("v3.16.2 review M1: a dated-link bullet (`- [[2026-03-01]]`, a daily note) is still a date — set aside",
+      near("# Team card\n\n- [[2026-03-01]]\n\n" + FACTS) == near("# Team card\n\n- [[2026-09-30]]\n\n" + FACTS))
+check("v3.16.2 review M7: a list of links inside a callout (`> - [[Bea Two]]`) is content too",
+      near("# Team card\n\n> - [[Bea Two]]\n\n" + FACTS) != near("# Team card\n\n> - [[Cy Three]]\n\n" + FACTS))
+check("v3.16.2 review M5: `local-context.md` in any case is left out",
+      ctx_index.excluded("Notes/_System/Local-Context.md", "Notes/_System/context", [])
+      and ctx_index.excluded("Notes/LOCAL-CONTEXT.md", "Notes/_System/context", []))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET near = 'from-a-later-build'")
+    con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('near_version', ?)", (str(ctx_index.NEAR_VERSION + 1),))
+    con.commit()
+    con.close()
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    nears = {n for n, in con.execute("SELECT near FROM notes")}
+    con.close()
+    check("v3.16.2 review M4: the keys of a later build (a higher `near_version`) are left as they are — redone only "
+          "when the stored version is lower", nears == {"from-a-later-build"}, nears)
+    os.symlink(env.note("ZorgCore/Teams/team-alpha.md"), env.note("Notes/Team link2.md"))
+    state = json.loads(read(env.index, "index.json"))
+    state["queue"] = [["f", roots[0]["path"], env.note("Notes/Team link2.md"), "Notes/Team link2.md"]]
+    write(os.path.join(env.index, "index.json"), json.dumps(state))
+    idx.refresh(roots, store_rel, blocks_rels)
+    check("v3.16.2 review M2: a symbolic link a saved queue still names is not indexed either",
+          "Notes/Team link2.md" not in {n["path"] for n in idx.notes()}, sorted(n["path"] for n in idx.notes())[:4])
+
+# --- v3.16.2 final review: the rows no root owns go on a resumed walk too; a queued link's row goes
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    write(env.note("Notes/Team link3.md"), "# Team link3\n\nA real file first.\n")
+    idx.refresh(roots, store_rel, blocks_rels)
+    os.remove(env.note("Notes/Team link3.md"))
+    os.symlink(env.note("ZorgCore/Teams/team-alpha.md"), env.note("Notes/Team link3.md"))
+    own = [r for r in roots if r["source"] == "own"]
+    state = json.loads(read(env.index, "index.json"))
+    state["queue"] = [["f", own[0]["path"], env.note("Notes/Team link3.md"), "Notes/Team link3.md"]]
+    write(os.path.join(env.index, "index.json"), json.dumps(state))
+    idx.refresh(own, store_rel, blocks_rels)            # the core no longer a root, the walk resumes a queue
+    left = {n["path"] for n in idx.notes()}
+    check("v3.16.2 final M1: a resumed walk drops the rows no root owns too (a core no longer a root)",
+          not any(p.startswith("ZorgCore/") for p in left), sorted(p for p in left if p.startswith("ZorgCore/"))[:3])
+    check("v3.16.2 final M3: a queued symbolic link's earlier row goes", "Notes/Team link3.md" not in left,
+          sorted(left)[:4])
+
 # ------------------------------------------------------------------ v3.16.1: ctx index rebuild --download
 import contextlib, io, signal, threading  # noqa: E401,E402
 import ctx as ctx_cli  # noqa: E402
@@ -1052,6 +1171,23 @@ with tempfile.TemporaryDirectory() as d:
         ctx_index.Index.rebuild, ctx_index.download = real_rebuild, real_download
     check("final M5: the index fails after a download — exit 3, and the result still says what came down",
           rc == 3 and res and res.get("download", {}).get("downloaded") == 2, (rc, res))
+
+# --- v3.16.2 C10 (final M4): after --download the status hint takes the count from the download — no second walk
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    evicted_set = {unicodedata.normalize("NFC", env.note("Notes/Inbox.md"))}
+    real_dataless, real_evicted, real_fetch = ctx_index.is_dataless, ctx_index.evicted, ctx_index._fetch
+    walks = []
+    ctx_index.is_dataless = lambda p: unicodedata.normalize("NFC", p) in evicted_set
+    ctx_index.evicted = lambda *a, **k: walks.append(1) or real_evicted(*a, **k)
+    ctx_index._fetch = lambda path, timeout: "timeout"
+    try:
+        rc, out, res = in_process(env, "index", "rebuild", "--download")
+    finally:
+        ctx_index.is_dataless, ctx_index.evicted, ctx_index._fetch = real_dataless, real_evicted, real_fetch
+    check("v3.16.2 C10: rebuild --download walks the plugin folder for evicted files once — the status hint's count comes "
+          "from the download", rc == 0 and len(walks) == 1
+          and "not downloaded (iCloud), not read: 1 (plugin folder: 1 — ctx index rebuild --download)" in out, (rc, walks, out[-300:]))
 
 # --- the real read: a child process, its time bounded
 with tempfile.TemporaryDirectory() as d:

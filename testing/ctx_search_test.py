@@ -1580,9 +1580,10 @@ with tempfile.TemporaryDirectory() as d:
               codes == [3, 3, 3, 3] and got == [cs_.EXCLUDED_NOTE % SCRATCH5, cs_.EXCLUDED_NOTE % SCRATCH5,
                                                 cs_.EXCLUDED_NOTE % "Notes/_system/_scratch/people_digests/zed-nine.md",
                                                 cs_.EXCLUDED_NOTE % "notes/_system/context/records/x.md"] and reads == [], (codes, got, reads))
-        check("V3: …the walk's own check is unchanged — exact, so a lower-cased folder is another folder",
-              not ci.excluded("Notes/_system/_scratch/x.md", "Notes/_System/context", [])
-              and ci.excluded("Notes/_system/_scratch/x.md", "Notes/_System/context", [], fold=True))
+        check("V3 (v3.16.2 C3): …the walk folds the folder names too (`_system/_scratch`), the store stays exact unless "
+              "`fold`", ci.excluded("Notes/_system/_scratch/x.md", "Notes/_System/context", [])
+              and not ci.excluded("notes/_system/context/records/x.md", "Notes/_System/context", [])
+              and ci.excluded("notes/_system/context/records/x.md", "Notes/_System/context", [], fold=True))
         ci.is_dataless = lambda p_: unicodedata.normalize("NFC", p_).endswith("Cart experiments.md")
         reads[:] = []
         h4, t4 = cs_.get(sx, "Growth/Cart experiments.md")
@@ -1691,28 +1692,35 @@ check("vault-protocol «In short»: the level-2 triggers are in search-protocol 
 # v3.16.1 Task 2: every --get form is cut at 20 000 characters (60 000 with --full), a line saying how much of how many
 # and naming the headings past the cut
 def heading_names_after(text, cut, dup_full=None):
-    """The names the line should carry, worked out from the text alone: the heading the cut falls under, then every
-    heading line that starts past the cut (the last part; the full path for a last part that repeats)."""
+    """The names the line should carry, worked out from the text alone: the heading the cut falls under — only when
+    --get of it would show 2 000 characters more than the cut text does (v3.16.2) —, then every heading line that
+    starts past the cut (the last part; the full path for a last part that repeats)."""
     import re as _re
-    pos, names, stack, last_before = 0, [], [], None
+    pos, names, stack, last_before, heads = 0, [], [], None, []
     for line in text.split("\n"):
         m = _re.match(r"^(#{1,3})[ \t]+(.+?)[ \t]*$", line)
         if m:
             level = len(m.group(1))
             stack = [s for s in stack if s[0] < level] + [(level, m.group(2))]
             name = " › ".join(s[1] for s in stack) if dup_full and m.group(2) in dup_full else m.group(2)
+            heads.append(pos)
             if pos >= cut:
                 names.append(name)
             else:
-                last_before = name
+                last_before = (name, pos, len(line) + 1)
         pos += len(line) + 1
-    return ([last_before] if last_before else []) + names
+    if last_before:
+        name, at, head = last_before
+        nxt = next((h for h in heads if h > at), len(text))
+        if min(nxt - at - head, cut) - (cut - at) >= 2000:
+            return [name] + names
+    return names
 
 
 def long_line(path, shown, total, names, full):
     n = lambda v: "{:,}".format(v).replace(",", " ")
     head = "нотатка довга — показано %s знаків із %s; " % (n(shown), n(total))
-    more = "" if full else " або --full (до 60 000)"
+    more = " --full" if full else " або --full (до 60 000)"
     if names:
         return head + "далі: " + " · ".join(names) + " — --get \"%s#<заголовок>\"" % path + more
     return head + "заголовків далі немає" + (" — --full (до 60 000)" if not full else "")
@@ -1767,7 +1775,7 @@ with tempfile.TemporaryDirectory() as d:
     dup = cs_._note_of(sx, DUP)[5]
     h, t = cut_of(DUP)
     check("…a last part that repeats (Task 2 fix: by the shortest end of its path that `--get` takes back to it)",
-          t == dup[:20000] + "\n\n" + long_line(DUP, 20000, len(dup), ["Dup parts", "Alpha", "Notes", "Beta", "Beta › Notes"],
+          t == dup[:20000] + "\n\n" + long_line(DUP, 20000, len(dup), ["Alpha", "Notes", "Beta", "Beta › Notes"],
                                                 False), (t or "")[-300:])
     h, t = cut_of(SEC + "#Big")
     check("…a section after `#` is cut too: 20 000, the line (no headings past the cut inside it)",
@@ -1955,9 +1963,9 @@ with tempfile.TemporaryDirectory() as d:
     sid = cs_.candidate_id(TWO, "Two bigs › Late")
     h, t = cs_.get(sx, sid)
     names = line_names(t)
-    check("Task 2 fix I1(d): a filled section past the cut is named by the suffix that reaches it (`Late › Big`, not "
-          "`Big`, the earlier one)", "Late › Big" in names and "Big" not in names
-          and back(TWO, "Late › Big")[1].startswith("b"), (h, names))
+    check("Task 2 fix I1(d): a filled section past the cut is never named `Big` (the earlier one); it begins near the top "
+          "of the text, so (v3.16.2 C8) it is not named at all", "Big" not in names and "Late › Big" not in names
+          and "заголовків далі немає" in t and back(TWO, "Late › Big")[1].startswith("b"), (h, names))
     h, t = cs_.get(sx, SAME)
     names = line_names(t)
     check("Task 2 fix I1(e): a section no name reaches (the same full path twice, `|` in its heading) is left out",
@@ -1966,7 +1974,7 @@ with tempfile.TemporaryDirectory() as d:
     h, t = cs_.get(sx, FENCE)
     names = line_names(t)
     check("Task 2 fix M3: a `##` inside a code fence and a `####` heading past the cut are not named; `Real` is",
-          names == ["Fenced", "Real"], names)
+          names == ["Real"], names)
     flat = "Notes/Long/Flat full.md"
     write(env.note(flat), "Flat full stripes. " + "g" * 34000 + "\n")
     env.refresh(sx)
@@ -2035,6 +2043,364 @@ with tempfile.TemporaryDirectory() as d:
     check("round 3b M1: a whole heading path asked is that section before an end of a longer one (`A › B`, not `X › A › B`); "
           "a bare `#B` is still the first one (`X › A › B`)", "Nest.md › A › B ·" in hn and tn.startswith("ab")
           and "Nest.md › X › A › B ·" in hx and tx.startswith("xab"), (hn, hx))
+
+# v3.16.2 Task 2: a fold records what it stands for; the folder-name exclusions hold for every source; the real-path
+# re-check names a core's file through its root
+out = cs_.dedup([entry(N1, "", 0.05, source="zorg-brain", near="k1", date="2026-10-01"),
+                 entry(N3, "", 0.01, source="zorg-brain", near="k1", date="2026-09-01"),
+                 entry(N4, "", 0.03, source="zorg-brain", near="k1", date="2026-01-01")], {}, own=["Notes"])
+check("v3.16.2 C2 (M8): the survivor of a fold records the paths it stands for (`twins`)",
+      [c["path"] for c in out] == [N3] and sorted(out[0].get("twins") or []) == sorted([N1, N4]), out)
+V1, V2, V3 = "Notes/Roadmap Q4 — draft v1.md", "Notes/Roadmap Q4 — draft v2.md", "Notes/Roadmap Q4 — draft v3.md"
+out = cs_.dedup([entry(V1, "", 0.03, sid=1), entry(V2, "", 0.02, sid=2), entry(V3, "", 0.01, sid=3)],
+                {V1: meta_of(V1, version_key="vk", date="2026-08-01"), V2: meta_of(V2, version_key="vk", date="2026-09-01"),
+                 V3: meta_of(V3, version_key="vk", date="2026-10-01")})
+check("…a version fold (key 5) too: the newest stands for the older ones", [c["path"] for c in out] == [V3]
+      and sorted(out[0].get("twins") or []) == sorted([V1, V2]), out)
+out = cs_.dedup([entry(N2, "", 0.05, source="zorg-brain", near="k1", date="2026-10-07"),
+                 entry(N1, "", 0.02, source="zorg-brain", near="k1", date="2026-09-01"),
+                 entry(N4, "", 0.01, source="zorg-brain", hash="h4")], {}, own=["Notes"])
+pub = [cs_._public(dict(c, source={"zorg-brain"}, sections=[], text=None, snippet=""), []) for c in out]
+check("…the public form carries `twins` only when the candidate stands for others",
+      pub[0].get("twins") == [N2] and "twins" not in next(p for p in pub if p["path"] == N4), pub)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Growth/_Backup 2025/Kiwi plan.md"), "---\ntype: note\n---\n# Kiwi plan\n\nThe kiwi plan of the cart.\n")
+    write(env.note("Growth/Plans/Kiwi plan.md"), "---\ntype: note\n---\n# Kiwi plan\n\nThe kiwi plan of the cart, current.\n")
+    build_brain(env.brain, env.vault, ["Growth/_Backup 2025/Kiwi plan.md", "Growth/Plans/Kiwi plan.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    res = cs_.run(sx, ["kiwi plan"], now=NOW)
+    got = [c["path"] for c in res["candidates"]]
+    check("v3.16.2 C3 (9, N5): a local hit under `_Backup 2025/` is no candidate — the stale backup can no longer win a fold",
+          "Growth/Plans/Kiwi plan.md" in got and not any("_Backup" in p for p in got), got)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    ext = os.path.join(d, "_backups", "zorg-ext")
+    write(os.path.join(ext, "Teams", "team-numbat.md"), "---\ntype: team\n---\n# Team Numbat\n\nThe numbat team.\n")
+    write(os.path.join(ext, "_System", "context-blocks.md"), "# Blocks\n\nThe core's blocks.\n")
+    write(os.path.join(env.home, ".grow-pm", "providers", "zorg-ext.yaml"),
+          "schema: provider-registration/2\nid: zorg-ext\ntitle: Zorg external core\nkind: folder\nauthority: org\n"
+          "core_root: %s\nblocks_file: _System/context-blocks.md\nstatus: active\n" % ext)
+    dev = os.path.join(d, "dev", "zorg-dev")
+    write(os.path.join(dev, "Pages", "Dev page.md"), "# Dev page\n\nA page of the dev core.\n")
+    write(os.path.join(dev, "_System", "context-blocks.md"), "# Blocks\n\nThe dev core's blocks.\n")
+    write(os.path.join(env.home, ".grow-pm", "providers", "zorg-dev.yaml"),
+          "schema: provider-registration/2\nid: zorg-dev\ntitle: Zorg dev core\nkind: folder\nauthority: org\n"
+          "core_root: %s\nblocks_file: _System/context-blocks.md\nstatus: active\n" % dev)
+    os.makedirs(env.note("Notes/Links"), exist_ok=True)
+    os.symlink(os.path.join(dev, "_System", "context-blocks.md"), env.note("Notes/Links/blocks.md"))
+    sx = env.sctx()
+    env.refresh(sx)
+    write(os.path.join(ext, "Teams", "team-new.md"), "---\ntype: team\n---\n# Team New\n\nA team added after the refresh.\n")
+
+    def got10(arg):
+        try:
+            return cs_.get(sx, arg)
+        except cs_.GetError as e:
+            return "exit %d" % e.code, str(e)
+
+    ha, ta = got10("@zorg-ext/Teams/team-numbat.md")
+    hb, tb = got10("@zorg-ext/Teams/team-new.md")
+    hc, tc = got10("Notes/Links/blocks.md")
+    check("v3.16.2 C3 (10): a core under `_backups/` — a note the index holds and one only its file holds read alike",
+          "numbat team" in ta and "added after the refresh" in tb, (ha, hb, tb))
+    check("…an in-vault link to a core's blocks file is excluded by its real name (`@zorg-dev/_System/context-blocks.md`)",
+          hc == "exit 3" and tc.startswith("шлях виключено з пошуку"), (hc, tc))
+
+# v3.16.2 Task 3: every name a search lists is read back from the source that holds it
+def got3b(sx, arg):
+    try:
+        return cs_.get(sx, arg)
+    except cs_.GetError as e:
+        return "exit %d" % e.code, str(e)
+
+
+INROOT = "---\ntype: page\n---\n# Zorg pricing\n\nThe pricing page under the root.\n"
+OUTROOT = "---\ntype: page\n---\n# Zorg pricing\n\nThe pricing page outside the root.\n"
+ONLYOUT = "---\ntype: page\n---\n# Zorg lonely\n\nA page only outside the root.\n"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    with FakeMcp(tree={"Growth/Shared/Zorg pricing.md": INROOT, "Shared/Zorg pricing.md": OUTROOT,
+                       "Shared/Zorg lonely.md": ONLYOUT}) as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [
+            {"path": "Growth/Shared/Zorg pricing.md", "title": "Zorg pricing"},
+            {"path": "Shared/Zorg pricing.md", "title": "Zorg pricing"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, _ = cs_.gather(sx, ["zorg pricing"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        names5 = paths(lists, "zorg-growth|v0")
+        check("v3.16.2 C5 (5, N3): a server's hit outside endpoint.root is `@<repo>/:/<path as given>` — no collision with "
+              "the note under the root", names5 == ["@zorg-growth/Shared/Zorg pricing.md", "@zorg-growth/:/Shared/Zorg pricing.md"],
+              names5)
+        ha, ta = got3b(sx, "@zorg-growth/Shared/Zorg pricing.md")
+        hb, tb = got3b(sx, "@zorg-growth/:/Shared/Zorg pricing.md")
+        hc, tc = got3b(sx, "@zorg-growth/Shared/Zorg lonely.md")
+        check("…each read back by its path with its own text", "under the root" in ta and "outside the root" in tb, (ta, tb))
+        check("…a v3.16.1 name of a note outside the root (no `:`) is an honest «no note» (review I1: no retry that could "
+              "swap in another note)", hc == "exit 3" and "only outside the root" not in tc, (hc, tc))
+
+OLD = "---\ntype: team\n---\n# Team Wombat\n\nAn OLD copy of the wombat team, ZORG-1.\n"
+NEW = "---\ntype: team\n---\n# Team Wombat\n\nThe wombat team as the server has it, ZORG-2.\n"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    core = os.path.join(env.vault, "WombatCore")
+    write(os.path.join(core, "Teams", "team-wombat.md"), OLD)
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["WombatCore/Teams/team-wombat.md"])
+    shutil.rmtree(core)                                  # the core folder is gone; the local index still holds the old copy
+    with FakeMcp(tree={"Core/Teams/team-wombat.md": NEW}) as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [{"path": "Core/Teams/team-wombat.md", "title": "Team Wombat"}]}, False)
+        env.reg("zorg-wombat", "schema: provider-registration/2\nid: zorg-wombat\ntitle: Zorg wombat\nkind: mcp\nauthority: team\n"
+                "core_root: %s\nendpoint:\n  url: %s\n  root: \"Core/\"\nstatus: active\n" % (core, s.url))
+        sx = env.sctx()
+        env.refresh(sx)
+        res = cs_.run(sx, ["team wombat"], now=NOW)
+        cs_.save_last(env.home, res["last"])
+        cand = next((c for c in res["candidates"] if c["path"] == "WombatCore/Teams/team-wombat.md"), None)
+        hi, ti = got3b(sx, cand["id"]) if cand else (None, "")
+        hp, tp = got3b(sx, "WombatCore/Teams/team-wombat.md")
+        hn, tn = got3b(sx, "team-wombat")
+    check("v3.16.2 C6 (6, N4): a core in the vault that is not on disk — id, path and name read through its server",
+          cand and "ZORG-2" in ti and "ZORG-2" in tp and "ZORG-2" in tn, (cand, ti[:80], tp[:80], tn[:80]))
+    check("…never the local index's old copy served as current; the header names the repository",
+          "ZORG-1" not in ti + tp + tn and hp.startswith("> [zorg-wombat · WombatCore/Teams/team-wombat.md"), (hi, hp, hn))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Notes/Zorg kiwi.md"), "---\ntype: note\n---\n# Zorg kiwi\n\nThe kiwi note of the plugin folder.\n")
+    build_brain(env.brain, os.path.join(env.vault, "Notes"), ["Zorg kiwi.md"])      # a local index rooted at Notes/
+    sx = env.sctx()
+    env.refresh(sx)
+    hk, tk = got3b(sx, "Zorg kiwi")
+    hk2, tk2 = got3b(sx, "Zorg kiwi.md")
+    check("v3.16.2 C7 (11): a local index rooted in a subfolder never answers a vault path by its own relative one — "
+          "`Zorg kiwi` is `Notes/Zorg kiwi.md`", hk.startswith("> [own · Notes/Zorg kiwi.md · ")
+          and hk2.startswith("> [own · Notes/Zorg kiwi.md · ") and "kiwi note" in tk, (hk, hk2))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    ext = os.path.join(d, "ext-notes")
+    write(os.path.join(ext, "Research", "Zorg quokka study.md"),
+          "---\ntype: research\n---\n# Zorg quokka study\n\nThe quokka study of the cart, outside every vault.\n")
+    build_brain(env.brain, ext, ["Research/Zorg quokka study.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    reads13, real_read13 = [], cs_.cst.read_text
+    cs_.cst.read_text = lambda p_, *a, **kw: reads13.append(p_) or real_read13(p_, *a, **kw)
+    try:
+        res = cs_.run(sx, ["quokka study"], now=NOW)
+        cs_.save_last(env.home, res["last"])
+        q = next((c for c in res["candidates"] if c["path"] == "@zorg-brain/Research/Zorg quokka study.md"), None)
+        out13 = [got3b(sx, a) for a in ((q or {}).get("id", "-"), "@zorg-brain/Research/Zorg quokka study.md", "Zorg quokka study",
+                                         "[[Zorg quokka study]]")]
+    finally:
+        cs_.cst.read_text = real_read13
+    check("v3.16.2 C7 (13): a local index outside every vault — its candidate read by id, path and name from the index's "
+          "own text; the file outside the vault is never opened",
+          q and all("outside every vault" in t for _, t in out13) and not any("quokka" in r for r in reads13),
+          (q, [h for h, _ in out13], [r for r in reads13 if "quokka" in r]))
+
+# v3.16.2 Task 2 review fixes: twin keys, transitive twins, the innermost core, the backup that could have won
+X, Y, Z = "Archive/Zorg plan x.md", "Archive/Zorg plan y.md", "Notes/Zorg plan z.md"
+out = cs_.dedup([entry(X, "", 0.05, source="zorg-brain", near="kz", date="2026-09-01"),
+                 entry(Y, "", 0.04, source="zorg-brain", date="2026-09-02"),
+                 entry(Z, "", 0.01, source="zorg-brain", near="kz", date="2026-10-01")],
+                {X: meta_of(X, hash="hh", near="kz"), Y: meta_of(Y, hash="hh")}, own=["Notes"])
+check("v3.16.2 review M2: twins are transitive — a survivor stands for the notes folded into what it folded",
+      [c["path"] for c in out] == [Z] and out[0].get("twins") == [X, Y], out)
+check("…each twin keeps the kind of fold that brought it (internal `twin_keys`: same text — hash, near)",
+      out[0].get("twin_keys") == {X: "near", Y: "near"} and "twin_keys" not in cs_._public(
+          dict(out[0], source={"zorg-brain"}, sections=[], text=None, snippet=""), []), out[0].get("twin_keys"))
+out = cs_.dedup([entry(V1, "", 0.03, sid=1), entry(V3, "", 0.01, sid=3)],
+                {V1: meta_of(V1, version_key="vk", date="2026-08-01"), V3: meta_of(V3, version_key="vk", date="2026-10-01")})
+check("…a version fold records `version`", out[0].get("twin_keys") == {V1: "version"}, out)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    a = os.path.join(d, "zorg-a")
+    b = os.path.join(a, "_backups", "zorg-b")
+    write(os.path.join(a, "Pages", "A page.md"), "# A page\n\nA page of core a.\n")
+    write(os.path.join(b, "Teams", "team-bilby.md"), "# Team Bilby\n\nThe bilby team of core b.\n")
+    for rid, folder in (("zorg-a", a), ("zorg-b", b)):
+        write(os.path.join(env.home, ".grow-pm", "providers", "%s.yaml" % rid),
+              "schema: provider-registration/2\nid: %s\ntitle: %s\nkind: folder\nauthority: org\ncore_root: %s\nstatus: active\n"
+              % (rid, rid, folder))
+    sx = env.sctx()
+    env.refresh(sx)
+    write(os.path.join(b, "Teams", "team-new.md"), "# Team New\n\nA team of core b added after the refresh.\n")
+    try:
+        hb, tb = cs_.get(sx, "@zorg-b/Teams/team-new.md")
+    except cs_.GetError as e:
+        hb, tb = "exit %d" % e.code, str(e)
+    check("v3.16.2 review M1: a core nested under another's `_backups/` — a note only its file holds reads by the innermost "
+          "core's name", "added after the refresh" in tb, (hb, tb))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    LONGP = "The kiwi plan of the cart: the seller's hours under each block, the paid orders after the test. " * 6
+    write(env.note("Growth/_Backup 2025/Kiwi plan.md"), "---\ntype: note\nupdated: 2025-01-01\n---\n# Kiwi plan\n\n" + LONGP + "\n")
+    write(env.note("Growth/Plans/Kiwi plan.md"), "---\ntype: note\nupdated: 2026-10-01\n---\n# Kiwi plan\n\n" + LONGP + "\n")
+    build_brain(env.brain, env.vault, ["Growth/_Backup 2025/Kiwi plan.md", "Growth/Plans/Kiwi plan.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    res = cs_.run(sx, ["kiwi plan"], now=NOW)
+    plan = next((c for c in res["candidates"] if c["path"] == "Growth/Plans/Kiwi plan.md"), None)
+    check("v3.16.2 review M3: an older near copy under `_Backup 2025/` no longer wins the fold as «the original» — the "
+          "current plan is listed, with no twin from the backup", plan and not any("_Backup" in f for f in plan["flags"])
+          and not any("_Backup" in c["path"] for c in res["candidates"]), [(c["path"], c["flags"]) for c in res["candidates"]])
+
+check("v3.16.2 review M6 — search-protocol §3: `twins` serve your picks and eval; what a mark names is what is read",
+      "`twins` serve your remembered picks and `ctx search eval`" in section(SP, 3)
+      and "never read a twin because it is listed there" in section(SP, 3), section(SP, 3)[-700:])
+
+# v3.16.2 Task 3 review fixes: no retry that swaps a note; a vanished core's rows go; the id header names the server;
+# a real `~` folder; a deleted vault file is not served from a local index by id
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    with FakeMcp(tree={"Growth/~/Zorg tilde.md": "# Zorg tilde\n\nUnder the root, in a folder named ~.\n",
+                       "Zorg tilde.md": "# Zorg tilde\n\nOutside the root.\n",
+                       "Shared/Zorg readme.md": "# Zorg readme\n\nThe whole vault's readme, not the core's.\n"}) as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [{"path": "Growth/~/Zorg tilde.md", "title": "Zorg tilde"},
+                                                                {"path": "Zorg tilde.md", "title": "Zorg tilde"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, _ = cs_.gather(sx, ["zorg tilde"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        names_t = paths(lists, "zorg-growth|v0")
+        ht1, tt1 = got3b(sx, "@zorg-growth/~/Zorg tilde.md")
+        ht2, tt2 = got3b(sx, "@zorg-growth/:/Zorg tilde.md")
+        hr, tr = got3b(sx, "@zorg-growth/Shared/Zorg readme.md")
+    check("v3.16.2 review M1: a real folder named `~` under the root is its own name; outside the root is `@<repo>/:/…`",
+          names_t == ["@zorg-growth/~/Zorg tilde.md", "@zorg-growth/:/Zorg tilde.md"] and "folder named ~" in tt1
+          and "Outside the root" in tt2, (names_t, tt1[:60], tt2[:60]))
+    check("v3.16.2 review I1: no retry — an under-root name the server does not have is exit 3, never the whole vault's "
+          "note of that path", hr == "exit 3" and "whole vault" not in tr, (hr, tr))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    core = os.path.join(env.vault, "WombatCore")
+    write(os.path.join(core, "Teams", "team-wombat.md"), OLD)
+    with FakeMcp(tree={"Core/Teams/team-wombat.md": "---\ntype: team\nupdated: 2026-10-01\n---\n" + NEW.split("---\n", 2)[2]}) as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [{"path": "Core/Teams/team-wombat.md", "title": "Team Wombat"}]}, False)
+        env.reg("zorg-wombat", "schema: provider-registration/2\nid: zorg-wombat\ntitle: Zorg wombat\nkind: mcp\nauthority: team\n"
+                "core_root: %s\nendpoint:\n  url: %s\n  root: \"Core/\"\nstatus: active\n" % (core, s.url))
+        sx = env.sctx()
+        env.refresh(sx)                                  # the core indexed while it is on disk …
+        held = "WombatCore/Teams/team-wombat.md" in ci.Index(env.home).paths()
+        shutil.rmtree(core)                              # … then it moves away
+        sx = env.sctx()
+        env.refresh(sx)
+        gone = "WombatCore/Teams/team-wombat.md" not in ci.Index(env.home).paths()
+        hp, tp = got3b(sx, "WombatCore/Teams/team-wombat.md")
+        res = cs_.run(sx, ["team wombat"], now=NOW)
+        cs_.save_last(env.home, res["last"])
+        cand = next((c for c in res["candidates"] if c["path"] == "WombatCore/Teams/team-wombat.md"), None)
+        hi, ti = got3b(sx, cand["id"]) if cand else (None, "")
+    check("v3.16.2 review I2: a core indexed, then gone from disk — its rows leave the index at the next refresh, and its "
+          "path reads through the server", held and gone and "ZORG-2" in tp and "ZORG-1" not in tp, (held, gone, hp, tp[:80]))
+    check("v3.16.2 review I3: …by id too, under the server's line and day", cand and "ZORG-2" in ti
+          and hi.startswith("> [zorg-wombat · WombatCore/Teams/team-wombat.md · 2026-10-01"), (hi, ti[:60]))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Growth/Zorg gone.md"), "---\ntype: note\n---\n# Zorg gone\n\nA note that will be deleted from the vault.\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/Zorg gone.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    res = cs_.run(sx, ["zorg gone"], now=NOW)
+    cs_.save_last(env.home, res["last"])
+    gc = next((c for c in res["candidates"] if c["path"] == "Growth/Zorg gone.md"), None)
+    os.remove(env.note("Growth/Zorg gone.md"))
+    hg, tg = got3b(sx, gc["id"]) if gc else (None, "")
+    check("v3.16.2 review M2: by id, a vault file deleted since the search is exit 3 «not on disk» — a local index's copy "
+          "of it is not served", gc and hg == "exit 3" and "not on disk" in tg, (gc, hg, tg))
+
+# v3.16.2 Task 4: the LONG_NOTE names aligned by heading path, found by a map, the cut-under one only when it helps;
+# `#H#C# tips`
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    EMPTYF = "Growth/Zorg empty notes.md"                 # read from its file: an empty `## Notes` before the cut
+    write(env.note(EMPTYF), "# Zorg empty notes\n\n" + "z" * 12000 + "\n\n## Notes\n\n## B\n\n" + "b" * 12000
+          + "\n\n### Notes\n\n" + "n " * 200 + "\n")
+    TOPF = "Notes/Long/Zorg top heavy.md"                 # one section from the top, past the cut
+    write(env.note(TOPF), "# Zorg top heavy\n\n## A\n\n" + "a" * 30000 + "\n")
+    MANYH = "Notes/Long/Zorg many headings.md"
+    write(env.note(MANYH), "# Zorg many headings\n\n" + "".join("## H%d\n\n%s\n\n" % (i, "h" * 480) for i in range(4000)))
+    TIPS = "Notes/Zorg tips.md"
+    write(env.note(TIPS), "# Zorg tips\n\n## Delivery\n\n" + "d " * 120 + "\n\n### C# tips\n\n" + "sharp " * 60 + "\n")
+    sx = env.sctx()
+    env.refresh(sx)
+    h, t = cs_.get(sx, EMPTYF)
+    names = line_names(t)
+    check("v3.16.2 C8 (final M1): an empty heading before the cut named like a sub-heading past it does not take that "
+          "sub-heading's place — the section the cut falls under (`B`) is named", "B" in names and "B › Notes" in names
+          or ("B" in names and "Notes" in names), names)
+    h, t = cs_.get(sx, TOPF)
+    check("v3.16.2 C8 (Task 2 review M4): the section the cut falls under is named only when --get of it shows 2 000 "
+          "characters more — a section from the top of the note is not", "заголовків далі немає" in t and "далі: A" not in t,
+          t[-200:])
+    whole_many = cs_._note_of(sx, MANYH)[5]
+    t0 = time.monotonic()
+    capped = cs_._cap(whole_many, MANYH, False, cs_._note_of(sx, MANYH)[4])
+    took = time.monotonic() - t0
+    check("v3.16.2 C8 (final M2): the names past the cut of a note with 4 000 headings in well under a second (a map, not "
+          "a scan per name)", took < 1.5 and "· ще " in capped, (round(took, 2), capped[-160:]))
+    ht, tt = got3b(sx, "[[Zorg tips#Delivery#C# tips]]")
+    check("v3.16.2 C9 (Task 3 review M4): `[[Name#Delivery#C# tips]]` — parts joined back with `#` — is `Delivery › C# tips`",
+          ht.endswith("› Zorg tips › Delivery › C# tips · " + ht.rsplit(" · ", 1)[-1]) and tt.startswith("sharp"), (ht, tt[:40]))
+
+# Task 4 review fixes: empty heading lines are left out as split_sections leaves them out; the layouts of the review
+LAYOUTS = {
+    "log": "# Zorg log\n\n## 2026-09-01\n\n### Agenda\n\n" + "a" * 6000 + "\n\n### Notes\n\n## 2026-10-01\n\n### Agenda\n\n"
+           + "b" * 20000 + "\n\n### Notes\n\n" + "n " * 300 + "\n\n## 2026-10-08\n\n### Agenda\n\n" + "c " * 300 + "\n",
+    "samepath": "# Zorg T\n\n## Notes\n\n## B\n\n" + "b" * 25000 + "\n\n## Notes\n\n" + "n " * 300 + "\n\n## C\n\n" + "c " * 300 + "\n",
+    "twoh1": "# Zorg T\n\n## Notes\n\n## B\n\n" + "b" * 25000 + "\n\n# Other\n\n" + "o " * 300 + "\n\n## Notes\n\n" + "n " * 300 + "\n",
+    "skip": "# Zorg skip\n\n" + "p" * 3000 + "\n\n### X\n\n" + "x" * 25000 + "\n\n### Y\n\n" + "y " * 300 + "\n\n## Z\n\n" + "z " * 300 + "\n",
+    "m1": "# Zorg empty notes\n\n" + "z" * 12000 + "\n\n## Notes\n\n## B\n\n" + "b" * 12000 + "\n\n### Notes\n\n" + "n " * 200 + "\n",
+    "render": "# Zorg R\n\n" + "r" * 3000 + "\n\n# Empty parent\n\n## A\n\n" + "a" * 25000 + "\n\n# Empty two\n\n## B\n\n" + "b " * 300 + "\n",
+    "log2": "# Zorg log2\n\n" + "i" * 3000 + "\n\n## 2026-10-01\n\n### Notes\n\n" + "n" * 25000 + "\n\n## 2026-10-08\n\n### Agenda\n\n"
+            + "a " * 300 + "\n\n## Notes\n\n" + "g " * 300 + "\n",
+}
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    for k, text in LAYOUTS.items():
+        write(env.note("Growth/Zorg %s.md" % k), text)
+        write(env.note("Notes/Long/Zorg %s.md" % k), text)
+    sx = env.sctx()
+    env.refresh(sx)
+    bad = []
+    for k in LAYOUTS:
+        got = {}
+        for p in ("Growth/Zorg %s.md" % k, "Notes/Long/Zorg %s.md" % k):
+            h, t = cs_.get(sx, p)
+            names = line_names(t)
+            back_ok = all(not got3b(sx, "%s#%s" % (p, n))[0].startswith("exit") for n in names)
+            got[p] = names
+            if not back_ok or not names:
+                bad.append((p, names, t.rsplit("\n\n", 1)[-1][:120]))
+        if len(set(map(tuple, got.values()))) != 1:
+            bad.append((k, got))
+    check("v3.16.2 review I1 (Task 4): seven layouts of empty headings — a file read and the own index's render name the "
+          "same headings, each reads back, and none says «заголовків далі немає» while sections lie past the cut", bad == [], bad)
+    h, t = cs_.get(sx, "Notes/Long/Zorg samepath.md")
+    check("…an empty `## Notes` before the cut never takes the place of the real `## Notes` after it",
+          line_names(t) == ["Notes", "C"] and got3b(sx, "Notes/Long/Zorg samepath.md#Notes")[1].startswith("n "), line_names(t))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note(TWO), "# Two bigs\n\n## Early\n\n### Big\n\n" + "e" * 3500 + "\n\n## Late\n\nshort\n\n### Big\n\n" + "b" * 30000 + "\n")
+    sx = env.sctx()
+    env.refresh(sx)
+    h, t = cs_.get(sx, TWO)
+    check("v3.16.2 review M3 (Task 4): a section past the cut whose last part an earlier one shares is named by the end "
+          "of its path that reaches it — `Late › Big`, never `Big`", line_names(t) == ["Late › Big"], line_names(t))
+    write(env.note("Notes/Zorg chunks.md"), "# Zorg chunks\n\n" + "".join("## Chunk %d\n\n%s\n\n" % (i, "h" * 2200) for i in range(1, 33)))
+    env.refresh(sx)
+    h, t = cs_.get(sx, "Notes/Zorg chunks.md", full=True)
+    check("v3.16.2 review M4 (Task 4): after --full the hint carries --full — the read it names is cut like this one",
+          t.rsplit("\n\n", 1)[-1].endswith(' — --get "Notes/Zorg chunks.md#<заголовок>" --full'), t[-160:])
+    write(env.note("Notes/Zorg blocks.md"), "# Zorg blocks\n\n## X\n\n" + "x " * 120 + "\n\n### A#B\n\n" + "ab " * 80
+          + "\n\n### A\n\n" + "a " * 80 + "\n")
+    env.refresh(sx)
+    hb, tb = got3b(sx, "[[Zorg blocks#X#A#^blk#B]]")
+    check("v3.16.2 review M5 (Task 4): no join across a block part — `#X#A#^blk#B` is not `X › A#B`",
+          not tb.startswith("ab "), (hb, tb[:40]))
 
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:
