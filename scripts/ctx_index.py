@@ -74,6 +74,8 @@ COMMIT_EVERY = 50                   # files written between two commits of a ref
 STUB_CHARS = 200                    # a section shorter than this (its breadcrumb lines aside) is short: --get and its
                                     # snippet go on with the sections after it (ctx_search)
 NEAR_MIN, NEAR_CHARS = 400, 20_000  # near copies: the characters a key needs at least, and the ones it reads
+NEAR_VERSION = 2                    # the rules of near_key (meta `near_version`): an index of other rules gets its keys
+                                    # again from its own sections (v3.16.2: a list of links is content)
 COUNTS = ("added", "changed", "removed", "pending", "skipped_dataless", "skipped_large")
 BROKEN_NOTE = "індекс пошуку не читається (%s) — ctx index rebuild збудує його наново"
 BUSY_NOTE = "індекс пошуку зайнятий іншим процесом — цього разу без нього"
@@ -187,17 +189,18 @@ def rel_path(abs_path, vaults, root=None):
 def _skip_folder(rel, store_rel, fold=False):
     """A folder (or a file in it) the index never enters: the store, `_System/providers/`, `_System/_scratch/` (the
     plugin's scratch files — per-person digests among them), `.obsidian`, `.trash`, a name that starts with
-    `_backup`. With `fold` the names are compared case-folded (`excluded`)."""
-    low = str.casefold if fold else str
+    `_backup`. These names are compared case-folded (since v3.16.2, in the walk too: `_Backup 2025`, `.Trash`); the
+    store only with `fold` (`excluded` for a path a user typed)."""
     if store_rel:
+        low = str.casefold if fold else str
         s = low(_slash(N(store_rel)).rstrip("/"))
         if s and (low(rel) == s or low(rel).startswith(s + "/")):
             return True
-    parts = [low(p) for p in rel.split("/")]
+    parts = [p.casefold() for p in rel.split("/")]
     for i, part in enumerate(parts):
         if part in (".obsidian", ".trash") or part.startswith("_backup"):
             return True
-        if part == low("_System") and i + 1 < len(parts) and parts[i + 1] in ("providers", "_scratch"):
+        if part == "_system" and i + 1 < len(parts) and parts[i + 1] in ("providers", "_scratch"):
             return True
     return False
 
@@ -205,14 +208,15 @@ def _skip_folder(rel, store_rel, fold=False):
 def excluded(rel, store_rel, blocks_rels, fold=False):
     """Is the file `rel` (an index name) left out: under the store, `_System/providers/` or `_System/_scratch/`, a
     blocks file of a registration, in a `.obsidian`, `.trash` or `_backup…` folder, not `.md`, or `local-context.md`
-    itself. Every source's hits go through it, not only the walk — exactly, as the index names them; with `fold`
-    the names are compared case-folded, for a path a user typed on a case-insensitive disk (`ctx search --get`)."""
+    itself. Every source's hits go through it, not only the walk; the folder names and `local-context.md` are
+    compared case-folded (`_skip_folder`), the store and the blocks files exactly as the index names them — with `fold`
+    case-folded too, for a path a user typed on a case-insensitive disk (`ctx search --get`)."""
     low = str.casefold if fold else str
     rel = _slash(N(rel or ""))
     if _skip_folder(rel, store_rel, fold) or low(rel) in {low(_slash(N(b))) for b in blocks_rels or ()}:
         return True
     name = rel.rsplit("/", 1)[-1]
-    return not name.lower().endswith(".md") or low(name) == "local-context.md"
+    return not name.lower().endswith(".md") or name.casefold() == "local-context.md"
 
 
 # ------------------------------------------------------------------ a note
@@ -225,6 +229,7 @@ _DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}(?::\d{2})?))?")
 _MARK = re.compile(r"\b(?:v\d+|draft|драфт(?:\s*№\s*\d+)?|rev\d+|ревізія\s*\d+)\b", re.I)
 _DATES = re.compile(r"\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}(?:\.\d{2,4})?")
 _LINK = re.compile(r"!?\[\[[^\]\n]*\]\]|!?\[[^\]\n]*\]\([^)\n]*\)")
+_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\S")
 _CODE = re.compile(r"`([^`\n]*)`")
 _SEPARATORS = re.compile(r"^[\s·•|/\\<>‹›«»←→↑↓\-–—*_=~,;.:]*$")
 _NAV = (r"(?:up|moc|parent|related|back|source|index|hub|пов[ʼ'’]?язан[еі]|зв[ʼ'’]?язки|назад|батьківська|джерело)")
@@ -352,13 +357,22 @@ def strip_links(text, label=False):
     return "\n".join(line for line in (text or "").split("\n") if not link_only(line, label))
 
 
+def _near_aside(line):
+    """Does near_key set the line aside: a breadcrumb or a line of links (with a navigation label or none) that is no
+    list item of links alone, or a date line."""
+    if _LIST_ITEM.match(line) and link_only(line):
+        return False
+    return link_only(line, label=True) or bool(_DATE_LINE.match(line))
+
+
 def near_key(sections):
     """The key two near copies of a note share (`Knowledge/sources/x.md` and `Research/x.md`), from its sections
     (split_sections: no frontmatter): sha1 of the first NEAR_CHARS characters of their heading paths and text, without
     the trailing «Повʼязане» / «Зв'язки» / «Related» block (sections under such a heading at the end, or a label line of
     that name in the last one and what follows it), the breadcrumb and navigation link lines (`link_only` with a label:
-    `Up:: [[MOC]]` — never `Owner: [[X]]`), the lines that are only a date or the day a note was updated or made
-    (`2026-10-07`, `Оновлено: 07.10.2026` — never `Deadline: …`) and the whitespace. None when fewer than NEAR_MIN
+    `Up:: [[MOC]]` — never `Owner: [[X]]`, and never a list item of links alone, `- [[Bea Two]]`: a list of owners or
+    attendees is the note's content, since v3.16.2), the lines that are only a date or the day a note was updated or
+    made (`2026-10-07`, `Оновлено: 07.10.2026` — never `Deadline: …`) and the whitespace. None when fewer than NEAR_MIN
     characters of text are left (the headings do not count) — a short note never folds."""
     secs = [(h or "", b or "") for h, b in sections or []]
     while secs and any(_RELATED.match(p.strip(" *_:")) for p in secs[-1][0].split(" › ") if p):
@@ -370,8 +384,7 @@ def near_key(sections):
             blocks[-1] = blocks[-1][:cut]
     kept, size = [], 0
     for (heading, _), lines in zip(secs, blocks):
-        body = " ".join(" ".join(line for line in lines if not (link_only(line, label=True) or _DATE_LINE.match(line)))
-                        .split())
+        body = " ".join(" ".join(line for line in lines if not _near_aside(line)).split())
         size += len(body)
         kept += [heading, body]
     if size < NEAR_MIN:
@@ -803,8 +816,22 @@ class Index:
         con = sqlite3.connect(self.db_path, timeout=5)
         con.executescript(DDL)
         con.execute("INSERT INTO meta(key, value) VALUES ('schema', ?)", (SCHEMA,))
+        con.execute("INSERT INTO meta(key, value) VALUES ('near_version', ?)", (str(NEAR_VERSION),))
         con.commit()
         return con
+
+    @staticmethod
+    def _near_again(con):
+        """The near keys of an index whose `near_version` is not NEAR_VERSION, again from its own sections — no file
+        read, the schema unchanged — then the version."""
+        row = con.execute("SELECT value FROM meta WHERE key='near_version'").fetchone()
+        if row and row[0] == str(NEAR_VERSION):
+            return
+        for nid, in con.execute("SELECT id FROM notes").fetchall():
+            secs = con.execute("SELECT heading, text FROM sections WHERE note_id = ? ORDER BY ord", (nid,)).fetchall()
+            con.execute("UPDATE notes SET near = ? WHERE id = ?", (near_key([(h or "", t or "") for h, t in secs]), nid))
+        con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('near_version', ?)", (str(NEAR_VERSION),))
+        con.commit()
 
     def _ro(self):
         """A read-only connection, or None when there is no index yet."""
@@ -842,6 +869,7 @@ class Index:
             con, rebuilt = self._open_rw()
             res["rebuilt"] = rebuilt or fresh
             try:
+                self._near_again(con)
                 files, sections, queue, when = self._walk(con, roots, store_rel, blocks_rels, deadline, res,
                                                           None if res["rebuilt"] else self._state().get("queue"))
             except sqlite3.DatabaseError as e:      # damage the open checks did not see: put it aside, walk once more
@@ -1145,7 +1173,7 @@ class _Walk:
                     present.add(name)
                     if N(os.path.normpath(e.path)) not in self.root_paths:   # another root walks it itself
                         dirs.append(("d", ri, e.path, child))
-                elif e.is_file():
+                elif e.is_file(follow_symlinks=False):      # a link to a file is not followed (v3.16.2)
                     present.add(name)
                     files.append(("f", ri, e.path, child))
             except OSError:

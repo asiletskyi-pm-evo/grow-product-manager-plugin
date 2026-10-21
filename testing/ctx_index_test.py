@@ -270,7 +270,7 @@ check("A5: near_key — the same text without its frontmatter, back-link and dat
       (near(COPY_A), near(COPY_B)))
 check("…a word changed is another key", near(COPY_A.replace("moves", "ships")) not in (None, near(COPY_A)))
 check("…fewer than 400 characters left: no key (short notes never fold)",
-      near("# Short\n\nOnly a line.\n") is None and near("# S\n\n" + "x" * 390 + "\n\n- [[A MOC]]\n2026-10-01\n") is None
+      near("# Short\n\nOnly a line.\n") is None and near("# S\n\n" + "x" * 390 + "\n\n[[A MOC]]\n2026-10-01\n") is None
       and near("# S\n\n" + "x" * 400 + "\n") is not None)
 check("Q4: the headings go into the key but not into the 400 characters — long headings over a short text give no key",
       near("# " + "Heading of the cart study " * 12 + "\n\n## " + "Findings of the study " * 10 + "\n\nOnly a line.\n") is None
@@ -727,6 +727,72 @@ with tempfile.TemporaryDirectory() as d:
     write(idx.db_path, "not a database at all, longer than one header of sixteen bytes\n" * 4)
     check("…None for a file SQLite cannot read, with the problem said", idx.built() is None
           and (idx.problem or "").startswith("індекс пошуку не читається ("), idx.problem)
+
+# ------------------------------------------------------------------ v3.16.2 Task 1: near copies, exclusions, file links
+check("v3.16.2 C1 (M7): a list of links is the note's content — two cards that differ only in `- [[Bea Two]]` / "
+      "`- [[Cy Three]]` (or a Markdown link) are two keys",
+      near("# Team card\n\n## Owners\n\n- [[Bea Two]]\n\n" + FACTS) != near("# Team card\n\n## Owners\n\n- [[Cy Three]]\n\n" + FACTS)
+      and near("# Team card\n\n- [Bea Two](people/bea.md)\n\n" + FACTS) != near("# Team card\n\n- [Cy Three](people/cy.md)\n\n" + FACTS)
+      and near("# Team card\n\n- [[Bea Two]]\n- [[Cy Three]]\n\n" + FACTS) != near("# Team card\n\n- [[Bea Two]]\n\n" + FACTS))
+check("…a list item with a navigation label (`- Up:: [[MOC]]`), a breadcrumb and a bare back-link line are still set aside",
+      near("# Cart study\n\n- Up:: [[Research MOC]]\n\n" + FACTS) == near("# Cart study\n\n" + FACTS)
+      and near("# Cart study\n\n[[Research MOC]]\n\n" + FACTS) == near("# Cart study\n\n" + FACTS)
+      and near("↑ [[Research]] · `Space / Page`\n# Cart study\n\n" + FACTS) == near("# Cart study\n\n" + FACTS))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET near = 'stale-key'")
+    con.execute("DELETE FROM meta WHERE key = 'near_version'")
+    con.commit()
+    con.close()
+    r = idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    stored = {nid: near_ for nid, near_ in con.execute("SELECT id, near FROM notes")}
+    want = {}
+    for nid, in con.execute("SELECT id FROM notes"):
+        secs = [(h, t) for h, t in con.execute("SELECT heading, text FROM sections WHERE note_id = ? ORDER BY ord", (nid,))]
+        want[nid] = ctx_index.near_key(secs)
+    ver = con.execute("SELECT value FROM meta WHERE key = 'near_version'").fetchone()
+    con.close()
+    check("v3.16.2 C1: an index whose near keys are of an earlier build gets them again from its own sections — no file "
+          "read again, the schema unchanged, once (the meta `near_version`)", stored == want and r["changed"] == 0
+          and r["rebuilt"] is False and ver and ver[0] == str(ctx_index.NEAR_VERSION), (r, ver, [k for k in stored if stored[k] != want[k]][:3]))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    for rel in ("Notes/.Trash/gone a.md", "Notes/Archive/_BACKUP/gone b.md", "Notes/_Backup 2025/gone c.md",
+                "Notes/_system/_Scratch/gone d.md", "Notes/.Obsidian/gone e.md"):
+        write(env.note(rel), "# Gone\n\nA copy that must not be searched.\n")
+    os.symlink(env.note("ZorgCore/Teams/team-alpha.md"), env.note("Notes/Team link.md"))
+    roots, store_rel, blocks_rels = env.scope()
+    real_skip = ctx_index._skip_folder
+    ctx_index._skip_folder = lambda rel, s, fold=False: real_skip(rel, s, fold) if fold else (
+        any(p in (".obsidian", ".trash") or p.startswith("_backup") for p in rel.split("/"))
+        or "/_System/_scratch" in "/" + rel or "/_System/providers" in "/" + rel
+        or (s and (rel == s or rel.startswith(s + "/"))))            # the exact rule of v3.16.1
+    idx = ctx_index.Index(env.home)
+    try:
+        idx.refresh(roots, store_rel, blocks_rels)
+    finally:
+        ctx_index._skip_folder = real_skip
+    before = {n["path"] for n in idx.notes()}
+    idx.refresh(roots, store_rel, blocks_rels)
+    after = {n["path"] for n in idx.notes()}
+    gone = {p for p in before if "gone" in p}
+    check("v3.16.2 C3 (9): `.Trash`, `_BACKUP`, `_Backup 2025`, `_system/_Scratch`, `.Obsidian` — any case — are left out by "
+          "the walk too; the rows an earlier build kept go at the next refresh",
+          gone and not any("gone" in p for p in after), (sorted(gone), sorted(p for p in after if "gone" in p)))
+    check("v3.16.2 C4 (N6): a symbolic link to a file is not indexed (its target is, where it lies)",
+          "Notes/Team link.md" not in after and "ZorgCore/Teams/team-alpha.md" in after, sorted(after)[:5])
+check("v3.16.2 C3: `excluded` compares the folder names case-folded without `fold`; the store and a blocks file stay exact",
+      ctx_index.excluded("Notes/.Trash/x.md", "Notes/_System/context", [])
+      and ctx_index.excluded("Notes/_BACKUP 1/x.md", "Notes/_System/context", [])
+      and ctx_index.excluded("Notes/_System/_Scratch/x.md", "Notes/_System/context", [])
+      and not ctx_index.excluded("Notes/_system/Context/x.md", "Notes/_System/context", [])
+      and ctx_index.excluded("Notes/_system/Context/x.md", "Notes/_System/context", [], fold=True))
 
 # ------------------------------------------------------------------ v3.16.1: ctx index rebuild --download
 import contextlib, io, signal, threading  # noqa: E401,E402

@@ -1580,9 +1580,10 @@ with tempfile.TemporaryDirectory() as d:
               codes == [3, 3, 3, 3] and got == [cs_.EXCLUDED_NOTE % SCRATCH5, cs_.EXCLUDED_NOTE % SCRATCH5,
                                                 cs_.EXCLUDED_NOTE % "Notes/_system/_scratch/people_digests/zed-nine.md",
                                                 cs_.EXCLUDED_NOTE % "notes/_system/context/records/x.md"] and reads == [], (codes, got, reads))
-        check("V3: …the walk's own check is unchanged — exact, so a lower-cased folder is another folder",
-              not ci.excluded("Notes/_system/_scratch/x.md", "Notes/_System/context", [])
-              and ci.excluded("Notes/_system/_scratch/x.md", "Notes/_System/context", [], fold=True))
+        check("V3 (v3.16.2 C3): …the walk folds the folder names too (`_system/_scratch`), the store stays exact unless "
+              "`fold`", ci.excluded("Notes/_system/_scratch/x.md", "Notes/_System/context", [])
+              and not ci.excluded("notes/_system/context/records/x.md", "Notes/_System/context", [])
+              and ci.excluded("notes/_system/context/records/x.md", "Notes/_System/context", [], fold=True))
         ci.is_dataless = lambda p_: unicodedata.normalize("NFC", p_).endswith("Cart experiments.md")
         reads[:] = []
         h4, t4 = cs_.get(sx, "Growth/Cart experiments.md")

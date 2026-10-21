@@ -4,6 +4,12 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v3.16.2 — search, second patch (added 2026-10-22)
+
+What v3.16.1 deferred (plan `plans/2026-10-22-context-v3.16.2.md`). Each check failed before its code.
+
+- **TC-ctx-3162-index** | `python3 testing/ctx_index_test.py` | expected: a list item of links alone (`- [[Bea Two]]` / `- [[Cy Three]]`, a Markdown link) keeps two cards apart — a navigation-labelled item, a breadcrumb and a bare back-link line are still set aside; an index of an earlier build gets its near keys again from its own sections at the next refresh — no file read, the schema unchanged, meta `near_version`; `.Trash`, `_BACKUP`, `_Backup 2025`, `_system/_Scratch`, `.Obsidian` in any case are left out by the walk and an earlier build's rows go; a symbolic link to a file is not indexed; `excluded` folds the folder names always and the store only with `fold`
+
 ## Release v3.16.1 — search patch (added 2026-10-21)
 
 `ctx index rebuild --download`, the cut of every `ctx search --get` form (20 000, `--full` 60 000) and the links as a hub writes them (`references/search-protocol.md` §4, `context-protocol.md` §3; plan `plans/2026-10-21-context-v3.16.1.md`). Each check failed before its code.
