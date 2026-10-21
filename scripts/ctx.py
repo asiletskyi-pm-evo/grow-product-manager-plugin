@@ -153,15 +153,16 @@
                                 rebuild: the index built again from nothing, no time limit. "індекс оновлюється: N файлів ще
                                 не переглянуто" when the refresh ran out of time. rebuild --download (since v3.16.1) first
                                 brings down the plugin folder's files iCloud evicted that the index would read — never a
-                                core folder or the rest of a vault; no limit on the run, 30 s a file, 4 at once, minutes for
-                                a large vault — then «iCloud: завантажено N з M[, лишилось K (не встигли за 30 с: T; не
-                                прочитано: F)]» (a reason only when not zero) or «iCloud: нічого завантажувати», then the
-                                rebuild; the index lock is checked first; Ctrl-C at any moment: «…, зупинено (Ctrl-C) —
-                                індекс не перебудовано», exit 130, the running reads killed. Nothing else ever downloads;
-                                status says «(plugin folder: K — ctx index rebuild --download)» when K evicted files lie in
-                                a plugin folder. No vault and no core folder: exit 3; rebuild while another process holds
-                                index.lock: exit 4. CTX_RESULT:
-                                action, schema, updated, files, sections, pending, skipped_dataless, download (with it)
+                                core folder or the rest of a vault; no limit on the run, 30 s a file, 4 at once, minutes
+                                for a large vault, «iCloud: N з M…» every 100 files and at least once a minute — then
+                                «iCloud: завантажено N з M[, лишилось K (не встигли за 30 с: T; не прочитано: F)]» (a
+                                reason only when not zero) or «iCloud: нічого завантажувати», then the rebuild; the index
+                                lock is checked first; Ctrl-C at any moment: «…, зупинено (Ctrl-C) — індекс не
+                                перебудовано», exit 130, the running reads killed. Nothing else ever downloads; status
+                                says «(plugin folder: K — ctx index rebuild --download)» when K evicted files lie in a
+                                plugin folder. No vault and no core folder: exit 3; rebuild while another process holds
+                                index.lock: exit 4. CTX_RESULT: action, schema, updated, files, sections, pending,
+                                skipped_dataless, download (with it, an index error too)
   search --q TEXT [--q TEXT …] [--skill S] [--product P] [--limit N] [--sources own,local,mcp] [--no-hints] [--json]
                                 (since v3.16.0; scripts/ctx_search.py) the first --q is the question, the others its
                                 variants: the section index (refreshed first, 30 s), the local indexes and the MCP of a
@@ -195,8 +196,10 @@
                                 budget, and one iCloud has not downloaded never: the text of a registered local index,
                                 after the line `файл не завантажено з iCloud — текст із локального індексу <id>`, else
                                 exit 3 (`файл не завантажено з iCloud: <path> — відкрий його в Obsidian або ctx index
-                                rebuild --download`; outside a plugin folder `… — відкрий його в Obsidian` alone). An unknown id, note, name or section, a file not read in time, a
-                                name several notes carry (`кілька нотаток із назвою «<назва>»: <шляхи> — --get один зі
+                                rebuild --download`; outside a plugin folder `… — відкрий його в Obsidian` alone). An
+                                unknown id, note, name or section, a file not read in time, a name several notes carry
+                                (`кілька нотаток із назвою «<назва>»: <шляхи> — --get один зі шляхів`; for the end of a
+                                path `кілька нотаток, чий шлях закінчується на «<посилання>»: <шляхи> — --get один зі
                                 шляхів`) or a path the search excludes (`шлях виключено з пошуку: <шлях>`): exit 3;
                                 the server did not answer: exit 5. --json: the header and the text in CTX_RESULT only
   search remember --q REQUEST --pick ID|PATH [--not ID|PATH] [--product P]
@@ -1017,12 +1020,13 @@ def _index_scope(c):
 
 
 def _download_line(dl):
-    """The line of `ctx index rebuild --download`: what came down from iCloud, what is left and why."""
-    if not dl["candidates"]:
-        return "iCloud: нічого завантажувати"
+    """The line of `ctx index rebuild --download`: what came down from iCloud, what is left and why — a Ctrl-C first,
+    even one in the scan, before anything was found."""
     head = "iCloud: завантажено %d з %d" % (dl["downloaded"], dl["candidates"])
     if dl["interrupted"]:
         return head + ", зупинено (Ctrl-C) — індекс не перебудовано"
+    if not dl["candidates"]:
+        return "iCloud: нічого завантажувати"
     if not dl["left"]:
         return head
     why = (["не встигли за %d с: %d" % (ci.DOWNLOAD_S, dl["timed_out"])] if dl["timed_out"] else []) \
@@ -1030,9 +1034,18 @@ def _download_line(dl):
     return head + ", лишилось %d" % dl["left"] + (" (%s)" % "; ".join(why) if why else "")
 
 
-def _download_progress(done, total):
-    if done % 100 == 0 and done < total:
-        print("iCloud: %d з %d…" % (done, total), flush=True)
+def _download_progress_printer(every=100, seconds=60.0, clock=time.monotonic):
+    """The progress of `rebuild --download`: «iCloud: N з M…» every `every` files and at least once in `seconds` (an
+    offline run reads a file in 30 s), never for the last file — the summary line says it."""
+    last = [clock()]
+
+    def show(done, total):
+        now = clock()
+        if done < total and (done % every == 0 or now - last[0] >= seconds):
+            print("iCloud: %d з %d…" % (done, total), flush=True)
+            last[0] = now
+
+    return show
 
 
 def cmd_index(a, c):
@@ -1045,7 +1058,7 @@ def cmd_index(a, c):
     if getattr(a, "download", False):
         if idx.lock_held():                     # before minutes of downloading, not after
             raise co.Busy("another process is updating the index (%s)" % idx.lock_path)
-        dl = ci.download(roots, store_rel, blocks, progress=_download_progress)
+        dl = ci.download(roots, store_rel, blocks, progress=_download_progress_printer())
         print(_download_line(dl), flush=True)
         if dl["interrupted"]:
             return 130, {"command": "index", "action": a.action, "download": dl}
@@ -1058,7 +1071,8 @@ def cmd_index(a, c):
             res = idx.refresh(roots, store_rel, blocks)
     except sqlite3.Error as e:
         print("index: %s — %s" % (idx.db_path, e))
-        return 3, {"command": "index", "action": a.action, "error": str(e)}
+        err = {"command": "index", "action": a.action, "error": str(e)}
+        return 3, dict(err, download=dl) if dl else err
     s = idx.status()
     print("index: %s" % idx.dir)
     for r in roots:

@@ -1020,6 +1020,39 @@ with tempfile.TemporaryDirectory() as d:
     check("…one of the plugin folder evicted too: the hint with its count",
           "not downloaded (iCloud), not read: 5 (plugin folder: 1 — ctx index rebuild --download)" in out3, out3[-300:])
 
+# --- final review M3, M6, M5: the line after a Ctrl-C in the scan, a progress line by the clock, `download` on an error
+line = ctx_cli._download_line
+check("final M3: Ctrl-C during the scan, nothing found yet — «зупинено», not «нічого завантажувати»",
+      line({"candidates": 0, "downloaded": 0, "left": 0, "timed_out": 0, "failed": 0, "interrupted": True})
+      == "iCloud: завантажено 0 з 0, зупинено (Ctrl-C) — індекс не перебудовано")
+printer = getattr(ctx_cli, "_download_progress_printer", None)
+now = [0.0]
+shown = io.StringIO()
+if printer:
+    show = printer(clock=lambda: now[0])
+    with contextlib.redirect_stdout(shown):
+        for done, t in ((1, 0.0), (2, 61.0), (3, 62.0), (100, 63.0), (101, 64.0), (500, 200.0)):
+            now[0] = t
+            show(done, 500)
+check("final M6: a progress line every 100 files and at least once a minute — never the last file (the summary says it)",
+      printer and shown.getvalue().splitlines() == ["iCloud: 2 з 500…", "iCloud: 100 з 500…"], shown.getvalue())
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    real_rebuild, real_download = ctx_index.Index.rebuild, ctx_index.download
+
+    def broken(self, *a, **k):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    ctx_index.Index.rebuild = broken
+    ctx_index.download = lambda *a, **k: {"candidates": 2, "downloaded": 2, "left": 0, "timed_out": 0, "failed": 0,
+                                           "interrupted": False}
+    try:
+        rc, out, res = in_process(env, "index", "rebuild", "--download")
+    finally:
+        ctx_index.Index.rebuild, ctx_index.download = real_rebuild, real_download
+    check("final M5: the index fails after a download — exit 3, and the result still says what came down",
+          rc == 3 and res and res.get("download", {}).get("downloaded") == 2, (rc, res))
+
 # --- the real read: a child process, its time bounded
 with tempfile.TemporaryDirectory() as d:
     f = os.path.join(d, "note.md")

@@ -30,8 +30,10 @@ priors then weigh a candidate by what it is — the skill's artifact types × 1.
                     with its line of provenance `> [<source> · <path> › <heading> · <day>]` — for a note of a local
                     index or a server, followed by what its frontmatter says (` · sensitive`, ` · застаріле`, its
                     type); a short section goes on with the next ones; a file iCloud has not downloaded is never read.
-                    By a path or a name (as a hub links it: `Name`, `[[Name|alias]]`, `[[Name#Heading]]`) the whole
-                    note or the section after `#`; an `@<repository>/…` name through the server. Any form gives 20 000
+                    By a path or a name (as a hub links it: `Name`, `[[Name|alias]]`, `[[Name#Heading]]`, since
+                    v3.16.1 `![[Name]]`, `[[Name#H1#H2]]`, `[[Name#^block]]`, a link with a folder — the plugin
+                    folder's path first, else the end of a path) the whole note or the section after `#`; an
+                    `@<repository>/…` name through the server. Any form gives 20 000
                     characters at most (60 000 with --full), then the LONG_NOTE line (long_note, since v3.16.1).
 - render            the human output of `ctx search`.
 
