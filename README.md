@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.15.2
+**Version:** 3.16.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.16.0** — **«Пошук»: Step 0.5 finds what your base already holds about the request** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Until now Step 0.5 matched every word of the request («AND»), in one language, and asked «Use as context?» in the middle of the run — on a real vault the right note was among the first five for 44 % of the requests and for 2 of 24 real ones. Now the model writes 3–4 variants of the request (Ukrainian, Russian, English, a synonym) and `ctx search` asks every source at once — its own section index of your plugin folder and the core folders (`~/.grow-pm/index/`, refreshed within 30 s, iCloud-evicted files never read), a local index of yours read only, and a repository's server only when it has no folder on disk; light Ukrainian/Russian stemming, OR semantics, the team glossary's other names, rank fusion, folding of the same page found twice and of near copies, a mark for an outdated, older or `sensitive` note and «станом на <день>» for a card older than its class. The skill reads 30 candidates, takes silently at most three that are directly about the request with their source and date, puts a doubt or a conflict into a block of variants after the work, and remembers what you pick (`ctx search remember`). `ctx search --get` reads a section, a note by its path or by its name. Measured on a copy of a real vault: the right note among the first 50 for 98.9 % of 95 requests (`ctx search eval`), and at the model level 95.8 % of what was taken silently was right, nothing taken on 10 of 10 requests the base has nothing on.
 
 **New in v3.15.2** — **A binding to a slot the catalogue lacks sets no other binding aside** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Per block the first binding counts — yours, the publisher's `slot=`, the plugin's `team#Members` — and a binding to a slot this plugin does not know still took that place: a core ahead of the plugin could set the plugin's `team#Members` aside and drop the core's half of a team's members. Such a binding now does nothing — the next source binds the block — and `ctx validate` still names it as `unknown`.
 
@@ -175,7 +177,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.12.1)
+### 1. CJM Research (v0.13.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -194,7 +196,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 2. Product Analysis (v0.17.1)
+### 2. Product Analysis (v0.18.0)
 
 **Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
 
@@ -238,7 +240,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 5. Write Concept (v0.15.1)
+### 5. Write Concept (v0.16.0)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -608,7 +610,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
-### 33. Context Navigator (v0.1.1) — NEW in v3.10.0
+### 33. Context Navigator (v0.2.0) — NEW in v3.10.0
 
 **Description:** Answers from a connected shared core instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
 
@@ -619,11 +621,11 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.12.1 | Customer Journey Map analysis and hypothesis validation |
-| Product Analysis | v0.17.1 | Analyze metrics, dashboards, and A/B test results |
+| CJM Research | v0.13.0 | Customer Journey Map analysis and hypothesis validation |
+| Product Analysis | v0.18.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.15.1 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.1 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
-| Write Concept | v0.15.1 | Write product concept documents (PRDs) |
+| Write Concept | v0.16.0 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.17.1 | Create and analyze feature requirements |
 | Task Creator | v0.15.1 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.15.1 | Visualize concepts with diagrams, prototypes, infographics |
@@ -651,7 +653,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Offboarding Guide | v0.2.1 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.1 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
 | Context Connect | v0.5.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
-| Context Navigator | v0.1.1 | Answer from the shared core through the provider's rules and graph, with note paths and snapshot dates |
+| Context Navigator | v0.2.0 | Answer from the shared core through the provider's rules and graph, with note paths and snapshot dates |
 
 ---
 
@@ -1065,5 +1067,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.15.2  
+**Version:** 3.16.0  
 **Last Updated:** October 2026

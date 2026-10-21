@@ -1,6 +1,6 @@
 ---
 name: context-navigator
-version: 0.1.1
+version: 0.2.0
 description: Answer from a shared organisational context (a team's core) — who owns what, team and module scope, rules, missions, people, terms. Not decisions (decision-log), not dashboards (product-analysis), not curated sources (knowledge-library). UA — «хто за що відповідає», «що робить команда X», «де описане правило».
 ---
 
