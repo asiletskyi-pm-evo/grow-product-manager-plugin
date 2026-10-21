@@ -12,6 +12,7 @@ the vault (iCloud never syncs it): deleting the folder is safe, `ctx index rebui
                                 text); a frontmatter that cannot be read leaves the whole note as text, without metadata.
                                 A stub before the first heading — a breadcrumb, a short preamble — is no section.
 - link_only / strip_links       a breadcrumb line or a line of links alone, and a text without such lines.
+- near_key                      the key two near copies of a note share (the search folds them), kept per note.
 - is_dataless                   a file iCloud has not downloaded: reading it would start the download, so it is skipped.
 - Index                         sections.sqlite (notes, sections, the FTS5 table sections_fts, meta), index.json (the
                                 state the session digest reads) and index.lock (one refresh at a time); `built` — has
@@ -61,6 +62,7 @@ DATE_KEYS = ("updated", "modified", "snapshot", "generated", "date", "created")
 TTL_DATE_KEYS = ("updated", "snapshot", "generated")   # the note's own date a class TTL is counted from (provider protocol §6)
 COMMIT_EVERY = 50                   # files written between two commits of a refresh
 STUB_CHARS = 200                    # a preamble shorter than this (its breadcrumb lines aside) is no section of its own
+NEAR_MIN, NEAR_CHARS = 400, 20_000  # near copies: the characters a key needs at least, and the ones it reads
 COUNTS = ("added", "changed", "removed", "pending", "skipped_dataless", "skipped_large")
 BROKEN_NOTE = "індекс пошуку не читається (%s) — ctx index rebuild збудує його наново"
 BUSY_NOTE = "індекс пошуку зайнятий іншим процесом — цього разу без нього"
@@ -72,14 +74,15 @@ DDL = """
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE notes(id INTEGER PRIMARY KEY, path TEXT UNIQUE, source TEXT, title TEXT, type TEXT, product TEXT,
                    status TEXT, date TEXT, ttl_date TEXT, confluence_id TEXT, aliases_json TEXT, tags_json TEXT,
-                   sensitive INTEGER, hub INTEGER, version_key TEXT, links_json TEXT, hash TEXT, mtime REAL, size INTEGER);
+                   sensitive INTEGER, hub INTEGER, version_key TEXT, links_json TEXT, hash TEXT, near TEXT, mtime REAL,
+                   size INTEGER);
 CREATE TABLE sections(id INTEGER PRIMARY KEY, note_id INTEGER, heading TEXT, ord INTEGER, text TEXT);
 CREATE INDEX sections_note ON sections(note_id);
 CREATE VIRTUAL TABLE sections_fts USING fts5(title, heading, tags, aliases, body,
                                              tokenize='unicode61 remove_diacritics 2');
 """
 NOTE_COLS = ("path", "source", "title", "type", "product", "status", "date", "ttl_date", "confluence_id", "aliases_json",
-             "tags_json", "sensitive", "hub", "version_key", "links_json", "hash", "mtime", "size")
+             "tags_json", "sensitive", "hub", "version_key", "links_json", "hash", "near", "mtime", "size")
 ROW_SQL = ("SELECT s.id AS id, s.heading, s.ord, s.text, n.id AS note_id, %s FROM sections s "
            "JOIN notes n ON n.id = s.note_id" % ", ".join("n." + c for c in NOTE_COLS))
 QUERY_SQL = ("SELECT s.id AS id, s.heading, s.ord, s.text, n.id AS note_id, %s, bm25(sections_fts, %s) AS rank "
@@ -209,6 +212,11 @@ _DATES = re.compile(r"\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}(?:\.\d{2,4})?")
 _LINK = re.compile(r"!?\[\[[^\]\n]*\]\]|!?\[[^\]\n]*\]\([^)\n]*\)|`[^`\n]*`")
 _SEPARATORS = re.compile(r"^[\s·•|/\\<>‹›«»←→↑↓\-–—*_=~,;.:]*$")
 _LABEL = re.compile(r"^[\s*_>\-]*[^\W\d_][\w ʼ'’\-]{0,23}::?")
+_RELATED_WORD = r"(?:пов[ʼ'’]?язан[еі](?:\s+нотатки)?|зв[ʼ'’]?язки|related(?:\s+notes)?)"
+_RELATED = re.compile(r"^%s$" % _RELATED_WORD, re.I)
+_RELATED_LINE = re.compile(r"^[\s*_#>\-]*%s[\s*_]*:?[\s*_]*$" % _RELATED_WORD, re.I)
+_DATE_LINE = re.compile(r"^[\s>*_\-–—•]*(?:[^\W\d_][\w ʼ'’\-]{0,23}::?[\s*_]*)?(?:\[\[)?"
+                        r"(?:\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?|\d{1,2}\.\d{1,2}\.\d{2,4})(?:\]\])?[\s*_.]*$")
 
 
 def _split_flow(s):
@@ -314,6 +322,29 @@ def link_only(line, label=False):
 def strip_links(text, label=False):
     """The text without its `link_only` lines."""
     return "\n".join(line for line in (text or "").split("\n") if not link_only(line, label))
+
+
+def near_key(sections):
+    """The key two near copies of a note share (`Knowledge/sources/x.md` and `Research/x.md`), from its sections
+    (split_sections: no frontmatter, no heading of level 1–3): sha1 of the first NEAR_CHARS characters of their text
+    without the trailing «Повʼязане» / «Зв'язки» / «Related» block (sections under such a heading at the end, or a
+    label line of that name in the last one and what follows it), the headings, the breadcrumb and link-only lines
+    (`link_only` with a label: `Up:: [[MOC]]`), the lines that are only a date (`2026-10-07`, `Оновлено: 07.10.2026`)
+    and the whitespace. None when fewer than NEAR_MIN characters are left — a short note never folds."""
+    secs = [(h or "", b or "") for h, b in sections or []]
+    while secs and any(_RELATED.match(p.strip(" *_:")) for p in secs[-1][0].split(" › ") if p):
+        secs.pop()
+    blocks = [b.split("\n") for _, b in secs]
+    if blocks:
+        cut = max((i for i, line in enumerate(blocks[-1]) if _RELATED_LINE.match(line)), default=None)
+        if cut is not None:
+            blocks[-1] = blocks[-1][:cut]
+    kept = [line for b in blocks for line in b
+            if not (link_only(line, label=True) or _DATE_LINE.match(line) or _HEADING.match(line))]
+    text = " ".join(" ".join(kept).split())
+    if len(text) < NEAR_MIN:
+        return None
+    return hashlib.sha1(text[:NEAR_CHARS].encode("utf-8")).hexdigest()
 
 
 def split_sections(text):
@@ -763,7 +794,8 @@ class Index:
 
     def notes(self):
         """The metadata of every note, by path (id, path, source, title, type, product, status, date, ttl_date,
-        confluence_id, aliases, tags, sensitive, hub, version_key, links, hash, mtime, size); `problem` as for `query`."""
+        confluence_id, aliases, tags, sensitive, hub, version_key, links, hash, near — `near_key` of its sections —,
+        mtime, size); `problem` as for `query`."""
         rows = self._read(lambda con: con.execute("SELECT id, %s FROM notes ORDER BY path" % ", ".join(NOTE_COLS))
                           .fetchall(), [])
         return [dict(_note_dict(r), id=r["id"]) for r in rows]
@@ -967,7 +999,8 @@ class _Walk:
         values = (rel, source, meta["title"], meta["type"], meta["product"], meta["status"], meta["date"],
                   meta["ttl_date"], meta["confluence_id"], json.dumps(meta["aliases"], ensure_ascii=False),
                   json.dumps(meta["tags"], ensure_ascii=False), int(meta["sensitive"]), int(meta["hub"]),
-                  meta["version_key"], json.dumps(meta["links"], ensure_ascii=False), digest, info.st_mtime, info.st_size)
+                  meta["version_key"], json.dumps(meta["links"], ensure_ascii=False), digest, near_key(sections),
+                  info.st_mtime, info.st_size)
         if row:
             nid = row["id"]
             self._drop_sections(nid)

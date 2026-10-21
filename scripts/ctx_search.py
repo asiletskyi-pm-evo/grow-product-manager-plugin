@@ -19,8 +19,8 @@ priors then weigh a candidate by what it is — the skill's artifact types × 1.
 - fuse              RRF over the lists.
 - priors            the weights and the marks of the candidates.
 - skill_types       a skill's artifact types: `search_types` of references/context-manifest.yaml.
-- dedup             one candidate per note (the five keys of spec §6: the same path, Confluence page, content, a twin
-                    of your layer and the core, versions), at most two sections of a note.
+- dedup             one candidate per note (the five keys of spec §6: the same path, Confluence page, content — a near copy
+                    too —, a twin of your layer and the core, versions), at most two sections of a note.
 - candidate_id      a section's stable id: sha1(`path#heading`)[:10].
 - snippet           ≤ 300 characters around the first match, the matches in «».
 - run               a whole search: the index refreshed, gather → fuse → priors → dedup → the remembered picks
@@ -396,7 +396,8 @@ def _local_sql(con):
     """The query of a local index in one of its two shapes, or _Shape: `notes_fts` with a `path` column (the shape a
     user's own local index has in the wild; `notes` joined by path when it has one), or context-provider-protocol.md
     §10 — `notes_fts` beside `notes`, `notes_fts.rowid = notes.id`. Title, type, date, status and product come from
-    `notes` (else from `notes_fts`) when a column has them, the rest from its frontmatter JSON when it keeps one."""
+    `notes` (else from `notes_fts`) when a column has them, the rest from its frontmatter JSON when it keeps one; the
+    file time from `notes.mtime` when there is one; the note's text from `notes_fts.body` when there is one."""
     fts = _columns(con, "notes_fts")
     notes = _columns(con, "notes")
     if "path" in fts:
@@ -407,7 +408,7 @@ def _local_sql(con):
     else:
         raise _Shape()
     cols = ["notes_fts.rowid AS rid", "%s AS path" % path]
-    for c in ("title", "type", "date", "status", "product"):
+    for c in ("title", "type", "date", "status", "product", "mtime"):
         if join and c in notes:
             cols.append("notes.%s AS %s" % (c, c))
         elif c in fts:
@@ -417,6 +418,7 @@ def _local_sql(con):
         cols.append("notes.%s AS fm" % fm)
     if "body" in fts:
         cols.append("snippet(notes_fts, %d, '«', '»', '…', 24) AS snip" % fts.index("body"))
+        cols.append("notes_fts.body AS body")
     return ("SELECT %s FROM notes_fts %s WHERE notes_fts MATCH ? ORDER BY bm25(notes_fts) LIMIT ?"
             % (", ".join(cols), join))
 
@@ -436,6 +438,17 @@ def _text_or_none(v):
 def _first_date(data, keys):
     """The first of `keys` that `data` (a frontmatter or a result, as a dict) gives a value for, as text; else None."""
     return next((_text_or_none(str(data[k])) for k in keys if data.get(k) not in (None, "")), None)
+
+
+def _file_day(v):
+    """The day of a local index's file time — seconds since the epoch (a number, or a text of one) or an ISO text — as
+    YYYY-MM-DD; None when it names none."""
+    if isinstance(v, str) and _day(v):
+        return _day(v).isoformat()
+    try:
+        return datetime.date.fromtimestamp(float(v)).isoformat() if v not in (None, "") else None
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 def _yes(v):
@@ -463,7 +476,14 @@ def _local(sctx, src, plans, until, box):
             box["silent" if _busy(e) else "schema"] = True
             return
         root = ci.Root(src["id"], folder) if folder else None
-        lists = {}
+        lists, near = {}, {}
+
+        def near_of(r):
+            """The near key of a note's text (ctx_index.near_key of its sections), once per note."""
+            if r["rid"] not in near:
+                body = r["body"] if "body" in r.keys() else None
+                near[r["rid"]] = ci.near_key(ci.split_sections(body)) if isinstance(body, str) and body.strip() else None
+            return near[r["rid"]]
 
         def name(p):
             p = N(p).strip().replace("\\", "/")
@@ -486,13 +506,14 @@ def _local(sctx, src, plans, until, box):
                 fm = _fm(r["fm"]) if "fm" in keys else {}
                 meta = {c: (_text_or_none(r[c]) if c in keys else None) or _text_or_none(fm.get(c))
                         for c in ("title", "type", "status", "product")}
-                date = (_text_or_none(r["date"]) if "date" in keys else None) or _first_date(fm, _FM_DATES)
+                date = ((_text_or_none(r["date"]) if "date" in keys else None) or _first_date(fm, _FM_DATES)
+                        or (_file_day(r["mtime"]) if "mtime" in keys else None))
                 h = Hit(rel, "", src["id"], 0, title=meta["title"], date=date,
                         snippet=_text_or_none(r["snip"]) if "snip" in keys else None, variant=i, list=key,
                         type=(meta["type"] or "").lower(), product=meta["product"] or "",
                         status=(meta["status"] or "").lower(), hub=True if _yes(fm.get("search_hub")) else None,
                         sensitive=_yes(fm.get("sensitive")) if "sensitive" in fm else None,
-                        ttl_date=_first_date(fm, ci.TTL_DATE_KEYS) or "", terms=None, asked=len(terms))
+                        ttl_date=_first_date(fm, ci.TTL_DATE_KEYS) or "", terms=None, asked=len(terms), near=near_of(r))
                 hits.append(h)
                 by_rid.setdefault(r["rid"], []).append(h)
             if terms and by_rid:                        # what each hit holds, as the index itself matches it
@@ -755,7 +776,8 @@ def candidate_id(path, heading):
 def _entries(lists, fused):
     """One entry per key of the fusion (NFC path, heading), for the priors and dedup: its score, the hits that found it
     and what the sources said of the note — the own index's word first (the local copy), else the first that said it;
-    an own section's id and text, an MCP hit's server path (`remote`), the first snippet a source gave."""
+    an own section's id and text, an MCP hit's server path (`remote`), the first snippet a source gave, the near key a
+    local index's text gave (`near`)."""
     by = {}
     for hits in (lists or {}).values():
         for h in hits or []:
@@ -771,7 +793,8 @@ def _entries(lists, fused):
              "hub": own.get("hub") if own else next((h["hub"] for h in hits if h.get("hub") is not None), None),
              "sensitive": any(h.get("sensitive") is True for h in hits),
              "remote": next((h["remote"] for h in hits if h.get("remote")), None),
-             "snippet": next((h["snippet"] for h in hits if h.get("snippet")), None)}
+             "snippet": next((h["snippet"] for h in hits if h.get("snippet")), None),
+             "near": next((h["near"] for h in hits if h.get("near")), None)}
         for k in _META:
             e[k] = next((h[k] for h in said if h.get(k)), "")
         out.append(e)
@@ -813,7 +836,8 @@ def _merge(path, entries):
              sections=[{"heading": e["heading"], "section_id": e["section_id"]} for e in secs[:MAX_SECTIONS]]
              or [{"heading": c["heading"], "section_id": None}],
              remote=next((e["remote"] for e in entries if e.get("remote")), None),
-             snippet=c.get("snippet") or next((e["snippet"] for e in entries if e.get("snippet")), None))
+             snippet=c.get("snippet") or next((e["snippet"] for e in entries if e.get("snippet")), None),
+             near=next((e["near"] for e in entries if e.get("near")), None))
     return c
 
 
@@ -827,13 +851,18 @@ def dedup(cands, notes_meta):
     2. the same `confluence_id` in two files of the index — the newer by its date stays, marked `двійник <path>` of
        the other;
     3. the same `hash` — the better one stays, marked `двійник <path>`;
+    3a. the same text but for what near copies differ by (ctx_index.near_key: frontmatter, back-link and date lines,
+       the trailing «Повʼязане» block; 400 characters at least) — the copy of your layer (a source `own`) stays, else
+       the newer by its date, marked `двійник <path>`; the key is the index's for its files, a local index's text for
+       a note only it knows;
     4. the same title (normalised) when the `links` of one hold the file name of the other (a hub of your layer and
        the core page) — the one with more text (`size`) stays, marked `двійник <path>`;
     5. the same `version_key` — the newer by its date stays, marked `є старіші версії: N` (the older ones the index
        holds); a version that is not the newest the index holds is marked `старіша версія <path of the newest>`.
     A candidate that stays keeps the best score of those it stands for, and their `sensitive`. `cands` are entries (one per path and heading,
     weighed by the priors: path, heading, score, flags, hits, section_id, title, …); `notes_meta` Index.notes() — the
-    keys 2–5 read hash, size, links, version_key, confluence_id and date there, so they hold for files of the index.
+    keys 2–5 read hash, near, size, links, version_key, confluence_id and date there, so they hold for files of the
+    index (key 3a also for a note only a local index knows, by the `near` its hits carry).
     `sensitive` (any source, or the index) is a mark too."""
     groups = {}
     for e in cands or []:
@@ -870,6 +899,8 @@ def dedup(cands, notes_meta):
         fold(max(g, key=lambda c: (when(c), c["score"])), g, TWIN)
     for g in grouped(lambda c: meta(c).get("hash")):
         fold(g[0], g, TWIN)
+    for g in grouped(lambda c: meta(c).get("near") or c.get("near")):
+        fold(max(g, key=lambda c: ("own" in (c.get("source") or []), when(c), c["score"])), g, TWIN)
     for g in grouped(lambda c: _title_key(meta(c).get("title") or c.get("title"))):
         comp = {id(c): id(c) for c in g}
 

@@ -240,6 +240,38 @@ check("…outside every vault: @<source>/<path from the root>",
       ctx_index.rel_path("/core/zx/a/b.md", ["/v"], ctx_index.Root("zorg-x", "/core/zx", "")) == "@zorg-x/a/b.md")
 check("is_dataless is false for a file on disk", ctx_index.is_dataless(os.path.abspath(__file__)) is False)
 
+# ------------------------------------------------------------------ A5: the key of near copies
+STUDY = "The cart shows the seller's working hours under each block, so a shopper knows when the order moves. " * 5
+COPY_A = ("---\ntype: research\nupdated: 2026-10-01\n---\n# Cart study\n\n" + STUDY + "\n\n## Findings\n\n"
+          "Shoppers wait less when they see the hours.\n\n## Повʼязане\n\n- [[Cart MOC]]\n- [[Seller hours]]\n")
+COPY_B = ("# Cart study\n\nUp:: [[Research MOC]]\n2026-10-07\n\n" + STUDY + "\n\n## Findings\n\n"
+          "Shoppers wait less when they see the hours.\n\nRelated:\n- [[Cart MOC]] — the map of the cart\n")
+
+
+def near(text):
+    return ctx_index.near_key(ctx_index.split_sections(text))
+
+
+check("A5: near_key — the same text without its frontmatter, back-link and date lines and trailing «Повʼязане» / "
+      "«Related» block is one key", near(COPY_A) and near(COPY_A) == near(COPY_B) and len(near(COPY_A)) == 40,
+      (near(COPY_A), near(COPY_B)))
+check("…a word changed is another key", near(COPY_A.replace("moves", "ships")) not in (None, near(COPY_A)))
+check("…fewer than 400 characters left: no key (short notes never fold)",
+      near("# Short\n\nOnly a line.\n") is None and near("# S\n\n" + "x" * 390 + "\n\n- [[A MOC]]\n2026-10-01\n") is None
+      and near("# S\n\n" + "x" * 400 + "\n") is not None)
+check("…the first 20 000 characters count", near("# L\n\n" + "y" * 20000 + "a\n") == near("# L\n\n" + "y" * 20000 + "b\n")
+      and near("# L\n\n" + "y" * 19990 + "a\n") != near("# L\n\n" + "y" * 19990 + "b\n"))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Notes/Knowledge/sources/Cart study.md"), COPY_A)
+    write(env.note("Notes/Research/Cart study.md"), COPY_B)
+    idx = ctx_index.Index(env.home)
+    idx.refresh(*env.scope())
+    notes = {n["path"]: n for n in idx.notes()}
+    check("A5: the index keeps each note's near key, from its sections",
+          notes["Notes/Knowledge/sources/Cart study.md"]["near"] == notes["Notes/Research/Cart study.md"]["near"] == near(COPY_A)
+          and notes["Notes/Mobile cart notes.md"]["near"] is None, {p: n.get("near") for p, n in notes.items()})
+
 # ------------------------------------------------------------------ A4: the walk never enters _System/_scratch/
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)

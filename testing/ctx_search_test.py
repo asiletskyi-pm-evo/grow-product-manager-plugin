@@ -95,10 +95,10 @@ class Env:
         return ci.Index(self.home).refresh(sctx["roots"], sctx["store_rel"], sctx["blocks_rels"])
 
 
-def build_brain(path, vault, rels, form="wild", junk=()):
+def build_brain(path, vault, rels, form="wild", junk=(), mtimes=None):
     """A user's own local index over `rels` (vault-relative): "wild" — `path` in notes_fts, meta k/v with `vault`;
     "s10" — context-provider-protocol.md §10, notes_fts rowid = notes.id, meta key/value with `vault_root`; "foreign" —
-    neither. `junk` rows (wild only) carry a path that is no path."""
+    neither. `junk` rows (wild only) carry a path that is no path; `mtimes` {rel: seconds} fills `notes.mtime`."""
     if os.path.exists(path):
         os.remove(path)
     con = sqlite3.connect(path)
@@ -128,15 +128,16 @@ def build_brain(path, vault, rels, form="wild", junk=()):
         text = read(vault, *rel.split("/"))
         m = ci.note_meta(rel, text)
         if form == "wild":
-            con.execute("INSERT INTO notes(path, top, title, type, date, status, fm_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            con.execute("INSERT INTO notes(path, top, title, type, date, status, fm_json, mtime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         (rel, rel.split("/")[0], m["title"], m["type"], m["date"], m["status"],
-                         json.dumps({"updated": m["ttl_date"]}) if m["ttl_date"] else None))
+                         json.dumps({"updated": m["ttl_date"]}) if m["ttl_date"] else None, (mtimes or {}).get(rel)))
             con.execute("INSERT INTO notes_fts(path, title, aliases, tags, headings, body) VALUES (?, ?, '', '', '', ?)",
                         (rel, m["title"], text))
         else:
-            con.execute("INSERT INTO notes(id, path, vault, title, type, frontmatter_json) VALUES (?, ?, 'Zorg', ?, ?, ?)",
+            con.execute("INSERT INTO notes(id, path, vault, title, type, frontmatter_json, mtime) VALUES (?, ?, 'Zorg', ?, ?, ?, ?)",
                         (i, rel, m["title"], m["type"], json.dumps(dict({"date": m["date"], "status": m["status"]},
-                                                                         **({"updated": m["ttl_date"]} if m["ttl_date"] else {})))))
+                                                                         **({"updated": m["ttl_date"]} if m["ttl_date"] else {}))),
+                         (mtimes or {}).get(rel)))
             con.execute("INSERT INTO notes_fts(rowid, title, headings, body) VALUES (?, ?, '', ?)", (i, m["title"], text))
     for p in junk:
         con.execute("INSERT INTO notes_fts(path, title, aliases, tags, headings, body) VALUES (?, 'junk', '', '', '', ?)",
@@ -1114,6 +1115,76 @@ with tempfile.TemporaryDirectory() as d:
     took = time.monotonic() - t0
     check("A2: a file that does not arrive within the read budget is one line (exit 3), never a hang", got is not None
           and got.code == 3 and "\n" not in str(got) and SLOTS in str(got) and took < 2.0, (got, took))
+
+# A3: a local hit with no date in its frontmatter takes the local index's file time, as a day
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    UNDATED = "Growth/Zebrafish idea.md"
+    write(env.note(UNDATED), "# Zebrafish idea\n\nA zebrafish mascot next to the mobile cart.\n")
+    MT = 1760000000.0
+    DAY = datetime.date.fromtimestamp(MT).isoformat()
+    sx = env.sctx()
+    brain_src = [cs_.Source("zorg-brain", "local", path=env.brain)]
+    for form in ("wild", "s10"):
+        build_brain(env.brain, env.vault, [UNDATED, "Notes/Mobile cart notes.md"], form=form,
+                    mtimes={UNDATED: MT, "Notes/Mobile cart notes.md": MT})
+        found, _ = cs_.gather(sx, ["zebrafish", "mobile cart"], brain_src, deadline())
+        z = next((h for h in found.get("zorg-brain|v0", []) if h["path"] == UNDATED), None)
+        mc = next((h for h in found.get("zorg-brain|v1", []) if h["path"] == "Notes/Mobile cart notes.md"), None)
+        check("A3 (%s shape): no date in the frontmatter — the day of notes.mtime" % form, z and z["date"] == DAY, z)
+        check("…a frontmatter date stays the date (%s shape)" % form, mc and mc["date"] == "2026-07-02", mc)
+    con = sqlite3.connect(env.brain)
+    con.executescript("DROP TABLE notes; DROP TABLE notes_fts; DROP TABLE meta;"
+                      "CREATE TABLE notes(path TEXT PRIMARY KEY, title TEXT, type TEXT, date TEXT, status TEXT, fm_json TEXT);"
+                      "CREATE VIRTUAL TABLE notes_fts USING fts5(path UNINDEXED, title, body);"
+                      "CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT);")
+    con.execute("INSERT INTO meta VALUES ('vault', ?)", (env.vault,))
+    con.execute("INSERT INTO notes(path, title, date) VALUES (?, 'Zebrafish idea', '2026-03-04')", (UNDATED,))
+    con.execute("INSERT INTO notes_fts(path, title, body) VALUES (?, 'Zebrafish idea', 'A zebrafish mascot.')", (UNDATED,))
+    con.commit()
+    con.close()
+    found, _ = cs_.gather(sx, ["zebrafish"], brain_src, deadline())
+    z = next((h for h in found.get("zorg-brain|v0", []) if h["path"] == UNDATED), None)
+    check("A3: …a notes table with no mtime: its date column", z and z["date"] == "2026-03-04", z)
+
+# A5: near copies — the same text but for a back-link line, a date line, a «Повʼязане» block, the frontmatter
+STUDY = "The cart shows the seller's working hours under each block, so a shopper knows when the order moves. " * 5
+COPY_A = ("---\ntype: research\nupdated: 2026-10-01\n---\n# Cart study\n\n" + STUDY + "\n\n## Findings\n\n"
+          "Shoppers wait less when they see the hours.\n\n## Повʼязане\n\n- [[Cart MOC]]\n- [[Seller hours]]\n")
+COPY_B = ("# Cart study\n\nUp:: [[Research MOC]]\n2026-10-07\n\n" + STUDY + "\n\n## Findings\n\n"
+          "Shoppers wait less when they see the hours.\n\nRelated:\n- [[Cart MOC]] — the map of the cart\n")
+N1, N2, C1 = "Notes/Knowledge/sources/Cart study.md", "Growth/Cart study.md", "ZorgCore/Pages/Cart study.md"
+out = cs_.dedup([entry(N2, "", 0.05, source="zorg-brain", near="k1", date="2026-10-07"),
+                 entry(N1, "Cart study", 0.02, sid=1)], {N1: meta_of(N1, near="k1", date="2026-09-01")})
+check("A5 dedup: near copies fold — your layer's copy stays, though older and lower, the other its twin",
+      [c["path"] for c in out] == [N1] and out[0]["flags"] == ["двійник " + N2] and abs(out[0]["score"] - 0.05) < 1e-9, out)
+out = cs_.dedup([entry(C1, "Cart study", 0.05, source="zorg-core", sid=2),
+                 entry(N2, "", 0.02, source="zorg-brain", near="k1", date="2026-10-07")],
+                {C1: meta_of(C1, near="k1", date="2026-09-01")})
+check("…neither in your layer: the newer by date stays", [c["path"] for c in out] == [N2]
+      and out[0]["flags"] == ["двійник " + C1], out)
+out = cs_.dedup([entry(N1, "Cart study", 0.05, sid=1), entry(N2, "", 0.02, source="zorg-brain", near="k1", sensitive=True)],
+                {N1: meta_of(N1, near="k1")})
+check("…a folded copy that is sensitive leaves the mark", [c["path"] for c in out] == [N1]
+      and out[0]["flags"] == ["двійник " + N2, "sensitive"], out)
+out = cs_.dedup([entry(N1, "Cart study", 0.05, sid=1), entry(N2, "", 0.02, source="zorg-brain", near=None)],
+                {N1: meta_of(N1, near=None)})
+check("…no key (a short note) never folds", sorted(c["path"] for c in out) == sorted([N1, N2]), out)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note(N1), COPY_A)
+    write(env.note(N2), COPY_B)
+    write(env.note("Notes/Short a.md"), "# Short a\n\nThe zebra cart rule in one line.\n")
+    write(env.note("Notes/Short b.md"), "# Short b\n\n↑ [[Zorg MOC]]\nThe zebra cart rule in one line.\n")
+    build_brain(env.brain, env.vault, [N2])
+    sx = env.sctx()
+    res = cs_.run(sx, ["seller working hours cart study"], now=NOW)
+    got = {c["path"]: c for c in res["candidates"]}
+    check("A5 run: a copy only the local index knows folds into your layer's copy, named its twin",
+          N1 in got and N2 not in got and "двійник " + N2 in got[N1]["flags"], [(c["path"], c["flags"]) for c in res["candidates"]])
+    res = cs_.run(sx, ["zebra cart rule"], now=NOW)
+    check("A5 run: two short notes with the same words never fold", {"Notes/Short a.md", "Notes/Short b.md"}
+          <= {c["path"] for c in res["candidates"]}, [(c["path"], c["flags"]) for c in res["candidates"]])
 
 # the protocols say what the fixes do
 import re  # noqa: E402

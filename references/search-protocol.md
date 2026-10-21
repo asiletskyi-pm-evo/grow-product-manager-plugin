@@ -70,7 +70,7 @@ The marks (`flags`) say what the search knows about a candidate:
 | `застаріле` | `status` outdated, archived, deprecated, former or superseded, or older than the `ttl_days` of its class | never taken silently (§6); if all you found is this — a doubt |
 | `старіша версія <шлях>` | a newer version of the same document exists at `<шлях>` | never taken; read the newer one from its path and rate that |
 | `є старіші версії: N` | the newest of its versions; the older ones were folded into it | may be taken |
-| `двійник <шлях>` | the same thing in another place (the same file, the same Confluence page twice, the same text, a hub of your layer and the core page) was folded into it | may be taken; when the fact you take is a number, a decision or an owner, read the twin too — if they say different things, it is a conflict (§7) |
+| `двійник <шлях>` | the same thing in another place (the same file, the same Confluence page twice, the same text, a near copy — the same text but for a back-link, a date line, a «Повʼязане» block, the frontmatter —, a hub of your layer and the core page) was folded into it | may be taken; when the fact you take is a number, a decision or an owner, read the twin too — if they say different things, it is a conflict (§7) |
 | `знімок від <день>` | it comes from a repository whose snapshot is older than its `stale_after_days` | may be taken, with that day in the taken line (§6); taking it is a doubt |
 | `sensitive` | `sensitive: true` in its frontmatter, or in a copy folded into it | outside the People contour: never taken, never read with `--get`, in the block by its title only (§6, §9) |
 | `хаб` | a glossary, a map of contents, a people list, a focus brief, a daily summary, a style guide | never taken silently; it may point the way — a note it links to is read from its path and rated like a candidate |
@@ -86,7 +86,7 @@ A note you reached from a hub, a twin or a newer version is rated like a candida
 ## 5. What a candidate's source and date are
 
 - **Source** — the first id of the candidate's `source`: `own` (your plugin folder) or the repository's id (a core page, `zorg-core`). A local index or an MCP server names itself the same way.
-- **Date** — the day of the candidate's `date` (the first ten characters). A candidate marked `знімок від <день>` carries both: `(<джерело>, <дата>, знімок від <день>)`. A piece found in a live source (§8) carries `живе · <день>` — the day it was read — in place of the date.
+- **Date** — the day of the candidate's `date` (the first ten characters); a note only a local index knows, with no date in its frontmatter, is dated by that index's file time. A candidate marked `знімок від <день>` carries both: `(<джерело>, <дата>, знімок від <день>)`. A piece found in a live source (§8) carries `живе · <день>` — the day it was read — in place of the date.
 
 ## 6. What is taken, and what never is
 
