@@ -4750,6 +4750,23 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = run_ok(env, "search", "--get", "Notes/Zebra/No such note.md")
     check("…an unknown path: exit 3, one line", rc == 3 and "search: no candidate Notes/Zebra/No such note.md" in out,
           (rc, out[-300:]))
+    # fix round 5: --get by a note's name, a section after `#`, an excluded path
+    TEAM5 = "ZorgCore/Teams/team-alpha.md"
+    rc, out, res = run_ok(env, "search", "--get", "[[team-alpha|the team]]", "--json")
+    check("U1: --get takes a note's name, as a hub links it: exit 0, the whole note under the repository's line",
+          rc == 0 and res and res["header"] == "> [zorg-core · %s · 2026-01-01 · team]" % TEAM5
+          and res["text"].startswith("# Team Alpha\n\n"), (rc, res, out[-300:]))
+    rc, out, res = run_ok(env, "search", "--get", TEAM5 + "#Members")
+    check("U6: …`<шлях>#<заголовок>` prints that section under its heading path", rc == 0
+          and out.startswith("> [zorg-core · %s › Team Alpha › Members · 2026-01-01 · team]\n- Alex One" % TEAM5), (rc, out[:300]))
+    rc, out, res = run_ok(env, "search", "--get", "Delivery slots (900100200)")
+    check("U1: a name two notes carry: exit 3, the line naming them", rc == 3 and out.startswith(
+        "search: кілька нотаток із назвою «Delivery slots (900100200)»: Notes/Knowledge/Delivery slots (900100200).md · "
+        "ZorgCore/Pages/Delivery slots (900100200).md — --get один зі шляхів") and res and res["error"].startswith("кілька нотаток"),
+        (rc, out[-300:]))
+    rc, out, res = run_ok(env, "search", "--get", "Notes/_System/context/records/x.md")
+    check("U5: a path under the store: exit 3 `шлях виключено з пошуку`", rc == 3
+          and out.startswith("search: шлях виключено з пошуку: Notes/_System/context/records/x.md"), (rc, out[-300:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

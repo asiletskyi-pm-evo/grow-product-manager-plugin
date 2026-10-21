@@ -166,18 +166,24 @@
                                 own index busy or damaged counts as not answered): exit 5; 0 candidates is exit 0. No store
                                 needed. The ids are merged into <home>/.grow-pm/index/last.json (a save that fails is a line,
                                 never the exit code). A candidate's sources name the repository of a core page.
-  search --get ID|PATH [--json] one section of the last searches (or of the section index, by its id), or for a note's
-                                path (`/` in it, or `.md` at its end) the whole note without its frontmatter — from the
-                                section index, else a local index's body, else its file (never one iCloud has not
-                                downloaded):
+  search --get ID|PATH|NAME [--json]
+                                one section of the last searches (or of the section index, by its id); for a note's
+                                path (`/` in it) or its name, as a hub links it (`Name`, `Name.md`, `[[Name]]`,
+                                `[[Name|alias]]`), the whole note without its frontmatter — from the section index,
+                                else its file when it is on disk and downloaded, else a local index's body, else (an
+                                `@<repo>/…` name of a repository with no folder on disk) its server — 20 000 characters
+                                at most, then the line `нотатка довга — показано перші 20 000 знаків; секцію — --get
+                                "<шлях>#<заголовок>"`; `<path>#<heading>` or `[[Name#Heading]]` gives that section:
                                 `> [<source> · <path> › <heading> · <day>]` and its text (an MCP note through vault_get_note).
                                 A section under 200 characters goes on with the next ones, up to 1 500, after
                                 the line `секція коротка — додано наступні: <headings>`. A file is read within the read
                                 budget, and one iCloud has not downloaded never: the text of a registered local index,
                                 after the line `файл не завантажено з iCloud — текст із локального індексу <id>`, else
                                 exit 3 (`файл не завантажено з iCloud: <path> — відкрий його в Obsidian або ctx index
-                                rebuild пізніше`). An unknown id, note or section, a file not read in time: exit 3; the
-                                server did not answer: exit 5. --json: the header and the text in CTX_RESULT only
+                                rebuild пізніше`). An unknown id, note, name or section, a file not read in time, a
+                                name several notes carry (`кілька нотаток із назвою «<назва>»: <шляхи> — --get один зі
+                                шляхів`) or a path the search excludes (`шлях виключено з пошуку: <шлях>`): exit 3;
+                                the server did not answer: exit 5. --json: the header and the text in CTX_RESULT only
   search remember --q REQUEST --pick ID|PATH [--not ID|PATH] [--product P]
   search forget --q REQUEST [--product P]
                                 (since v3.16.0; scripts/ctx_hints.py) your choices in a search's block of options, kept in
@@ -1060,8 +1066,9 @@ def _search_options(a):
 
 def cmd_search(a, c):
     """`search`: the question and its variants through the section index, the local indexes and MCP
-    (ctx_search.run), or `--get ID|PATH`: one section, or a whole note, with its line of provenance (ctx_search.get). Reads only — no store
-    lock, no import, the store need not exist; writes only `<home>/.grow-pm/index/` (the index, last.json).
+    (ctx_search.run), or `--get ID|PATH|NAME`: one section, or a whole note, with its line of provenance
+    (ctx_search.get). Reads only — no store lock, no import, the store need not exist; writes only
+    `<home>/.grow-pm/index/` (the index, last.json).
     `search remember|forget` (since v3.16.0) write the store's search memory (`_search_hint`); `search eval` measures
     the search on a golden set (`_search_eval`) and writes nothing but the index."""
     _search_options(a)
@@ -1083,7 +1090,7 @@ def cmd_search(a, c):
             print(text)
         return 0, {"command": "search", "action": "get", "id": a.get, "header": header, "text": text if a.json else None}
     if not a.q:
-        raise Usage("search takes --q TEXT (once or more) or --get ID|PATH")
+        raise Usage("search takes --q TEXT (once or more) or --get ID|PATH|NAME")
     which = _search_kinds(a.sources)
     limit = cs_.LIMIT if a.limit is None else a.limit
     if limit < 1:

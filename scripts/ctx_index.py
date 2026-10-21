@@ -824,6 +824,12 @@ class Index:
 
         return self._read(read, None)
 
+    def paths(self):
+        """The path (NFC) of every note, sorted — what `ctx search --get <name>` looks through for a note's name;
+        `problem` as for `query`."""
+        rows = self._read(lambda con: con.execute("SELECT path FROM notes ORDER BY path").fetchall(), [])
+        return sorted(N(r[0] or "") for r in rows)
+
     def headings(self):
         """(section id, path, heading) of every section — how `ctx search --get` finds a section by its id when the
         last search did not list it; `problem` as for `query`."""

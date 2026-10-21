@@ -1341,9 +1341,12 @@ with tempfile.TemporaryDirectory() as d:
         check("…a path written decomposed (NFD) is the same note", h1n.startswith("> [own · %s · 2026-09-15" % P)
               and "## Рішення" in t1n and reads == [], (h1n, t1n[:200]))
         h2, t2 = cs_.get(sx, "Growth/Cart experiments.md")
-        check("T1: …a path only a local index knows: its body there (before the file), no file read",
-              h2 == "> [zorg-brain · Growth/Cart experiments.md · 2026-08-01 · ab-test-results]"
-              and "seller's hours under each block" in t2 and "type:" not in t2 and reads == [], (h2, t2, reads))
+        check("T1/U7: …a path only a local index knows, its file on disk and downloaded: the file first (one budgeted read), "
+              "its source the root it lies under — `vault` outside every root",
+              h2 == "> [vault · Growth/Cart experiments.md · 2026-08-01 · ab-test-results]"
+              and "seller's hours under each block" in t2 and "type:" not in t2 and len(reads) == 1
+              and reads[0].endswith("Cart experiments.md"), (h2, t2, reads))
+        reads[:] = []
         h3, t3 = cs_.get(sx, "Growth/Only on disk.md")
         check("T1: …a path no index holds: the file, through the time-budgeted reader",
               h3 == "> [vault · Growth/Only on disk.md · 2026-10-02 · note]" and "A zebra note no index holds." in t3
@@ -1369,6 +1372,162 @@ with tempfile.TemporaryDirectory() as d:
     check("T1: …an id still gives its section", hid.startswith("> [own · %s › " % P) and hid.endswith("Рішення · 2026-09-15]")
           and tid.startswith("Показувати графік роботи продавця"), (hid, tid[:200]))
     check("T1: a path --get writes nothing: no last.json", not os.path.exists(cs_.last_path(env.home)))
+
+# U1–U8 (fix round 5): --get by a note's name, a heading after a path, the 20 000 cap, an excluded path, the file before
+# a local index's body, the header's source, `@<repo>/…` through the server, key 4 with an unknown size, key 3a by the day
+TEAM = "ZorgCore/Teams/team-alpha.md"
+SCRATCH5 = "Notes/_System/_scratch/people_digests/zed-nine.md"
+LONG = "Notes/Long/Long zebra.md"
+D1, D2 = "Notes/Knowledge/Delivery slots (900100200).md", "ZorgCore/Pages/Delivery slots (900100200).md"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note(SCRATCH5), "---\ntype: note\n---\n# Zed Nine\n\nDigest of the 1-1s.\n")
+    write(env.note(LONG), "---\ntype: note\nupdated: 2026-10-03\n---\n# Long zebra\n\n## Part 1\n\n" + "z" * 15000
+          + "\n\n## Part 2\n\n" + "y" * 10000 + "\n")
+    for i in range(1, 7):
+        write(env.note("Notes/Z%d/Zebra twin.md" % i), "# Zebra twin\n\nCopy %d of the zebra note.\n" % i)
+    build_brain(env.brain, env.vault, BRAIN_NOTES + [SCRATCH5])
+    sx = env.sctx()
+    env.refresh(sx)
+    reads, real_read, codes = [], cs_.cst.read_text, []
+    cs_.cst.read_text = lambda p_, *a, **kw: reads.append(p_) or real_read(p_, *a, **kw)
+
+    def get_or(arg):
+        try:
+            return cs_.get(sx, arg)
+        except cs_.GetError as e:
+            codes.append(e.code)
+            return None, str(e)
+    try:
+        h, t = cs_.get(sx, "team-alpha")
+        check("U1: --get <name> finds the note by its name key in the own index — the whole note, as a path --get gives it",
+              h == "> [zorg-core · %s · 2026-01-01 · team]" % TEAM and t.startswith("# Team Alpha\n\n") and reads == [], (h, t[:120]))
+        same = [cs_.get(sx, a)[0] for a in ("Team-Alpha.md", "[[team-alpha]]", "[[Team-Alpha|the team]]",
+                                            unicodedata.normalize("NFD", "team-alpha"))]
+        check("…`Name.md`, `[[Name]]`, `[[Name|alias]]` and a decomposed name give the same note", all(x == h for x in same), same)
+        hm, tm = cs_.get(sx, "[[team-alpha#Members]]")
+        check("U1: `[[Name#Heading]]` gives that section under its heading path, as an id with a heading does",
+              hm == "> [zorg-core · %s › Team Alpha › Members · 2026-01-01 · team]" % TEAM
+              and tm.startswith("- Alex One — product manager") and "Owns the cart" not in tm, (hm, tm))
+        check("U6: …and so does `<шлях>#<заголовок>`", cs_.get(sx, TEAM + "#Members") == (hm, tm), cs_.get(sx, TEAM + "#Members"))
+        hl, tl = cs_.get(sx, "[[ZorgCore/Epics/Epic — PROJ-77|core page]]")
+        check("U1: a link with a folder, as a hub writes it, is that path (`.md` added)",
+              hl == "> [zorg-core · ZorgCore/Epics/Epic — PROJ-77.md · 2026-09-28 · epic]" and "## Goal" in tl, (hl, tl[:120]))
+        hc, tc = cs_.get(sx, "Cart experiments")
+        check("U1/U7: a name only a local index knows (by its file's name): that note — its file first, as it is on disk",
+              hc == "> [vault · Growth/Cart experiments.md · 2026-08-01 · ab-test-results]" and "seller's hours" in tc
+              and len(reads) == 1, (hc, tc[:120], reads))
+        hs, ts = get_or("Delivery slots (900100200)")
+        check("U1: a name two notes carry: exit 3, one line naming them, `--get` one of the paths", codes == [3]
+              and ts == "кілька нотаток із назвою «Delivery slots (900100200)»: %s · %s — --get один зі шляхів" % (D1, D2), (codes, ts))
+        codes[:] = []
+        hs, ts = get_or("Zebra twin.md")
+        check("…more than five: the first five, then `· ще N`", codes == [3] and ts == "кілька нотаток із назвою «Zebra twin»: "
+              + " · ".join("Notes/Z%d/Zebra twin.md" % i for i in range(1, 6)) + " · ще 1 — --get один зі шляхів", (codes, ts))
+        codes[:] = []
+        hn, tn = get_or("No such zebra")
+        check("U1: an unknown name: exit 3, one line naming it", codes == [3] and "No such zebra" in tn and "\n" not in tn, (codes, tn))
+        codes[:] = []
+        got = [get_or(p)[1] for p in ("Notes/_System/context/records/x.md", SCRATCH5, "ZorgCore/_System/context-blocks.md")]
+        check("U5: a path the index excludes — the store, _System/_scratch/, a blocks file — is exit 3 `шлях виключено з пошуку`",
+              codes == [3, 3, 3] and got == ["шлях виключено з пошуку: Notes/_System/context/records/x.md",
+                                            "шлях виключено з пошуку: " + SCRATCH5,
+                                            "шлях виключено з пошуку: ZorgCore/_System/context-blocks.md"], (codes, got))
+        codes[:] = []
+        hz, tz = get_or("zed-nine")
+        check("U5: …a name whose only note a local index holds under _System/_scratch/: the same line, nothing read",
+              codes == [3] and tz == "шлях виключено з пошуку: " + SCRATCH5 and len(reads) == 1, (codes, tz, reads))
+        hg, tg = cs_.get(sx, LONG)
+        check("U6: a whole note is cut at 20 000 characters, then one line naming the path and the --get of a section",
+              hg == "> [own · %s · 2026-10-03 · note]" % LONG and tg.startswith("## Part 1\n\n") and len(tg) == cs_.GET_CHARS
+              + len("\n\n" + cs_.LONG_NOTE % LONG) and tg.endswith("нотатка довга — показано перші 20 000 знаків; "
+                                                                    "секцію — --get \"%s#<заголовок>\"" % LONG), (hg, len(tg), tg[-200:]))
+        hp, tp = cs_.get(sx, LONG + "#Part 2")
+        check("…a section of it is whole, with no such line", hp == "> [own · %s › Long zebra › Part 2 · 2026-10-03 · note]" % LONG
+              and tp == "y" * 10000 and cs_.get(sx, "[[Long zebra#Part 2]]") == (hp, tp), (hp, len(tp), tp[-100:]))
+        codes[:] = []
+        hx, tx = get_or(LONG + "#Part 9")
+        check("…a heading the note does not have: exit 3 `no section`", codes == [3] and tx == "no section Part 9 in %s" % LONG, (codes, tx))
+        check("U1: a name --get writes nothing: no last.json", not os.path.exists(cs_.last_path(env.home)))
+    finally:
+        cs_.cst.read_text = real_read
+
+# U4 (M2): the header of a path read from a local index names the root the path lies under; the index only in ICLOUD_LOCAL
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    build_brain(env.brain, env.vault, [TEAM])
+    sx = env.sctx()                                   # no own index yet: the local index is the only copy
+    reads, real_read, real_dataless = [], cs_.cst.read_text, ci.is_dataless
+    cs_.cst.read_text = lambda p_, *a, **kw: reads.append(p_) or real_read(p_, *a, **kw)
+    ci.is_dataless = lambda p_: unicodedata.normalize("NFC", p_).endswith("team-alpha.md")
+    try:
+        h4, t4 = cs_.get(sx, TEAM)
+        check("U4: a core page a local index holds (its file dataless) is cited by its repository; the index in the ICLOUD_LOCAL line",
+              h4 == "> [zorg-core · %s · 2026-01-01 · team]" % TEAM
+              and t4.startswith(cs_.ICLOUD_LOCAL % "zorg-brain" + "\n\n# Team Alpha") and reads == [], (h4, t4[:160], reads))
+    finally:
+        cs_.cst.read_text, ci.is_dataless = real_read, real_dataless
+
+# U2 (I2): `@<repo>/<rel>` of a repository with an endpoint and no folder on disk is read through vault_get_note
+PAGE5 = ("---\ntype: page\nupdated: 2026-09-20\n---\n# Delivery slots\n\nShoppers pick a two-hour delivery slot at checkout.\n\n"
+         "## Rules\n\nThe slots of a closed seller are hidden.\n")
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    codes = []
+    with FakeMcp(tree={"Growth/Pages/Delivery slots.md": PAGE5}) as s:
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        h5, t5 = cs_.get(sx, "@zorg-growth/Pages/Delivery slots.md")
+        check("U2: --get @<repo>/<rel> reads the note through the server at endpoint.root/<rel>, under the repository's line with its marks",
+              h5 == "> [zorg-growth · @zorg-growth/Pages/Delivery slots.md · 2026-09-20 · page]"
+              and t5.startswith("# Delivery slots\n\n") and "type:" not in t5 and "closed seller" in t5, (h5, t5))
+        asked = [json.dumps(x.get("body"), ensure_ascii=False) for x in s.seen]
+        check("…asked for the server's path", any("vault_get_note" in b and "Growth/Pages/Delivery slots.md" in b for b in asked), asked[-2:])
+        hr, tr = cs_.get(sx, "@zorg-growth/Pages/Delivery slots.md#Rules")
+        check("…with a heading: that section", hr == "> [zorg-growth · @zorg-growth/Pages/Delivery slots.md › Delivery slots › Rules · "
+              "2026-09-20 · page]" and tr == "The slots of a closed seller are hidden.", (hr, tr))
+        try:
+            cs_.get(sx, "@zorg-growth/Pages/No such.md")
+            got = None
+        except cs_.GetError as e:
+            got = e
+        check("…a note the server does not have: exit 3, naming it", got is not None and got.code == 3
+              and "Growth/Pages/No such.md" in str(got), got)
+    try:
+        cs_.get(sx, "@zorg-growth/Pages/Delivery slots.md")
+        got = None
+    except cs_.GetError as e:
+        got = e
+    check("…the server gone: exit 5, as for an id", got is not None and got.code == 5 and str(got) == "zorg-growth не відповів — без нього", got)
+    try:
+        cs_.get(sx, "@nobody/Pages/x.md")
+        got = None
+    except cs_.GetError as e:
+        got = e
+    check("…a repository nobody registered: exit 3, one line", got is not None and got.code == 3 and "@nobody/Pages/x.md" in str(got), got)
+
+# U2 (I2) key 4: a candidate whose size is unknown (a server's note) is not the smaller one
+E1, E2 = "Notes/Epics/Epic — PROJ-77.md", "ZorgCore/Epics/Epic — PROJ-77.md"
+E3 = "@zorg-growth/Epics/Epic — PROJ-77.md"
+metas = {E1: meta_of(E1, title="Epic — PROJ-77", links=["epic — proj-77"], size=180, date="2026-10-01")}
+out = cs_.dedup([entry(E1, "", 0.03, sid=1), entry(E3, "", 0.04, source="zorg-growth", title="Epic — PROJ-77")], metas)
+check("U2 key 4: the hub of your layer and a server's page of the same title — the size unknown, the better score stays",
+      [c["path"] for c in out] == [E3] and out[0]["flags"] == ["двійник " + E1], out)
+out = cs_.dedup([entry(E1, "", 0.05, sid=1, flags=["хаб"]), entry(E3, "", 0.04, source="zorg-growth", title="Epic — PROJ-77")], metas)
+check("…a non-hub over a hub, before the score", [c["path"] for c in out] == [E3] and out[0]["flags"] == ["двійник " + E1], out)
+metas[E2] = meta_of(E2, title="Epic — PROJ-77", size=640, date="2026-09-28")
+out = cs_.dedup([entry(E1, "", 0.05, sid=1), entry(E2, "Epic — PROJ-77 › Goal", 0.03, sid=2)], metas)
+check("…both sizes known: the bigger stays, as before", [c["path"] for c in out] == [E2] and out[0]["flags"] == ["двійник " + E1], out)
+
+# U8 (M6) key 3a: the day decides, not the full date — the same day, the better score
+N2, N4 = "Growth/Cart study.md", "Archive/Cart study.md"
+out = cs_.dedup([entry(N2, "", 0.01, source="zorg-brain", near="k1", date="2026-10-07"),
+                 entry(N4, "", 0.05, source="zorg-brain", near="k1", date="2026-10-07T09:30:00")], {}, own=["Notes"])
+check("U8 key 3a: a date-only copy and a copy with a time on the same day: the better score stays",
+      [c["path"] for c in out] == [N4] and out[0]["flags"] == ["двійник " + N2], out)
+out = cs_.dedup([entry(N2, "", 0.05, source="zorg-brain", near="k1", date="2026-10-06T23:59:00"),
+                 entry(N4, "", 0.01, source="zorg-brain", near="k1", date="2026-10-07")], {}, own=["Notes"])
+check("…an earlier day still wins", [c["path"] for c in out] == [N2] and out[0]["flags"] == ["двійник " + N4], out)
 
 # the protocols say what the fixes do
 import re  # noqa: E402
@@ -1425,15 +1584,31 @@ check("fix round 1 — provider §5: a navigation label only, an update date onl
       and "the whole note when that copy has no such section" in section(SP, 4), section(PP, 5)[-1500:])
 check("fix round 2 — provider §5: your layer first, then the older; the headings do not count toward 400; §10: a breadcrumb "
       "is a section of its own; search-protocol §3: a breadcrumb is never the snippet",
-      all(x in section(PP, 5) for x in ("stays first, and of those the older by its date",
+      all(x in section(PP, 5) for x in ("stays first, and of those the older by its day",
                                         "a copy with no date never wins over a dated one", "the headings do not count"))
       and "is a section of its own, a mirror page's breadcrumb too" in section(PP, 10)
       and "so a breadcrumb is never the snippet" in section(SP, 3), section(PP, 10)[-1500:])
 check("fix round 4 — search-protocol §4: a twin, a newer version and a hub's link are read with `ctx search --get <шлях>`; "
       "context-protocol §3: --get ID|PATH", all(x in section(SP, 4) for x in (
           "read the newer one with `ctx search --get \"<шлях>\" --json`", "read the twin too (`ctx search --get \"<шлях>\" --json`)",
-          "a note it links to is read with `ctx search --get \"<шлях>\" --json`", "Never open a vault file by its path yourself"))
-      and "from its path" not in section(SP, 4) and "`search --get ID\\|PATH [--json]`" in section(CP, 3), section(SP, 4)[-1200:])
+          "a note it links to is read with `ctx search --get \"<назва або шлях>\" --json`", "Never open a vault file by its path yourself"))
+      and "from its path" not in section(SP, 4) and "`search --get ID\\|PATH\\|NAME [--json]`" in section(CP, 3), section(SP, 4)[-1200:])
+check("fix round 5 — search-protocol §4: a hub's link by name or path, the name forms, the several-notes and excluded lines, "
+      "the 20 000 cap and the section after `#`, the source `vault`, the never-open sentence scoped to Step 0.5 with SHELL; §5: `vault`",
+      all(x in section(SP, 4) for x in (
+          "`Name`, `Name.md`, `[[Name]]`, `[[Name|alias]]`, `[[Name#Heading]]`",
+          "`%s`" % (cs_.SEVERAL_NOTE % ("<назва>", "<шлях> · <шлях> …")), "`%s`" % (cs_.EXCLUDED_NOTE % "<шлях>"),
+          "`%s`" % (cs_.LONG_NOTE % "<шлях>"), "`vault` for a file outside every root", "read through its server (exit 5",
+          "Never open a vault file by its path yourself in Step 0.5 on a host with SHELL", "without SHELL §12 applies"))
+      and "`vault` is a file outside every root" in section(SP, 5), section(SP, 4)[-2600:])
+check("fix round 5 — provider §2 (U3): a server's note is `застаріле` by status only, `станом на <день>` by its class age; §5: key 4 "
+      "a non-hub first and an unknown size never the smaller, key 3a by the day; context-protocol §3, the usage line and the module "
+      "docstring: --get ID|PATH|NAME",
+      "never marked `застаріле` (its status) or `sensitive`; the age of its class marks it `станом на <день>`" in section(PP, 2)
+      and all(x in section(PP, 5) for x in ("a note that is not a hub stays over a hub",
+                                            "a server's note has no size, and is not the smaller for it", "the older by its day"))
+      and "`search --get ID\\|PATH\\|NAME [--json]`" in section(CP, 3) and "search --get ID|PATH|NAME [--json]" in read(ROOT, "scripts", "ctx.py")
+      and "--get ID|PATH|NAME" in cs_.__doc__, (section(PP, 2)[-700:], section(PP, 5)[-1200:]))
 check("vault-protocol «In short»: the level-2 triggers are in search-protocol §8",
       "maybe live sources (level 2; triggers in search-protocol §8)" in read(ROOT, "references", "vault-protocol.md"))
 

@@ -347,6 +347,8 @@ with tempfile.TemporaryDirectory() as d:
     r = idx.refresh(roots, store_rel, blocks_rels)
     paths = {n["path"] for n in idx.notes()}
     check("own layer and the core are indexed", "Notes/Roadmap Q4 — draft v3.md" in paths and any(p.startswith("ZorgCore/") for p in paths))
+    check("U1 (fix round 5): Index.paths() is every note's path, NFC, sorted — what `ctx search --get <name>` looks through",
+          idx.paths() == sorted(paths) and all(p == unicodedata.normalize("NFC", p) for p in idx.paths()), idx.paths()[:5])
     check("the store, blocks file, .obsidian and _backup are not", not any(
         p.startswith(("Notes/_System/context/", "_backup")) or "/_backup" in "/" + p or "/.obsidian/" in p
         or p == "ZorgCore/_System/context-blocks.md" for p in paths), sorted(paths))
