@@ -157,7 +157,7 @@
                                 (since v3.16.0; scripts/ctx_search.py) the first --q is the question, the others its
                                 variants: the section index (refreshed first, 30 s), the local indexes and the MCP of a
                                 repository with no folder on disk, every variant × source; RRF, the priors, one candidate per
-                                note (at most two sections), the best N (50). Lines: `Пошук: <n> варіант(и) · джерела: <ids> ·
+                                note (at most two sections), the best N (30). Lines: `Пошук: <n> варіант(и) · джерела: <ids> ·
                                 кандидатів <k>`, per candidate `N. <title> › <heading> · <sources> · <type> · <date>[ ·
                                 <mark>…]`, its snippet, `id <id> · варіанти <i,…>`, then the notes (a source that did not
                                 answer, the index's state). --json: CTX_RESULT only. CTX_RESULT: candidates, notes, sources
@@ -1082,7 +1082,7 @@ def cmd_search(a, c):
     if not a.q:
         raise Usage("search takes --q TEXT (once or more) or --get ID")
     which = _search_kinds(a.sources)
-    limit = cs_.LIST_LIMIT if a.limit is None else a.limit
+    limit = cs_.LIMIT if a.limit is None else a.limit
     if limit < 1:
         raise Usage("--limit takes a number from 1")
     if a.skill:

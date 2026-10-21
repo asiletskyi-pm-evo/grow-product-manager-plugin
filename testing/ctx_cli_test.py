@@ -4722,6 +4722,25 @@ with tempfile.TemporaryDirectory() as d:
     check("152: forget of a request of stop words only: exit 3, a message about forgetting, not remembering",
           rc == 3 and "forget" in out and "remember" not in out, (rc, out[-300:]))
 
+# --- v3.16.0 acceptance fix wave B2: `ctx search` lists 30 candidates unless --limit says otherwise; eval reads 50
+with tempfile.TemporaryDirectory() as d:
+    env = SearchEnv(d, brain=False)
+    for i in range(40):
+        env.add("Notes/Zebra/Zebra note %02d.md" % i, "# Zebra note %02d\n\nThe zebrafish of the cart. %s\n" % (i, "filler " * i))
+    rc, out, res = run_ok(env, "search", "--q", "zebrafish", "--no-hints", "--json")
+    check("B2: ctx search lists 30 candidates by default (40 notes match)", rc == 0 and res and len(res["candidates"]) == 30
+          and res["counts"]["candidates"] == 30, (rc, res and len(res.get("candidates") or [])))
+    rc, out, res = run_ok(env, "search", "--q", "zebrafish", "--no-hints", "--limit", "50", "--json")
+    check("…--limit 50 lists them all", rc == 0 and res and len(res["candidates"]) == 40, (rc, res and len(res.get("candidates") or [])))
+    far = res["candidates"][34]["path"] if res and len(res["candidates"]) == 40 else ""
+    golden = os.path.join(d, "golden.yaml")
+    open(golden, "w", encoding="utf-8").write(
+        "schema: search-golden/1\nqueries:\n  - q: \"zebrafish\"\n    variants: []\n    class: форма\n"
+        "    good: [\"%s\"]\n    source: reviewed\n    added: 2026-10-21\n" % far)
+    rc, out, res = run_ok(env, "search", "eval", "--golden", golden, "--no-hints", "--json")
+    check("B2: eval still reads the first 50 — an answer at place 35 is found", rc == 0 and res and res["n"] == 1
+          and res["recall50"] == 1.0 and res["rows"][0].get("rank") == 35, (rc, res and res.get("rows"), out[-300:]))
+
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

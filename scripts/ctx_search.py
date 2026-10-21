@@ -7,8 +7,8 @@ index — an SQLite file, read only) and the MCP server of a repository whose fo
 list of its own in each source, and so is the glossary's widening of it (the other names of what the variant names,
 ctx_glossary). Reciprocal-rank fusion makes one score of all the lists (k = 60, a glossary list at half weight); the
 priors then weigh a candidate by what it is — the skill's artifact types × 1.2, the same product × 1.1 and another
-× 0.7, a hub × 0.5, an outdated note × 0.5 — and mark what the reader should know (`знімок від <день>`, `лише
-глосарій`, `одне слово`).
+× 0.7, a hub × 0.5, a note whose status says it is outdated × 0.5 — and mark what the reader should know (`станом на
+<день>` for a note older than its class's TTL, `знімок від <день>`, `лише глосарій`, `одне слово`).
 
 - context_for       the search context (`sctx`) of a local-context.md — the vaults, the repositories, the roots of the
                     index, the store and the blocks files as the index names them; `ctx index` builds its scope from it.
@@ -65,7 +65,8 @@ N = cc.N
 KINDS = ("own", "local", "mcp")
 RRF_K = 60                      # reciprocal-rank fusion: Σ w / (RRF_K + rank)
 GLOSSARY_W = 0.5                # the weight of a glossary list in the fusion
-LIST_LIMIT = 50                 # hits asked of a source for one list
+LIST_LIMIT = 50                 # hits asked of a source for one list; also the pool `ctx search eval` reads
+LIMIT = 30                      # candidates a search lists unless --limit says otherwise (a skill's Step 0.5 reads them)
 SOURCE_S = 20.0                 # one source's time, all its lists together
 OPEN_S = 5.0                    # opening a local index (SQLite's busy timeout)
 TYPE_W, SAME_PRODUCT_W, OTHER_PRODUCT_W, HUB_W, OUTDATED_W = 1.2, 1.1, 0.7, 0.5, 0.5
@@ -77,6 +78,7 @@ PENDING_NOTE = "індекс оновлюється: %d файлів ще не �
 GLOSSARY_NOTE = "глосарій прочитано не весь: %s"
 HUB, STALE, SNAPSHOT, GLOSSARY_ONLY, ONE_WORD = "хаб", "застаріле", "знімок від %s", "лише глосарій", "одне слово"
 TWIN, OLDER, NEWER_EXISTS, SENSITIVE = "двійник %s", "є старіші версії: %d", "старіша версія %s", "sensitive"
+AS_OF = "станом на %s"           # a note older than its class's ttl_days: its own day — cited with it, never devalued
 REBUILT_NOTE = "індекс пошуку був зіпсований або старий — збудовано наново"
 REFRESH_NOTE = "індекс пошуку не оновлено (%s) — пошук по тому, що є"
 BUILDING_NOTE = "індекс пошуку ще будується (інший процес) — цього разу без нього"
@@ -701,13 +703,13 @@ def priors(cands, skill_types, product, now, ttl, snaps=None):
     - TYPE_W when its type is one of `skill_types` (any case);
     - SAME_PRODUCT_W for the product asked, OTHER_PRODUCT_W for another (no product asked or none on the note: 1);
     - HUB_W for a hub, marked `хаб`;
-    - OUTDATED_W, marked `застаріле`, for a status of OUTDATED, or a `ttl_date` (the note's own `updated` | `snapshot`
-      | `generated`; a note with none of them is never outdated by age) older than the TTL of the folder class it lies
-      in (`ttl`: class_ttl's {prefix: days}).
-    Marks that leave the score as it is: `знімок від <день>` for a note under a repository of `snaps` (snapshots'
-    {prefix: day}); `лише глосарій` when every hit came from a glossary list; `одне слово` when the variants' hits held
-    one term at best of an expression of two or more (hits whose `terms` is not known do not count). A mark is never
-    added twice."""
+    - OUTDATED_W, marked `застаріле`, for a status of OUTDATED — and only for that.
+    Marks that leave the score as it is: `станом на <день>` for a `ttl_date` (the note's own `updated` | `snapshot` |
+    `generated`; a note with none of them is never marked by age) older than the TTL of the folder class it lies in
+    (`ttl`: class_ttl's {prefix: days}) — the day is that date: such a note may be taken, and is cited with it;
+    `знімок від <день>` for a note under a repository of `snaps` (snapshots' {prefix: day}); `лише глосарій` when every
+    hit came from a glossary list; `одне слово` when the variants' hits held one term at best of an expression of two
+    or more (hits whose `terms` is not known do not count). A mark is never added twice."""
     types = {str(t).lower() for t in skill_types or ()}
     asked = _product_names(product)
     today = _today(now)
@@ -729,10 +731,11 @@ def priors(cands, skill_types, product, now, ttl, snaps=None):
         path = N(c.get("path") or "")
         days = _longest(path, ttl)
         day = _day(c.get("ttl_date"))
-        if str(c.get("status") or "").lower() in OUTDATED or (days is not None and day is not None
-                                                                and (today - day).days > days):
+        if str(c.get("status") or "").lower() in OUTDATED:
             score *= OUTDATED_W
             _flag(c, STALE)
+        if days is not None and day is not None and (today - day).days > days:
+            _flag(c, AS_OF % day.isoformat())
         snap = _longest(path, snaps)
         if snap:
             _flag(c, SNAPSHOT % snap)
@@ -1047,12 +1050,12 @@ def _saved_state(idx):
                 **{k: ci._count(state.get(k)) for k in STATUS_KEYS if k not in ("schema", "updated")})
 
 
-def run(sctx, queries, skill=None, product=None, limit=LIST_LIMIT, which=KINDS, use_hints=True, now=None, refresh=True):
+def run(sctx, queries, skill=None, product=None, limit=LIMIT, which=KINDS, use_hints=True, now=None, refresh=True):
     """One search: {candidates, notes, sources, index, last}.
     - The own index is refreshed first (ctx_index.REFRESH_S, never past the command's COMMAND_S; with `refresh` False
       it is read as it is — `ctx search eval` refreshes it once, not at every search); then every query × source
       (`gather`, the sources of `which`), RRF (`fuse`), the priors (`skill`'s types, `product`, the classes' TTL and
-      the repositories' snapshots), `dedup`, the best `limit`.
+      the repositories' snapshots), `dedup`, the best `limit` (LIMIT, 30; `ctx search eval` asks LIST_LIMIT, 50).
     - An own index that is not there to read — no database, or one a first build (or a rebuild) is still filling: no
       `updated` row in its meta (Index.built) — has not answered and is not asked: `індекс пошуку ще будується (інший
       процес) — цього разу без нього` while another process holds its lock (`index.locked`), else `індексу пошуку ще

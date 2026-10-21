@@ -14,11 +14,12 @@ Stdlib only; run from the repo root:
 
   env -u GROW_PM_CONTEXT_PATH -u GROW_PM_PROVIDER_PATHS python3 testing/ctx_search_test.py
 """
-import datetime, hashlib, json, os, shutil, sqlite3, subprocess, sys, tempfile, time, unicodedata
+import datetime, hashlib, inspect, json, os, shutil, sqlite3, subprocess, sys, tempfile, time, unicodedata
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 sys.path.insert(0, os.path.join(ROOT, "testing"))
+import ctx_hints as ch  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_search as cs_  # noqa: E402
@@ -168,6 +169,9 @@ def deadline(s=60):
 # ------------------------------------------------------------------ the spec's numbers
 check("RRF k 60, glossary 0.5, 50 a list, 20 s a source, 5 s to open a local index",
       (cs_.RRF_K, cs_.GLOSSARY_W, cs_.LIST_LIMIT, cs_.SOURCE_S, cs_.OPEN_S) == (60, 0.5, 50, 20.0, 5.0))
+check("B2: a search lists 30 candidates unless told otherwise; the eval's pool stays 50",
+      cs_.LIMIT == 30 and inspect.signature(cs_.run).parameters["limit"].default == 30 and ch.POOL == 50,
+      (getattr(cs_, "LIMIT", None), inspect.signature(cs_.run).parameters["limit"].default, ch.POOL))
 
 # ------------------------------------------------------------------ fuse
 fused = cs_.fuse({"own|v0": [hit("a.md")], "own|g0": [hit("b.md", lst="own|g0")]})
@@ -489,12 +493,16 @@ with tempfile.TemporaryDirectory() as d:
     fresh = cand("ZorgCore/Teams/team-beta.md", type="team", date="2026-10-10", ttl_date="2026-10-10")
     person = cand("ZorgCore/People/bea-two.md", type="note", date="2025-01-01", ttl_date="2025-01-01")
     created = cand("ZorgCore/Teams/team-gamma.md", type="team", date="2025-01-01", ttl_date="")
-    cs_.priors([team, fresh, person, created], [], None, NOW, ttl)
-    check("a team card older than 14 days is outdated", team["score"] == 0.5 and team["flags"] == ["застаріле"], team)
+    gone = cand("ZorgCore/Teams/team-delta.md", type="team", status="archived", date="2026-01-01", ttl_date="2026-01-01")
+    cs_.priors([team, fresh, person, created, gone], [], None, NOW, ttl)
+    check("B1: a team card older than its class's 14 days is marked `станом на <its day>`, its score as it is — "
+          "never `застаріле`", team["score"] == 1.0 and team["flags"] == ["станом на 2026-01-01"], team)
     check("…a fresh one is not, nor a note of a class with no TTL", fresh["flags"] == [] and person["flags"] == [],
           (fresh, person))
     check("…nor one with no updated | snapshot | generated, however old its date", created["flags"] == []
           and created["score"] == 1.0, created)
+    check("…`застаріле` (× 0.5) stays for a status alone, beside the as-of mark", gone["score"] == 0.5
+          and gone["flags"] == ["застаріле", "станом на 2026-01-01"], gone)
     write(env.note("ZorgCore/Teams/team-beta.md"), "---\ntype: team\ncreated: 2025-01-01\n---\n# Team Beta\n\nOwns the delivery slots.\n")
     env.refresh(sx)
     found, _ = cs_.gather(sx, ["team owns"], [cs_.Source("own", "own")], deadline())
@@ -505,9 +513,9 @@ with tempfile.TemporaryDirectory() as d:
                                          score=1.0, flags=[], hits=[h]))
     cs_.priors(list(cards.values()), [], None, NOW, ttl)
     alpha, beta = cards.get("ZorgCore/Teams/team-alpha.md"), cards.get("ZorgCore/Teams/team-beta.md")
-    check("from the index: the card with an old `updated` is outdated, the one dated only by an old `created` is not",
-          alpha and alpha["flags"] == ["застаріле"] and beta and beta["flags"] == [] and beta["date"] == "2025-01-01",
-          (alpha, beta))
+    check("from the index: the card with an old `updated` is `станом на 2026-01-01`, the one dated only by an old "
+          "`created` is not marked", alpha and alpha["flags"] == ["станом на 2026-01-01"] and alpha["score"] == 1.0
+          and beta and beta["flags"] == [] and beta["date"] == "2025-01-01", (alpha, beta))
     os.remove(os.path.join(env.vault, "ZorgCore", "_System", "provider-manifest.yaml"))
     check("no manifest: no class TTL", cs_.class_ttl(sx["repos"], sx["vaults"]) == {})
 
@@ -1218,6 +1226,22 @@ check("context-provider-protocol §2: --get reads status and sensitive of a serv
       "`ctx search --get` reads them from the note's frontmatter" in section(PP, 2)
       and "joined by `OR` (`\"кошик\"* OR \"мобільний\"*`) — because plain words would be read as \"all of them\" "
           "(`search-protocol.md` §12)" in section(PP, 2), section(PP, 2)[-1800:])
+CP = flat("references", "context-protocol.md")
+check("acceptance fix wave — search-protocol §3: the pool of 30; §4: `застаріле` by status alone, the `станом на <день>` "
+      "row, the --get lines as the code prints them; §5: the as-of citation; §6: as-of alone does not forbid",
+      "the pool of 30" in section(SP, 3)
+      and "| `застаріле` | `status` outdated, archived, deprecated, former or superseded |" in section(SP, 4)
+      and "| `%s` |" % (cs_.AS_OF % "<день>") in section(SP, 4)
+      and all("`%s`" % x in section(SP, 4) for x in (cs_.SHORT_NOTE % "<заголовки>", cs_.ICLOUD_LOCAL % "<id>",
+                                                    cs_.ICLOUD_MISSING % "<шлях>"))
+      and "`(<джерело>, станом на <день>)`" in section(SP, 5)
+      and "`знімок від <день>` or `станом на <день>` alone does not forbid it" in section(SP, 6), section(SP, 4)[:1200])
+check("…context-provider-protocol §5: near copies are key 3a, an outdated status × 0.5; §6: a class TTL marks "
+      "`станом на <день>` and lowers nothing; context-protocol §3: the best N (30), eval 50",
+      "**Near copies** count as the same content (key 3a)" in section(PP, 5)
+      and "a note whose `status` says it is outdated × 0.5" in section(PP, 5)
+      and "marks a search candidate `станом на <день>`" in section(PP, 6) and "its score is not lowered" in section(PP, 6)
+      and "the best N (30; `search eval` reads 50)" in section(CP, 3), section(PP, 6)[-1200:])
 check("vault-protocol «In short»: the level-2 triggers are in search-protocol §8",
       "maybe live sources (level 2; triggers in search-protocol §8)" in read(ROOT, "references", "vault-protocol.md"))
 

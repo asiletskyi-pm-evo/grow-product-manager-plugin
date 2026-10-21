@@ -35,7 +35,7 @@ With SHELL:
 
 `python3 "<plugin root>/scripts/ctx.py" search --q "<request>" --q "<variant 1>" … --skill <this skill> --product "<active product>" --json`
 
-- `--product` is the active product of Step 0d; leave it out when there is none. `--skill` is the skill's own name — `ctx search` weighs the types of its `search_types` (`references/context-manifest.yaml`, the same list as its `SKILL_CONTEXT_MAP` row) × 1.2; a type is a weight, never a filter, so a note without a type is found too. Do not pass `--limit` or `--sources`: the pool of 50 and every kind of source are the design.
+- `--product` is the active product of Step 0d; leave it out when there is none. `--skill` is the skill's own name — `ctx search` weighs the types of its `search_types` (`references/context-manifest.yaml`, the same list as its `SKILL_CONTEXT_MAP` row) × 1.2; a type is a weight, never a filter, so a note without a type is found too. Do not pass `--limit` or `--sources`: the pool of 30 and every kind of source are the design.
 - **`--json` prints only the `CTX_RESULT` line** — unlike `ctx read` and `ctx explain`, whose `--json` adds to the human output. `CTX_RESULT` holds `candidates`, `notes`, `sources` (`[{id, kind, answered}]`), `index` (the section index's state; `index.locked` is true while another process holds it — building or refreshing it) and `counts`.
 - A candidate is **one note**: `id` (its best section), `path`, `heading`, `title`, `type`, `product`, `date`, `source` (the ids that hold it: `own` for your plugin folder, a repository id for a core page), `flags` (§5), `matched` (which `--q` found it, from 1), `snippet` (≤ 300 characters, the matches in «»), `score`, and `sections` — at most two sections of that note, each with its own `id`.
 - **`notes`** are lines to the user: `<id> не відповів — без нього`, `індекс <id> має незнайому схему — без нього`, `індекс оновлюється: N файлів ще не переглянуто`, `пам'ять пошуку не прочитано (…) — без підказок` and the index's own lines — among them `індекс пошуку ще будується (інший процес) — цього разу без нього` (no index yet, or one another process is still filling, `index.locked`) and `індексу пошуку ще немає (…) — ctx index rebuild` (no index, and nobody building it): either way the section index (`own`) has not answered. Say each once per session, unchanged, right before the taken line (§6).
@@ -67,7 +67,8 @@ The marks (`flags`) say what the search knows about a candidate:
 
 | Mark | What it means | What it does here |
 |---|---|---|
-| `застаріле` | `status` outdated, archived, deprecated, former or superseded, or older than the `ttl_days` of its class | never taken silently (§6); if all you found is this — a doubt |
+| `застаріле` | `status` outdated, archived, deprecated, former or superseded | never taken silently (§6); if all you found is this — a doubt |
+| `станом на <день>` | its own date (`updated`, `snapshot` or `generated`) is older than the `ttl_days` of its class — `<день>` is that date | may be taken silently; it is cited `(<джерело>, станом на <день>)`, and every fact from it in the work carries that day (§5) |
 | `старіша версія <шлях>` | a newer version of the same document exists at `<шлях>` | never taken; read the newer one from its path and rate that |
 | `є старіші версії: N` | the newest of its versions; the older ones were folded into it | may be taken |
 | `двійник <шлях>` | the same thing in another place (the same file, the same Confluence page twice, the same text, a near copy — the same text but for a back-link, a date line, a «Повʼязане» block, the frontmatter —, a hub of your layer and the core page) was folded into it | may be taken; when the fact you take is a number, a decision or an owner, read the twin too — if they say different things, it is a conflict (§7) |
@@ -86,7 +87,7 @@ A note you reached from a hub, a twin or a newer version is rated like a candida
 ## 5. What a candidate's source and date are
 
 - **Source** — the first id of the candidate's `source`: `own` (your plugin folder) or the repository's id (a core page, `zorg-core`). A local index or an MCP server names itself the same way.
-- **Date** — the day of the candidate's `date` (the first ten characters); a note only a local index knows, with no date in its frontmatter, is dated by that index's file time. A candidate marked `знімок від <день>` carries both: `(<джерело>, <дата>, знімок від <день>)`. A piece found in a live source (§8) carries `живе · <день>` — the day it was read — in place of the date.
+- **Date** — the day of the candidate's `date` (the first ten characters); a note only a local index knows, with no date in its frontmatter, is dated by that index's file time. A candidate marked `знімок від <день>` carries both: `(<джерело>, <дата>, знімок від <день>)`. A candidate marked `станом на <день>` carries that day in place of the date: `(<джерело>, станом на <день>)`. A piece found in a live source (§8) carries `живе · <день>` — the day it was read — in place of the date.
 
 ## 6. What is taken, and what never is
 
@@ -105,7 +106,7 @@ Each of them is a doubt (§7); level 2 may start (§8).
 
 **Never taken silently:**
 - a candidate rated «частково» or «ні», and one whose rating you are not sure of;
-- one marked `застаріле` or `старіша версія <шлях>`; at level 2, a copy behind its live page (§8). `знімок від <день>` alone does not forbid it;
+- one marked `застаріле` or `старіша версія <шлях>`; at level 2, a copy behind its live page (§8). `знімок від <день>` or `станом на <день>` alone does not forbid it;
 - **outside the People contour** (`goal-setter`, `one-on-one`, `performance-review`, `hiring-designer`, `offboarding-guide`, `delegation-coach`): a candidate marked `sensitive`, and one of the people types (`data-policy.md` → Search, rule 1). It is not read, its content is not repeated anywhere, and it can never be picked: in the block it may appear only as an unnumbered line with its title (§9). A candidate a server gave (its source is an `mcp` one in `sources`) carries no `sensitive` mark in the list — the server's search does not say; its `--get` header does (§4) — so outside the People contour treat one whose path lies under a people folder (`People/`, the core's `people_dir`) as sensitive even before reading it;
 - a hub;
 - a candidate marked `ти казав «не те»`;
