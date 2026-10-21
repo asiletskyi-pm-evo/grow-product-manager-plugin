@@ -1061,7 +1061,7 @@ SLOT_PAGE = ("---\ntype: page\nconfluence_id: 900100300\nmodified: 2026-10-05\n-
              "## Appendix\n\n" + "Tail text that is never reached. " * 10 + "\n")
 SHORT = "секція коротка — додано наступні: Slot rules › Who sees a slot · Slot rules › Closed sellers"
 
-# A1: a Confluence-like page — the breadcrumb is no section, --get of its image-only first section goes on
+# A1: a Confluence-like page — its breadcrumb is a section of its own (Q1); --get of a short section goes on
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)
     write(env.note(SLOTS), SLOT_PAGE)
@@ -1069,8 +1069,22 @@ with tempfile.TemporaryDirectory() as d:
     env.refresh(sx)
     idx = ci.Index(env.home)
     secs = [(sid, h) for sid, p, h in idx.headings() if p == SLOTS]
-    check("A1: the breadcrumb before the H1 is no section; the image-only H1 section is", [h for _, h in secs]
-          == ["Slot rules", "Slot rules › Who sees a slot", "Slot rules › Closed sellers", "Slot rules › Appendix"], secs)
+    check("Q1: the breadcrumb before the H1 is a section of its own, and so is the image-only H1 section", [h for _, h in secs]
+          == ["", "Slot rules", "Slot rules › Who sees a slot", "Slot rules › Closed sellers", "Slot rules › Appendix"], secs)
+    hc, tc = cs_.get(sx, cs_.candidate_id(SLOTS, ""))
+    check("Q1: --get of the breadcrumb goes on with the sections after it, up to 1 500, under its provenance line",
+          hc == "> [own · %s · 2026-10-05]" % SLOTS and tc.startswith(CRUMB) and "секція коротка — додано наступні: Slot rules · "
+          "Slot rules › Who sees a slot · Slot rules › Closed sellers" in tc and WHO.strip() in tc and "Tail text" not in tc,
+          (hc, tc[:400]))
+    res = cs_.run(sx, ["Delivery"], which=("own",), now=NOW)
+    sl = next((c for c in res["candidates"] if c["path"] == SLOTS), None)
+    check("Q2: a candidate whose best section is the breadcrumb takes its snippet from the sections after it — never the "
+          "breadcrumb", sl and sl["heading"] == "" and sl["snippet"].startswith("A shopper sees the two-hour slots")
+          and not any(x in sl["snippet"] for x in ("↑", "[[", "Zorg / ")), sl)
+    res = cs_.run(sx, ["slot rules"], which=("own",), now=NOW)
+    sl = next((c for c in res["candidates"] if c["path"] == SLOTS), None)
+    check("Q2: …an image-only best section too: the snippet is the first real text, its match marked", sl
+          and "«slots»" in sl["snippet"] and not any(x in sl["snippet"] for x in ("↑", "[[", "slot-diagram")), sl)
     top = cs_.candidate_id(SLOTS, "Slot rules")
     head, text = cs_.get(sx, top)
     check("A1: --get of a section under 200 characters goes on with the next ones up to 1 500, under the same "
@@ -1149,6 +1163,23 @@ with tempfile.TemporaryDirectory() as d:
     check("A2: a file that does not arrive within the read budget is one line (exit 3), never a hang", got is not None
           and got.code == 3 and "\n" not in str(got) and SLOTS in str(got) and took < 2.0, (got, took))
 
+# Q2: a local index's or a server's snippet never shows the breadcrumb
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    LOCAL_SLOTS = "Growth/Slot rules (900100300).md"
+    write(env.note(LOCAL_SLOTS), SLOT_PAGE)
+    build_brain(env.brain, env.vault, [LOCAL_SLOTS])
+    sx = env.sctx()
+    res = cs_.run(sx, ["Delivery"], which=("local",), now=NOW)
+    sl = next((c for c in res["candidates"] if c["path"] == LOCAL_SLOTS), None)
+    check("Q2: a local hit whose snippet would be the breadcrumb: the text after it", sl and sl["snippet"]
+          and not any(x in sl["snippet"] for x in ("↑", "[[", "Zorg / ")) and "two-hour slots" in sl["snippet"], sl)
+    mcp_c = {"path": "@zorg-growth/Slot rules.md", "heading": "", "title": "Slot rules", "text": None, "source": ["zorg-growth"],
+             "flags": [], "hits": [], "score": 1.0, "sections": [{"heading": "", "section_id": None}],
+             "snippet": "…" + CRUMB + "\n\nThe slots of a closed seller are hidden."}
+    check("Q2: …a server's snippet loses its breadcrumb lines", cs_._public(mcp_c, [])["snippet"]
+          == "The slots of a closed seller are hidden.", cs_._public(mcp_c, [])["snippet"])
+
 # A3: a local hit with no date in its frontmatter takes the local index's file time, as a day
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)
@@ -1193,7 +1224,21 @@ check("R4 dedup: your layer is where the path lies — a plugin-folder copy only
       [c["path"] for c in out] == [N1] and out[0]["flags"] == ["двійник " + N2], out)
 out = cs_.dedup([entry(N1, "", 0.02, source="zorg-brain", near="k1", date="2026-09-01"),
                  entry(N2, "", 0.05, source="zorg-brain", near="k1", date="2026-10-07")], {}, own=[""])
-check("…a plugin folder that is the whole vault holds both: the newer stays", [c["path"] for c in out] == [N2], out)
+check("Q3: …a plugin folder that is the whole vault holds both: the older (the original) stays", [c["path"] for c in out] == [N1]
+      and out[0]["flags"] == ["двійник " + N2], out)
+N3, N4 = "Notes/Research/Cart study.md", "Archive/Cart study.md"
+out = cs_.dedup([entry(N1, "", 0.05, source="zorg-brain", near="k1", date="2026-10-01"),
+                 entry(N3, "", 0.01, source="zorg-brain", near="k1", date="2026-09-01"),
+                 entry(N4, "", 0.03, source="zorg-brain", near="k1", date="2026-01-01")], {}, own=["Notes"])
+check("Q3: your layer first, and within it the older copy — an older one elsewhere does not win",
+      [c["path"] for c in out] == [N3] and out[0]["flags"] == ["двійник " + N1, "двійник " + N4]
+      and abs(out[0]["score"] - 0.05) < 1e-9, out)
+out = cs_.dedup([entry(N2, "", 0.05, source="zorg-brain", near="k1", date=""),
+                 entry(N4, "", 0.01, source="zorg-brain", near="k1", date="2026-10-07")], {}, own=["Notes"])
+check("Q3: a copy with no date never wins over a dated one", [c["path"] for c in out] == [N4], out)
+out = cs_.dedup([entry(N2, "", 0.01, source="zorg-brain", near="k1", date="2026-10-07"),
+                 entry(N4, "", 0.05, source="zorg-brain", near="k1", date="2026-10-07")], {}, own=["Notes"])
+check("Q3: the same date: the higher score stays", [c["path"] for c in out] == [N4], out)
 out = cs_.dedup([entry(N2, "", 0.05, source="zorg-brain", near="k1", date="2026-10-07"),
                  entry(N1, "Cart study", 0.02, sid=1)], {N1: meta_of(N1, near="k1", date="2026-09-01")})
 check("A5 dedup: near copies fold — your layer's copy stays, though older and lower, the other its twin",
@@ -1201,8 +1246,8 @@ check("A5 dedup: near copies fold — your layer's copy stays, though older and 
 out = cs_.dedup([entry(C1, "Cart study", 0.05, source="zorg-core", sid=2),
                  entry(N2, "", 0.02, source="zorg-brain", near="k1", date="2026-10-07")],
                 {C1: meta_of(C1, near="k1", date="2026-09-01")})
-check("…neither in your layer: the newer by date stays", [c["path"] for c in out] == [N2]
-      and out[0]["flags"] == ["двійник " + C1], out)
+check("Q3: …neither in your layer: the older by date stays", [c["path"] for c in out] == [C1]
+      and out[0]["flags"] == ["двійник " + N2], out)
 out = cs_.dedup([entry(N1, "Cart study", 0.05, sid=1), entry(N2, "", 0.02, source="zorg-brain", near="k1", sensitive=True)],
                 {N1: meta_of(N1, near="k1")})
 check("…a folded copy that is sensitive leaves the mark", [c["path"] for c in out] == [N1]
@@ -1286,6 +1331,12 @@ check("fix round 1 — provider §5: a navigation label only, an update date onl
       all(x in section(PP, 5) for x in ("`Owner: [[X]]` is text", "`Deadline: …` is text",
                                         "its path under the plugin folder, whichever source found it", "the same headings and text"))
       and "the whole note when that copy has no such section" in section(SP, 4), section(PP, 5)[-1500:])
+check("fix round 2 — provider §5: your layer first, then the older; the headings do not count toward 400; §10: a breadcrumb "
+      "is a section of its own; search-protocol §3: a breadcrumb is never the snippet",
+      all(x in section(PP, 5) for x in ("stays first, and of those the older by its date",
+                                        "a copy with no date never wins over a dated one", "the headings do not count"))
+      and "is a section of its own, a mirror page's breadcrumb too" in section(PP, 10)
+      and "so a breadcrumb is never the snippet" in section(SP, 3), section(PP, 10)[-1500:])
 check("vault-protocol «In short»: the level-2 triggers are in search-protocol §8",
       "maybe live sources (level 2; triggers in search-protocol §8)" in read(ROOT, "references", "vault-protocol.md"))
 

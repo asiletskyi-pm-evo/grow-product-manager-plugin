@@ -129,11 +129,12 @@ check("a heading path skips a missing level", [h for h, _ in ctx_index.split_sec
       == ["B", "A", "A › C"], ctx_index.split_sections("## B\nb\n# A\na\n### C\nc\n"))
 check("a # inside a code fence is no heading", [h for h, _ in ctx_index.split_sections("# A\n```\n# not\n```\nx\n")] == ["A"])
 LONG_INTRO = ("An introduction long enough to stand alone. " * 6).strip()
-check("text before the first heading is its own section when it holds 200 characters or more",
-      ctx_index.split_sections(LONG_INTRO + "\n# A\nx\n") == [("", LONG_INTRO), ("A", "x")],
-      ctx_index.split_sections(LONG_INTRO + "\n# A\nx\n"))
+check("text before the first heading is its own section", ctx_index.split_sections(LONG_INTRO + "\n# A\nx\n")
+      == [("", LONG_INTRO), ("A", "x")], ctx_index.split_sections(LONG_INTRO + "\n# A\nx\n"))
 
-# A1: a stub before the first heading (a Confluence mirror's breadcrumb, a short preamble) is no section of its own
+# A1 (fix round 2, Q1): a breadcrumb or a short preamble before the first heading stays a section of its own — on a
+# mirror page that short row carries the title and ranks on it; `ctx search --get` of it and its snippet go on with the
+# sections after it (ctx_search_test). link_only / strip_links tell a breadcrumb line for near_key and that fill.
 CRUMB = "↑ [[Delivery (900100100)|Delivery]]  ·  `Zorg / Delivery / Slots`"
 check("link_only: a breadcrumb, a line of links, an embed, a backticked path, a line of separators",
       all(ctx_index.link_only(x) for x in (CRUMB, "[[A]] · [[B|b]]", "![[diagram.png]]", "![](att/x.png)",
@@ -146,22 +147,19 @@ check("R6: a backticked span is a breadcrumb only when it is a path — `a/b/c.m
       ctx_index.link_only("`docs/zorg/slots.md`") and ctx_index.link_only("`Zorg / Delivery / Slots`")
       and not ctx_index.link_only("`npm install zorg`") and not ctx_index.link_only("`zorg`")
       and not ctx_index.link_only("`a / b` and `npm i`"))
-check("R6: …a preamble of a code span alone is folded into the first section, never dropped",
-      ctx_index.split_sections("`npm install zorg`\n# Setup\n\nThen run it.\n") == [("Setup", "`npm install zorg`\n\nThen run it.")]
-      and ctx_index.split_sections("`Zorg / Delivery / Slots`\n# Slots\n\nThe slots.\n") == [("Slots", "The slots.")],
-      ctx_index.split_sections("`npm install zorg`\n# Setup\n\nThen run it.\n"))
-check("a short preamble is folded into the first heading's section", ctx_index.split_sections("intro\n# A\nx\n")
-      == [("A", "intro\n\nx")], ctx_index.split_sections("intro\n# A\nx\n"))
-check("…a breadcrumb alone is dropped", ctx_index.split_sections(CRUMB + "\n\n# Slots\n\nThe slots.\n")
-      == [("Slots", "The slots.")], ctx_index.split_sections(CRUMB + "\n\n# Slots\n\nThe slots.\n"))
-check("…a breadcrumb and a short line: the line folded, the breadcrumb dropped",
-      ctx_index.split_sections("---\ntype: page\n---\n" + CRUMB + "\nDraft of the team.\n# Slots\n\nThe slots.\n")
-      == [("Slots", "Draft of the team.\n\nThe slots.")],
-      ctx_index.split_sections("---\ntype: page\n---\n" + CRUMB + "\nDraft of the team.\n# Slots\n\nThe slots.\n"))
-check("…folded into a first heading that is empty, which is then kept", ctx_index.split_sections("intro\n# A\n## B\ny\n")
-      == [("A", "intro"), ("A › B", "y")], ctx_index.split_sections("intro\n# A\n## B\ny\n"))
-check("…a breadcrumb does not count towards the 200 characters", ctx_index.split_sections(
-    CRUMB + "\n" + "x" * 150 + "\n# A\nbody\n") == [("A", "x" * 150 + "\n\nbody")])
+check("R6: …strip_links keeps a code span and drops a backticked path",
+      ctx_index.strip_links("`npm install zorg`\n`Zorg / Delivery / Slots`\nrun it") == "`npm install zorg`\nrun it")
+check("Q1: a short preamble is its own section", ctx_index.split_sections("intro\n# A\nx\n")
+      == [("", "intro"), ("A", "x")], ctx_index.split_sections("intro\n# A\nx\n"))
+check("Q1: …and so is a breadcrumb alone, or a breadcrumb and a line", ctx_index.split_sections(CRUMB + "\n\n# Slots\n\nThe slots.\n")
+      == [("", CRUMB), ("Slots", "The slots.")]
+      and ctx_index.split_sections("---\ntype: page\n---\n" + CRUMB + "\nDraft of the team.\n# Slots\n\nThe slots.\n")
+      == [("", CRUMB + "\nDraft of the team."), ("Slots", "The slots.")],
+      ctx_index.split_sections(CRUMB + "\n\n# Slots\n\nThe slots.\n"))
+check("Q1: …a code span alone too; an empty first heading is left out as before",
+      ctx_index.split_sections("`npm install zorg`\n# Setup\n\nThen run it.\n") == [("", "`npm install zorg`"), ("Setup", "Then run it.")]
+      and ctx_index.split_sections("intro\n# A\n## B\ny\n") == [("", "intro"), ("A › B", "y")],
+      ctx_index.split_sections("intro\n# A\n## B\ny\n"))
 
 check("a draft mark makes a version key, a date series does not",
       ctx_index.version_key("Roadmap Q4 — draft v2", "Notes") == ctx_index.version_key("Roadmap Q4 — draft v3", "Notes")
@@ -267,6 +265,9 @@ check("…a word changed is another key", near(COPY_A.replace("moves", "ships"))
 check("…fewer than 400 characters left: no key (short notes never fold)",
       near("# Short\n\nOnly a line.\n") is None and near("# S\n\n" + "x" * 390 + "\n\n- [[A MOC]]\n2026-10-01\n") is None
       and near("# S\n\n" + "x" * 400 + "\n") is not None)
+check("Q4: the headings go into the key but not into the 400 characters — long headings over a short text give no key",
+      near("# " + "Heading of the cart study " * 12 + "\n\n## " + "Findings of the study " * 10 + "\n\nOnly a line.\n") is None
+      and near("# H\n\n" + "x" * 400 + "\n") is not None)
 check("…the first 20 000 characters count", near("# L\n\n" + "y" * 20000 + "a\n") == near("# L\n\n" + "y" * 20000 + "b\n")
       and near("# L\n\n" + "y" * 19990 + "a\n") != near("# L\n\n" + "y" * 19990 + "b\n"))
 FACTS = STUDY + "\n\n"

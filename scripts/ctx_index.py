@@ -10,7 +10,6 @@ the vault (iCloud never syncs it): deleting the folder is safe, `ctx index rebui
                                 top folder (`Notes/…`, `ZorgCore/…`), or `@<repository>/…` outside every vault.
 - split_sections / note_meta / version_key / name_key   a note's sections and its metadata (the frontmatter, else the
                                 text); a frontmatter that cannot be read leaves the whole note as text, without metadata.
-                                A stub before the first heading — a breadcrumb, a short preamble — is no section.
 - link_only / strip_links       a breadcrumb line or a line of links alone, and a text without such lines.
 - near_key                      the key two near copies of a note share (the search folds them), kept per note.
 - is_dataless                   a file iCloud has not downloaded: reading it would start the download, so it is skipped.
@@ -61,7 +60,8 @@ TRUE = ("true", "yes", "1")
 DATE_KEYS = ("updated", "modified", "snapshot", "generated", "date", "created")
 TTL_DATE_KEYS = ("updated", "snapshot", "generated")   # the note's own date a class TTL is counted from (provider protocol §6)
 COMMIT_EVERY = 50                   # files written between two commits of a refresh
-STUB_CHARS = 200                    # a preamble shorter than this (its breadcrumb lines aside) is no section of its own
+STUB_CHARS = 200                    # a section shorter than this (its breadcrumb lines aside) is short: --get and its
+                                    # snippet go on with the sections after it (ctx_search)
 NEAR_MIN, NEAR_CHARS = 400, 20_000  # near copies: the characters a key needs at least, and the ones it reads
 COUNTS = ("added", "changed", "removed", "pending", "skipped_dataless", "skipped_large")
 BROKEN_NOTE = "індекс пошуку не читається (%s) — ctx index rebuild збудує його наново"
@@ -81,8 +81,9 @@ CREATE INDEX sections_note ON sections(note_id);
 CREATE VIRTUAL TABLE sections_fts USING fts5(title, heading, tags, aliases, body,
                                              tokenize='unicode61 remove_diacritics 2');
 """
-NOTE_COLS = ("path", "source", "title", "type", "product", "status", "date", "ttl_date", "confluence_id", "aliases_json",
-             "tags_json", "sensitive", "hub", "version_key", "links_json", "hash", "near", "mtime", "size")
+NOTE_COLS = ("path", "source", "title", "type", "product", "status", "date", "ttl_date", "confluence_id",
+             "aliases_json", "tags_json", "sensitive", "hub", "version_key", "links_json", "hash", "near", "mtime",
+             "size")
 ROW_SQL = ("SELECT s.id AS id, s.heading, s.ord, s.text, n.id AS note_id, %s FROM sections s "
            "JOIN notes n ON n.id = s.note_id" % ", ".join("n." + c for c in NOTE_COLS))
 QUERY_SQL = ("SELECT s.id AS id, s.heading, s.ord, s.text, n.id AS note_id, %s, bm25(sections_fts, %s) AS rank "
@@ -220,8 +221,8 @@ _RELATED_LINE = re.compile(r"^[\s*_#>\-]*%s[\s*_]*:?[\s*_]*$" % _RELATED_WORD, r
 _WHEN = (r"(?:(?:last\s+)?(?:updated|modified)|created|date|generated|snapshot|оновлено|змінено|створено"
          r"|дата(?:\s+оновлення)?|станом\s+на)")
 _DATE_LINE = re.compile(r"^[\s>*_\-–—•]*(?:%s[\s*_]*:{0,2}[\s*_]*)?(?:\[\[)?"
-                        r"(?:\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?|\d{1,2}\.\d{1,2}\.\d{2,4})(?:\]\])?[\s*_.]*$" % _WHEN,
-                        re.I)
+                        r"(?:\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?|\d{1,2}\.\d{1,2}\.\d{2,4})"
+                        r"(?:\]\])?[\s*_.]*$" % _WHEN, re.I)
 
 
 def _split_flow(s):
@@ -344,7 +345,7 @@ def near_key(sections):
     that name in the last one and what follows it), the breadcrumb and navigation link lines (`link_only` with a label:
     `Up:: [[MOC]]` — never `Owner: [[X]]`), the lines that are only a date or the day a note was updated or made
     (`2026-10-07`, `Оновлено: 07.10.2026` — never `Deadline: …`) and the whitespace. None when fewer than NEAR_MIN
-    characters are left — a short note never folds."""
+    characters of text are left (the headings do not count) — a short note never folds."""
     secs = [(h or "", b or "") for h, b in sections or []]
     while secs and any(_RELATED.match(p.strip(" *_:")) for p in secs[-1][0].split(" › ") if p):
         secs.pop()
@@ -353,22 +354,24 @@ def near_key(sections):
         cut = max((i for i, line in enumerate(blocks[-1]) if _RELATED_LINE.match(line)), default=None)
         if cut is not None:
             blocks[-1] = blocks[-1][:cut]
-    kept = []
+    kept, size = [], 0
     for (heading, _), lines in zip(secs, blocks):
-        kept.append(heading)
-        kept.extend(line for line in lines if not (link_only(line, label=True) or _DATE_LINE.match(line)))
-    text = " ".join(" ".join(kept).split())
-    if len(text) < NEAR_MIN:
+        body = " ".join(" ".join(line for line in lines if not (link_only(line, label=True) or _DATE_LINE.match(line)))
+                        .split())
+        size += len(body)
+        kept += [heading, body]
+    if size < NEAR_MIN:
         return None
+    text = " ".join(" ".join(kept).split())
     return hashlib.sha1(text[:NEAR_CHARS].encode("utf-8")).hexdigest()
 
 
 def split_sections(text):
     """[(heading path "H1 › H2 › H3", body)] for the headings of level 1–3 (a deeper heading stays in the body, a `#` in
-    a code fence is no heading). The frontmatter is cut. Text before the first heading is a section of its own when
-    what is left of it without its breadcrumb lines (`link_only`) is STUB_CHARS characters or more; a shorter one is no
-    section: what is left of it starts the first heading's section, and nothing is left of a breadcrumb alone. A
-    heading with nothing under it is left out unless every one is empty. No heading: [("", text)]."""
+    a code fence is no heading). The frontmatter is cut; text before the first heading is a section of its own when
+    it has any — a mirror's breadcrumb too (that short row carries the note's title and ranks on it; `ctx search`
+    goes on from it to the next sections, ctx_search._fill); a heading with nothing under it is left out unless every
+    one is empty. No heading: [("", text)]."""
     _, body = _frontmatter((text or "").replace("\r\n", "\n"))
     out, stack, head, buf, fence, seen = [], [], "", [], None, False
     for line in body.split("\n"):
@@ -394,11 +397,6 @@ def split_sections(text):
     if not seen:
         return [("", out[0][1])]
     pre, headed = out[0], out[1:]
-    left = strip_links(pre[1]).strip("\n")
-    if len(left.strip()) < STUB_CHARS:            # a stub: no section of its own
-        if left.strip():
-            headed[0] = (headed[0][0], (left + "\n\n" + headed[0][1]).strip("\n"))
-        pre = ("", "")
     full = [s for s in headed if s[1].strip()]
     return ([pre] if pre[1].strip() else []) + (full or headed)
 

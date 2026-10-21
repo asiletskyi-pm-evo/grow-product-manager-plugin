@@ -19,8 +19,8 @@ priors then weigh a candidate by what it is — the skill's artifact types × 1.
 - fuse              RRF over the lists.
 - priors            the weights and the marks of the candidates.
 - skill_types       a skill's artifact types: `search_types` of references/context-manifest.yaml.
-- dedup             one candidate per note (the five keys of spec §6: the same path, Confluence page, content — a near copy
-                    too —, a twin of your layer and the core, versions), at most two sections of a note.
+- dedup             one candidate per note (the five keys of spec §6: the same path, Confluence page, content — a near
+                    copy too —, a twin of your layer and the core, versions), at most two sections of a note.
 - candidate_id      a section's stable id: sha1(`path#heading`)[:10].
 - snippet           ≤ 300 characters around the first match, the matches in «».
 - run               a whole search: the index refreshed, gather → fuse → priors → dedup → the remembered picks
@@ -66,7 +66,7 @@ KINDS = ("own", "local", "mcp")
 RRF_K = 60                      # reciprocal-rank fusion: Σ w / (RRF_K + rank)
 GLOSSARY_W = 0.5                # the weight of a glossary list in the fusion
 LIST_LIMIT = 50                 # hits asked of a source for one list; also the pool `ctx search eval` reads
-LIMIT = 30                      # candidates a search lists unless --limit says otherwise (a skill's Step 0.5 reads them)
+LIMIT = 30                      # candidates a search lists unless --limit says otherwise (Step 0.5 reads them)
 SOURCE_S = 20.0                 # one source's time, all its lists together
 OPEN_S = 5.0                    # opening a local index (SQLite's busy timeout)
 TYPE_W, SAME_PRODUCT_W, OTHER_PRODUCT_W, HUB_W, OUTDATED_W = 1.2, 1.1, 0.7, 0.5, 0.5
@@ -484,7 +484,8 @@ def _local(sctx, src, plans, until, box):
             """The near key of a note's text (ctx_index.near_key of its sections), once per note."""
             if r["rid"] not in near:
                 body = r["body"] if "body" in r.keys() else None
-                near[r["rid"]] = ci.near_key(ci.split_sections(body)) if isinstance(body, str) and body.strip() else None
+                text = isinstance(body, str) and body.strip()
+                near[r["rid"]] = ci.near_key(ci.split_sections(body)) if text else None
             return near[r["rid"]]
 
         def name(p):
@@ -510,12 +511,15 @@ def _local(sctx, src, plans, until, box):
                         for c in ("title", "type", "status", "product")}
                 date = ((_text_or_none(r["date"]) if "date" in keys else None) or _first_date(fm, _FM_DATES)
                         or (_file_day(r["mtime"]) if "mtime" in keys else None))
-                h = Hit(rel, "", src["id"], 0, title=meta["title"], date=date,
-                        snippet=_text_or_none(r["snip"]) if "snip" in keys else None, variant=i, list=key,
+                snip = _text_or_none(r["snip"]) if "snip" in keys else None
+                body = r["body"] if "body" in keys else None
+                h = Hit(rel, "", src["id"], 0, title=meta["title"], date=date, snippet=snip, variant=i, list=key,
                         type=(meta["type"] or "").lower(), product=meta["product"] or "",
                         status=(meta["status"] or "").lower(), hub=True if _yes(fm.get("search_hub")) else None,
                         sensitive=_yes(fm.get("sensitive")) if "sensitive" in fm else None,
                         ttl_date=_first_date(fm, ci.TTL_DATE_KEYS) or "", terms=None, asked=len(terms), near=near_of(r))
+                if snip and _clean(snip) != snip and isinstance(body, str):     # the index's snippet shows a breadcrumb
+                    h["preview"] = _preview(ci.split_sections(body))
                 hits.append(h)
                 by_rid.setdefault(r["rid"], []).append(h)
             if terms and by_rid:                        # what each hit holds, as the index itself matches it
@@ -791,7 +795,8 @@ def _entries(lists, fused):
         own = next((h for h in hits if h.get("section_id") is not None), None)
         said = ([own] if own else []) + [h for h in hits if h is not own]
         e = {"path": path, "heading": heading, "score": score, "hits": hits, "flags": [],
-             "section_id": own["section_id"] if own else None, "text": own.get("text") if own else None,
+             "section_id": own["section_id"] if own else None,
+             "text": own.get("text") if own else next((h["preview"] for h in hits if h.get("preview")), None),
              "own_source": own["source"] if own else None,
              "hub": own.get("hub") if own else next((h["hub"] for h in hits if h.get("hub") is not None), None),
              "sensitive": any(h.get("sensitive") is True for h in hits),
@@ -854,11 +859,12 @@ def dedup(cands, notes_meta, own=None):
     2. the same `confluence_id` in two files of the index — the newer by its date stays, marked `двійник <path>` of
        the other;
     3. the same `hash` — the better one stays, marked `двійник <path>`;
-    3a. the same text but for what near copies differ by (ctx_index.near_key: frontmatter, back-link and date lines,
-       the trailing «Повʼязане» block; 400 characters at least) — the copy of your layer stays (its path under one of
-       `own`, the index names of the plugin folders — whichever source found it; or a source `own`), else the newer by
-       its date, marked `двійник <path>`; the key is the index's for its files, a local index's text for a note only
-       it knows;
+    3a. the same text but for what near copies differ by (ctx_index.near_key: frontmatter, back-link and update-date
+       lines, the trailing «Повʼязане» block; 400 characters of text at least) — the copy of your layer stays (its path
+       under one of `own`, the index names of the plugin folders — whichever source found it; or a source `own`), and
+       of those the older by its date: the original, as a copy is made later (one with no date never wins over a dated
+       one; the same day — the better score); marked `двійник <path>`; the key is the index's for its files, a local
+       index's text for a note only it knows;
     4. the same title (normalised) when the `links` of one hold the file name of the other (a hub of your layer and
        the core page) — the one with more text (`size`) stays, marked `двійник <path>`;
     5. the same `version_key` — the newer by its date stays, marked `є старіші версії: N` (the older ones the index
@@ -906,8 +912,8 @@ def dedup(cands, notes_meta, own=None):
     def yours(c):
         return "own" in (c.get("source") or []) or (own is not None and _in_scope(c["path"], own))
 
-    for g in grouped(lambda c: meta(c).get("near") or c.get("near")):
-        fold(max(g, key=lambda c: (yours(c), when(c), c["score"])), g, TWIN)
+    for g in grouped(lambda c: meta(c).get("near") or c.get("near")):    # yours first, then the original: the older
+        fold(min(g, key=lambda c: (not yours(c), not when(c), when(c), -c["score"])), g, TWIN)
     for g in grouped(lambda c: _title_key(meta(c).get("title") or c.get("title"))):
         comp = {id(c): id(c) for c in g}
 
@@ -986,6 +992,34 @@ def snippet(text, terms, width=SNIPPET_W):
     return out + _cut(flat[pos:], width - len(out))
 
 
+def _clean(text):
+    """A snippet a source gave without its breadcrumb and link-only lines (ctx_index.link_only; a line's `…` aside)."""
+    lines = (text or "").split("\n")
+    return "\n".join(line for line in lines if not ci.link_only(line.strip().strip("…").strip())).strip("\n")
+
+
+def _preview(sections):
+    """The text a candidate's snippet is taken from, given its best section and the ones after it ([(heading, text)]):
+    their text without link-only lines — the best section's alone when that holds ctx_index.STUB_CHARS characters or
+    more, else it and the next ones until FILL_CHARS (the fill of `--get`). A breadcrumb is never the snippet."""
+    out, size = [], 0
+    for i, (_, text) in enumerate(sections or []):
+        if i and (size >= FILL_CHARS or (i == 1 and size >= ci.STUB_CHARS)):
+            break
+        part = ci.strip_links(text).strip("\n")
+        out.append(part)
+        size += len(part.strip())
+    return "\n".join(p for p in out if p.strip())
+
+
+def _following(idx, c):
+    """The sections after an own candidate's section, from the index — only when its text is short (`_preview`)."""
+    if len(ci.strip_links(c.get("text") or "").strip()) >= ci.STUB_CHARS:
+        return []
+    sec = idx.section(c["section_id"])
+    return idx.following(sec["note_id"], sec["ord"]) if sec else []
+
+
 # ------------------------------------------------------------------ run
 def _note(notes, more):
     for n in more or []:
@@ -1011,7 +1045,7 @@ def _public(c, terms):
     if c.get("text") is not None:
         snip = snippet(c["text"], terms)
     else:
-        snip = _cut(" ".join(N(c.get("snippet") or "").split()), SNIPPET_W)
+        snip = _cut(" ".join(N(_clean(c.get("snippet") or "")).split()), SNIPPET_W)
     return {"id": candidate_id(path, c["heading"]), "path": path, "heading": c["heading"], "title": c.get("title") or "",
             "type": c.get("type") or "", "product": c.get("product") or "", "date": c.get("date") or "",
             "source": list(c["source"]), "flags": list(c["flags"]),
@@ -1131,12 +1165,16 @@ def run(sctx, queries, skill=None, product=None, limit=LIMIT, which=KINDS, use_h
     entries = _entries(lists, fuse(lists))
     priors(entries, skill_types(skill), product, now, class_ttl(sctx["repos"], sctx["vaults"]), snapshots(sctx, now))
     metas = idx.notes() if os.path.isfile(idx.db_path) and not busy and not unbuilt else []
-    mine = [ci.rel_path(r["path"], sctx.get("vaults") or [], r) for r in sctx.get("roots") or [] if r.get("source") == "own"]
+    mine = [ci.rel_path(r["path"], sctx.get("vaults") or [], r) for r in sctx.get("roots") or []
+            if r.get("source") == "own"]
     cands = dedup(entries, metas, own=mine)
     if hints:
         ch.apply(cands, hints, _today(now))
         cands.sort(key=_order)
     cands = cands[:max(1, int(limit))]
+    for c in cands:
+        if c.get("section_id") is not None and c.get("text") is not None:
+            c["text"] = _preview([(c.get("heading") or "", c["text"])] + _following(idx, c))
     terms = list(dict.fromkeys(t for q in queries for t in st.query_terms(q)))
     last = {}
     for c in cands:
@@ -1385,10 +1423,11 @@ def get(sctx, cid):
     search), else among the sections of the own index. An own section is read from the index (from its file when the
     note changed since); a note only a local index knows from the vault; an MCP one through vault_get_note. A file is
     read only through the time-budgeted reader, and never one iCloud has not downloaded (`_from_disk`: the text of a
-    local index then, its line first — the whole note when that copy has no such section). A section shorter than 200 characters goes on with the next ones (`_fill`). The
-    header of a local or an MCP note goes on with what its frontmatter says (`_marks`: ` · sensitive`, ` · застаріле`,
-    its type) — what the list of such a source does not carry, so its flags are complete only here. GetError: 3 — no
-    such id, note or section, a file not read in time or not downloaded; 5 — the server did not answer. Reads only."""
+    local index then, its line first — the whole note when that copy has no such section). A section shorter than 200
+    characters goes on with the next ones (`_fill`). The header of a local or an MCP note goes on with what its
+    frontmatter says (`_marks`: ` · sensitive`, ` · застаріле`, its type) — what the list of such a source does not
+    carry, so its flags are complete only here. GetError: 3 — no such id, note or section, a file not read in time or
+    not downloaded; 5 — the server did not answer. Reads only."""
     cid = str(cid or "").strip().lower()
     idx = ci.Index(sctx["home"])
     entry = _load_last(sctx["home"]).get(cid)
