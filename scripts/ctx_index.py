@@ -597,21 +597,22 @@ def download(roots, store_rel, blocks_rels, fetch=None, workers=DOWNLOAD_WORKERS
     (`_fetch`: a child process, `per_file` seconds at most), `workers` at once; a file still not on disk after its
     read is left — timed out, failed, or neither (iCloud did not give it). `progress(done, total)` after every file.
     Ctrl-C (SIGINT, from before the scan; the old handler back after) stops it: no new read begins, the running ones
-    are killed, what came down stays and is counted — a handler that sets an event, so that no KeyboardInterrupt is
-    raised inside a lock. Returns {candidates, downloaded, left, timed_out, failed, interrupted}. Writes nothing."""
+    are killed, what came down stays and is counted — a handler that only marks a flag: no KeyboardInterrupt raised
+    inside a lock, and no lock taken by the handler (one the main thread may hold right then). Returns {candidates,
+    downloaded, left, timed_out, failed, interrupted}. Writes nothing."""
     fetch = fetch or _fetch
-    stop = threading.Event()
+    stop = [False]                              # set by the handler; read by the workers and the loop
     res = {"candidates": 0, "downloaded": 0, "left": 0, "timed_out": 0, "failed": 0, "interrupted": False}
     old = None
     if threading.current_thread() is threading.main_thread():
-        old = signal.signal(signal.SIGINT, lambda *_: stop.set())
+        old = signal.signal(signal.SIGINT, lambda *_: stop.__setitem__(0, True))
     try:
         files = evicted(roots, store_rel, blocks_rels)
         res["candidates"] = len(files)
         queue, done, lock = list(reversed(files)), [], threading.Lock()
 
         def work():
-            while not stop.is_set():
+            while not stop[0]:
                 with lock:
                     if not queue:
                         return
@@ -627,7 +628,7 @@ def download(roots, store_rel, blocks_rels, fetch=None, workers=DOWNLOAD_WORKERS
         for t in threads:
             t.start()
         seen = 0
-        while not stop.is_set():
+        while not stop[0]:
             alive = any(t.is_alive() for t in threads)
             with lock:
                 batch, done[:] = list(done), []
@@ -643,8 +644,8 @@ def download(roots, store_rel, blocks_rels, fetch=None, workers=DOWNLOAD_WORKERS
                     progress(seen, len(files))
             if not alive:
                 break
-            stop.wait(0.1)
-        if stop.is_set():
+            time.sleep(0.1)
+        if stop[0]:
             res["interrupted"] = True
             with _children_lock:
                 running = list(_children)

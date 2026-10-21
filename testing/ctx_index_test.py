@@ -912,8 +912,10 @@ STOPPER = r"""
 import os, sys, time
 sys.path.insert(0, sys.argv[1])
 import ctx_index as ci
+import signal
 top = sys.argv[2]
 ci.is_dataless = lambda p: True
+signal.signal(signal.SIGINT, lambda *a: None)       # what download restores: a burst's later signals do nothing
 def fetch(path, timeout):
     time.sleep(0.002)
     return "ok"
@@ -935,7 +937,12 @@ with tempfile.TemporaryDirectory() as d:
                              stderr=subprocess.STDOUT, text=True)
         p.stdout.readline()
         time.sleep(random.uniform(0.05, 0.6))
-        p.send_signal(signal.SIGINT)
+        for _ in range(40):                          # a burst: each signal is one more chance to land inside a lock
+            try:
+                p.send_signal(signal.SIGINT)
+            except ProcessLookupError:
+                break
+            time.sleep(0.002)
         try:
             out, _ = p.communicate(timeout=10)
         except subprocess.TimeoutExpired:
@@ -943,10 +950,42 @@ with tempfile.TemporaryDirectory() as d:
             out, _ = p.communicate()
             hung += 1
             continue
-        if p.returncode != 0 or "RESULT True" not in out:
+        if "RESULT True" not in out:                 # a burst's last signal may end it after the result: fine
             bad.append((p.returncode, out[-300:]))
-    check("fix I1: SIGINT at a random moment of a download — 30 runs, every one stops within 10 s with interrupted",
+    check("fix I1 (+ round 3b: the handler takes no lock): a burst of SIGINT at a random moment of a download — 30 runs, "
+          "every one stops within 10 s with interrupted",
           hung == 0 and not bad, (hung, bad[:2]))
+
+# --- round 3b: the SIGINT handler takes no lock (Event.set takes the Event's plain Lock: handled while the main thread
+# holds it — inside its own wait — the main thread waits on itself for ever)
+with tempfile.TemporaryDirectory() as d:
+    top = os.path.join(d, "Notes")
+    os.makedirs(top)
+    for i in range(3):
+        open(os.path.join(top, "n%d.md" % i), "w").write("x")
+    seen_calls = []
+
+    def probe(path, timeout):
+        if not seen_calls:
+            handler = signal.getsignal(signal.SIGINT)
+            calls = []
+            sys.setprofile(lambda frame, event, arg: calls.append(getattr(arg, "__name__", "")) if event == "c_call" else None)
+            try:
+                handler(signal.SIGINT, None)
+            finally:
+                sys.setprofile(None)
+            seen_calls.append(calls)
+        return "ok"
+
+    real_dataless = ctx_index.is_dataless
+    ctx_index.is_dataless = lambda p: True
+    try:
+        r = ctx_index.download([ctx_index.Root("own", top, d)], "", [], fetch=probe, workers=1)
+    finally:
+        ctx_index.is_dataless = real_dataless
+    check("round 3b: the SIGINT handler of a download acquires no lock — it only marks the stop; the download stops",
+          seen_calls and "acquire" not in seen_calls[0] and "__enter__" not in seen_calls[0] and r["interrupted"] is True,
+          (seen_calls, r))
 
 # --- fix M3: the index lock is checked before minutes of downloading
 with tempfile.TemporaryDirectory() as d:

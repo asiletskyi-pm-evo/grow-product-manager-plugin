@@ -109,6 +109,7 @@ LONG_FULL = "--full (до 60 000)"
 LONG_NAMES, LONG_NAMES_CHARS = 20, 600      # the headings LONG_NOTE names at most, and their characters
 EXCLUDED_NOTE = "шлях виключено з пошуку: %s"
 SEVERAL_NOTE = "кілька нотаток із назвою «%s»: %s — --get один зі шляхів"
+SEVERAL_TAIL = "кілька нотаток, чий шлях закінчується на «%s»: %s — --get один зі шляхів"
 SEVERAL_MAX = 5                 # paths SEVERAL_NOTE names, then `· ще N`
 NO_CANDIDATE = "no candidate %s in the last search or the section index — search again"
 _META = ("title", "type", "product", "status", "date", "ttl_date")
@@ -1517,18 +1518,30 @@ def _by_name(sctx, name):
 
 
 def _by_tail(sctx, path):
-    """The path of the one note whose index name ends in `/<path>` — a link with a folder in it, as Obsidian writes one
-    when a name is not unique (`[[Concepts/Name]]`; `../` is dropped by `_parse`), NFC, case folded — among the own
-    index's notes, else among every registered local index's; picked as `_by_name` picks (`_pick`)."""
+    """The path of the note a link with a folder in it means (`[[Concepts/Name]]`, as Obsidian writes one when a name
+    is not unique; `../` is dropped by `_parse`), NFC, case folded: the notes whose index name ends in `/<path>` —
+    the own index's and every registered local index's together, so that a note one of them misses (iCloud evicted
+    it) is never swapped silently for another —, then the one that is `<plugin folder>/<path>` (the link as it reads
+    from the plugin folder), else a file of the plugin folder on disk by that name (stat only: one no index holds),
+    else as `_by_name` picks (`_pick`, SEVERAL_TAIL for several)."""
     tail = "/" + N(path).casefold()
     hit = lambda rel: ("/" + N(rel).casefold()).endswith(tail)  # noqa: E731
-    found = [p for p in ci.Index(sctx["home"]).paths() if hit(p)]
-    if not found:
-        found = _local_paths(sctx, hit)
-    return _pick(sctx, path[:-3] if path.lower().endswith(".md") else path, found, missing=path)
+    found = sorted({N(p) for p in ci.Index(sctx["home"]).paths() if hit(p)} | {N(p) for p in _local_paths(sctx, hit)})
+    vaults = sctx.get("vaults") or []
+    for r in sctx.get("roots") or []:
+        if r.get("source") != "own":
+            continue
+        pre = ci.rel_path(r["path"], vaults, r)
+        meant = pre + "/" + N(path) if pre else N(path)
+        same = [p for p in found if p.casefold() == meant.casefold() and _keep(sctx, p)]
+        if same:
+            return same[0]
+        if os.path.isfile(os.path.join(r["path"], *N(path).split("/"))) and _keep(sctx, meant):
+            return meant
+    return _pick(sctx, path[:-3] if path.lower().endswith(".md") else path, found, missing=path, several=SEVERAL_TAIL)
 
 
-def _pick(sctx, name, found, missing=None):
+def _pick(sctx, name, found, missing=None, several=None):
     """The one path of `found` a `--get` of `name` means: a note the search excludes (`_keep`) does not count; exactly
     one, or the one whose path is the name itself (`<name>.md` at a vault's root); else several → GetError 3 naming at
     most SEVERAL_MAX and `ще N`; none → GetError 3 (NO_CANDIDATE of `missing` — the name when None —, or EXCLUDED_NOTE
@@ -1540,7 +1553,7 @@ def _pick(sctx, name, found, missing=None):
         return N(name) + ".md"
     if len(kept) > 1:
         shown = kept[:SEVERAL_MAX] + (["ще %d" % (len(kept) - SEVERAL_MAX)] if len(kept) > SEVERAL_MAX else [])
-        raise GetError(3, SEVERAL_NOTE % (name, " · ".join(shown)))
+        raise GetError(3, (several or SEVERAL_NOTE) % (name, " · ".join(shown)))
     return kept[0]
 
 
@@ -1569,6 +1582,10 @@ def _heading_of(secs, want):
     Fees`) or the whole path (spaces collapsed, case folded): how `[[Name#Heading]]` and `<path>#<heading>` name a
     section; None when the note has none."""
     key = _parts(want)
+    if len(key) > 1:                          # a whole path asked is that section before the end of a longer one
+        exact = next((h for h, _ in secs if h and _parts(h) == key), None)
+        if exact is not None:
+            return exact
     for h, _ in secs:
         if h:
             parts = _parts(h)
@@ -1579,13 +1596,18 @@ def _heading_of(secs, want):
 
 def _heading_for(secs, heading):
     """The heading path a `#…` after a note names: the whole of it as one heading first (`C# tips`), then its parts
-    between `#` as the end of a heading path (`#H1#H2` → `… › H1 › H2`) with a `^block` part dropped — "" (the whole
-    note) when nothing else is left (`#^a1b2c3`); None when no section has it."""
+    between `#` as the end of a heading path (`#H1#H2` → `… › H1 › H2`) with a `^block` part dropped; a block alone
+    (`#^a1b2c3`) is the section whose text holds that block id at the end of a line, else "" (the whole note); None
+    when no section has it."""
     hp = _heading_of(secs, heading)
     if hp is not None:
         return hp
     parts = [p.strip() for p in heading.split("#") if p.strip() and not p.strip().startswith("^")]
     if not parts:
+        blocks = [p.strip()[1:] for p in heading.split("#") if p.strip().startswith("^") and len(p.strip()) > 1]
+        if blocks:
+            mark = re.compile(r"(?:^|\s)\^%s[ \t]*$" % re.escape(blocks[-1]), re.M)
+            return next((h for h, t in secs if h and mark.search(t or "")), "")
         return ""
     joined = " › ".join(parts)
     return _heading_of(secs, joined) if joined != heading.strip() else None
@@ -1640,14 +1662,14 @@ def _note_of(sctx, path):
 
 def _get_path(sctx, arg, full=False):
     """(header, text) of a note by its path (an index name, NFC or NFD; `.md` added when it has none) or its name
-    (`Name`, `Name.md`, `[[Name]]`, `[[Name|alias]]`), read as `_note_of` reads it. A target is a path first — a
-    note at a vault's root is named `<name>.md`, with no `/`, as the list prints it — and a name only when no source
-    holds that path (`_by_name`); a link with a folder in it is a path, else the end of one (`_by_tail`; an
-    `@<repository>/…` name never). The whole note without its frontmatter
-    under `> [<source> · <path> · <day>]` and its marks, cut by `_cap` (GET_CHARS, FULL_CHARS with `full`);
-    with a heading after `#` (`[[Name#Heading]]`, `<path>#<heading>` — the section whose heading path ends in it,
-    `_heading_of`) that section alone under `> [<source> · <path> › <heading> · <day>]`, a short one going on with
-    the next (`_fill`); GetError 3 for a heading the note lacks. A path the search excludes (ctx_index.excluded,
+    (`Name`, `Name.md`, `[[Name]]`, `[[Name|alias]]`, an embed `![[…]]` — `_parse`), read as `_note_of` reads it. A
+    target is a path first — a note at a vault's root is named `<name>.md`, with no `/`, as the list prints it — and a
+    name only when no source holds that path (`_by_name`); a link with a folder in it is a path, else the end of one
+    (`_by_tail`: the plugin folder's path first; an `@<repository>/…` name never). The whole note without its
+    frontmatter under `> [<source> · <path> · <day>]` and its marks, cut by `_cap` (GET_CHARS, FULL_CHARS with
+    `full`); with a heading after `#` (`[[Name#Heading]]`, `<path>#<heading>`, `#H1#H2`, `#^block` — `_heading_for`)
+    that section alone under `> [<source> · <path> › <heading> · <day>]`, a short one going on with the next
+    (`_fill`); GetError 3 for a heading the note lacks. A path the search excludes (ctx_index.excluded,
     case-folded: the store, a blocks file, `_System/_scratch/`) is GetError 3 EXCLUDED_NOTE. Reads only; last.json
     is not touched."""
     target, heading = _parse(arg)

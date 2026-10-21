@@ -1852,8 +1852,9 @@ with tempfile.TemporaryDirectory() as d:
     h1, t1 = got("[[Zorg cart concept#Fees]]")
     check("…a bare `#Fees` is still the first one (Pricing › Fees)", h1.endswith("› Zorg cart concept › Pricing › Fees · 2026-10-04 · concept]")
           and t1.startswith("pricefee"), h1)
-    check("…a block reference `#^id` is the whole note; `#H#^id` that section",
-          got("[[Zorg cart concept#^a1b2c3]]") == whole and got("[[Zorg cart concept#Pricing#^a1b2c3]]") == pricing,
+    check("…a block reference `#^id` is the section that holds the block (round 3b), an unknown one the whole note; "
+          "`#H#^id` that section", got("[[Zorg cart concept#^a1b2c3]]") == got("[[Zorg cart concept#Delivery#Fees]]")
+          and got("[[Zorg cart concept#^zzz999]]") == whole and got("[[Zorg cart concept#Pricing#^a1b2c3]]") == pricing,
           (got("[[Zorg cart concept#^a1b2c3]]")[0], got("[[Zorg cart concept#Pricing#^a1b2c3]]")[0]))
     h2, t2 = got("[[Zorg cart concept#C# tips]]")
     check("…a heading with `#` in it is tried whole first", h2.endswith("› Zorg cart concept › C# tips · 2026-10-04 · concept]")
@@ -1870,8 +1871,9 @@ with tempfile.TemporaryDirectory() as d:
     check("…case and NFD do not matter", got("[[concepts/zorg CART concept]]") == whole
           and got(unicodedata.normalize("NFD", "[[Concepts/Zorg cart concept]]")) == whole, got("[[concepts/zorg CART concept]]")[0])
     h5, t5 = got("[[Shared/Dup end]]")
-    check("…two notes end in it: exit 3, the line naming both", h5 == "exit 3" and t5 == cs_.SEVERAL_NOTE % (
-        "Shared/Dup end", "Notes/A/Shared/Dup end.md · Notes/B/Shared/Dup end.md"), (h5, t5))
+    check("…two notes end in it: exit 3, the line naming both (round 3b: a path's own line)", h5 == "exit 3"
+          and t5 == getattr(cs_, "SEVERAL_TAIL", "%s %s") % ("Shared/Dup end", "Notes/A/Shared/Dup end.md · Notes/B/Shared/Dup end.md")
+          and t5.startswith("кілька нотаток, чий шлях закінчується на «Shared/Dup end»"), (h5, t5))
     h6, t6 = got("[[_scratch/Tail only]]")
     check("…only an excluded note ends in it: exit 3 `шлях виключено з пошуку`",
           (h6, t6) == ("exit 3", cs_.EXCLUDED_NOTE % "Notes/_System/_scratch/Tail only.md"), (h6, t6))
@@ -1889,7 +1891,10 @@ with tempfile.TemporaryDirectory() as d:
 check("v3.16.1 C7/C8 — search-protocol §4: the link forms as a hub writes them — an embed, `#H1#H2`, `#^block`, a folder in "
       "the link tried as a path, then as the end of one; context-protocol §3 and the usage name them",
       all(x in section(SP, 4) for x in ("`![[Name]]`", "`[[Name#H1#H2]]`", "`[[Name#^block]]`",
-                                        "a link with a folder in it is tried as a path, then as the end of one"))
+                                        "a link with a folder in it is tried as a path, then as the end of one",
+                                        "`%s`" % cs_.SEVERAL_TAIL % ("<посилання>", "<шлях> · <шлях> …"),
+                                        "the plugin folder's `<папка плагіна>/<посилання>` first",
+                                        "the section that holds the block, else the whole note"))
       and "`![[Name]]`" in section(CP, 3) and "as the end of a path" in read(ROOT, "scripts", "ctx.py"),
       section(SP, 4)[-2600:])
 
@@ -1983,6 +1988,54 @@ check("Task 2 fix M5 — search-protocol §4: the 600-character bound of the nam
       and "is cut at 20 000 characters" in section(SP, 4).split("`--get` also takes a note's path")[0]
       and "server ;" not in read(ROOT, "references", "context-protocol.md"), section(SP, 4)[:600])
 
+# Task 3 review, round 3b: the end of a path never silently swaps in another note; an exact heading path first
+PLAN, ARCH = "Notes/Concepts/Zorg plan.md", "Notes/Archive/Concepts/Zorg plan.md"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    para3 = lambda w: (" ".join([w] * 60)) + "."
+    write(env.note(PLAN), "---\ntype: concept\n---\n# Zorg plan\n\n" + para3("current") + "\n")
+    write(env.note(ARCH), "---\ntype: concept\n---\n# Zorg plan\n\n" + para3("archived") + "\n")
+    write(env.note("Notes/xa/Zorg tail.md"), "# Zorg tail\n\n" + para3("xa") + "\n")
+    write(env.note("Notes/@zorg/Zorg at.md"), "# Zorg at\n\n" + para3("atfolder") + "\n")
+    write(env.note("Notes/Nest.md"), "# X\n\n## A\n\n### B\n\n" + para3("xab") + "\n\n# A\n\n## B\n\n" + para3("ab") + "\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + [PLAN])
+    sx = env.sctx()
+
+    def got3(arg):
+        try:
+            return cs_.get(sx, arg)
+        except cs_.GetError as e:
+            return "exit %d" % e.code, str(e)
+
+    real_dataless = ci.is_dataless
+    ci.is_dataless = lambda p_: unicodedata.normalize("NFC", p_).endswith("Notes/Concepts/Zorg plan.md")
+    try:
+        env.refresh(sx)                                  # the current plan evicted: never indexed, the local index holds it
+        hb, tb = got3("[[Concepts/Zorg plan]]")
+        build_brain(env.brain, env.vault, BRAIN_NOTES)   # …and no local index holds it either
+        hc, tc = got3("[[Concepts/Zorg plan]]")
+    finally:
+        ci.is_dataless = real_dataless
+    check("round 3b I1: an evicted plugin-folder note only a local index holds — `[[Concepts/Zorg plan]]` is that note "
+          "(through the local index), never the archived one", hb.startswith("> [own · %s · " % PLAN) and "current" in tb
+          and "archived" not in tb, (hb, tb[:120]))
+    check("…held by no index at all: the iCloud line for that note, never the archived one",
+          hc == "exit 3" and tc == cs_.ICLOUD_MISSING % PLAN, (hc, tc))
+    build_brain(env.brain, env.vault, BRAIN_NOTES + [PLAN])
+    env.refresh(sx)
+    ha, ta = got3("[[Concepts/Zorg plan]]")
+    check("…both indexed: the link is the plugin folder's path, not «кілька нотаток»", ha.startswith("> [own · %s · " % PLAN)
+          and "current" in ta, (ha, ta[:120]))
+    check("round 3b M2: the end of a path starts at a `/` — `[[a/Zorg tail]]` is not `Notes/xa/Zorg tail.md`",
+          got3("[[a/Zorg tail]]")[0] == "exit 3", got3("[[a/Zorg tail]]"))
+    check("…an `@<repo>/…` name is never the end of another path (a vault folder named `@zorg` too)",
+          got3("[[@zorg/Zorg at]]")[0] == "exit 3", got3("[[@zorg/Zorg at]]"))
+    hn, tn = got3("Notes/Nest.md#A › B")
+    hx, tx = got3("Notes/Nest.md#B")
+    check("round 3b M1: a whole heading path asked is that section before an end of a longer one (`A › B`, not `X › A › B`); "
+          "a bare `#B` is still the first one (`X › A › B`)", "Nest.md › A › B ·" in hn and tn.startswith("ab")
+          and "Nest.md › X › A › B ·" in hx and tx.startswith("xab"), (hn, hx))
+
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)
@@ -1997,7 +2050,8 @@ with tempfile.TemporaryDirectory() as d:
         res = cs_.run(sx, ["графік роботи продавця"], now=NOW)
         ids = [c["id"] for c in res["candidates"]][:3]
         for arg in ids + [P, "Кошик — графік роботи продавця", "[[Кошик — графік роботи продавця#Рішення]]",
-                          "Growth/Cart experiments.md"]:
+                          "Growth/Cart experiments.md", "![[Кошик — графік роботи продавця]]", "[[Knowledge/Slot rules]]",
+                          "[[Notes/Mobile cart notes#^blk]]"]:
             try:
                 cs_.get(sx, arg)
             except cs_.GetError:
