@@ -44,6 +44,7 @@ import datetime
 import hashlib
 import json
 import os
+import posixpath
 import sqlite3
 import sys
 import tempfile
@@ -1422,11 +1423,21 @@ def _is_id(arg):
 
 def _parse(arg):
     """(target, heading) of a `--get` argument that is no id — a path or a name, bare or as a wiki-link: `[[…]]` off,
-    `|alias` dropped, the heading after `#` (`[[Name#Heading]]`, `<path>#<heading>`); NFC, `/`, no leading `./`."""
+    `|alias` dropped, the heading after the `#` that follows the name or the `.md` (`[[Name#Heading]]`,
+    `<path>#<heading>`; a target that ends in `.md` carries no heading, so `Growth/C# notes.md` is a path); NFC, `/`,
+    the `.` and `..` segments of a path resolved (posixpath.normpath), no leading `./`."""
     s = N(arg).strip()
     s = s[2:-2] if s.startswith("[[") and s.endswith("]]") else s
-    target, _, heading = s.split("|", 1)[0].partition("#")
+    s = s.split("|", 1)[0].strip()
+    cut = s.lower().find(".md#")
+    if s.lower().endswith(".md"):
+        target, heading = s, ""
+    elif cut >= 0:
+        target, heading = s[:cut + 3], s[cut + 4:]
+    else:
+        target, _, heading = s.partition("#")
     target = target.strip().replace("\\", "/")
+    target = posixpath.normpath(target) if "/" in target else target
     return target[2:] if target.startswith("./") else target, heading.strip()
 
 
@@ -1476,9 +1487,9 @@ def _local_paths(sctx, key):
 def _by_name(sctx, name):
     """The path of the note named `name` — its name key (ctx_index.name_key: no folder, no `.md`, NFC, case folded)
     among the own index's notes, else among those of every registered local index (`_local_paths`, by the file's
-    name); a note the search excludes (`_keep`) does not count. Exactly one; several → GetError 3 naming at most
-    SEVERAL_MAX of them and `ще N` for the rest; none → GetError 3 (NO_CANDIDATE, or EXCLUDED_NOTE when only an
-    excluded note has the name)."""
+    name); a note the search excludes (`_keep`) does not count. Exactly one, or the one whose path is the name itself
+    (`<name>.md` at a vault's root); else several → GetError 3 naming at most SEVERAL_MAX of them and `ще N` for the
+    rest; none → GetError 3 (NO_CANDIDATE, or EXCLUDED_NOTE when only an excluded note has the name)."""
     key = ci.name_key(name)
     found = [p for p in ci.Index(sctx["home"]).paths() if ci.name_key(p) == key] if key else []
     if key and not found:
@@ -1486,6 +1497,8 @@ def _by_name(sctx, name):
     kept = sorted({N(p) for p in found if _keep(sctx, p)})
     if not kept:
         raise GetError(3, EXCLUDED_NOTE % sorted(found)[0] if found else NO_CANDIDATE % name)
+    if N(name) + ".md" in kept:
+        return N(name) + ".md"
     if len(kept) > 1:
         shown = kept[:SEVERAL_MAX] + (["ще %d" % (len(kept) - SEVERAL_MAX)] if len(kept) > SEVERAL_MAX else [])
         raise GetError(3, SEVERAL_NOTE % (name, " · ".join(shown)))
@@ -1523,16 +1536,20 @@ def _note_of(sctx, path):
     disk and downloaded, through the time-budgeted reader (ctx_store.read_text); a registered local index's body
     (`_local_body`; `said` is the ICLOUD_LOCAL line when the file is one iCloud has not downloaded — never opened);
     the server, for an `@<repository>/…` name of a repository reached only over MCP (`_mcp_entry`, `_from_mcp`).
-    `source` names the root the note lies under (`_root_source`: `own`, a repository id), else the local index, else
-    `vault` (a file outside every root); `marks` is `_marks` of its frontmatter. GetError 3 — no such note
-    (NO_CANDIDATE), a file not downloaded that no local index holds (ICLOUD_MISSING), or one not read in time; 5 —
-    the server did not answer."""
+    `source` names the root the note lies under (`_root_source`: `own`, a repository id), else `vault` (a file outside
+    every root) whichever source gave the text; `marks` is `_marks` of its frontmatter. None when nothing holds the
+    note. GetError 3 — a file not downloaded that no local index holds (ICLOUD_MISSING), one not read in time, or a
+    file that lies under an excluded folder after all (ctx_index.excluded of its real path, case-folded: a link, a
+    spelling in another case); 5 — the server did not answer."""
     got = ci.Index(sctx["home"]).note(path)
     if got:
         meta, secs = got
         return (meta.get("source") or "own", meta.get("date"), _marks(meta), None, secs,
                 "\n\n".join(p for p in (_as_markdown(h, t) for h, t in secs) if p))
     found = _file_of(sctx, path)
+    if found and ci.excluded(ci.rel_path(os.path.realpath(found), sctx.get("vaults") or []), sctx.get("store_rel"),
+                             sctx.get("blocks_rels"), fold=True):
+        raise GetError(3, EXCLUDED_NOTE % path)
     dataless = bool(found) and ci.is_dataless(found)
     try:
         mtime = os.stat(found).st_mtime if found else None
@@ -1549,7 +1566,7 @@ def _note_of(sctx, path):
     local = _local_body(sctx, path, found or os.path.join((sctx.get("vaults") or [""])[0], *path.split("/")))
     if local:
         meta = ci.note_meta(path, local[1], mtime=mtime)
-        return (_root_source(sctx, path) or local[0], meta.get("date"), _marks(meta),
+        return (_root_source(sctx, path) or "vault", meta.get("date"), _marks(meta),
                 ICLOUD_LOCAL % local[0] if dataless else None, ci.split_sections(local[1]), _section_of(local[1], ""))
     if found and dataless:
         raise GetError(3, ICLOUD_MISSING % path)
@@ -1557,26 +1574,31 @@ def _note_of(sctx, path):
     if entry:
         body, date, meta, _ = _from_mcp(sctx, entry)
         return entry["source"], date, _marks(meta), None, ci.split_sections(body), _section_of(body, "")
-    raise GetError(3, NO_CANDIDATE % path)
+    return None
 
 
 def _get_path(sctx, arg):
     """(header, text) of a note by its path (an index name, NFC or NFD; `.md` added when it has none) or its name
-    (`_by_name`: `Name`, `Name.md`, `[[Name]]`, `[[Name|alias]]`; a link with a folder in it is a path), read as
-    `_note_of` reads it. The whole note without its frontmatter under `> [<source> · <path> · <day>]` and its marks,
-    GET_CHARS characters at most and then the LONG_NOTE line; with a heading after `#` (`[[Name#Heading]]`,
-    `<path>#<heading>` — the section whose heading path ends in it, `_heading_of`) that section alone under
-    `> [<source> · <path> › <heading> · <day>]`, a short one going on with the next (`_fill`); GetError 3 for a
-    heading the note lacks. A path the search excludes (ctx_index.excluded: the store, a blocks file,
-    `_System/_scratch/`) is GetError 3 EXCLUDED_NOTE. Reads only; last.json is not touched."""
+    (`Name`, `Name.md`, `[[Name]]`, `[[Name|alias]]`), read as `_note_of` reads it. A target is a path first — a
+    note at a vault's root is named `<name>.md`, with no `/`, as the list prints it — and a name only when no source
+    holds that path (`_by_name`); a link with a folder in it is a path alone. The whole note without its frontmatter
+    under `> [<source> · <path> · <day>]` and its marks, GET_CHARS characters at most and then the LONG_NOTE line;
+    with a heading after `#` (`[[Name#Heading]]`, `<path>#<heading>` — the section whose heading path ends in it,
+    `_heading_of`) that section alone under `> [<source> · <path> › <heading> · <day>]`, a short one going on with
+    the next (`_fill`); GetError 3 for a heading the note lacks. A path the search excludes (ctx_index.excluded,
+    case-folded: the store, a blocks file, `_System/_scratch/`) is GetError 3 EXCLUDED_NOTE. Reads only; last.json
+    is not touched."""
     target, heading = _parse(arg)
-    if "/" in target:
-        path = target if target.lower().endswith(".md") else target + ".md"
-    else:
-        path = _by_name(sctx, target[:-3] if target.lower().endswith(".md") else target)
-    if ci.excluded(path, sctx.get("store_rel"), sctx.get("blocks_rels")):
+    path = target if target.lower().endswith(".md") else target + ".md"
+    if ci.excluded(path, sctx.get("store_rel"), sctx.get("blocks_rels"), fold=True):
         raise GetError(3, EXCLUDED_NOTE % path)
-    source, date, marks, said, secs, whole = _note_of(sctx, path)
+    note = _note_of(sctx, path)
+    if note is None and "/" not in target:
+        path = _by_name(sctx, target[:-3] if target.lower().endswith(".md") else target)
+        note = _note_of(sctx, path)
+    if note is None:
+        raise GetError(3, NO_CANDIDATE % path)
+    source, date, marks, said, secs, whole = note
     if heading:
         hp = _heading_of(secs, heading)
         if hp is None:
@@ -1643,7 +1665,8 @@ def get(sctx, cid):
     links to — `<path>`, `Name`, `[[Name|alias]]`, `[[Name#Heading]]`, `<path>#<heading>`). For an id: the header
     `> [<source> · <path> › <heading> · <day>]` (an own section names the index's source of its note: `own`, or the
     repository of a core page), the text under the heading (a note-level candidate: the note without its
-    frontmatter). The id is looked up in last.json (the last search), else among the sections of the own index. An
+    frontmatter). The id is looked up in last.json (the last search), else among the sections of the own index — and
+    one neither has is tried as a name (a note named by ten hex digits). An
     own section is read from the index (from its file when the note changed since); a note only a local index knows
     from the vault; an MCP one through vault_get_note. A file is read only through the time-budgeted reader, and
     never one iCloud has not downloaded (`_from_disk`: the text of a local index then, its line first — the whole
@@ -1661,7 +1684,7 @@ def get(sctx, cid):
     if not isinstance(entry, dict) or not entry.get("path"):
         entry = _in_index(idx, cid)
     if not entry:
-        raise GetError(3, NO_CANDIDATE % cid)
+        return _get_path(sctx, arg)             # a note named like an id; else NO_CANDIDATE, as for a name
     heading, date, text, marks = entry.get("heading") or "", entry.get("date") or "", None, ""
     said, following = None, []
     if entry.get("kind") == "own":

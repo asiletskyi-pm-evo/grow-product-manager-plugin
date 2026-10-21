@@ -1529,6 +1529,76 @@ out = cs_.dedup([entry(N2, "", 0.05, source="zorg-brain", near="k1", date="2026-
                  entry(N4, "", 0.01, source="zorg-brain", near="k1", date="2026-10-07")], {}, own=["Notes"])
 check("…an earlier day still wins", [c["path"] for c in out] == [N2] and out[0]["flags"] == ["двійник " + N4], out)
 
+# V1–V5 (round 5b): a vault-root path is a path first, `#` in a `.md` path, exclusion of non-canonical spellings, `vault`
+# whichever source gave the text, a note named like an id
+ROOT_TEAM = "---\ntype: note\ndate: 2026-10-10\n---\n# My root copy of team alpha\n\nROOT-LEVEL NOTE TEXT.\n"
+SHARP = "Growth/C# notes.md"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("team-alpha.md"), ROOT_TEAM)
+    write(env.note("Root memo.md"), "# Root memo\n\nroot one\n")
+    write(env.note("Growth/Root memo.md"), "# Root memo\n\ngrowth one\n")
+    write(env.note(SHARP), "# C# notes\n\nsharp text\n\n## Sharp\n\nThe sharp section.\n")
+    write(env.note(SCRATCH5), "---\ntype: note\n---\n# Zed Nine\n\nDigest of the 1-1s.\n")
+    write(env.note("Notes/deadbeef12.md"), "# deadbeef12\n\nA note named like an id.\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["team-alpha.md", "Root memo.md", "Growth/Root memo.md", SHARP])
+    sx = env.sctx()
+    env.refresh(sx)
+    reads, real_read, real_dataless, codes = [], cs_.cst.read_text, ci.is_dataless, []
+    cs_.cst.read_text = lambda p_, *a, **kw: reads.append(p_) or real_read(p_, *a, **kw)
+
+    def get_or(arg):
+        try:
+            return cs_.get(sx, arg)
+        except cs_.GetError as e:
+            codes.append(e.code)
+            return None, str(e)
+    try:
+        h, t = cs_.get(sx, "team-alpha.md")
+        check("V1: a vault-root path with no `/`, as the list prints it, is that note — never the own-index note of the same name",
+              h == "> [vault · team-alpha.md · 2026-10-10 · note]" and "ROOT-LEVEL NOTE TEXT." in t, (h, t[:80]))
+        check("…and the bare name is the exact path first", cs_.get(sx, "team-alpha") == (h, t), cs_.get(sx, "team-alpha")[0])
+        hr, tr = cs_.get(sx, "Root memo.md")
+        check("V1: two notes named Root memo: the root-level path reads itself, the other its own",
+              hr.startswith("> [vault · Root memo.md · ") and "root one" in tr
+              and "growth one" in cs_.get(sx, "Growth/Root memo.md")[1], (hr, tr[:60]))
+        check("V1: _by_name prefers the exact path among several", cs_._by_name(sx, "Root memo") == "Root memo.md",
+              cs_._by_name(sx, "Root memo"))
+        hs, ts = cs_.get(sx, SHARP)
+        check("V2: a path with `#` in its name is a path (it ends in .md)", hs.startswith("> [vault · %s · " % SHARP)
+              and "sharp text" in ts, (hs, ts[:60]))
+        hs2, ts2 = cs_.get(sx, SHARP + "#Sharp")
+        check("…and `<such a path>#<heading>` is its section", hs2.startswith("> [vault · %s › C# notes › Sharp · " % SHARP)
+              and ts2 == "The sharp section.", (hs2, ts2))
+        reads[:] = []
+        got = [get_or(p)[1] for p in ("Notes/_System/./_scratch/people_digests/zed-nine.md",
+                                      "Notes/_System/context/../_scratch/people_digests/zed-nine.md",
+                                      "Notes/_system/_scratch/people_digests/zed-nine.md", "notes/_system/context/records/x.md")]
+        check("V3: an excluded path spelt with `.`, `..` or another case is exit 3 `шлях виключено з пошуку`, nothing read",
+              codes == [3, 3, 3, 3] and got == [cs_.EXCLUDED_NOTE % SCRATCH5, cs_.EXCLUDED_NOTE % SCRATCH5,
+                                                cs_.EXCLUDED_NOTE % "Notes/_system/_scratch/people_digests/zed-nine.md",
+                                                cs_.EXCLUDED_NOTE % "notes/_system/context/records/x.md"] and reads == [], (codes, got, reads))
+        check("V3: …the walk's own check is unchanged — exact, so a lower-cased folder is another folder",
+              not ci.excluded("Notes/_system/_scratch/x.md", "Notes/_System/context", [])
+              and ci.excluded("Notes/_system/_scratch/x.md", "Notes/_System/context", [], fold=True))
+        ci.is_dataless = lambda p_: unicodedata.normalize("NFC", p_).endswith("Cart experiments.md")
+        reads[:] = []
+        h4, t4 = cs_.get(sx, "Growth/Cart experiments.md")
+        check("V4: a note outside every root, its text from a local index (the file dataless): `vault` in the header, the index "
+              "only in the ICLOUD_LOCAL line", h4 == "> [vault · Growth/Cart experiments.md · 2026-08-01 · ab-test-results]"
+              and t4.startswith(cs_.ICLOUD_LOCAL % "zorg-brain" + "\n\n") and reads == [], (h4, t4[:120], reads))
+        ci.is_dataless = real_dataless
+        h5, t5 = cs_.get(sx, "deadbeef12")
+        check("V5: a note named like an id (ten hex digits) is read by its name when no search gave that id",
+              h5.startswith("> [own · Notes/deadbeef12.md · ") and "A note named like an id." in t5, (h5, t5[:60]))
+        codes[:] = []
+        h6, t6 = get_or("0000000000")
+        check("…an id no search gave and no note is named by: exit 3, one line", codes == [3] and "0000000000" in t6 and "\n" not in t6,
+              (codes, t6))
+        check("V1–V5: nothing written — no last.json", not os.path.exists(cs_.last_path(env.home)))
+    finally:
+        cs_.cst.read_text, ci.is_dataless = real_read, real_dataless
+
 # the protocols say what the fixes do
 import re  # noqa: E402
 
@@ -1609,6 +1679,10 @@ check("fix round 5 — provider §2 (U3): a server's note is `застаріле
                                             "a server's note has no size, and is not the smaller for it", "the older by its day"))
       and "`search --get ID\\|PATH\\|NAME [--json]`" in section(CP, 3) and "search --get ID|PATH|NAME [--json]" in read(ROOT, "scripts", "ctx.py")
       and "--get ID|PATH|NAME" in cs_.__doc__, (section(PP, 2)[-700:], section(PP, 5)[-1200:]))
+check("round 5b — search-protocol §4 (V6): a --get of a twin, a newer version or a hub's link that exits non-zero — rate on what "
+      "you have; a path is tried before a name",
+      all(x in section(SP, 4) for x in ("a twin you could not read is not a conflict", "leaves the older one in the block, not taken",
+                                        "a hub's link you could not read is not taken", "tried as a path first")), section(SP, 4)[-1800:])
 check("vault-protocol «In short»: the level-2 triggers are in search-protocol §8",
       "maybe live sources (level 2; triggers in search-protocol §8)" in read(ROOT, "references", "vault-protocol.md"))
 

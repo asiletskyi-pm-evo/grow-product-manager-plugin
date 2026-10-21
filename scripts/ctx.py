@@ -167,9 +167,11 @@
                                 needed. The ids are merged into <home>/.grow-pm/index/last.json (a save that fails is a line,
                                 never the exit code). A candidate's sources name the repository of a core page.
   search --get ID|PATH|NAME [--json]
-                                one section of the last searches (or of the section index, by its id); for a note's
-                                path (`/` in it) or its name, as a hub links it (`Name`, `Name.md`, `[[Name]]`,
-                                `[[Name|alias]]`), the whole note without its frontmatter — from the section index,
+                                one section of the last searches (or of the section index, by its id — an id neither
+                                has is tried as a name); for a note's path or its name, as a hub links it (`Name`,
+                                `Name.md`, `[[Name]]`, `[[Name|alias]]`; a path first — a note at a vault's root is
+                                `<name>.md` — a name when no source holds that path), the whole note without its
+                                frontmatter — from the section index,
                                 else its file when it is on disk and downloaded, else a local index's body, else (an
                                 `@<repo>/…` name of a repository with no folder on disk) its server — 20 000 characters
                                 at most, then the line `нотатка довга — показано перші 20 000 знаків; секцію — --get

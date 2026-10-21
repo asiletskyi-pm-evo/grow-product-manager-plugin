@@ -173,32 +173,35 @@ def rel_path(abs_path, vaults, root=None):
     return _slash(_spellings(abs_path)[0])
 
 
-def _skip_folder(rel, store_rel):
+def _skip_folder(rel, store_rel, fold=False):
     """A folder (or a file in it) the index never enters: the store, `_System/providers/`, `_System/_scratch/` (the
     plugin's scratch files — per-person digests among them), `.obsidian`, `.trash`, a name that starts with
-    `_backup`."""
+    `_backup`. With `fold` the names are compared case-folded (`excluded`)."""
+    low = str.casefold if fold else str
     if store_rel:
-        s = _slash(N(store_rel)).rstrip("/")
-        if s and (rel == s or rel.startswith(s + "/")):
+        s = low(_slash(N(store_rel)).rstrip("/"))
+        if s and (low(rel) == s or low(rel).startswith(s + "/")):
             return True
-    parts = rel.split("/")
+    parts = [low(p) for p in rel.split("/")]
     for i, part in enumerate(parts):
         if part in (".obsidian", ".trash") or part.startswith("_backup"):
             return True
-        if part == "_System" and i + 1 < len(parts) and parts[i + 1] in ("providers", "_scratch"):
+        if part == low("_System") and i + 1 < len(parts) and parts[i + 1] in ("providers", "_scratch"):
             return True
     return False
 
 
-def excluded(rel, store_rel, blocks_rels):
+def excluded(rel, store_rel, blocks_rels, fold=False):
     """Is the file `rel` (an index name) left out: under the store, `_System/providers/` or `_System/_scratch/`, a
     blocks file of a registration, in a `.obsidian`, `.trash` or `_backup…` folder, not `.md`, or `local-context.md`
-    itself. Every source's hits go through it, not only the walk."""
+    itself. Every source's hits go through it, not only the walk — exactly, as the index names them; with `fold`
+    the names are compared case-folded, for a path a user typed on a case-insensitive disk (`ctx search --get`)."""
+    low = str.casefold if fold else str
     rel = _slash(N(rel or ""))
-    if _skip_folder(rel, store_rel) or rel in {_slash(N(b)) for b in blocks_rels or ()}:
+    if _skip_folder(rel, store_rel, fold) or low(rel) in {low(_slash(N(b))) for b in blocks_rels or ()}:
         return True
     name = rel.rsplit("/", 1)[-1]
-    return not name.lower().endswith(".md") or name == "local-context.md"
+    return not name.lower().endswith(".md") or low(name) == "local-context.md"
 
 
 # ------------------------------------------------------------------ a note

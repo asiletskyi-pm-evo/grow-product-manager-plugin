@@ -4767,6 +4767,15 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = run_ok(env, "search", "--get", "Notes/_System/context/records/x.md")
     check("U5: a path under the store: exit 3 `шлях виключено з пошуку`", rc == 3
           and out.startswith("search: шлях виключено з пошуку: Notes/_System/context/records/x.md"), (rc, out[-300:]))
+    # round 5b: a vault-root path with no `/` is a path first, never a name's lookup
+    env.add("Root memo.md", "# Root memo\n\nroot one\n")
+    env.add("Growth/Root memo.md", "# Root memo\n\ngrowth one\n")
+    rc, out, res = run_ok(env, "search", "--get", "Root memo.md", "--json")
+    check("V1: --get of a vault-root path with no `/`: exit 0, that note under `> [vault · Root memo.md · …]`",
+          rc == 0 and res and res["header"].startswith("> [vault · Root memo.md · ") and "root one" in res["text"], (rc, res, out[-300:]))
+    rc, out, res = run_ok(env, "search", "--get", "Root memo", "--json")
+    check("…and its bare name is that path first", rc == 0 and res and res["header"].startswith("> [vault · Root memo.md · "),
+          (rc, res, out[-300:]))
 
 check("every command ends with a CTX_RESULT line", contract_ok)
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

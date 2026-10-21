@@ -221,8 +221,15 @@ check("a frontmatter never closed: no metadata, the text read as text", m["type"
 m = ctx_index.note_meta("Notes/t.md", "---\ntitle: T\n\ttype: meeting\n---\n# Head\n")
 check("a frontmatter with a tab: no metadata at all", m["title"] == "Head" and m["type"] in ("", None), m)
 
-check("excluded: the store, _System/providers, the blocks file",
+check("excluded: the store, _System/providers, the blocks file — exact for the walk, case-folded with fold=True (round 5b)",
       ctx_index.excluded("Notes/_System/context/records/x.md", "Notes/_System/context", [])
+      and not ctx_index.excluded("notes/_system/context/records/x.md", "Notes/_System/context", [])
+      and ctx_index.excluded("notes/_system/context/records/x.md", "Notes/_System/context", [], fold=True)
+      and ctx_index.excluded("Notes/_SYSTEM/_scratch/x.md", "", [], fold=True)
+      and ctx_index.excluded("Notes/.Obsidian/x.md", "", [], fold=True)
+      and ctx_index.excluded("zorgcore/_system/context-blocks.md", "", ["ZorgCore/_System/context-blocks.md"], fold=True)
+      and ctx_index.excluded("Notes/Local-Context.md", "", [], fold=True)
+      and not ctx_index.excluded("Notes/_System/x.md", "", [], fold=True)
       and ctx_index.excluded("Notes/_System/context/INDEX.md", "Notes/_System/context", [])
       and ctx_index.excluded("Notes/_System/providers/p.md", "Notes/_System/context", [])
       and ctx_index.excluded("ZorgCore/_System/context-blocks.md", "", ["ZorgCore/_System/context-blocks.md"]))
