@@ -1438,10 +1438,12 @@ with tempfile.TemporaryDirectory() as d:
         check("U5: …a name whose only note a local index holds under _System/_scratch/: the same line, nothing read",
               codes == [3] and tz == "шлях виключено з пошуку: " + SCRATCH5 and len(reads) == 1, (codes, tz, reads))
         hg, tg = cs_.get(sx, LONG)
-        check("U6: a whole note is cut at 20 000 characters, then one line naming the path and the --get of a section",
-              hg == "> [own · %s · 2026-10-03 · note]" % LONG and tg.startswith("## Part 1\n\n") and len(tg) == cs_.GET_CHARS
-              + len("\n\n" + cs_.LONG_NOTE % LONG) and tg.endswith("нотатка довга — показано перші 20 000 знаків; "
-                                                                    "секцію — --get \"%s#<заголовок>\"" % LONG), (hg, len(tg), tg[-200:]))
+        whole6 = cs_._note_of(sx, LONG)[5]
+        check("U6 (v3.16.1): a whole note is cut at 20 000 characters, then how much of how many, the heading the cut falls "
+              "under and the --get of a section or --full",
+              hg == "> [own · %s · 2026-10-03 · note]" % LONG and tg.startswith("## Part 1\n\n") and tg == whole6[:20000]
+              + "\n\nнотатка довга — показано 20 000 знаків із %s; далі: Part 2 — --get \"%s#<заголовок>\" або --full "
+              "(до 60 000)" % ("{:,}".format(len(whole6)).replace(",", " "), LONG), (hg, len(tg), tg[-200:]))
         hp, tp = cs_.get(sx, LONG + "#Part 2")
         check("…a section of it is whole, with no such line", hp == "> [own · %s › Long zebra › Part 2 · 2026-10-03 · note]" % LONG
               and tp == "y" * 10000 and cs_.get(sx, "[[Long zebra#Part 2]]") == (hp, tp), (hp, len(tp), tp[-100:]))
@@ -1668,7 +1670,7 @@ check("fix round 5 — search-protocol §4: a hub's link by name or path, the na
       all(x in section(SP, 4) for x in (
           "`Name`, `Name.md`, `[[Name]]`, `[[Name|alias]]`, `[[Name#Heading]]`",
           "`%s`" % (cs_.SEVERAL_NOTE % ("<назва>", "<шлях> · <шлях> …")), "`%s`" % (cs_.EXCLUDED_NOTE % "<шлях>"),
-          "`%s`" % (cs_.LONG_NOTE % "<шлях>"), "`vault` for a file outside every root", "read through its server (exit 5",
+          "`vault` for a file outside every root", "read through its server (exit 5",
           "Never open a vault file by its path yourself in Step 0.5 on a host with SHELL", "without SHELL §12 applies"))
       and "`vault` is a file outside every root" in section(SP, 5), section(SP, 4)[-2600:])
 check("fix round 5 — provider §2 (U3): a server's note is `застаріле` by status only, `станом на <день>` by its class age; §5: key 4 "
@@ -1685,6 +1687,129 @@ check("round 5b — search-protocol §4 (V6): a --get of a twin, a newer version
                                         "a hub's link you could not read is not taken", "tried as a path first")), section(SP, 4)[-1800:])
 check("vault-protocol «In short»: the level-2 triggers are in search-protocol §8",
       "maybe live sources (level 2; triggers in search-protocol §8)" in read(ROOT, "references", "vault-protocol.md"))
+
+# v3.16.1 Task 2: every --get form is cut at 20 000 characters (60 000 with --full), a line saying how much of how many
+# and naming the headings past the cut
+def heading_names_after(text, cut, dup_full=None):
+    """The names the line should carry, worked out from the text alone: the heading the cut falls under, then every
+    heading line that starts past the cut (the last part; the full path for a last part that repeats)."""
+    import re as _re
+    pos, names, stack, last_before = 0, [], [], None
+    for line in text.split("\n"):
+        m = _re.match(r"^(#{1,3})[ \t]+(.+?)[ \t]*$", line)
+        if m:
+            level = len(m.group(1))
+            stack = [s for s in stack if s[0] < level] + [(level, m.group(2))]
+            name = " › ".join(s[1] for s in stack) if dup_full and m.group(2) in dup_full else m.group(2)
+            if pos >= cut:
+                names.append(name)
+            else:
+                last_before = name
+        pos += len(line) + 1
+    return ([last_before] if last_before else []) + names
+
+
+def long_line(path, shown, total, names, full):
+    n = lambda v: "{:,}".format(v).replace(",", " ")
+    head = "нотатка довга — показано %s знаків із %s; " % (n(shown), n(total))
+    more = "" if full else " або --full (до 60 000)"
+    if names:
+        return head + "далі: " + " · ".join(names) + " — --get \"%s#<заголовок>\"" % path + more
+    return head + "заголовків далі немає" + (" — --full (до 60 000)" if not full else "")
+
+
+PARTS = "Notes/Long/Long parts.md"          # 20 sections, ~45 000 characters
+HUGE = "Notes/Long/Huge parts.md"           # 32 sections, ~70 000
+MANY = "Notes/Long/Many parts.md"           # 40 short sections past the cut
+DUP = "Notes/Long/Dup parts.md"             # two `Notes` under two parents past the cut
+SEC = "Notes/Long/Long section.md"          # one 30 000-character section
+FLAT = "Notes/Long/Flat zebra.md"           # no heading, 34 000 characters
+OUT = "Growth/Zebra long.md"                # outside the plugin folder: only the local index knows it
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note(PARTS), "---\ntype: note\nupdated: 2026-10-05\n---\n# Long parts\n\n"
+          + "".join("## Part %d\n\n%s\n\n" % (i, "p" * 2200) for i in range(1, 21)))
+    write(env.note(HUGE), "# Huge parts\n\n" + "".join("## Chunk %d\n\n%s\n\n" % (i, "h" * 2200) for i in range(1, 33)))
+    write(env.note(MANY), "# Many parts\n\n" + "m" * 20500 + "\n\n" + "".join("## Bit %d\n\nshort\n\n" % i for i in range(1, 41)))
+    write(env.note(DUP), "# Dup parts\n\n" + "d" * 20500 + "\n\n## Alpha\n\nalpha text\n\n### Notes\n\na\n\n## Beta\n\nbeta text\n\n### Notes\n\nb\n")
+    write(env.note(SEC), "# Long section\n\n## Big\n\n" + "b" * 30000 + "\n\n## Small\n\nsmall text\n")
+    write(env.note(FLAT), "Flat zebra stripes of the cart. " + "f" * 34000 + "\n")
+    write(env.note(OUT), "---\ntype: note\nupdated: 2026-09-09\n---\n# Zebra long\n\nLong zebra stripes of the cart.\n\n"
+          + "".join("## Leg %d\n\n%s\n\n" % (i, "o" * 2200) for i in range(1, 21)))
+    build_brain(env.brain, env.vault, BRAIN_NOTES + [OUT])
+    sx = env.sctx()
+    env.refresh(sx)
+
+    def cut_of(arg, full=False):
+        try:
+            return cs_.get(sx, arg, full=full)
+        except TypeError as e:              # no `full` yet
+            return None, "TypeError %s" % e
+
+    h, t = cut_of(PARTS)
+    full_text = cs_._note_of(sx, PARTS)[5]
+    want = full_text[:20000] + "\n\n" + long_line(PARTS, 20000, len(full_text), heading_names_after(full_text, 20000), False)
+    check("v3.16.1 C6: --get <path> of a 45 000-character note — 20 000 characters, then how much of how many and the headings "
+          "from the one the cut falls under", t == want, (len(t or ""), (t or "")[-400:], want[-400:]))
+    h, t = cut_of(PARTS, full=True)
+    check("…--full: the whole 45 000, no line", t == full_text, (len(t or ""), (t or "")[-200:]))
+    huge = cs_._note_of(sx, HUGE)[5]
+    h, t = cut_of(HUGE, full=True)
+    check("…--full of a 70 000-character note: 60 000, the line without the --full hint",
+          t == huge[:60000] + "\n\n" + long_line(HUGE, 60000, len(huge), heading_names_after(huge, 60000), True),
+          (len(t or ""), (t or "")[-300:]))
+    many = cs_._note_of(sx, MANY)[5]
+    h, t = cut_of(MANY)
+    names = heading_names_after(many, 20000)
+    check("…more than 20 names: the first 20, then `· ще N`", t is not None and t.endswith(
+        "далі: " + " · ".join(names[:20]) + " · ще %d — --get \"%s#<заголовок>\" або --full (до 60 000)" % (len(names) - 20, MANY)),
+        (t or "")[-500:])
+    dup = cs_._note_of(sx, DUP)[5]
+    h, t = cut_of(DUP)
+    check("…a last part that repeats is named by its full path", t == dup[:20000] + "\n\n"
+          + long_line(DUP, 20000, len(dup), heading_names_after(dup, 20000, dup_full={"Notes"}), False)
+          and "· Dup parts › Alpha › Notes · Beta · Dup parts › Beta › Notes —" in t, (t or "")[-300:])
+    h, t = cut_of(SEC + "#Big")
+    check("…a section after `#` is cut too: 20 000, the line (no headings past the cut inside it)",
+          t == "b" * 20000 + "\n\n" + long_line(SEC, 20000, 30000, [], False), (len(t or ""), (t or "")[-200:]))
+    h, t = cut_of(SEC + "#Big", full=True)
+    check("…with --full the 30 000-character section is whole", t == "b" * 30000, (len(t or ""), (t or "")[-100:]))
+    res = cs_.run(sx, ["flat zebra stripes"], now=NOW)
+    flat = next((c for c in res["candidates"] if c["path"] == FLAT), None)
+    h, t = cut_of(flat["id"]) if flat else (None, "")
+    flat_text = cs_._note_of(sx, FLAT)[5]
+    check("…--get <id> of an own section with no heading, 34 000 characters: 20 000, «заголовків далі немає»",
+          flat and len(flat_text) > 34000 and t == flat_text[:20000] + "\n\n" + long_line(FLAT, 20000, len(flat_text), [], False),
+          (len(t or ""), (t or "")[-200:]))
+    res = cs_.run(sx, ["long zebra stripes"], now=NOW)
+    cs_.save_last(env.home, res["last"])
+    out = next((c for c in res["candidates"] if c["path"] == OUT), None)
+    h, t = cut_of(out["id"]) if out else (None, "")
+    body = cs_._note_of(sx, OUT)[5]
+    check("…--get <id> of a note-level local-index candidate: the same cut and line",
+          out and out["source"] == ["zorg-brain"] and t == body[:20000] + "\n\n"
+          + long_line(OUT, 20000, len(body), heading_names_after(body, 20000), False), (out, len(t or ""), (t or "")[-300:]))
+    real_dataless = ci.is_dataless
+    ci.is_dataless = lambda p_: unicodedata.normalize("NFC", p_).endswith("Zebra long.md")
+    try:
+        h, t = cut_of(OUT)
+        body_l = cs_._note_of(sx, OUT)[5]
+    finally:
+        ci.is_dataless = real_dataless
+    said = cs_.ICLOUD_LOCAL % "zorg-brain" + "\n\n"
+    check("…the ICLOUD_LOCAL line comes first and is not counted", t == said + body_l[:20000] + "\n\n"
+          + long_line(OUT, 20000, len(body_l), heading_names_after(body_l, 20000), False), (t or "")[:200])
+    h, t = cut_of(PARTS + "#Part 2")
+    check("…a text within the cut: no line", t == "p" * 2200, (len(t or ""), (t or "")[-100:]))
+
+check("v3.16.1 C6 — search-protocol §4: every --get form is cut at 20 000, the line's two shapes, --full up to 60 000 for a "
+      "candidate taken as «прямо» and when, never for a hub, a twin's check or one not rated «прямо»; context-protocol §3",
+      all(x in section(SP, 4) for x in (
+          "`%s`" % cs_.long_note("<шлях>", 20000, "<усього>", ["<заголовок>", "…"], False),
+          "`%s`" % cs_.long_note("<шлях>", 20000, "<усього>", [], False),
+          "Any form of `--get`", "a section after `#` too", "`--full`", "60 000", "rated «прямо»",
+          "never for a hub, a twin's check or a candidate not rated «прямо»"))
+      and "--full" in section(CP, 3), section(SP, 4)[-2600:])
 
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:

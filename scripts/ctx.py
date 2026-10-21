@@ -179,12 +179,15 @@
                                 `<name>.md` — a name when no source holds that path), the whole note without its
                                 frontmatter — from the section index,
                                 else its file when it is on disk and downloaded, else a local index's body, else (an
-                                `@<repo>/…` name of a repository with no folder on disk) its server — 20 000 characters
-                                at most, then the line `нотатка довга — показано перші 20 000 знаків; секцію — --get
-                                "<шлях>#<заголовок>"`; `<path>#<heading>` or `[[Name#Heading]]` gives that section:
+                                `@<repo>/…` name of a repository with no folder on disk) its server;
+                                `<path>#<heading>` or `[[Name#Heading]]` gives that section:
                                 `> [<source> · <path> › <heading> · <day>]` and its text (an MCP note through vault_get_note).
                                 A section under 200 characters goes on with the next ones, up to 1 500, after
-                                the line `секція коротка — додано наступні: <headings>`. A file is read within the read
+                                the line `секція коротка — додано наступні: <headings>`. Any form gives 20 000
+                                characters at most (since v3.16.1; --full: 60 000, for a note taken as «прямо»), then
+                                `нотатка довга — показано 20 000 знаків із <усього>; далі: <headings> — --get
+                                "<шлях>#<заголовок>" або --full (до 60 000)` (or `заголовків далі немає`); --full
+                                goes with --get alone (else exit 3). A file is read within the read
                                 budget, and one iCloud has not downloaded never: the text of a registered local index,
                                 after the line `файл не завантажено з iCloud — текст із локального індексу <id>`, else
                                 exit 3 (`файл не завантажено з iCloud: <path> — відкрий його в Obsidian або ctx index
@@ -1110,12 +1113,14 @@ def cmd_search(a, c):
         return _search_hint(a, c)
     if a.action == "eval":
         return _search_eval(a, c)
+    if a.full and a.get is None:
+        raise Usage("--full goes with --get")
     sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
     if a.get is not None:
         if a.q:
             raise Usage("search takes --q or --get, not both")
         try:
-            header, text = cs_.get(sctx, a.get)
+            header, text = cs_.get(sctx, a.get, full=a.full)
         except cs_.GetError as e:
             print("search: %s" % e)
             return e.code, {"command": "search", "action": "get", "id": a.get, "error": str(e)}
@@ -1767,7 +1772,7 @@ def build_parser():
     ip.add_parser("status", parents=[common])
     ip.add_parser("rebuild", parents=[common]).add_argument("--download", action="store_true")
     sp = sub.add_parser("search", parents=[common]); sp.add_argument("action", nargs="?", choices=SEARCH_ACTIONS)
-    sp.add_argument("--q", action="append"); sp.add_argument("--get")
+    sp.add_argument("--q", action="append"); sp.add_argument("--get"); sp.add_argument("--full", action="store_true")
     sp.add_argument("--skill"); sp.add_argument("--product"); sp.add_argument("--limit", type=int)
     sp.add_argument("--sources"); sp.add_argument("--no-hints", action="store_true"); sp.add_argument("--json", action="store_true")
     sp.add_argument("--pick", action="append", metavar="ID|PATH")
