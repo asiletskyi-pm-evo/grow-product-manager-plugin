@@ -30,20 +30,22 @@ process holds index.lock (younger than 600 s, its process alive) the refresh doe
 index as it is.
 
 Writes only under `<home>/.grow-pm/index/` (through ctx_store.check_target, so inside `ctx` the write guard holds);
-reads the vault and the core folders; no network. Stdlib only.
+reads the vault and the core folders; no network of its own (`rebuild --download` has macOS bring files down from
+iCloud). Stdlib only.
 """
 import bisect
 import collections
-import concurrent.futures
 import datetime
 import hashlib
 import json
 import os
 import re
+import signal
 import sqlite3
 import stat
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 
@@ -59,7 +61,8 @@ LOCK_STALE_S = 600.0                # a lock older than this is abandoned
 SF_DATALESS = 0x40000000            # st_flags of a file whose data is not on disk (macOS, iCloud)
 DOWNLOAD_S = 30.0                   # rebuild --download: one file's time to come down, then it is left
 DOWNLOAD_WORKERS = 4                # rebuild --download: files read at once
-_READ_ONE = "import sys; open(sys.argv[1], 'rb').read(1)"   # the child's read that brings a file down
+_READ_ONE = ("import signal, sys; getattr(signal, 'alarm', int)(int(sys.argv[2])); open(sys.argv[1], 'rb').read(1)")
+                                    # the child's read that brings a file down; it stops itself a little after its time
 DB_NAME, STATE_NAME, LOCK_NAME = "sections.sqlite", "index.json", "index.lock"
 BM25 = (10.0, 6.0, 4.0, 4.0, 1.0)   # title, heading, tags, aliases, body
 HUB_TYPES = frozenset(("glossary", "moc", "people", "person", "focus-brief", "daily-summary"))
@@ -522,32 +525,47 @@ def is_dataless(path):
 
 
 # ------------------------------------------------------------------ bringing evicted files down (`rebuild --download`)
+_children, _children_lock = set(), threading.Lock()     # the reads running now: a stopped download kills them
+
+
 def _fetch(path, timeout):
     """Read the first byte of `path` in a child process — macOS brings a file iCloud evicted down when it is read —
     within `timeout` seconds: "ok", "timeout" (the child killed: a read in this process could not be stopped) or
-    "failed" (it could not be read)."""
+    "failed" (it could not be read). The child stops itself (SIGALRM) a few seconds after `timeout` should this process
+    go first; while it runs it is in `_children`, so that a stopped download kills it."""
     try:
-        p = subprocess.run([sys.executable, "-I", "-c", _READ_ONE, path], stdin=subprocess.DEVNULL,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return "timeout"
+        p = subprocess.Popen([sys.executable, "-I", "-c", _READ_ONE, path, str(int(timeout) + 5)],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError:
         return "failed"
-    return "ok" if p.returncode == 0 else "failed"
+    with _children_lock:
+        _children.add(p)
+    try:
+        try:
+            rc = p.wait(timeout)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            p.wait()
+            return "timeout"
+        return "ok" if rc == 0 else "failed"
+    finally:
+        with _children_lock:
+            _children.discard(p)
 
 
 def evicted(roots, store_rel, blocks_rels):
     """The files of the plugin folders (the roots `own`) iCloud has not downloaded that the index would read: as the
     walk takes them (`_skip_folder`, `excluded`, MAX_BYTES at most) — no symbolic link followed (it could lead out of
-    the plugin folder) and no folder another root walks (a core inside the plugin folder). Only stat calls; sorted."""
+    the plugin folder), no folder another root walks (a core inside the plugin folder, a nested plugin root: that one
+    on its own turn), each file once. Only stat calls; sorted."""
     vaults = []
     for r in roots:
         if r.get("vault") and r["vault"] not in vaults:
             vaults.append(r["vault"])
-    others = {N(os.path.normpath(r["path"])) for r in roots if r.get("source") != "own"}
+    every = {N(os.path.normpath(r["path"])) for r in roots}
     store = _slash(N(store_rel or "")).rstrip("/")
     blocks = [_slash(N(b)) for b in blocks_rels or ()]
-    out = []
+    out = set()
     for r in roots:
         if r.get("source") != "own":
             continue
@@ -564,11 +582,11 @@ def evicted(roots, store_rel, blocks_rels):
                 child = rel + "/" + N(e.name) if rel else N(e.name)
                 try:
                     if e.is_dir(follow_symlinks=False):
-                        if not _skip_folder(child, store) and N(os.path.normpath(e.path)) not in others:
+                        if not _skip_folder(child, store) and N(os.path.normpath(e.path)) not in every:
                             stack.append((e.path, child))
                     elif (e.is_file(follow_symlinks=False) and not excluded(child, store, blocks)
                           and e.stat(follow_symlinks=False).st_size <= MAX_BYTES and is_dataless(e.path)):
-                        out.append(e.path)
+                        out.add(e.path)
                 except OSError:
                     continue
     return sorted(out)
@@ -578,41 +596,68 @@ def download(roots, store_rel, blocks_rels, fetch=None, workers=DOWNLOAD_WORKERS
     """Bring down from iCloud the files `evicted` names (`ctx index rebuild --download`): each read by `fetch`
     (`_fetch`: a child process, `per_file` seconds at most), `workers` at once; a file still not on disk after its
     read is left — timed out, failed, or neither (iCloud did not give it). `progress(done, total)` after every file.
-    Ctrl-C stops it: the reads not begun are dropped, what came down stays and is counted. Returns {candidates,
-    downloaded, left, timed_out, failed, interrupted}. Writes nothing."""
+    Ctrl-C (SIGINT, from before the scan; the old handler back after) stops it: no new read begins, the running ones
+    are killed, what came down stays and is counted — a handler that sets an event, so that no KeyboardInterrupt is
+    raised inside a lock. Returns {candidates, downloaded, left, timed_out, failed, interrupted}. Writes nothing."""
     fetch = fetch or _fetch
-    files = evicted(roots, store_rel, blocks_rels)
-    res = {"candidates": len(files), "downloaded": 0, "left": 0, "timed_out": 0, "failed": 0, "interrupted": False}
-    if not files:
-        return res
-    pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(workers)))
-    pending, done_n = {}, 0
+    stop = threading.Event()
+    res = {"candidates": 0, "downloaded": 0, "left": 0, "timed_out": 0, "failed": 0, "interrupted": False}
+    old = None
+    if threading.current_thread() is threading.main_thread():
+        old = signal.signal(signal.SIGINT, lambda *_: stop.set())
     try:
-        for p in files:
-            pending[pool.submit(fetch, p, per_file)] = p
-        while pending:
-            done, _ = concurrent.futures.wait(pending, timeout=0.2, return_when=concurrent.futures.FIRST_COMPLETED)
-            for fut in done:
-                path = pending.pop(fut)
+        files = evicted(roots, store_rel, blocks_rels)
+        res["candidates"] = len(files)
+        queue, done, lock = list(reversed(files)), [], threading.Lock()
+
+        def work():
+            while not stop.is_set():
+                with lock:
+                    if not queue:
+                        return
+                    path = queue.pop()
                 try:
-                    got = fut.result()
+                    got = fetch(path, per_file)
                 except Exception:  # noqa: BLE001 — a read that broke is one more file left
                     got = "failed"
+                with lock:
+                    done.append((path, got))
+
+        threads = [threading.Thread(target=work, daemon=True) for _ in range(min(max(1, int(workers)), len(files)))]
+        for t in threads:
+            t.start()
+        seen = 0
+        while not stop.is_set():
+            alive = any(t.is_alive() for t in threads)
+            with lock:
+                batch, done[:] = list(done), []
+            for path, got in batch:
                 if not is_dataless(path):
                     res["downloaded"] += 1
                 else:
                     res["left"] += 1
                     res["timed_out"] += got == "timeout"
                     res["failed"] += got not in ("ok", "timeout")
-                done_n += 1
+                seen += 1
                 if progress:
-                    progress(done_n, len(files))
-    except KeyboardInterrupt:
-        res["interrupted"] = True
-        res["downloaded"] = sum(1 for p in files if not is_dataless(p))
-        res["left"] = len(files) - res["downloaded"]
+                    progress(seen, len(files))
+            if not alive:
+                break
+            stop.wait(0.1)
+        if stop.is_set():
+            res["interrupted"] = True
+            with _children_lock:
+                running = list(_children)
+            for p in running:
+                try:
+                    p.kill()
+                except OSError:
+                    pass
+            res["downloaded"] = sum(1 for p in files if not is_dataless(p))
+            res["left"] = len(files) - res["downloaded"]
     finally:
-        pool.shutdown(wait=not res["interrupted"], cancel_futures=True)
+        if old is not None:
+            signal.signal(signal.SIGINT, old)
     return res
 
 

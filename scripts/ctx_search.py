@@ -98,6 +98,7 @@ FILL_CHARS = 1500               # --get: a short section goes on with the next o
 SHORT_NOTE = "секція коротка — додано наступні: %s"
 ICLOUD_LOCAL = "файл не завантажено з iCloud — текст із локального індексу %s"
 ICLOUD_MISSING = "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index rebuild --download"
+ICLOUD_OPEN = "файл не завантажено з iCloud: %s — відкрий його в Obsidian"   # a path --download never brings down
 GET_CHARS = 20000               # --get, any form (a section after `#` too): the characters of its text at most
 FULL_CHARS = 60000              # --get --full (a note the model took as «прямо», search-protocol §4): at most
 LONG_NOTE = "нотатка довга — показано %s знаків із %s; %s"
@@ -1312,6 +1313,12 @@ def _file_of(sctx, path):
     return next((f for f in files if f.lower().endswith(".md") and _inside(f, folders) and os.path.isfile(f)), None)
 
 
+def _icloud_missing(sctx, path):
+    """The line of a file iCloud has not downloaded that no local index holds: ICLOUD_MISSING (Obsidian or `ctx index
+    rebuild --download`) for a note of a plugin folder — the one --download brings down —, else ICLOUD_OPEN."""
+    return (ICLOUD_MISSING if _root_source(sctx, path) == "own" else ICLOUD_OPEN) % path
+
+
 def _from_disk(sctx, entry):
     """(text, date, meta, said) of a note on disk, by its index name: a vault's file, or `@<repository>/…` under its
     core folder; meta is what its frontmatter says (`_marks`), said a line to print above the text (None). Only a `.md`
@@ -1319,7 +1326,8 @@ def _from_disk(sctx, entry):
     file that does not arrive in time is one line, GetError 3, never a hang. A file iCloud has not downloaded
     (ctx_index.is_dataless) is never read — that would start its download: its text comes from a registered local index
     that holds it, said so (`файл не завантажено з iCloud — текст із локального індексу <id>`), else GetError 3
-    (`файл не завантажено з iCloud: <шлях> — відкрий його в Obsidian або ctx index rebuild --download`)."""
+    (`_icloud_missing`: `файл не завантажено з iCloud: <шлях> — відкрий його в Obsidian`, and ` або ctx index rebuild
+    --download` for a note of a plugin folder)."""
     path = entry["path"]
     found = _file_of(sctx, path)
     if not found:
@@ -1327,7 +1335,7 @@ def _from_disk(sctx, entry):
     if ci.is_dataless(found):
         local = _local_body(sctx, path, found)
         if local is None:
-            raise GetError(3, ICLOUD_MISSING % path)
+            raise GetError(3, _icloud_missing(sctx, path))
         meta = ci.note_meta(path, local[1])
         return local[1], meta.get("date") or "", meta, ICLOUD_LOCAL % local[0]
     try:
@@ -1574,7 +1582,7 @@ def _note_of(sctx, path):
         return (_root_source(sctx, path) or "vault", meta.get("date"), _marks(meta),
                 ICLOUD_LOCAL % local[0] if dataless else None, ci.split_sections(local[1]), _section_of(local[1], ""))
     if found and dataless:
-        raise GetError(3, ICLOUD_MISSING % path)
+        raise GetError(3, _icloud_missing(sctx, path))
     entry = _mcp_entry(sctx, path)
     if entry:
         body, date, meta, _ = _from_mcp(sctx, entry)

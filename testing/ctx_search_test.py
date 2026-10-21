@@ -1360,7 +1360,7 @@ with tempfile.TemporaryDirectory() as d:
         codes = []
         h5, t5 = get_or(codes, "Growth/Only on disk.md")
         check("T1: …a dataless file nothing else holds: exit 3, ICLOUD_MISSING, the file never opened",
-              codes == [3] and t5 == cs_.ICLOUD_MISSING % "Growth/Only on disk.md" and reads == [], (codes, t5, reads))
+              codes == [3] and t5 == getattr(cs_, "ICLOUD_OPEN", "-") % "Growth/Only on disk.md" and reads == [], (codes, t5, reads))
     finally:
         cs_.cst.read_text, ci.is_dataless = real_read, real_dataless
     codes = []
@@ -1640,7 +1640,7 @@ check("acceptance fix wave — search-protocol §3: the pool of 30; §4: `зас
       and "| `застаріле` | `status` outdated, archived, deprecated, former or superseded |" in section(SP, 4)
       and "| `%s` |" % (cs_.AS_OF % "<день>") in section(SP, 4)
       and all("`%s`" % x in section(SP, 4) for x in (cs_.SHORT_NOTE % "<заголовки>", cs_.ICLOUD_LOCAL % "<id>",
-                                                    cs_.ICLOUD_MISSING % "<шлях>"))
+                                                    cs_.ICLOUD_MISSING % "<шлях>", getattr(cs_, "ICLOUD_OPEN", "-") % "<шлях>"))
       and "`(<джерело>, станом на <день>)`" in section(SP, 5)
       and "`знімок від <день>` or `станом на <день>` alone does not forbid it" in section(SP, 6), section(SP, 4)[:1200])
 check("…context-provider-protocol §5: near copies are key 3a, an outdated status × 0.5; §6: a class TTL marks "
@@ -1834,8 +1834,10 @@ with tempfile.TemporaryDirectory() as d:
               pulled == [] and res["candidates"], pulled[:3])
     finally:
         ci.download, ci._fetch, ci.is_dataless = real_download, real_fetch, real_dataless
-check("v3.16.1: ICLOUD_MISSING names ctx index rebuild --download",
-      cs_.ICLOUD_MISSING == "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index rebuild --download")
+check("v3.16.1: ICLOUD_MISSING names ctx index rebuild --download — a note of the plugin folder, the one it brings down; "
+      "fix I2: ICLOUD_OPEN for any other path names Obsidian alone",
+      cs_.ICLOUD_MISSING == "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index rebuild --download"
+      and getattr(cs_, "ICLOUD_OPEN", None) == "файл не завантажено з iCloud: %s — відкрий його в Obsidian")
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

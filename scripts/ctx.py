@@ -145,7 +145,7 @@
                                 `decide` with no divergence ("no divergence for SLOT") or for a REPO that is not one of
                                 the sides, and a memory that cannot be read ("slots memory not readable|not valid:
                                 .state/slots.json (…)") are exit 3. CTX_RESULT: action, slot, changed, snapshot, memory (after)
-  index status|rebuild [--download]
+  index status | index rebuild [--download]
                                 the section index of the search (since v3.16.0; scripts/ctx_index.py): the plugin folder of
                                 every vault and the core folder of every registration that has one on disk, in
                                 `<home>/.grow-pm/index/` — no store lock, nothing written anywhere else. status: an
@@ -155,9 +155,12 @@
                                 brings down the plugin folder's files iCloud evicted that the index would read — never a
                                 core folder or the rest of a vault; no limit on the run, 30 s a file, 4 at once, minutes for
                                 a large vault — then «iCloud: завантажено N з M[, лишилось K (не встигли за 30 с: T; не
-                                прочитано: F)]» or «iCloud: нічого завантажувати», then the rebuild; Ctrl-C: «…, зупинено
-                                (Ctrl-C) — індекс не перебудовано», exit 130. Nothing else ever downloads. No vault and no
-                                core folder: exit 3; rebuild while another process holds index.lock: exit 4. CTX_RESULT:
+                                прочитано: F)]» (a reason only when not zero) or «iCloud: нічого завантажувати», then the
+                                rebuild; the index lock is checked first; Ctrl-C at any moment: «…, зупинено (Ctrl-C) —
+                                індекс не перебудовано», exit 130, the running reads killed. Nothing else ever downloads;
+                                status says «(plugin folder: K — ctx index rebuild --download)» when K evicted files lie in
+                                a plugin folder. No vault and no core folder: exit 3; rebuild while another process holds
+                                index.lock: exit 4. CTX_RESULT:
                                 action, schema, updated, files, sections, pending, skipped_dataless, download (with it)
   search --q TEXT [--q TEXT …] [--skill S] [--product P] [--limit N] [--sources own,local,mcp] [--no-hints] [--json]
                                 (since v3.16.0; scripts/ctx_search.py) the first --q is the question, the others its
@@ -191,7 +194,7 @@
                                 budget, and one iCloud has not downloaded never: the text of a registered local index,
                                 after the line `файл не завантажено з iCloud — текст із локального індексу <id>`, else
                                 exit 3 (`файл не завантажено з iCloud: <path> — відкрий його в Obsidian або ctx index
-                                rebuild --download`). An unknown id, note, name or section, a file not read in time, a
+                                rebuild --download`; outside a plugin folder `… — відкрий його в Obsidian` alone). An unknown id, note, name or section, a file not read in time, a
                                 name several notes carry (`кілька нотаток із назвою «<назва>»: <шляхи> — --get один зі
                                 шляхів`) or a path the search excludes (`шлях виключено з пошуку: <шлях>`): exit 3;
                                 the server did not answer: exit 5. --json: the header and the text in CTX_RESULT only
@@ -1036,13 +1039,15 @@ def cmd_index(a, c):
     if not roots:
         print("index: nothing to index — no vault in local-context.md and no registered repository with a folder on disk")
         return 3, {"command": "index", "action": a.action, "error": "no vault and no repository folder"}
+    idx = ci.Index(c.home)
     dl = None
     if getattr(a, "download", False):
+        if idx.lock_held():                     # before minutes of downloading, not after
+            raise co.Busy("another process is updating the index (%s)" % idx.lock_path)
         dl = ci.download(roots, store_rel, blocks, progress=_download_progress)
-        print(_download_line(dl))
+        print(_download_line(dl), flush=True)
         if dl["interrupted"]:
             return 130, {"command": "index", "action": a.action, "download": dl}
-    idx = ci.Index(c.home)
     try:
         if a.action == "rebuild":
             res = idx.rebuild(roots, store_rel, blocks)
@@ -1064,7 +1069,9 @@ def cmd_index(a, c):
     if res["rebuilt"] and a.action != "rebuild":
         print("  the index could not be read or had another schema — built again (the old one: %s.broken)" % idx.db_path)
     if s["skipped_dataless"]:
-        print("  not downloaded (iCloud), not read: %d — ctx index rebuild --download" % s["skipped_dataless"])
+        own = len(ci.evicted(roots, store_rel, blocks))     # what --download brings down: the plugin folder's
+        print("  not downloaded (iCloud), not read: %d%s" % (s["skipped_dataless"], " (plugin folder: %d — ctx index "
+                                                              "rebuild --download)" % own if own else ""))
     if res["skipped_large"]:
         print("  over %d bytes, not indexed: %d" % (ci.MAX_BYTES, res["skipped_large"]))
     if s["pending"]:

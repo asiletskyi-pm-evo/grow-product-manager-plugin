@@ -878,6 +878,109 @@ with tempfile.TemporaryDirectory() as d:
         ctx_index.download = real_download
         ctx_index.is_dataless = real_dataless
 
+# --- fix round (review of Task 1): the scope's "never" cases, nested roots, the defaults, the line's parts, the lock
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Elsewhere/x.md"), "# Elsewhere\n\nA folder of the vault no registration names.\n")
+    write(env.note("Notes/Core/y.md"), "# Inner core\n\nA core folder inside the plugin folder.\n")
+    write(env.note("Notes/Sub/z.md"), "# Sub\n\nA note of a nested plugin root.\n")
+    roots, store_rel, blocks_rels = env.scope()
+    real_dataless = ctx_index.is_dataless
+    ctx_index.is_dataless = lambda p: True
+    try:
+        inner = roots + [ctx_index.Root("zorg-inner", os.path.join(env.vault, "Notes", "Core"), env.vault)]
+        got = [unicodedata.normalize("NFC", p) for p in ctx_index.evicted(inner, store_rel, blocks_rels)]
+        check("fix I3: a vault folder outside the plugin folder and a core inside it are never taken",
+              not any("/Elsewhere/" in p or "/Notes/Core/" in p for p in got) and any(p.endswith("/Notes/Inbox.md") for p in got),
+              [p for p in got if "Elsewhere" in p or "Core" in p])
+        nested = roots + [ctx_index.Root("own", os.path.join(env.vault, "Notes", "Sub"), env.vault)]
+        got = [unicodedata.normalize("NFC", p) for p in ctx_index.evicted(nested, store_rel, blocks_rels)]
+        check("fix M2: a plugin root inside another one — each file once", len(got) == len(set(got))
+              and sum(p.endswith("/Notes/Sub/z.md") for p in got) == 1, sorted(p for p in got if "Sub" in p))
+    finally:
+        ctx_index.is_dataless = real_dataless
+check("fix M6: the defaults — 30 s a file, 4 at once", ctx_index.DOWNLOAD_S == 30.0 and ctx_index.DOWNLOAD_WORKERS == 4)
+line = getattr(ctx_cli, "_download_line", None)
+check("fix M7: the line names only the reasons that are not zero; neither — no brackets",
+      line and line({"candidates": 5, "downloaded": 3, "left": 2, "timed_out": 0, "failed": 2, "interrupted": False})
+      == "iCloud: завантажено 3 з 5, лишилось 2 (не прочитано: 2)"
+      and line({"candidates": 5, "downloaded": 4, "left": 1, "timed_out": 0, "failed": 0, "interrupted": False})
+      == "iCloud: завантажено 4 з 5, лишилось 1")
+
+# --- fix I1: Ctrl-C at any moment never hangs the process (it used to deadlock inside concurrent.futures)
+STOPPER = r"""
+import os, sys, time
+sys.path.insert(0, sys.argv[1])
+import ctx_index as ci
+top = sys.argv[2]
+ci.is_dataless = lambda p: True
+def fetch(path, timeout):
+    time.sleep(0.002)
+    return "ok"
+print("ready", flush=True)
+r = ci.download([ci.Root("own", top, os.path.dirname(top))], "", [], fetch=fetch)
+print("RESULT", r["interrupted"], flush=True)
+"""
+with tempfile.TemporaryDirectory() as d:
+    top = os.path.join(d, "Notes")
+    os.makedirs(top)
+    for i in range(3000):
+        open(os.path.join(top, "n%04d.md" % i), "w").write("x")
+    script = os.path.join(d, "stopper.py")
+    write(script, STOPPER)
+    import random  # noqa: E402
+    hung, bad = 0, []
+    for run in range(30):
+        p = subprocess.Popen([sys.executable, script, os.path.join(ROOT, "scripts"), top], stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True)
+        p.stdout.readline()
+        time.sleep(random.uniform(0.05, 0.6))
+        p.send_signal(signal.SIGINT)
+        try:
+            out, _ = p.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            out, _ = p.communicate()
+            hung += 1
+            continue
+        if p.returncode != 0 or "RESULT True" not in out:
+            bad.append((p.returncode, out[-300:]))
+    check("fix I1: SIGINT at a random moment of a download — 30 runs, every one stops within 10 s with interrupted",
+          hung == 0 and not bad, (hung, bad[:2]))
+
+# --- fix M3: the index lock is checked before minutes of downloading
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    os.makedirs(env.index, exist_ok=True)
+    write(os.path.join(env.index, "index.lock"), json.dumps({"pid": os.getpid(), "at": time.time()}))
+    real_download, dl_calls = ctx_index.download, []
+    ctx_index.download = lambda *a, **k: dl_calls.append(1) or real_download(*a, **k)
+    try:
+        rc, out, res = in_process(env, "index", "rebuild", "--download")
+    finally:
+        ctx_index.download = real_download
+    check("fix M3: rebuild --download while another process holds the index lock: exit 4 before any download",
+          rc == 4 and dl_calls == [], (rc, dl_calls, out[-300:]))
+
+# --- fix I2: the hint names --download only for what it brings down
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    real_dataless = ctx_index.is_dataless
+    ctx_index.is_dataless = lambda p: unicodedata.normalize("NFC", p).startswith(unicodedata.normalize("NFC", env.note("ZorgCore")))
+    try:
+        rc, out, res = in_process(env, "index", "rebuild", "--download")
+        rc2, out2, res2 = in_process(env, "index", "status")
+        ctx_index.is_dataless = lambda p: unicodedata.normalize("NFC", p).startswith(
+            (unicodedata.normalize("NFC", env.note("ZorgCore")), unicodedata.normalize("NFC", env.note("Notes/Inbox.md"))))
+        rc3, out3, res3 = in_process(env, "index", "status")
+    finally:
+        ctx_index.is_dataless = real_dataless
+    check("fix I2: only the core's files evicted — `nothing to download`, and no hint to run it",
+          rc == 0 and "iCloud: нічого завантажувати" in out and "not downloaded (iCloud), not read: 4" in out
+          and "--download" not in out.split("iCloud: нічого завантажувати")[1] and "--download" not in out2, (out[-400:], out2[-300:]))
+    check("…one of the plugin folder evicted too: the hint with its count",
+          "not downloaded (iCloud), not read: 5 (plugin folder: 1 — ctx index rebuild --download)" in out3, out3[-300:])
+
 # --- the real read: a child process, its time bounded
 with tempfile.TemporaryDirectory() as d:
     f = os.path.join(d, "note.md")
