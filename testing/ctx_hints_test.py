@@ -187,6 +187,19 @@ ch.apply(c, [{"good": ["Notes/C# guide.md#Intro"], "bad": []}], datetime.date(20
 check("…a note whose name has a # in it; a hint with no day: today", c[0]["score"] == 1.5
       and c[0]["flags"] == ["твій вибір від 2026-10-20"], c)
 
+# v3.16.2 Task 2 (M8, N7): a pick of a note folded as a twin weighs and marks its survivor; eval counts it there
+c = [{"path": "Notes/Research/Cart study.md", "heading": "", "score": 1.0, "flags": [],
+      "twins": ["Notes/Knowledge/Cart study.md"]},
+     {"path": "Notes/Other.md", "heading": "", "score": 1.0, "flags": [], "twins": ["Notes/Old other.md"]}]
+ch.apply(c, [{"good": ["Notes/Knowledge/Cart study.md#Findings"], "bad": ["Notes/Old other.md"], "at": "2026-10-10"}],
+         datetime.date(2026, 10, 20))
+check("v3.16.2 C2 (M8): `good` on a note folded as a twin — its survivor × 1.5 and «твій вибір від <день>»; `bad` — «ти казав «не те»»",
+      c[0]["score"] == 1.5 and c[0]["flags"] == ["твій вибір від 2026-10-10"] and c[1]["score"] == 1.0
+      and c[1]["flags"] == ["ти казав «не те»"], c)
+check("v3.16.2 C2 (N7): eval finds a golden note folded as a twin at its survivor's place",
+      ch._rank([{"path": "A.md"}, {"path": "B.md", "twins": ["C.md"]}], ["C.md"]) == 2
+      and ch._rank([{"path": "A.md"}], ["C.md"]) is None)
+
 # ------------------------------------------------------------------ remember, forget, resolve
 mem = ch.empty()
 check("remember: a new hint", ch.remember(mem, "мобільний кошик", None, [MOBILE], [], "2026-10-19") is True

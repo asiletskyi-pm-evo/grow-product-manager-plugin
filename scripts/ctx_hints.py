@@ -241,19 +241,20 @@ def _flag(cand, mark):
 
 def apply(cands, hints, today):
     """Weigh the candidates of a search in place by the hints that serve it (`match`): a note one of them names `good` —
-    any of its sections, or the note itself — gets × GOOD_W once, however many name it, and the mark `твій вибір від
-    <день>` (the latest day of those hints; `today` for a hint with none); a note one names `bad` gets the mark `ти
-    казав «не те»` and keeps its weight. The caller sorts again before it cuts the best N."""
+    any of its sections, or the note itself, or a note it stands for (its `twins`: folded into it, since v3.16.2) —
+    gets × GOOD_W once, however many name it, and the mark `твій вибір від <день>` (the latest day of those hints;
+    `today` for a hint with none); a note one names `bad` gets the mark `ти казав «не те»` and keeps its weight. The
+    caller sorts again before it cuts the best N."""
     if not hints:
         return
     day = today.isoformat() if isinstance(today, (datetime.date, datetime.datetime)) else str(today or "")[:10]
     for c in cands or []:
-        path = c.get("path")
-        goods = [h for h in hints if any(names(e, path) for e in h.get("good") or [])]
+        paths = [c.get("path")] + list(c.get("twins") or [])
+        goods = [h for h in hints if any(names(e, p) for e in h.get("good") or [] for p in paths)]
         if goods:
             c["score"] = float(c.get("score") or 0.0) * GOOD_W
             _flag(c, CHOICE % max(h.get("at") or day for h in goods))
-        if any(names(e, path) for h in hints for e in h.get("bad") or []):
+        if any(names(e, p) for h in hints for e in h.get("bad") or [] for p in paths):
             _flag(c, NOT_THAT)
 
 
@@ -408,9 +409,10 @@ def hint_rows(mem):
 
 
 def _rank(cands, entries):
-    """The place (from 1) of the first of the first POOL candidates that one of `entries` names; None when none does."""
+    """The place (from 1) of the first of the first POOL candidates that one of `entries` names — the candidate or a
+    note folded into it (`twins`, since v3.16.2); None when none does."""
     for i, c in enumerate((cands or [])[:POOL], 1):
-        if any(names(e, c.get("path")) for e in entries):
+        if any(names(e, p) for e in entries for p in [c.get("path")] + list(c.get("twins") or [])):
             return i
     return None
 

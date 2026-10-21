@@ -897,7 +897,8 @@ def dedup(cands, notes_meta, own=None):
        `двійник <path>`;
     5. the same `version_key` — the newer by its date stays, marked `є старіші версії: N` (the older ones the index
        holds); a version that is not the newest the index holds is marked `старіша версія <path of the newest>`.
-    A candidate that stays keeps the best score of those it stands for, and their `sensitive`. `cands` are entries (one per path and heading,
+    A candidate that stays keeps the best score of those it stands for, their `sensitive`, and their paths (`twins`,
+    since v3.16.2: a remembered pick of one of them weighs it, `ctx search eval` finds them there). `cands` are entries (one per path and heading,
     weighed by the priors: path, heading, score, flags, hits, section_id, title, …); `notes_meta` Index.notes() — the
     keys 2–5 read hash, near, size, links, version_key, confluence_id and date there, so they hold for files of the
     index (key 3a also for a note only a local index knows, by the `near` its hits carry).
@@ -920,6 +921,10 @@ def dedup(cands, notes_meta, own=None):
             if o is not keep and id(o) not in gone:
                 gone.add(id(o))
                 keep["score"] = max(keep["score"], o["score"])
+                twins = keep.setdefault("twins", [])           # what it stands for: a pick of one weighs it (v3.16.2)
+                for t in [o["path"]] + list(o.get("twins") or []):
+                    if t != keep["path"] and t not in twins:
+                        twins.append(t)
                 if o.get("sensitive") or meta(o).get("sensitive"):
                     keep["sensitive"] = True            # what it stands for is sensitive: the mark stays (spec §7.4)
                 if mark:
@@ -1091,7 +1096,8 @@ def _public(c, terms):
             "source": list(c["source"]), "flags": list(c["flags"]),
             "matched": sorted({h.get("variant", 0) + 1 for h in c.get("hits") or []}), "snippet": snip,
             "score": round(c["score"], 6),
-            "sections": [{"id": candidate_id(path, s["heading"]), "heading": s["heading"]} for s in c["sections"]]}
+            "sections": [{"id": candidate_id(path, s["heading"]), "heading": s["heading"]} for s in c["sections"]],
+            **({"twins": list(c["twins"])} if c.get("twins") else {})}
 
 
 def _last(c):
@@ -1615,6 +1621,23 @@ def _heading_for(secs, heading):
     return _heading_of(secs, joined) if joined != heading.strip() else None
 
 
+def _index_name(sctx, abs_path):
+    """The index's name of a file on disk: its vault's name, else `@<repository>/…` under the core folder of the
+    registration that holds it (as the walk names it), else the absolute path — so that an exclusion is tested on
+    the name, never on the folders above a core."""
+    vaults = sctx.get("vaults") or []
+    name = ci.rel_path(abs_path, vaults)
+    if not name.startswith("/"):
+        return name
+    for r in sctx.get("repos") or []:
+        folder = _folder(r)
+        if folder and r.get("id"):
+            got = ci.rel_path(abs_path, vaults, ci.Root(r["id"], folder))
+            if got.startswith("@"):
+                return got
+    return name
+
+
 def _note_of(sctx, path):
     """(source, date, marks, said, sections, whole) of a note by its index name, read in this order: the own section
     index (its sections; the whole note is their text joined under their headings); the file itself, when it is on
@@ -1632,7 +1655,7 @@ def _note_of(sctx, path):
         return (meta.get("source") or "own", meta.get("date"), _marks(meta), None, secs,
                 "\n\n".join(p for p in (_as_markdown(h, t) for h, t in secs) if p))
     found = _file_of(sctx, path)
-    if found and ci.excluded(ci.rel_path(os.path.realpath(found), sctx.get("vaults") or []), sctx.get("store_rel"),
+    if found and ci.excluded(_index_name(sctx, os.path.realpath(found)), sctx.get("store_rel"),
                              sctx.get("blocks_rels"), fold=True):
         raise GetError(3, EXCLUDED_NOTE % path)
     dataless = bool(found) and ci.is_dataless(found)

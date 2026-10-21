@@ -2037,6 +2037,70 @@ with tempfile.TemporaryDirectory() as d:
           "a bare `#B` is still the first one (`X › A › B`)", "Nest.md › A › B ·" in hn and tn.startswith("ab")
           and "Nest.md › X › A › B ·" in hx and tx.startswith("xab"), (hn, hx))
 
+# v3.16.2 Task 2: a fold records what it stands for; the folder-name exclusions hold for every source; the real-path
+# re-check names a core's file through its root
+out = cs_.dedup([entry(N1, "", 0.05, source="zorg-brain", near="k1", date="2026-10-01"),
+                 entry(N3, "", 0.01, source="zorg-brain", near="k1", date="2026-09-01"),
+                 entry(N4, "", 0.03, source="zorg-brain", near="k1", date="2026-01-01")], {}, own=["Notes"])
+check("v3.16.2 C2 (M8): the survivor of a fold records the paths it stands for (`twins`)",
+      [c["path"] for c in out] == [N3] and sorted(out[0].get("twins") or []) == sorted([N1, N4]), out)
+V1, V2, V3 = "Notes/Roadmap Q4 — draft v1.md", "Notes/Roadmap Q4 — draft v2.md", "Notes/Roadmap Q4 — draft v3.md"
+out = cs_.dedup([entry(V1, "", 0.03, sid=1), entry(V2, "", 0.02, sid=2), entry(V3, "", 0.01, sid=3)],
+                {V1: meta_of(V1, version_key="vk", date="2026-08-01"), V2: meta_of(V2, version_key="vk", date="2026-09-01"),
+                 V3: meta_of(V3, version_key="vk", date="2026-10-01")})
+check("…a version fold (key 5) too: the newest stands for the older ones", [c["path"] for c in out] == [V3]
+      and sorted(out[0].get("twins") or []) == sorted([V1, V2]), out)
+out = cs_.dedup([entry(N2, "", 0.05, source="zorg-brain", near="k1", date="2026-10-07"),
+                 entry(N1, "", 0.02, source="zorg-brain", near="k1", date="2026-09-01"),
+                 entry(N4, "", 0.01, source="zorg-brain", hash="h4")], {}, own=["Notes"])
+pub = [cs_._public(dict(c, source={"zorg-brain"}, sections=[], text=None, snippet=""), []) for c in out]
+check("…the public form carries `twins` only when the candidate stands for others",
+      pub[0].get("twins") == [N2] and "twins" not in next(p for p in pub if p["path"] == N4), pub)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Growth/_Backup 2025/Kiwi plan.md"), "---\ntype: note\n---\n# Kiwi plan\n\nThe kiwi plan of the cart.\n")
+    write(env.note("Growth/Plans/Kiwi plan.md"), "---\ntype: note\n---\n# Kiwi plan\n\nThe kiwi plan of the cart, current.\n")
+    build_brain(env.brain, env.vault, ["Growth/_Backup 2025/Kiwi plan.md", "Growth/Plans/Kiwi plan.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    res = cs_.run(sx, ["kiwi plan"], now=NOW)
+    got = [c["path"] for c in res["candidates"]]
+    check("v3.16.2 C3 (9, N5): a local hit under `_Backup 2025/` is no candidate — the stale backup can no longer win a fold",
+          "Growth/Plans/Kiwi plan.md" in got and not any("_Backup" in p for p in got), got)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    ext = os.path.join(d, "_backups", "zorg-ext")
+    write(os.path.join(ext, "Teams", "team-numbat.md"), "---\ntype: team\n---\n# Team Numbat\n\nThe numbat team.\n")
+    write(os.path.join(ext, "_System", "context-blocks.md"), "# Blocks\n\nThe core's blocks.\n")
+    write(os.path.join(env.home, ".grow-pm", "providers", "zorg-ext.yaml"),
+          "schema: provider-registration/2\nid: zorg-ext\ntitle: Zorg external core\nkind: folder\nauthority: org\n"
+          "core_root: %s\nblocks_file: _System/context-blocks.md\nstatus: active\n" % ext)
+    dev = os.path.join(d, "dev", "zorg-dev")
+    write(os.path.join(dev, "Pages", "Dev page.md"), "# Dev page\n\nA page of the dev core.\n")
+    write(os.path.join(dev, "_System", "context-blocks.md"), "# Blocks\n\nThe dev core's blocks.\n")
+    write(os.path.join(env.home, ".grow-pm", "providers", "zorg-dev.yaml"),
+          "schema: provider-registration/2\nid: zorg-dev\ntitle: Zorg dev core\nkind: folder\nauthority: org\n"
+          "core_root: %s\nblocks_file: _System/context-blocks.md\nstatus: active\n" % dev)
+    os.makedirs(env.note("Notes/Links"), exist_ok=True)
+    os.symlink(os.path.join(dev, "_System", "context-blocks.md"), env.note("Notes/Links/blocks.md"))
+    sx = env.sctx()
+    env.refresh(sx)
+    write(os.path.join(ext, "Teams", "team-new.md"), "---\ntype: team\n---\n# Team New\n\nA team added after the refresh.\n")
+
+    def got10(arg):
+        try:
+            return cs_.get(sx, arg)
+        except cs_.GetError as e:
+            return "exit %d" % e.code, str(e)
+
+    ha, ta = got10("@zorg-ext/Teams/team-numbat.md")
+    hb, tb = got10("@zorg-ext/Teams/team-new.md")
+    hc, tc = got10("Notes/Links/blocks.md")
+    check("v3.16.2 C3 (10): a core under `_backups/` — a note the index holds and one only its file holds read alike",
+          "numbat team" in ta and "added after the refresh" in tb, (ha, hb, tb))
+    check("…an in-vault link to a core's blocks file is excluded by its real name (`@zorg-dev/_System/context-blocks.md`)",
+          hc == "exit 3" and tc.startswith("шлях виключено з пошуку"), (hc, tc))
+
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)
