@@ -1720,7 +1720,7 @@ def heading_names_after(text, cut, dup_full=None):
 def long_line(path, shown, total, names, full):
     n = lambda v: "{:,}".format(v).replace(",", " ")
     head = "нотатка довга — показано %s знаків із %s; " % (n(shown), n(total))
-    more = "" if full else " або --full (до 60 000)"
+    more = " --full" if full else " або --full (до 60 000)"
     if names:
         return head + "далі: " + " · ".join(names) + " — --get \"%s#<заголовок>\"" % path + more
     return head + "заголовків далі немає" + (" — --full (до 60 000)" if not full else "")
@@ -2345,6 +2345,62 @@ with tempfile.TemporaryDirectory() as d:
     ht, tt = got3b(sx, "[[Zorg tips#Delivery#C# tips]]")
     check("v3.16.2 C9 (Task 3 review M4): `[[Name#Delivery#C# tips]]` — parts joined back with `#` — is `Delivery › C# tips`",
           ht.endswith("› Zorg tips › Delivery › C# tips · " + ht.rsplit(" · ", 1)[-1]) and tt.startswith("sharp"), (ht, tt[:40]))
+
+# Task 4 review fixes: empty heading lines are left out as split_sections leaves them out; the layouts of the review
+LAYOUTS = {
+    "log": "# Zorg log\n\n## 2026-09-01\n\n### Agenda\n\n" + "a" * 6000 + "\n\n### Notes\n\n## 2026-10-01\n\n### Agenda\n\n"
+           + "b" * 20000 + "\n\n### Notes\n\n" + "n " * 300 + "\n\n## 2026-10-08\n\n### Agenda\n\n" + "c " * 300 + "\n",
+    "samepath": "# Zorg T\n\n## Notes\n\n## B\n\n" + "b" * 25000 + "\n\n## Notes\n\n" + "n " * 300 + "\n\n## C\n\n" + "c " * 300 + "\n",
+    "twoh1": "# Zorg T\n\n## Notes\n\n## B\n\n" + "b" * 25000 + "\n\n# Other\n\n" + "o " * 300 + "\n\n## Notes\n\n" + "n " * 300 + "\n",
+    "skip": "# Zorg skip\n\n" + "p" * 3000 + "\n\n### X\n\n" + "x" * 25000 + "\n\n### Y\n\n" + "y " * 300 + "\n\n## Z\n\n" + "z " * 300 + "\n",
+    "m1": "# Zorg empty notes\n\n" + "z" * 12000 + "\n\n## Notes\n\n## B\n\n" + "b" * 12000 + "\n\n### Notes\n\n" + "n " * 200 + "\n",
+    "render": "# Zorg R\n\n" + "r" * 3000 + "\n\n# Empty parent\n\n## A\n\n" + "a" * 25000 + "\n\n# Empty two\n\n## B\n\n" + "b " * 300 + "\n",
+    "log2": "# Zorg log2\n\n" + "i" * 3000 + "\n\n## 2026-10-01\n\n### Notes\n\n" + "n" * 25000 + "\n\n## 2026-10-08\n\n### Agenda\n\n"
+            + "a " * 300 + "\n\n## Notes\n\n" + "g " * 300 + "\n",
+}
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    for k, text in LAYOUTS.items():
+        write(env.note("Growth/Zorg %s.md" % k), text)
+        write(env.note("Notes/Long/Zorg %s.md" % k), text)
+    sx = env.sctx()
+    env.refresh(sx)
+    bad = []
+    for k in LAYOUTS:
+        got = {}
+        for p in ("Growth/Zorg %s.md" % k, "Notes/Long/Zorg %s.md" % k):
+            h, t = cs_.get(sx, p)
+            names = line_names(t)
+            back_ok = all(not got3b(sx, "%s#%s" % (p, n))[0].startswith("exit") for n in names)
+            got[p] = names
+            if not back_ok or not names:
+                bad.append((p, names, t.rsplit("\n\n", 1)[-1][:120]))
+        if len(set(map(tuple, got.values()))) != 1:
+            bad.append((k, got))
+    check("v3.16.2 review I1 (Task 4): seven layouts of empty headings — a file read and the own index's render name the "
+          "same headings, each reads back, and none says «заголовків далі немає» while sections lie past the cut", bad == [], bad)
+    h, t = cs_.get(sx, "Notes/Long/Zorg samepath.md")
+    check("…an empty `## Notes` before the cut never takes the place of the real `## Notes` after it",
+          line_names(t) == ["Notes", "C"] and got3b(sx, "Notes/Long/Zorg samepath.md#Notes")[1].startswith("n "), line_names(t))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note(TWO), "# Two bigs\n\n## Early\n\n### Big\n\n" + "e" * 3500 + "\n\n## Late\n\nshort\n\n### Big\n\n" + "b" * 30000 + "\n")
+    sx = env.sctx()
+    env.refresh(sx)
+    h, t = cs_.get(sx, TWO)
+    check("v3.16.2 review M3 (Task 4): a section past the cut whose last part an earlier one shares is named by the end "
+          "of its path that reaches it — `Late › Big`, never `Big`", line_names(t) == ["Late › Big"], line_names(t))
+    write(env.note("Notes/Zorg chunks.md"), "# Zorg chunks\n\n" + "".join("## Chunk %d\n\n%s\n\n" % (i, "h" * 2200) for i in range(1, 33)))
+    env.refresh(sx)
+    h, t = cs_.get(sx, "Notes/Zorg chunks.md", full=True)
+    check("v3.16.2 review M4 (Task 4): after --full the hint carries --full — the read it names is cut like this one",
+          t.rsplit("\n\n", 1)[-1].endswith(' — --get "Notes/Zorg chunks.md#<заголовок>" --full'), t[-160:])
+    write(env.note("Notes/Zorg blocks.md"), "# Zorg blocks\n\n## X\n\n" + "x " * 120 + "\n\n### A#B\n\n" + "ab " * 80
+          + "\n\n### A\n\n" + "a " * 80 + "\n")
+    env.refresh(sx)
+    hb, tb = got3b(sx, "[[Zorg blocks#X#A#^blk#B]]")
+    check("v3.16.2 review M5 (Task 4): no join across a block part — `#X#A#^blk#B` is not `X › A#B`",
+          not tb.startswith("ab "), (hb, tb[:40]))
 
 # v3.16.1: only `ctx index rebuild --download` brings a file down — a search and every form of --get never do
 with tempfile.TemporaryDirectory() as d:

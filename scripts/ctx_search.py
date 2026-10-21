@@ -1709,8 +1709,9 @@ def _heading_for(secs, heading, index=None):
     hp = _heading_of(secs, joined, index) if joined != heading.strip() else None
     if hp is not None:
         return hp
-    pieces = [p for p in heading.split("#") if not p.strip().startswith("^")]
-    if 2 < len(pieces) <= 8:                         # «C# tips» inside a nested link: join neighbours back with `#`
+    raw = heading.split("#")
+    pieces = [] if any(p.strip().startswith("^") for p in raw[:-1]) else [p for p in raw if not p.strip().startswith("^")]
+    if 2 < len(pieces) <= 8:                         # never across a block part in the middle                         # «C# tips» inside a nested link: join neighbours back with `#`
         for cuts in range(len(pieces) - 2, 0, -1):
             for at in itertools.combinations(range(1, len(pieces)), cuts):
                 groups = ["#".join(pieces[a:b]).strip() for a, b in zip((0,) + at, at + (len(pieces),))]
@@ -1814,7 +1815,7 @@ def _get_path(sctx, arg, full=False):
     if note is None:
         raise GetError(3, NO_CANDIDATE % path)
     source, date, marks, said, secs, whole = note
-    hp = _heading_for(secs, heading) if heading else ""
+    hp = _heading_for(secs, heading, _heading_index(secs)) if heading else ""
     if hp is None:
         raise GetError(3, "no section %s in %s" % (heading, path))
     if hp:
@@ -1842,16 +1843,16 @@ def long_note(path, shown, total, names, full):
             kept.append(name)
             size += len(name) + 3
         listed = " · ".join(kept + (["ще %d" % (len(names) - len(kept))] if len(kept) < len(names) else []))
-        tail = LONG_NEXT % (listed, path) + ("" if full else " або " + LONG_FULL)
+        tail = LONG_NEXT % (listed, path) + (" --full" if full else " або " + LONG_FULL)     # read as this one was
     else:
         tail = LONG_NONE + ("" if full else " — " + LONG_FULL)
     return LONG_NOTE % (_thousands(shown), _thousands(total), tail)
 
 
 def _heading_lines(text):
-    """[(offset, heading path parts, level)] of the heading lines of `text` that ctx_index.split_sections reads as
-    headings: level 1–3, none in a code fence; the path within the text, by the same stack of levels (a text that
-    starts in the middle of a note has the end of the note's path)."""
+    """[(offset, heading path parts, level)] of the heading lines of `text` that ctx_index.split_sections keeps as
+    sections: level 1–3, none in a code fence, and — as it does — none with nothing under it (unless every one is
+    empty); the path within the text, by the same stack of levels."""
     out, pos, fence, stack = [], 0, None, []
     for line in text.split("\n"):
         f = ci._FENCE.match(line)
@@ -1867,7 +1868,12 @@ def _heading_lines(text):
                 stack = [(lv, t) for lv, t in stack if lv < level] + [(level, m.group(2).strip())]
                 out.append((pos, [t for _, t in stack], level))
         pos += len(line) + 1
-    return out
+    ends = [p for p, _, _ in out[1:]] + [len(text)]
+    filled = []
+    for (p, _, _), e in zip(out, ends):
+        nl = text.find("\n", p)
+        filled.append(bool(text[nl if 0 <= nl < e else e:e].strip()))
+    return [o for o, f in zip(out, filled) if f] if any(filled) else out
 
 
 def _names_past(text, cut, path, secs, start=0):
@@ -1876,17 +1882,15 @@ def _names_past(text, cut, path, secs, start=0):
     left out, one with nothing under it, is skipped): the section the cut falls under, then every one after it, each by
     the shortest end of its heading path (its last part, else more of it) that `--get "<path>#<name>"` — `_parse`, then
     `_heading_for` — takes back to that very section; one no name reaches (a heading another one shadows, `|` in it)
-    is left out. Since v3.16.2 a heading line is matched by its path (an empty `## Notes` before the cut does not take
-    the place of a `### Notes` after it), the names are found through one map of the note's headings, and the section
-    the cut falls under is named only when --get of it shows LONG_GAIN characters more than the cut text does."""
+    is left out. Since v3.16.2 the heading lines with nothing under them are left out as split_sections leaves them out
+    (an empty `## Notes` before the cut never takes the place of a `### Notes` after it), the names are found through
+    one map of the note's headings, and the section the cut falls under is named only when --get of it shows
+    LONG_GAIN characters more than the cut text does."""
     folded = [_parts(h) if h else [] for h, _ in secs]
     lines, aligned, k = _heading_lines(text), [], start
-    for pos, line, level in lines:
-        key = _parts(" › ".join(line))
-        nxt = next((i for i in range(k, len(secs)) if folded[i] and folded[i][-len(key):] == key), None)
-        if nxt is None:                              # a rendered note leaves out the empty headings above: its last
-            nxt = next((i for i in range(k, len(secs))   # part at the depth of its level
-                        if folded[i] and folded[i][-1] == key[-1] and len(folded[i]) == level), None)
+    for pos, line, _ in lines:                       # the lines and the sections leave out the same empty headings:
+        key = _parts(line[-1])[-1]                   # in order, by the last part
+        nxt = next((i for i in range(k, len(secs)) if folded[i] and folded[i][-1] == key), None)
         if nxt is not None:
             aligned.append((pos, nxt))
             k = nxt + 1

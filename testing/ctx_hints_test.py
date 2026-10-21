@@ -228,6 +228,12 @@ ev = ch.evaluate([{"q": "zorg q", "class": "форма", "good": ["G.md"], "ok":
 check("v3.16.2 review M4: an eval row found through a twin says so (`via_twin`), and the result counts them",
       ev["rows"][0]["rank"] == 1 and ev["rows"][0].get("via_twin") is True and ev.get("via_twin") == 1, ev)
 
+ev = ch.evaluate([{"q": "zorg q2", "class": "форма", "good": ["G.md"], "ok": ["A.md"]}],
+                 lambda qs, row: {"candidates": [{"path": "A.md"}, {"path": "B.md", "twins": ["G.md"]}]})
+check("v3.16.2 (acceptance): the first `good` found through a twin is said too (`good_via_twin`), apart from the recall's",
+      ev["rows"][0]["rank"] == 1 and ev["rows"][0]["via_twin"] is False and ev["rows"][0].get("good_via_twin") is True
+      and ev.get("good_via_twin") == 1, ev)
+
 # ------------------------------------------------------------------ remember, forget, resolve
 mem = ch.empty()
 check("remember: a new hint", ch.remember(mem, "мобільний кошик", None, [MOBILE], [], "2026-10-19") is True
@@ -339,7 +345,8 @@ check("…by_class", m["by_class"] == {"A": {"n": 1, "recall50": 1.0, "recall50_
 check("…the empty rows: how many candidates their top 5 has, on average", (m["empty_n"], m["empty_top5_mean"]) == (1, 3.0), m)
 check("…a row with no variants is asked once", asked.count(("qb",)) == 1 and asked.count(("qf",)) == 1, asked)
 check("…each row's ranks, and the notes once", m["rows"][0] == {"q": "qa", "class": "A", "source": "reviewed", "rank": 2,
-                                                                "rank_q_only": None, "rank_good": 2, "via_twin": False}
+                                                                "rank_q_only": None, "rank_good": 2, "via_twin": False,
+                                                                "good_via_twin": False}
       and m["rows"][2] == {"q": "qe", "class": "порожній", "source": "reviewed", "top5": 3} and m["notes"] == ["n1"], m["rows"])
 check("…no rows: no numbers, no error", ch.evaluate([], ask)["recall50"] is None)
 

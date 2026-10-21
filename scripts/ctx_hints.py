@@ -442,8 +442,9 @@ def evaluate(rows, ask):
     `candidates` (best first), `notes` and `sources` are read. For each row with an answer: the question and its frozen
     variants (`[q] + variants`), and the question alone (one search when it has no variants); for each empty row the
     question and its variants. Returns {n, recall50, recall50_q_only, mrr, by_class {class: {n, recall50,
-    recall50_q_only, mrr}}, empty_n, empty_top5_mean, via_twin (rows found only through a twin, since v3.16.2), rows
-    [{q, class, source, rank, rank_q_only, rank_good, via_twin} | {q, class,
+    recall50_q_only, mrr}}, empty_n, empty_top5_mean, via_twin and good_via_twin (rows whose answer, or first `good`, was
+    found only through a twin, since v3.16.2), rows [{q, class, source, rank, rank_q_only, rank_good, via_twin,
+    good_via_twin} | {q, class,
     source, top5}], notes} — recall: a `good` or `ok` entry names one of the first 50; mrr: 1 / the place of the first
     `good` (0 when none); None for a number with no row behind it."""
     done, gone, every, notes = [], [], [], []
@@ -466,8 +467,9 @@ def evaluate(rows, ask):
         cands = search([q] + variants, row)
         alone = search([q], row) if variants else cands
         rank, via = _found(cands, right)
+        good, good_via = _found(cands, row["good"])
         done.append({"q": q, "class": row["class"], "source": row.get("source") or "", "rank": rank,
-                     "rank_q_only": _rank(alone, right), "rank_good": _rank(cands, row["good"]), "via_twin": via})
+                     "rank_q_only": _rank(alone, right), "rank_good": good, "via_twin": via, "good_via_twin": good_via})
         every.append(done[-1])
 
     def numbers(part):
@@ -480,6 +482,7 @@ def evaluate(rows, ask):
     out = numbers(done)
     out.update(by_class={k: numbers(v) for k, v in by_class.items()}, empty_n=len(gone),
                via_twin=sum(1 for r in done if r.get("via_twin")),
+               good_via_twin=sum(1 for r in done if r.get("good_via_twin")),
                empty_top5_mean=sum(r["top5"] for r in gone) / len(gone) if gone else None,
                rows=every,
                notes=notes)
