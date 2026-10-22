@@ -321,6 +321,8 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | U8 | знайди в інтернеті, як конкуренти зробили чекаут | product-research — NOT context-navigator |
 | U9 | /grow-product-manager:find накручені відгуки | `find` command (explicit invocation — the only way in); Claude: n/a — the host runs a typed command before any routing, so the row is scored on Codex only |
 | U10 | що ми вирішили про накручені відгуки | decision-log — NOT context-navigator (the user's own decisions stay decision-log's) |
+| U11 | хто такий Bea Two і хто на нього посилається | context-navigator (v3.18.0: `ctx entity`) |
+| U12 | що таке PROJ-1234 | context-navigator (v3.18.0: `ctx entity`) |
 
 ## Results log
 

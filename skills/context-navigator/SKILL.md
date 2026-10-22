@@ -29,6 +29,8 @@ Answering from the graph has no judgment points of its own; a question that asks
 3. **The user's place in it** (with a provider). The focus note and the bundle manifest when present (team, role, bundle size); the Jira write scope from the provider's team block in `local-context.md`.
 
 ## On each question
+**Who or what it is (since v3.18.0).** With SHELL, a question about a person, a team, a mission, a module, a metric, a work item or a Jira key — «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X» — first runs `python3 "<plugin root>/scripts/ctx.py" entity "<X>" --skill context-navigator` (`ctx entity "<X>" --skill context-navigator`, `references/search-protocol.md` §13): its lines say who it is, where its cards are and who links to it, and the route below answers the rest of the question.
+
 **First the form** (`references/search-protocol.md` §13): a request for a fact gets an answer; a request for the notes themselves — «знайди нотатки про…», «що в мене є про…», «де в моїх нотатках…», «покажи нотатки про…», `--list` — gets a list. Then, with a provider, follow its `routing_hints` note when it exists, otherwise this default route, cheapest first. Without a provider every question takes the last row, except recording or revisiting a decision and a person, whose rows hold either way:
 
 | Question about | Route |
@@ -73,5 +75,7 @@ Before a meeting note that names people is written into the user's vault: resolv
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
 
 > Answer from a shared organisational context (a team's core) — who owns what, team and module scope, rules, missions, people, terms. Not decisions (decision-log), not dashboards (product-analysis), not curated sources (knowledge-library). UA — «хто за що відповідає», «що робить команда X», «де описане правило», «які місії у команди», «хто така людина X у структурі», «як у нас називають цей термін». EN — "who owns this", "what does team X do", "where is the rule for", "which missions does the team have", "who is X in the org", "answer from the shared context". Reads the provider's rules once per session and routes each answer through its graph (vault/v1), always with the note path and the snapshot date.
+
+Since v3.18.0 (who is who, `ctx entity`): UA — «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X»; EN — "who is X", "what is PROJ-1234", "what links to X".
 
 Since v3.17.0 (the search the user asks for, `references/search-protocol.md` §13) also: UA — «знайди в моєму контексті…», «що в мене є про…», «де в моїх нотатках ми обговорювали…», «пошукай у Confluence і в моїх нотатках…», «що ми обговорювали про…»; EN — "search my notes for…", "what do I have on…", "find in my context". Typed: `/grow-product-manager:find <запит> [--list] [--all]`. The boundaries stay: recording a decision → decision-log, the curated library → knowledge-library, the web → product-research, a person's profile → the People contour.

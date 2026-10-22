@@ -229,9 +229,18 @@ The user asks the base itself — «знайди в моєму контекст�
   - The providers asked as under "MCP only", by their ids.
   - Only when level 2 ran, `· живі: …` with the live sources it asked: `(не відповів)` after one that failed, `(пропущено)` after one the user declined at the question.
   - Without SHELL: the plugin folders and core folders looked through and the providers asked, by name.
+- **Who or what it is (since v3.18.0).** A question about a person, a team, a mission, a module, a metric, a work item or a Jira key — «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X» — first asks `python3 "<plugin root>/scripts/ctx.py" entity "<X>" --skill context-navigator` (`ctx entity "<X>" --skill context-navigator`; `context-protocol.md` §5h):
+  - one entity → its lines are the answer: who it is, where its cards are, who links to it, each cited `(<шлях>)`; a line `можливо той самий: …` is shown as it is, with the command it names — the model never answers it for the user;
+  - several → its list and `уточни, кого саме`; nothing is guessed;
+  - a Jira key no card holds → its mentions, as a list;
+  - `Не знаю такої сутності: «…»` → §13 as usual with the same request; `Поки не знаю «…» — …` → that line, then §13 as usual;
+  - a line that ends ` · sensitive` stays its title, path and day — never read with `--get` (§6);
+  - the rest of the question (what the team does, why something was decided) goes on through `ctx search` as above; exit 5 → `Базу не прочитано: …`.
+
+  Without SHELL: as before — the card through `context-navigator`'s route.
 - **People.** `context-navigator` is outside the People contour, so a sensitive candidate is never read (§6). A question about a person gets the person's identity only:
   - their name, e-mail, team and role as the registry card's frontmatter states them, and the card's path;
-  - the same whether the person route of `context-navigator` reads the card or this section finds it (`data-policy.md` → Search, rule 1);
+  - with SHELL, the identity `ctx entity` gives (above) — every card of the person joined, never a judgement field; without SHELL, the same fields whether the person route of `context-navigator` reads the card or this section finds it (`data-policy.md` → Search, rule 1);
   - never the card's body or a judgement field.
 
   The profile itself belongs to the People contour (`one-on-one`, `performance-review`).
