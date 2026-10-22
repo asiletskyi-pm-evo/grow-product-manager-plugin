@@ -436,5 +436,53 @@ with tempfile.TemporaryDirectory() as d:
           frozenset(("ZorgCore/People/una-a.md", "Notes/People/una-b.md")) not in pairs
           and frozenset((CY_OWN, CY_CORE)) in pairs, sorted(map(sorted, pairs)))
 
+
+# --- v3.18.0 Task 3 review fixes
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(os.path.join(env.vault, "Notes", "Other", "bea-two.md"), "# Not Bea\n")
+    write(os.path.join(env.vault, "Notes", "Elsewhere.md"), "# Elsewhere\n\n[[Notes/Other/bea-two]]\n")
+    for i in range(22):
+        write(os.path.join(env.vault, "Notes", "Log", "day-%02d.md" % i),
+              "---\ndate: 2026-09-%02d\n---\n# Day %02d\n\n[[ZorgCore/People/bea-two]]\n" % (i + 1, i))
+    env.idx.refresh(env.sctx["roots"], env.sctx["store_rel"], env.sctx["blocks_rels"])
+    res = ce.run(env.sctx, BEA_CORE)
+    bl = res["entities"][0]["backlinks"]
+    paths = [i["path"] for i in bl["items"]]
+    check("v3.18.0 review (Task 3): a link to another note of the card's name is not a backlink; the entity's own cards "
+          "are not either", "Notes/Elsewhere.md" not in paths and BEA_OWN not in paths, paths)
+    dates = [i["date"] for i in bl["items"]]
+    check("…newest first, 20 lines, `ще N` for the rest", len(bl["items"]) == 20 and bl["count"] > 20
+          and dates == sorted(dates, reverse=True) and paths.index("Notes/Log/day-21.md") < paths.index("Notes/Log/day-20.md") and ("    ще %d" % (bl["count"] - 20)) in ce.render(res), (bl["count"], paths[:3]))
+    ep = ce.run(env.sctx, "PROJ-1234")["entities"][0]
+    check("…a work entity's own cards are not among the notes that mention its key",
+          EPIC not in [i["path"] for i in ep["mentions"]["items"]], ep["mentions"])
+    reg, _ = env.registry()
+    try:
+        ce.card_of(reg, "ZorgCore/Pages/cy.md")
+        raised = False
+    except ValueError:
+        raised = True
+    env.cli("migrate", "--apply")
+    rc, out, _ = env.cli("entity", "same", "ZorgCore/Pages/cy.md", CY_CORE)
+    check("v3.18.0 review I1 (Task 3): an answer naming a path that is no card is refused — never another card by its "
+          "name", raised and rc == 3, (raised, rc, out[-300:]))
+    rc, out, res = env.cli("entity", "PROJ-1234", "--kind", "team", "--json")
+    check("…`--kind team PROJ-1234` never says «картки немає» about a key a work card holds",
+          rc == 0 and not (res or {}).get("mention"), (res or {}).get("mention"))
+    real_cards = ci.Index.cards
+
+    def busy(self):
+        self.problem = ci.BUSY_NOTE
+        return []
+    os.remove(os.path.join(env.home, "zorg-brain.sqlite"))      # only the own index could answer
+    ci.Index.cards = busy
+    try:
+        res = ce.run(env.sctx, BEA_CORE)
+    finally:
+        ci.Index.cards = real_cards
+    check("v3.18.0 review I2 (Task 3): an index busy when its cards are read has not answered — `read` False (exit 5), "
+          "never «Не знаю»", res["read"] is False and any(ci.BUSY_NOTE in n for n in res["notes"]), (res["read"], res["notes"]))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

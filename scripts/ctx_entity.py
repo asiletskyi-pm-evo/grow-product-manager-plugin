@@ -328,6 +328,8 @@ def _person_bucket(card):
 
 
 class Registry:
+    unread = None                        # load(): why the own index's cards were not read (busy, damaged), or None
+
     def __init__(self, entities, by_path, pairs, resolver, skipped=()):
         self.entities, self._by_path, self._pairs, self.resolver = entities, by_path, pairs, resolver
         self.skipped = list(skipped)     # your `same` answers that could not be applied: {cards, day, why}
@@ -530,8 +532,9 @@ def load(sctx, idx, mem):
     local index that did not answer or has another shape)."""
     notes = []
     own = idx.cards()
-    if idx.problem:
-        notes.append(idx.problem)
+    unread = idx.problem                     # the cards' own read: busy or damaged, the index has not answered
+    if unread:
+        notes.append(unread)
     metas = {}
     for n in idx.notes():
         metas[N(n["path"])] = {"title": n["title"], "source": n["source"], "sensitive": n["sensitive"], "date": n["date"]}
@@ -543,7 +546,9 @@ def load(sctx, idx, mem):
     vaults = sctx.get("vaults") or []
     prefixes = [ci.rel_path(r["path"], vaults, r) for r in sctx.get("roots") or [] if r.get("source") == "own"]
     resolver = Resolver(metas, prefixes)
-    return build([_card(d, "index") for d in own] + local, mem, resolver), notes
+    reg = build([_card(d, "index") for d in own] + local, mem, resolver)
+    reg.unread = unread
+    return reg, notes
 
 
 # ------------------------------------------------------------------ `ctx entity`
@@ -622,8 +627,7 @@ def _prepare(sctx, store, budget):
     reg, more = load(sctx, idx, mem)
     notes.extend(n for n in more if n not in notes)
     notes.extend(NOT_APPLIED % (s["cards"][0], s["cards"][1], s["day"], NOT_APPLIED_WHY[s["why"]]) for s in reg.skipped)
-    read = (built is True and not (idx.problem and idx.problem != ci.BUSY_NOTE)) \
-        or any(c["origin"] == "local" for e in reg.entities for c in e["cards"])
+    read = (built is True and not reg.unread) or any(c["origin"] == "local" for e in reg.entities for c in e["cards"])
     return idx, reg, notes, read, pending
 
 
@@ -643,11 +647,15 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None):
                "maybe": [_brief(c) for c in e["maybe"]]}
         if len(found) == 1:
             one["backlinks"] = backlinks(idx, reg, e, people)
+            if idx.problem and idx.problem not in notes:      # a busy index: the lines are missing, and the user is told
+                notes.append(idx.problem)
             one["mentions"] = mentions(idx, e["key"], {c["path"] for c in e["cards"]}, people) if e["key"] else \
                 {"count": 0, "items": []}
+            if idx.problem and idx.problem not in notes:
+                notes.append(idx.problem)
         out["entities"].append(one)
     out["several"] = len(found)
-    if how == "key" and not found:
+    if how == "key" and not found and not reg.find(query)[0]:     # no card of any kind holds the key
         key = N(query).strip().upper()
         rows = idx.mentions({key})
         prefix = key.rsplit("-", 1)[0]
@@ -753,6 +761,8 @@ def card_of(reg, arg):
         if card:
             return card
     q = Resolver.clean(arg)
+    if "/" in q or q.lower().endswith(".md"):    # a path names its card or nothing — never another card by its name
+        raise ValueError("«%s» — не картка сутності" % arg)
     nk = ci.name_key(q)
     cards = [c for e in reg.entities for c in e["cards"] if c.get("home", True)
              and nk in {ci.name_key(x) for x in _names(c) + list(c.get("aliases") or [])}]
