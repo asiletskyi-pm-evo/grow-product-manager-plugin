@@ -68,10 +68,12 @@ DB_NAME, STATE_NAME, LOCK_NAME = "sections.sqlite", "index.json", "index.lock"
 BM25 = (10.0, 6.0, 4.0, 4.0, 1.0)   # title, heading, tags, aliases, body
 HUB_TYPES = frozenset(("glossary", "moc", "people", "person", "focus-brief", "daily-summary"))
 PEOPLE_TYPES = frozenset(("people", "person", "one-on-one-notes", "performance-review", "offboarding-plan",
-                          "delegation-audit", "followup-arcv"))
+                          "delegation-audit", "followup-arcv", "one-on-one"))
                                     # data-policy.md (Search, rule 1): taken only by the People contour (v3.17.0)
 STEP_P_FIELDS = ("d_type", "d_history", "recommended_style", "signals", "one_on_one", "gtd_index", "forecast_qa",
                  "delegation", "active_goal_letter")   # a person profile's judgement (people-context-protocol.md)
+ONE_ON_ONE = re.compile(r"(?<![\w.:/-])(?:1\s?[-:]\s?1|1on1|one[- ]on[- ]one)(?![\w.:/]|-\d)", re.I)
+                                    # a 1-1 named in a title or a folder: `1-1 …`, `1:1 …`, `1on1 …`, `1-1-Logs/`
 HUB_TITLE = re.compile(r"style guide|глосарій|glossary|абревіатури", re.I)
 TRUE = ("true", "yes", "1")
 NULLISH = ("", "~", "null", "none", "false")   # a frontmatter value that says nothing
@@ -480,6 +482,13 @@ def sensitive_of(fm):
     return any(_filled(m.get(k)) for m in maps for k in STEP_P_FIELDS)
 
 
+def one_on_one(path, title=""):
+    """Is a note a 1-1 by its title or a folder of its path (`1-1 …`, `1:1 …`, `1on1 …`, `1-1-Logs/`, one-on-one),
+    whatever its type (since v3.17.0: 1-1 notes are kept as `meeting` notes too)? Never by a key, a date or a quarter."""
+    parts = [_text(title)] + N(str(path or "")).split("/")
+    return any(ONE_ON_ONE.search(p) for p in parts if p)
+
+
 def _items(v, tags=False):
     """A list of texts: a list as it is, a scalar split on commas (tags: on spaces too, `#` dropped)."""
     raw = v if isinstance(v, list) else (_text(v).split(",") if _text(v) else [])
@@ -569,7 +578,7 @@ def note_meta(rel, text, mtime=None):
         "title": title, "type": ntype, "product": _text(fm.get("product")), "status": _text(fm.get("status")).lower(),
         "date": date or "", "ttl_date": ttl_date, "confluence_id": cid, "aliases": _items(fm.get("aliases") or fm.get("alias")),
         "tags": _items(fm.get("tags") or fm.get("tag"), tags=True),
-        "sensitive": sensitive_of(fm),
+        "sensitive": sensitive_of(fm) or one_on_one(rel, title),
         "hub": ntype in HUB_TYPES or _text(fm.get("search_hub")).lower() in TRUE or bool(HUB_TITLE.search(title)),
         "version_key": version_key(title, rel.rsplit("/", 1)[0] if "/" in rel else ""), "links": links,
     }
@@ -744,7 +753,9 @@ def _note_dict(r):
             d[c] = json.loads(d.pop(c + "_json") or "[]")
         except ValueError:
             d[c] = []
-    d["sensitive"], d["hub"] = bool(d["sensitive"]) or (d.get("type") or "").lower() in PEOPLE_TYPES, bool(d["hub"])
+    d["sensitive"] = bool(d["sensitive"]) or (d.get("type") or "").lower() in PEOPLE_TYPES \
+        or one_on_one(d.get("path"), d.get("title"))
+    d["hub"] = bool(d["hub"])
     return d
 
 

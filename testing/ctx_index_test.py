@@ -1210,7 +1210,8 @@ check("…not a generic field, an empty Step-P field, `sensitive: false`, nothin
       and not so({"d_type": ""}) and not so({"signals": []}) and not so({"d_type": None}) and not so({}), so)
 check("…PEOPLE_TYPES and STEP_P_FIELDS as the plan names them (C1)",
       getattr(ctx_index, "PEOPLE_TYPES", None) == frozenset(("people", "person", "one-on-one-notes", "performance-review",
-                                                            "offboarding-plan", "delegation-audit", "followup-arcv"))
+                                                            "offboarding-plan", "delegation-audit", "followup-arcv",
+                                                            "one-on-one"))
       and getattr(ctx_index, "STEP_P_FIELDS", None) == ("d_type", "d_history", "recommended_style", "signals", "one_on_one",
                                                        "gtd_index", "forecast_qa", "delegation", "active_goal_letter"))
 check("v3.17.0 Q2: note_meta of a `type: person` card without `sensitive` is sensitive",
@@ -1358,6 +1359,39 @@ for stored, rereads in (("3", False), ("x", True)):
         check("v3.17.0 review M3: `meta_version` %s — %s" % (stored, "a later build's: nothing read again" if not rereads
                                                            else "unreadable: read as 1, every file read again"),
               bool(opened) is rereads, len(opened))
+
+# --- v3.17.0 acceptance fix wave: 1-1 notes by their title or folder, and the `one-on-one` type
+oo = getattr(ctx_index, "one_on_one", None)
+check("v3.17.0 acceptance: a 1-1 note by its title or a folder of its path — `1-1 …`, `1:1 …`, `1on1 …`, `1-1-Logs/`, "
+      "one-on-one",
+      oo is not None and all(oo(p, t) for p, t in (
+          ("Notes/Meetings/1on1 Bea/Meeting - 2026-02-27 - 1-1 Zorg-Bea.md", ""),
+          ("Notes/Meetings/Meeting - 2026-09-29 - 1-1 Zorg-Cy.md", "Meeting with Cy"),
+          ("Notes/x.md", "1:1 — Bea & Zorg (2026-09-22)"),
+          ("ZorgCore/_personal/1-1-Logs/bea-two/2026-09-22.md", ""),
+          ("Notes/One-on-one with Bea.md", ""))), oo)
+check("…not a key, a date or a quarter that holds «1-1»",
+      oo is not None and not any(oo(p, t) for p, t in (
+          ("Notes/ZORG-10452.1-1 brand pages.md", ""), ("Notes/Reviews 2023-11-1 notes.md", ""),
+          ("Notes/Q1-1 plan.md", ""), ("Notes/report 2021-1-1.md", ""), ("Notes/x.md", "Plan 11-12"))), oo)
+check("…`one-on-one` is a people type", "one-on-one" in ctx_index.PEOPLE_TYPES)
+check("…note_meta of a `type: meeting` 1-1 note is sensitive",
+      ctx_index.note_meta("Notes/Meetings/1on1 Bea/Meeting - 2026-02-27 - 1-1 Zorg-Bea.md",
+                          "---\ntype: meeting\n---\n# 1-1 Zorg-Bea\n\nAction items.\n")["sensitive"] is True
+      and ctx_index.note_meta("Notes/Meetings/Meeting - 2026-03-01 - Pricing.md",
+                              "---\ntype: meeting\n---\n# Pricing\n\nAction items.\n")["sensitive"] is False)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Notes/Meetings/Meeting - 2026-09-29 - 1-1 Zorg-Cy.md"), "---\ntype: meeting\n---\n# 1-1 Zorg-Cy\n\nItems.\n")
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET sensitive = 0 WHERE path LIKE '%1-1 Zorg-Cy%'")
+    con.commit()
+    con.close()
+    row = next((n for n in idx.notes() if "1-1 Zorg-Cy" in n["path"]), None)
+    check("…a row of a 1-1 note reads as sensitive whatever its column says", row is not None and row["sensitive"] is True, row)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

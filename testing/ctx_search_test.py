@@ -2635,5 +2635,31 @@ check("…commands/find.md: the guard names the conversational «знайди»,
       and "the choices §10 remembers" in FIND and "`Невідомий прапорець: <слово>" in FIND
       and "A bare `skills/<name>/SKILL.md` is read from the same root" in FIND)
 
+# --- v3.17.0 acceptance fix wave: 1-1 notes in every source
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Notes/Meetings/Meeting - 2026-09-29 - 1-1 Zorg-Cy.md"),
+          "---\ntype: meeting\ndate: 2026-09-29\n---\n# 1-1 Zorg-Cy\n\nQuokkaflat: rent the flat, sign the lease.\n")
+    write(env.note("Growth/1on1 Bea/2026-09-22.md"), "---\ntype: meeting\nupdated: 2026-09-22\n---\n# Sync\n\nQuokkaflat items.\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/1on1 Bea/2026-09-22.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    res = cs_.run(sx, ["Quokkaflat"], now=NOW, refresh=False)
+    own = next((c for c in res["candidates"] if "1-1 Zorg-Cy" in c["path"]), None)
+    loc = next((c for c in res["candidates"] if c["path"] == "Growth/1on1 Bea/2026-09-22.md"), None)
+    check("v3.17.0 acceptance: a 1-1 note typed `meeting` — own (by its title) and a local index's (by its folder) — is "
+          "`sensitive`", own is not None and "sensitive" in own["flags"] and loc is not None and "sensitive" in loc["flags"],
+          [(c["path"], c["flags"]) for c in res["candidates"][:5]])
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    with FakeMcp() as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [
+            {"path": "Growth/Sync.md", "title": "1:1 — Bea & Zorg", "type": "meeting"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, _ = cs_.gather(sx, ["Quokkaflat"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        got = {h["path"]: h.get("sensitive") for k, l in lists.items() for h in l}
+    check("…a server's hit titled «1:1 — …» is sensitive before --get", got.get("@zorg-growth/Sync.md") is True, got)
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

@@ -547,6 +547,7 @@ def _local(sctx, src, plans, until, box):
                         type=(meta["type"] or "").lower(), product=meta["product"] or "",
                         status=(meta["status"] or "").lower(), hub=True if _yes(fm.get("search_hub")) else None,
                         sensitive=True if ci.sensitive_of(fm) or (meta["type"] or "").lower() in ci.PEOPLE_TYPES
+                        or ci.one_on_one(rel, meta["title"])
                         else (_yes(fm.get("sensitive")) if "sensitive" in fm else None),
                         ttl_date=_first_date(fm, ci.TTL_DATE_KEYS) or "", terms=None, asked=len(terms), near=near_of(r))
                 if snip and isinstance(body, str) and _lost(snip):    # the match was in a breadcrumb or a link line
@@ -621,7 +622,8 @@ def _mcp(sctx, src, plans, until, box):
             hits.append(Hit(rel, "", src["id"], 0, title=_text_or_none(r.get("title")), date=date,
                             snippet=_text_or_none(r.get("snippet")), variant=i, list=key,
                             type=rtype, product="", status="", hub=None,
-                            sensitive=True if rtype in ci.PEOPLE_TYPES else None,   # a people type (v3.17.0)
+                            sensitive=True if rtype in ci.PEOPLE_TYPES or ci.one_on_one(r["path"], r.get("title"))
+                            else None,                                # a people type, a 1-1 (v3.17.0)
                             ttl_date=_first_date(r, ci.TTL_DATE_KEYS) or "", terms=None, asked=asked,
                             remote=N(r["path"])))
         _add(lists, key, hits)
@@ -1472,7 +1474,8 @@ def _local_meta(path, local, mtime=None):
     fm = row.get("fm") or {}
     rtype = (_text_or_none(row.get("type")) or ci._text(fm.get("type")) or "").lower()
     meta["type"] = meta["type"] or rtype
-    meta["sensitive"] = bool(meta["sensitive"] or ci.sensitive_of(fm) or rtype in ci.PEOPLE_TYPES)
+    meta["sensitive"] = bool(meta["sensitive"] or ci.sensitive_of(fm) or rtype in ci.PEOPLE_TYPES
+                             or ci.one_on_one(path, meta.get("title")))
     meta["date"] = _first_date(fm, ci.DATE_KEYS) or meta["date"]
     return meta
 
@@ -1978,7 +1981,8 @@ def _from_mcp(sctx, entry):
         return "" if v is None or isinstance(v, (list, dict)) else N(str(v)).strip()
 
     meta = {"type": said("type") or inner["type"], "status": said("status") or inner["status"],
-            "sensitive": ci.sensitive_of(fm) or inner["sensitive"]}
+            "sensitive": ci.sensitive_of(fm) or inner["sensitive"]
+            or ci.one_on_one(entry.get("remote") or "", fm.get("title"))}
     return content, _first_date(fm, ci.DATE_KEYS) or inner["date"] or "", meta, None
 
 
