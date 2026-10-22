@@ -917,12 +917,12 @@ The plugin is defined against Claude Code / Cowork and degrades by **observed ca
 
 | | Claude Code / Cowork | Codex CLI · Codex app | ChatGPT | Codex Cloud |
 |---|---|---|---|---|
-| Skills (31) | ✅ | ✅ same namespace | ✅ (expected) | ✅ (expected) |
+| Skills (33) | ✅ | ✅ same namespace | ✅ (expected) | ✅ (expected) |
 | Connectors | ✅ | ✅ URL-matched; name-matched ones (`gmail`, `google calendar`, `google drive`, `fireflies`) work in the **app**, fail at session start in the **CLI** | ✅ | ? |
 | Filesystem `~/.grow-pm/`, vault | ✅ | ✅ | ❌ on web / mobile → `storage_mode: session`, artifact exported at the end; ✅ in the desktop app with a *Local Project* (attached folder, read/write) → behaves as the Codex column | own sandbox → via connector or the repo |
 | Subagents (checker, debater, extractor) | ✅ automatic | ⚠️ only on explicit request → sequential in-session passes (`.codex/agents/` for manual use) | ❌ | ⚠️ |
 | Hooks (context digest, write gate) | ✅ | ❌ ([openai/codex#17331](https://github.com/openai/codex/issues/17331)) → Step 0a in full, in-skill confirmation before writes | ❌ | ❌ |
-| Commands | ✅ 5, user-only | ✅ 5, migrated to typed-only skills | ❌ | ⚠️ |
+| Commands | ✅ 6, user-only | ✅ 6, migrated to typed-only skills | ❌ | ⚠️ |
 | Skill descriptions | full while the listing fits 1% of the context window; over it, the least-used skills show names only — descriptions stay within 400 characters (v3.10.1) | shortened to fit one shared ≈15k-character budget (~190 chars each on a host with 80 skills) — descriptions are ordered for that cut | ? | ? |
 | Per-skill result | 31 full | 15 full / 16 degraded | 21 degraded / 10 n/a | 22 degraded / 9 n/a |
 

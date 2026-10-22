@@ -223,7 +223,7 @@ The user asks the base itself — «знайди в моєму контекст�
   - a live source the user names («у Confluence», «в Jira», «у пошті») → that source, besides the base;
   - everywhere («скрізь», `--all`) → every source of the session the request can reach.
 
-  Naming the source, or typing `--all`, is the user's answer to §8's question about the data and the breadth. A VPN or a login the session lacks still comes first, as one question. Otherwise level 2 starts only when the base gave nothing «прямо»; a doubt or a conflict alone offers `живе джерело: …` instead, in the block or in the list's unnumbered lines.
+  Naming the source, or typing `--all`, answers §8's question about the breadth. §8's other questions still come first, as one question: a VPN or a login the session lacks, and the data — mail, person profiles, private channels (`data-policy.md` → Search, rule 2). Otherwise level 2 starts only when the base gave nothing «прямо»; a doubt or a conflict alone offers `живе джерело: …` instead, in the block or in the list's unnumbered lines.
 - **Where it looked** — the last line of either form, after the block: `Де шукав: <id> · <id> (не відповів) · … · живі: <назви>`.
   - Every `sources[].id` of `CTX_RESULT` in its order, with `(не відповів)` after one whose `answered` is false.
   - The providers asked as under "MCP only", by their ids.

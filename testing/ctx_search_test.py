@@ -2616,5 +2616,24 @@ check("…context-navigator: the person row is identity only, decisions go to de
       and "for a list, call no `--get`" in NAVb and "§12 — the files on an FS host" in NAVb
       and "A question the base cannot answer" in NAVb and "A question the core cannot answer" not in NAVb)
 
+# --- v3.17.0 Task 3 review fixes: /find and §13 say one rule
+SP17c = " ".join(read(ROOT, "references", "search-protocol.md").split())
+check("v3.17.0 review (Task 3) I1: naming a live source or --all answers only §8's breadth question; a VPN or a login, "
+      "mail, person profiles and private channels are still asked first (spec criterion 5)",
+      "answers §8's question about the breadth" in section(SP17c, 13)
+      and "a VPN or a login the session lacks, and the data — mail, person profiles, private channels" in section(SP17c, 13)
+      and "is the user's answer to §8's question about the data and the breadth" not in section(SP17c, 13), section(SP17c, 13)[-1600:])
+FIND = read(ROOT, "commands", "find.md")
+FIND_FM = FIND.split("\n---", 1)[0]
+check("…commands/find.md: the guard names the conversational «знайди», the description says notes (not the vault), the "
+      "navigator is followed whole, --all keeps §8's questions, the writes are §10's and the index's, a flag is an exact "
+      "word and an unknown one stops, the Path rule covers the skill's path",
+      "never for a conversational «знайди…»" in FIND_FM and "your vault" not in FIND_FM
+      and len(FIND_FM.split("description: ", 1)[-1].split("\n")[0]) <= 260
+      and "Follow `skills/context-navigator/SKILL.md` whole" in FIND
+      and "A VPN or a login the session lacks, and mail, person profiles or private channels" in FIND
+      and "the choices §10 remembers" in FIND and "`Невідомий прапорець: <слово>" in FIND
+      and "A bare `skills/<name>/SKILL.md` is read from the same root" in FIND)
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)
