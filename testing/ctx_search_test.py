@@ -2579,5 +2579,42 @@ check("v3.17.0: context-navigator 0.3.0 searches your whole context — the desc
       and "`Спільне ядро не підключене — шукаю у твоїй базі`" in NAV and "§13" in NAV and "`Де шукав: …`" in NAV
       and "None → say that no shared context is connected and offer `context-connect`; never invent" not in NAV)
 
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    with FakeMcp() as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [
+            {"path": "Growth/Old plan.md", "title": "Old plan", "type": "concept", "updated": "2026-01-02"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, _ = cs_.gather(sx, ["Quokkaplan roadmap"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        old = next((h for k, l in lists.items() for h in l if h["path"] == "@zorg-growth/Old plan.md"), None)
+    check("v3.17.0 review X1: a server's hit keeps the date its class TTL counts from, `terms` unknown and `asked`",
+          old is not None and old.get("ttl_date") == "2026-01-02" and "terms" in old and old["terms"] is None
+          and old.get("asked") == 2, old)
+
+# --- v3.17.0 Task 2 review fixes
+SP17b = " ".join(read(ROOT, "references", "search-protocol.md").split())
+S13b = section(SP17b, 13)
+check("v3.17.0 review (Task 2): §13 — a list has no numbered block (I1), only the plugin folder of a vault is indexed "
+      "(I2), a person is the card's frontmatter identity, never its body (I3), a server line without a known mark has no "
+      "snippet and a line is read before it is remembered (I4), a refreshing index never says the bare «нічого» (I5), a "
+      "named source is that source (I6), a usage error stops (M11), a declined live source is named (M12)",
+      all(x in S13b for x in (
+          "**No numbered block.**", "the rest of a vault only through a registered local index of it",
+          "never the card's body", "from its title and heading alone, with no snippet and no «навіщо»",
+          "`--get` of that note first", "`Поки нічого прямо про це — індекс оновлюється: N файлів ще не переглянуто`",
+          "→ that source, besides the base", "`Пошук не виконано: <помилка>`, and nothing more", "`(пропущено)`",
+          "a doubt or a conflict alone offers `живе джерело: …` instead")), S13b[-1500:])
+DP = " ".join(read(ROOT, "references", "data-policy.md").split())
+check("…data-policy rule 1 names the one exception: a person's directory identity from a registry card",
+      "a person's identity — name, e-mail, team and role as a registry card's frontmatter states them, and the card's path"
+      in DP, DP[DP.find("1. **Sensitive"):][:900])
+NAVb = read(ROOT, "skills", "context-navigator", "SKILL.md")
+check("…context-navigator: the person row is identity only, decisions go to decision-log with or without a provider, a "
+      "list calls no --get, no-SHELL hosts take §12, «the base» cannot answer",
+      "identity only (`references/search-protocol.md` §13)" in NAVb and "with or without a provider" in NAVb
+      and "for a list, call no `--get`" in NAVb and "§12 — the files on an FS host" in NAVb
+      and "A question the base cannot answer" in NAVb and "A question the core cannot answer" not in NAVb)
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

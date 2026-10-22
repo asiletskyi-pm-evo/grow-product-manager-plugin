@@ -621,7 +621,8 @@ def _mcp(sctx, src, plans, until, box):
             hits.append(Hit(rel, "", src["id"], 0, title=_text_or_none(r.get("title")), date=date,
                             snippet=_text_or_none(r.get("snippet")), variant=i, list=key,
                             type=rtype, product="", status="", hub=None,
-                            sensitive=True if rtype in ci.PEOPLE_TYPES else None,   # a people type (v3.17.0) ttl_date=_first_date(r, ci.TTL_DATE_KEYS) or "", terms=None, asked=asked,
+                            sensitive=True if rtype in ci.PEOPLE_TYPES else None,   # a people type (v3.17.0)
+                            ttl_date=_first_date(r, ci.TTL_DATE_KEYS) or "", terms=None, asked=asked,
                             remote=N(r["path"])))
         _add(lists, key, hits)
     box["lists"] = lists

@@ -277,7 +277,7 @@ Users can add any additional sections with free-form markdown content. The confi
 | **Product Landscape** | — | product.name, landscape (category, bookmarks consent), product.competitors (registry seed) |
 | **Flow Walkthrough** | — | product.name, test_accounts (multi-role legs), product.platforms |
 | **Context Connect** | user.email (or the host account) | Team, Obsidian Vaults (registration folder), Vault Search MCP, the provider blocks already merged |
-| **Context Navigator** | — | Vault Search MCP + provider registrations (`session.providers`), the provider's team block (Jira write scope) |
+| **Context Navigator** | — | the vaults and their plugin folders, registered repositories and local indexes (the search the user asks for, since v3.17.0); with a shared core, Vault Search MCP + provider registrations (`session.providers`) and the provider's team block (Jira write scope) |
 
 > Every skill sent to Step 0e must have a row here — the step tells a skill to check "its required fields" against this table, so a missing row silently means "nothing required". 12 skills had no row until v2.1.1.
 
