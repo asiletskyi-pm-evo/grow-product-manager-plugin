@@ -22,9 +22,13 @@ cards apart whatever the keys say. Nothing is written into a note.
 - known_prefixes                the Jira project prefixes the cards name (a team's or a mission's `…jira…` fields, a
                                 work card's key): a key-shaped token is a mention only with one of them (or a /browse/ link)
 - load                          the registry of a search context: the own index's cards, the local ones, the memory
+- run, pairs_result, render     `ctx entity <request>` and `ctx entity pairs`: the index refreshed, the entity (or the
+                                several, or a Jira key's mentions), who links to it — a sensitive note outside the People
+                                contour as its title and path with ` · sensitive`, never its field or text (plan C8) —,
+                                and the lines to print. Never a note's text, never a field beyond the identity.
 
-Reads the index (ctx_index), a registered local index (mode=ro) and `.state/entities.json`; writes only that file
-(`save_memory`, for the writing commands of ctx.py). Stdlib only.
+Reads the index (ctx_index), a registered local index (mode=ro) and `.state/entities.json`; writes the index (`run`
+refreshes it) and that file (`save_memory`, for the writing commands of ctx.py) — nothing else. Stdlib only.
 """
 import json
 import os
@@ -47,6 +51,16 @@ FILE = "entities.json"
 WHERE = ".state/" + FILE
 _KEYS = ("schema", "same", "not_same")
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
+KINDS = ("person", "team", "mission", "module", "metric", "work")
+PEOPLE_SKILLS = ("goal-setter", "one-on-one", "performance-review", "hiring-designer", "offboarding-guide",
+                 "delegation-coach")      # data-policy.md: the People contour sees a sensitive line's field (C8)
+SHOWN = 20                              # the lines of who links to an entity, or mentions a key, at most
+SEVERAL = 5                             # the entities a request that names several lists, at most
+UNKNOWN = "Не знаю такої сутності: «%s»"
+UNKNOWN_YET = "Поки не знаю «%s» — %s"
+MENTION = "%s — картки немає, згадується в %d нотатках:"
+UNREAD_MEMORY = "пам'ять сутностей не прочитано (%s) — без твоїх відповідей"
+NOT_READ = "Базу не прочитано: %s"
 
 
 # ------------------------------------------------------------------ your answers
@@ -505,3 +519,218 @@ def load(sctx, idx, mem):
     prefixes = [ci.rel_path(r["path"], vaults, r) for r in sctx.get("roots") or [] if r.get("source") == "own"]
     resolver = Resolver(metas, prefixes)
     return build([_card(d, "index") for d in own] + local, mem, resolver), notes
+
+
+# ------------------------------------------------------------------ `ctx entity`
+def _line(row, people):
+    """One note that links to an entity or mentions a key: {path, title, date, sensitive[, field]} — the field (where the
+    link stands, "" for the text) only when the note is not sensitive or the reader is the People contour (C8)."""
+    d = {"path": row["path"], "title": row.get("title") or _stem(row["path"]), "date": (row.get("date") or "")[:10],
+         "sensitive": bool(row.get("sensitive"))}
+    if not d["sensitive"] or people:
+        d["field"] = row.get("field", "")
+    return d
+
+
+def _newest(items):
+    return sorted(items, key=lambda d: (d["date"], d["path"]), reverse=True)
+
+
+def backlinks(idx, reg, ent, people=False):
+    """{count, items}: the notes that link to a card (or a home page) of `ent` — each link's target resolved as `--get`
+    would, so a note of the same name elsewhere is never counted —, the entity's own cards left out; newest first, at
+    most SHOWN items, `count` all of them."""
+    homes = {c["path"] for c in ent["cards"]}
+    found = {}
+    for row in idx.links_to({ci.name_key(p) for p in homes}):
+        if row["path"] in homes or row["path"] in found:
+            continue
+        if reg.resolver.resolve(row["target"]) in homes:
+            found[row["path"]] = _line(row, people)
+    items = _newest(found.values())
+    return {"count": len(items), "items": items[:SHOWN]}
+
+
+def mentions(idx, key, skip=(), people=False):
+    """{count, items}: the notes that carry the Jira key `key`, those of `skip` left out; newest first, at most SHOWN."""
+    found = {}
+    for row in idx.mentions({key}):
+        if row["path"] not in skip and row["path"] not in found:
+            found[row["path"]] = _line(dict(row, field=""), people)
+    items = _newest(found.values())
+    return {"count": len(items), "items": items[:SHOWN]}
+
+
+def _public_card(c):
+    return {"path": c["path"], "source": c["source"], "label": c["label"], "emails": c["emails"], "team": c["team"],
+            "role": c["role"], "sensitive": c["sensitive"], "home": c.get("home", True)}
+
+
+def _brief(c):
+    return {"path": c["path"], "label": c["label"], "source": c["source"], "kind": c["kind"]}
+
+
+def _prepare(sctx, store, budget):
+    """(idx, registry, notes, read, pending): the index refreshed (as `ctx search` does), your answers, the registry.
+    `read` — did any base answer (a built own index, or a card from a local index)."""
+    notes, pending = [], 0
+    idx = ci.Index(sctx["home"])
+    built = None
+    if sctx.get("roots"):
+        done, why = cs_._refresh(idx, sctx, ci.REFRESH_S if budget is None else budget, notes)
+        pending = (done or {}).get("pending") or 0
+        if why:
+            notes.append(cs_.REFRESH_NOTE % why)
+        built = idx.built()
+        if built is False:
+            notes.append(cs_.BUILDING_NOTE if idx.lock_held() or (done or {}).get("locked")
+                         else cs_.NO_INDEX_NOTE % (why or "збудуй його: ctx index rebuild"))
+        if pending:
+            notes.append(cs_.PENDING_NOTE % pending)
+    mem = empty_memory()
+    if store is not None and store.exists():
+        try:
+            mem = load_memory(store, timeout=cs_.OPEN_S)
+        except cs.StoreError as e:
+            notes.append(UNREAD_MEMORY % e)
+    reg, more = load(sctx, idx, mem)
+    notes.extend(n for n in more if n not in notes)
+    read = (built is True and not (idx.problem and idx.problem != ci.BUSY_NOTE)) \
+        or any(c["origin"] == "local" for e in reg.entities for c in e["cards"])
+    return idx, reg, notes, read, pending
+
+
+def run(sctx, query, kind=None, skill=None, store=None, budget=None):
+    """`ctx entity <request>` (plan C13–C14): {command, query, how, entities, mention, notes, read, pending}. One entity
+    → its cards (identity only), related, maybe, backlinks, mentions (a work entity's key); several → at most SEVERAL
+    of them, without backlinks; a Jira key no card holds → its mentions, when its prefix is known or a /browse/ link
+    names it; `read` False → no base answered (the caller exits 5). Refreshes the index; writes nothing else."""
+    idx, reg, notes, read, pending = _prepare(sctx, store, budget)
+    people = skill in PEOPLE_SKILLS
+    found, how = reg.find(query, kind)
+    out = {"command": "entity", "query": query, "how": how, "entities": [], "mention": None, "notes": notes,
+           "read": read, "pending": pending}
+    for e in found[:SEVERAL]:
+        one = {"id": e["id"], "kind": e["kind"], "label": e["label"], "key": e["key"],
+               "cards": [_public_card(c) for c in e["cards"]], "related": [_brief(c) for c in e["related"]],
+               "maybe": [_brief(c) for c in e["maybe"]]}
+        if len(found) == 1:
+            one["backlinks"] = backlinks(idx, reg, e, people)
+            one["mentions"] = mentions(idx, e["key"], {c["path"] for c in e["cards"]}, people) if e["key"] else \
+                {"count": 0, "items": []}
+        out["entities"].append(one)
+    out["several"] = len(found)
+    if how == "key" and not found:
+        key = N(query).strip().upper()
+        rows = idx.mentions({key})
+        prefix = key.rsplit("-", 1)[0]
+        if rows and (prefix in known_prefixes([c for e in reg.entities for c in e["cards"]]) or any(r["browse"] for r in rows)):
+            out["mention"] = dict(mentions(idx, key, (), people), key=key)
+    return out
+
+
+def pairs_result(sctx, kind=None, store=None, budget=None):
+    """`ctx entity pairs`: {command, action, pairs: [{a, b}], count, notes, read} — every open «maybe the same» pair."""
+    _, reg, notes, read, _ = _prepare(sctx, store, budget)
+    pairs = [{"a": _brief(a), "b": _brief(b)} for a, b in reg.pairs() if kind is None or a["kind"] == kind]
+    return {"command": "entity", "action": "pairs", "pairs": pairs, "count": len(pairs), "notes": notes, "read": read}
+
+
+def _plain(v):
+    """A frontmatter value as it reads: a wiki link as its label (else its target's name)."""
+    s = N(v or "").strip()
+    m = ci._WIKI.fullmatch(s)
+    if m:
+        target, _, label = ci._link_parts(m.group(1))
+        return label or _stem(target)
+    return s
+
+
+def _values(cards, field):
+    """The values of `field` over the cards, each once; when they differ, each with the source that says it."""
+    seen = []
+    for c in cards:
+        vals = c[field] if isinstance(c[field], list) else [c[field]]
+        for v in vals:
+            v = _plain(v) if field != "emails" else v
+            if v and v not in [x for x, _ in seen]:
+                seen.append((v, c["source"]))
+    if len(seen) <= 1:
+        return ", ".join(v for v, _ in seen)
+    return ", ".join("%s (%s)" % (v, s) for v, s in seen)
+
+
+def _note_line(d):
+    return "%s — %s%s%s" % (d["title"], d["path"], " · " + d["date"] if d["date"] else "", " · sensitive" if d["sensitive"] else "")
+
+
+def render(res):
+    """The human lines of `run` / `pairs_result`."""
+    lines = list(res.get("notes") or [])
+    if res.get("action") == "pairs":
+        for p in res["pairs"]:
+            lines.append("можливо той самий: %s ↔ %s — ctx entity same|not-same \"%s\" \"%s\""
+                         % (p["a"]["path"], p["b"]["path"], p["a"]["path"], p["b"]["path"]))
+        lines.append("відкритих пар: %d" % res["count"])
+        return "\n".join(lines) + "\n"
+    ents = res["entities"]
+    if res.get("several", len(ents)) > 1:
+        lines.append("кілька сутностей «%s»:" % res["query"])
+        for e in ents:
+            lines.append("%s · %s — ctx entity \"%s\"" % (e["label"], e["kind"], e["id"]))
+        if res["several"] > len(ents):
+            lines.append("ще %d — уточни запит або --kind" % (res["several"] - len(ents)))
+        return "\n".join(lines) + "\n"
+    if ents:
+        e = ents[0]
+        cards = e["cards"]
+        lines.append("%s · %s%s" % (e["label"], e["kind"], " · " + e["key"] if e["key"] else ""))
+        lines.append("  картки: " + " · ".join("%s · %s%s" % (c["source"], c["path"], " · sensitive" if c["sensitive"] else "")
+                                               for c in cards))
+        ident = [(n, _values(cards, f)) for n, f in (("e-mail", "emails"), ("команда", "team"), ("роль", "role"))]
+        ident = [(n, v) for n, v in ident if v]
+        if ident:
+            lines.append("  " + " · ".join("%s: %s" % (n, v) for n, v in ident))
+        for r in e["related"]:
+            lines.append("  пов'язана з: %s — %s" % (r["label"], r["path"]))
+        for m in e["maybe"]:
+            lines.append("  можливо той самий: %s — ctx entity same|not-same \"%s\" \"%s\"" % (m["path"], e["id"], m["path"]))
+        for name, part in (("хто посилається", e["backlinks"]), ("згадки", e["mentions"])):
+            if part["count"]:
+                lines.append("  %s (%d):" % (name, part["count"]))
+                lines.extend("    " + _note_line(d) for d in part["items"])
+                if part["count"] > len(part["items"]):
+                    lines.append("    ще %d" % (part["count"] - len(part["items"])))
+        return "\n".join(lines) + "\n"
+    if res.get("mention"):
+        m = res["mention"]
+        lines.append(MENTION % (m["key"], m["count"]))
+        lines.extend("  " + _note_line(d) for d in m["items"])
+        if m["count"] > len(m["items"]):
+            lines.append("  ще %d" % (m["count"] - len(m["items"])))
+        return "\n".join(lines) + "\n"
+    if res.get("pending"):
+        lines.append(UNKNOWN_YET % (res["query"], cs_.PENDING_NOTE % res["pending"]))
+    else:
+        lines.append(UNKNOWN % res["query"])
+    return "\n".join(lines) + "\n"
+
+
+def card_of(reg, arg):
+    """The one card `arg` names for an answer — its path (or a link), or a name one card alone carries — else a
+    ValueError that says what it names instead."""
+    hit = reg.resolver.resolve(arg)
+    if isinstance(hit, str):
+        e = reg.of(hit)
+        card = next((c for c in (e or {}).get("cards", []) if c["path"] == hit and c.get("home", True)), None)
+        if card:
+            return card
+    q = Resolver.clean(arg)
+    nk = ci.name_key(q)
+    cards = [c for e in reg.entities for c in e["cards"] if c.get("home", True)
+             and nk in {ci.name_key(x) for x in _names(c) + list(c.get("aliases") or [])}]
+    if len(cards) == 1:
+        return cards[0]
+    if cards:
+        raise ValueError("«%s» — кілька карток: %s — назви шлях" % (arg, ", ".join(sorted(c["path"] for c in cards)[:SEVERAL])))
+    raise ValueError("«%s» — не картка сутності" % arg)

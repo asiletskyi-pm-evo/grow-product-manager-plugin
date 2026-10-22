@@ -9,7 +9,7 @@ request is looked up in. Stdlib only; run from the repo root:
 
   env -u GROW_PM_CONTEXT_PATH -u GROW_PM_PROVIDER_PATHS python3 testing/ctx_entity_test.py
 """
-import json, os, shutil, sqlite3, sys, tempfile
+import json, os, shutil, sqlite3, stat, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -22,6 +22,7 @@ except ImportError:
     ce = None
 
 FIX = os.path.join(ROOT, "testing", "fixtures", "entity")
+CTX = os.path.join(ROOT, "scripts", "ctx.py")
 fails = 0
 
 
@@ -90,6 +91,19 @@ class Env:
         self.sctx = cs_.context_for(self.home, self.text, store_root=self.store.root)
         self.idx = ci.Index(self.home)
         self.idx.refresh(self.sctx["roots"], self.sctx["store_rel"], self.sctx["blocks_rels"])
+
+    def cli(self, *args):
+        """(exit code, output, CTX_RESULT) of `ctx.py <args> --home --context`."""
+        env = dict(os.environ)
+        env.pop("GROW_PM_CONTEXT_PATH", None)
+        p = subprocess.run([sys.executable, CTX] + list(args) + ["--home", self.home, "--context", self.ctx],
+                           capture_output=True, text=True, env=env, timeout=120)
+        lines = [l for l in p.stdout.splitlines() if l.strip()]
+        try:
+            res = json.loads(lines[-1][len("CTX_RESULT "):]) if lines and lines[-1].startswith("CTX_RESULT ") else None
+        except ValueError:
+            res = None
+        return p.returncode, p.stdout + p.stderr, res
 
     def registry(self, mem=None):
         return ce.load(self.sctx, self.idx, mem or ce.empty_memory())
@@ -220,6 +234,136 @@ with tempfile.TemporaryDirectory() as d:
     check("v3.18.0 C12: a local index of another shape — no cards from it, and one line that says so",
           reg.of(BEA_G) is None and ent(reg, BEA_CORE) == {BEA_CORE, BEA_OWN}
           and any("незнайому схему" in n for n in notes), (notes, ent(reg, BEA_CORE)))
+
+
+# --- v3.18.0 Task 3: `ctx entity` (plan C8, C9, C10, C13, C14)
+def tree(*tops):
+    out = {}
+    for top in tops:
+        for dirpath, _, names in os.walk(top):
+            for n in names:
+                p_ = os.path.join(dirpath, n)
+                out[p_] = (os.stat(p_).st_size, os.stat(p_).st_mtime)
+    return out
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    rc, out, res = env.cli("entity", "bea.two@zorg.example", "--json")
+    e0 = (res or {}).get("entities") or [{}]
+    items = (e0[0].get("backlinks") or {}).get("items") or []
+    one = [i for i in items if i["path"] == "Notes/Meetings/1-1 Bea 2026-10-01.md"]
+    check("v3.18.0 `ctx entity <e-mail>`: exit 0, one entity of three cards, who links to it",
+          rc == 0 and len(e0) == 1 and len(e0[0].get("cards") or []) == 3 and (e0[0].get("backlinks") or {}).get("count", 0) >= 2,
+          (rc, out[-600:]))
+    check("…the 1-1 note that links to Bea is a line marked sensitive, without its field (C8)",
+          len(one) == 1 and one[0]["sensitive"] is True and "field" not in one[0], one)
+    rc, out, _ = env.cli("entity", "bea.two@zorg.example")
+    check("…the text: ` · sensitive` on that line, never a judgement value (`D3`) nor the note's text (Review Focus 5, C9)",
+          rc == 0 and "1-1 Bea 2026-10-01 — Notes/Meetings/1-1 Bea 2026-10-01.md" in out and " · sensitive" in out
+          and "D3" not in out and "growth plan" not in out and "Action items" not in out, out[-900:])
+    check("…the identity: e-mail, team, role (each once), the cards with their source",
+          "bea.two@zorg.example" in out and "Data analyst" in out and "zorg-core · ZorgCore/People/bea-two.md" in out
+          and "zorg-brain · Growth/People/bea-g.md" in out, out[-900:])
+    rc, out, res = env.cli("entity", "bea.two@zorg.example", "--skill", "one-on-one", "--json")
+    items = ((res or {}).get("entities") or [{}])[0].get("backlinks", {}).get("items") or []
+    one = [i for i in items if i["path"] == "Notes/Meetings/1-1 Bea 2026-10-01.md"]
+    rc2, out2, _ = env.cli("entity", "bea.two@zorg.example", "--skill", "one-on-one")
+    check("v3.18.0 C8: a People skill (`--skill one-on-one`) sees the field of that line; the note's text is printed never",
+          rc == 0 and len(one) == 1 and one[0].get("field") == "" and "Action items" not in out2 and "growth plan" not in out2,
+          (one, out2[-400:]))
+    rc, out, _ = env.cli("entity", "Bea", "--skill", "no-such-skill")
+    check("…an unknown skill is a usage error (exit 3)", rc == 3 and "no such skill" in out, (rc, out[-300:]))
+
+    rc, out, res = env.cli("entity", "PROJ-9999", "--json")
+    check("v3.18.0 C6: a key with no card — «картки немає, згадується в 1 нотатках» and the roadmap",
+          rc == 0 and ((res or {}).get("mention") or {}).get("count") == 1, (rc, out[-500:]))
+    rc, out, _ = env.cli("entity", "PROJ-9999")
+    check("…in the text too", "PROJ-9999 — картки немає, згадується в 1 нотатках" in out and "Notes/Roadmap.md" in out, out[-500:])
+    rc, out, res = env.cli("entity", "QQ-7", "--json")
+    check("…a /browse/ key is a mention (QQ is known, and the link says it is Jira)",
+          ((res or {}).get("mention") or {}).get("count") == 1, out[-400:])
+    rc, out, res = env.cli("entity", "GPT-4", "--json")
+    rc2, out2, _ = env.cli("entity", "GPT-4")
+    check("…an unknown prefix is no mention: «Не знаю такої сутності»", rc == 0 and not (res or {}).get("mention")
+          and not (res or {}).get("entities") and "Не знаю такої сутності: «GPT-4»" in out2, (rc, out2[-300:]))
+    rc, out, res = env.cli("entity", "PROJ-1234", "--json")
+    e1 = ((res or {}).get("entities") or [{}])[0]
+    check("v3.18.0 a work entity: its key, its two homes, the notes that mention the key (the roadmap) or link to it",
+          e1.get("key") == "PROJ-1234" and {c["path"] for c in e1.get("cards") or []} == {EPIC, SPEC}
+          and any(i["path"] == "Notes/Roadmap.md" for i in (e1.get("mentions") or {}).get("items") or [])
+          and any(i["path"] == "Notes/Features/Fast cart.md" for i in (e1.get("backlinks") or {}).get("items") or []),
+          e1)
+    rc, out, res = env.cli("entity", "Cy Namesake", "--json")
+    rc2, out2, _ = env.cli("entity", "Cy Namesake")
+    check("v3.18.0 several entities: two lines `— ctx entity \"<шлях>\"`, no block",
+          rc == 0 and len((res or {}).get("entities") or []) == 2 and out2.count('— ctx entity "ZorgCore/People/cy-namesake') == 2,
+          out2[-400:])
+    rc, out, _ = env.cli("entity", "Alpha")
+    check("v3.18.0 a team: «пов'язана з» the Growth squad linked under another name", rc == 0
+          and "пов'язана з: Alpha squad — Growth/Team/Alpha squad.md" in out, out[-600:])
+
+    before = tree(env.vault, os.path.join(env.home, ".grow-pm"))
+    rc, out, res = env.cli("entity", "pairs", "--json")
+    pairs_ = {frozenset((x["a"]["path"], x["b"]["path"])) for x in (res or {}).get("pairs") or []}
+    check("v3.18.0 `ctx entity pairs`: the open pairs, Cy ↔ Cy Three among them",
+          rc == 0 and frozenset((CY_OWN, CY_CORE)) in pairs_, (rc, out[-500:]))
+    rc, out, _ = env.cli("entity", CY_CORE)
+    after = tree(env.vault, os.path.join(env.home, ".grow-pm"))
+    changed = sorted(p_ for p_ in set(before) | set(after) if before.get(p_) != after.get(p_)
+                     and not p_.startswith(os.path.join(env.home, ".grow-pm", "index") + os.sep))
+    check("v3.18.0 a request and `pairs` write nothing but <home>/.grow-pm/index/", changed == [], changed)
+    check("…and the pair shows on the entity: `можливо той самий: … — ctx entity same|not-same`",
+          "можливо той самий:" in out and "ctx entity same|not-same" in out, out[-600:])
+
+    rc, out, _ = env.cli("entity", "same", CY_OWN, CY_CORE)
+    check("v3.18.0 C10: no store — `same` exits 3 «немає сховища — відповідь не збережено»",
+          rc == 3 and "немає сховища — відповідь не збережено" in out, (rc, out[-300:]))
+    rc, out, _ = env.cli("migrate", "--apply")
+    check("(the store migrated)", rc == 0, out[-300:])
+    rc, out, res = env.cli("entity", "same", CY_OWN, CY_CORE)
+    mem = json.loads(read(env.store.state_dir, "entities.json")) if os.path.isfile(os.path.join(env.store.state_dir, "entities.json")) else {}
+    journal = read(env.store.state_dir, "journal.jsonl").strip().splitlines() if os.path.isfile(os.path.join(env.store.state_dir, "journal.jsonl")) else []
+    last = json.loads(journal[-1]) if journal else {}
+    check("v3.18.0 `ctx entity same`: the answer in .state/entities.json, a snapshot, a journal line op entity",
+          rc == 0 and [x[:2] for x in mem.get("same") or []] == [sorted([CY_OWN, CY_CORE])] and last.get("op") == "entity"
+          and last.get("action") == "same" and last.get("snapshot"), (rc, out[-400:], mem, last))
+    rc, out, res = env.cli("entity", "Cy Three", "--json")
+    check("…and the next request sees one entity", len(((res or {}).get("entities") or [{}])[0].get("cards") or []) == 2, out[-400:])
+    rc, out, _ = env.cli("entity", "same", CY_CORE, CY_OWN)
+    check("…the same answer again changes nothing", rc == 0 and "unchanged" in out, out[-300:])
+    rc, out, _ = env.cli("undo")
+    mem = json.loads(read(env.store.state_dir, "entities.json")) if os.path.isfile(os.path.join(env.store.state_dir, "entities.json")) else {"same": []}
+    check("…`ctx undo` takes it back", rc == 0 and not mem.get("same"), (rc, mem))
+    rc, out, _ = env.cli("entity", "not-same", "Cy Namesake", CY_CORE)
+    check("v3.18.0 an answer by a name several cards carry is a usage error that names them (exit 3)",
+          rc == 3 and "cy-namesake" in out, (rc, out[-300:]))
+    rc, out, _ = env.cli("entity", "same", CY_OWN, ALPHA)
+    check("…two cards of different kinds: exit 3 that says so", rc == 3 and "різних видів" in out, (rc, out[-300:]))
+    rc, out, _ = env.cli("entity", "--q", "pairs")
+    check("v3.18.0 `--q pairs` asks for an entity named «pairs», not the list", rc == 0 and "Не знаю такої сутності: «pairs»" in out,
+          out[-300:])
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(os.path.join(env.vault, "Notes", "People", "eve.md"), "---\ntype: person\nemail: eve@zorg.example\n---\n# Eve New\n")
+    res = ce.run(env.sctx, "eve@zorg.example", budget=0)
+    check("v3.18.0 C13: while the index still has files to look at, «Поки не знаю» and the line of the refresh",
+          not res["entities"] and any(n.startswith("індекс оновлюється") for n in res["notes"])
+          and "Поки не знаю «eve@zorg.example» — індекс оновлюється" in ce.render(res), (res["notes"], ce.render(res)))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    os.remove(os.path.join(env.home, "zorg-brain.sqlite"))
+    db = os.path.join(env.home, ".grow-pm", "index", "sections.sqlite")
+    write(db, "not a database")
+    folder = os.path.dirname(db)
+    os.chmod(folder, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        rc, out, _ = env.cli("entity", "Bea")
+    finally:
+        os.chmod(folder, stat.S_IRWXU)
+    check("v3.18.0 C13: an index that cannot be read nor built again, and nothing else to read — exit 5 «Базу не прочитано»",
+          rc == 5 and "Базу не прочитано" in out, (rc, out[-400:]))
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)
