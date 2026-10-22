@@ -1561,5 +1561,35 @@ with tempfile.TemporaryDirectory() as d:
     check("v3.18.0 a removed note takes its identity, link and mention rows with it", left == [] and rows == (0, 0), (left, rows))
 
 
+# --- v3.18.0 Task 1 review fixes
+ido = ctx_index.identity_of
+r_ = ido("Notes/People/bea.md", {"type": "person", "delegation": "[[Notes/People/cy]]", "one_on_one": ["[[Notes/1-1 Bea]]"],
+                                 "d_history": ["[[bea — D2 to D3]]"], "home_card": "[[ZorgCore/People/bea-two]]"}, "Bea")
+check("v3.18.0 review I1: a judgement field of one link is no bridge — never in the identity row (C9)",
+      set(r_["bridges"]) == {"home_card"} and "D2 to D3" not in json.dumps(r_), r_["bridges"])
+ls = ctx_index.links_of({}, "| who |\n|---|\n| [[Notes/People/bea\\|Bea Two]] |\n")
+check("v3.18.0 review I2: a link in a table (`[[x\\|label]]`) keeps its target and name key",
+      [(l["target"], l["tkey"], l["label"]) for l in ls] == [("Notes/People/bea", "bea", "Bea Two")], ls)
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    src, dst = env.note("ZorgCore/People/dee-real.md"), env.note("ZorgCore/People/zz-dee.md")
+    os.rename(src, dst)                                           # an older build: the same bytes under a new name
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET path = 'ZorgCore/People/zz-dee.md' WHERE path = 'ZorgCore/People/dee-real.md'")
+    con.commit()
+    con.close()
+    hidden = "ZorgCore/People/zz-dee.md" not in cards_by_path(idx)
+    _, opened = counting_refresh(env, idx, scope)
+    check("v3.18.0 review I3: an identity row is its note's only under the same path — a row a note id took over (an "
+          "older build's rename, byte for byte) is stale, and that file is read again",
+          hidden and "ZorgCore/People/zz-dee.md" in cards_by_path(idx) and any(str(p_).endswith("zz-dee.md") for p_ in opened),
+          (hidden, sorted(cards_by_path(idx))[-3:], opened))
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    drop_entity_tables(idx)
+    got = (idx.cards(), idx.problem, idx.links_to({"bea"}), idx.problem, idx.mentions(None), idx.problem)
+    check("v3.18.0 review I4: on an index of v3.17 (no entity tables yet) the reads give nothing and no «broken index»",
+          got == ([], None, [], None, [], None), got)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

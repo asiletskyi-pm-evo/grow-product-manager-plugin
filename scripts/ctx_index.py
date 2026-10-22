@@ -104,6 +104,9 @@ ISSUE_KEY = re.compile(r"(?<![A-Za-z0-9])([A-Z][A-Z0-9]{1,9})-(\d{1,6})(?![A-Za-
 BROWSE_KEY = re.compile(r"/browse/([A-Z][A-Z0-9]{1,9}-\d{1,6})(?![0-9])")                   # a key a Jira link names
 _EMAIL = re.compile(r"^[^@\s<>()\[\],;:\"]+@[^@\s<>()\[\],;:\"]+\.[^@\s<>()\[\],;:\"]+$")
 _PREFIX = re.compile(r"(?<![A-Za-z0-9])[A-Z][A-Z0-9]{1,9}(?![A-Za-z0-9])")
+EMAIL_FIELDS = frozenset(("email", "emails", "mail", "emailaliases", "emailalias", "emailaddress", "emailaddresses"))
+                                    # a card's own address fields (their names without `-` and `_`): `manager_email`
+                                    # is someone else's (v3.18.0 review)
 COUNTS = ("added", "changed", "removed", "pending", "skipped_dataless", "skipped_large")
 BROKEN_NOTE = "індекс пошуку не читається (%s) — ctx index rebuild збудує його наново"
 BUSY_NOTE = "індекс пошуку зайнятий іншим процесом — цього разу без нього"
@@ -123,7 +126,7 @@ CREATE VIRTUAL TABLE sections_fts USING fts5(title, heading, tags, aliases, body
                                              tokenize='unicode61 remove_diacritics 2');
 """
 ENTITY_DDL = """
-CREATE TABLE IF NOT EXISTS ents(note_id INTEGER PRIMARY KEY, hash TEXT, kind TEXT, label TEXT, emails_json TEXT,
+CREATE TABLE IF NOT EXISTS ents(note_id INTEGER PRIMARY KEY, hash TEXT, path TEXT, kind TEXT, label TEXT, emails_json TEXT,
                                 team TEXT, role TEXT, slug TEXT, aliases_json TEXT, key TEXT, bridges_json TEXT,
                                 prefixes_json TEXT);
 CREATE TABLE IF NOT EXISTS links(note_id INTEGER, field TEXT, target TEXT, tkey TEXT, anchor TEXT, label TEXT,
@@ -134,7 +137,8 @@ CREATE TABLE IF NOT EXISTS mentions(note_id INTEGER, key TEXT, browse INTEGER);
 CREATE INDEX IF NOT EXISTS mentions_key ON mentions(key);
 CREATE INDEX IF NOT EXISTS mentions_note ON mentions(note_id);
 """                                 # v3.18.0: one `ents` row per note (kind "" for a note that is no card) with the
-                                    # note's hash, so a row an older build left behind is known as stale (plan C11)
+                                    # note's hash and path, so a row an older build left behind is known as stale
+                                    # (plan C11) — the path too, as SQLite gives a removed note's id to the next one
 ENTITY_TABLES = ("ents", "links", "mentions")
 ENTITY_COLS = ("kind", "label", "emails_json", "team", "role", "slug", "aliases_json", "key", "bridges_json",
                "prefixes_json")
@@ -646,15 +650,15 @@ def _link_parts(inner):
     """(target, anchor, label) of the inside of a wiki link `target#anchor|label` (the target NFC, stripped)."""
     left, _, label = inner.partition("|")
     target, _, anchor = left.partition("#")
-    return N(target).strip(), anchor.strip(), label.strip()
+    return N(target).strip().rstrip("\\").strip(), anchor.strip().rstrip("\\"), label.strip()   # `[[x\\|y]]` in a table
 
 
 def identity_of(rel, fm, title):
     """The identity of a card (v3.18.0, plan C1–C2) — {kind, label, emails, team, role, slug, aliases, key, bridges,
     prefixes} — or None for a note that is no card. Only these fields: never a profile's judgement or any other field.
-    `emails`: the e-mail-shaped texts of every field whose name holds `mail`, lower case; `role`: `role`, else
+    `emails`: the e-mail-shaped texts of the card's own address fields (EMAIL_FIELDS), lower case; `role`: `role`, else
     `position`; `key`: a work card's Jira key in its file name or title; `bridges`: {field: target} of every field that
-    is exactly one wiki link; `prefixes`: the Jira project prefixes a team's or a mission's `…jira…` fields name."""
+    is exactly one wiki link, a judgement field (STEP_P_FIELDS) never; `prefixes`: the Jira project prefixes a team's or a mission's `…jira…` fields name."""
     fm = fm if isinstance(fm, dict) else {}
     types = [x.lower() for x in _strings(fm.get("type"))]
     kind = next((ENTITY_KINDS[x.strip()] for x in types if x.strip() in ENTITY_KINDS), None)
@@ -662,7 +666,7 @@ def identity_of(rel, fm, title):
         return None
     emails = []
     for k, v in fm.items():
-        if "mail" in k:
+        if re.sub(r"[\W_]", "", k) in EMAIL_FIELDS:
             for s in _strings(v):
                 s = N(s).strip().lower()
                 if _EMAIL.match(s) and s not in emails:
@@ -674,7 +678,7 @@ def identity_of(rel, fm, title):
         key = m.group(0) if m else ""
     bridges = {}
     for k, v in fm.items():
-        target = _one_link(v)
+        target = _one_link(v) if k not in STEP_P_FIELDS else None    # a judgement field is never identity (C9)
         if target:
             bridges[k] = target
     prefixes = set()
@@ -1259,7 +1263,7 @@ class Index:
         names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         return set(ENTITY_TABLES) <= names
 
-    _FRESH = "JOIN ents e ON e.note_id = n.id AND e.hash = n.hash"     # an identity row an older build left is stale
+    _FRESH = "JOIN ents e ON e.note_id = n.id AND e.hash = n.hash AND e.path = n.path"   # an older build's row is stale
 
     def cards(self):
         """Every card the index holds (v3.18.0): the identity row of a note whose kind is not "" and whose hash is the
@@ -1394,7 +1398,8 @@ class _Walk:
         for tb in ENTITY_TABLES:                     # the rows of a note an older build removed (v3.18.0, plan C11)
             con.execute("DELETE FROM %s WHERE note_id NOT IN (SELECT id FROM notes)" % tb)
         self.stale_ents = {r[0] for r in con.execute(
-            "SELECT n.id FROM notes n LEFT JOIN ents e ON e.note_id = n.id WHERE e.note_id IS NULL OR e.hash IS NOT n.hash")}
+            "SELECT n.id FROM notes n LEFT JOIN ents e ON e.note_id = n.id "
+            "WHERE e.note_id IS NULL OR e.hash IS NOT n.hash OR e.path IS NOT n.path")}
                                                      # read again whatever their mtime: no identity row, or one an older
                                                      # build left behind when it changed the note
 
@@ -1595,9 +1600,9 @@ class _Walk:
         ident, links, mentions = entity_rows(rel, text, title)
         self._drop_entities(nid)
         ident = ident or {}
-        self.con.execute("INSERT INTO ents(note_id, hash, %s) VALUES (?, ?, %s)" % (", ".join(ENTITY_COLS),
-                                                                                  ", ".join("?" * len(ENTITY_COLS))),
-                         (nid, digest, ident.get("kind", ""), ident.get("label", ""),
+        self.con.execute("INSERT INTO ents(note_id, hash, path, %s) VALUES (?, ?, ?, %s)"
+                         % (", ".join(ENTITY_COLS), ", ".join("?" * len(ENTITY_COLS))),
+                         (nid, digest, rel, ident.get("kind", ""), ident.get("label", ""),
                           json.dumps(ident.get("emails", []), ensure_ascii=False), ident.get("team", ""),
                           ident.get("role", ""), ident.get("slug", ""),
                           json.dumps(ident.get("aliases", []), ensure_ascii=False), ident.get("key", ""),

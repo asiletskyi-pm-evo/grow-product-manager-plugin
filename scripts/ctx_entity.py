@@ -60,6 +60,8 @@ UNKNOWN = "Не знаю такої сутності: «%s»"
 UNKNOWN_YET = "Поки не знаю «%s» — %s"
 MENTION = "%s — картки немає, згадується в %d нотатках:"
 UNREAD_MEMORY = "пам'ять сутностей не прочитано (%s) — без твоїх відповідей"
+NOT_APPLIED = "твою відповідь same %s ↔ %s від %s не застосовано: %s"
+NOT_APPLIED_WHY = {"not-same": "її заперечує твоє not-same", "kinds": "картки різних видів"}
 NOT_READ = "Базу не прочитано: %s"
 
 
@@ -231,7 +233,7 @@ class Resolver:
         for p, v in (notes or {}).items():
             self.meta[N(p)] = dict(v) if isinstance(v, dict) else {"title": v}
         self.prefixes = [N(p).strip("/") for p in plugin_prefixes or () if p]
-        self.exact, self.tails, self.names = {}, {}, {}
+        self.exact, self.tails, self.names, self.local = {}, {}, {}, set()
         for p in self.meta:
             cf = p.casefold()
             self.exact.setdefault(cf, []).append(p)
@@ -239,6 +241,8 @@ class Resolver:
             for i in range(1, len(parts)):
                 self.tails.setdefault("/".join(parts[i:]), []).append(p)
             self.names.setdefault(ci.name_key(p), []).append(p)
+            if self.meta[p].get("origin") == "local":
+                self.local.add(p)
 
     @staticmethod
     def clean(target):
@@ -265,13 +269,14 @@ class Resolver:
         want = (base + ".md").casefold()
         if want in self.exact:
             return self._one(self.exact[want])
-        for pre in self.prefixes:
+        if "/" not in base:                     # a name: the own index's notes first, as --get looks (`_by_name`)
+            hits = self.names.get(ci.name_key(base)) or []
+            return self._one([p for p in hits if p not in self.local] or hits)
+        for pre in self.prefixes:               # a path: the plugin folder's, then the end of a path (`_by_tail`)
             hit = self.exact.get((pre + "/" + base + ".md").casefold())
             if hit:
                 return self._one(hit)
-        if "/" in base:
-            return self._one(self.tails.get(want))
-        return self._one(self.names.get(ci.name_key(base)))
+        return self._one(self.tails.get(want))
 
     def title(self, path):
         return (self.meta.get(path) or {}).get("title") or _stem(path)
@@ -323,8 +328,9 @@ def _person_bucket(card):
 
 
 class Registry:
-    def __init__(self, entities, by_path, pairs, resolver):
+    def __init__(self, entities, by_path, pairs, resolver, skipped=()):
         self.entities, self._by_path, self._pairs, self.resolver = entities, by_path, pairs, resolver
+        self.skipped = list(skipped)     # your `same` answers that could not be applied: {cards, day, why}
 
     def of(self, path):
         """The entity a card (or a page a work card links to) belongs to, or None."""
@@ -357,7 +363,11 @@ class Registry:
             return out([e for e in ents if any(low in c["emails"] for c in e["cards"])], "email")
         if ci.ISSUE_KEY.fullmatch(q.upper()):
             return out([e for e in ents if e["key"] == q.upper()], "key")
-        if "/" in q or low.endswith(".md") or q.startswith("[["):
+        if "/" in Resolver.clean(q) or Resolver.clean(q).lower().endswith(".md"):
+            hit = self.resolver.resolve(q)       # a path names its note or nothing — never another note by its name
+            paths = [hit] if isinstance(hit, str) else hit or []
+            return out([self.of(p) for p in paths if self.of(p) and (kind is None or self.of(p)["kind"] == kind)], "path")
+        if q.startswith("[["):
             hit = self.resolver.resolve(q)
             paths = [hit] if isinstance(hit, str) else hit or []
             found = [self.of(p) for p in paths if self.of(p) and (kind is None or self.of(p)["kind"] == kind)]
@@ -397,21 +407,28 @@ def build(cards, mem, resolver):
         return p
 
     def union(a, b):
+        """Join the entities of a and b; False when a `not-same` answer keeps them apart."""
         ra, rb = find(a), find(b)
         if ra == rb:
-            return
+            return True
         for x, y in apart:
             if x in by_path and y in by_path and {find(x), find(y)} == {ra, rb}:
-                return
+                return False
         if len(members[ra]) < len(members[rb]):
             ra, rb = rb, ra
         parent[rb] = ra
         members[ra] |= members.pop(rb)
+        return True
 
-    for x in mem.get("same", []):
+    skipped = []
+    for x in sorted(mem.get("same", []), key=lambda x: (x[2], x[0], x[1]), reverse=True):   # the newest answer first
         a, b = _pair(x[0], x[1])
-        if a in by_path and b in by_path and by_path[a]["kind"] == by_path[b]["kind"]:
-            union(a, b)
+        if a not in by_path or b not in by_path:
+            continue
+        if by_path[a]["kind"] != by_path[b]["kind"]:
+            skipped.append({"cards": [a, b], "day": x[2], "why": "kinds"})
+        elif not union(a, b):
+            skipped.append({"cards": [a, b], "day": x[2], "why": "not-same"})
     groups = {}
     for c in sorted(order, key=lambda c: (_rank(c), c["path"])):
         if c["kind"] == "person":
@@ -474,6 +491,8 @@ def build(cards, mem, resolver):
         else:
             for k in _norms(c):
                 by_kind.setdefault((c["kind"], k), []).append(c)
+            if c["kind"] == "work" and c["key"]:      # one Jira key in two sources (spec §3: the key of work)
+                by_kind.setdefault(("work", "key:" + c["key"]), []).append(c)
     for (kind, _), group in sorted(by_kind.items(), key=lambda kv: kv[0]):
         for i in range(len(group)):
             for j in range(i + 1, len(group)):
@@ -487,7 +506,7 @@ def build(cards, mem, resolver):
                 pairs.append((by_path[key[0]], by_path[key[1]]))
                 of[a["path"]]["maybe"].append(b)
                 of[b["path"]]["maybe"].append(a)
-    return Registry(entities, of, pairs, resolver)
+    return Registry(entities, of, pairs, resolver, skipped)
 
 
 def known_prefixes(cards):
@@ -514,7 +533,8 @@ def load(sctx, idx, mem):
     local, lnotes = local_cards(sctx, set(metas))
     notes.extend(lnotes)
     for c in local:
-        metas[c["path"]] = {"title": c["label"], "source": c["source"], "sensitive": c["sensitive"], "date": c["date"]}
+        metas[c["path"]] = {"title": c["label"], "source": c["source"], "sensitive": c["sensitive"], "date": c["date"],
+                            "origin": "local"}
     vaults = sctx.get("vaults") or []
     prefixes = [ci.rel_path(r["path"], vaults, r) for r in sctx.get("roots") or [] if r.get("source") == "own"]
     resolver = Resolver(metas, prefixes)
@@ -595,6 +615,7 @@ def _prepare(sctx, store, budget):
             notes.append(UNREAD_MEMORY % e)
     reg, more = load(sctx, idx, mem)
     notes.extend(n for n in more if n not in notes)
+    notes.extend(NOT_APPLIED % (s["cards"][0], s["cards"][1], s["day"], NOT_APPLIED_WHY[s["why"]]) for s in reg.skipped)
     read = (built is True and not (idx.problem and idx.problem != ci.BUSY_NOTE)) \
         or any(c["origin"] == "local" for e in reg.entities for c in e["cards"])
     return idx, reg, notes, read, pending

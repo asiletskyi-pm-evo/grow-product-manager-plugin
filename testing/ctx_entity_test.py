@@ -365,5 +365,49 @@ with tempfile.TemporaryDirectory() as d:
     check("v3.18.0 C13: an index that cannot be read nor built again, and nothing else to read — exit 5 «Базу не прочитано»",
           rc == 5 and "Базу не прочитано" in out, (rc, out[-400:]))
 
+
+# --- v3.18.0 Task 2 review fixes
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(os.path.join(env.vault, "ZorgCore", "People", "boss.md"), "---\ntype: people\nemail: boss@zorg.example\n---\n# Una Boss\n")
+    write(os.path.join(env.vault, "Notes", "People", "ivy.md"),
+          "---\ntype: person\nemail: ivy@zorg.example\nmanager_email: boss@zorg.example\n---\n# Ivy Lee\n")
+    write(os.path.join(env.vault, "ZorgCore", "Epics", "PROJ-1234 hub.md"), "---\ntype: epic\n---\n# PROJ-1234 hub\n")
+    write(os.path.join(env.vault, "ZorgCore", "ann.md"), "---\ntype: people\n---\n# Ann Core\n")
+    write(os.path.join(env.vault, "Notes", "ann.md"), "---\ntype: person\nhome_card: \"[[ann]]\"\n---\n# Ann Core\n")
+    env.idx.refresh(env.sctx["roots"], env.sctx["store_rel"], env.sctx["blocks_rels"])
+    reg, _ = env.registry()
+    check("v3.18.0 review I3 (Task 2): only a person's own address fields are a key — `manager_email` merges nobody",
+          ent(reg, "Notes/People/ivy.md") == {"Notes/People/ivy.md"}, ent(reg, "Notes/People/ivy.md"))
+    found, how = reg.find("ZorgCore/Pages/cy.md", None)
+    found2, how2 = reg.find("ZorgCore/Pages/PROJ-1234 Design.md", None)
+    check("v3.18.0 review I1 (Task 2): a path that names no card is no name request — nothing, never another note's entity",
+          (found, found2) == ([], []) and how == how2 == "path", (how, [e["id"] for e in found], how2, [e["id"] for e in found2]))
+    pairs = {frozenset((a["path"], b["path"])) for a, b in reg.pairs()}
+    check("v3.18.0 review I5 (Task 2): two work cards of one Jira key in different sources are an open pair",
+          frozenset((EPIC, "ZorgCore/Epics/PROJ-1234 hub.md")) in pairs, sorted(map(sorted, pairs)))
+    r = reg.resolver
+    check("v3.18.0 review I4 (Task 2): a bare name is never the plugin folder's guess — two notes `ann` are two, as --get "
+          "says; the bridge of `[[ann]]` merges nothing", r.resolve("ann") == ["Notes/ann.md", "ZorgCore/ann.md"]
+          and ent(reg, "Notes/ann.md") == {"Notes/ann.md"}, (r.resolve("ann"), ent(reg, "Notes/ann.md")))
+    rl = ce.Resolver({"Notes/x.md": {"title": "x", "source": "own"}, "Growth/x.md": {"title": "x", "source": "zorg-brain",
+                                                                                     "origin": "local"}}, ["Notes"])
+    check("…and a name the own index holds once wins over a local index's note of that name, as --get prefers",
+          rl.resolve("x") == "Notes/x.md", rl.resolve("x"))
+    mem = ce.empty_memory()
+    mem["not_same"].append([CY_OWN, CY_CORE, "2026-10-20"])
+    mem["same"].append(sorted([CY_CORE, "ZorgCore/People/cy-namesake.md"]) + ["2026-10-21"])
+    mem["same"].append(sorted([CY_OWN, "ZorgCore/People/cy-namesake.md"]) + ["2026-10-22"])
+    reg2, _ = env.registry(mem)
+    skipped = [tuple(x["cards"]) for x in getattr(reg2, "skipped", [])]
+    check("v3.18.0 review I2 (Task 2): your answers apply newest first; one a `not-same` blocks is reported, never dropped "
+          "silently", ent(reg2, CY_OWN) == {CY_OWN, "ZorgCore/People/cy-namesake.md"}
+          and skipped == [tuple(sorted([CY_CORE, "ZorgCore/People/cy-namesake.md"]))], (ent(reg2, CY_OWN), skipped))
+    os.makedirs(env.store.state_dir, exist_ok=True)
+    ce.save_memory(env.store, mem)
+    res = ce.run(env.sctx, CY_CORE, store=env.store)
+    check("…`ctx entity` says which answer it could not apply", any(n.startswith("твою відповідь same %s ↔ %s"
+          % tuple(sorted([CY_CORE, "ZorgCore/People/cy-namesake.md"]))) and "not-same" in n for n in res["notes"]), res["notes"])
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)
