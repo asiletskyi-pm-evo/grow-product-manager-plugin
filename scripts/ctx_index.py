@@ -19,6 +19,11 @@ the vault (iCloud never syncs it): deleting the folder is safe, `ctx index rebui
 - Index                         sections.sqlite (notes, sections, the FTS5 table sections_fts, meta), index.json (the
                                 state the session digest reads) and index.lock (one refresh at a time); `built` — has
                                 a walk ever finished into it (its meta `updated` row), `lock_held` — is one going on.
+- identity_of / links_of / mentions_of   (since v3.18.0) what the walk writes beside every note for `ctx entity`:
+                                its identity when it is a card (only the identity fields — never a profile's judgement),
+                                its wiki links as written, its Jira-key-shaped tokens — the tables ents, links and
+                                mentions; Index.cards / links_to / mentions read them, a row whose hash is not its
+                                note's (an older build changed the note) never.
 
 The refresh is incremental. It walks the roots as os.walk(followlinks=False) would — and, since v3.16.2, follows no
 link to a file either, and compares the excluded folder names case-folded — one folder at a time so that it can
@@ -89,8 +94,16 @@ STUB_CHARS = 200                    # a section shorter than this (its breadcrum
 NEAR_MIN, NEAR_CHARS = 400, 20_000  # near copies: the characters a key needs at least, and the ones it reads
 NEAR_VERSION = 2                    # the rules of near_key (meta `near_version`): an index of other rules gets its keys
                                     # again from its own sections (v3.16.2: a list of links is content)
-META_VERSION = 2                    # the rules of note_meta (meta `meta_version`): an index of other rules reads its
-                                    # downloaded files once more (v3.17.0: a people type or a Step-P field is sensitive)
+META_VERSION = 3                    # the rules of note_meta (meta `meta_version`): an index of other rules reads its
+                                    # downloaded files once more (v3.17.0: a people type or a Step-P field is sensitive;
+                                    # v3.18.0: the identity, link and mention rows of every note)
+ENTITY_KINDS = {"people": "person", "person": "person", "team": "team", "mission": "mission", "module": "module",
+                "metric": "metric", "epic": "work", "feature": "work", "project": "work"}
+                                    # a note's type → the kind of entity it is a card of (v3.18.0, plan C1)
+ISSUE_KEY = re.compile(r"(?<![A-Za-z0-9])([A-Z][A-Z0-9]{1,9})-(\d{1,6})(?![A-Za-z0-9])")   # a key-shaped token
+BROWSE_KEY = re.compile(r"/browse/([A-Z][A-Z0-9]{1,9}-\d{1,6})(?![0-9])")                   # a key a Jira link names
+_EMAIL = re.compile(r"^[^@\s<>()\[\],;:\"]+@[^@\s<>()\[\],;:\"]+\.[^@\s<>()\[\],;:\"]+$")
+_PREFIX = re.compile(r"(?<![A-Za-z0-9])[A-Z][A-Z0-9]{1,9}(?![A-Za-z0-9])")
 COUNTS = ("added", "changed", "removed", "pending", "skipped_dataless", "skipped_large")
 BROKEN_NOTE = "індекс пошуку не читається (%s) — ctx index rebuild збудує його наново"
 BUSY_NOTE = "індекс пошуку зайнятий іншим процесом — цього разу без нього"
@@ -109,6 +122,22 @@ CREATE INDEX sections_note ON sections(note_id);
 CREATE VIRTUAL TABLE sections_fts USING fts5(title, heading, tags, aliases, body,
                                              tokenize='unicode61 remove_diacritics 2');
 """
+ENTITY_DDL = """
+CREATE TABLE IF NOT EXISTS ents(note_id INTEGER PRIMARY KEY, hash TEXT, kind TEXT, label TEXT, emails_json TEXT,
+                                team TEXT, role TEXT, slug TEXT, aliases_json TEXT, key TEXT, bridges_json TEXT,
+                                prefixes_json TEXT);
+CREATE TABLE IF NOT EXISTS links(note_id INTEGER, field TEXT, target TEXT, tkey TEXT, anchor TEXT, label TEXT,
+                                 embed INTEGER);
+CREATE INDEX IF NOT EXISTS links_tkey ON links(tkey);
+CREATE INDEX IF NOT EXISTS links_note ON links(note_id);
+CREATE TABLE IF NOT EXISTS mentions(note_id INTEGER, key TEXT, browse INTEGER);
+CREATE INDEX IF NOT EXISTS mentions_key ON mentions(key);
+CREATE INDEX IF NOT EXISTS mentions_note ON mentions(note_id);
+"""                                 # v3.18.0: one `ents` row per note (kind "" for a note that is no card) with the
+                                    # note's hash, so a row an older build left behind is known as stale (plan C11)
+ENTITY_TABLES = ("ents", "links", "mentions")
+ENTITY_COLS = ("kind", "label", "emails_json", "team", "role", "slug", "aliases_json", "key", "bridges_json",
+               "prefixes_json")
 NOTE_COLS = ("path", "source", "title", "type", "product", "status", "date", "ttl_date", "confluence_id",
              "aliases_json", "tags_json", "sensitive", "hub", "version_key", "links_json", "hash", "near", "mtime",
              "size")
@@ -592,6 +621,113 @@ def note_meta(rel, text, mtime=None):
     }
 
 
+def _strings(v):
+    """The texts of a frontmatter value: a text, the texts of a list, the texts of a map's values (one level)."""
+    if isinstance(v, str):
+        return [v]
+    if isinstance(v, list):
+        return [x for x in v if isinstance(x, str)]
+    if isinstance(v, dict):
+        return [x for vv in v.values() for x in _strings(vv) if not isinstance(vv, dict)]
+    return []
+
+
+def _one_link(v):
+    """The target as written of a value that is exactly one wiki link — a text, or a list of one text — else None."""
+    items = v if isinstance(v, list) else [v]
+    if len(items) != 1 or not isinstance(items[0], str):
+        return None
+    s = N(items[0]).strip()
+    m = _WIKI.fullmatch(s)
+    return _link_parts(m.group(1))[0] or None if m else None
+
+
+def _link_parts(inner):
+    """(target, anchor, label) of the inside of a wiki link `target#anchor|label` (the target NFC, stripped)."""
+    left, _, label = inner.partition("|")
+    target, _, anchor = left.partition("#")
+    return N(target).strip(), anchor.strip(), label.strip()
+
+
+def identity_of(rel, fm, title):
+    """The identity of a card (v3.18.0, plan C1–C2) — {kind, label, emails, team, role, slug, aliases, key, bridges,
+    prefixes} — or None for a note that is no card. Only these fields: never a profile's judgement or any other field.
+    `emails`: the e-mail-shaped texts of every field whose name holds `mail`, lower case; `role`: `role`, else
+    `position`; `key`: a work card's Jira key in its file name or title; `bridges`: {field: target} of every field that
+    is exactly one wiki link; `prefixes`: the Jira project prefixes a team's or a mission's `…jira…` fields name."""
+    fm = fm if isinstance(fm, dict) else {}
+    types = [x.lower() for x in _strings(fm.get("type"))]
+    kind = next((ENTITY_KINDS[x.strip()] for x in types if x.strip() in ENTITY_KINDS), None)
+    if kind is None:
+        return None
+    emails = []
+    for k, v in fm.items():
+        if "mail" in k:
+            for s in _strings(v):
+                s = N(s).strip().lower()
+                if _EMAIL.match(s) and s not in emails:
+                    emails.append(s)
+    key = ""
+    if kind == "work":
+        name = rel.rsplit("/", 1)[-1]
+        m = ISSUE_KEY.search(name[:-3] if name.lower().endswith(".md") else name) or ISSUE_KEY.search(title or "")
+        key = m.group(0) if m else ""
+    bridges = {}
+    for k, v in fm.items():
+        target = _one_link(v)
+        if target:
+            bridges[k] = target
+    prefixes = set()
+    if kind in ("team", "mission"):
+        for k, v in fm.items():
+            if "jira" in k:
+                for s in _strings(v):
+                    prefixes.update(_PREFIX.findall(s))
+    return {"kind": kind, "label": N(title or "").strip(), "emails": emails, "team": _text(fm.get("team")),
+            "role": _text(fm.get("role")) or _text(fm.get("position")), "slug": _text(fm.get("slug")),
+            "aliases": _items(fm.get("aliases") or fm.get("alias")), "key": key, "bridges": bridges,
+            "prefixes": sorted(prefixes)}
+
+
+_EMBED_WIKI = re.compile(r"(!?)\[\[([^\]\n]+?)\]\]")
+
+
+def links_of(fm, body):
+    """Every wiki link of a note as written (v3.18.0): {field ("" for the text), target, tkey (its name_key), anchor,
+    label, embed}, once per field and target (the first one's anchor and label), the frontmatter's fields first."""
+    out, seen = [], set()
+
+    def add(field, text):
+        for m in _EMBED_WIKI.finditer(text or ""):
+            target, anchor, label = _link_parts(m.group(2))
+            if not target or (field, target) in seen:
+                continue
+            seen.add((field, target))
+            out.append({"field": field, "target": target, "tkey": name_key(target), "anchor": anchor, "label": label,
+                        "embed": bool(m.group(1))})
+
+    for k, v in (fm or {}).items():
+        for s in _strings(v):
+            add(k, s)
+    add("", body)
+    return out
+
+
+def mentions_of(text):
+    """[(key, browse)] of every Jira-key-shaped token of a text, once each, sorted; `browse` when a `/browse/<key>`
+    link names it. Which prefixes count is decided when the rows are read (plan C6)."""
+    t = text or ""
+    browse = set(BROWSE_KEY.findall(t))
+    keys = {m.group(0) for m in ISSUE_KEY.finditer(t)} | browse
+    return [(k, k in browse) for k in sorted(keys)]
+
+
+def entity_rows(rel, text, title):
+    """(identity or None, links, mentions) of a note's text — what the walk writes beside its row (v3.18.0)."""
+    fm, body = _frontmatter((text or "").replace("\r\n", "\n"))
+    return identity_of(rel, fm or {}, title), links_of(fm or {}, body if fm is not None else text), mentions_of(text)
+
+
 def is_dataless(path):
     """Is the file's data not on disk (iCloud evicted it: `SF_DATALESS` in st_flags)? False where there are no flags."""
     try:
@@ -866,6 +1002,7 @@ class Index:
                 con.execute("SELECT rowid FROM sections_fts LIMIT 1").fetchone()
                 cols = {r[1] for r in con.execute("PRAGMA table_info(notes)").fetchall()}
                 if row and row[0] == SCHEMA and set(NOTE_COLS) <= cols:    # a column short (an earlier build): rebuilt
+                    con.executescript(ENTITY_DDL)       # an earlier build's file gets the tables in place (v3.18.0)
                     return con, False
             except sqlite3.DatabaseError as e:
                 if _busy(e):
@@ -880,7 +1017,7 @@ class Index:
 
     def _create(self):
         con = sqlite3.connect(self.db_path, timeout=5)
-        con.executescript(DDL)
+        con.executescript(DDL + ENTITY_DDL)
         con.execute("INSERT INTO meta(key, value) VALUES ('schema', ?)", (SCHEMA,))
         con.execute("INSERT INTO meta(key, value) VALUES ('near_version', ?)", (str(NEAR_VERSION),))
         con.execute("INSERT INTO meta(key, value) VALUES ('meta_version', ?)", (str(META_VERSION),))
@@ -1116,6 +1253,80 @@ class Index:
                           .fetchall(), [])
         return [dict(_note_dict(r), id=r["id"]) for r in rows]
 
+    @staticmethod
+    def _has_entities(con):
+        """Does the index hold the tables of v3.18.0 (an earlier build's file has none until a walk of this one)?"""
+        names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        return set(ENTITY_TABLES) <= names
+
+    _FRESH = "JOIN ents e ON e.note_id = n.id AND e.hash = n.hash"     # an identity row an older build left is stale
+
+    def cards(self):
+        """Every card the index holds (v3.18.0): the identity row of a note whose kind is not "" and whose hash is the
+        note's, as identity_of gives it, with the note's id, path, source, title, type, date and sensitivity (as
+        Index.notes() reads it). [] before a walk of this build; `problem` as for `query`."""
+        def read(con):
+            if not self._has_entities(con):
+                return []
+            return con.execute("SELECT n.id, %s, %s FROM notes n %s WHERE e.kind != '' ORDER BY n.path"
+                               % (", ".join("n." + c for c in NOTE_COLS), ", ".join("e." + c for c in ENTITY_COLS),
+                                  self._FRESH)).fetchall()
+
+        out = []
+        for r in self._read(read, []):
+            d = dict(_note_dict(r), id=r["id"])
+            for c in ENTITY_COLS:
+                v = r[c]
+                if c.endswith("_json"):
+                    try:
+                        v = json.loads(v or "null")
+                    except ValueError:
+                        v = None
+                    d[c[:-5]] = v if v is not None else ({} if c == "bridges_json" else [])
+                else:
+                    d[c] = v or ""
+            out.append(d)
+        return out
+
+    def _with_note(self, sql, args):
+        def read(con):
+            if not self._has_entities(con):
+                return []
+            return con.execute(sql, args).fetchall()
+
+        out = []
+        for r in self._read(read, []):
+            d = {k: r[k] for k in r.keys()}
+            d["sensitive"] = bool(d["sensitive"]) or (d.get("type") or "").lower() in PEOPLE_TYPES \
+                or one_on_one(d.get("path"), d.get("title"))
+            out.append(d)
+        return out
+
+    def links_to(self, tkeys):
+        """The links whose target's name key is one of `tkeys` (v3.18.0): {field, target, tkey, anchor, label, embed}
+        with the note that holds them — its path, source, title, type, date, sensitivity. `problem` as for `query`."""
+        keys = sorted({k for k in tkeys or () if k})
+        if not keys:
+            return []
+        return self._with_note("SELECT l.field, l.target, l.tkey, l.anchor, l.label, l.embed, n.path, n.source, n.title, "
+                               "n.type, n.date, n.sensitive FROM links l JOIN notes n ON n.id = l.note_id %s "
+                               "WHERE l.tkey IN (%s) ORDER BY n.path" % (self._FRESH, ",".join("?" * len(keys))), keys)
+
+    def mentions(self, keys=None):
+        """The Jira-key-shaped tokens of the notes (v3.18.0): {key, browse, path, source, title, type, date, sensitive};
+        `keys` — those keys only, None — all. `problem` as for `query`."""
+        if keys is not None:
+            keys = sorted({k for k in keys if k})
+            if not keys:
+                return []
+        where = "WHERE m.key IN (%s)" % ",".join("?" * len(keys)) if keys is not None else ""
+        rows = self._with_note("SELECT m.key, m.browse, n.path, n.source, n.title, n.type, n.date, n.sensitive "
+                               "FROM mentions m JOIN notes n ON n.id = m.note_id %s %s ORDER BY m.key, n.path"
+                               % (self._FRESH, where), keys or [])
+        for d in rows:
+            d["browse"] = bool(d["browse"])
+        return rows
+
     def built(self):
         """Has a walk ever finished into this index — the database there, with its meta `updated` row? False when there
         is no database yet, or while a first build (or a rebuild) is still filling one — it writes `updated` when its
@@ -1180,6 +1391,12 @@ class _Walk:
         for path in self.rows:
             self._know(path)
         self.writes = 0
+        for tb in ENTITY_TABLES:                     # the rows of a note an older build removed (v3.18.0, plan C11)
+            con.execute("DELETE FROM %s WHERE note_id NOT IN (SELECT id FROM notes)" % tb)
+        self.stale_ents = {r[0] for r in con.execute(
+            "SELECT n.id FROM notes n LEFT JOIN ents e ON e.note_id = n.id WHERE e.note_id IS NULL OR e.hash IS NOT n.hash")}
+                                                     # read again whatever their mtime: no identity row, or one an older
+                                                     # build left behind when it changed the note
 
     def _outside(self, path):
         """Is this index name one of a root outside every vault (`@<its source>/…`)? A vault's own `@Name.md` is not."""
@@ -1239,6 +1456,7 @@ class _Walk:
         for path in orphans:
             nid = self.rows.pop(path)["id"]
             self._drop_sections(nid)
+            self._drop_entities(nid)
             self.con.execute("DELETE FROM notes WHERE id=?", (nid,))
             self.res["removed"] += 1
         self.children = collections.defaultdict(set)
@@ -1316,7 +1534,8 @@ class _Walk:
                 self._remove(rel)
             return
         row = self.rows.get(rel)
-        if row and not self.reread and row["mtime"] == info.st_mtime and row["size"] == info.st_size:
+        if row and not self.reread and row["mtime"] == info.st_mtime and row["size"] == info.st_size \
+                and row["id"] not in self.stale_ents:
             return
         try:
             with open(path, "rb") as f:
@@ -1329,10 +1548,12 @@ class _Walk:
             self.con.execute("UPDATE notes SET sensitive=?, mtime=?, size=? WHERE id=?",   # note_meta changed (v3.17.0)
                              (int(meta["sensitive"]), info.st_mtime, info.st_size, row["id"]))
             row.update(mtime=info.st_mtime, size=info.st_size)
+            self._entities(row["id"], rel, data.decode("utf-8", errors="replace"), meta["title"], digest)   # v3.18.0
             return
         text = data.decode("utf-8", errors="replace").replace("\r\n", "\n")
-        self._write(row, rel, self.roots[ri]["source"], note_meta(rel, text, mtime=info.st_mtime),
-                    split_sections(text), digest, info)
+        meta = note_meta(rel, text, mtime=info.st_mtime)
+        nid = self._write(row, rel, self.roots[ri]["source"], meta, split_sections(text), digest, info)
+        self._entities(nid, rel, text, meta["title"], digest)
 
     # -------------------------------------------------- rows
     def _write(self, row, rel, source, meta, sections, digest, info):
@@ -1366,6 +1587,32 @@ class _Walk:
         self.writes += 1
         if self.writes % COMMIT_EVERY == 0:
             con.commit()
+        return nid
+
+    def _entities(self, nid, rel, text, title, digest):
+        """The identity row (kind "" for a note that is no card), the links and the mentions of a note, in place of
+        what it had (v3.18.0)."""
+        ident, links, mentions = entity_rows(rel, text, title)
+        self._drop_entities(nid)
+        ident = ident or {}
+        self.con.execute("INSERT INTO ents(note_id, hash, %s) VALUES (?, ?, %s)" % (", ".join(ENTITY_COLS),
+                                                                                  ", ".join("?" * len(ENTITY_COLS))),
+                         (nid, digest, ident.get("kind", ""), ident.get("label", ""),
+                          json.dumps(ident.get("emails", []), ensure_ascii=False), ident.get("team", ""),
+                          ident.get("role", ""), ident.get("slug", ""),
+                          json.dumps(ident.get("aliases", []), ensure_ascii=False), ident.get("key", ""),
+                          json.dumps(ident.get("bridges", {}), ensure_ascii=False),
+                          json.dumps(ident.get("prefixes", []), ensure_ascii=False)))
+        self.con.executemany("INSERT INTO links(note_id, field, target, tkey, anchor, label, embed) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                             [(nid, l["field"], l["target"], l["tkey"], l["anchor"], l["label"], int(l["embed"]))
+                              for l in links])
+        self.con.executemany("INSERT INTO mentions(note_id, key, browse) VALUES (?, ?, ?)",
+                             [(nid, k, int(b)) for k, b in mentions])
+        self.stale_ents.discard(nid)
+
+    def _drop_entities(self, nid):
+        for tb in ENTITY_TABLES:
+            self.con.execute("DELETE FROM %s WHERE note_id=?" % tb, (nid,))
 
     def _drop_sections(self, nid):
         self.con.execute("DELETE FROM sections_fts WHERE rowid IN (SELECT id FROM sections WHERE note_id=?)", (nid,))
@@ -1379,6 +1626,7 @@ class _Walk:
                      and (owner is None or self._owner(p) == owner)]:
             nid = self.rows.pop(path)["id"]
             self._drop_sections(nid)
+            self._drop_entities(nid)
             self.con.execute("DELETE FROM notes WHERE id=?", (nid,))
             self.res["removed"] += 1
         if any(p == prefix or p.startswith(prefix + "/") for p in self.rows):

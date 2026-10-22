@@ -4,6 +4,12 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v3.18.0 — who is who (added 2026-10-22)
+
+Plan `plans/2026-10-22-context-v3.18.0.md`. Each check failed before its code. Fixture: `testing/fixtures/entity/` (Zorg people, teams, a mission, an epic and its pages).
+
+- **TC-ctx-3180-index** | `python3 testing/ctx_index_test.py` | expected: `identity_of` gives a card's identity alone — kind by type (`People` and `person` → person, `epic`/`feature`/`project` → work; a note, `jira-project` → none), the lower-case e-mails of its `…mail…` fields, `team`, `role` else `position`, a work card's key from its file name (a feature's `epic:` is its parent, not its key), the fields of exactly one link (a list of one too, never a list of two), a mission's Jira prefixes — and never a judgement field; `links_of` keeps the target as written with its label, anchor and embed, once per field and target; `mentions_of` keeps every key-shaped token (`GPT-4`, `SHA-256` too) and marks a `/browse/` key; a walk writes a row for every note (kind "" when it is no card), its links and mentions; an index of v3.17 gets the tables in place (`meta_version` 3, sections unchanged, no rebuild) and the next refresh reads nothing; a file iCloud has not downloaded keeps its row and its card; a row whose hash is not its note's is not read and its file alone is read again; the rows of a note gone, or removed, go with it
+
 ## Release v3.17.0 — search your context (added 2026-10-22)
 
 Plan `plans/2026-10-22-context-v3.17.0.md`. Each check failed before its code.
