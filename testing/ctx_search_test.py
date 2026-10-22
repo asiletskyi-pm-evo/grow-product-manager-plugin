@@ -1677,7 +1677,7 @@ check("fix round 5 — search-protocol §4: a hub's link by name or path, the na
 check("fix round 5 — provider §2 (U3): a server's note is `застаріле` by status only, `станом на <день>` by its class age; §5: key 4 "
       "a non-hub first and an unknown size never the smaller, key 3a by the day; context-protocol §3, the usage line and the module "
       "docstring: --get ID|PATH|NAME",
-      "never marked `застаріле` (its status) or `sensitive`; the age of its class marks it `станом на <день>`" in section(PP, 2)
+      "never marked `застаріле` (its status), and `sensitive` only when its `type` is a people type (since v3.17.0); the age of its class marks it `станом на <день>`" in section(PP, 2)
       and all(x in section(PP, 5) for x in ("a note that is not a hub stays over a hub",
                                             "a server's note has no size, and is not the smaller for it", "the older by its day"))
       and "`search --get ID\\|PATH\\|NAME [--json]`" in section(CP, 3) and "search --get ID|PATH|NAME [--json]" in read(ROOT, "scripts", "ctx.py")
@@ -2430,6 +2430,78 @@ check("v3.16.1: ICLOUD_MISSING names ctx index rebuild --download — a note of 
       "fix I2: ICLOUD_OPEN for any other path names Obsidian alone",
       cs_.ICLOUD_MISSING == "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index rebuild --download"
       and getattr(cs_, "ICLOUD_OPEN", None) == "файл не завантажено з iCloud: %s — відкрий його в Obsidian")
+
+# ------------------------------------------------------------------ v3.17.0 Task 1: people notes are sensitive (Q2)
+BEA = "ZorgCore/People/bea-two.md"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    sx = env.sctx()
+    env.refresh(sx)
+    con = sqlite3.connect(os.path.join(env.home, ".grow-pm", "index", "sections.sqlite"))
+    con.execute("UPDATE notes SET sensitive = 0 WHERE path = ?", (BEA,))
+    con.commit()
+    con.close()
+    res = cs_.run(sx, ["Bea Two data analyst"], now=NOW, refresh=False)
+    bea = next((c for c in res["candidates"] if c["path"] == BEA), None)
+    check("v3.17.0 Q2: an own candidate of a people type is `sensitive`, whatever the row's column says",
+          bea is not None and "sensitive" in bea["flags"], bea)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Growth/Bea profile.md"), "---\ntype: person\nupdated: 2026-07-03\n---\n# Bea profile\n\n"
+          "Quokkaplan coaching of the cart funnel.\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/Bea profile.md"])
+    sx = env.sctx()
+    srcs = cs_.sources(env.text, sx["repos"], which=("local",))
+    lists, _ = cs_.gather(sx, ["Quokkaplan"], srcs, deadline())
+    hit_ = next((h for k, l in lists.items() if k.startswith("zorg-brain|") for h in l
+                 if h["path"] == "Growth/Bea profile.md"), None)
+    check("v3.17.0 Q2: a local-index hit whose frontmatter says `type: person` is sensitive", hit_ is not None
+          and hit_.get("sensitive") is True, (hit_, sorted(lists)))
+    write(env.note("Growth/Coach.md"), "---\nd_type: D2\nupdated: 2026-07-04\n---\n# Coach\n\nThe coaching log.\n")
+    cs_.save_last(env.home, {"dddddddddd": {"source": "zorg-brain", "path": "Growth/Coach.md", "heading": "",
+                                            "kind": "local", "title": "Coach", "date": "2026-07-04"}})
+    h4, _ = cs_.get(sx, "dddddddddd")
+    check("v3.17.0 Q2: --get of a local note with a Step-P field (`d_type`) and no type says ` · sensitive`",
+          h4 == "> [zorg-brain · Growth/Coach.md · 2026-07-04 · sensitive]", h4)
+    CARD = "# Bea card\n\nThe card.\n"
+    with FakeMcp(tree={"Growth/Bea card.md": CARD}) as s:
+        s.handlers["vault_get_note"] = lambda args: ({
+            "path": args.get("path"), "title": "Bea card", "tags": [], "headings": [], "content": CARD,
+            "outgoing_links": [], "frontmatter": {"type": "Person", "updated": "2026-06-02"}}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        cs_.save_last(env.home, {"eeeeeeeeee": {"source": "zorg-growth", "path": "@zorg-growth/Bea card.md", "heading": "",
+                                                "kind": "mcp", "title": "Bea card", "date": "", "remote": "Growth/Bea card.md"}})
+        h5, _ = cs_.get(sx, "eeeeeeeeee")
+    check("…of a server's note whose frontmatter says `type: Person`, with no `sensitive`",
+          h5 == "> [zorg-growth · @zorg-growth/Bea card.md · 2026-06-02 · sensitive · person]", h5)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    BODY = "# Onboarding plan\n\n" + ("Quokkaplan onboarding: the first weeks, the cart funnel, the checkout dashboards. " * 8) + "\n"
+    write(env.note("Notes/Onboarding plan.md"), "---\ntype: note\n---\n" + BODY)
+    write(env.note("Notes/People/Onboarding plan copy.md"), "---\ntype: person\n---\n" + BODY)
+    sx = env.sctx()
+    env.refresh(sx)
+    res = cs_.run(sx, ["Quokkaplan onboarding"], now=NOW, refresh=False)
+    holder = next((c for c in res["candidates"] if c["path"] == "Notes/People/Onboarding plan copy.md"
+                   or "Notes/People/Onboarding plan copy.md" in (c.get("twins") or [])), None)
+    check("v3.17.0 Q2: a person note folded into another note leaves `sensitive` on the one that stays",
+          holder is not None and "sensitive" in holder["flags"], [(c["path"], c["flags"], c.get("twins")) for c in res["candidates"][:4]])
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    with FakeMcp() as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [
+            {"path": "Growth/Bea card.md", "title": "Bea card", "type": "Person"},
+            {"path": "Growth/Pricing.md", "title": "Pricing", "type": "concept"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, _ = cs_.gather(sx, ["Quokkaplan"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        got = {h["path"]: h.get("sensitive") for k, l in lists.items() for h in l}
+    check("v3.17.0 Q2: a server's hit of a people type (`type: Person`) is sensitive before --get; another type is "
+          "not known yet", got.get("@zorg-growth/Bea card.md") is True and got.get("@zorg-growth/Pricing.md") is None, got)
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

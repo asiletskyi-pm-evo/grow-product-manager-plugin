@@ -4,6 +4,12 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v3.17.0 — search your context (added 2026-10-22)
+
+Plan `plans/2026-10-22-context-v3.17.0.md`. Each check failed before its code.
+
+- **TC-ctx-3170-sensitive** | `python3 testing/ctx_index_test.py`, `python3 testing/ctx_search_test.py` | expected: `sensitive_of` — `sensitive: yes`, a people type in any case (`person` among them) and a Step-P field with a value make a note sensitive; a generic field, an empty Step-P field or `sensitive: false` alone do not; `note_meta` of a `type: person` card is sensitive; an index of an earlier `meta_version` reads every downloaded file once — a Step-P note's row turns sensitive with no section rewritten — and the next refresh reads none; an evicted file is not opened; a row of a people type reads as sensitive whatever its column says; own, local-index and server candidates of a people type carry the mark (a server's by its `type`, before `--get`); `--get` of a local note with `d_type` and of a server's `type: Person` note says ` · sensitive`; a person note folded as a twin leaves the mark on the survivor
+
 ## Release v3.16.2 — search, second patch (added 2026-10-22)
 
 What v3.16.1 deferred (plan `plans/2026-10-22-context-v3.16.2.md`). Each check failed before its code.

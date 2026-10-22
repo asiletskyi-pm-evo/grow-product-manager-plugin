@@ -1200,5 +1200,97 @@ with tempfile.TemporaryDirectory() as d:
     check("_fetch: a file on disk → ok; one whose read hangs (a FIFO) → timeout, the child killed; a missing one → failed",
           got == ("ok", "timeout", "failed") and time.time() - t0 < 8, (got, time.time() - t0))
 
+# ------------------------------------------------------------------ v3.17.0 Task 1: people notes are sensitive (Q2)
+so = getattr(ctx_index, "sensitive_of", None)
+check("v3.17.0 Q2: sensitive_of — a people type (any case), a Step-P field with a value, `sensitive: yes`",
+      so is not None and so({"type": "person"}) and so({"type": "People"}) and so({"type": "note", "d_type": "D3"})
+      and so({"signals": ["x"]}) and so({"sensitive": "yes"}), so)
+check("…not a generic field, an empty Step-P field, `sensitive: false`, nothing",
+      so is not None and not so({"type": "meeting-notes", "sensitive": "false"}) and not so({"reporting": {"cadence": "weekly"}})
+      and not so({"d_type": ""}) and not so({"signals": []}) and not so({"d_type": None}) and not so({}), so)
+check("…PEOPLE_TYPES and STEP_P_FIELDS as the plan names them (C1)",
+      getattr(ctx_index, "PEOPLE_TYPES", None) == frozenset(("people", "person", "one-on-one-notes", "performance-review",
+                                                            "offboarding-plan"))
+      and getattr(ctx_index, "STEP_P_FIELDS", None) == ("d_type", "d_history", "recommended_style", "signals", "one_on_one",
+                                                       "gtd_index", "forecast_qa", "delegation", "active_goal_letter"))
+check("v3.17.0 Q2: note_meta of a `type: person` card without `sensitive` is sensitive",
+      ctx_index.note_meta("ZorgCore/People/x.md", "---\ntype: person\n---\n# X\n\nA card.\n")["sensitive"] is True)
+
+COACH = "Notes/Coaching notes.md"
+
+
+def coach_env(d):
+    env = Env(d)
+    write(env.note(COACH), "---\ntype: note\nd_type: D3\n---\n# Coaching notes\n\nHow the onboarding went this month.\n")
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET sensitive = 0 WHERE path = ?", (COACH,))
+    con.execute("DELETE FROM meta WHERE key = 'meta_version'")       # an index of an earlier build
+    con.commit()
+    con.close()
+    return env, idx, (roots, store_rel, blocks_rels)
+
+
+def counting_refresh(env, idx, scope):
+    """(result, the vault files the refresh opened)."""
+    opened, real_open = [], open
+
+    def counting(p_, *a, **k):
+        if str(p_).startswith(env.vault):
+            opened.append(p_)
+        return real_open(p_, *a, **k)
+    ctx_index.open = counting
+    try:
+        return idx.refresh(*scope), opened
+    finally:
+        del ctx_index.open
+
+
+def coach_row(idx):
+    con = sqlite3.connect(idx.db_path)
+    try:
+        return (con.execute("SELECT sensitive FROM notes WHERE path = ?", (COACH,)).fetchone(),
+                con.execute("SELECT value FROM meta WHERE key = 'meta_version'").fetchone())
+    finally:
+        con.close()
+
+
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = coach_env(d)
+    r1, opened1 = counting_refresh(env, idx, scope)
+    sens, ver = coach_row(idx)
+    check("v3.17.0 C7: an index of an earlier meta_version re-reads every file once — a Step-P note's row is sensitive "
+          "though its hash did not change, no section rewritten (`changed` 0), the version written",
+          sens == (1,) and ver == (str(getattr(ctx_index, "META_VERSION", "?")),) and len(opened1) > 0
+          and r1["changed"] == 0 and r1["rebuilt"] is False, (sens, ver, len(opened1), r1))
+    r2, opened2 = counting_refresh(env, idx, scope)
+    check("…and the next refresh reads no file", opened2 == [], opened2[:3])
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = coach_env(d)
+    real_dataless = ctx_index.is_dataless
+    ctx_index.is_dataless = lambda p_: str(p_).endswith("Coaching notes.md")
+    try:
+        r, opened = counting_refresh(env, idx, scope)
+    finally:
+        ctx_index.is_dataless = real_dataless
+    sens, _ = coach_row(idx)
+    check("v3.17.0 C7: the re-read never opens a file iCloud has not downloaded — its row stays as it was",
+          not any(str(p_).endswith("Coaching notes.md") for p_ in opened) and sens == (0,) and r["skipped_dataless"] >= 1,
+          (sens, r, [p_ for p_ in opened if "Coaching" in str(p_)]))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET sensitive = 0 WHERE path = 'ZorgCore/People/bea-two.md'")
+    con.commit()
+    con.close()
+    bea = next((n for n in idx.notes() if n["path"] == "ZorgCore/People/bea-two.md"), None)
+    check("v3.17.0 C7: a row of a people type is sensitive as it is read, whatever its column says (an older index, an "
+          "evicted file)", bea is not None and bea["sensitive"] is True, bea)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

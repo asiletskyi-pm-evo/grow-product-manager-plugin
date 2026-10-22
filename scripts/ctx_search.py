@@ -546,7 +546,8 @@ def _local(sctx, src, plans, until, box):
                 h = Hit(rel, "", src["id"], 0, title=meta["title"], date=date, snippet=snip, variant=i, list=key,
                         type=(meta["type"] or "").lower(), product=meta["product"] or "",
                         status=(meta["status"] or "").lower(), hub=True if _yes(fm.get("search_hub")) else None,
-                        sensitive=_yes(fm.get("sensitive")) if "sensitive" in fm else None,
+                        sensitive=True if ci.sensitive_of(fm) or (meta["type"] or "").lower() in ci.PEOPLE_TYPES
+                        else (_yes(fm.get("sensitive")) if "sensitive" in fm else None),
                         ttl_date=_first_date(fm, ci.TTL_DATE_KEYS) or "", terms=None, asked=len(terms), near=near_of(r))
                 if snip and isinstance(body, str) and _lost(snip):    # the match was in a breadcrumb or a link line
                     h["preview"] = _preview(ci.split_sections(body))
@@ -619,7 +620,7 @@ def _mcp(sctx, src, plans, until, box):
             hits.append(Hit(rel, "", src["id"], 0, title=_text_or_none(r.get("title")), date=date,
                             snippet=_text_or_none(r.get("snippet")), variant=i, list=key,
                             type=(_text_or_none(r.get("type")) or "").lower(), product="", status="", hub=None,
-                            sensitive=None, ttl_date=_first_date(r, ci.TTL_DATE_KEYS) or "", terms=None, asked=asked,
+                            sensitive=True if (_text_or_none(r.get("type")) or "").lower() in ci.PEOPLE_TYPES else None, ttl_date=_first_date(r, ci.TTL_DATE_KEYS) or "", terms=None, asked=asked,
                             remote=N(r["path"])))
         _add(lists, key, hits)
     box["lists"] = lists
@@ -1955,7 +1956,7 @@ def _from_mcp(sctx, entry):
         return "" if v is None or isinstance(v, (list, dict)) else N(str(v)).strip()
 
     meta = {"type": said("type") or inner["type"], "status": said("status") or inner["status"],
-            "sensitive": _yes(fm.get("sensitive")) or inner["sensitive"]}
+            "sensitive": ci.sensitive_of(fm) or inner["sensitive"]}
     return content, _first_date(fm, ci.DATE_KEYS) or inner["date"] or "", meta, None
 
 

@@ -67,6 +67,10 @@ _READ_ONE = ("import signal, sys; getattr(signal, 'alarm', int)(int(sys.argv[2])
 DB_NAME, STATE_NAME, LOCK_NAME = "sections.sqlite", "index.json", "index.lock"
 BM25 = (10.0, 6.0, 4.0, 4.0, 1.0)   # title, heading, tags, aliases, body
 HUB_TYPES = frozenset(("glossary", "moc", "people", "person", "focus-brief", "daily-summary"))
+PEOPLE_TYPES = frozenset(("people", "person", "one-on-one-notes", "performance-review", "offboarding-plan"))
+                                    # data-policy.md (Search, rule 1): taken only by the People contour (v3.17.0)
+STEP_P_FIELDS = ("d_type", "d_history", "recommended_style", "signals", "one_on_one", "gtd_index", "forecast_qa",
+                 "delegation", "active_goal_letter")   # a person profile's judgement (people-context-protocol.md)
 HUB_TITLE = re.compile(r"style guide|глосарій|glossary|абревіатури", re.I)
 TRUE = ("true", "yes", "1")
 DATE_KEYS = ("updated", "modified", "snapshot", "generated", "date", "created")
@@ -77,6 +81,8 @@ STUB_CHARS = 200                    # a section shorter than this (its breadcrum
 NEAR_MIN, NEAR_CHARS = 400, 20_000  # near copies: the characters a key needs at least, and the ones it reads
 NEAR_VERSION = 2                    # the rules of near_key (meta `near_version`): an index of other rules gets its keys
                                     # again from its own sections (v3.16.2: a list of links is content)
+META_VERSION = 2                    # the rules of note_meta (meta `meta_version`): an index of other rules reads its
+                                    # downloaded files once more (v3.17.0: a people type or a Step-P field is sensitive)
 COUNTS = ("added", "changed", "removed", "pending", "skipped_dataless", "skipped_large")
 BROKEN_NOTE = "індекс пошуку не читається (%s) — ctx index rebuild збудує його наново"
 BUSY_NOTE = "індекс пошуку зайнятий іншим процесом — цього разу без нього"
@@ -436,6 +442,22 @@ def _text(v):
     return "" if v is None or isinstance(v, list) else N(str(v)).strip()
 
 
+def _filled(v):
+    """Does a frontmatter value say something — not None, not blank, not an empty list or map?"""
+    if v is None or (isinstance(v, (list, dict)) and not v):
+        return False
+    return bool(N(str(v)).strip()) if isinstance(v, str) else True
+
+
+def sensitive_of(fm):
+    """Is a note sensitive by what its frontmatter says (since v3.17.0)? `sensitive: yes`, a people type (PEOPLE_TYPES,
+    any case), or a person profile's judgement field (STEP_P_FIELDS) with a value — whatever `sensitive` says then."""
+    fm = fm if isinstance(fm, dict) else {}
+    if _text(fm.get("sensitive")).lower() in TRUE or _text(fm.get("type")).lower() in PEOPLE_TYPES:
+        return True
+    return any(_filled(fm.get(k)) for k in STEP_P_FIELDS)
+
+
 def _items(v, tags=False):
     """A list of texts: a list as it is, a scalar split on commas (tags: on spaces too, `#` dropped)."""
     raw = v if isinstance(v, list) else (_text(v).split(",") if _text(v) else [])
@@ -525,7 +547,7 @@ def note_meta(rel, text, mtime=None):
         "title": title, "type": ntype, "product": _text(fm.get("product")), "status": _text(fm.get("status")).lower(),
         "date": date or "", "ttl_date": ttl_date, "confluence_id": cid, "aliases": _items(fm.get("aliases") or fm.get("alias")),
         "tags": _items(fm.get("tags") or fm.get("tag"), tags=True),
-        "sensitive": _text(fm.get("sensitive")).lower() in TRUE,
+        "sensitive": sensitive_of(fm),
         "hub": ntype in HUB_TYPES or _text(fm.get("search_hub")).lower() in TRUE or bool(HUB_TITLE.search(title)),
         "version_key": version_key(title, rel.rsplit("/", 1)[0] if "/" in rel else ""), "links": links,
     }
@@ -700,7 +722,7 @@ def _note_dict(r):
             d[c] = json.loads(d.pop(c + "_json") or "[]")
         except ValueError:
             d[c] = []
-    d["sensitive"], d["hub"] = bool(d["sensitive"]), bool(d["hub"])
+    d["sensitive"], d["hub"] = bool(d["sensitive"]) or (d.get("type") or "").lower() in PEOPLE_TYPES, bool(d["hub"])
     return d
 
 
@@ -820,6 +842,7 @@ class Index:
         con.executescript(DDL)
         con.execute("INSERT INTO meta(key, value) VALUES ('schema', ?)", (SCHEMA,))
         con.execute("INSERT INTO meta(key, value) VALUES ('near_version', ?)", (str(NEAR_VERSION),))
+        con.execute("INSERT INTO meta(key, value) VALUES ('meta_version', ?)", (str(META_VERSION),))
         con.commit()
         return con
 
@@ -839,6 +862,17 @@ class Index:
             con.execute("UPDATE notes SET near = ? WHERE id = ?", (near_key([(h or "", t or "") for h, t in secs]), nid))
         con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('near_version', ?)", (str(NEAR_VERSION),))
         con.commit()
+
+    @staticmethod
+    def _meta_stale(con):
+        """Is the index's `meta_version` lower than META_VERSION (none: 1)? Then its walk reads every downloaded file
+        once more; a later build's rows are left alone."""
+        row = con.execute("SELECT value FROM meta WHERE key='meta_version'").fetchone()
+        try:
+            stored = int(row[0]) if row else 1
+        except (TypeError, ValueError):
+            stored = 1
+        return stored < META_VERSION
 
     def _ro(self):
         """A read-only connection, or None when there is no index yet."""
@@ -878,7 +912,8 @@ class Index:
             try:
                 self._near_again(con)
                 files, sections, queue, when = self._walk(con, roots, store_rel, blocks_rels, deadline, res,
-                                                          None if res["rebuilt"] else self._state().get("queue"))
+                                                          None if res["rebuilt"] else self._state().get("queue"),
+                                                          reread=self._meta_stale(con))
             except sqlite3.DatabaseError as e:      # damage the open checks did not see: put it aside, walk once more
                 con.close()
                 if _busy(e):
@@ -896,9 +931,12 @@ class Index:
         return res
 
     @staticmethod
-    def _walk(con, roots, store_rel, blocks_rels, deadline, res, saved):
-        """One walk into `con`, then the day and the counts: (files, sections, queue, when)."""
-        queue = _Walk(con, roots, store_rel, blocks_rels, deadline, res).run(saved)
+    def _walk(con, roots, store_rel, blocks_rels, deadline, res, saved, reread=False):
+        """One walk into `con`, then the day and the counts: (files, sections, queue, when). `reread`: every downloaded
+        file is read again for its metadata (META_VERSION); the version is written once a walk ends with nothing left."""
+        queue = _Walk(con, roots, store_rel, blocks_rels, deadline, res, reread=reread).run(saved)
+        if reread and not res["pending"]:
+            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('meta_version', ?)", (str(META_VERSION),))
         when = _now()
         con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('updated', ?)", (when,))
         con.commit()
@@ -1076,8 +1114,8 @@ def _alive(pid):
 class _Walk:
     """One run of the refresh over the roots: folders listed one at a time, depth first, until the deadline."""
 
-    def __init__(self, con, roots, store_rel, blocks_rels, deadline, res):
-        self.con, self.deadline, self.res = con, deadline, res
+    def __init__(self, con, roots, store_rel, blocks_rels, deadline, res, reread=False):
+        self.con, self.deadline, self.res, self.reread = con, deadline, res, reread
         vaults = []
         for r in roots:
             if r.get("vault") and r["vault"] not in vaults:
@@ -1228,7 +1266,7 @@ class _Walk:
                 self._remove(rel)
             return
         row = self.rows.get(rel)
-        if row and row["mtime"] == info.st_mtime and row["size"] == info.st_size:
+        if row and not self.reread and row["mtime"] == info.st_mtime and row["size"] == info.st_size:
             return
         try:
             with open(path, "rb") as f:
@@ -1237,6 +1275,9 @@ class _Walk:
             return
         digest = hashlib.sha1(data).hexdigest()
         if row and row["hash"] == digest:            # touched, not changed
+            if self.reread:                          # this build's rules of note_meta: the columns they changed (v3.17.0)
+                meta = note_meta(rel, data.decode("utf-8", errors="replace").replace("\r\n", "\n"), mtime=info.st_mtime)
+                self.con.execute("UPDATE notes SET sensitive=? WHERE id=?", (int(meta["sensitive"]), row["id"]))
             self.con.execute("UPDATE notes SET mtime=?, size=? WHERE id=?", (info.st_mtime, info.st_size, row["id"]))
             row.update(mtime=info.st_mtime, size=info.st_size)
             return
