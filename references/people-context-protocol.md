@@ -4,7 +4,7 @@ This document defines how the plugin's **People-contour** skills (`goal-setter`,
 
 Profiles accumulate knowledge about a person **between sessions** — their situational-leadership type, delegation levels, active goals, reporting cadence, 1-1 history, GTD-index trend, and career signals — so every people-skill starts from what is already known instead of re-asking.
 
-> **Data sensitivity:** person profiles are the **highest-sensitivity** category in the plugin. They live **locally / in the vault only** and are never published to Confluence/Jira or sent to external LLM services. See `references/data-policy.md` → "People data".
+> **Data sensitivity:** person profiles are the **highest-sensitivity** category in the plugin. They live **locally / in the vault only** and are never published to Confluence/Jira or sent to external LLM services. See `references/data-policy.md` → "People data". Since v3.17.0 the search marks a profile `sensitive` by its type or by any of its judgement fields, whether or not the profile says `sensitive: true` (`data-policy.md` → Search, rule 1).
 
 ---
 

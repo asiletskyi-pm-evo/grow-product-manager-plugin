@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.16.2
+**Version:** 3.17.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.17.0** — **«Пошук по контексту»: ask your context directly** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). Ask in your own words — «знайди в моєму контексті…», «що в мене є про…» — or type `/grow-product-manager:find <запит> [--list] [--all]`. `context-navigator` searches every connected context: your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct. It answers with a source and a date for every statement, or lists the notes, and ends with «Де шукав: …». It works with or without a shared core. People notes — `person` cards, profiles, 1-1s — are marked `sensitive` by the engine itself and stay with the People contour; elsewhere a person is named by identity only.
 
 **New in v3.16.2** — **«Пошук», другий патч: nothing swaps in another note silently** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Two cards that differ only by a list of owners no longer fold into one; your remembered pick of a note folded as a twin weighs its survivor, and a «не те» crosses only a fold of the same text; the excluded folders are the same in the index, the search and `--get`; every name a search lists reads back from the source that holds it — a server's note outside its root is `@<repo>/:/…`, a core gone from disk is read through its server; the «нотатка довга» line names exactly the sections `--get` takes back. `ctx search eval` finds a golden note folded as a twin at its survivor's place.
 
@@ -365,7 +367,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 11. Knowledge Library (v0.9.1)
+### 11. Knowledge Library (v0.9.2)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
@@ -614,11 +616,11 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
-### 33. Context Navigator (v0.2.0) — NEW in v3.10.0
+### 33. Context Navigator (v0.3.0) — NEW in v3.10.0, your whole context since v3.17.0
 
-**Description:** Answers from a connected shared core instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
+**Description:** Since v3.17.0 it answers and searches from your whole context — your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct — with or without a shared core: an answer with a source and a date for every statement, or a list of notes, and a «Де шукав» line naming each source; `/grow-product-manager:find` runs the same search. With a shared core it answers from it instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
 
-**Trigger phrases:** "who owns this", "what does team X do", "where is the rule for", "which missions does the team have", «хто за що відповідає», «що робить команда X», «де описане правило», «які місії у команди»
+**Trigger phrases:** «знайди в моєму контексті…», «що в мене є про…», "search my notes for…", "who owns this", "what does team X do", "where is the rule for", "which missions does the team have", «хто за що відповідає», «що робить команда X», «де описане правило», «які місії у команди»
 ---
 
 ## Skills Summary
@@ -637,7 +639,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.18.1 | Process meetings and extract action items |
 | Plugin Configurator | v2.15.2 | Configure plugin for your organization |
-| Knowledge Library | v0.9.1 | Manage curated knowledge sources |
+| Knowledge Library | v0.9.2 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Product Reporter | v0.10.1 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
@@ -657,7 +659,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Offboarding Guide | v0.2.1 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.1 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
 | Context Connect | v0.5.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
-| Context Navigator | v0.2.0 | Answer from the shared core through the provider's rules and graph, with note paths and snapshot dates |
+| Context Navigator | v0.3.0 | Answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---
 
@@ -889,7 +891,7 @@ Besides skills, the plugin ships four kinds of host-level components. They are d
 
 Every protocol keeps a fallback chain (named agent → `general-purpose` with the same prompt, reported → sequential in-session passes with a role reset, reported → inline with the reduced-independence marker), so nothing breaks in a host without plugin agents. Codex does not load `agents/*.md`; `.codex/agents/*.toml` ports the three for manual use there, generated from these files (check 14 keeps them paired, and since v3.8.0 keeps their instructions identical apart from the host note).
 
-**Commands — `commands/` (5).** Service entry points that are **user-only** (`disable-model-invocation: true`) — the model never routes a conversation into them, which also keeps them out of trigger collisions. On Codex, which migrates commands into routable skills, the same guarantee comes from each description opening with *"Typed command … only"* (validator check 13, trigger-evals L):
+**Commands — `commands/` (6 commands).** Service entry points that are **user-only** (`disable-model-invocation: true`) — the model never routes a conversation into them, which also keeps them out of trigger collisions. On Codex, which migrates commands into routable skills, the same guarantee comes from each description opening with *"Typed command … only"* (validator check 13, trigger-evals L):
 
 | Command | Arguments | Does |
 |---|---|---|
@@ -898,6 +900,7 @@ Every protocol keeps a fallback chain (named agent → `general-purpose` with th
 | `/grow-product-manager:release` | `patch \| minor \| major` | `release-manager` with the bump class pre-answered — for the plugin repo only |
 | `/grow-product-manager:glossary-lint` | `[file]` | Gate 3 team-language lint over a file or pasted text, standalone |
 | `/grow-product-manager:setup` | `--show \| --write-gate on\|off` | Host-level toggles (the write gate) and whether the hooks environment is wired in this session |
+| `/grow-product-manager:find` | `<запит> [--list] [--all]` | The search of your context, typed (since v3.17.0): `context-navigator`'s answer with a source and a date for every statement, `--list` for the notes instead, `--all` for the session's live sources too; ends with `Де шукав: …` |
 
 **Hooks — `hooks/hooks.json` (3 hooks).** All three run in the session's own environment and **fail open** — a script error can never block a session.
 
@@ -916,12 +919,12 @@ The plugin is defined against Claude Code / Cowork and degrades by **observed ca
 
 | | Claude Code / Cowork | Codex CLI · Codex app | ChatGPT | Codex Cloud |
 |---|---|---|---|---|
-| Skills (31) | ✅ | ✅ same namespace | ✅ (expected) | ✅ (expected) |
+| Skills (33) | ✅ | ✅ same namespace | ✅ (expected) | ✅ (expected) |
 | Connectors | ✅ | ✅ URL-matched; name-matched ones (`gmail`, `google calendar`, `google drive`, `fireflies`) work in the **app**, fail at session start in the **CLI** | ✅ | ? |
 | Filesystem `~/.grow-pm/`, vault | ✅ | ✅ | ❌ on web / mobile → `storage_mode: session`, artifact exported at the end; ✅ in the desktop app with a *Local Project* (attached folder, read/write) → behaves as the Codex column | own sandbox → via connector or the repo |
 | Subagents (checker, debater, extractor) | ✅ automatic | ⚠️ only on explicit request → sequential in-session passes (`.codex/agents/` for manual use) | ❌ | ⚠️ |
 | Hooks (context digest, write gate) | ✅ | ❌ ([openai/codex#17331](https://github.com/openai/codex/issues/17331)) → Step 0a in full, in-skill confirmation before writes | ❌ | ❌ |
-| Commands | ✅ 5, user-only | ✅ 5, migrated to typed-only skills | ❌ | ⚠️ |
+| Commands | ✅ 6, user-only | ✅ 6, migrated to typed-only skills | ❌ | ⚠️ |
 | Skill descriptions | full while the listing fits 1% of the context window; over it, the least-used skills show names only — descriptions stay within 400 characters (v3.10.1) | shortened to fit one shared ≈15k-character budget (~190 chars each on a host with 80 skills) — descriptions are ordered for that cut | ? | ? |
 | Per-skill result | 31 full | 15 full / 16 degraded | 21 degraded / 10 n/a | 22 degraded / 9 n/a |
 
@@ -1071,5 +1074,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.16.2  
+**Version:** 3.17.0  
 **Last Updated:** October 2026

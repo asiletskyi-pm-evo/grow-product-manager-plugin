@@ -1677,7 +1677,7 @@ check("fix round 5 — search-protocol §4: a hub's link by name or path, the na
 check("fix round 5 — provider §2 (U3): a server's note is `застаріле` by status only, `станом на <день>` by its class age; §5: key 4 "
       "a non-hub first and an unknown size never the smaller, key 3a by the day; context-protocol §3, the usage line and the module "
       "docstring: --get ID|PATH|NAME",
-      "never marked `застаріле` (its status) or `sensitive`; the age of its class marks it `станом на <день>`" in section(PP, 2)
+      "never marked `застаріле` (its status), and `sensitive` only when its `type` is a people type (since v3.17.0); the age of its class marks it `станом на <день>`" in section(PP, 2)
       and all(x in section(PP, 5) for x in ("a note that is not a hub stays over a hub",
                                             "a server's note has no size, and is not the smaller for it", "the older by its day"))
       and "`search --get ID\\|PATH\\|NAME [--json]`" in section(CP, 3) and "search --get ID|PATH|NAME [--json]" in read(ROOT, "scripts", "ctx.py")
@@ -2430,6 +2430,248 @@ check("v3.16.1: ICLOUD_MISSING names ctx index rebuild --download — a note of 
       "fix I2: ICLOUD_OPEN for any other path names Obsidian alone",
       cs_.ICLOUD_MISSING == "файл не завантажено з iCloud: %s — відкрий його в Obsidian або ctx index rebuild --download"
       and getattr(cs_, "ICLOUD_OPEN", None) == "файл не завантажено з iCloud: %s — відкрий його в Obsidian")
+
+# ------------------------------------------------------------------ v3.17.0 Task 1: people notes are sensitive (Q2)
+BEA = "ZorgCore/People/bea-two.md"
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    sx = env.sctx()
+    env.refresh(sx)
+    con = sqlite3.connect(os.path.join(env.home, ".grow-pm", "index", "sections.sqlite"))
+    con.execute("UPDATE notes SET sensitive = 0 WHERE path = ?", (BEA,))
+    con.commit()
+    con.close()
+    res = cs_.run(sx, ["Bea Two data analyst"], now=NOW, refresh=False)
+    bea = next((c for c in res["candidates"] if c["path"] == BEA), None)
+    check("v3.17.0 Q2: an own candidate of a people type is `sensitive`, whatever the row's column says",
+          bea is not None and "sensitive" in bea["flags"], bea)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Growth/Bea profile.md"), "---\ntype: person\nupdated: 2026-07-03\n---\n# Bea profile\n\n"
+          "Quokkaplan coaching of the cart funnel.\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/Bea profile.md"])
+    sx = env.sctx()
+    srcs = cs_.sources(env.text, sx["repos"], which=("local",))
+    lists, _ = cs_.gather(sx, ["Quokkaplan"], srcs, deadline())
+    hit_ = next((h for k, l in lists.items() if k.startswith("zorg-brain|") for h in l
+                 if h["path"] == "Growth/Bea profile.md"), None)
+    check("v3.17.0 Q2: a local-index hit whose frontmatter says `type: person` is sensitive", hit_ is not None
+          and hit_.get("sensitive") is True, (hit_, sorted(lists)))
+    write(env.note("Growth/Coach.md"), "---\nd_type: D2\nupdated: 2026-07-04\n---\n# Coach\n\nThe coaching log.\n")
+    cs_.save_last(env.home, {"dddddddddd": {"source": "zorg-brain", "path": "Growth/Coach.md", "heading": "",
+                                            "kind": "local", "title": "Coach", "date": "2026-07-04"}})
+    h4, _ = cs_.get(sx, "dddddddddd")
+    check("v3.17.0 Q2: --get of a local note with a Step-P field (`d_type`) and no type says ` · sensitive`",
+          h4 == "> [zorg-brain · Growth/Coach.md · 2026-07-04 · sensitive]", h4)
+    CARD = "# Bea card\n\nThe card.\n"
+    with FakeMcp(tree={"Growth/Bea card.md": CARD}) as s:
+        s.handlers["vault_get_note"] = lambda args: ({
+            "path": args.get("path"), "title": "Bea card", "tags": [], "headings": [], "content": CARD,
+            "outgoing_links": [], "frontmatter": {"type": "Person", "updated": "2026-06-02"}}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        cs_.save_last(env.home, {"eeeeeeeeee": {"source": "zorg-growth", "path": "@zorg-growth/Bea card.md", "heading": "",
+                                                "kind": "mcp", "title": "Bea card", "date": "", "remote": "Growth/Bea card.md"}})
+        h5, _ = cs_.get(sx, "eeeeeeeeee")
+    check("…of a server's note whose frontmatter says `type: Person`, with no `sensitive`",
+          h5 == "> [zorg-growth · @zorg-growth/Bea card.md · 2026-06-02 · sensitive · person]", h5)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    BODY = "# Onboarding plan\n\n" + ("Quokkaplan onboarding: the first weeks, the cart funnel, the checkout dashboards. " * 8) + "\n"
+    write(env.note("Notes/Onboarding plan.md"), "---\ntype: note\n---\n" + BODY)
+    write(env.note("Notes/People/Onboarding plan copy.md"), "---\ntype: person\n---\n" + BODY)
+    sx = env.sctx()
+    env.refresh(sx)
+    res = cs_.run(sx, ["Quokkaplan onboarding"], now=NOW, refresh=False)
+    holder = next((c for c in res["candidates"] if c["path"] == "Notes/People/Onboarding plan copy.md"
+                   or "Notes/People/Onboarding plan copy.md" in (c.get("twins") or [])), None)
+    check("v3.17.0 Q2: a person note folded into another note leaves `sensitive` on the one that stays",
+          holder is not None and "sensitive" in holder["flags"], [(c["path"], c["flags"], c.get("twins")) for c in res["candidates"][:4]])
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    with FakeMcp() as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [
+            {"path": "Growth/Bea card.md", "title": "Bea card", "type": "Person"},
+            {"path": "Growth/Pricing.md", "title": "Pricing", "type": "concept"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, _ = cs_.gather(sx, ["Quokkaplan"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        got = {h["path"]: h.get("sensitive") for k, l in lists.items() for h in l}
+    check("v3.17.0 Q2: a server's hit of a people type (`type: Person`) is sensitive before --get; another type is "
+          "not known yet", got.get("@zorg-growth/Bea card.md") is True and got.get("@zorg-growth/Pricing.md") is None, got)
+
+# --- v3.17.0 Task 1 review fixes
+for form in ("wild", "s10"):
+    with tempfile.TemporaryDirectory() as d:
+        env = Env(d)
+        write(env.note("Growth/Bea profile.md"), "---\ntype: note\nupdated: 2026-07-03\n---\n# Bea profile\n\n"
+              "Quokkaplan coaching of the cart funnel.\n")
+        build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/Bea profile.md"], form=form)
+        con = sqlite3.connect(env.brain)
+        col = "fm_json" if form == "wild" else "frontmatter_json"
+        con.execute("UPDATE notes SET %s = ?, type = 'person' WHERE path = 'Growth/Bea profile.md'" % col,
+                    (json.dumps({"type": "person", "d_type": "D2", "updated": "2026-07-03"}),))
+        if form == "s10":
+            nid = con.execute("SELECT id FROM notes WHERE path = 'Growth/Bea profile.md'").fetchone()[0]
+            con.execute("UPDATE notes_fts SET body = ? WHERE rowid = ?",
+                        ("# Bea profile\n\nQuokkaplan coaching of the cart funnel.\n", nid))    # §10 keeps no frontmatter
+        else:
+            con.execute("UPDATE notes_fts SET body = ? WHERE path = 'Growth/Bea profile.md'",
+                        ("# Bea profile\n\nQuokkaplan coaching of the cart funnel.\n",))
+        con.commit()
+        con.close()
+        sx = env.sctx()
+        real_dataless = ci.is_dataless
+        ci.is_dataless = lambda p_: str(p_).endswith("Bea profile.md")      # evicted: --get serves the index's body
+        try:
+            heads = []
+            for arg in ("Growth/Bea profile.md", "Bea profile"):
+                try:
+                    heads.append(cs_.get(sx, arg)[0])
+                except cs_.GetError as e:
+                    heads.append("GetError %s" % e)
+            cs_.save_last(env.home, {"ffffffffff": {"source": "zorg-brain", "path": "Growth/Bea profile.md", "heading": "",
+                                                    "kind": "local", "title": "Bea profile", "date": "2026-07-03"}})
+            heads.append(cs_.get(sx, "ffffffffff")[0])
+        finally:
+            ci.is_dataless = real_dataless
+        check("v3.17.0 review I4 (%s): --get by path, name and id of an evicted note a local index serves says ` · sensitive` "
+              "and its type from the index's frontmatter, dated by it" % form,
+              all(" · sensitive" in h and h.rstrip("]").endswith("person") and "2026-07-03" in h for h in heads), heads)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Growth/Coach log.md"), "---\ntype: note\nupdated: 2026-07-05\n---\n# Coach log\n\nQuokkaplan coaching.\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/Coach log.md"])
+    con = sqlite3.connect(env.brain)
+    con.execute("UPDATE notes SET fm_json = ? WHERE path = 'Growth/Coach log.md'",
+                (json.dumps({"type": "note", "d_type": "D2", "updated": "2026-07-05"}),))
+    con.commit()
+    con.close()
+    sx = env.sctx()
+    lists, _ = cs_.gather(sx, ["Quokkaplan"], cs_.sources(env.text, sx["repos"], which=("local",)), deadline())
+    hit_ = next((h for k, l in lists.items() for h in l if h["path"] == "Growth/Coach log.md"), None)
+    check("v3.17.0 review M3: a local-index hit whose frontmatter JSON has a Step-P field (and no people type) is sensitive",
+          hit_ is not None and hit_.get("sensitive") is True, hit_)
+
+# ------------------------------------------------------------------ v3.17.0 Task 2: the search the user asks for
+SP17 = " ".join(read(ROOT, "references", "search-protocol.md").split())    # `flat` is a name of a test above by now
+S13 = section(SP17, 13)
+check("v3.17.0 §13: the search the user asks for — every connected context (an unregistered vault/v1 provider joined by "
+      "RRF), the nothing-to-search line, an answer of at most five sections, a list of at most ten lines with no --get, "
+      "level 2 at once on --all or a named source, the «Де шукав» line, a person by identity only, /find with no text",
+      all(x in S13 for x in (
+          "A search the user asks for (since v3.17.0)", "`--skill context-navigator`", "reciprocal-rank fusion (k = 60)",
+          "`Немає де шукати: підключи вейлт (plugin-configurator) або спільне ядро (context-connect)`",
+          "at most **five** sections", "At most ten numbered lines", "This form calls no `--get`", "`--all`",
+          "`Де шукав: <id> · <id> (не відповів) · … · живі: <назви>`",
+          "`Що шукати? /grow-product-manager:find <запит> [--list] [--all]`", "identity only")), S13[:600])
+check("…§1 sends context-navigator's own searches to §13",
+      "context-navigator runs Step 0.5 for its \"anything else\" route and for every search the user asks for (§13)"
+      in section(SP17, 1), section(SP17, 1)[-600:])
+NAV = read(ROOT, "skills", "context-navigator", "SKILL.md")
+NAV_FM = NAV.split("\n---", 1)[0]
+check("v3.17.0: context-navigator 0.3.0 searches your whole context — the description says so, a missing shared core is "
+      "one line and the search goes on, §13 and the «Де шукав» line are named",
+      "version: 0.3.0" in NAV_FM and "знайди в моєму контексті" in NAV_FM and len(NAV_FM.split("description: ", 1)[-1].split("\n")[0]) <= 400
+      and "`Спільне ядро не підключене — шукаю у твоїй базі`" in NAV and "§13" in NAV and "`Де шукав: …`" in NAV
+      and "None → say that no shared context is connected and offer `context-connect`; never invent" not in NAV)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    with FakeMcp() as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [
+            {"path": "Growth/Old plan.md", "title": "Old plan", "type": "concept", "updated": "2026-01-02"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, _ = cs_.gather(sx, ["Quokkaplan roadmap"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        old = next((h for k, l in lists.items() for h in l if h["path"] == "@zorg-growth/Old plan.md"), None)
+    check("v3.17.0 review X1: a server's hit keeps the date its class TTL counts from, `terms` unknown and `asked`",
+          old is not None and old.get("ttl_date") == "2026-01-02" and "terms" in old and old["terms"] is None
+          and old.get("asked") == 2, old)
+
+# --- v3.17.0 Task 2 review fixes
+SP17b = " ".join(read(ROOT, "references", "search-protocol.md").split())
+S13b = section(SP17b, 13)
+check("v3.17.0 review (Task 2): §13 — a list has no numbered block (I1), only the plugin folder of a vault is indexed "
+      "(I2), a person is the card's frontmatter identity, never its body (I3), a server line without a known mark has no "
+      "snippet and a line is read before it is remembered (I4), a refreshing index never says the bare «нічого» (I5), a "
+      "named source is that source (I6), a usage error stops (M11), a declined live source is named (M12)",
+      all(x in S13b for x in (
+          "**No numbered block.**", "the rest of a vault only through a registered local index of it",
+          "never the card's body", "from its title and heading alone, with no snippet and no «навіщо»",
+          "`--get` of that note first", "`Поки нічого прямо про це — індекс оновлюється: N файлів ще не переглянуто`",
+          "→ that source, besides the base", "`Пошук не виконано: <помилка>`, and nothing more", "`(пропущено)`",
+          "a doubt or a conflict alone offers `живе джерело: …` instead")), S13b[-1500:])
+DP = " ".join(read(ROOT, "references", "data-policy.md").split())
+check("…data-policy rule 1 names the one exception: a person's directory identity from a registry card",
+      "a person's identity — name, e-mail, team and role as a registry card's frontmatter states them, and the card's path"
+      in DP, DP[DP.find("1. **Sensitive"):][:900])
+NAVb = read(ROOT, "skills", "context-navigator", "SKILL.md")
+check("…context-navigator: the person row is identity only, decisions go to decision-log with or without a provider, a "
+      "list calls no --get, no-SHELL hosts take §12, «the base» cannot answer",
+      "identity only (`references/search-protocol.md` §13)" in NAVb and "with or without a provider" in NAVb
+      and "for a list, call no `--get`" in NAVb and "§12 — the files on an FS host" in NAVb
+      and "A question the base cannot answer" in NAVb and "A question the core cannot answer" not in NAVb)
+
+# --- v3.17.0 Task 3 review fixes: /find and §13 say one rule
+SP17c = " ".join(read(ROOT, "references", "search-protocol.md").split())
+check("v3.17.0 review (Task 3) I1: naming a live source or --all answers only §8's breadth question; a VPN or a login, "
+      "mail, person profiles and private channels are still asked first (spec criterion 5)",
+      "answers §8's question about the breadth" in section(SP17c, 13)
+      and "a VPN or a login the session lacks, and the data — mail, person profiles, private channels" in section(SP17c, 13)
+      and "is the user's answer to §8's question about the data and the breadth" not in section(SP17c, 13), section(SP17c, 13)[-1600:])
+FIND = read(ROOT, "commands", "find.md")
+FIND_FM = FIND.split("\n---", 1)[0]
+check("…commands/find.md: the guard names the conversational «знайди», the description says notes (not the vault), the "
+      "navigator is followed whole, --all keeps §8's questions, the writes are §10's and the index's, a flag is an exact "
+      "word and an unknown one stops, the Path rule covers the skill's path",
+      "never for a conversational «знайди…»" in FIND_FM and "your vault" not in FIND_FM
+      and len(FIND_FM.split("description: ", 1)[-1].split("\n")[0]) <= 260
+      and "Follow `skills/context-navigator/SKILL.md` whole" in FIND
+      and "A VPN or a login the session lacks, and mail, person profiles or private channels" in FIND
+      and "the choices §10 remembers" in FIND and "`Невідомий прапорець: <слово>" in FIND
+      and "A bare `skills/<name>/SKILL.md` is read from the same root" in FIND)
+
+# --- v3.17.0 acceptance fix wave: 1-1 notes in every source
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Notes/Meetings/Meeting - 2026-09-29 - 1-1 Zorg-Cy.md"),
+          "---\ntype: meeting\ndate: 2026-09-29\n---\n# 1-1 Zorg-Cy\n\nQuokkaflat: rent the flat, sign the lease.\n")
+    write(env.note("Growth/1on1 Bea/2026-09-22.md"), "---\ntype: meeting\nupdated: 2026-09-22\n---\n# Sync\n\nQuokkaflat items.\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/1on1 Bea/2026-09-22.md"])
+    sx = env.sctx()
+    env.refresh(sx)
+    res = cs_.run(sx, ["Quokkaflat"], now=NOW, refresh=False)
+    own = next((c for c in res["candidates"] if "1-1 Zorg-Cy" in c["path"]), None)
+    loc = next((c for c in res["candidates"] if c["path"] == "Growth/1on1 Bea/2026-09-22.md"), None)
+    check("v3.17.0 acceptance: a 1-1 note typed `meeting` — own (by its title) and a local index's (by its folder) — is "
+          "`sensitive`", own is not None and "sensitive" in own["flags"] and loc is not None and "sensitive" in loc["flags"],
+          [(c["path"], c["flags"]) for c in res["candidates"][:5]])
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    with FakeMcp() as s:
+        s.handlers["vault_search"] = lambda args: ({"results": [
+            {"path": "Growth/Sync.md", "title": "1:1 — Bea & Zorg", "type": "meeting"}]}, False)
+        env.reg("zorg-growth", growth_reg(s.url))
+        sx = env.sctx()
+        lists, _ = cs_.gather(sx, ["Quokkaflat"], cs_.sources(env.text, sx["repos"], which=("mcp",)), deadline())
+        got = {h["path"]: h.get("sensitive") for k, l in lists.items() for h in l}
+    check("…a server's hit titled «1:1 — …» is sensitive before --get", got.get("@zorg-growth/Sync.md") is True, got)
+
+# --- v3.17.0 final review fixes in the prose
+NAVc = read(ROOT, "skills", "context-navigator", "SKILL.md")
+check("v3.17.0 final I2: inside the navigator, recording or revisiting a decision goes to decision-log, asking what "
+      "was decided is §13 (decisions in meeting notes too)",
+      "recording a decision, or revisiting one the user names → `decision-log`" in NAVc
+      and "what was decided about something → §13" in NAVc
+      and "the user's own decisions → `decision-log`, with or without a provider" not in NAVc)
+FINDc = read(ROOT, "commands", "find.md")
+check("v3.17.0 final M2: /find — a dash standing alone is part of the request; only `--word` or `—word` is a flag",
+      "A dash standing alone (`—`, `-`) is part of the request" in FINDc
+      and "Any other word that starts with `--` or `—` followed by a letter" in FINDc)
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

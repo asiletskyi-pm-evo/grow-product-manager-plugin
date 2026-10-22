@@ -1200,5 +1200,210 @@ with tempfile.TemporaryDirectory() as d:
     check("_fetch: a file on disk → ok; one whose read hangs (a FIFO) → timeout, the child killed; a missing one → failed",
           got == ("ok", "timeout", "failed") and time.time() - t0 < 8, (got, time.time() - t0))
 
+# ------------------------------------------------------------------ v3.17.0 Task 1: people notes are sensitive (Q2)
+so = getattr(ctx_index, "sensitive_of", None)
+check("v3.17.0 Q2: sensitive_of — a people type (any case), a Step-P field with a value, `sensitive: yes`",
+      so is not None and so({"type": "person"}) and so({"type": "People"}) and so({"type": "note", "d_type": "D3"})
+      and so({"signals": ["x"]}) and so({"sensitive": "yes"}), so)
+check("…not a generic field, an empty Step-P field, `sensitive: false`, nothing",
+      so is not None and not so({"type": "meeting-notes", "sensitive": "false"}) and not so({"reporting": {"cadence": "weekly"}})
+      and not so({"d_type": ""}) and not so({"signals": []}) and not so({"d_type": None}) and not so({}), so)
+check("…PEOPLE_TYPES and STEP_P_FIELDS as the plan names them (C1)",
+      getattr(ctx_index, "PEOPLE_TYPES", None) == frozenset(("people", "person", "one-on-one-notes", "performance-review",
+                                                            "offboarding-plan", "delegation-audit", "followup-arcv",
+                                                            "one-on-one"))
+      and getattr(ctx_index, "STEP_P_FIELDS", None) == ("d_type", "d_history", "recommended_style", "signals", "one_on_one",
+                                                       "gtd_index", "forecast_qa", "delegation", "active_goal_letter"))
+check("v3.17.0 Q2: note_meta of a `type: person` card without `sensitive` is sensitive",
+      ctx_index.note_meta("ZorgCore/People/x.md", "---\ntype: person\n---\n# X\n\nA card.\n")["sensitive"] is True)
+
+COACH = "Notes/Coaching notes.md"
+
+
+def coach_env(d):
+    env = Env(d)
+    write(env.note(COACH), "---\ntype: note\nd_type: D3\n---\n# Coaching notes\n\nHow the onboarding went this month.\n")
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET sensitive = 0 WHERE path = ?", (COACH,))
+    con.execute("DELETE FROM meta WHERE key = 'meta_version'")       # an index of an earlier build
+    con.commit()
+    con.close()
+    return env, idx, (roots, store_rel, blocks_rels)
+
+
+def counting_refresh(env, idx, scope):
+    """(result, the vault files the refresh opened)."""
+    opened, real_open = [], open
+
+    def counting(p_, *a, **k):
+        if str(p_).startswith(env.vault):
+            opened.append(p_)
+        return real_open(p_, *a, **k)
+    ctx_index.open = counting
+    try:
+        return idx.refresh(*scope), opened
+    finally:
+        del ctx_index.open
+
+
+def coach_row(idx):
+    con = sqlite3.connect(idx.db_path)
+    try:
+        return (con.execute("SELECT sensitive FROM notes WHERE path = ?", (COACH,)).fetchone(),
+                con.execute("SELECT value FROM meta WHERE key = 'meta_version'").fetchone())
+    finally:
+        con.close()
+
+
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = coach_env(d)
+    r1, opened1 = counting_refresh(env, idx, scope)
+    sens, ver = coach_row(idx)
+    check("v3.17.0 C7: an index of an earlier meta_version re-reads every file once — a Step-P note's row is sensitive "
+          "though its hash did not change, no section rewritten (`changed` 0), the version written",
+          sens == (1,) and ver == (str(getattr(ctx_index, "META_VERSION", "?")),) and len(opened1) > 0
+          and r1["changed"] == 0 and r1["rebuilt"] is False, (sens, ver, len(opened1), r1))
+    r2, opened2 = counting_refresh(env, idx, scope)
+    check("…and the next refresh reads no file", opened2 == [], opened2[:3])
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = coach_env(d)
+    real_dataless = ctx_index.is_dataless
+    ctx_index.is_dataless = lambda p_: str(p_).endswith("Coaching notes.md")
+    try:
+        r, opened = counting_refresh(env, idx, scope)
+    finally:
+        ctx_index.is_dataless = real_dataless
+    sens, _ = coach_row(idx)
+    check("v3.17.0 C7: the re-read never opens a file iCloud has not downloaded — its row stays as it was",
+          not any(str(p_).endswith("Coaching notes.md") for p_ in opened) and sens == (0,) and r["skipped_dataless"] >= 1,
+          (sens, r, [p_ for p_ in opened if "Coaching" in str(p_)]))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET sensitive = 0 WHERE path = 'ZorgCore/People/bea-two.md'")
+    con.commit()
+    con.close()
+    bea = next((n for n in idx.notes() if n["path"] == "ZorgCore/People/bea-two.md"), None)
+    check("v3.17.0 C7: a row of a people type is sensitive as it is read, whatever its column says (an older index, an "
+          "evicted file)", bea is not None and bea["sensitive"] is True, bea)
+
+# --- v3.17.0 Task 1 review fixes
+check("v3.17.0 review M1: null-like and empty values are not filled — `~`, `null`, `false`, a comment, `[\"\"]`, `{a: \"\"}`",
+      not any(ctx_index.sensitive_of(fm) for fm in ({"d_type": "~"}, {"d_type": "null"}, {"signals": "false"},
+                                                    {"signals": False}, {"d_type": "# none yet"}, {"signals": [""]},
+                                                    {"signals": {"risks": ""}}))
+      and ctx_index.sensitive_of({"gtd_index": 0}) and ctx_index.sensitive_of({"signals": {"risks": ["churn"]}}))
+check("v3.17.0 review M2: a list-valued type (`type: [person]`) is a people type",
+      ctx_index.sensitive_of({"type": ["note", "person"]}) and not ctx_index.sensitive_of({"type": ["note"]}))
+check("v3.17.0 delegation-audit and followup-arcv are People-contour types too (review, declined list)",
+      {"delegation-audit", "followup-arcv"} <= set(ctx_index.PEOPLE_TYPES))
+PROFILE = ("---\nname: \"Zorg One\"\nrole: \"Analyst\"\nupdated: 2026-07-01\nsignals:\n  motivation: \"growth\"\n  risks: []\n"
+           "one_on_one:\n  cadence: biweekly\n  last: 2026-07-07\n---\n"
+           "# Zorg One\n\nA profile.\n")
+check("v3.17.0 review I3: a profile with no type whose `signals:` and `one_on_one:` are maps, as the schema writes them, "
+      "is sensitive", ctx_index.note_meta("Notes/People/zorg-one.md", PROFILE)["sensitive"] is True)
+check("…and with a history list under `one_on_one:` the map is still read as one",
+      ctx_index.note_meta("Notes/People/zorg-one.md", PROFILE.replace("  last: 2026-07-07\n", "  last: 2026-07-07\n  history:\n"
+                                                                   "    - { date: 2026-07-07, note: \"x\" }\n"))["sensitive"] is True)
+check("…a Step-P field one level down (`reporting: forecast_qa`) too; `reporting: cadence` alone is not",
+      ctx_index.note_meta("Notes/x.md", "---\ntype: note\nreporting:\n  cadence: weekly\n  forecast_qa: 92\n---\n# X\n")["sensitive"]
+      is True and ctx_index.note_meta("Notes/y.md", "---\ntype: note\nreporting:\n  cadence: weekly\n---\n# Y\n")["sensitive"]
+      is False)
+m_ = ctx_index.note_meta("Notes/z.md", "---\ntitle:\n  en: Mapped\ntype: note\ntags:\n  - a\n---\n# Real title\n")
+check("…a mapped value never becomes text: a `title:` map leaves the H1 as the title, a tag list still reads",
+      m_["title"] == "Real title" and m_["type"] == "note" and m_["tags"] == ["a"], m_)
+
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = coach_env(d)
+    state = json.loads(read(env.index, "index.json"))
+    state["queue"] = [["f", scope[0][0]["path"], env.note("Notes/Inbox.md"), "Notes/Inbox.md"]]   # an older build's walk, unfinished
+    write(os.path.join(env.index, "index.json"), json.dumps(state))
+    idx.refresh(*scope)
+    sens, ver = coach_row(idx)
+    check("v3.17.0 review I1: an older build's unfinished queue does not finish the re-read — a new walk reads every "
+          "file, then the version", sens == (1,) and ver == (str(ctx_index.META_VERSION),), (sens, ver))
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = coach_env(d)
+    real_dataless = ctx_index.is_dataless
+    ctx_index.is_dataless = lambda p_: str(p_).endswith("Coaching notes.md")
+    try:
+        idx.refresh(*scope)
+    finally:
+        ctx_index.is_dataless = real_dataless
+    idx.refresh(*scope)                                   # the file came down, its mtime and size as they were
+    sens, ver = coach_row(idx)
+    check("v3.17.0 review I2: a file evicted during the re-read gets its mark once it comes down unchanged",
+          sens == (1,) and ver == (str(ctx_index.META_VERSION),), (sens, ver))
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = coach_env(d)
+    r = idx.refresh(*scope, budget=0)
+    _, ver0 = coach_row(idx)
+    idx.refresh(*scope)
+    sens, ver = coach_row(idx)
+    check("v3.17.0 review M3: a re-read walk the budget stopped writes no version; the walk that ends writes it",
+          r["pending"] > 0 and ver0 is None and sens == (1,) and ver == (str(ctx_index.META_VERSION),), (r, ver0, sens, ver))
+for stored, rereads in (("3", False), ("x", True)):
+    with tempfile.TemporaryDirectory() as d:
+        env, idx, scope = coach_env(d)
+        con = sqlite3.connect(idx.db_path)
+        con.execute("INSERT INTO meta(key, value) VALUES ('meta_version', ?)", (stored,))
+        con.commit()
+        con.close()
+        _, opened = counting_refresh(env, idx, scope)
+        check("v3.17.0 review M3: `meta_version` %s — %s" % (stored, "a later build's: nothing read again" if not rereads
+                                                           else "unreadable: read as 1, every file read again"),
+              bool(opened) is rereads, len(opened))
+
+# --- v3.17.0 acceptance fix wave: 1-1 notes by their title or folder, and the `one-on-one` type
+oo = getattr(ctx_index, "one_on_one", None)
+check("v3.17.0 acceptance: a 1-1 note by its title or a folder of its path — `1-1 …`, `1:1 …`, `1on1 …`, `1-1-Logs/`, "
+      "one-on-one",
+      oo is not None and all(oo(p, t) for p, t in (
+          ("Notes/Meetings/1on1 Bea/Meeting - 2026-02-27 - 1-1 Zorg-Bea.md", ""),
+          ("Notes/Meetings/Meeting - 2026-09-29 - 1-1 Zorg-Cy.md", "Meeting with Cy"),
+          ("Notes/x.md", "1:1 — Bea & Zorg (2026-09-22)"),
+          ("ZorgCore/_personal/1-1-Logs/bea-two/2026-09-22.md", ""),
+          ("Notes/One-on-one with Bea.md", ""))), oo)
+check("…not a key, a date or a quarter that holds «1-1»",
+      oo is not None and not any(oo(p, t) for p, t in (
+          ("Notes/ZORG-10452.1-1 brand pages.md", ""), ("Notes/Reviews 2023-11-1 notes.md", ""),
+          ("Notes/Q1-1 plan.md", ""), ("Notes/report 2021-1-1.md", ""), ("Notes/x.md", "Plan 11-12"))), oo)
+check("…`one-on-one` is a people type", "one-on-one" in ctx_index.PEOPLE_TYPES)
+check("…note_meta of a `type: meeting` 1-1 note is sensitive",
+      ctx_index.note_meta("Notes/Meetings/1on1 Bea/Meeting - 2026-02-27 - 1-1 Zorg-Bea.md",
+                          "---\ntype: meeting\n---\n# 1-1 Zorg-Bea\n\nAction items.\n")["sensitive"] is True
+      and ctx_index.note_meta("Notes/Meetings/Meeting - 2026-03-01 - Pricing.md",
+                              "---\ntype: meeting\n---\n# Pricing\n\nAction items.\n")["sensitive"] is False)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Notes/Meetings/Meeting - 2026-09-29 - 1-1 Zorg-Cy.md"), "---\ntype: meeting\n---\n# 1-1 Zorg-Cy\n\nItems.\n")
+    roots, store_rel, blocks_rels = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(roots, store_rel, blocks_rels)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET sensitive = 0 WHERE path LIKE '%1-1 Zorg-Cy%'")
+    con.commit()
+    con.close()
+    row = next((n for n in idx.notes() if "1-1 Zorg-Cy" in n["path"]), None)
+    check("…a row of a 1-1 note reads as sensitive whatever its column says", row is not None and row["sensitive"] is True, row)
+
+# --- v3.17.0 final review: the 1-1 names people actually write, and the ones that only look like it
+check("v3.17.0 final I1: a 1-1 at the end of a file name, a plural folder, `1-on-1`, `_`, `1-1: …`",
+      all(ctx_index.one_on_one(p, t) for p, t in (
+          ("Notes/Meetings/2026-10-14 Bea 1-1.md", "Bea — жовтень"),
+          ("Growth/Bea Two — 1-1.md", ""),
+          ("Notes/1-1s/2026-10-01.md", ""), ("Notes/One-on-ones/Bea.md", ""), ("Notes/1on1s/x.md", ""),
+          ("Notes/x.md", "1-on-1 with Bea"), ("Notes/1-1_Bea.md", ""), ("Notes/x.md", "1-1: Bea"))))
+check("…not a ratio or a step: «Split 1:1», «розподіл 1:1», «Крок 1-1», «Step 1-1»",
+      not any(ctx_index.one_on_one(p, t) for p, t in (
+          ("Notes/x.md", "A/B test — Split 1:1"), ("Notes/x.md", "Тест: розподіл 1:1"),
+          ("Notes/Крок 1-1.md", ""), ("Notes/x.md", "Step 1-1 of the rollout"))))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)
