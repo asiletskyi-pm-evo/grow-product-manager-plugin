@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.17.0
+**Version:** 3.18.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.18.0** — **«Хто є хто»: one person, team or epic across your notes and the cores** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). Ask «хто такий X», «що за команда X», «що таке PROJ-1234» or «хто посилається на X»: `ctx entity` joins your person note, a core's registry card and another team's card in your local index into one entity — by the e-mail, a field of one link recognised by its shape, or your own `ctx entity same|not-same` answer, never by a name alone — and says who it is, where its cards are, who links to it and, for a Jira key with no card, where it is mentioned. Outside the People contour you see identity only, and a sensitive note as its title and path with ` · sensitive`. Nothing is written into your notes; `ctx entity pairs` lists the cards that may be the same. The search index gets the identity, link and mention rows in place — no rebuild.
 
 **New in v3.17.0** — **«Пошук по контексту»: ask your context directly** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). Ask in your own words — «знайди в моєму контексті…», «що в мене є про…» — or type `/grow-product-manager:find <запит> [--list] [--all]`. `context-navigator` searches every connected context: your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct. It answers with a source and a date for every statement, or lists the notes, and ends with «Де шукав: …». It works with or without a shared core. People notes — `person` cards, profiles, 1-1s — are marked `sensitive` by the engine itself and stay with the People contour; elsewhere a person is named by identity only.
 
@@ -616,7 +618,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
-### 33. Context Navigator (v0.3.0) — NEW in v3.10.0, your whole context since v3.17.0
+### 33. Context Navigator (v0.3.1) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0
 
 **Description:** Since v3.17.0 it answers and searches from your whole context — your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct — with or without a shared core: an answer with a source and a date for every statement, or a list of notes, and a «Де шукав» line naming each source; `/grow-product-manager:find` runs the same search. With a shared core it answers from it instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
 
@@ -659,7 +661,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Offboarding Guide | v0.2.1 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.1 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
 | Context Connect | v0.5.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
-| Context Navigator | v0.3.0 | Answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
+| Context Navigator | v0.3.1 | Who is who (`ctx entity`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---
 
@@ -1074,5 +1076,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.17.0  
+**Version:** 3.18.0  
 **Last Updated:** October 2026

@@ -12,6 +12,65 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.18.0 (2026-10-22)
+
+**«Хто є хто»: one person, team or epic across your notes and the cores.** Your person note, a core's registry card and another team's card in your local index often describe one person — and until now each skill saw them apart. `ctx entity` joins them into one entity and answers «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X»: who it is, where its cards are, who links to it, and — for a Jira key with no card — where it is mentioned. It writes nothing into your notes.
+
+MINOR: a new command line (`ctx entity`), three new tables in the search index (filled in place, the schema name unchanged), `context-navigator` 0.3.1.
+
+### Added
+
+- **`ctx entity <запит> [--kind K] [--skill S] [--json]`** (`scripts/ctx_entity.py`, `context-protocol.md` §5h):
+  - the request is an e-mail, a Jira key, a card's path or link, a name or an alias; a near match says `схоже на «…» — не точний збіг:`;
+  - one entity → its cards with their source, its identity (e-mail, team, role — nothing else), `пов'язана з: …`, `можливо той самий: … — ctx entity same|not-same …`, who links to it and the notes that carry a work entity's key (newest first, 20 at most);
+  - several → `<мітка> · <вид> — ctx entity "<шлях>"`;
+  - a Jira key with no card → `<KEY> — картки немає, згадується в N нотатках:`, only for a key whose project prefix a card names or a `/browse/` link names (`GPT-4` is no key);
+  - a sensitive note outside the People contour → its title, path and day with ` · sensitive`; its field only for a People skill, its text never.
+- **How cards join** — the strongest key first:
+  - your answer `ctx entity same`;
+  - an equal e-mail of a card's own address fields (`manager_email` is someone else's);
+  - a bridge recognised by its shape — a field of exactly one link, whatever its name, to a card of the same kind in another source, with nothing against it.
+
+  A name never merges. `ctx entity not-same` keeps two cards apart whatever the keys say. A team linked under another name is `пов'язана з` it. An epic's core page with the same key is its second home.
+- **`ctx entity pairs`** lists every open «можливо той самий» pair: two cards of one kind from different sources whose names are alike, never two people with different e-mails. **`ctx entity same|not-same A B`** keeps your answer in `.state/entities.json`, with a snapshot and a journal line; `ctx undo` takes it back.
+- **Cards from your local index (Q7):** another team's cards that only your local index holds join by their frontmatter alone.
+- **The search index keeps who is who** (`context-provider-protocol.md` §10), three tables in the same file:
+  - an identity row per note — a card's identity fields alone, never a judgement field;
+  - every wiki link as written;
+  - every Jira-key-shaped token.
+
+  An index of v3.17 gets them in place: its downloaded files are read once (`meta_version` 3) and nothing is rebuilt. A row an older build left behind (another hash or path) is never read, and its file is read again.
+
+### Changed
+
+- **`context-navigator` 0.3.1** and `search-protocol.md` §13 — «Who or what it is»: a question about a person, a team, a mission, a module, a metric, a work item or a Jira key asks `ctx entity` first, and its lines are the answer with their paths. A person's identity comes from it.
+- Protocols:
+  - `data-policy.md` Search rule 1 — `ctx entity` follows it;
+  - `people-context-protocol.md`;
+  - `context-protocol.md` §1, §3, §5h, §8.
+
+  Also: trigger evals U11–U12.
+
+### Acceptance (a copy of the author's index and local index)
+
+- **Migration:** a copy of the real index migrated in one 18 s walk — 7 243 notes, 898 cards, 49 319 links.
+- **Links:** 99.74 % of the links with a folder from your layer resolve to one note.
+- **People:** 646 cards → 465 people, with 0 doubles by e-mail and 0 false merges.
+- **Who links to them:**
+  - missions 27/30, people 178/447;
+  - teams 4/39: the other teams are linked only from `_System/` notes, which the index leaves out by design.
+- **Judgement fields:** none of their values reached the output for 20 people.
+- **Jira:** 1 473 of 1 524 keys have a known prefix; 34 epics have a second home.
+- **Pairs:** 74 open pairs of people. 605 more joined people with different e-mails and were dropped by a fix.
+- **Speed:** the registry builds in ~1 s; a request takes ~0.7 s.
+- **Found by the acceptance and fixed:**
+  - a link that two notes of one name answer broke the command;
+  - pairs of people with different e-mails.
+- **Trigger evals:**
+  - Claude (visible and real): U 11/11, T 14/14, L 8/9 (L9 → the host's own `update-config`, as before);
+  - Codex: 29/36. U11 and U12 are right; the misses are the earlier ones, plus noise on L5 and T8 — the branch changes no description.
+- `host-smoke` passed (Claude + Codex).
+
 ## v3.17.0 (2026-10-22)
 
 **«Пошук по контексту»: ask your context directly.** Until now the search ran only inside the skills, before their work (Step 0.5). Now you ask it yourself — «знайди в моєму контексті…», «що в мене є про…», or the typed `/grow-product-manager:find` — and `context-navigator` searches every connected context: the plugin folder of each vault (the rest of a vault through a local index of it), every registered core, your local indexes, a `vault/v1` provider of the session, and the live sources when you ask or when the base has nothing direct. It answers with a source and a date for every statement, or lists the notes, and ends with the line `Де шукав: …`. People notes — 1-1s among them — are marked `sensitive` by the engine and stay with the People contour.
