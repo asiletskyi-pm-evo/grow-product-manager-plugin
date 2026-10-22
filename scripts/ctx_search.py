@@ -617,10 +617,11 @@ def _mcp(sctx, src, plans, until, box):
                 continue
             date = next((_text_or_none(r.get(k)) for k in ("date", "updated", "modified") if _text_or_none(r.get(k))),
                         None)
+            rtype = (_text_or_none(r.get("type")) or "").lower()
             hits.append(Hit(rel, "", src["id"], 0, title=_text_or_none(r.get("title")), date=date,
                             snippet=_text_or_none(r.get("snippet")), variant=i, list=key,
-                            type=(_text_or_none(r.get("type")) or "").lower(), product="", status="", hub=None,
-                            sensitive=True if (_text_or_none(r.get("type")) or "").lower() in ci.PEOPLE_TYPES else None, ttl_date=_first_date(r, ci.TTL_DATE_KEYS) or "", terms=None, asked=asked,
+                            type=rtype, product="", status="", hub=None,
+                            sensitive=True if rtype in ci.PEOPLE_TYPES else None,   # a people type (v3.17.0) ttl_date=_first_date(r, ci.TTL_DATE_KEYS) or "", terms=None, asked=asked,
                             remote=N(r["path"])))
         _add(lists, key, hits)
     box["lists"] = lists
@@ -1368,7 +1369,7 @@ def _from_disk(sctx, entry):
         local = _local_body(sctx, path, found)
         if local is None:
             raise GetError(3, _icloud_missing(sctx, path))
-        meta = ci.note_meta(path, local[1])
+        meta = _local_meta(path, local)
         return local[1], meta.get("date") or "", meta, ICLOUD_LOCAL % local[0]
     try:
         text = cst.read_text(found)
@@ -1395,7 +1396,7 @@ def _from_local(sctx, entry):
     if lid and any(src["id"] == lid for src in sources(sctx["text"], sctx["repos"], ("local",))):
         local = _local_body(sctx, path, os.path.join((sctx.get("vaults") or [""])[0], *path.split("/")))
         if local:
-            meta = ci.note_meta(path, local[1])
+            meta = _local_meta(path, local)
             return local[1], meta.get("date") or "", meta, None, None
     raise GetError(3, "the note is not on disk: %s" % path)
 
@@ -1423,9 +1424,10 @@ def _local_names(path, found, vaults, folder, src_id=""):
 
 
 def _local_body(sctx, path, found):
-    """(id, text) of a note in the first registered local index whose `body` holds it (either shape of `_local_sql`),
-    opened read only as a search opens it (OPEN_S to open, SOURCE_S for the query); None when none does. `path` is the
-    note's index name, `found` its file."""
+    """(id, text, row) of a note in the first registered local index whose `body` holds it (either shape of
+    `_local_sql`), opened read only as a search opens it (OPEN_S to open, SOURCE_S for the query); None when none does.
+    `row` is what the index's `notes` says of it, {"type", "fm"} (since v3.17.0: §10 keeps the frontmatter apart from
+    the body). `path` is the note's index name, `found` its file."""
     for src in sources(sctx["text"], sctx["repos"], ("local",)):
         try:
             con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=OPEN_S)
@@ -1437,13 +1439,18 @@ def _local_body(sctx, path, found):
             fts, notes = _columns(con, "notes_fts"), _columns(con, "notes")
             names = _local_names(path, found, sctx.get("vaults"), _local_root(con), src["id"])
             marks = ",".join("?" * len(names))
+            fmc = next((c for c in ("fm_json", "frontmatter_json") if c in notes), None)
+            cols = [c for c in ("type", fmc) if c and c in notes] if "path" in notes else []
+            more = "".join(", notes.%s" % c for c in cols)
             if "body" not in fts:
                 row = None
             elif "path" in fts:
-                row = con.execute("SELECT body FROM notes_fts WHERE path IN (%s)" % marks, names).fetchone()
+                row = con.execute("SELECT notes_fts.body%s FROM notes_fts %sWHERE notes_fts.path IN (%s)"
+                                  % (more, "LEFT JOIN notes ON notes.path = notes_fts.path " if cols else "", marks),
+                                  names).fetchone()
             elif "id" in notes and "path" in notes:
-                row = con.execute("SELECT notes_fts.body FROM notes_fts JOIN notes ON notes.id = notes_fts.rowid "
-                                  "WHERE notes.path IN (%s)" % marks, names).fetchone()
+                row = con.execute("SELECT notes_fts.body%s FROM notes_fts JOIN notes ON notes.id = notes_fts.rowid "
+                                  "WHERE notes.path IN (%s)" % (more, marks), names).fetchone()
             else:
                 row = None
         except sqlite3.Error:
@@ -1451,8 +1458,22 @@ def _local_body(sctx, path, found):
         finally:
             con.close()
         if row and isinstance(row[0], str) and row[0].strip():
-            return src["id"], row[0]
+            got = dict(zip(cols, row[1:]))
+            return src["id"], row[0], {"type": got.get("type"), "fm": _fm(got.get(fmc)) if fmc else {}}
     return None
+
+
+def _local_meta(path, local, mtime=None):
+    """note_meta of a local index's text of a note, with what the index's row says that the text may not (§10 keeps
+    the frontmatter apart from the body): its type, its date, and whether it is sensitive (since v3.17.0)."""
+    meta = ci.note_meta(path, local[1], mtime=mtime)
+    row = local[2] if len(local) > 2 else {}
+    fm = row.get("fm") or {}
+    rtype = (_text_or_none(row.get("type")) or ci._text(fm.get("type")) or "").lower()
+    meta["type"] = meta["type"] or rtype
+    meta["sensitive"] = bool(meta["sensitive"] or ci.sensitive_of(fm) or rtype in ci.PEOPLE_TYPES)
+    meta["date"] = _first_date(fm, ci.DATE_KEYS) or meta["date"]
+    return meta
 
 
 def _after(body, heading):
@@ -1780,7 +1801,7 @@ def _note_of(sctx, path):
                 _section_of(body, ""))
     local = _local_body(sctx, path, found or os.path.join((sctx.get("vaults") or [""])[0], *path.split("/")))
     if local:
-        meta = ci.note_meta(path, local[1], mtime=mtime)
+        meta = _local_meta(path, local, mtime=mtime)
         return (_root_source(sctx, path) or "vault", meta.get("date"), _marks(meta),
                 ICLOUD_LOCAL % local[0] if dataless else None, ci.split_sections(local[1]), _section_of(local[1], ""))
     if found and dataless:

@@ -1210,7 +1210,7 @@ check("…not a generic field, an empty Step-P field, `sensitive: false`, nothin
       and not so({"d_type": ""}) and not so({"signals": []}) and not so({"d_type": None}) and not so({}), so)
 check("…PEOPLE_TYPES and STEP_P_FIELDS as the plan names them (C1)",
       getattr(ctx_index, "PEOPLE_TYPES", None) == frozenset(("people", "person", "one-on-one-notes", "performance-review",
-                                                            "offboarding-plan"))
+                                                            "offboarding-plan", "delegation-audit", "followup-arcv"))
       and getattr(ctx_index, "STEP_P_FIELDS", None) == ("d_type", "d_history", "recommended_style", "signals", "one_on_one",
                                                        "gtd_index", "forecast_qa", "delegation", "active_goal_letter"))
 check("v3.17.0 Q2: note_meta of a `type: person` card without `sensitive` is sensitive",
@@ -1291,6 +1291,73 @@ with tempfile.TemporaryDirectory() as d:
     bea = next((n for n in idx.notes() if n["path"] == "ZorgCore/People/bea-two.md"), None)
     check("v3.17.0 C7: a row of a people type is sensitive as it is read, whatever its column says (an older index, an "
           "evicted file)", bea is not None and bea["sensitive"] is True, bea)
+
+# --- v3.17.0 Task 1 review fixes
+check("v3.17.0 review M1: null-like and empty values are not filled — `~`, `null`, `false`, a comment, `[\"\"]`, `{a: \"\"}`",
+      not any(ctx_index.sensitive_of(fm) for fm in ({"d_type": "~"}, {"d_type": "null"}, {"signals": "false"},
+                                                    {"signals": False}, {"d_type": "# none yet"}, {"signals": [""]},
+                                                    {"signals": {"risks": ""}}))
+      and ctx_index.sensitive_of({"gtd_index": 0}) and ctx_index.sensitive_of({"signals": {"risks": ["churn"]}}))
+check("v3.17.0 review M2: a list-valued type (`type: [person]`) is a people type",
+      ctx_index.sensitive_of({"type": ["note", "person"]}) and not ctx_index.sensitive_of({"type": ["note"]}))
+check("v3.17.0 delegation-audit and followup-arcv are People-contour types too (review, declined list)",
+      {"delegation-audit", "followup-arcv"} <= set(ctx_index.PEOPLE_TYPES))
+PROFILE = ("---\nname: \"Zorg One\"\nrole: \"Analyst\"\nupdated: 2026-07-01\nsignals:\n  motivation: \"growth\"\n  risks: []\n"
+           "one_on_one:\n  cadence: biweekly\n  last: 2026-07-07\n---\n"
+           "# Zorg One\n\nA profile.\n")
+check("v3.17.0 review I3: a profile with no type whose `signals:` and `one_on_one:` are maps, as the schema writes them, "
+      "is sensitive", ctx_index.note_meta("Notes/People/zorg-one.md", PROFILE)["sensitive"] is True)
+check("…and with a history list under `one_on_one:` the map is still read as one",
+      ctx_index.note_meta("Notes/People/zorg-one.md", PROFILE.replace("  last: 2026-07-07\n", "  last: 2026-07-07\n  history:\n"
+                                                                   "    - { date: 2026-07-07, note: \"x\" }\n"))["sensitive"] is True)
+check("…a Step-P field one level down (`reporting: forecast_qa`) too; `reporting: cadence` alone is not",
+      ctx_index.note_meta("Notes/x.md", "---\ntype: note\nreporting:\n  cadence: weekly\n  forecast_qa: 92\n---\n# X\n")["sensitive"]
+      is True and ctx_index.note_meta("Notes/y.md", "---\ntype: note\nreporting:\n  cadence: weekly\n---\n# Y\n")["sensitive"]
+      is False)
+m_ = ctx_index.note_meta("Notes/z.md", "---\ntitle:\n  en: Mapped\ntype: note\ntags:\n  - a\n---\n# Real title\n")
+check("…a mapped value never becomes text: a `title:` map leaves the H1 as the title, a tag list still reads",
+      m_["title"] == "Real title" and m_["type"] == "note" and m_["tags"] == ["a"], m_)
+
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = coach_env(d)
+    state = json.loads(read(env.index, "index.json"))
+    state["queue"] = [["f", scope[0][0]["path"], env.note("Notes/Inbox.md"), "Notes/Inbox.md"]]   # an older build's walk, unfinished
+    write(os.path.join(env.index, "index.json"), json.dumps(state))
+    idx.refresh(*scope)
+    sens, ver = coach_row(idx)
+    check("v3.17.0 review I1: an older build's unfinished queue does not finish the re-read — a new walk reads every "
+          "file, then the version", sens == (1,) and ver == (str(ctx_index.META_VERSION),), (sens, ver))
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = coach_env(d)
+    real_dataless = ctx_index.is_dataless
+    ctx_index.is_dataless = lambda p_: str(p_).endswith("Coaching notes.md")
+    try:
+        idx.refresh(*scope)
+    finally:
+        ctx_index.is_dataless = real_dataless
+    idx.refresh(*scope)                                   # the file came down, its mtime and size as they were
+    sens, ver = coach_row(idx)
+    check("v3.17.0 review I2: a file evicted during the re-read gets its mark once it comes down unchanged",
+          sens == (1,) and ver == (str(ctx_index.META_VERSION),), (sens, ver))
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = coach_env(d)
+    r = idx.refresh(*scope, budget=0)
+    _, ver0 = coach_row(idx)
+    idx.refresh(*scope)
+    sens, ver = coach_row(idx)
+    check("v3.17.0 review M3: a re-read walk the budget stopped writes no version; the walk that ends writes it",
+          r["pending"] > 0 and ver0 is None and sens == (1,) and ver == (str(ctx_index.META_VERSION),), (r, ver0, sens, ver))
+for stored, rereads in (("3", False), ("x", True)):
+    with tempfile.TemporaryDirectory() as d:
+        env, idx, scope = coach_env(d)
+        con = sqlite3.connect(idx.db_path)
+        con.execute("INSERT INTO meta(key, value) VALUES ('meta_version', ?)", (stored,))
+        con.commit()
+        con.close()
+        _, opened = counting_refresh(env, idx, scope)
+        check("v3.17.0 review M3: `meta_version` %s — %s" % (stored, "a later build's: nothing read again" if not rereads
+                                                           else "unreadable: read as 1, every file read again"),
+              bool(opened) is rereads, len(opened))
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

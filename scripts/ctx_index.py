@@ -67,12 +67,14 @@ _READ_ONE = ("import signal, sys; getattr(signal, 'alarm', int)(int(sys.argv[2])
 DB_NAME, STATE_NAME, LOCK_NAME = "sections.sqlite", "index.json", "index.lock"
 BM25 = (10.0, 6.0, 4.0, 4.0, 1.0)   # title, heading, tags, aliases, body
 HUB_TYPES = frozenset(("glossary", "moc", "people", "person", "focus-brief", "daily-summary"))
-PEOPLE_TYPES = frozenset(("people", "person", "one-on-one-notes", "performance-review", "offboarding-plan"))
+PEOPLE_TYPES = frozenset(("people", "person", "one-on-one-notes", "performance-review", "offboarding-plan",
+                          "delegation-audit", "followup-arcv"))
                                     # data-policy.md (Search, rule 1): taken only by the People contour (v3.17.0)
 STEP_P_FIELDS = ("d_type", "d_history", "recommended_style", "signals", "one_on_one", "gtd_index", "forecast_qa",
                  "delegation", "active_goal_letter")   # a person profile's judgement (people-context-protocol.md)
 HUB_TITLE = re.compile(r"style guide|глосарій|glossary|абревіатури", re.I)
 TRUE = ("true", "yes", "1")
+NULLISH = ("", "~", "null", "none", "false")   # a frontmatter value that says nothing
 DATE_KEYS = ("updated", "modified", "snapshot", "generated", "date", "created")
 TTL_DATE_KEYS = ("updated", "snapshot", "generated")   # the note's own date a class TTL is counted from (provider protocol §6)
 COMMIT_EVERY = 50                   # files written between two commits of a refresh
@@ -295,7 +297,9 @@ def _fm_value(v):
 def _read_frontmatter(lines):
     """{key (lower case): text | [texts]} of the frontmatter lines, or None when they are not YAML this reader trusts:
     a tab in the indentation, or a line at the margin that is neither `key: value` nor an item `- x` of the list a key
-    with no value opened (`tags:` then `- a` at the margin is how PyYAML writes a list). A nested mapping is not read."""
+    with no value opened (`tags:` then `- a` at the margin is how PyYAML writes a list). Since v3.17.0 the indented
+    `sub: value` lines under a key with no value are read as one map {sub: value} (a deeper level joins it; a list
+    inside the map is left out) — a person profile writes `signals:` and `one_on_one:` so."""
     data, cur = {}, None
     for raw in lines:
         raw = raw.rstrip("\r")
@@ -306,6 +310,8 @@ def _read_frontmatter(lines):
             return None
         item = raw.strip()
         if cur is not None and (item == "-" or item.startswith("- ")):
+            if isinstance(data.get(cur), dict):      # a list inside the map: not read
+                continue
             v = _fm_value(item[1:])
             if not isinstance(data.get(cur), list):
                 data[cur] = []
@@ -319,6 +325,13 @@ def _read_frontmatter(lines):
             key, val = m.group(1).strip().lower(), (m.group(2) or "").strip()
             data[key] = _fm_value(val) if val else ""
             cur = None if val else key
+        elif cur is not None and not (isinstance(data.get(cur), list) and data[cur]):
+            m = _FM_KEY.match(item)
+            if m:
+                if not isinstance(data.get(cur), dict):
+                    data[cur] = {}
+                sub, sval = m.group(1).strip().lower(), (m.group(2) or "").strip()
+                data[cur][sub] = _fm_value(sval) if sval else ""
     return data
 
 
@@ -438,24 +451,33 @@ def split_sections(text):
 
 
 def _text(v):
-    """A frontmatter value as one line of text ('' for nothing or a list)."""
-    return "" if v is None or isinstance(v, list) else N(str(v)).strip()
+    """A frontmatter value as one line of text ('' for nothing, a list or a map)."""
+    return "" if v is None or isinstance(v, (list, dict)) else N(str(v)).strip()
 
 
 def _filled(v):
-    """Does a frontmatter value say something — not None, not blank, not an empty list or map?"""
-    if v is None or (isinstance(v, (list, dict)) and not v):
+    """Does a frontmatter value say something? Not None or false, not blank, `~`, `null`, `none`, `false` or a
+    comment, and not a list or a map of such values only."""
+    if v is None or v is False:
         return False
-    return bool(N(str(v)).strip()) if isinstance(v, str) else True
+    if isinstance(v, (list, dict)):
+        return any(_filled(x) for x in (v.values() if isinstance(v, dict) else v))
+    if isinstance(v, str):
+        t = N(v).strip()
+        return bool(t) and t.lower() not in NULLISH and not t.startswith("#")
+    return True
 
 
 def sensitive_of(fm):
     """Is a note sensitive by what its frontmatter says (since v3.17.0)? `sensitive: yes`, a people type (PEOPLE_TYPES,
-    any case), or a person profile's judgement field (STEP_P_FIELDS) with a value — whatever `sensitive` says then."""
+    any case, one of a list of types too), or a person profile's judgement field (STEP_P_FIELDS) with a value, at the
+    top or one map down (`reporting: forecast_qa`) — whatever `sensitive` says then."""
     fm = fm if isinstance(fm, dict) else {}
-    if _text(fm.get("sensitive")).lower() in TRUE or _text(fm.get("type")).lower() in PEOPLE_TYPES:
+    types = fm.get("type") if isinstance(fm.get("type"), list) else [fm.get("type")]
+    if _text(fm.get("sensitive")).lower() in TRUE or any(_text(t).lower() in PEOPLE_TYPES for t in types):
         return True
-    return any(_filled(fm.get(k)) for k in STEP_P_FIELDS)
+    maps = [fm] + [v for v in fm.values() if isinstance(v, dict)]
+    return any(_filled(m.get(k)) for m in maps for k in STEP_P_FIELDS)
 
 
 def _items(v, tags=False):
@@ -909,11 +931,14 @@ class Index:
                 self._set_aside(broken=False)
             con, rebuilt = self._open_rw()
             res["rebuilt"] = rebuilt or fresh
+            stale = False
             try:
                 self._near_again(con)
-                files, sections, queue, when = self._walk(con, roots, store_rel, blocks_rels, deadline, res,
-                                                          None if res["rebuilt"] else self._state().get("queue"),
-                                                          reread=self._meta_stale(con))
+                stale = self._meta_stale(con)
+                state = {} if res["rebuilt"] else self._state()
+                saved = state.get("queue") if not stale or state.get("reread") == META_VERSION else None
+                files, sections, queue, when = self._walk(con, roots, store_rel, blocks_rels, deadline, res, saved,
+                                                          reread=stale)   # an older build's queue: a new walk
             except sqlite3.DatabaseError as e:      # damage the open checks did not see: put it aside, walk once more
                 con.close()
                 if _busy(e):
@@ -921,11 +946,13 @@ class Index:
                 self._set_aside(broken=True)
                 res.update({k: 0 for k in COUNTS}, rebuilt=True)
                 con = self._create()
+                stale = False
                 files, sections, queue, when = self._walk(con, roots, store_rel, blocks_rels, deadline, res, None)
             finally:
                 con.close()
             self._save_state({"schema": SCHEMA, "updated": when, "files": files, "sections": sections,
-                              "skipped_dataless": res["skipped_dataless"], "pending": res["pending"], "queue": queue})
+                              "skipped_dataless": res["skipped_dataless"], "pending": res["pending"], "queue": queue,
+                              "reread": META_VERSION if stale else None})
         finally:
             self._drop_lock()
         return res
@@ -1259,6 +1286,10 @@ class _Walk:
             return
         if is_dataless(path):
             self.res["skipped_dataless"] += 1
+            row = self.rows.get(rel)
+            if self.reread and row:                  # read once it comes down, its mtime as it was (v3.17.0)
+                self.con.execute("UPDATE notes SET mtime=-1 WHERE id=?", (row["id"],))
+                row["mtime"] = -1.0
             return
         if info.st_size > MAX_BYTES:
             self.res["skipped_large"] += 1
@@ -1274,11 +1305,10 @@ class _Walk:
         except OSError:
             return
         digest = hashlib.sha1(data).hexdigest()
-        if row and row["hash"] == digest:            # touched, not changed
-            if self.reread:                          # this build's rules of note_meta: the columns they changed (v3.17.0)
-                meta = note_meta(rel, data.decode("utf-8", errors="replace").replace("\r\n", "\n"), mtime=info.st_mtime)
-                self.con.execute("UPDATE notes SET sensitive=? WHERE id=?", (int(meta["sensitive"]), row["id"]))
-            self.con.execute("UPDATE notes SET mtime=?, size=? WHERE id=?", (info.st_mtime, info.st_size, row["id"]))
+        if row and row["hash"] == digest:            # touched, not changed: the columns this build's rules of
+            meta = note_meta(rel, data.decode("utf-8", errors="replace").replace("\r\n", "\n"), mtime=info.st_mtime)
+            self.con.execute("UPDATE notes SET sensitive=?, mtime=?, size=? WHERE id=?",   # note_meta changed (v3.17.0)
+                             (int(meta["sensitive"]), info.st_mtime, info.st_size, row["id"]))
             row.update(mtime=info.st_mtime, size=info.st_size)
             return
         text = data.decode("utf-8", errors="replace").replace("\r\n", "\n")

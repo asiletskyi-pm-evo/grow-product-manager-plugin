@@ -2503,5 +2503,58 @@ with tempfile.TemporaryDirectory() as d:
     check("v3.17.0 Q2: a server's hit of a people type (`type: Person`) is sensitive before --get; another type is "
           "not known yet", got.get("@zorg-growth/Bea card.md") is True and got.get("@zorg-growth/Pricing.md") is None, got)
 
+# --- v3.17.0 Task 1 review fixes
+for form in ("wild", "s10"):
+    with tempfile.TemporaryDirectory() as d:
+        env = Env(d)
+        write(env.note("Growth/Bea profile.md"), "---\ntype: note\nupdated: 2026-07-03\n---\n# Bea profile\n\n"
+              "Quokkaplan coaching of the cart funnel.\n")
+        build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/Bea profile.md"], form=form)
+        con = sqlite3.connect(env.brain)
+        col = "fm_json" if form == "wild" else "frontmatter_json"
+        con.execute("UPDATE notes SET %s = ?, type = 'person' WHERE path = 'Growth/Bea profile.md'" % col,
+                    (json.dumps({"type": "person", "d_type": "D2", "updated": "2026-07-03"}),))
+        if form == "s10":
+            nid = con.execute("SELECT id FROM notes WHERE path = 'Growth/Bea profile.md'").fetchone()[0]
+            con.execute("UPDATE notes_fts SET body = ? WHERE rowid = ?",
+                        ("# Bea profile\n\nQuokkaplan coaching of the cart funnel.\n", nid))    # §10 keeps no frontmatter
+        else:
+            con.execute("UPDATE notes_fts SET body = ? WHERE path = 'Growth/Bea profile.md'",
+                        ("# Bea profile\n\nQuokkaplan coaching of the cart funnel.\n",))
+        con.commit()
+        con.close()
+        sx = env.sctx()
+        real_dataless = ci.is_dataless
+        ci.is_dataless = lambda p_: str(p_).endswith("Bea profile.md")      # evicted: --get serves the index's body
+        try:
+            heads = []
+            for arg in ("Growth/Bea profile.md", "Bea profile"):
+                try:
+                    heads.append(cs_.get(sx, arg)[0])
+                except cs_.GetError as e:
+                    heads.append("GetError %s" % e)
+            cs_.save_last(env.home, {"ffffffffff": {"source": "zorg-brain", "path": "Growth/Bea profile.md", "heading": "",
+                                                    "kind": "local", "title": "Bea profile", "date": "2026-07-03"}})
+            heads.append(cs_.get(sx, "ffffffffff")[0])
+        finally:
+            ci.is_dataless = real_dataless
+        check("v3.17.0 review I4 (%s): --get by path, name and id of an evicted note a local index serves says ` · sensitive` "
+              "and its type from the index's frontmatter, dated by it" % form,
+              all(" · sensitive" in h and h.rstrip("]").endswith("person") and "2026-07-03" in h for h in heads), heads)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(env.note("Growth/Coach log.md"), "---\ntype: note\nupdated: 2026-07-05\n---\n# Coach log\n\nQuokkaplan coaching.\n")
+    build_brain(env.brain, env.vault, BRAIN_NOTES + ["Growth/Coach log.md"])
+    con = sqlite3.connect(env.brain)
+    con.execute("UPDATE notes SET fm_json = ? WHERE path = 'Growth/Coach log.md'",
+                (json.dumps({"type": "note", "d_type": "D2", "updated": "2026-07-05"}),))
+    con.commit()
+    con.close()
+    sx = env.sctx()
+    lists, _ = cs_.gather(sx, ["Quokkaplan"], cs_.sources(env.text, sx["repos"], which=("local",)), deadline())
+    hit_ = next((h for k, l in lists.items() for h in l if h["path"] == "Growth/Coach log.md"), None)
+    check("v3.17.0 review M3: a local-index hit whose frontmatter JSON has a Step-P field (and no people type) is sensitive",
+          hit_ is not None and hit_.get("sensitive") is True, hit_)
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)
