@@ -44,6 +44,7 @@ MINOR: a new command (`/find`), a new protocol section (search-protocol §13), `
   - recording or revisiting a decision → decision-log; what was decided → §13, which reads the decision records and the meeting notes alike;
   - a person by identity only: name, e-mail, team and role from the card's frontmatter, and its path;
   - the description is re-cut so that the guards against decision-log, product-analysis and the source library fit the 190 characters Codex shows.
+- **`knowledge-library` 0.9.2:** its description now leads with «які джерела маємо» and «додай у бібліотеку». Before, these sat past the 190 characters Codex shows, so «які джерела маємо по чекауту» (T13) went to the navigator there.
 - **The engine marks `sensitive` itself (Q2).** A note is sensitive when it has:
   - `sensitive: true`;
   - a people type: `people`, `person`, `one-on-one-notes`, `one-on-one`, `performance-review`, `offboarding-plan`, `delegation-audit`, `followup-arcv`;

@@ -367,7 +367,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 11. Knowledge Library (v0.9.1)
+### 11. Knowledge Library (v0.9.2)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
@@ -639,7 +639,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.18.1 | Process meetings and extract action items |
 | Plugin Configurator | v2.15.2 | Configure plugin for your organization |
-| Knowledge Library | v0.9.1 | Manage curated knowledge sources |
+| Knowledge Library | v0.9.2 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Product Reporter | v0.10.1 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |

@@ -1,7 +1,7 @@
 ---
 name: context-navigator
 version: 0.3.0
-description: Answer and search your context — notes, cores, local indexes. Not decisions (decision-log), dashboards (product-analysis), the source library «які джерела маємо» (knowledge-library). UA — «знайди в моєму контексті», «що в мене є про…», «хто за що відповідає», «де описане правило»; with source and date, live sources on request.
+description: Answer and search your context — notes, cores, local indexes. Not decisions (decision-log), dashboards (product-analysis), curated sources (knowledge-library). UA — «знайди в моєму контексті», «що в мене є про…», «хто за що відповідає», «де описане правило»; with source and date, live sources on request.
 ---
 
 # Context Navigator
