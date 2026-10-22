@@ -1292,6 +1292,17 @@ class Index:
             out.append(d)
         return out
 
+    def identity_paths(self):
+        """The paths of the notes whose identity row is fresh — card or not (v3.18.0): a note the index holds whose
+        identity it has not read yet (iCloud evicted it before a walk of this build) is not among them, so a local
+        index may give its card meanwhile. `problem` as for `query`."""
+        def read(con):
+            if not self._has_entities(con):
+                return []
+            return con.execute("SELECT n.path FROM notes n %s" % self._FRESH).fetchall()
+
+        return {N(r[0] or "") for r in self._read(read, [])}
+
     def _with_note(self, sql, args):
         def read(con):
             if not self._has_entities(con):

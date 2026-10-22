@@ -4,7 +4,7 @@
 The fictional Zorg vault of testing/fixtures/entity/ (the plugin folder Notes/, the core ZorgCore/ registered as zorg-core)
 is copied to a temp dir, with a local index of the user's (zorg-brain, the shape seen in the wild) built beside it: the
 three keys of a merge — your answer, the e-mail, a bridge by shape —, the pairs that only look alike, the memory of
-your answers, a Growth team that is related or the same, a work item with two homes, the link resolver and the order a
+your answers, a partner team that is related or the same, a work item with two homes, the link resolver and the order a
 request is looked up in. Stdlib only; run from the repo root:
 
   env -u GROW_PM_CONTEXT_PATH -u GROW_PM_PROVIDER_PATHS python3 testing/ctx_entity_test.py
@@ -41,12 +41,13 @@ def write(path, text):
     open(path, "w", encoding="utf-8", newline="").write(text)
 
 
-LOCAL_NOTES = (   # path, type, frontmatter — the user's own local index holds Growth, which the plugin's index does not
-    ("Growth/People/bea-g.md", "person", {"type": "person", "email": "bea.two@zorg.example", "team": "Growth"}),
-    ("Growth/Team/Alpha squad.md", "team", {"type": "team", "name": "Alpha squad",
+LOCAL_NOTES = (   # path, type, frontmatter — the user's own local index holds partner, which the plugin's index does not
+    ("Partner/People/bea-g.md", "person", {"type": "person", "email": "bea.two@zorg.example", "team": "partner"}),
+    ("Partner/Team/Alpha squad.md", "team", {"type": "team", "name": "Alpha squad",
                                             "core_team": "[[ZorgCore/Teams/team-alpha]]"}),
-    ("Growth/Team/Team Alpha.md", "team", {"type": "team", "core_team": "[[ZorgCore/Teams/team-alpha]]"}),
-    ("Growth/Notes/plan.md", "note", {"type": "note"}),
+    ("Partner/Team/Team Alpha.md", "team", {"type": "team", "core_team": "[[ZorgCore/Teams/team-alpha]]"}),
+    ("Partner/Notes/plan.md", "note", {"type": "note"}),
+    ("Notes/People/cy.md", "person", {"type": "person", "team": "team-alpha"}),   # a note of yours it also holds
 )
 
 
@@ -119,7 +120,7 @@ if ce is None:
     print("RESULT: RED ❌")
     sys.exit(1)
 
-BEA_CORE, BEA_OWN, BEA_G = "ZorgCore/People/bea-two.md", "Notes/People/bea.md", "Growth/People/bea-g.md"
+BEA_CORE, BEA_OWN, BEA_G = "ZorgCore/People/bea-two.md", "Notes/People/bea.md", "Partner/People/bea-g.md"
 CY_OWN, CY_CORE = "Notes/People/cy.md", "ZorgCore/People/cy-three.md"
 DEE_OWN, DEE_CORE = "Notes/People/dee.md", "ZorgCore/People/dee-real.md"
 NAMESAKES = ("ZorgCore/People/cy-namesake.md", "ZorgCore/People/cy-namesake-2.md")
@@ -130,10 +131,10 @@ with tempfile.TemporaryDirectory() as d:
     env = Env(d)
     reg, notes = env.registry()
     bea = reg.of(BEA_CORE)
-    check("v3.18.0 e-mail: Bea of your layer, of the core and of Growth (the local index) is one entity of three cards, "
+    check("v3.18.0 e-mail: Bea of your layer, of the core and of partner (the local index) is one entity of three cards, "
           "its id the core's card", ent(reg, BEA_CORE) == {BEA_CORE, BEA_OWN, BEA_G} and bea["id"] == BEA_CORE
           and bea["kind"] == "person", (ent(reg, BEA_CORE), bea and bea["id"]))
-    check("…the Growth card carries the local index as its source",
+    check("…the partner card carries the local index as its source",
           any(c["path"] == BEA_G and c["source"] == "zorg-brain" for c in bea["cards"]), bea["cards"])
     check("v3.18.0 bridge by shape needs corroboration: Dee's `home_card` points at Bea's card (other name, no e-mail) — "
           "Dee stays apart", DEE_OWN not in ent(reg, BEA_CORE) and ent(reg, DEE_OWN) == {DEE_OWN}, ent(reg, DEE_OWN))
@@ -152,11 +153,11 @@ with tempfile.TemporaryDirectory() as d:
           and any(c["path"] == CY_OWN for c in reg.of(CY_CORE)["maybe"]), sorted(map(sorted, pairs)))
     check("…never a pair inside one source (the namesakes) nor one already merged",
           frozenset(NAMESAKES) not in pairs and frozenset((BEA_OWN, BEA_CORE)) not in pairs, sorted(map(sorted, pairs)))
-    check("v3.18.0 Q1: Growth's «Team Alpha» links to the core's team and its name is the team's alias — one entity",
-          "Growth/Team/Team Alpha.md" in ent(reg, ALPHA), ent(reg, ALPHA))
-    squad = reg.of("Growth/Team/Alpha squad.md")
+    check("v3.18.0 Q1: a partner team's «Team Alpha» links to the core's team and its name is the team's alias — one entity",
+          "Partner/Team/Team Alpha.md" in ent(reg, ALPHA), ent(reg, ALPHA))
+    squad = reg.of("Partner/Team/Alpha squad.md")
     check("…«Alpha squad» links to it under another name — an entity of its own, related to the core's team",
-          squad is not None and ent(reg, "Growth/Team/Alpha squad.md") == {"Growth/Team/Alpha squad.md"}
+          squad is not None and ent(reg, "Partner/Team/Alpha squad.md") == {"Partner/Team/Alpha squad.md"}
           and any(c["path"] == ALPHA for c in squad["related"]), squad)
     epic = reg.of(EPIC)
     check("v3.18.0 C7: the epic and the core page its `core_page` names (the same key in its name) are one work entity "
@@ -165,7 +166,7 @@ with tempfile.TemporaryDirectory() as d:
           and ent(reg, EPIC) == {EPIC, SPEC} and DESIGN not in ent(reg, EPIC), (epic and epic["key"], ent(reg, EPIC)))
     check("…the feature whose `epic:` names the key is a work entity of its own",
           ent(reg, "Notes/Features/Fast cart.md") == {"Notes/Features/Fast cart.md"}, ent(reg, "Notes/Features/Fast cart.md"))
-    check("…a local index note that is no card is no entity", reg.of("Growth/Notes/plan.md") is None)
+    check("…a local index note that is no card is no entity", reg.of("Partner/Notes/plan.md") is None)
     check("v3.18.0 known prefixes: a team's `jira`, a mission's `jira_projects`, a work card's key",
           {"PROJ", "QQ"} <= ce.known_prefixes([c for e in reg.entities for c in e["cards"]]),
           ce.known_prefixes([c for e in reg.entities for c in e["cards"]]))
@@ -264,7 +265,7 @@ with tempfile.TemporaryDirectory() as d:
           and "D3" not in out and "growth plan" not in out and "Action items" not in out, out[-900:])
     check("…the identity: e-mail, team, role (each once), the cards with their source",
           "bea.two@zorg.example" in out and "Data analyst" in out and "zorg-core · ZorgCore/People/bea-two.md" in out
-          and "zorg-brain · Growth/People/bea-g.md" in out, out[-900:])
+          and "zorg-brain · Partner/People/bea-g.md" in out, out[-900:])
     rc, out, res = env.cli("entity", "bea.two@zorg.example", "--skill", "one-on-one", "--json")
     items = ((res or {}).get("entities") or [{}])[0].get("backlinks", {}).get("items") or []
     one = [i for i in items if i["path"] == "Notes/Meetings/1-1 Bea 2026-10-01.md"]
@@ -300,8 +301,8 @@ with tempfile.TemporaryDirectory() as d:
           rc == 0 and len((res or {}).get("entities") or []) == 2 and out2.count('— ctx entity "ZorgCore/People/cy-namesake') == 2,
           out2[-400:])
     rc, out, _ = env.cli("entity", "Alpha")
-    check("v3.18.0 a team: «пов'язана з» the Growth squad linked under another name", rc == 0
-          and "пов'язана з: Alpha squad — Growth/Team/Alpha squad.md" in out, out[-600:])
+    check("v3.18.0 a team: «пов'язана з» the partner squad linked under another name", rc == 0
+          and "пов'язана з: Alpha squad — Partner/Team/Alpha squad.md" in out, out[-600:])
 
     before = tree(env.vault, os.path.join(env.home, ".grow-pm"))
     rc, out, res = env.cli("entity", "pairs", "--json")
@@ -390,7 +391,7 @@ with tempfile.TemporaryDirectory() as d:
     check("v3.18.0 review I4 (Task 2): a bare name is never the plugin folder's guess — two notes `ann` are two, as --get "
           "says; the bridge of `[[ann]]` merges nothing", r.resolve("ann") == ["Notes/ann.md", "ZorgCore/ann.md"]
           and ent(reg, "Notes/ann.md") == {"Notes/ann.md"}, (r.resolve("ann"), ent(reg, "Notes/ann.md")))
-    rl = ce.Resolver({"Notes/x.md": {"title": "x", "source": "own"}, "Growth/x.md": {"title": "x", "source": "zorg-brain",
+    rl = ce.Resolver({"Notes/x.md": {"title": "x", "source": "own"}, "Partner/x.md": {"title": "x", "source": "zorg-brain",
                                                                                      "origin": "local"}}, ["Notes"])
     check("…and a name the own index holds once wins over a local index's note of that name, as --get prefers",
           rl.resolve("x") == "Notes/x.md", rl.resolve("x"))
@@ -483,6 +484,56 @@ with tempfile.TemporaryDirectory() as d:
         ci.Index.cards = real_cards
     check("v3.18.0 review I2 (Task 3): an index busy when its cards are read has not answered — `read` False (exit 5), "
           "never «Не знаю»", res["read"] is False and any(ci.BUSY_NOTE in n for n in res["notes"]), (res["read"], res["notes"]))
+
+
+# --- v3.18.0 final review fixes
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(os.path.join(env.vault, "Notes", "People", "eve.md"), "---\ntype: person\nemail: eve@zorg.example\n---\n# Eve Same\n")
+    write(os.path.join(env.vault, "ZorgCore", "People", "eve.md"), "---\ntype: people\nemail: eve@zorg.example\n---\n# Eve Same\n")
+    write(os.path.join(env.vault, "ZorgCore", "People", "eve-namesake.md"), "---\ntype: people\n---\n# Eve Same\n")
+    env.idx.refresh(env.sctx["roots"], env.sctx["store_rel"], env.sctx["blocks_rels"])
+    out = ce.render(ce.run(env.sctx, "eve@zorg.example"))
+    check("v3.18.0 final I1: the «maybe the same» line names the two cards that paired, so its command closes the pair",
+          'ctx entity same|not-same "Notes/People/eve.md" "ZorgCore/People/eve-namesake.md"' in out, out)
+    env.cli("migrate", "--apply")
+    env.cli("entity", "not-same", "Notes/People/eve.md", "ZorgCore/People/eve-namesake.md")
+    rc, out2, _ = env.cli("entity", "eve@zorg.example")
+    check("…and once answered, the pair is gone", "можливо той самий" not in out2, out2[-400:])
+    res = ce.run(env.sctx, "Two Bea")
+    check("v3.18.0 final I2: a near match says so before the entity — «схоже на «…» — не точний збіг»",
+          ce.render(res).startswith("схоже на «Two Bea» — не точний збіг:"), ce.render(res)[:200])
+    real_cards = ci.Index.cards
+
+    def busy(self):
+        self.problem = ci.BUSY_NOTE
+        return []
+    ci.Index.cards = busy
+    try:
+        res = ce.run(env.sctx, "Nobody Here")
+    finally:
+        ci.Index.cards = real_cards
+    check("v3.18.0 final M2 (re-graded): the own index busy, a local index answering — «Поки не знаю … індекс пошуку "
+          "зайнятий», never the bare «Не знаю»", "Поки не знаю «Nobody Here» — " + ci.BUSY_NOTE in ce.render(res)
+          and "Не знаю такої сутності" not in ce.render(res), ce.render(res))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    con = sqlite3.connect(env.idx.db_path)
+    for tb in ("ents", "links", "mentions"):
+        con.execute("DROP TABLE %s" % tb)
+    con.execute("UPDATE meta SET value = '2' WHERE key = 'meta_version'")
+    con.commit()
+    con.close()
+    real = ci.is_dataless
+    ci.is_dataless = lambda p_: str(p_).endswith(os.path.join("Notes", "People", "cy.md"))
+    try:
+        env.idx.refresh(env.sctx["roots"], env.sctx["store_rel"], env.sctx["blocks_rels"])
+    finally:
+        ci.is_dataless = real
+    reg, _ = env.registry()
+    c = next((c for c in (reg.of(CY_OWN) or {}).get("cards", []) if c["path"] == CY_OWN), None)
+    check("v3.18.0 final M1 (re-graded): a card iCloud evicted before its identity was read comes from the local index "
+          "meanwhile", c is not None and c["origin"] == "local", c)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

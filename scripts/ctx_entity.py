@@ -3,7 +3,7 @@
 a local index of yours hold (since v3.18.0).
 
 A card is a note whose type makes it one (ctx_index.ENTITY_KINDS): a person note of your layer, a core's registry card,
-a Growth card a local index of yours holds. The registry joins the cards of one entity by three keys, the strongest
+a card another team keeps that a local index of yours holds. The registry joins the cards of one entity by three keys, the strongest
 first — your answer (`ctx entity same`), the e-mail, a bridge recognised by its shape — and by nothing else: a name or a
 title never merges two cards, it only offers them as «maybe the same» for your answer. `ctx entity not-same` keeps two
 cards apart whatever the keys say. Nothing is written into a note.
@@ -58,6 +58,7 @@ SHOWN = 20                              # the lines of who links to an entity, o
 SEVERAL = 5                             # the entities a request that names several lists, at most
 UNKNOWN = "Не знаю такої сутності: «%s»"
 UNKNOWN_YET = "Поки не знаю «%s» — %s"
+SIMILAR = "схоже на «%s» — не точний збіг:"
 MENTION = "%s — картки немає, згадується в %d нотатках:"
 UNREAD_MEMORY = "пам'ять сутностей не прочитано (%s) — без твоїх відповідей"
 NOT_APPLIED = "твою відповідь same %s ↔ %s від %s не застосовано: %s"
@@ -511,8 +512,8 @@ def build(cards, mem, resolver):
                         continue
                 seen.add(key)
                 pairs.append((by_path[key[0]], by_path[key[1]]))
-                of[a["path"]]["maybe"].append(b)
-                of[b["path"]]["maybe"].append(a)
+                of[a["path"]]["maybe"].append(dict(b, mine=a["path"]))    # `mine`: the card of this entity that paired
+                of[b["path"]]["maybe"].append(dict(a, mine=b["path"]))
     return Registry(entities, of, pairs, resolver, skipped)
 
 
@@ -538,7 +539,7 @@ def load(sctx, idx, mem):
     metas = {}
     for n in idx.notes():
         metas[N(n["path"])] = {"title": n["title"], "source": n["source"], "sensitive": n["sensitive"], "date": n["date"]}
-    local, lnotes = local_cards(sctx, set(metas))
+    local, lnotes = local_cards(sctx, idx.identity_paths())      # a card the own index has not read yet: the local one
     notes.extend(lnotes)
     for c in local:
         metas[c["path"]] = {"title": c["label"], "source": c["source"], "sensitive": c["sensitive"], "date": c["date"],
@@ -640,11 +641,11 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None):
     people = skill in PEOPLE_SKILLS
     found, how = reg.find(query, kind)
     out = {"command": "entity", "query": query, "how": how, "entities": [], "mention": None, "notes": notes,
-           "read": read, "pending": pending}
+           "read": read, "pending": pending, "unread": reg.unread}
     for e in found[:SEVERAL]:
         one = {"id": e["id"], "kind": e["kind"], "label": e["label"], "key": e["key"],
                "cards": [_public_card(c) for c in e["cards"]], "related": [_brief(c) for c in e["related"]],
-               "maybe": [_brief(c) for c in e["maybe"]]}
+               "maybe": [dict(_brief(c), mine=c["mine"]) for c in e["maybe"]]}
         if len(found) == 1:
             one["backlinks"] = backlinks(idx, reg, e, people)
             if idx.problem and idx.problem not in notes:      # a busy index: the lines are missing, and the user is told
@@ -709,6 +710,8 @@ def render(res):
         lines.append("відкритих пар: %d" % res["count"])
         return "\n".join(lines) + "\n"
     ents = res["entities"]
+    if ents and res.get("how") == "similar":           # a near match, never presented as the one asked about (C14)
+        lines.append(SIMILAR % res["query"])
     if res.get("several", len(ents)) > 1:
         lines.append("кілька сутностей «%s»:" % res["query"])
         for e in ents:
@@ -729,7 +732,7 @@ def render(res):
         for r in e["related"]:
             lines.append("  пов'язана з: %s — %s" % (r["label"], r["path"]))
         for m in e["maybe"]:
-            lines.append("  можливо той самий: %s — ctx entity same|not-same \"%s\" \"%s\"" % (m["path"], e["id"], m["path"]))
+            lines.append("  можливо той самий: %s — ctx entity same|not-same \"%s\" \"%s\"" % (m["path"], m["mine"], m["path"]))
         for name, part in (("хто посилається", e["backlinks"]), ("згадки", e["mentions"])):
             if part["count"]:
                 lines.append("  %s (%d):" % (name, part["count"]))
@@ -746,6 +749,8 @@ def render(res):
         return "\n".join(lines) + "\n"
     if res.get("pending"):
         lines.append(UNKNOWN_YET % (res["query"], cs_.PENDING_NOTE % res["pending"]))
+    elif res.get("unread"):                            # the own index did not answer: never the bare «Не знаю»
+        lines.append(UNKNOWN_YET % (res["query"], res["unread"]))
     else:
         lines.append(UNKNOWN % res["query"])
     return "\n".join(lines) + "\n"

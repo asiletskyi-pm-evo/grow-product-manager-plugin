@@ -231,6 +231,7 @@ The user asks the base itself — «знайди в моєму контекст�
   - Without SHELL: the plugin folders and core folders looked through and the providers asked, by name.
 - **Who or what it is (since v3.18.0).** A question about a person, a team, a mission, a module, a metric, a work item or a Jira key — «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X» — first asks `python3 "<plugin root>/scripts/ctx.py" entity "<X>" --skill context-navigator` (`ctx entity "<X>" --skill context-navigator`; `context-protocol.md` §5h):
   - one entity → its lines are the answer: who it is, where its cards are, who links to it, each cited `(<шлях>)`; a line `можливо той самий: …` is shown as it is, with the command it names — the model never answers it for the user;
+  - a near match — its first line `схоже на «…» — не точний збіг:` — is said to be one: «не точний збіг, можливо ти про …»; never answered as the one asked about;
   - several → its list and `уточни, кого саме`; nothing is guessed;
   - a Jira key no card holds → its mentions, as a list;
   - `Не знаю такої сутності: «…»` → §13 as usual with the same request; `Поки не знаю «…» — …` → that line, then §13 as usual;
