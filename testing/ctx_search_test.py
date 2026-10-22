@@ -2661,5 +2661,17 @@ with tempfile.TemporaryDirectory() as d:
         got = {h["path"]: h.get("sensitive") for k, l in lists.items() for h in l}
     check("…a server's hit titled «1:1 — …» is sensitive before --get", got.get("@zorg-growth/Sync.md") is True, got)
 
+# --- v3.17.0 final review fixes in the prose
+NAVc = read(ROOT, "skills", "context-navigator", "SKILL.md")
+check("v3.17.0 final I2: inside the navigator, recording or revisiting a decision goes to decision-log, asking what "
+      "was decided is §13 (decisions in meeting notes too)",
+      "recording a decision, or revisiting one the user names → `decision-log`" in NAVc
+      and "what was decided about something → §13" in NAVc
+      and "the user's own decisions → `decision-log`, with or without a provider" not in NAVc)
+FINDc = read(ROOT, "commands", "find.md")
+check("v3.17.0 final M2: /find — a dash standing alone is part of the request; only `--word` or `—word` is a flag",
+      "A dash standing alone (`—`, `-`) is part of the request" in FINDc
+      and "Any other word that starts with `--` or `—` followed by a letter" in FINDc)
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

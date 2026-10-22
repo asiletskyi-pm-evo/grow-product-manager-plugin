@@ -17,7 +17,7 @@ The words after the command are the request. A flag is one of two exact words st
 - `--list` — the list of notes instead of an answer (§13, the list);
 - `--all` — the session's live sources too, at once (§13, level 2). Typing it answers §8's question about the breadth. A VPN or a login the session lacks, and mail, person profiles or private channels, are still asked about first.
 
-Any other word that starts with `--` or `—` → one line, `Невідомий прапорець: <слово> — /grow-product-manager:find <запит> [--list] [--all]`, and stop. No words besides the flags → `Що шукати? /grow-product-manager:find <запит> [--list] [--all]`, and stop.
+A dash standing alone (`—`, `-`) is part of the request. Any other word that starts with `--` or `—` followed by a letter → one line, `Невідомий прапорець: <слово> — /grow-product-manager:find <запит> [--list] [--all]`, and stop. No words besides the flags → `Що шукати? /grow-product-manager:find <запит> [--list] [--all]`, and stop.
 
 ## Run
 

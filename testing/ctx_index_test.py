@@ -1393,5 +1393,17 @@ with tempfile.TemporaryDirectory() as d:
     row = next((n for n in idx.notes() if "1-1 Zorg-Cy" in n["path"]), None)
     check("…a row of a 1-1 note reads as sensitive whatever its column says", row is not None and row["sensitive"] is True, row)
 
+# --- v3.17.0 final review: the 1-1 names people actually write, and the ones that only look like it
+check("v3.17.0 final I1: a 1-1 at the end of a file name, a plural folder, `1-on-1`, `_`, `1-1: …`",
+      all(ctx_index.one_on_one(p, t) for p, t in (
+          ("Notes/Meetings/2026-10-14 Bea 1-1.md", "Bea — жовтень"),
+          ("Growth/Bea Two — 1-1.md", ""),
+          ("Notes/1-1s/2026-10-01.md", ""), ("Notes/One-on-ones/Bea.md", ""), ("Notes/1on1s/x.md", ""),
+          ("Notes/x.md", "1-on-1 with Bea"), ("Notes/1-1_Bea.md", ""), ("Notes/x.md", "1-1: Bea"))))
+check("…not a ratio or a step: «Split 1:1», «розподіл 1:1», «Крок 1-1», «Step 1-1»",
+      not any(ctx_index.one_on_one(p, t) for p, t in (
+          ("Notes/x.md", "A/B test — Split 1:1"), ("Notes/x.md", "Тест: розподіл 1:1"),
+          ("Notes/Крок 1-1.md", ""), ("Notes/x.md", "Step 1-1 of the rollout"))))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

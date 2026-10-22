@@ -29,7 +29,7 @@ Answering from the graph has no judgment points of its own; a question that asks
 3. **The user's place in it** (with a provider). The focus note and the bundle manifest when present (team, role, bundle size); the Jira write scope from the provider's team block in `local-context.md`.
 
 ## On each question
-**First the form** (`references/search-protocol.md` §13): a request for a fact gets an answer; a request for the notes themselves — «знайди нотатки про…», «що в мене є про…», «де в моїх нотатках…», «покажи нотатки про…», `--list` — gets a list. Then, with a provider, follow its `routing_hints` note when it exists, otherwise this default route, cheapest first. Without a provider every question takes the last row, except the user's own decisions and a person, whose rows hold either way:
+**First the form** (`references/search-protocol.md` §13): a request for a fact gets an answer; a request for the notes themselves — «знайди нотатки про…», «що в мене є про…», «де в моїх нотатках…», «покажи нотатки про…», `--list` — gets a list. Then, with a provider, follow its `routing_hints` note when it exists, otherwise this default route, cheapest first. Without a provider every question takes the last row, except recording or revisiting a decision and a person, whose rows hold either way:
 
 | Question about | Route |
 |---|---|
@@ -37,7 +37,7 @@ Answering from the graph has no judgment points of its own; a question that asks
 | a module, a rule, a process | module card → the page it cites (local copy first, the wiki connector read-only when the page is outside the bundle) |
 | a number | the metric card's fact row → the provider's actuals note → a live source only as the provider's data rules say |
 | a mission or project | mission card → the provider's issue snapshot; live status through the tracker connector, read-only |
-| a decision | the user's own decisions → `decision-log`, with or without a provider; with one, its public decisions note |
+| a decision | recording a decision, or revisiting one the user names → `decision-log`, with or without a provider; what was decided about something → §13 (it finds the decision records and the meeting notes alike), with a provider its public decisions note too |
 | a person | identity only (`references/search-protocol.md` §13): the registry card in `people_dir` → its frontmatter name, e-mail, team and role and the card's path, never its body → their team card; without a provider, §13 finds the card; a profile → `one-on-one` / `performance-review` |
 | a term | the provider's glossary, then the user's own (knowledge library) |
 | anything else, and the user's own notes | §13 — SHELL: `ctx search` (below) → `ctx search --get` on the sections rated «прямо» for an answer, none for a list; without SHELL: §12 — the files on an FS host, `vault_search` → `vault_get_note` on an MCP host (for a list, neither `--get` nor `vault_get_note`). Then `vault_get_links` / `vault_graph_context` (depth 1–2) when the question is relational |

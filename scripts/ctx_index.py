@@ -72,8 +72,12 @@ PEOPLE_TYPES = frozenset(("people", "person", "one-on-one-notes", "performance-r
                                     # data-policy.md (Search, rule 1): taken only by the People contour (v3.17.0)
 STEP_P_FIELDS = ("d_type", "d_history", "recommended_style", "signals", "one_on_one", "gtd_index", "forecast_qa",
                  "delegation", "active_goal_letter")   # a person profile's judgement (people-context-protocol.md)
-ONE_ON_ONE = re.compile(r"(?<![\w.:/-])(?:1\s?[-:]\s?1|1on1|one[- ]on[- ]one)(?![\w.:/]|-\d)", re.I)
-                                    # a 1-1 named in a title or a folder: `1-1 …`, `1:1 …`, `1on1 …`, `1-1-Logs/`
+ONE_ON_ONE = re.compile(r"(?<![^\W_])(?<![.:/-])(?:1\s?[-:]\s?1|1[-\s]?on[-\s]?1|one[-\s_]?on[-\s_]?one)s?"
+                        r"(?![^\W_]|[./]|-\d|:\d)", re.I)
+                                    # a 1-1 named in a title, a folder or a file name: `1-1 …`, `… 1-1`, `1:1 …`,
+                                    # `1-1: …`, `1on1s/`, `1-on-1`, `One-on-ones/`, `1-1_Bea`, `1-1-Logs/`
+NOT_ONE_ON_ONE = re.compile(r"(?:split|спліт|розподіл|ratio|співвідношенн\w*|пропорці\w*|крок|step|етап|пункт|"
+                            r"round|раунд)\W*$", re.I)   # «Split 1:1», «Крок 1-1» — a ratio or a step
 HUB_TITLE = re.compile(r"style guide|глосарій|glossary|абревіатури", re.I)
 TRUE = ("true", "yes", "1")
 NULLISH = ("", "~", "null", "none", "false")   # a frontmatter value that says nothing
@@ -484,9 +488,13 @@ def sensitive_of(fm):
 
 def one_on_one(path, title=""):
     """Is a note a 1-1 by its title or a folder of its path (`1-1 …`, `1:1 …`, `1on1 …`, `1-1-Logs/`, one-on-one),
-    whatever its type (since v3.17.0: 1-1 notes are kept as `meeting` notes too)? Never by a key, a date or a quarter."""
-    parts = [_text(title)] + N(str(path or "")).split("/")
-    return any(ONE_ON_ONE.search(p) for p in parts if p)
+    whatever its type (since v3.17.0: 1-1 notes are kept as `meeting` notes too)? Never by a key, a date, a quarter,
+    a ratio or a step (NOT_ONE_ON_ONE right before it). A file name is matched without its `.md`."""
+    for part in [_text(title)] + N(str(path or "")).split("/"):
+        part = part[:-3] if part.lower().endswith(".md") else part
+        if any(not NOT_ONE_ON_ONE.search(part[:m.start()]) for m in ONE_ON_ONE.finditer(part)):
+            return True
+    return False
 
 
 def _items(v, tags=False):
