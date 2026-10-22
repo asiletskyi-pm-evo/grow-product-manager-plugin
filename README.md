@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.16.2
+**Version:** 3.17.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.17.0** — **«Пошук по контексту»: ask your context directly** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). Ask in your own words — «знайди в моєму контексті…», «що в мене є про…» — or type `/grow-product-manager:find <запит> [--list] [--all]`. `context-navigator` searches every connected context: your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct. It answers with a source and a date for every statement, or lists the notes, and ends with «Де шукав: …». It works with or without a shared core. People notes — `person` cards, profiles, 1-1s — are marked `sensitive` by the engine itself and stay with the People contour; elsewhere a person is named by identity only.
 
 **New in v3.16.2** — **«Пошук», другий патч: nothing swaps in another note silently** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Two cards that differ only by a list of owners no longer fold into one; your remembered pick of a note folded as a twin weighs its survivor, and a «не те» crosses only a fold of the same text; the excluded folders are the same in the index, the search and `--get`; every name a search lists reads back from the source that holds it — a server's note outside its root is `@<repo>/:/…`, a core gone from disk is read through its server; the «нотатка довга» line names exactly the sections `--get` takes back. `ctx search eval` finds a golden note folded as a twin at its survivor's place.
 
@@ -1072,5 +1074,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.16.2  
+**Version:** 3.17.0  
 **Last Updated:** October 2026

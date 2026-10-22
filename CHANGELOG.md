@@ -12,6 +12,80 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.17.0 (2026-10-22)
+
+**«Пошук по контексту»: ask your context directly.** Until now the search ran only inside the skills, before their work (Step 0.5). Now you ask it yourself — «знайди в моєму контексті…», «що в мене є про…», or the typed `/grow-product-manager:find` — and `context-navigator` searches every connected context: the plugin folder of each vault (the rest of a vault through a local index of it), every registered core, your local indexes, a `vault/v1` provider of the session, and the live sources when you ask or when the base has nothing direct. It answers with a source and a date for every statement, or lists the notes, and ends with the line `Де шукав: …`. People notes — 1-1s among them — are marked `sensitive` by the engine and stay with the People contour.
+
+MINOR: a new command (`/find`), a new protocol section (search-protocol §13), `context-navigator` 0.3.0; the index schema unchanged.
+
+### Added
+
+- **`search-protocol.md` §13 — the search the user asks for:**
+  - Step 0.5 as the task itself: level 1 over every connected context — `ctx search`, plus a `vault/v1` provider no registration covers, joined by RRF;
+  - an **answer** takes at most five sections, base and live together; every statement carries its source and date, and nothing unsupported is said;
+  - a **list** gives at most ten notes and calls no `--get`:
+    - a server's line whose mark is not known yet shows its title only;
+    - a line is read before it is remembered;
+    - its doubts are unnumbered lines, never a second numbering;
+  - **level 2**:
+    - starts at once on `--all`, or on a named source (that source only);
+    - otherwise starts only when the base has nothing direct;
+    - a VPN or a login, mail, person profiles and private channels are still asked about first;
+  - **the closing lines:**
+    - `Де шукав: …` names every source, and the one that did not answer or was skipped;
+    - `Немає де шукати: …` when there is nothing to search;
+    - `Поки нічого прямо про це — індекс оновлюється: …` while the index refreshes.
+- **`/grow-product-manager:find <запит> [--list] [--all]`** — the same search, typed. It is user-only like every command, and there are six now.
+
+### Changed
+
+- **`context-navigator` 0.3.0:**
+  - answers and searches from your whole context, with or without a shared core — with no core, one line and then your base;
+  - recording or revisiting a decision → decision-log; what was decided → §13, which reads the decision records and the meeting notes alike;
+  - a person by identity only: name, e-mail, team and role from the card's frontmatter, and its path;
+  - the description is re-cut so that the guards against decision-log, product-analysis and the source library fit the 190 characters Codex shows.
+- **The engine marks `sensitive` itself (Q2).** A note is sensitive when it has:
+  - `sensitive: true`;
+  - a people type: `people`, `person`, `one-on-one-notes`, `one-on-one`, `performance-review`, `offboarding-plan`, `delegation-audit`, `followup-arcv`;
+  - a person profile's judgement field (`d_type`, `signals`, `one_on_one`, … — one map down too);
+  - a 1-1 in its title, folder or file name (`1-1 …`, `… 1-1.md`, `1:1 …`, `1on1s/`, `1-on-1`, `One-on-ones/`, `1-1-Logs/` — never «Split 1:1»).
+
+  Own rows, local-index and server hits, and `--get` from every source carry the mark. An old row of a people type or a 1-1 reads as sensitive at once.
+- Protocols:
+  - `data-policy.md` Search rule 1 — the list, and the one identity exception;
+  - `search-protocol.md` §1, §4, §6;
+  - `people-context-protocol.md`;
+  - `context-provider-protocol.md` §2, §10.
+
+  Also: README, the plugin-configurator context schema, trigger evals Group U (U1–U10) and L10.
+
+### Fixed
+
+- The frontmatter reader keeps one level of a map (a profile's `signals:`, `one_on_one:`), and a mapped value never becomes a title.
+- `--get` of an evicted note that a local index serves takes its type, date and mark from the index's row, in both shapes.
+- A server's hit keeps the date its class TTL counts from.
+
+### Acceptance (a copy of the author's vault, the same state for both versions)
+
+- `ctx search eval`: v3.16.2 and v3.17.0 agree row for row — recall in the first 50 is 100 %, MRR 0.594.
+- `sensitive` went from 54 to 734 notes. None of them is marked by a judgement field alone on a non-people type.
+- Twelve requests walked by the model at the level of §13:
+  - every answer cites path and date;
+  - the lists call no `--get`;
+  - a person is identity only;
+  - with no core the search uses the vault alone.
+- The walk found 1-1 notes kept as `meeting` or `one-on-one`: they were unmarked and their snippets reached the list. This is fixed — see the 1-1 rule above.
+- Trigger evals, Claude (visible and real): Group U 9/9 (6/8 on v3.16.2), T 14/14, L 8/9 (L9 → the host's own `update-config`, as on v3.16.2). Codex: T13 regressed to the navigator, so the guard was sharpened. L6, L7 and U8 miss on v3.16.2 too.
+- Tests: `ctx_index_test.py`, `ctx_search_test.py` (with pins of §13, the navigator and `/find`) — each new check failed before its code. An independent review followed every task and the whole branch, each with fixes.
+
+### Backwards compatibility
+
+- The index schema is unchanged (`search-index/1`). An index of an earlier build reads its downloaded files once more on the next refresh (meta `meta_version` 2), which takes about as long as one rebuild. Until then, people types and 1-1s are marked as they are read.
+- Notes that skills outside People could take before — `person` notes, 1-1 notes kept as `meeting` — are now named there by title only.
+- `context-navigator` no longer stops when no shared core is connected.
+
+---
+
 ## v3.16.2 (2026-10-22)
 
 **«Пошук», другий патч: nothing swaps in another note silently.** What v3.16.1 deferred, done in one night with the user's consent to merge: two cards that differ only by a list of owners no longer fold into one; a remembered pick is no longer lost — nor a «не те» spread to the wrong note — when its note is folded; the excluded folders are the same in the index, the search and `--get`; every name a search lists reads back from the source that holds it; the «нотатка довга» line names exactly the sections `--get` takes back, and fast. Measured on a copy of the user's real vault (95 reviewed requests, old = v3.16.1 and new on the same vault state): the search ranks every request alike (a sample's top 15 identical); `ctx search eval` now counts a golden note folded as a twin at its survivor's place — top-1 good 49 → 51, MRR 0,629 → 0,649, each change through such a fold (a project note and the Confluence page it links, a library copy and its original); near-copy groups 51 = 51.
