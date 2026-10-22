@@ -76,7 +76,9 @@ MINOR: a new command (`/find`), a new protocol section (search-protocol §13), `
   - a person is identity only;
   - with no core the search uses the vault alone.
 - The walk found 1-1 notes kept as `meeting` or `one-on-one`: they were unmarked and their snippets reached the list. This is fixed — see the 1-1 rule above.
-- Trigger evals, Claude (visible and real): Group U 9/9 (6/8 on v3.16.2), T 14/14, L 8/9 (L9 → the host's own `update-config`, as on v3.16.2). Codex: T13 regressed to the navigator, so the guard was sharpened. L6, L7 and U8 miss on v3.16.2 too.
+- Trigger evals, Claude (visible and real): E 5/5, H 16/16, J 9/9, K 13/13, O 8/8, T 14/14, U 9/9 (6/8 on v3.16.2), L 8/9 (L9 → the host's own `update-config`, as on v3.16.2).
+- Trigger evals, Codex: T13 had gone to the navigator; with `knowledge-library` 0.9.2 it is 2/3 to the library, and green in the U+T run. Groups U and T are 22/24 (U8 → the user's own `lazyweb-quick-search`; U9 is the `find` command under Codex's name).
+- Pre-existing on Codex, on v3.16.2 as well: L6, L7, U8, and Group K's glossary and style phrases.
 - Tests: `ctx_index_test.py`, `ctx_search_test.py` (with pins of §13, the navigator and `/find`) — each new check failed before its code. An independent review followed every task and the whole branch, each with fixes.
 
 ### Backwards compatibility
