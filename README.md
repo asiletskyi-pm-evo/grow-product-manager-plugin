@@ -889,7 +889,7 @@ Besides skills, the plugin ships four kinds of host-level components. They are d
 
 Every protocol keeps a fallback chain (named agent → `general-purpose` with the same prompt, reported → sequential in-session passes with a role reset, reported → inline with the reduced-independence marker), so nothing breaks in a host without plugin agents. Codex does not load `agents/*.md`; `.codex/agents/*.toml` ports the three for manual use there, generated from these files (check 14 keeps them paired, and since v3.8.0 keeps their instructions identical apart from the host note).
 
-**Commands — `commands/` (5).** Service entry points that are **user-only** (`disable-model-invocation: true`) — the model never routes a conversation into them, which also keeps them out of trigger collisions. On Codex, which migrates commands into routable skills, the same guarantee comes from each description opening with *"Typed command … only"* (validator check 13, trigger-evals L):
+**Commands — `commands/` (6 commands).** Service entry points that are **user-only** (`disable-model-invocation: true`) — the model never routes a conversation into them, which also keeps them out of trigger collisions. On Codex, which migrates commands into routable skills, the same guarantee comes from each description opening with *"Typed command … only"* (validator check 13, trigger-evals L):
 
 | Command | Arguments | Does |
 |---|---|---|
@@ -898,6 +898,7 @@ Every protocol keeps a fallback chain (named agent → `general-purpose` with th
 | `/grow-product-manager:release` | `patch \| minor \| major` | `release-manager` with the bump class pre-answered — for the plugin repo only |
 | `/grow-product-manager:glossary-lint` | `[file]` | Gate 3 team-language lint over a file or pasted text, standalone |
 | `/grow-product-manager:setup` | `--show \| --write-gate on\|off` | Host-level toggles (the write gate) and whether the hooks environment is wired in this session |
+| `/grow-product-manager:find` | `<запит> [--list] [--all]` | The search of your context, typed (since v3.17.0): `context-navigator`'s answer with a source and a date for every statement, `--list` for the notes instead, `--all` for the session's live sources too; ends with `Де шукав: …` |
 
 **Hooks — `hooks/hooks.json` (3 hooks).** All three run in the session's own environment and **fail open** — a script error can never block a session.
 
