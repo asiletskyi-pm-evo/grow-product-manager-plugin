@@ -185,6 +185,7 @@ Commands in `commands/` carry `disable-model-invocation: true`; the model must n
 | L7 | what is the plugin status | plugin-configurator (Validate) — NOT `status` command |
 | L8 | /grow-product-manager:status | `status` command (explicit invocation — the only way in); Claude: n/a — the host runs a typed command before any routing, so the row is scored on Codex only |
 | L9 | вимкни підтвердження перед записом у Confluence | plugin-configurator or none (conversation) → point to `/grow-product-manager:setup --write-gate off` — NOT the `setup` command itself (added v2.6.0; plugin-configurator accepted since v3.5.0, when it learned to explain the command) |
+| L10 | знайди в моєму контексті про ліміт фото | context-navigator — NOT `find` command (added v3.17.0: the conversational search is the skill) |
 
 ### Group M — Flow walkthrough vs neighbours (added 2026-09-10, v3.1.0)
 
@@ -303,6 +304,23 @@ Collisions: v3.10.0 adds two skills. Connecting to a team's shared core, refresh
 | T13 | які джерела маємо по чекауту | knowledge-library — NOT context-navigator |
 | T14 | де описане правило модерації відгуків | context-navigator |
 
+
+### Group U — Search your context (added 2026-10-22, v3.17.0)
+
+Collisions: since v3.17.0 context-navigator is the one entry for searching and answering from the user's whole context — their vault, the plugin folder, every connected core, local indexes, live sources on request — with or without a shared core. Recording a decision stays decision-log, the curated library stays knowledge-library, research on the web stays product-research. The typed `/grow-product-manager:find` runs the same search; a conversation never routes into it (Group L, L10).
+
+| # | Phrase | Expected |
+|---|--------|----------|
+| U1 | знайди в моєму контексті все про накручені відгуки | context-navigator |
+| U2 | що в мене є про програму лояльності продавців | context-navigator |
+| U3 | де в моїх нотатках ми обговорювали ліміт фото в картці | context-navigator |
+| U4 | search my notes for the checkout redesign | context-navigator |
+| U5 | пошукай у Confluence і в моїх нотатках про модерацію відгуків | context-navigator |
+| U6 | зафіксуй рішення відкласти порівняння товарів | decision-log — NOT context-navigator |
+| U7 | які джерела маємо в бібліотеці про чекаут | knowledge-library — NOT context-navigator |
+| U8 | знайди в інтернеті, як конкуренти зробили чекаут | product-research — NOT context-navigator |
+| U9 | /grow-product-manager:find накручені відгуки | `find` command (explicit invocation — the only way in); Claude: n/a — the host runs a typed command before any routing, so the row is scored on Codex only |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -325,6 +343,7 @@ Collisions: v3.10.0 adds two skills. Connecting to a team's shared core, refresh
 | 2026-10-08 | **Claude Code, live** (`claude -p --plugin-dir <repo> --max-turns 1`, neutral directory, Python driver, model claude-opus-5-5), pre-release v3.10.0 — all 179 phrases once; the 12 misses re-run 3× on v3.10.0 and 3× on v3.9.0 `main` in the same environment; Group T twice after one description fix. **Codex CLI 0.153.2, live** — Group T only | A 8/8 · B 9/9 · C 8/9 · D 4/4 · E 4/5 · F 4/4 · G 10/10 · H 16/16 · I 8/8 · J 8/9 · K 13/13 · L 8/9 · M 8/8 · N 9/9 (N7 2/3) · O 6/8 · R 16/20 · S 16/16 · **T 13/14 → 28/28** after the fix. Codex: T 12/14 on the first run, 22/28 after the fix | **T8** «підключи Obsidian-вейлт» was the one regression: plugin-configurator 3/3 on v3.9.0, another plugin's Obsidian skill 3/3 on v3.10.0 — context-connect's "team vault" wording pulled it away. Fix: the context-connect lead names "Not your Obsidian vault (plugin-configurator)" and carries «онови пакет з ядра» inside the visible cut → T 28/28 on Claude. Ten misses predate this release — they fail the same way on v3.9.0 `main` today: C6, J6, L8, O4, O8, R19 route to a neighbour inside the plugin (the default model changed since 2026-10-06); E2, R13, R15, R16 go to other plugins installed on the test machine (a UI-reference plugin the global instructions prefer, a design plugin, a design toolkit) → retune in v3.10.1. **Codex:** the author's configuration now lists 118 skills and shows about 55 characters per description (v3.0.0: 80 skills, about 190); T8 → context-connect there and in a lean run (43 skills, about 167 characters), which stopped at 15 of 28 answers on the account's usage limit. T4 went to a companion plugin for the same core while it was installed (uninstall it, CHANGELOG backwards compatibility); T11 → another installed plugin's metrics skill in the crowded configuration. |
 | 2026-10-08 (2) | **Claude Code, live**, same driver and model, after a retune of six descriptions — all 179 phrases once, the disputed rows 3×, then one revert experiment | all 179: 168/179 (T 14/14, L 9/9, N 9/9, O 6/8, C 7/9, J 7/9, R 16/20, E 4/5). Disputed rows 3×: O4 3/3, C8 2/3, O5 2/3, J6 1/3, C6 0/3, J9 0/3, O8 0/3, R19 0/3, L8 0/3 | Kept: the configurator's description starts with «Configure the plugin and your Obsidian vault» and lists «підключи Obsidian-вейлт» — for Codex, where about 55 characters show; on Claude no group regressed (K 13/13, L, N, O as before, T 14/14). Reverted: guards in product-reporter (C6), roadmap-architect (R19), flow-walkthrough (O4), product-landscape (O8) and the requirements-creator keyword (J6) — the flow-walkthrough guard fixed O4 (0/3 → 3/3) but moved J9 to product-landscape (0/3), and the others changed nothing. With the revert, J9 1/3 (two answers to a UI-reference plugin), O5 3/3. The ten pre-existing misses stay open for the next PATCH. |
 | 2026-10-08 (3) | **Claude Code, live** (`testing/trigger_claude.py`: a staged copy, a fictional context, no MCP servers, no write tools; model claude-opus-5-5), v3.10.1 — all 178 rows in both modes (as the host lists skills / every description visible); misses re-run 3×, scored by majority; the same rows on v3.10.0 and v3.9.0 in the same harness. **Codex CLI 0.153.2** — Group T ×2 | as listed: v3.10.0 169/178 → v3.10.1 177/178 (B7) → B 27/27 ×3 after one fix; J9 2/3, K8 2/3 · visible: 177/178 → 178/178 · v3.9.0 as listed, ×3: C6, J6, O4, O5, O8, R15, R16, R19, S10 fail by majority · Codex T: v3.10.0 25/28 → v3.10.1 28/28 over two runs (T4 2/2, T8 2/2) | Root cause of the drift: Claude Code's skill-listing budget (1% of the context window) — past it, the least-used skills are listed by name only; in this environment 16 of the 33 Grow PM skills had no description, the targets of 8 of the 10 old misses, so guards inside those descriptions could not work. Fix: the description diet (21,217 → 9,787 characters), the full triggers in each skill's `## Routing` section, validator check 12 caps (400 / 10,000). B7 went to a design toolkit's own skill once the listing freed room → «через мій дизайн-тулкіт» restored in design-bridge. L8 is scored on Codex only; E2 and R13 accept a Lazyweb skill (the user's own global rule) — neither needed it in this run. |
+| 2026-10-22 | **Claude Code, live** (`testing/trigger_claude.py`, staged copy, fictional context, model claude-fable-5-1), pre-release v3.17.0 — Groups U, L, T in both modes on `main` (before) and on the branch (after); L9 then 3× on both | before (`main`, visible): U 6/8 · L 9/9 · T 14/14; after: visible U 8/8 · L 8/9 · T 14/14, real U 8/8 · L 8/9 · T 14/14 | Before: U3 «де в моїх нотатках ми обговорювали…» → decision-log, U4 «search my notes for…» → knowledge-library — fixed by context-navigator 0.3.0 (your whole context). L9 «вимкни підтвердження перед записом у Confluence» → the host's own `update-config` skill: 0/3 on `main`, 1/3 on the branch — a collision with a host skill that predates this release, not caused by it (follow-up: L9's expected column or plugin-configurator's guard). |
 | (fill after each run) | | | |
 
 ## Maintenance

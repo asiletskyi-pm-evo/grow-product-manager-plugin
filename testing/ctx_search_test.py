@@ -2556,5 +2556,28 @@ with tempfile.TemporaryDirectory() as d:
     check("v3.17.0 review M3: a local-index hit whose frontmatter JSON has a Step-P field (and no people type) is sensitive",
           hit_ is not None and hit_.get("sensitive") is True, hit_)
 
+# ------------------------------------------------------------------ v3.17.0 Task 2: the search the user asks for
+SP17 = " ".join(read(ROOT, "references", "search-protocol.md").split())    # `flat` is a name of a test above by now
+S13 = section(SP17, 13)
+check("v3.17.0 §13: the search the user asks for — every connected context (an unregistered vault/v1 provider joined by "
+      "RRF), the nothing-to-search line, an answer of at most five sections, a list of at most ten lines with no --get, "
+      "level 2 at once on --all or a named source, the «Де шукав» line, a person by identity only, /find with no text",
+      all(x in S13 for x in (
+          "A search the user asks for (since v3.17.0)", "`--skill context-navigator`", "reciprocal-rank fusion (k = 60)",
+          "`Немає де шукати: підключи вейлт (plugin-configurator) або спільне ядро (context-connect)`",
+          "at most **five** sections", "At most ten numbered lines", "This form calls no `--get`", "`--all`",
+          "`Де шукав: <id> · <id> (не відповів) · … · живі: <назви>`",
+          "`Що шукати? /grow-product-manager:find <запит> [--list] [--all]`", "identity only")), S13[:600])
+check("…§1 sends context-navigator's own searches to §13",
+      "context-navigator runs Step 0.5 for its \"anything else\" route and for every search the user asks for (§13)"
+      in section(SP17, 1), section(SP17, 1)[-600:])
+NAV = read(ROOT, "skills", "context-navigator", "SKILL.md")
+NAV_FM = NAV.split("\n---", 1)[0]
+check("v3.17.0: context-navigator 0.3.0 searches your whole context — the description says so, a missing shared core is "
+      "one line and the search goes on, §13 and the «Де шукав» line are named",
+      "version: 0.3.0" in NAV_FM and "знайди в моєму контексті" in NAV_FM and len(NAV_FM.split("description: ", 1)[-1].split("\n")[0]) <= 400
+      and "`Спільне ядро не підключене — шукаю у твоїй базі`" in NAV and "§13" in NAV and "`Де шукав: …`" in NAV
+      and "None → say that no shared context is connected and offer `context-connect`; never invent" not in NAV)
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

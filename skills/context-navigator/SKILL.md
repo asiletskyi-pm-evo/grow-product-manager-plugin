@@ -1,21 +1,21 @@
 ---
 name: context-navigator
-version: 0.2.0
-description: Answer from a shared organisational context (a team's core) — who owns what, team and module scope, rules, missions, people, terms. Not decisions (decision-log), not dashboards (product-analysis), not curated sources (knowledge-library). UA — «хто за що відповідає», «що робить команда X», «де описане правило».
+version: 0.3.0
+description: Answer and search from your context — your vault, plugin folder, every connected team core, local indexes; live sources on request — with source and date. Not decisions (decision-log), not dashboards (product-analysis), not curated sources (knowledge-library). UA — «знайди в моєму контексті», «що в мене є про…», «хто за що відповідає», «де описане правило».
 ---
 
 # Context Navigator
 
 > **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
 
-Answers questions about the organisation from a connected **shared-context provider** — its cards for teams, modules, missions, metrics and people, its rules and its glossary — instead of from memory or a blind text search. The provider's own rules (its `playbook`) are data in the core, not text in this skill, so they change when the core changes.
+Answers and searches from the user's own context — their vault, the plugin folder, the core of every connected repository, their local indexes and, when asked, the session's live sources (since v3.17.0, `references/search-protocol.md` §13) — and, when a **shared-context provider** is connected, from its cards for teams, modules, missions, metrics and people, its rules and its glossary: never from memory or a blind text search. The provider's own rules (its `playbook`) are data in the core, not text in this skill, so they change when the core changes. The typed `/grow-product-manager:find` runs the same search.
 
 ## Prerequisites
 - `references/local-context-protocol.md` — Step 0; the digest's `providers:` and `bundle:` lines name what is connected.
 - `references/context-provider-protocol.md` — the contract (§2), routing across providers (§5), freshness and offline behaviour (§6), the write boundary (§7).
 - `references/data-integrity-protocol.md` — a number always carries its period and source.
 - `references/data-policy.md` — provider content is internal data.
-- `references/search-protocol.md` — Step 0.5 (since v3.16.0): with SHELL, the search below is `ctx search`; the rating, what is taken and the block of variants.
+- `references/search-protocol.md` — Step 0.5 (since v3.16.0) and §13, the search the user asks for (since v3.17.0): with SHELL the search is `ctx search`; the rating, what is taken, the two forms (an answer or a list), level 2 and the block of variants.
 
 > **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
 > judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
@@ -24,12 +24,12 @@ Answers questions about the organisation from a connected **shared-context provi
 Answering from the graph has no judgment points of its own; a question that asks for a verdict or a priority goes to the skill that owns it.
 
 ## At the start of a session (once)
-1. **Which provider.** `session.providers` from Step 0h (registrations, `### Vault Search MCP` bullets, servers exposing `vault_search` and `vault_get_note`). None → say that no shared context is connected and offer `context-connect`; never invent the organisation's rules.
-2. **Its rules.** Read every file the manifest lists under `playbook` in full — from the local copy when its folder is connected, else through `vault_get_note` (then say once that this is the server's snapshot, with its date). Apply them without asking again.
-3. **The user's place in it.** The focus note and the bundle manifest when present (team, role, bundle size); the Jira write scope from the provider's team block in `local-context.md`.
+1. **Which provider.** `session.providers` from Step 0h (registrations, `### Vault Search MCP` bullets, servers exposing `vault_search` and `vault_get_note`). None → one line, `Спільне ядро не підключене — шукаю у твоїй базі`, and every question goes to §13 over the user's own base; offer `context-connect` only when the question is about the organisation, and never invent the organisation's rules.
+2. **Its rules** (with a provider). Read every file the manifest lists under `playbook` in full — from the local copy when its folder is connected, else through `vault_get_note` (then say once that this is the server's snapshot, with its date). Apply them without asking again.
+3. **The user's place in it** (with a provider). The focus note and the bundle manifest when present (team, role, bundle size); the Jira write scope from the provider's team block in `local-context.md`.
 
 ## On each question
-Follow the provider's `routing_hints` note when it exists; otherwise this default route, cheapest first:
+**First the form** (`references/search-protocol.md` §13): a question gets an answer; a «знайди», «де в мене є» or `--list` request gets a list of notes. Then, with a provider, follow its `routing_hints` note when it exists, otherwise this default route, cheapest first; without a provider every question takes the last row:
 
 | Question about | Route |
 |---|---|
@@ -40,11 +40,11 @@ Follow the provider's `routing_hints` note when it exists; otherwise this defaul
 | a decision | the provider's public decisions note; the user's own decisions → `decision-log` |
 | a person | registry card in `people_dir` → their team card |
 | a term | the provider's glossary, then the user's own (knowledge library) |
-| anything else | SHELL: `ctx search` (below) → `ctx search --get` on the sections rated «прямо»; without SHELL: `vault_search` → `vault_get_note` on the few notes that matter. Then `vault_get_links` / `vault_graph_context` (depth 1–2) when the question is relational |
+| anything else, and the user's own notes | §13 — SHELL: `ctx search` (below) → `ctx search --get` on the sections rated «прямо» for an answer, none for a list; without SHELL: `vault_search` → `vault_get_note` on the few notes that matter. Then `vault_get_links` / `vault_graph_context` (depth 1–2) when the question is relational |
 
 Every answer carries: the note path; for a number, its period and source; for snapshot content, the snapshot date, and "(as of <date>)" when the note's class is past its `ttl_days`; a caveat for a note marked outdated or older than three years. A reference value on a card ("target", "benchmark") is never presented as the current value. A decision recorded without the core's confirmation mark is reported as unconfirmed.
 
-**Searching with SHELL (since v3.16.0).** This skill runs Step 0.5 only for the "anything else" route: a card or note one of the routes above reads directly is neither taken by Step 0.5 nor counted as a doubt (`references/search-protocol.md` §1). There, the question is the request of `references/search-protocol.md`, and Step 0.5 is that one search — not a second one: `python3 "<plugin root>/scripts/ctx.py" search --q "<the question's topic>" --q "<variant>" … --skill context-navigator --json`. It asks the plugin's section index — which holds the core folder of every registered repository on this machine, so the local copy comes first by construction — the user's own local index, and the server only of a repository whose core folder is not on disk; plain words, no FTS5 syntax. Rate the candidates, read the «прямо» ones with `ctx search --get <id>` (its first line is the path and the date to cite), answer from what is taken, and end with the block of variants when the search was unsure or two notes disagree. Exit 5 means the core was not read: say so — never that the core holds nothing.
+**Searching with SHELL (since v3.16.0; §13 since v3.17.0).** The "anything else" route and every search the user asks for follow `references/search-protocol.md` §13, which is Step 0.5 as the task itself. A card or note one of the routes above reads directly is neither taken by it nor counted as a doubt (§1). There, the question is the request of `references/search-protocol.md`, and Step 0.5 is that one search — not a second one: `python3 "<plugin root>/scripts/ctx.py" search --q "<the question's topic>" --q "<variant>" … --skill context-navigator --json`. It asks the plugin's section index — which holds the core folder of every registered repository on this machine, so the local copy comes first by construction — the user's own local index, and the server only of a repository whose core folder is not on disk; plain words, no FTS5 syntax. Rate the candidates, read the «прямо» ones with `ctx search --get <id>` (its first line is the path and the date to cite), answer from what is taken (at most five sections) or list the notes (§13), end with the block of variants when the search was unsure or two notes disagree, and last with the line `Де шукав: …`. Exit 5 means the base was not read: say so — never that it holds nothing.
 
 **Searching the server** (without SHELL, or for the graph tools). FTS5 syntax: words are AND; `OR` and `NOT` are operators; put a phrase, and any word with `&`, `-`, `:`, `/` or `.`, in double quotes. Copy paths exactly as returned. Entities typed in frontmatter (missions, modules, metrics) are listed by folder, not by tag. When both the local copy and the server hold a note, the local copy is primary; the server is for full-text search and graph traversal. A provider that does not answer (VPN off, server down) gets one line, then the local copy if there is one — never an answer from memory.
 
@@ -62,13 +62,16 @@ Before a meeting note that names people is written into the user's vault: resolv
 ## Quality Standards
 - Answers in `user.language`, short, with the path and the date; the user can open every cited note.
 - One line when a provider is stale or unreachable, once per session.
+- Every search ends with `Де шукав: …` — each source asked, and the one that did not answer named (`references/search-protocol.md` §13).
 - A question the core cannot answer is said to be unanswered, with what would answer it (a card to add, a page to export, a person to ask).
 
 ## Skill Chaining
-→ `decision-log` (a decision surfaces that the user wants recorded) · → `product-analysis` (live numbers beyond the core's actuals) · → `context-connect` (connect a provider, refresh or widen the bundle) · → `meeting-processor` (a transcript to process; people resolve as above).
+→ `decision-log` (a decision surfaces that the user wants recorded) · → `product-analysis` (live numbers beyond the core's actuals) · → `context-connect` (connect a provider, refresh or widen the bundle) · → `meeting-processor` (a transcript to process; people resolve as above) · → `one-on-one` / `performance-review` (a person's profile — this skill gives a person's identity only, §13).
 
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
 
 > Answer from a shared organisational context (a team's core) — who owns what, team and module scope, rules, missions, people, terms. Not decisions (decision-log), not dashboards (product-analysis), not curated sources (knowledge-library). UA — «хто за що відповідає», «що робить команда X», «де описане правило», «які місії у команди», «хто така людина X у структурі», «як у нас називають цей термін». EN — "who owns this", "what does team X do", "where is the rule for", "which missions does the team have", "who is X in the org", "answer from the shared context". Reads the provider's rules once per session and routes each answer through its graph (vault/v1), always with the note path and the snapshot date.
+
+Since v3.17.0 (the search the user asks for, `references/search-protocol.md` §13) also: UA — «знайди в моєму контексті…», «що в мене є про…», «де в моїх нотатках ми обговорювали…», «пошукай у Confluence і в моїх нотатках…», «що ми обговорювали про…»; EN — "search my notes for…", "what do I have on…", "find in my context". Typed: `/grow-product-manager:find <запит> [--list] [--all]`. The boundaries stay: recording a decision → decision-log, the curated library → knowledge-library, the web → product-research, a person's profile → the People contour.
