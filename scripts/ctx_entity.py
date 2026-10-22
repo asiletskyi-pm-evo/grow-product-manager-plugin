@@ -502,6 +502,11 @@ def build(cards, mem, resolver):
                     continue
                 if kind == "person" and not _same_person(a, b):
                     continue
+                if kind == "person":                 # two different e-mails are two people (v3.18.0 acceptance)
+                    ma = {m for c in of[a["path"]]["cards"] for m in c["emails"]}
+                    mb = {m for c in of[b["path"]]["cards"] for m in c["emails"]}
+                    if ma and mb and not ma & mb:
+                        continue
                 seen.add(key)
                 pairs.append((by_path[key[0]], by_path[key[1]]))
                 of[a["path"]]["maybe"].append(b)
@@ -565,7 +570,8 @@ def backlinks(idx, reg, ent, people=False):
     for row in idx.links_to({ci.name_key(p) for p in homes}):
         if row["path"] in homes or row["path"] in found:
             continue
-        if reg.resolver.resolve(row["target"]) in homes:
+        hit = reg.resolver.resolve(row["target"])
+        if isinstance(hit, str) and hit in homes:      # several notes answer the link: it counts for none of them
             found[row["path"]] = _line(row, people)
     items = _newest(found.values())
     return {"count": len(items), "items": items[:SHOWN]}

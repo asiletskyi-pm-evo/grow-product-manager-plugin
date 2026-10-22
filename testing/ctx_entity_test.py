@@ -409,5 +409,32 @@ with tempfile.TemporaryDirectory() as d:
     check("…`ctx entity` says which answer it could not apply", any(n.startswith("твою відповідь same %s ↔ %s"
           % tuple(sorted([CY_CORE, "ZorgCore/People/cy-namesake.md"]))) and "not-same" in n for n in res["notes"]), res["notes"])
 
+
+# --- v3.18.0 acceptance fix: a link two notes of one name answer is counted for neither, and breaks nothing
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(os.path.join(env.vault, "ZorgCore", "ann.md"), "---\ntype: people\n---\n# Ann Core\n")
+    write(os.path.join(env.vault, "Notes", "ann.md"), "---\ntype: person\n---\n# Ann Mine\n")
+    write(os.path.join(env.vault, "Notes", "x.md"), "# X\n\nSee [[ann]].\n")
+    try:
+        res = ce.run(env.sctx, "Notes/ann.md")
+        err = None
+    except Exception as e:  # noqa: BLE001
+        res, err = None, e
+    check("v3.18.0 acceptance: an ambiguous link (`[[ann]]`, two notes) breaks no request and counts for neither",
+          err is None and res["entities"][0]["backlinks"]["count"] == 0, err or res["entities"][0]["backlinks"])
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(os.path.join(env.vault, "ZorgCore", "People", "una-a.md"), "---\ntype: people\nemail: una.a@zorg.example\n---\n# Una Same\n")
+    write(os.path.join(env.vault, "Notes", "People", "una-b.md"), "---\ntype: person\nemail: una.b@zorg.example\n---\n# Una Same\n")
+    env.idx.refresh(env.sctx["roots"], env.sctx["store_rel"], env.sctx["blocks_rels"])
+    reg, _ = env.registry()
+    pairs = {frozenset((a["path"], b["path"])) for a, b in reg.pairs()}
+    check("v3.18.0 acceptance: two people whose e-mails differ are no «maybe the same» pair, however alike their names "
+          "(605 of 679 pairs on the real data); a card without one still is",
+          frozenset(("ZorgCore/People/una-a.md", "Notes/People/una-b.md")) not in pairs
+          and frozenset((CY_OWN, CY_CORE)) in pairs, sorted(map(sorted, pairs)))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)
