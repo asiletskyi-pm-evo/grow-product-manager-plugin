@@ -21,6 +21,7 @@ import ctx_stem  # noqa: E402
 
 CTX = os.path.join(ROOT, "scripts", "ctx.py")
 FIX = os.path.join(ROOT, "testing", "fixtures", "search")
+FIX_ENTITY = os.path.join(ROOT, "testing", "fixtures", "entity")   # the people, teams and work of v3.18.0
 fails = 0
 
 
@@ -53,17 +54,17 @@ def tree(top):
 class Env:
     """A temp home (home/.grow-pm) and a temp vault: the fixture vault copied, {{VAULT}} and {{HOME}} filled in."""
 
-    def __init__(self, d, fixture="context"):
+    def __init__(self, d, fixture="context", base=FIX):
         self.home = os.path.join(d, "home")
         self.vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(self.home, ".grow-pm"))
-        shutil.copytree(os.path.join(FIX, "vault"), self.vault)
+        shutil.copytree(os.path.join(base, "vault"), self.vault)
         for dirpath, _, names in os.walk(self.vault):
             for n in names:
                 p = os.path.join(dirpath, n)
                 if n.endswith(".yaml") and "{{VAULT}}" in read(p):
                     write(p, read(p).replace("{{VAULT}}", self.vault))
-        self.text = read(FIX, fixture + ".md").replace("{{VAULT}}", self.vault).replace("{{HOME}}", self.home)
+        self.text = read(base, fixture + ".md").replace("{{VAULT}}", self.vault).replace("{{HOME}}", self.home)
         self.ctx = os.path.join(self.home, ".grow-pm", "local-context.md")
         self.mirror = os.path.join(self.vault, "Notes", "_System", "local-context.md")
         self.store = os.path.join(self.vault, "Notes", "_System", "context")
@@ -1404,6 +1405,191 @@ check("…not a ratio or a step: «Split 1:1», «розподіл 1:1», «Кр
       not any(ctx_index.one_on_one(p, t) for p, t in (
           ("Notes/x.md", "A/B test — Split 1:1"), ("Notes/x.md", "Тест: розподіл 1:1"),
           ("Notes/Крок 1-1.md", ""), ("Notes/x.md", "Step 1-1 of the rollout"))))
+
+# --- v3.18.0 Task 1: identity, link and mention rows for every note (plan C1, C2, C6, C11)
+fm_bea = {"type": "person", "email": "Bea.Two@Zorg.example", "home_card": "[[ZorgCore/People/bea-two]]",
+          "manager": "[[ZorgCore/People/cy-three|Cy Three]]", "people": ["[[A]]", "[[B]]"], "d_type": "D3",
+          "role": "Data analyst", "team": "team-alpha"}
+ido = getattr(ctx_index, "identity_of", None)
+idb = ido("Notes/People/bea.md", fm_bea, "Bea Two") if ido else None
+check("v3.18.0 identity_of: a person note — kind, e-mail (lower case), team, role; bridges are the fields of exactly one "
+      "link (home_card, manager — not a list of two)",
+      idb is not None and idb["kind"] == "person" and idb["emails"] == ["bea.two@zorg.example"] and idb["team"] == "team-alpha"
+      and idb["role"] == "Data analyst" and idb["label"] == "Bea Two"
+      and set(idb["bridges"]) == {"home_card", "manager"} and idb["bridges"]["manager"] == "ZorgCore/People/cy-three", idb)
+check("…and never a judgement field: no `D3` anywhere in the identity (C9)", idb is not None and "D3" not in json.dumps(idb), idb)
+check("…a one-item list of one link is a bridge too; an e-mail field by its name (`email_aliases`); `position` is the role",
+      ido is not None and (lambda r: r["bridges"].get("profile") == "ZorgCore/People/x"
+                           and r["emails"] == ["a@z.example", "b@z.example"] and r["role"] == "Lead")(
+          ido("ZorgCore/People/x.md", {"type": "people", "profile": ["[[ZorgCore/People/x|X]]"], "email": "a@z.example",
+                                       "email_aliases": ["B@z.example", "not mail"], "position": "Lead"}, "X")))
+kinds = [ido(r, f, ti) if ido else "?" for r, f, ti in (
+    ("ZorgCore/People/x.md", {"type": "People"}, "X"), ("Notes/x.md", {"type": "note"}, "X"),
+    ("Notes/Epics/Epic — PROJ-1234.md", {"type": "epic"}, "Epic — PROJ-1234"),
+    ("Notes/Features/Fast cart.md", {"type": "feature", "epic": "PROJ-1234"}, "Fast cart"),
+    ("ZorgCore/Missions/m.md", {"type": "mission", "jira_projects": ["PROJ", "QQ"]}, "M"),
+    ("Growth/jp.md", {"type": "jira-project"}, "JP"))]
+check("v3.18.0 identity_of: `People` → person, a note → None, an epic with its key from the file name, a feature with "
+      "none (its `epic:` is a parent, not its key), a mission's Jira prefixes, `jira-project` → None",
+      ido is not None and kinds[0]["kind"] == "person" and kinds[1] is None
+      and (kinds[2]["kind"], kinds[2]["key"]) == ("work", "PROJ-1234") and (kinds[3]["kind"], kinds[3]["key"]) == ("work", "")
+      and kinds[4]["prefixes"] == ["PROJ", "QQ"] and kinds[5] is None, kinds)
+lo = getattr(ctx_index, "links_of", None)
+ls = lo({"home_card": "[[ZorgCore/People/bea-two|Bea]]"},
+        "See [[Notes/People/bea|Bea]], ![[x#H]] and [[Notes/People/bea|again]].\n") if lo else []
+by = {(l["field"], l["target"]): l for l in ls}
+check("v3.18.0 links_of: the target as written, its label, anchor and embed, the field it is in; once per field and target",
+      lo is not None and by.get(("", "Notes/People/bea"), {}).get("label") == "Bea"
+      and by.get(("", "x"), {}).get("embed") is True and by.get(("", "x"), {}).get("anchor") == "H"
+      and by.get(("home_card", "ZorgCore/People/bea-two"), {}).get("tkey") == "bea-two" and len(ls) == 3, ls)
+mo = getattr(ctx_index, "mentions_of", None)
+ms = dict(mo("PROJ-1234, GPT-4 and https://jira.zorg.example/browse/QQ-7; SHA-256") or []) if mo else {}
+check("v3.18.0 mentions_of: every key-shaped token, `/browse/` keys marked — the prefix filter is the reader's (C6)",
+      ms == {"PROJ-1234": False, "GPT-4": False, "QQ-7": True, "SHA-256": False}, ms)
+
+
+def entity_env(d):
+    env = Env(d, base=FIX_ENTITY)
+    scope = env.scope()
+    idx = ctx_index.Index(env.home)
+    idx.refresh(*scope)
+    return env, idx, scope
+
+
+def cards_by_path(idx):
+    return {c["path"]: c for c in (idx.cards() if hasattr(idx, "cards") else [])}
+
+
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    cards = cards_by_path(idx)
+    kinds_ = {c["kind"] for c in cards.values()}
+    check("v3.18.0 the walk writes identity rows: cards of every kind, with the note's path, source and sensitivity",
+          {"person", "team", "mission", "work"} <= kinds_ and cards.get("Notes/People/bea.md", {}).get("sensitive") is True
+          and cards.get("ZorgCore/Teams/team-alpha.md", {}).get("source") == "zorg-core"
+          and "Notes/Roadmap.md" not in cards, sorted(cards))
+    back = idx.links_to({ctx_index.name_key("bea")}) if hasattr(idx, "links_to") else []
+    check("…links_to: the links whose target names `bea`, with the note that holds them",
+          {"Notes/Roadmap.md", "Notes/Meetings/1-1 Bea 2026-10-01.md", "Notes/Epics/Epic — PROJ-1234.md"}
+          <= {b["path"] for b in back}, back)
+    men = idx.mentions(None) if hasattr(idx, "mentions") else []
+    check("…mentions: PROJ-9999 from the roadmap, QQ-7 marked as a /browse/ key",
+          any(m["key"] == "PROJ-9999" and m["path"] == "Notes/Roadmap.md" for m in men)
+          and any(m["key"] == "QQ-7" and m["browse"] for m in men), men[:5])
+    con = sqlite3.connect(idx.db_path)
+    try:
+        bare = con.execute("SELECT e.kind FROM ents e JOIN notes n ON n.id = e.note_id WHERE n.path = 'Notes/Roadmap.md'").fetchone()
+    except sqlite3.Error as e:
+        bare = e
+    con.close()
+    check("…a note that is no entity has its row too, kind \"\" (so the walk knows it read it)", bare == ("",), bare)
+
+
+def drop_entity_tables(idx, version="2"):
+    """The index as a v3.17 build leaves it: no entity tables, meta_version 2."""
+    con = sqlite3.connect(idx.db_path)
+    for tb in ("ents", "links", "mentions"):
+        con.execute("DROP TABLE IF EXISTS %s" % tb)
+    con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('meta_version', ?)", (version,))
+    con.commit()
+    con.close()
+
+
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    secs0 = sqlite3.connect(idx.db_path).execute("SELECT count(*) FROM sections").fetchone()
+    drop_entity_tables(idx)
+    r1, opened1 = counting_refresh(env, idx, scope)
+    con = sqlite3.connect(idx.db_path)
+    ver = con.execute("SELECT value FROM meta WHERE key = 'meta_version'").fetchone()
+    secs1 = con.execute("SELECT count(*) FROM sections").fetchone()
+    con.close()
+    check("v3.18.0 an index of v3.17 (meta_version 2, no entity tables) gets the tables and their rows in place — "
+          "the version 3, the sections as they were, nothing rebuilt",
+          ver == ("3",) and "Notes/People/bea.md" in cards_by_path(idx) and secs0 == secs1 and r1["rebuilt"] is False
+          and len(opened1) > 0, (ver, secs0, secs1, r1))
+    r2, opened2 = counting_refresh(env, idx, scope)
+    check("…and the next refresh reads no file", opened2 == [], opened2[:3])
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE meta SET value = '2' WHERE key = 'meta_version'")
+    con.commit()
+    con.close()
+    real_dataless = ctx_index.is_dataless
+    ctx_index.is_dataless = lambda p_: str(p_).endswith("cy-three.md")
+    try:
+        counting_refresh(env, idx, scope)
+    finally:
+        ctx_index.is_dataless = real_dataless
+    check("v3.18.0 the re-read never opens a file iCloud has not downloaded — its identity row stays, so does the card "
+          "(Review Focus 3)", "ZorgCore/People/cy-three.md" in cards_by_path(idx), sorted(cards_by_path(idx)))
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET hash = 'x' WHERE path = 'ZorgCore/People/dee-real.md'")   # an older build changed it
+    try:
+        con.execute("INSERT INTO ents(note_id, hash, kind) VALUES (99999, 'h', 'person')")  # the row of a note gone
+    except sqlite3.Error:
+        pass
+    con.commit()
+    con.close()
+    stale_hidden = "ZorgCore/People/dee-real.md" not in cards_by_path(idx)
+    _, opened = counting_refresh(env, idx, scope)
+    con = sqlite3.connect(idx.db_path)
+    try:
+        orphan = con.execute("SELECT count(*) FROM ents WHERE note_id = 99999").fetchone()
+    except sqlite3.Error as e:
+        orphan = e
+    con.close()
+    check("v3.18.0 C11: a note an older build changed (its identity row's hash is not the note's) is not read as a card, "
+          "the next walk reads that file alone again and the card is back; the row of a note gone is dropped",
+          stale_hidden and [os.path.basename(str(p_)) for p_ in opened] == ["dee-real.md"]
+          and "ZorgCore/People/dee-real.md" in cards_by_path(idx) and orphan == (0,), (stale_hidden, opened, orphan))
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    os.remove(env.note("Notes/Roadmap.md"))
+    idx.refresh(*scope)
+    left = idx.mentions({"PROJ-9999"}) if hasattr(idx, "mentions") else ["?"]
+    con = sqlite3.connect(idx.db_path)
+    try:
+        rows = con.execute("SELECT (SELECT count(*) FROM links WHERE note_id NOT IN (SELECT id FROM notes)), "
+                           "(SELECT count(*) FROM ents WHERE note_id NOT IN (SELECT id FROM notes))").fetchone()
+    except sqlite3.Error as e:
+        rows = e
+    con.close()
+    check("v3.18.0 a removed note takes its identity, link and mention rows with it", left == [] and rows == (0, 0), (left, rows))
+
+
+# --- v3.18.0 Task 1 review fixes
+ido = ctx_index.identity_of
+r_ = ido("Notes/People/bea.md", {"type": "person", "delegation": "[[Notes/People/cy]]", "one_on_one": ["[[Notes/1-1 Bea]]"],
+                                 "d_history": ["[[bea — D2 to D3]]"], "home_card": "[[ZorgCore/People/bea-two]]"}, "Bea")
+check("v3.18.0 review I1: a judgement field of one link is no bridge — never in the identity row (C9)",
+      set(r_["bridges"]) == {"home_card"} and "D2 to D3" not in json.dumps(r_), r_["bridges"])
+ls = ctx_index.links_of({}, "| who |\n|---|\n| [[Notes/People/bea\\|Bea Two]] |\n")
+check("v3.18.0 review I2: a link in a table (`[[x\\|label]]`) keeps its target and name key",
+      [(l["target"], l["tkey"], l["label"]) for l in ls] == [("Notes/People/bea", "bea", "Bea Two")], ls)
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    src, dst = env.note("ZorgCore/People/dee-real.md"), env.note("ZorgCore/People/zz-dee.md")
+    os.rename(src, dst)                                           # an older build: the same bytes under a new name
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE notes SET path = 'ZorgCore/People/zz-dee.md' WHERE path = 'ZorgCore/People/dee-real.md'")
+    con.commit()
+    con.close()
+    hidden = "ZorgCore/People/zz-dee.md" not in cards_by_path(idx)
+    _, opened = counting_refresh(env, idx, scope)
+    check("v3.18.0 review I3: an identity row is its note's only under the same path — a row a note id took over (an "
+          "older build's rename, byte for byte) is stale, and that file is read again",
+          hidden and "ZorgCore/People/zz-dee.md" in cards_by_path(idx) and any(str(p_).endswith("zz-dee.md") for p_ in opened),
+          (hidden, sorted(cards_by_path(idx))[-3:], opened))
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    drop_entity_tables(idx)
+    got = (idx.cards(), idx.problem, idx.links_to({"bea"}), idx.problem, idx.mentions(None), idx.problem)
+    check("v3.18.0 review I4: on an index of v3.17 (no entity tables yet) the reads give nothing and no «broken index»",
+          got == ([], None, [], None, [], None), got)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

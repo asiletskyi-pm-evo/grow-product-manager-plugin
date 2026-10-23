@@ -321,6 +321,8 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | U8 | знайди в інтернеті, як конкуренти зробили чекаут | product-research — NOT context-navigator |
 | U9 | /grow-product-manager:find накручені відгуки | `find` command (explicit invocation — the only way in); Claude: n/a — the host runs a typed command before any routing, so the row is scored on Codex only |
 | U10 | що ми вирішили про накручені відгуки | decision-log — NOT context-navigator (the user's own decisions stay decision-log's) |
+| U11 | хто такий Bea Two і хто на нього посилається | context-navigator (v3.18.0: `ctx entity`) |
+| U12 | що таке PROJ-1234 | context-navigator (v3.18.0: `ctx entity`) |
 
 ## Results log
 
@@ -349,6 +351,8 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | 2026-10-22 (3) | **Claude Code, live** (`testing/trigger_claude.py`), pre-release v3.17.0, after `knowledge-library` 0.9.2 («які джерела маємо» moved into its first 190 characters) and the navigator's guard without the quoted phrase — Groups E, H, J, K, L, O, T, U in both modes | visible and real: E 5/5 · H 16/16 · J 9/9 · K 13/13 · L 8/9 · O 8/8 · T 14/14 · U 9/9 | L9 as before (the host's `update-config`). Codex 19:16 run before this change: T13 0/2 still, U1–U4 ✓, then the usage limit. |
 | 2026-10-22 (4) | **Codex CLI 0.153.2, live**, after `knowledge-library` 0.9.2 — T13 3×, Groups U and T once, the library rows E3, E4, K1–K6, T5, U7; K1–K6 2× on `main` (v3.16.2, a temporary worktree) | T13 2/3 → knowledge-library (and ✓ in the U+T run); U+T 22/24 (U8 → the user's `lazyweb-quick-search`, U9 = the `find` command under Codex's name); E3, E4, T5, U7 ✓; K1–K6 ✗ — and 0/12 on `main` too | Group K on Codex predates this release (glossary and style phrases go to context-navigator, context-connect, the glossary-lint command or another plugin's template-creator) — follow-up: knowledge-library's glossary/style triggers inside its first 190 characters. |
 | (fill after each run) | | | |
+| 2026-10-22 (5) | **Claude Code, live** (`testing/trigger_claude.py`, staged copy, fictional context, model claude-fable-5-1), pre-release v3.18.0 — Groups U, L, T on the branch, both modes | visible and real: U 11/11 · L 8/9 · T 14/14 | U11 «хто такий …», U12 «що таке PROJ-…» → context-navigator (new). L9 → the host's `update-config` as before (predates this release). |
+| 2026-10-22 (6) | **Codex CLI 0.153.2, live** (`testing/trigger_codex.py`), pre-release v3.18.0 — Groups L, U, T on the branch; L5 and T8 2× on the branch and on `main` (v3.17.0, a temporary worktree) | branch 29/36; L5/T8 again: branch 3/4 (L5 → none once), `main` 4/4 | U11, U12 ✓. L6, L7, U8 miss as on `main` before; L8, U9 are the right command under Codex's name `source-command-…`. L5 (`none` once) and T8 (→ context-connect once in the full run) are noise: the branch changes no skill description, and Codex routes on descriptions. |
 
 ## Maintenance
 

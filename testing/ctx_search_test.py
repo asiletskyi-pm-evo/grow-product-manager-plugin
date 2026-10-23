@@ -2575,7 +2575,7 @@ NAV = read(ROOT, "skills", "context-navigator", "SKILL.md")
 NAV_FM = NAV.split("\n---", 1)[0]
 check("v3.17.0: context-navigator 0.3.0 searches your whole context — the description says so, a missing shared core is "
       "one line and the search goes on, §13 and the «Де шукав» line are named",
-      "version: 0.3.0" in NAV_FM and "знайди в моєму контексті" in NAV_FM and len(NAV_FM.split("description: ", 1)[-1].split("\n")[0]) <= 400
+      ("version: 0.3.0" in NAV_FM or "version: 0.3.1" in NAV_FM) and "знайди в моєму контексті" in NAV_FM and len(NAV_FM.split("description: ", 1)[-1].split("\n")[0]) <= 400
       and "`Спільне ядро не підключене — шукаю у твоїй базі`" in NAV and "§13" in NAV and "`Де шукав: …`" in NAV
       and "None → say that no shared context is connected and offer `context-connect`; never invent" not in NAV)
 
@@ -2672,6 +2672,22 @@ FINDc = read(ROOT, "commands", "find.md")
 check("v3.17.0 final M2: /find — a dash standing alone is part of the request; only `--word` or `—word` is a flag",
       "A dash standing alone (`—`, `-`) is part of the request" in FINDc
       and "Any other word that starts with `--` or `—` followed by a letter" in FINDc)
+
+# --- v3.18.0 Task 4: who someone or something is comes from `ctx entity`
+SP18 = " ".join(read(ROOT, "references", "search-protocol.md").split())
+S13e = section(SP18, 13)
+check("v3.18.0 §13: «who / what it is» — a question about a person, a team, a mission, a module, a metric, a work item "
+      "or a Jira key, or who links to one, asks `ctx entity` first; its lines are the answer with the path; several → its "
+      "list; «Не знаю такої сутності» → §13 as usual; a sensitive line outside People as `ctx entity` gives it",
+      all(x in S13e for x in ('`ctx entity "<X>" --skill context-navigator`', "**Who or what it is",
+                              "`Не знаю такої сутності: «…»`", "`уточни, кого саме`", " · sensitive`")), S13e[-1500:])
+check("…the person bullet takes the identity from `ctx entity`, not a card read by hand",
+      "the identity `ctx entity` gives" in S13e, S13e[-900:])
+NAV18 = read(ROOT, "skills", "context-navigator", "SKILL.md")
+check("v3.18.0 context-navigator: a person, a team, a mission or a Jira key goes to `ctx entity` first (§13), and its "
+      "Routing names «хто такий» and «що таке <ключ>»",
+      '`ctx entity "<X>" --skill context-navigator`' in NAV18 and "«хто такий X»" in NAV18 and "«що таке PROJ-1234»" in NAV18,
+      NAV18[-800:])
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)
