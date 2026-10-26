@@ -387,7 +387,7 @@ LEVEL_ORDER = {"rule": 0, "mine": 1, "repo": 2, "local": 3, "derived": 4}
                                       # holds, then what another entity's card says of this one
 WHY_RULE = "правило ядра"
 WHY_MINE = "твоє перемагає (блок не є правилом ядра)"
-WHY_LIST = "список — виводяться всі кандидати; склеювання пунктів — у v3.17"
+WHY_LIST = "список — виводяться всі кандидати; team.members у ctx read склеєно за сутністю"
 LEVEL_WORDS = {"repo": "репозиторій", "local": "локальний індекс", "derived": "виведене"}
 WHY_JOINED = "список — пункти склеєно за сутністю"      # v3.18.1: one item per person, team or mission (ctx_eslots)
 WHY_ONLY = "єдиний кандидат"

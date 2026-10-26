@@ -555,9 +555,43 @@ def cmd_read(a, c):
         repos = crp.load_repos(c.text, c.home, skipped=skipped)
     except Exception:  # noqa: BLE001 — the line that names a block's repository is not worth a read
         repos = []
-    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10], repos=repos, skipped=skipped)
+    text, res = cr.read_view(c.store, c.copies, a.skill, product=a.product, today=now()[:10], repos=repos, skipped=skipped,
+                             entities=_entities_for_read(c, repos))
     sys.stdout.write(text)
     return 0, dict(res, command="read", skill=a.skill, text=text if a.json else None)
+
+
+def _entities_for_read(c, repos):
+    """The registry `ctx read` joins team.members by (v3.18.1, plan C8), built the first time it is asked for: the index
+    as it is — never refreshed, no lock, nothing written — and your answers; ((registry, index, search context), why)."""
+    got = {}
+
+    def entities():
+        if "v" not in got:
+            got["v"] = _load_entities(c, repos)
+        return got["v"]
+    return entities
+
+
+def _load_entities(c, repos):
+    try:
+        sctx = cs_.context_for(c.home, c.text, store_root=c.store.root, repos=repos)
+        idx = ci.Index(c.home)
+        built = idx.built()
+        if built is not True:
+            return None, idx.problem or "індекс пошуку ще не збудовано — ctx index rebuild"
+        mem = ce.empty_memory()
+        if c.store.exists():
+            try:
+                mem = ce.load_memory(c.store, timeout=cs_.OPEN_S)
+            except cs.StoreError:
+                pass                             # without your answers, as `ctx entity` goes on
+        reg, _ = ce.load(sctx, idx, mem)
+        if reg.unread:
+            return None, reg.unread
+        return (reg, idx, sctx), None
+    except Exception as e:  # noqa: BLE001 — a members list joined is not worth a read: it is printed as before
+        return None, cc.clip(str(e), 200)
 
 
 def cmd_explain(a, c):

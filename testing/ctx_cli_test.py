@@ -3746,7 +3746,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         members = slot_in(res, "team.members")
         check("…team.members: your Team Members and the core's Members, both shown (a list shows every candidate), the header says what it is",
               outcomes_of(members) == [("mine", "shown"), ("zorg-core", "shown")] and members["kind"] == "list" and members["record"] == "team.alpha-a"
-              and members["winner"] is None and members["why"] == "список — виводяться всі кандидати; склеювання пунктів — у v3.17"
+              and members["winner"] is None and members["why"] == "список — виводяться всі кандидати; team.members у ctx read склеєно за сутністю"
               and "team.members · список · Team: Alpha (A)\n" in out and "  чому: список — виводяться всі кандидати" in out, (members, out[:1500]))
         mine_row, core_row = members["candidates"]
         check("…your row says where your text is; the block's — which block, which version, in which record, checked when",

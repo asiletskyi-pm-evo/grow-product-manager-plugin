@@ -1732,5 +1732,22 @@ check("v3.18.1 review M3: person.email is an address in lower case; `TBD` is non
 check("v3.18.1 review M5: a judgement field by any spelling (`D-Type`, `One-On-One`) is never a slot field",
       "D3" not in json.dumps(ido("Notes/People/x.md", {"type": "person", "D-Type": "D3", "role": "PM"}, "X")), "")
 
+mk = dict(ctx_index.mentions_of("`PROJ-1\nPROJ-2` and PROJ-3\n\n`x\n\nPROJ-4`"))
+check("v3.18.1 Task 2 review (Task 1 M1d): an inline code span may hold one line break, never a blank line",
+      set(mk) == {"PROJ-3", "PROJ-4"}, mk)
+saved = dict(ctx_index._CARD_NAMES)
+real_load = ctx_index.sl.load_catalogue
+try:
+    ctx_index._CARD_NAMES.clear()
+    ctx_index.sl.load_catalogue = lambda *a_: (_ for _ in ()).throw(ValueError("cannot read"))
+    unread_fields = ctx_index.identity_of("Notes/People/x.md", {"type": "person", "role": "PM"}, "X")["fields"]
+    unread_ver = ctx_index.slot_names_version()
+finally:
+    ctx_index.sl.load_catalogue = real_load
+    ctx_index._CARD_NAMES.clear()
+    ctx_index._CARD_NAMES.update(saved)
+check("v3.18.1 Task 2 review M4: a catalogue that cannot be read keeps no field (None — read again once it reads) and is "
+      "card_names_version 0, below any real one", unread_fields is None and unread_ver == 0, (unread_fields, unread_ver))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

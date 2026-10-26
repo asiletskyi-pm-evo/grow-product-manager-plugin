@@ -675,8 +675,8 @@ def card_field_names():
             cat = sl.load_catalogue()
             _CARD_NAMES.update(names=sl.card_names_by_kind(cat), version=sl.card_names_version(cat),
                                kinds={k: (sl.card_slot_info(cat, k) or {}).get("kind") for k in sl._all_slots(cat)})
-        except ValueError:
-            _CARD_NAMES.update(names={}, version=1, kinds={})
+        except ValueError:                      # unreadable: no field is kept (NULL, read again once it reads) and
+            _CARD_NAMES.update(names=None, version=0, kinds={})          # version 0, below any real one (review M4)
     return _CARD_NAMES["names"]
 
 
@@ -793,11 +793,12 @@ def identity_of(rel, fm, title, names=None):
     return {"kind": kind, "label": N(title or "").strip(), "emails": emails, "team": _text(fm.get("team")),
             "role": _text(fm.get("role")) or _text(fm.get("position")), "slug": _text(fm.get("slug")),
             "aliases": _items(fm.get("aliases") or fm.get("alias")), "key": key, "bridges": bridges,
-            "prefixes": prefixes, "fields": _slot_fields(kind, fm, card_field_names() if names is None else names)}
+            "prefixes": prefixes, "fields": None if (names is None and card_field_names() is None)
+            else _slot_fields(kind, fm, card_field_names() if names is None else names)}
 
 
 _EMBED_WIKI = re.compile(r"(!?)\[\[([^\]\n]+?)\]\]")
-_CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)")
+_CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n).)*?(?<!`)\1(?!`)", re.S)   # one line break inside, not two
 _OPEN_FENCE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})(.*)$")
 _QUOTE = re.compile(r"^[ \t]{0,3}(?:>[ \t]?)+")
 
@@ -1190,7 +1191,9 @@ class Index:
     def _names_again(con):
         """The cards of an index whose slot fields were kept by an older card_names_version (meta `slot_names`, none: 0)
         are marked unread (`fields_json` NULL) — the walk reads those files alone again — then the version; a later
-        catalogue's fields are left alone, so two builds never read the cards again and again in turn (v3.18.1)."""
+        catalogue's fields are left alone, so two builds never read the cards again and again in turn (v3.18.1). The
+        version is written before the walk: an older build that refreshes first fills those rows by its own names, and
+        this build does not read them again until they change — a trade for never looping (review M5)."""
         row = con.execute("SELECT value FROM meta WHERE key='slot_names'").fetchone()
         try:
             stored = int(row[0]) if row else 0
@@ -1770,7 +1773,7 @@ class _Walk:
                           json.dumps(ident.get("aliases", []), ensure_ascii=False), ident.get("key", ""),
                           json.dumps(ident.get("bridges", {}), ensure_ascii=False),
                           json.dumps(ident.get("prefixes", []), ensure_ascii=False),
-                          json.dumps(ident.get("fields", {}), ensure_ascii=False)))
+                          None if ident and ident.get("fields") is None else json.dumps(ident.get("fields", {}), ensure_ascii=False)))
         self.con.executemany("INSERT INTO links(note_id, field, target, tkey, anchor, label, embed) VALUES (?, ?, ?, ?, ?, ?, ?)",
                              [(nid, l["field"], l["target"], l["tkey"], l["anchor"], l["label"], int(l["embed"]))
                               for l in links])

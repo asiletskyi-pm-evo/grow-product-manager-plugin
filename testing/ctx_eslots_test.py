@@ -198,6 +198,8 @@ with tempfile.TemporaryDirectory() as d:
     check("v3.18.1 Task 1 review I2: a card whose slot fields no walk read yet answers from its identity columns — Fay is "
           "still a member of zorg-pay by her team", item(env.slots(PAY).get("team.members"), FAY, env.reg) is not None,
           env.slots(PAY).get("team.members"))
+    check("v3.18.1 Task 2 review M3: …and her answer says which card is not read yet",
+          (env.slots(FAY).get("person.team") or {}).get("unread") == [FAY], env.slots(FAY).get("person.team"))
 
 # the cascade over the levels of the cards (C6): pure, candidates in, an answer out
 cat = sl.load_catalogue()
@@ -231,6 +233,66 @@ check("…and `ctx validate` proposes no binding to a card's slot (`### Team Mem
 r = rv.resolve("person.role", cat, [cand("repo", "core-a", "A", 1), cand("repo", "core-b", "B", 1)], None)
 check("…a card slot's divergence is shown both ways and no decision of the memory is applied to it",
       len(r["shown"]) == 2 and r["decision"] is None, r)
+
+# --- v3.18.1 Task 2 review fixes
+def card(env, rel, text):
+    write(os.path.join(env.vault, rel), text)
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    card(env, "ZorgCore/Teams/zt-sub.md", "---\ntype: team\nmissions: 3\nmembers: 12\nupdated: 2026-10-01\n---\n# ZT Sub\n\n"
+         "## Місії (матриця капасіті)\n\n- [[ZorgCore/Missions/mission-orbit]]\n\n## Склад команди\n\n### Backend\n\n"
+         "- [[ZorgCore/People/gus]]\n\n### Frontend\n\n- [[ZorgCore/People/fay]]\n\n## Команди-партнери\n\n- [[zorg-old]]\n")
+    card(env, "ZorgCore/People/dup.md", "---\ntype: people\nemail: dup1@zorg.example\n---\n# Dup One\n")
+    card(env, "ZorgCore/Other/dup.md", "---\ntype: people\nemail: dup2@zorg.example\n---\n# Dup Two\n")
+    card(env, "ZorgCore/Teams/zt-dup.md", "---\ntype: team\n---\n# ZT Dup\n\n## Склад команди\n\n- [[dup]] — who?\n"
+         "- [[ZorgCore/People/gus]]\n- [[ZorgCore/People/gus|Gus again]] — lead\n- Ann Other — QA\n- Ann Other — QA\n\n"
+         "| Name | Role |\n|-|-|\n| [[ZorgCore/People/fay\\|Fay]] | PM |\n")
+    card(env, "ZorgCore/Metrics/churn.md", "---\ntype: metric\n---\n# Churn\n\n## Owner history\n\n2024: someone else\n\n"
+         "## Власник\n\n- Gus Five\n")
+    env.idx.refresh(env.sctx["roots"], env.sctx["store_rel"], env.sctx["blocks_rels"])
+    env.reg, _ = ce.load(env.sctx, env.idx, ce.empty_memory())
+    reg = env.reg
+    sub = env.slots("ZorgCore/Teams/zt-sub.md")
+    check("v3.18.1 Task 2 review I1: a field that names nothing (`missions: 3`, `members: 12`) does not hide the sections "
+          "with the real list", item(sub.get("team.missions"), "ZorgCore/Missions/mission-orbit.md", reg) is not None
+          and item(sub.get("team.members"), GUS, reg) is not None, sub)
+    check("v3.18.1 Task 2 review I3: members under sub-headings of «Склад команди» (`### Backend`, `### Frontend`) count",
+          item(sub.get("team.members"), GUS, reg) is not None and item(sub.get("team.members"), FAY, reg) is not None,
+          labels(sub.get("team.members")))
+    check("v3.18.1 Task 2 review M1: «Команди-партнери» is no «Команди» — a hyphen is no qualifier",
+          not (env.slots("ZorgCore/Missions/fast-pay.md").get("mission.teams") or {}).get("items") or
+          item(env.slots("ZorgCore/Missions/fast-pay.md").get("mission.teams"), OLD, reg) is None, "")
+    dup = env.slots("ZorgCore/Teams/zt-dup.md").get("team.members") or {}
+    check("v3.18.1 Task 2 review I2: a link two people's notes answer (`[[dup]]`) joins nobody — never the namesake that "
+          "sorts first", not any(i["label"] in ("Dup One", "Dup Two") for i in dup.get("items", [])), labels(dup))
+    g = item(dup, GUS, reg)
+    check("v3.18.1 Task 2 review M6: two lines of one card that name one person are one item with both rows (one origin)",
+          g is not None and len(g["origins"]) == 1 and len(g["rows"]) == 2, g)
+    check("v3.18.1 Task 2 review M7: a table with a `|-|-|` rule — its header is no item, its row is (Fay)",
+          item(dup, FAY, reg) is not None and not any(i["label"].startswith("| Name") for i in dup.get("items", [])), labels(dup))
+    check("…every item says its kind", all(i.get("kind") == "person" for i in dup.get("items", [])), dup.get("items"))
+    own = env.slots("ZorgCore/Metrics/churn.md").get("metric.owner") or {}
+    check("v3.18.1 Task 2 review M1/M10: a value slot prefers the exact heading («Власник») over a qualified one («Owner "
+          "history»), and a value read from a list item loses its marker (Gus Five, his entity)",
+          own.get("entity") == (reg.of(GUS) or {}).get("id"), own)
+    j = es.join_items([{"level": "mine", "card_source": "own", "path": "a.md", "date": "", "items": ["Ann Other — QA"]},
+                       {"level": "repo", "card_source": "zorg-core", "path": "b.md", "date": "", "items": ["Ann Other — QA"]}],
+                      reg, "person", strict=False)
+    check("v3.18.1 Task 2 review M6: two text items of two sources are never joined by their words", len(j) == 2, j)
+    check("v3.18.1 Task 2 review M8: outside the People contour a person's slots are role, team and e-mail at most — a "
+          "person slot the catalogue may add later stays out", set(es.PERSON_IDENTITY) == {"person.role", "person.team", "person.email"}
+          and set(env.slots(RHEA_OWN)) <= set(es.PERSON_IDENTITY), "")
+import types  # noqa: E402
+a_ = types.SimpleNamespace(action="prefer", slot="person.role", target="mine", sub=None, team=None, record=None)
+try:
+    ctx_cli._slot_request(a_, cat)
+    msg = ""
+except ctx_cli.Usage as e:
+    msg = str(e)
+check("v3.18.1 Task 2 review M9: `ctx slot prefer person.role mine` itself is the usage line of a card slot",
+      "ctx entity" in msg and "--slot person.role" in msg, msg)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

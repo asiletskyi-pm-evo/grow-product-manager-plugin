@@ -275,7 +275,8 @@ def _pick_product(products, wanted):
     return None, len(products) > 1
 
 
-def read_view(store, copies, skill, product=None, today=None, manifest=None, repos=None, skipped=None, catalogue=None):
+def read_view(store, copies, skill, product=None, today=None, manifest=None, repos=None, skipped=None, catalogue=None,
+              entities=None):
     """The text of `ctx read --skill <skill>` and its result (records, missing, chars, tokens_est, pending,
     needs_product, slots). Reads only: no lock, no network, nothing written. `repos` are the registrations
     (ctx_repos.load_repos): they name the repository of each block and give its rank; without them a block is named by
@@ -297,12 +298,17 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
     whole counts as there only when that record has it (a block bound to its slot in another record does not print it
     there: `є блок в іншому записі — ctx explain <slot>`). Every file is read within one time budget (cs.read_timeout, or
     what is left of the caller's cs.read_budget), as a snapshot reads, and each block state and base once (the one _Repos
-    of ctx_resolve.slot_context)."""
+    of ctx_resolve.slot_context).
+
+    Since v3.18.1 `team.members` of a team record is one line per person (ctx_eslots.read_members) when `entities` is
+    given — a function that returns ((registry, index, search context), why), called the first time a team's members are
+    read: the record's items, the matched team card's and the members derived from the cards joined by entity; a team
+    with no members of its own gets those of its card."""
     with cs.read_budget(cs.read_timeout()):
-        return _read_view(store, copies, skill, product, today, manifest, repos, skipped, catalogue)
+        return _read_view(store, copies, skill, product, today, manifest, repos, skipped, catalogue, entities)
 
 
-def _read_view(store, copies, skill, product, today, manifest, repos, skipped, catalogue):
+def _read_view(store, copies, skill, product, today, manifest, repos, skipped, catalogue, entities=None):
     import ctx_resolve as rv                     # here: ctx_resolve imports this module
     spec = manifest_for(manifest or load_manifest(), skill)
     today = (today or datetime.date.today().isoformat())[:10]
@@ -357,7 +363,13 @@ def _read_view(store, copies, skill, product, today, manifest, repos, skipped, c
         if slot is None:
             return None
         found = entry_of(slot, field, rec["id"] if rkind in ("product", "team") else None)
+        joined = entities is not None and slot == "team.members" and rkind == "team"
         if found is None:
+            if joined:                          # no members of its own: those of its team card (v3.18.1)
+                import ctx_eslots as es
+                text = es.read_members(None, rec, origin, entities, catalogue)
+                if text:
+                    return text, None
             return None, looked(slot, rec, field)
         result = found["result"]
         got = res["slots"].setdefault(slot, {"shown": [], "also": [], "diverges": []})
@@ -368,6 +380,9 @@ def _read_view(store, copies, skill, product, today, manifest, repos, skipped, c
             used_part = (slot, result["kind"], c["text"])
             if c.get("ns") and c.get("block") and used_part not in given.get((c["ns"], c["block"]), ()):
                 given.setdefault((c["ns"], c["block"]), []).append(used_part)
+        if joined:                              # one line per person (v3.18.1, plan C8)
+            import ctx_eslots as es
+            return es.read_members(result, rec, origin, entities, catalogue), None
         return rv.render_slot(result, origin), None
 
     def present(rkind, rec, name):

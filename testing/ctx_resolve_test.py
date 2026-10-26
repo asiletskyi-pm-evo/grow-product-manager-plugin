@@ -526,7 +526,7 @@ check("a list: every candidate, yours first, then the repositories by rank (high
       src(r["shown"]) == ["mine", "zorg-zzz", "zorg-aaa", "zorg-core", "zorg-growth", "zorg-growth", "zorg-zero", "zorg-nil"]
       and r["note"] is None and r["also"] == []
       and r["diverges"] == [] and r["kind"] == "list"
-      and r["why"] == "список — виводяться всі кандидати; склеювання пунктів — у v3.17", r)
+      and r["why"] == "список — виводяться всі кандидати; team.members у ctx read склеєно за сутністю", r)
 r = R(LIST_SLOT, lg, {"prefer": {LIST_SLOT: "repo:zorg-growth"}})
 check("…a list with a preference for a repository: all its candidates, the rest in «також» — but a registration not read is "
       "shown after them (Task 5 ruling)", src(r["shown"]) == ["zorg-growth"] * 2 + ["zorg-nil"]

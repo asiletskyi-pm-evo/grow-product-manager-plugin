@@ -850,7 +850,7 @@ def _note_line(d):
 def _who(o):
     """An origin in words: yours, a repository's or a local index's id, or what it was derived from."""
     if o["level"] == "derived":
-        return "виведене (%s)" % o["path"]
+        return "виведене (%s%s)" % (o["path"], ", спірне" if o.get("contested") else "")
     return "твоє" if o["level"] == "mine" else o["source"]
 
 
@@ -874,9 +874,11 @@ def _slot_lines(slots):
                 line += " · різні значення: " + " · ".join(a["diverges"])
             if a.get("also"):
                 line += " · також: " + ", ".join("%s (%s)" % (x["value"], _where(x)) for x in a["also"])
+            if a.get("unread"):
+                line += " · не прочитано: " + ", ".join(a["unread"])
             lines.append(line)
             continue
-        lines.append("    %s (%d):" % (name, a["count"]))
+        lines.append("    %s (%d):%s" % (name, a["count"], " не прочитано: " + ", ".join(a["unread"]) if a.get("unread") else ""))
         for it in a["items"][:SHOWN]:
             row = next((_row(r["text"]) for r in it.get("rows") or ()), "")
             lines.append("      %s — %s%s%s" % (it["label"], " · ".join(_who(o) for o in it["origins"]),
