@@ -1,6 +1,6 @@
 ---
 name: one-on-one
-version: 0.2.1
+version: 0.2.2
 description: Prepare and analyze 1-1s — a meeting for and about the person — agenda, NVC feedback, burnout signals. Not status meetings (meeting-processor), not a formal review (performance-review). UA — «підготуй мене до 1-1», «розбери 1-1», «з ким давно не було 1-1». EN — "prepare for a 1-1".
 ---
 
@@ -42,7 +42,7 @@ Per `local-context-protocol.md`.
 > a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step P — Person context
-Per `people-context-protocol.md`. Load the profile: `d_type`, active goals, `one_on_one` history + last follow-up, `gtd_index` trend, `signals`. If no profile — offer to create one.
+Per `people-context-protocol.md`. Find the person first (`references/people-context-protocol.md` → Find a person, since v3.18.1: `ctx entity "<e-mail or name>" --kind person --skill one-on-one`; several → ask, never pick); their profile is the `people_dir` card of that entity. Load the profile: `d_type`, active goals, `one_on_one` history + last follow-up, `gtd_index` trend, `signals`. If no profile — offer to create one.
 
 ### Step T — Template resolution
 Per `template-protocol.md`: `artifact_type: one-on-one-notes` for prepare/analyze notes, `followup-arcv` for the actionable follow-up. Resolve the built-in templates; escape hatch "no template" uses the internal structure.

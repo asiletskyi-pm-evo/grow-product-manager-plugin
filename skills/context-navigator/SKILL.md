@@ -1,6 +1,6 @@
 ---
 name: context-navigator
-version: 0.3.1
+version: 0.3.2
 description: Answer and search your context — notes, cores, local indexes. Not decisions (decision-log), dashboards (product-analysis), curated sources (knowledge-library). UA — «знайди в моєму контексті», «що в мене є про…», «хто за що відповідає», «де описане правило»; with source and date, live sources on request.
 ---
 
@@ -29,7 +29,7 @@ Answering from the graph has no judgment points of its own; a question that asks
 3. **The user's place in it** (with a provider). The focus note and the bundle manifest when present (team, role, bundle size); the Jira write scope from the provider's team block in `local-context.md`.
 
 ## On each question
-**Who or what it is (since v3.18.0).** With SHELL, a question about a person, a team, a mission, a module, a metric, a work item or a Jira key — «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X» — first runs `python3 "<plugin root>/scripts/ctx.py" entity "<X>" --skill context-navigator` (`ctx entity "<X>" --skill context-navigator`, `references/search-protocol.md` §13): its lines say who it is, where its cards are and who links to it, and the route below answers the rest of the question.
+**Who or what it is (since v3.18.0).** With SHELL, a question about a person, a team, a mission, a module, a metric, a work item or a Jira key — «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X» — first runs `python3 "<plugin root>/scripts/ctx.py" entity "<X>" --skill context-navigator` (`ctx entity "<X>" --skill context-navigator`, `references/search-protocol.md` §13): its lines say who it is, where its cards are and who links to it, and the route below answers the rest of the question. Since v3.18.1 they also hold its slots — a person's role, team and e-mail, a team's members («хто в команді X»), missions and parent, a mission's teams, an owner — each with where it comes from; quote them with their source (`references/people-context-protocol.md` → Find a person for a person's identity).
 
 **First the form** (`references/search-protocol.md` §13): a request for a fact gets an answer; a request for the notes themselves — «знайди нотатки про…», «що в мене є про…», «де в моїх нотатках…», «покажи нотатки про…», `--list` — gets a list. Then, with a provider, follow its `routing_hints` note when it exists, otherwise this default route, cheapest first. Without a provider every question takes the last row, except recording or revisiting a decision and a person, whose rows hold either way:
 

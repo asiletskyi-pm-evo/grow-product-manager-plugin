@@ -272,7 +272,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 7. Task Creator (v0.15.1)
+### 7. Task Creator (v0.15.2)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -317,7 +317,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 9. Meeting Processor (v0.18.1)
+### 9. Meeting Processor (v0.18.2)
 
 **Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
 
@@ -351,7 +351,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.15.2)
+### 10. Plugin Configurator (v2.15.3)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -433,7 +433,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 14. Product Reporter (v0.10.1) — renamed from Team Ops Reporter in v2.0.0
+### 14. Product Reporter (v0.10.2) — renamed from Team Ops Reporter in v2.0.0
 
 **Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
 
@@ -481,7 +481,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 18. Sprint Planning (v0.6.1) — Planning Suite
+### 18. Sprint Planning (v0.6.2) — Planning Suite
 
 **Description:** Sprint pre-planning: derives focuses from the quarterly roadmap, highlights what's READY to pull (dependencies cleared), catches work-sequence violations, gathers per-member capacity, analyzes carryover risk, suggests assignees, and fills the sprint to capacity.
 
@@ -507,7 +507,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 20. Focus Advisor (v0.9.2) — NEW in v1.31.0, complete in v1.33.0
+### 20. Focus Advisor (v0.9.3) — NEW in v1.31.0, complete in v1.33.0
 
 **Description:** PM attention dispatcher — the 4th height of the suite, above structure/quarter/sprint. Scans the PM's context (sprint cycle position, calendar meetings needing preparation, important unanswered emails, open action items from recent meetings, Jira tails), ranks the signals, and recommends 1–3 focuses with reasons, cost of delay, and a chained next step. Recommends and chains — never executes another skill's work; the PM decides.
 
@@ -529,7 +529,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 22. Decision Log (v0.5.1) — NEW in v1.36.0
+### 22. Decision Log (v0.5.2) — NEW in v1.36.0
 
 **Description:** ADR-style records of key product decisions in the vault `Decisions/` area — context, options considered, decision, rationale, consequences, evidence links. Answers "чому ми вирішили X?" from the accumulated log; supersede-flow preserves history.
 
@@ -553,7 +553,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 The second contour of the plugin: **manager → people → goals → communication → development**. These six skills share the **People Context Protocol (Step P)** — a persistent, **vault-local** profile per team member (situational-leadership D-type, 7-levels delegation, active goals, reporting cadence, 1-1 history, GTD-index trend, motivation/career signals). Person data is the **highest-sensitivity tier**: it lives in the vault `People/` area (or `~/.grow-pm/people/`) and is **never** published to Confluence/Jira or sent to external LLMs. Methodology lives in `references/goal-frameworks.md`, `people-frameworks.md`, `reporting-3t5f.md`, `communication-frameworks.md`, `roi-frameworks.md`, and `people-context-protocol.md`.
 
-### 24. Goal Setter (v0.2.1) — NEW in v2.0.0
+### 24. Goal Setter (v0.2.2) — NEW in v2.0.0
 
 **Description:** Formulates and audits goals — the foundation of the People-contour. Picks the methodology (**SMARTCBP** for personal goals, **OKR** for product/direction), drafts 2–3 variants or audits a draft against the 8 SMARTCBP checks, cascades Mission→direction→team→person, drives goals to **commitment** (Tell and Sell), and records them on the person's profile. Pulls the Comparable baseline via product-reporter/Tableau.
 
@@ -561,7 +561,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "постав ціль", "проведи аудит цілі", "лист цілей", "каскад цілей", "OKR на квартал", "set a goal", "audit this goal"
 
-### 25. One-on-One (v0.2.1) — NEW in v2.0.0
+### 25. One-on-One (v0.2.2) — NEW in v2.0.0
 
 **Description:** Prepares and analyzes 1-1 meetings — *for the person, about the person* (feedback/growth/trust), not tasks/status. Prepare builds the agenda from the profile (6 stages + seven "how" questions + NVC feedback drafts); Analyze turns a Fireflies transcript/notes into signals (motivation, burnout, career) + a manager-written **ARCV** follow-up + a profile update. Headless coverage: who hasn't been "touched" in > N weeks.
 
@@ -569,25 +569,25 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "підготуватись до 1-1", "розбери 1-1", "з ким давно не було 1-1", "нотатки 1-1", "prepare for a 1-1"
 
-### 26. Performance Review (v0.2.1) — NEW in v2.0.0
+### 26. Performance Review (v0.2.2) — NEW in v2.0.0
 
 **Description:** Reviews a team member on the People-contour's coordinates — goal achievement (3T5F Forecast QA), GTD-index, Hersey-Blanchard diagnosis (D-type → style + delegation level), and 1-1 signals — rendered into the employer's standard review template (past-period feedback + a 6–12-month SMARTCBP plan). Ends with one recommendation: development / style change / yellow card / promotion. Strictly local.
 
 **Trigger phrases:** "провести перформанс-ревʼю", "оцінити співробітника", "піврічне ревʼю", "план розвитку для…", "is it time to promote"
 
-### 27. Hiring Designer (v0.2.1) — NEW in v2.0.0
+### 27. Hiring Designer (v0.2.2) — NEW in v2.0.0
 
 **Description:** Designs the role before the vacancy — the **goal letter** (SMARTCBP on 3/6/12 months) comes first, the offer = goals + conditions. Produces a **universal vacancy profile** (Request / Role goals / Description / Conditions / Selection process) mapped onto the employer's HR-form fields, plus killer questions (past-experience, numeric + If/Then), a candidate-documents checklist, and a **goal × experience** evaluation table. On hire, creates the new person's profile (curator, S1, probation = offer goals).
 
 **Trigger phrases:** "відкрити вакансію", "спроєктувати посаду", "профіль вакансії", "вітальні запитання", "оцінити кандидатів", "draft an offer"
 
-### 28. Offboarding Guide (v0.2.1) — NEW in v2.0.0
+### 28. Offboarding Guide (v0.2.2) — NEW in v2.0.0
 
 **Description:** Guides parting ways with an underperformer — respectfully, on evidence. Gates on an **evidence base** (goals + reports; if absent → set them first), diagnoses "can't" vs "doesn't want", and runs the **four-meeting algorithm** (critical issues → measurable probation → results → sustainability), each with an ARCV follow-up, plus the dismissal script and a neutral team message. Strictly local; immediate dismissal only for theft/unlawful/ethics.
 
 **Trigger phrases:** "допоможи звільнити", "офбординг", "випробувальний термін через недосягнення", "розмова про звільнення", "PIP"
 
-### 29. Delegation Coach (v0.2.1) — NEW in v2.0.0
+### 29. Delegation Coach (v0.2.2) — NEW in v2.0.0
 
 **Description:** Audits the PM's operational load against the **7 levels of Appelo** (real delegation starts at level 5), builds the audit table (activity / current level / candidate / target / blocker), picks delegates from profiles (D-type, GTD-index — levels 5–7 only for consistently high GTD), and lays out the **S1→S4** transfer plan with dates. Computes hiring/delegation ROI when "no one to delegate to". Chains from focus-advisor when it sees PM overload.
 
@@ -618,7 +618,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
-### 33. Context Navigator (v0.3.1) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0
+### 33. Context Navigator (v0.3.2) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0
 
 **Description:** Since v3.17.0 it answers and searches from your whole context — your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct — with or without a shared core: an answer with a source and a date for every statement, or a list of notes, and a «Де шукав» line naming each source; `/grow-product-manager:find` runs the same search. With a shared core it answers from it instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
 
@@ -635,33 +635,33 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Brainstorm Features | v0.15.1 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
 | Write Concept | v0.16.0 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.17.1 | Create and analyze feature requirements |
-| Task Creator | v0.15.1 | Create Jira tasks from requirements |
+| Task Creator | v0.15.2 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.15.1 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
-| Meeting Processor | v0.18.1 | Process meetings and extract action items |
-| Plugin Configurator | v2.15.2 | Configure plugin for your organization |
+| Meeting Processor | v0.18.2 | Process meetings and extract action items |
+| Plugin Configurator | v2.15.3 | Configure plugin for your organization |
 | Knowledge Library | v0.9.2 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
-| Product Reporter | v0.10.1 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
+| Product Reporter | v0.10.2 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
 | Roadmap Architect | v0.6.1 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
 | Project Planning | v0.6.1 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.8.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
-| Sprint Planning | v0.6.1 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
+| Sprint Planning | v0.6.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.4.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
-| Focus Advisor | v0.9.2 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
+| Focus Advisor | v0.9.3 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.1 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
-| Decision Log | v0.5.1 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
+| Decision Log | v0.5.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
 | Feedback Triage | v0.7.1 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
-| Goal Setter | v0.2.1 | Set/audit goals — SMARTCBP (people) / OKR (product), cascade, Tell-and-Sell commitment |
-| One-on-One | v0.2.1 | Prepare & analyze 1-1s — agenda from profile, signals + ARCV follow-up, coverage headless |
-| Performance Review | v0.2.1 | Review a person on goals + GTD-index + D-type, into the employer's review template |
-| Hiring Designer | v0.2.1 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
-| Offboarding Guide | v0.2.1 | Evidence-gated four-meeting offboarding, strictly local |
-| Delegation Coach | v0.2.1 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
+| Goal Setter | v0.2.2 | Set/audit goals — SMARTCBP (people) / OKR (product), cascade, Tell-and-Sell commitment |
+| One-on-One | v0.2.2 | Prepare & analyze 1-1s — agenda from profile, signals + ARCV follow-up, coverage headless |
+| Performance Review | v0.2.2 | Review a person on goals + GTD-index + D-type, into the employer's review template |
+| Hiring Designer | v0.2.2 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
+| Offboarding Guide | v0.2.2 | Evidence-gated four-meeting offboarding, strictly local |
+| Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
 | Context Connect | v0.5.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
-| Context Navigator | v0.3.1 | Who is who (`ctx entity`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
+| Context Navigator | v0.3.2 | Who is who (`ctx entity`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---
 

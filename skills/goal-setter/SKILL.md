@@ -1,6 +1,6 @@
 ---
 name: goal-setter
-version: 0.2.1
+version: 0.2.2
 description: Set and audit goals — SMARTCBP for a person, OKR for a product or direction; goal letters, cascades. Not progress reports (product-reporter), not a performance review (performance-review). UA — «постав ціль», «OKR на квартал», «аудит цілі», «лист цілей». EN — "set a goal", "cascade goals".
 ---
 
@@ -54,7 +54,7 @@ Per `local-context-protocol.md`. Load the active product, Mission Atlas / `goal_
 > a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step P — Person context (when the goal is for a person)
-Per `people-context-protocol.md`. Load or offer to create the profile; read `d_type` (a D4 gets a goal, not tasks — confirm scope fits), reporting cadence, and any existing `active_goal_letter`.
+Per `people-context-protocol.md`. Find the person (`references/people-context-protocol.md` → Find a person: `ctx entity "<e-mail or name>" --kind person --skill goal-setter`), then load or offer to create the profile; read `d_type` (a D4 gets a goal, not tasks — confirm scope fits), reporting cadence, and any existing `active_goal_letter`.
 
 ### Step T — Template resolution
 For `goal-letter` (and optionally `formulate`): `artifact_type: goal-letter`, resolve per `template-protocol.md`.

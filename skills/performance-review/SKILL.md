@@ -1,6 +1,6 @@
 ---
 name: performance-review
-version: 0.2.1
+version: 0.2.2
 description: Structured performance review of a team member — goals, GTD index, situational leadership, growth plan. Not Jira throughput (product-reporter member-review), not a 1-1 (one-on-one). UA — «перформанс-ревʼю», «піврічне/річне ревʼю», «план розвитку для…». EN — "performance review".
 ---
 
@@ -44,7 +44,7 @@ Employer-standard structure — register in template-library as a built-in:
 ## Pipeline
 
 ### Step 0 — Local context · Step P — Person context
-Load the profile: goals, `forecast_qa`, `gtd_index`, `d_type`, 1-1 `signals`.
+Find the person first (`references/people-context-protocol.md` → Find a person: `ctx entity "<e-mail or name>" --kind person --skill performance-review`; several → ask, never pick); only a core's card → offer a profile seeded from it. Load the profile: goals, `forecast_qa`, `gtd_index`, `d_type`, 1-1 `signals`.
 
 > **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
 > judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through

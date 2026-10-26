@@ -88,15 +88,31 @@ Only `name`, `role`, and `updated` are strictly required. Everything else is fil
 
 ---
 
+## Find a person — `ctx entity` (since v3.18.1)
+
+One person may have several cards — your note in `people_dir`, a core's registry card, a card another team keeps that a local index of yours holds — and two people may share a name. Every skill that works with a person finds them the same way: the People contour through Step P, and `meeting-processor`, `context-navigator`, `product-reporter`, `sprint-planning`, `task-creator`, `focus-advisor`, `decision-log`, `plugin-configurator`. With SHELL:
+
+1. **By e-mail first**, else by the name the user or the source gives: `python3 "<plugin root>/scripts/ctx.py" entity "<e-mail or name>" --kind person --skill <your name> --slot person.role --slot person.team --slot person.email`. Several people at once — a meeting's participants, a sprint's assignees — in one call: `--q "<a>" --q "<b>" …` (one block per person).
+2. **One entity** → that person: their cards with their sources, and their role, team and e-mail, each with where it comes from (`context-protocol.md` §5h). Their **profile** is the card of your layer in `people_dir` among those cards; only a People-contour skill reads it (`data-policy.md`).
+3. **Several** (`кілька сутностей`) → show them and ask; never pick one. `схоже на «…» — не точний збіг` is no match either: ask. A `можливо той самий` line → say it once; the user settles it with `ctx entity same|not-same`.
+4. **None** (`Не знаю такої сутності`) → the person is not in your context: say so and go on with the name as given; a People-contour skill offers a profile (P-c).
+5. **Only a core's card** (no card in `people_dir`) → a People-contour skill offers a profile seeded with the identity the answer gives — name, e-mail, team, role — and one field that is exactly one link to that card (`core_card: "[[<its path>]]"`), so `ctx entity` joins the two by its shape; the write is gated (P-d).
+6. **A team's people** → `ctx entity "<team>" --slot team.members`: one line per person, with where each comes from; without SHELL, `ctx read`'s `team.members`, joined the same way. Who is in a team is never guessed from a folder of profiles.
+7. **Without SHELL**, or when `ctx entity` exits 3 or 5 → as before: the profile by its exact slug, then a fuzzy name match against the roster — and say in one line that the person was matched by name only.
+
+The answer never holds a judgement field; outside the People contour a person is their identity alone (name, e-mail, team, role, card path).
+
+---
+
 ## Step P — Load / create person profile (MANDATORY for People-contour skills)
 
 Runs **after Step 0** (local-context) and **before** the skill's own work, wherever a skill operates on a specific person.
 
 ### P-a. Resolve the person
 
-1. If the user named the person → resolve to their profile file (exact slug, then fuzzy name match against the roster).
-2. If the skill operates on the whole team (e.g. `one-on-one` headless "who is overdue") → load the roster and iterate.
-3. If no person is named and the skill needs one → ask via `AskUserQuestion`, pre-filling names from the roster.
+1. If the user named the person → find them (**Find a person** above): their profile is the `people_dir` card of the one entity `ctx entity` gives; several → ask; without SHELL → exact slug, then fuzzy name match against the roster.
+2. If the skill operates on the whole team (e.g. `one-on-one` headless "who is overdue") → the team's people by `ctx entity "<team>" --slot team.members` (the roster when there is no team card or no SHELL), each one's profile as in 1, and iterate.
+3. If no person is named and the skill needs one → ask via `AskUserQuestion`, pre-filling names from the team's members (else the roster).
 
 ### P-b. If the profile exists → read and parse
 

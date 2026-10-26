@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.15.1
+version: 0.15.2
 description: Create Jira tasks from requirements (usually a Confluence page) — FE/BE/Android/iOS/Design/Analytics breakdown inside an Epic. Not writing the requirements (requirements-creator). UA — «створи задачі для фічі», «розбий вимоги на задачі». EN — "break this spec into Jira tasks".
 ---
 
@@ -29,7 +29,7 @@ Key context used by this skill:
 - `product.jira_project_key` — for finding Epics and creating tasks
 - `user.jira_account_id` — for setting Reporter on tasks
 - `team.jira_team_id` — for setting Team field
-- `team.members` — for discovering assignees and roles
+- `team.members` — for discovering assignees and roles: one line per person since v3.18.1 (`ctx read`; a named assignee is found by `references/people-context-protocol.md` → Find a person — `ctx entity "<e-mail or name>" --kind person --skill task-creator --slot person.role`; several → ask)
 - `product.confluence_space` — for Confluence page links
 - `user.language` — for output language
 
@@ -349,7 +349,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.15.1", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.15.2", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode
