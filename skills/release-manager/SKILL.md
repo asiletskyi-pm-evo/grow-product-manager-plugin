@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.4.1
+version: 0.4.2
 description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…». EN — "release the plugin", "ship vX.Y.Z".
 ---
 
@@ -43,12 +43,12 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 3. Propose `vX.Y.Z` + draft scope summary. **Gate: user confirms version and scope.**
 
 ### Step 3 — Apply the bump (the 6 mandatory places)
-1. `.claude-plugin/plugin.json` — `"version"` field + description tail `— vX.Y.Z (released YYYY-MM-DD)`.
-2. `.claude-plugin/marketplace.json` — plugin entry `"version"` + both description tails.
-2a. `.codex-plugin/plugin.json` (since v3.0.1) — `"version"` + the same description as plugin.json; validator check 1 compares them.
+1. `.claude-plugin/plugin.json` — the `"version"` field. The description is not touched: since v3.20.0 it is one sentence of at most 200 characters with no version, no counts and no release history — what Claude shows on the plugin's card (validator check 1). A release that changes what the plugin is for rewrites that sentence; nothing else does.
+2. `.claude-plugin/marketplace.json` — the plugin entry's `"version"`; its description stays the same sentence as plugin.json.
+2a. `.codex-plugin/plugin.json` (since v3.0.1) — `"version"`; its `description` and `interface.shortDescription` are the same sentence as plugin.json (validator check 1).
 3. `README.md` — header + footer `**Version:**`; if skills changed: section headers, Skills Summary rows, "New in vX.Y.Z" overview paragraph.
 4. `CHANGELOG.md` — prepend the entry (Added/Changed/Fixed, files table with skill version bumps, Backwards compatibility note). No editorial placeholders — write the final text directly (pitfall P3).
-5. **Component counts** (since v2.5.0) — the phrase `N skills, N agents, N commands, N connectors` in `plugin.json`, `marketplace.json` and README must equal what is on disk (`skills/*/`, `agents/*.md`, `commands/*.md`, `.mcp.json` keys). Validator check 10 fails the release otherwise. Adding an agent, a command or a connector is a MINOR bump.
+5. **Component counts** (since v2.5.0; README alone since v3.20.0) — the phrase `N skills, N agents, N commands, N connectors, N hooks` in README must equal what is on disk (`skills/*/`, `agents/*.md`, `commands/*.md`, `.mcp.json` keys). Validator check 10 fails the release otherwise. Adding an agent, a command or a connector is a MINOR bump.
 
 This pipeline is also reachable as `/grow-product-manager:release [patch|minor|major]` — the command pre-answers Step 2's classification and changes nothing else.
 
@@ -95,7 +95,7 @@ Mirror push rejected non-fast-forward → mirror diverged: never force into a pr
 4. Remind the user to update their installed plugin from the marketplace.
 
 ## Quality Standards
-- Version is read and written only via the structured `"version"` fields; description tails are derived, never the source of truth.
+- Version is read and written only via the structured `"version"` fields; a manifest description never carries a version (since v3.20.0).
 - Explicit `git add` file lists; never `-A` (protects unrelated WIP).
 - Every push/merge/publish — user-gated; Claude prepares, the user (or their browser session) executes.
 - Force push is never used on protected branches; mirror divergence is resolved by merge, not history rewrite.

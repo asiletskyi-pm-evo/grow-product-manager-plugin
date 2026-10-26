@@ -4,6 +4,12 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v3.20.0 — bridges in your notes (added 2026-10-26)
+
+Plan `plans/2026-10-26-context-v3.20.0.md`. Each check failed before its code.
+
+- **TC-val-3200-description** | `bash testing/validate-consistency.sh` | expected: the plugin's description is one sentence of at most 200 characters with no `**` and no version, the same in `.claude-plugin/plugin.json`, the marketplace entry and `.codex-plugin/plugin.json` (`description` and `interface.shortDescription`); the marketplace's own description has no version either; the component counts are checked in README alone (check 10); a 5 089-character description with counts and a version tail fails
+
 ## Release v3.19.0 — slots of one entity (added 2026-10-26)
 
 Plan `plans/2026-10-23-context-v3.19.0.md`. Each check failed before its code. Fixture: `testing/fixtures/entity/`, widened.

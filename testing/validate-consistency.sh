@@ -26,11 +26,26 @@ fi
 FOOTER_COUNT=$(grep -cF "**Version:** $README_VER" README.md || true)
 [ "$FOOTER_COUNT" -ge 2 ] || err "README footer version differs from header ($README_VER found $FOOTER_COUNT time(s), expected 2)"
 
-# Version must be mentioned in manifest descriptions too (human-readable tail).
-# -F matters: without it the dots are regex wildcards, so "v2x1x0" (or v2.10.0)
-# satisfies a "v2.1.0" check and a desynced tail passes green.
-grep -qF "v$PLUGIN_VER" .claude-plugin/plugin.json      || err "plugin.json description tail does not mention v$PLUGIN_VER"
-grep -qF "v$PLUGIN_VER" .claude-plugin/marketplace.json || err "marketplace.json description tail does not mention v$PLUGIN_VER"
+# The description Claude and Codex show on the plugin's card (since v3.20.0): one
+# sentence, like other plugins' — no counts, no version, no release history (it
+# had grown to 5 089 characters, a changelog nobody reads on a settings card).
+# The version lives in the "version" fields alone; the counts in README (check 10).
+python3 - <<'PYEOF' || err "plugin description: keep one sentence of at most 200 characters, the same in plugin.json, the marketplace entry and the Codex manifest (description and shortDescription), with no '**' and no version"
+import json,re,sys
+MAX=200
+a=json.load(open(".claude-plugin/plugin.json"))["description"]
+m=json.load(open(".claude-plugin/marketplace.json"))
+entry=next((p.get("description","") for p in m.get("plugins",[]) if p.get("name")=="grow-product-manager"),"")
+texts=[a,entry,m.get("description","")]
+try:
+    c=json.load(open(".codex-plugin/plugin.json")); texts += [c["description"], c.get("interface",{}).get("shortDescription","")]
+    same = c["description"]==a and c.get("interface",{}).get("shortDescription")==a
+except FileNotFoundError:
+    same = True
+bad=[t[:60] for t in texts if len(t)>MAX or "**" in t or re.search(r"\bv?\d+\.\d+\.\d+\b",t)]
+for t in bad: print("  description: "+t+"…")
+sys.exit(0 if a and a==entry and same and not bad else 1)
+PYEOF
 
 # Codex manifest (since v3.0.1): same version and description as plugin.json,
 # plus the interface block that draws the card — logo files must exist.
@@ -417,14 +432,14 @@ else
   ok "search_types: every skill's types in context-manifest.yaml match its SKILL_CONTEXT_MAP row"
 fi
 
-# --- 10. Component counts in the three public descriptions -------------------
-# "33 skills across six contours" lives in plugin.json, marketplace.json and
-# README. With agents/commands/connectors the counts multiply; grep them all.
+# --- 10. Component counts in README ------------------------------------------
+# "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
+# description is one sentence with no counts (check 1). Grep every count.
 N_SKILLS=$(ls -d skills/*/ | wc -l | tr -d ' ')
 N_AGENTS=$([ -d agents ] && ls agents/*.md 2>/dev/null | wc -l | tr -d ' ' || echo 0)
 N_COMMANDS=$([ -d commands ] && ls commands/*.md 2>/dev/null | wc -l | tr -d ' ' || echo 0)
 N_CONNECTORS=$([ -f .mcp.json ] && echo "$MCP_KEYS" | grep -c . || echo 0)
-for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json README.md; do
+for f in README.md; do
   [ -f "$f" ] || continue
   grep -qF "$N_SKILLS skills"        "$f" || err "$f: does not state '$N_SKILLS skills' (actual count)"
   grep -qF "$N_AGENTS agents"        "$f" || err "$f: does not state '$N_AGENTS agents' (actual count)"
