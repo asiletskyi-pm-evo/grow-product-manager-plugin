@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.18.0
+**Version:** 3.19.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.19.0** — **«Слоти з однієї сутності»: a person's role, a team's members — one answer from every card** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). A person's role, team and e-mail and a team's members, missions and parent are put together from all the cards of one entity — your note, a core's card, another team's card, and every person whose own `team:` names the team — by the cascade (yours first, then the cores, then a local index, then what other cards say), each piece with where it comes from. `ctx read`'s team members are one line per person, nothing of the section lost, and `ctx entity` shows the slots (`--slot`, several requests with one `--q` each). The 14 skills that work with people find a person through `ctx entity` — by e-mail first, several → you choose — never by a file name.
 
 **New in v3.18.0** — **«Хто є хто»: one person, team or epic across your notes and the cores** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). Ask «хто такий X», «що за команда X», «що таке PROJ-1234» or «хто посилається на X»: `ctx entity` joins your person note, a core's registry card and another team's card in your local index into one entity — by the e-mail, a field of one link recognised by its shape, or your own `ctx entity same|not-same` answer, never by a name alone — and says who it is, where its cards are, who links to it and, for a Jira key with no card, where it is mentioned. Outside the People contour you see identity only, and a sensitive note as its title and path with ` · sensitive`. Nothing is written into your notes; `ctx entity pairs` lists the cards that may be the same. The search index gets the identity, link and mention rows in place — no rebuild.
 
@@ -618,7 +620,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
-### 33. Context Navigator (v0.3.2) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0
+### 33. Context Navigator (v0.3.2) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0
 
 **Description:** Since v3.17.0 it answers and searches from your whole context — your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct — with or without a shared core: an answer with a source and a date for every statement, or a list of notes, and a «Де шукав» line naming each source; `/grow-product-manager:find` runs the same search. With a shared core it answers from it instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
 
@@ -1076,5 +1078,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.18.0  
+**Version:** 3.19.0  
 **Last Updated:** October 2026
