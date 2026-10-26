@@ -300,6 +300,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_blocks as cb  # noqa: E402
+import ctx_bridges as cbr  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_eslots as es  # noqa: E402
@@ -329,8 +330,8 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
 
 def writes(a):
     """Does this run write to the store? Every command of WRITING does, and `provider apply`, `provider sync` and (since
-    v3.16.0) `search remember|forget`, (since v3.18.0) `entity same|not-same`; `migrate` and `provider adopt` only with
-    --apply. A plain search, `--get` and `search
+    v3.16.0) `search remember|forget`, (since v3.18.0) `entity same|not-same`; `migrate`, `provider adopt` and (since
+    v3.20.0) `entity apply` only with --apply. A plain search, `--get` and `search
     eval` write no store. (A `provider sync` that synced nothing saves no summary: `main`.)"""
     if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) in ("apply", "sync")):
         return True
@@ -338,6 +339,8 @@ def writes(a):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
+    if a.cmd == "entity" and _entity_action(a)[0] == "apply":
+        return getattr(a, "apply", False)
     if a.cmd == "migrate" or (a.cmd == "provider" and getattr(a, "action", None) == "adopt"):
         return getattr(a, "apply", False)
     return False
@@ -1272,6 +1275,8 @@ def _entity_action(a):
         return words[0], words[1:]
     if words == ["pairs"]:
         return "pairs", []
+    if words == ["apply"]:
+        return "apply", []
     return None, words
 
 
@@ -1305,6 +1310,7 @@ def _team_records(c, repos):
 
 
 NO_STORE_ANSWER = "немає сховища — відповідь не збережено"
+NO_STORE_APPLY = "немає сховища — мости не пишуться: `ctx undo` живе у сховищі (ctx migrate --apply)"
 
 
 def cmd_entity(a, c):
@@ -1323,10 +1329,14 @@ def cmd_entity(a, c):
             cr.manifest_for(cr.load_manifest(), a.skill)
         except KeyError:
             raise Usage("no such skill: %s" % a.skill)
-    if a.slot and action in ("same", "not-same", "pairs"):
+    if (getattr(a, "apply", False) or getattr(a, "code", None)) and action != "apply":
+        raise Usage("--apply and --code belong to `entity apply`")
+    if a.slot and action in ("same", "not-same", "pairs", "apply"):
         raise Usage("--slot asks for an entity's slots: not with %s" % action)
     if action in ("same", "not-same"):
         return _entity_answer(a, c, action, words)
+    if action == "apply":
+        return _entity_apply(a, c)
     sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
     if not sctx["roots"] and not cs_.sources(sctx["text"], sctx["repos"], ("local",)):
         print("entity: nothing to search — no vault in local-context.md, no registered repository with a folder on disk, "
@@ -1352,6 +1362,48 @@ def cmd_entity(a, c):
     if not a.json:
         sys.stdout.write(ce.render(res))
     return 0, res
+
+
+def _entity_apply(a, c):
+    """`entity apply` (v3.20.0, ctx_bridges): the bridges your layer lacks — a report and its code; `--apply --code
+    <code>` writes them. No store: exit 3 (`ctx undo` lives in the store); an index that did not answer: exit 5."""
+    out = {"command": "entity", "action": "apply"}
+    if not c.store.exists():
+        print(NO_STORE_APPLY)
+        return 3, dict(out, error=NO_STORE_APPLY)
+    if a.apply and not a.code:
+        raise Usage("entity apply --apply takes --code <the report's code>: run `ctx entity apply` first")
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    if not a.apply:
+        res = cbr.plan_result(sctx, c.store, kind=a.kind)
+        if not res["read"]:
+            print(ce.NOT_READ % ("; ".join(res["notes"]) or "індексу немає"))
+            return 5, dict(res, error="not read")
+        if not a.json:
+            sys.stdout.write(cbr.render(res))
+        return 0, res
+    with co.lock(c.home):
+        c.guard()
+        res = cbr.plan_result(sctx, c.store, kind=a.kind)
+        if not res["read"]:            # a plan without the index is not the plan the report showed: nothing written
+            print(ce.NOT_READ % ("; ".join(res["notes"]) or "індексу немає"))
+            return 5, dict(res, error="not read", written=[])
+        if res["code"] != a.code.strip().lower():
+            raise co.Refused(cbr.CHANGED)               # refused before anything is touched, the copies included
+        if res["rows"]:
+            c.import_first()            # an edit to local-context.md waiting is kept before the snapshot `ctx undo` uses
+        regs, _ = cc.boundary_registrations(cc.vault_entries(c.text),
+                                            extra_dirs=[os.path.join(c.home, ".grow-pm", "providers")])
+        t = now()
+        done = cbr.apply_plan(sctx, c.store, c.copies, c.home, res, regs, t[:10],
+                              lambda notes: co.snapshot(c.store, c.copies, c.home, "entity-apply", notes=notes),
+                              c.store.journal, t)
+    shown = dict(res, rows=done["written"], skipped=dict(res["skipped"], **done["skipped"]))
+    if not a.json:
+        sys.stdout.write(cbr.render(shown, written=True))
+        if done["written"]:
+            print("скасувати: ctx undo")
+    return 0, dict(res, written=done["written"], skipped=shown["skipped"], snapshot=done["snapshot"])
 
 
 def _entity_answer(a, c, action, words):
@@ -2032,6 +2084,7 @@ def build_parser():
     sp = sub.add_parser("entity", parents=[common]); sp.add_argument("words", nargs="*"); sp.add_argument("--q", action="append")
     sp.add_argument("--slot", action="append")
     sp.add_argument("--kind"); sp.add_argument("--skill"); sp.add_argument("--json", action="store_true")
+    sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
     kp = sub.add_parser("slot").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = kp.add_parser("bind", parents=[common]); sp.add_argument("repo"); sp.add_argument("target"); sp.add_argument("slot")
     sp.add_argument("--team")

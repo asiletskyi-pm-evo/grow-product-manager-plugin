@@ -112,10 +112,12 @@ def _files(folder, prefix):
     return out
 
 
-def snapshot(store, copies, home, label):
+def snapshot(store, copies, home, label, notes=None):
     """Copy the store and the compiled copies to ~/.grow-pm/snapshots/<time>-<label>/; an identical
     newest snapshot is reused. Returns the snapshot folder. Every file is read within one time budget (`cs.read_timeout`,
-    or what is left of the caller's `cs.read_budget`): one that does not arrive → StoreError before anything is written."""
+    or what is left of the caller's `cs.read_budget`): one that does not arrive → StoreError before anything is written.
+    `notes` (since v3.20.0, `ctx entity apply` and an undo of it): [(index name, absolute path)] of notes of your layer
+    a write is about to change — kept as `notes/<n>.md`, listed in the manifest's `notes` [{path, file}]."""
     root = os.path.join(_grow(home), "snapshots")
     os.makedirs(root, exist_ok=True)
     with cs.read_budget(cs.read_timeout()):
@@ -127,6 +129,10 @@ def snapshot(store, copies, home, label):
         if os.path.isfile(store.card_path):
             files["INDEX.md"] = cs.read_bytes(store.card_path)
         existed = os.path.isdir(store.records_dir) or os.path.isdir(store.state_dir)
+        kept = []
+        for n, (rel, path) in enumerate(notes or ()):
+            files["notes/%d.md" % n] = cs.read_bytes(path)
+            kept.append({"path": rel, "file": "notes/%d.md" % n})
         cps = []
         for n, path in enumerate(copies):
             rel = "copies/%d.md" % n
@@ -136,7 +142,8 @@ def snapshot(store, copies, home, label):
     h = hashlib.sha256()
     for rel in sorted(files):
         h.update(rel.encode("utf-8") + b"\0" + files[rel] + b"\0")
-    h.update(json.dumps([existed, [(c["path"], c["existed"]) for c in cps]]).encode("utf-8"))
+    h.update(json.dumps([existed, [(c["path"], c["existed"]) for c in cps]] + ([[k["path"] for k in kept]] if kept else []))
+             .encode("utf-8"))
     digest = h.hexdigest()
     newest = sorted(n for n in os.listdir(root) if SNAP_RE.match(n))
     if newest:
@@ -160,6 +167,8 @@ def snapshot(store, copies, home, label):
             f.write(data)
     manifest = {"label": label, "created": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
                 "store": store.root, "store_existed": existed, "copies": cps, "hash": digest}
+    if kept:
+        manifest["notes"] = kept
     os.makedirs(snap, exist_ok=True)
     with open(os.path.join(snap, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=1)

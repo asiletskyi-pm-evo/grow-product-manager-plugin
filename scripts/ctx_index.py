@@ -1494,6 +1494,17 @@ class Index:
                                "n.type, n.date, n.sensitive FROM links l JOIN notes n ON n.id = l.note_id %s "
                                "WHERE l.tkey IN (%s) ORDER BY n.path" % (self._FRESH, ",".join("?" * len(keys))), keys)
 
+    def field_links(self, field, source=None):
+        """The paths of the notes with a link in the frontmatter field `field` (any case), of `source` only when given
+        (v3.20.0: the notes of your layer that already hold `same_as`). `problem` as for `query`."""
+        where, args = "WHERE lower(l.field) = ?", [str(field).lower()]
+        if source is not None:
+            where += " AND n.source = ?"
+            args.append(source)
+        rows = self._with_note("SELECT DISTINCT n.path, n.source, n.title, n.type, n.date, n.sensitive FROM links l "
+                               "JOIN notes n ON n.id = l.note_id %s %s ORDER BY n.path" % (self._FRESH, where), args)
+        return [N(r["path"]) for r in rows]
+
     def mentions(self, keys=None):
         """The Jira-key-shaped tokens of the notes (v3.18.0): {key, browse, path, source, title, type, date, sensitive};
         `keys` — those keys only, None — all. `problem` as for `query`."""
