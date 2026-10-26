@@ -21,7 +21,8 @@
                                 those blocks: for each block the pass took, the core's text (its hash, or "removed")
                                 goes into the repository's block state as rejected — written after the restore — and
                                 no sync applies it again, nor does `provider apply` unless told --choose BLOCK=theirs
-                                ("не застосовуватиметься, доки ядро не змінить блок: <repo>: <blocks>"). CTX_RESULT:
+                                ("не застосовуватиметься, доки ядро не змінить блок: <repo>: <blocks>"). Since v3.20.0
+                                the notes `entity apply` wrote go back too («повернуто нотаток: N», «не повернуто: …»). CTX_RESULT:
                                 rejected {repo: [blocks]}, rejected_failed {repo: why} (a state that could not take
                                 it: the undo stands, and says the sync may apply the text again)
   read --skill S [--product P]  the card plus what the skill's manifest entry names (reads only)
@@ -262,6 +263,18 @@
   entity pairs [--kind K] [--json]
                                 every open pair «можливо той самий» (two cards of one kind from different sources whose
                                 names are alike, not answered yet). Writes only the index
+  entity apply [--kind K] [--json]
+                                since v3.20.0: the bridges your notes lack — a card of yours an e-mail or your `same`
+                                joins to a card of another source, with no bridge yet, gets `same_as: "[[<card>|<title>]]"`
+                                (context-protocol §5h). A report: `запишу N мостів:`, what is skipped and why, `код звіту:
+                                <8 hex>`; writes only the index. No code when your answers or notes iCloud keeps (and no
+                                local index gives) cannot be read
+  entity apply --apply --code C
+                                writes that report alone into your plugin folder — one frontmatter line per note, in place,
+                                after a snapshot of the notes; `.state/bridges.json` and one journal line (op entity-apply);
+                                `ctx undo` takes it back. Another code: exit 4; --apply without --code, --code without
+                                --apply, no store or no code: exit 3; the index not read: exit 5. CTX_RESULT: rows
+                                (written), planned, skipped, snapshot
   entity same|not-same A B      your answer: A and B (a card's path or link, or a name one card alone carries) are, or are
                                 not, the same — kept in the store's `.state/entities.json` (context-entity-memory/1), the
                                 opposite answer replaced; `not-same` keeps them apart whatever the e-mail or a bridge
@@ -271,7 +284,7 @@
                                 read: exit 3. CTX_RESULT: action, cards, changed, snapshot
 
 `read` and `explain` take no lock and write nothing; `index`, `search` (but `search remember|forget`) and `entity` (but
-`entity same|not-same`) take no store lock and write only the index's folder.
+`entity same|not-same` and `entity apply --apply`) take no store lock and write only the index's folder.
 Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
 registration is not read in time — 3 s each, 6 s for all: the boundary cannot be checked, exit 4), imports direct
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
@@ -300,6 +313,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_blocks as cb  # noqa: E402
+import ctx_bridges as cbr  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_eslots as es  # noqa: E402
@@ -329,8 +343,8 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
 
 def writes(a):
     """Does this run write to the store? Every command of WRITING does, and `provider apply`, `provider sync` and (since
-    v3.16.0) `search remember|forget`, (since v3.18.0) `entity same|not-same`; `migrate` and `provider adopt` only with
-    --apply. A plain search, `--get` and `search
+    v3.16.0) `search remember|forget`, (since v3.18.0) `entity same|not-same`; `migrate`, `provider adopt` and (since
+    v3.20.0) `entity apply` only with --apply. A plain search, `--get` and `search
     eval` write no store. (A `provider sync` that synced nothing saves no summary: `main`.)"""
     if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) in ("apply", "sync")):
         return True
@@ -338,6 +352,8 @@ def writes(a):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
+    if a.cmd == "entity" and _entity_action(a)[0] == "apply":
+        return getattr(a, "apply", False)
     if a.cmd == "migrate" or (a.cmd == "provider" and getattr(a, "action", None) == "adopt"):
         return getattr(a, "apply", False)
     return False
@@ -843,17 +859,48 @@ def cmd_undo(a, c):
         rejections = sync_rejections(marks[-a.steps:])      # the sync passes this undo takes back: what they took is not applied again
         jpath = os.path.join(c.store.state_dir, "journal.jsonl")
         journal = co._read(jpath)
-        pre = co.snapshot(c.store, c.copies, c.home, "pre-undo")
+        items = cbr.undo_notes(marks[-a.steps:])        # the notes `entity apply` (or an undo of it) changed (v3.20.0)
+        sctx, regs, keep = None, None, []
+        if items:
+            sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+            regs, _ = cc.boundary_registrations(cc.vault_entries(c.text),
+                                                extra_dirs=[os.path.join(c.home, ".grow-pm", "providers")])
+            for rel in dict.fromkeys(rel for rel, _, _ in items):    # as they are now: `ctx undo` of this undo needs them
+                path, _ = cbr.own_file(sctx, rel)
+                if path and os.path.isfile(path) and not ci.is_dataless(path) \
+                        and not cbr.write_refusal(sctx, regs, c.store.root, c.home, rel):
+                    try:
+                        cs.read_bytes(path)             # one iCloud has not downloaded: no copy, said by the revert
+                    except (OSError, cs.StoreError):
+                        continue
+                    keep.append((rel, path))
+        previous = None
+        if items:
+            try:
+                previous = cbr.load_ledger(c.store)     # our lines before the restore: a renamed note keeps them ours
+            except cs.StoreError:
+                previous = None
+        pre = co.snapshot(c.store, c.copies, c.home, "pre-undo", notes=keep or None)
         skipped = co.restore(target, c.store, c.copies)
-        for p in skipped:
-            print("skipped (not a current copy): %s" % p)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
             existed = json.load(f).get("store_existed")
+        if existed:
+            cs.atomic_write(jpath, journal)             # the history first: nothing after the restore may lose it
+        for p in skipped:
+            print("skipped (not a current copy): %s" % p)
+        notes_done, notes_back, notes_kept = (cbr.revert_notes(sctx, regs, c.store.root, c.home, items) if items
+                                              else ([], [], []))
+        if items and existed:
+            cbr.keep_ours(sctx, c.store, items, now()[:10], previous=previous, reverted=notes_back)   # ours stays ours
+        if notes_back:
+            print("повернуто нотаток: %d" % len(notes_back))
+        for rel, why in notes_kept:
+            print("не повернуто: %s — %s" % (rel, why))
         reverted, kept, rejected, rejected_failed = [], [], {}, {}
         if existed:
-            cs.atomic_write(jpath, journal)
             t = now()
-            c.store.journal({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre})
+            c.store.journal(dict({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre},
+                                 **({"notes": notes_done} if notes_done else {})))
             # a sync pass taken back stays taken back: the core's texts it applied are remembered as rejected in the
             # block state — after the restore, which brought that state back to what it was before the pass
             rejected, rejected_failed = remember_rejected(c.store, rejections)
@@ -882,7 +929,8 @@ def cmd_undo(a, c):
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)
     return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped,
                "records_reverted": reverted, "records_not_reverted": kept, "rejected": rejected,
-               "rejected_failed": rejected_failed}
+               "rejected_failed": rejected_failed, "notes_reverted": notes_back,
+               "notes_not_reverted": [{"path": p, "why": w} for p, w in notes_kept]}
 
 
 def cmd_validate(a, c):
@@ -1272,6 +1320,8 @@ def _entity_action(a):
         return words[0], words[1:]
     if words == ["pairs"]:
         return "pairs", []
+    if words == ["apply"]:
+        return "apply", []
     return None, words
 
 
@@ -1305,6 +1355,7 @@ def _team_records(c, repos):
 
 
 NO_STORE_ANSWER = "немає сховища — відповідь не збережено"
+NO_STORE_APPLY = "немає сховища — мости не пишуться: `ctx undo` живе у сховищі (ctx migrate --apply)"
 
 
 def cmd_entity(a, c):
@@ -1323,10 +1374,14 @@ def cmd_entity(a, c):
             cr.manifest_for(cr.load_manifest(), a.skill)
         except KeyError:
             raise Usage("no such skill: %s" % a.skill)
-    if a.slot and action in ("same", "not-same", "pairs"):
+    if (getattr(a, "apply", False) or getattr(a, "code", None)) and action != "apply":
+        raise Usage("--apply and --code belong to `entity apply`")
+    if a.slot and action in ("same", "not-same", "pairs", "apply"):
         raise Usage("--slot asks for an entity's slots: not with %s" % action)
     if action in ("same", "not-same"):
         return _entity_answer(a, c, action, words)
+    if action == "apply":
+        return _entity_apply(a, c)
     sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
     if not sctx["roots"] and not cs_.sources(sctx["text"], sctx["repos"], ("local",)):
         print("entity: nothing to search — no vault in local-context.md, no registered repository with a folder on disk, "
@@ -1352,6 +1407,56 @@ def cmd_entity(a, c):
     if not a.json:
         sys.stdout.write(ce.render(res))
     return 0, res
+
+
+def _entity_apply(a, c):
+    """`entity apply` (v3.20.0, ctx_bridges): the bridges your layer lacks — a report and its code; `--apply --code
+    <code>` writes them. No store: exit 3 (`ctx undo` lives in the store); an index that did not answer: exit 5."""
+    out = {"command": "entity", "action": "apply"}
+    if not c.store.exists():
+        print(NO_STORE_APPLY)
+        return 3, dict(out, error=NO_STORE_APPLY)
+    if a.apply and not a.code:
+        raise Usage("entity apply --apply takes --code <the report's code>: run `ctx entity apply` first")
+    if a.code and not a.apply:
+        raise Usage("--code goes with --apply: `ctx entity apply --apply --code <code>`")
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    if not a.apply:
+        res = cbr.plan_result(sctx, c.store, kind=a.kind)
+        if not res["read"]:
+            print(ce.NOT_READ % ("; ".join(res["notes"]) or "індексу немає"))
+            return 5, dict(res, error="not read")
+        if not a.json:
+            sys.stdout.write(cbr.render(res))
+        return 0, res
+    with co.lock(c.home):
+        c.guard()
+        res = cbr.plan_result(sctx, c.store, kind=a.kind)
+        if not res["read"]:            # a plan without the index is not the plan the report showed: nothing written
+            print(ce.NOT_READ % ("; ".join(res["notes"]) or "індексу немає"))
+            return 5, dict(res, error="not read", written=[])
+        if res.get("blocked"):
+            raise cs.StoreError(res["blocked"])         # your not-same unread: never a bridge it might deny
+        if res["code"] != a.code.strip().lower():
+            raise co.Refused(cbr.CHANGED)               # refused before anything is touched, the copies included
+        if res["rows"]:
+            c.import_first()            # an edit to local-context.md waiting is kept before the snapshot `ctx undo` uses
+        regs, _ = cc.boundary_registrations(cc.vault_entries(c.text),
+                                            extra_dirs=[os.path.join(c.home, ".grow-pm", "providers")])
+        t = now()
+        done = cbr.apply_plan(sctx, c.store, c.copies, c.home, res, regs, t[:10],
+                              lambda notes: co.snapshot(c.store, c.copies, c.home, "entity-apply", notes=notes),
+                              c.store.journal, t)
+    merged = {k: list(v) for k, v in res["skipped"].items()}
+    for k, v in done["skipped"].items():            # a reason of the plan and of the write: both lists kept (final M5)
+        merged[k] = list(dict.fromkeys(merged.get(k, []) + v))
+    shown = dict(res, rows=done["written"], skipped=merged)
+    if not a.json:
+        sys.stdout.write(cbr.render(shown, written=True))
+        if done["written"]:
+            print("скасувати: ctx undo")
+    return 0, dict(res, rows=done["written"], planned=res["rows"], written=done["written"], skipped=merged,
+                   snapshot=done["snapshot"])
 
 
 def _entity_answer(a, c, action, words):
@@ -2032,6 +2137,7 @@ def build_parser():
     sp = sub.add_parser("entity", parents=[common]); sp.add_argument("words", nargs="*"); sp.add_argument("--q", action="append")
     sp.add_argument("--slot", action="append")
     sp.add_argument("--kind"); sp.add_argument("--skill"); sp.add_argument("--json", action="store_true")
+    sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
     kp = sub.add_parser("slot").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = kp.add_parser("bind", parents=[common]); sp.add_argument("repo"); sp.add_argument("target"); sp.add_argument("slot")
     sp.add_argument("--team")

@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.19.0
+**Version:** 3.20.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.20.0** — **«Мости в нотатках»: the bridges your notes lack, written on your «так»** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). When an e-mail or your own `same` answer makes your person note and a core's card one person, nothing in your note said so — Obsidian, your scripts and other tools did not see it. Ask context-navigator «запиши мости в нотатки»: `ctx entity apply` reports which notes would get one frontmatter line `same_as: "[[<card>|<title>]]"`, what it skips and why, and a report code; only on your «так» does `--apply --code` write that report alone — into your plugin folder, never a core, one line per note with every other byte, the file's mode and its tags kept, after a snapshot. `ctx undo` takes it back: a note you have not touched byte for byte, one you edited loses our line alone. A `same_as` your own scripts keep is someone else's field: the plugin then writes nothing and says so. The plugin's card in Claude now shows one sentence instead of 5 000 characters of history; and a row «Ім'я, Ім'я — роль» of a core's team card joins both people.
 
 **New in v3.19.0** — **«Слоти з однієї сутності»: a person's role, a team's members — one answer from every card** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). A person's role, team and e-mail and a team's members, missions and parent are put together from all the cards of one entity — your note, a core's card, another team's card, and every person whose own `team:` names the team — by the cascade (yours first, then the cores, then a local index, then what other cards say), each piece with where it comes from. `ctx read`'s team members are one line per person, nothing of the section lost, and `ctx entity` shows the slots (`--slot`, several requests with one `--q` each). The 14 skills that work with people find a person through `ctx entity` — by e-mail first, several → you choose — never by a file name.
 
@@ -495,7 +497,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 19. Release Manager (v0.4.1) — NEW in v1.28.0
+### 19. Release Manager (v0.4.2) — NEW in v1.28.0
 
 **Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
 
@@ -620,7 +622,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
-### 33. Context Navigator (v0.3.2) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0
+### 33. Context Navigator (v0.4.0) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0, bridges in your notes since v3.20.0
 
 **Description:** Since v3.17.0 it answers and searches from your whole context — your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct — with or without a shared core: an answer with a source and a date for every statement, or a list of notes, and a «Де шукав» line naming each source; `/grow-product-manager:find` runs the same search. With a shared core it answers from it instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
 
@@ -651,7 +653,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Project Planning | v0.6.1 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.8.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
-| Release Manager | v0.4.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
+| Release Manager | v0.4.2 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 | Focus Advisor | v0.9.3 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.1 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
@@ -663,7 +665,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Offboarding Guide | v0.2.2 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
 | Context Connect | v0.5.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
-| Context Navigator | v0.3.2 | Who is who (`ctx entity`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
+| Context Navigator | v0.4.0 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---
 
@@ -1078,5 +1080,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.19.0  
+**Version:** 3.20.0  
 **Last Updated:** October 2026

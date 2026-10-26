@@ -12,6 +12,62 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.20.0 (2026-10-26)
+
+**«Мости в нотатках»: the bridges your notes lack, written on your «так».** Since v3.18.0 `ctx entity` knows that your person note and a core's card are one person when an e-mail or your `same` answer joins them — but nothing in your note said so, and Obsidian, your scripts and other tools did not see the join. `ctx entity apply` reports the bridges your layer lacks and, only on your «так» to that report, writes them: one frontmatter line per note, a snapshot first, `ctx undo` to take it back. It is the only command of the plugin that writes into your notes, so it is the last release of the Context Core programme. Also: the plugin's card in Claude shows one sentence instead of 5 089 characters of history.
+
+MINOR: a new command (`ctx entity apply`) that writes into your notes, and a new behaviour of `ctx undo`. (Planned as v3.18.2, then v3.19.1 — the version follows the change.)
+
+### Added
+
+- **`ctx entity apply`** (`scripts/ctx_bridges.py`, `context-protocol.md` §5h):
+  - **a dry run** lists, for a card of yours that an e-mail or your `same` joins *directly* to a card of another source and that has no bridge to its entity yet, the line `same_as: "[[<card>|<title>]]"` — one link, the shape the registry itself reads as a bridge — to the strongest such card (a core's by rank, then a local index's) in the same vault. A name or a «maybe the same» pair never makes one; a `not-same` pair never gets one;
+  - **what it skips, and why**: `уже мають міст` (any field, your scripts' too), `уже має same_as, але його ціль не знайдено`, `межа запису: …` (a note `--apply` would refuse), `картка поза вейлтом`, `нотатку не прочитано` / `не завантажено з iCloud — завантаж: ctx index rebuild --download`; then `код звіту: <8 hex>`;
+  - **someone else's field**: a `same_as` in your layer the plugin did not write (`.state/bridges.json`, schema `context-bridges/1`) — in a note on disk, or one iCloud keeps that your local index gives — means your own scripts keep it: no bridge at all, said once;
+  - **`--apply --code <code>`** writes that report alone (another code: exit 4, nothing touched): into your plugin folder and the storage root, never a core — a registered one, one inside your plugin folder in any letter case, one a registration file names even when it does not parse, a folder with a core's manifest or `.git` —, never `_System/`, the store or through a symlink; a note changed meanwhile is skipped; the line goes last in the frontmatter the index reads (`---` or `...`), in the note's own line ending, the note written in place — its mode, extended attributes and inode kept; one journal line `op entity-apply` with each note's hashes, a snapshot of the notes (0600);
+  - **context-navigator 0.4.0** writes bridges only when asked («запиши мости в нотатки», «зв'яжи мої нотатки з ядром»): the report, one question, `--apply --code` on your «так», then `Скасувати: ctx undo`.
+
+### Changed
+
+- **`ctx undo`** puts back the notes `entity apply` wrote: byte for byte from the snapshot when untouched, else our line alone (your edits stay), else `не повернуто: <path> — …`; the journal's history is written back before any note; `ctx undo` of the undo writes the bridges back; a note renamed since keeps our line ours.
+- **The plugin's description** (`plugin.json`, the marketplace entry, the Codex manifest) is one sentence of 182 characters; the component counts live in README alone. `validate-consistency.sh` check 1 keeps it one sentence ≤ 200 characters with no count, no version, no `**`; release-manager 0.4.2 no longer writes a version tail.
+- **The deferred minors of v3.19.0:** a row `«Ім'я, Ім'я — роль»` of a team card's people — in a table, as `**Lead:** A, B` or as the cores' own `**A, B** — роль` — gives one item per person when every name is exactly one person, and `ctx read` prints each as `<person> — з рядка «…»`; a repository card whose registration gives no rank is the last of the repositories in the cascade; `ctx entity` and `entity apply` on an index another process holds answer in about 6 s instead of 26–32 s.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/ctx_bridges.py` | new: the plan, the ledger, the write, the undo of notes |
+| `scripts/ctx.py` | `entity apply`, `ctx undo` of notes, usage text |
+| `scripts/ctx_ops.py` | `snapshot(notes=)` |
+| `scripts/ctx_index.py` | `Index.field_links`, `busy_once` + `probe` |
+| `scripts/ctx_entity.py` | the registry's own answers for the plan; busy once |
+| `scripts/ctx_eslots.py` | rows of several people; unranked registrations |
+| `skills/context-navigator/SKILL.md` | 0.3.2 → 0.4.0 — «Bridges in your notes» |
+| `skills/release-manager/SKILL.md` | 0.4.1 → 0.4.2 — no description tail |
+| `references/context-protocol.md`, `data-policy.md`, `host-profiles.md` | §5h, the journal, the commands table; bridges carry identity alone; needs FS + SHELL |
+| `.claude-plugin/*.json`, `.codex-plugin/plugin.json` | one-sentence description |
+| `testing/ctx_bridges_test.py` (new), `ctx_eslots_test.py`, `validate-consistency.sh`, `test-cases.md` | tests, the description check |
+
+### Acceptance (a copy of the author's vault, local index and store)
+
+- **The author's data as it is:** 0 bridges to write — 178 notes «уже мають міст» (the bridges their own normaliser keeps); 646 person cards → 465 people, 0 doubles.
+- **Without the normaliser** (its field taken out of the copy): 178 bridges, all by e-mail, all to the core; `--apply`: exactly 178 notes changed, one line each, the core's folder 0 changes; the next report 0; `ctx undo`: every note byte for byte.
+- One hand-written `same_as`: 0 bridges, said. An edited note: undo takes our line alone.
+- A busy index: 7.2 s / 6.3 s (exit 5, nothing written). Members of 39 core teams: 0 lost, +1; `ctx read` identical.
+- The real vault, `~/.grow-pm` and the local index: 0 changes from the acceptance.
+- Findings fixed during the acceptance: the author's notes iCloud keeps were taken for another source (never a bridge's target now, and said with `ctx index rebuild --download`); the cores' `**A, B** — роль` was taken for a label.
+
+### Known limits
+
+- A `same_as` written as text (no link) in a note that is no row of the report is not seen.
+- A process killed in the middle of the writes leaves the notes written so far with no journal line; the snapshot holds them.
+- On a vault iCloud mostly keeps, notes of yours that only a local index gives are checked by their frontmatter but get no bridge until downloaded (`ctx index rebuild --download`).
+
+### Backwards compatibility
+
+The index schema stays `search-index/1`, `meta_version` 4 — no re-read. Nothing writes into a note unless you run `entity apply --apply` with its report's code. `ctx undo` of anything else works as before. A CTX_RESULT of `ctx undo` gains `notes_reverted` and `notes_not_reverted`.
+
 ## v3.19.0 (2026-10-26)
 
 **«Слоти з однієї сутності»: a person's role, a team's members — one answer from every card.** A person has a note of yours, a core's registry card and maybe another team's card; a team has its core card, your team record and every person whose `team:` names it. Until now a skill read one of them, or read them all and saw one person twice. Now an entity's slots — `person.role`, `person.team`, `person.email`, `team.members`, `team.missions`, `team.parent`, `mission.teams`, `mission.jira_projects`, `*.owner` — are put together from all of its cards by the cascade of the records (yours, then the cores by rank, then a local index's card, then what other cards say), each piece with where it comes from and its date, and a list is one line per person. `ctx read`'s `team.members` is joined the same way, and the 14 skills that work with people find a person through `ctx entity`, never by a file name.

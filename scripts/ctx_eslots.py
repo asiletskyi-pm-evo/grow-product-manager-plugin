@@ -45,6 +45,10 @@ _MARKER = re.compile(r"^\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+")
 _SEPARATORS = re.compile(r"\s+[—–-]\s+|:|,|\(")
 _TABLE_RULE = re.compile(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$|^\|\s*:?-+:?\s*\|\s*$")
 _EMAIL = re.compile(r"[^@\s<>()\[\],;:\"|`*]+@[^@\s<>()\[\],;:\"|`*]+\.[A-Za-z]{2,}")
+_LABEL_LINE = re.compile(r"^\*\*([^*\n]{1,40}?)(?::\*\*|\*\*[ \t]*:)[ \t]*(.+)$")   # `**Lead:** A, B` (v3.20.0): a colon
+                                                                                 # makes a label — `**A, B** — роль` is names
+_NAME_SPLIT = re.compile(r"\s*(?:,|;|&|\s+(?:і|та|й|and)\s+)\s*")              # never `/`: a link's path has it
+UNRANKED = -10 ** 9                 # the rank of a repository card whose registration gives none: below every rank
 
 
 def item_kind(slot):
@@ -62,6 +66,37 @@ def _name_part(text):
     else:
         t = _SEPARATORS.split(t, 1)[0]
     return re.sub(r"^[\W_]+|[\W_]+$", "", t).strip()      # `**Bea Two**`, `Bea Two ◌`, `⭐ Bea Two`
+
+
+def _listed_names(text):
+    """The names an item lists before its role (v3.20.0, v3.19.0 known limits): a table row's first cell, the text after
+    an inline `**Label:**`, else the text before the first ` — `, ` – `, ` - ` or `(` — split at `,`, `;`, `&`, « і »,
+    « та », « й », « and ». (names, labelled): [] when the item lists one name and has no label."""
+    t = _MARKER.sub("", N(text or "")).strip()
+    labelled = False
+    if t.startswith("|"):
+        cells = [c.strip() for c in t.replace("\\|", "\x00").strip("|").split("|")]
+        t = cells[0].replace("\x00", "|") if cells else ""
+    else:
+        m = _LABEL_LINE.match(t)
+        if m:
+            t, labelled = m.group(2), True
+        t = re.split(r"\s+[—–-]\s+|\(", t, 1)[0]
+    parts = [x.strip() for x in _NAME_SPLIT.split(t) if x.strip()]
+    return (parts if len(parts) > 1 or (labelled and parts) else []), labelled
+
+
+def expand_items(text, kind, entity_of):
+    """[(row text, item text)] of one item of a people list: one per person it lists — a row «A, B — роль», an inline
+    `**Lead:** A, B` — when every name names exactly one person, each a different one; else the item as it is. A name two
+    people carry keeps the whole line one item, so nobody is joined from it by a guess."""
+    if kind == "person":
+        names, _ = _listed_names(text)
+        if names:
+            hits = [entity_of(x, kind)[0] for x in names]
+            if all(hits) and len(set(hits)) == len(hits):
+                return [(text, x) for x in names]
+    return [(text, text)]
 
 
 def item_entity(reg, text, kind):
@@ -164,7 +199,8 @@ class _Slots:
             return "mine", None             # your note, read through a local index while iCloud keeps its file: yours
         if card.get("origin") == "local":
             return "local", None
-        return "repo", self.ranks.get(card["source"])
+        rank = self.ranks.get(card["source"])
+        return "repo", UNRANKED if rank is None else rank   # a registration that gives no rank: last of the repositories
 
     def own(self, ent, slot):
         """The candidates of `slot` the entity's own cards give (no derived one)."""
@@ -285,7 +321,7 @@ def join_items(cands, reg, kind, strict, entity_of=None):
     groups, order = {}, []
     for k, c in enumerate(cands):
         seen = set()
-        for text in c["items"]:
+        for row, text in (x for t in c["items"] for x in expand_items(t, kind, entity_of)):
             eid, how = entity_of(text, kind)
             if eid is None and (strict or c.get("strict")) and kind:
                 continue
@@ -299,7 +335,8 @@ def join_items(cands, reg, kind, strict, entity_of=None):
                 seen.add(key)
                 g["origins"].append(_origin(c, how))
             if c["level"] != "derived" and not c.get("private"):
-                g["rows"].append({"level": c["level"], "source": c["card_source"], "text": text})
+                g["rows"].append(dict({"level": c["level"], "source": c["card_source"], "text": row},
+                                      **({"part": text} if row != text else {})))   # one person of a row of several
     if kind == "person":                                # a text item in another spelling of a person the list's other
         named = {k: reg.of(k) for k in order if not isinstance(k, tuple)}   # sources name: one line with them
         for k in [k for k in order if isinstance(k, tuple)]:
@@ -446,6 +483,8 @@ def member_lines(items, reg, idx, cat, sctx, limit=None, team=None):
                 continue
         rows = sorted(it.get("rows") or (), key=lambda r: LEVEL_RANK.get(r["level"], 9))
         head = _clean_row(rows[0]["text"]) if rows else it["label"]
+        if rows and rows[0].get("part"):                   # a row of several people: whose line this is (review M5)
+            head = "%s — з рядка «%s»" % (it["label"], head)
         if not rows and it.get("entity"):
             ent = reg.of(it["entity"])
             sl_ = slots_of(reg, idx, ent, cat, sctx, only=["person.role", "person.email"]) if ent else {}

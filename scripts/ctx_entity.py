@@ -769,9 +769,12 @@ def _prepare(sctx, store, budget):
     `read` — did any base answer (a built own index, or a card from a local index)."""
     notes, pending = [], 0
     idx = ci.Index(sctx["home"])
+    idx.busy_once = True                 # v3.20.0: a busy index is said once, not waited for at every read
     built = None
     if sctx.get("roots"):
         done, why = cs_._refresh(idx, sctx, ci.REFRESH_S if budget is None else budget, notes)
+        if why and ci._busy(why):
+            idx.probe()                  # held by another connection: the reads of this run do not wait for it
         pending = (done or {}).get("pending") or 0
         if why:
             notes.append(cs_.REFRESH_NOTE % why)
@@ -781,13 +784,15 @@ def _prepare(sctx, store, budget):
                          else cs_.NO_INDEX_NOTE % (why or "збудуй його: ctx index rebuild"))
         if pending:
             notes.append(cs_.PENDING_NOTE % pending)
-    mem = empty_memory()
+    mem, mem_problem = empty_memory(), None
     if store is not None and store.exists():
         try:
             mem = load_memory(store, timeout=cs_.OPEN_S)
         except cs.StoreError as e:
+            mem_problem = str(e)
             notes.append(UNREAD_MEMORY % e)
     reg, more = load(sctx, idx, mem)
+    reg.memory, reg.memory_problem = mem, mem_problem      # v3.20.0: `entity apply` plans by the answers it was built with
     notes.extend(n for n in more if n not in notes)
     notes.extend(NOT_APPLIED % (s["cards"][0], s["cards"][1], s["day"], NOT_APPLIED_WHY[s["why"]]) for s in reg.skipped)
     read = (built is True and not reg.unread) or any(c["origin"] == "local" for e in reg.entities for c in e["cards"])

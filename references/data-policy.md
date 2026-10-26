@@ -77,6 +77,10 @@ Step 0.5 of every skill searches the user's own base and, when it is not enough,
 2. **Live sources are read in the session, with a question where the data is sensitive.** Level 2 reads Confluence, Jira, meeting transcripts, Drive or mail only through the user's own connectors, and asks the user first before it reads person profiles, private channels or mail. What it reads stays in the session, like any data under this policy.
 3. **Nothing from a live source is indexed or stored.** The search's own index (`~/.grow-pm/index/`, outside every vault) holds only the user's vault folders and the cores registered on this machine; what level 2 finds goes into no index, no record and no store, and the user's choices keep the request and the paths chosen, never a note's content. A remote repository's server is asked only for a repository whose folder is not on disk, and only with the words of the request.
 
+## Bridges in your notes (since v3.20.0)
+
+`ctx entity apply` writes one frontmatter line into a note of the user's own plugin folder — a link to another card of the same entity and that card's title, identity alone, never a field, a value or a line of a profile — only after the user's «так» to the report, never into a core's folder; `ctx undo` takes it back (`references/context-protocol.md` §5h). The snapshot taken before keeps a copy of each note written — local, in `~/.grow-pm/snapshots/`, readable by the user alone (0600), rotated with the snapshots.
+
 ---
 
 ## Reference

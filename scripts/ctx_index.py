@@ -1058,6 +1058,8 @@ class Index:
         self.state_path = os.path.join(self.dir, STATE_NAME)
         self.lock_path = os.path.join(self.dir, LOCK_NAME)
         self.problem = None              # what the last read could not do, as a line for the caller to print
+        self.busy_once = False           # v3.20.0: once a read finds the index busy, the next ones of this run give up
+        self.busy = False                #   at once (`ctx entity`, apply: no wait of OPEN_S per read, ~26 s in all)
 
     # -------------------------------------------------- state and lock
     def _state(self):
@@ -1227,6 +1229,23 @@ class Index:
         con.row_factory = sqlite3.Row
         return con
 
+    def probe(self, timeout=0.5):
+        """Can the index be read now — one row of its meta within `timeout` seconds (v3.20.0)? False when another
+        connection holds it: `busy` and `problem` say so; True otherwise (no index, or a damaged one, is no busy one)."""
+        if not os.path.isfile(self.db_path):
+            return True
+        try:
+            con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(self.db_path), uri=True, timeout=timeout)
+            try:
+                con.execute("SELECT 1 FROM meta LIMIT 1").fetchone()
+            finally:
+                con.close()
+        except sqlite3.DatabaseError as e:
+            if _busy(e):
+                self.busy, self.problem = True, BUSY_NOTE
+                return False
+        return True
+
     # -------------------------------------------------- refresh
     def refresh(self, roots, store_rel, blocks_rels, budget=REFRESH_S):
         """Bring the index up to date within `budget` seconds (None: no limit). Returns {added, changed, removed,
@@ -1302,6 +1321,9 @@ class Index:
         corruption, a malformed page or a missing row is one too; a busy one; an expression FTS5 did not take).
         `problem` is None after a read that worked."""
         self.problem = None
+        if self.busy_once and self.busy:
+            self.problem = BUSY_NOTE
+            return empty
         try:
             con = self._ro()
             if con is None:
@@ -1313,6 +1335,7 @@ class Index:
         except sqlite3.DatabaseError as e:
             if _busy(e):
                 self.problem = BUSY_NOTE
+                self.busy = True
             elif "fts5" in str(e).lower() and not any(w in str(e).lower() for w in DAMAGE_WORDS):
                 self.problem = QUERY_NOTE % e
             else:
@@ -1493,6 +1516,17 @@ class Index:
         return self._with_note("SELECT l.field, l.target, l.tkey, l.anchor, l.label, l.embed, n.path, n.source, n.title, "
                                "n.type, n.date, n.sensitive FROM links l JOIN notes n ON n.id = l.note_id %s "
                                "WHERE l.tkey IN (%s) ORDER BY n.path" % (self._FRESH, ",".join("?" * len(keys))), keys)
+
+    def field_links(self, field, source=None):
+        """{path, target} of every link in the frontmatter field `field` (any case), of the notes of `source` only when
+        given (v3.20.0: the notes of your layer that already hold `same_as`). `problem` as for `query`."""
+        where, args = "WHERE lower(l.field) = ?", [str(field).lower()]
+        if source is not None:
+            where += " AND n.source = ?"
+            args.append(source)
+        rows = self._with_note("SELECT DISTINCT n.path, l.target, n.source, n.title, n.type, n.date, n.sensitive FROM links l "
+                               "JOIN notes n ON n.id = l.note_id %s %s ORDER BY n.path" % (self._FRESH, where), args)
+        return [{"path": N(r["path"]), "target": N(r["target"] or "")} for r in rows]
 
     def mentions(self, keys=None):
         """The Jira-key-shaped tokens of the notes (v3.18.0): {key, browse, path, source, title, type, date, sensitive};
