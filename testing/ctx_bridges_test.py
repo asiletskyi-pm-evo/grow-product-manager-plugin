@@ -439,9 +439,11 @@ with tempfile.TemporaryDirectory() as d:
     env = applied(d)
     os.remove(os.path.join(env.vault, RHEA[0]))
     rc, out, _ = env.cli("undo")
-    check("the note is gone: undo says so and restores the store anyway",
+    _, _, res_gone = env.cli("entity", "apply")
+    check("the note is gone: undo says so and restores the store anyway; the next report is not blocked (final I2: "
+          "a gone note's line stays ours — it may live on under another name)",
           rc == 0 and "не повернуто: %s" % RHEA[0] in out and not os.path.exists(os.path.join(env.vault, RHEA[0]))
-          and cb_.load_ledger(env.store)["written"] == [], out)
+          and res_gone["foreign"] == [], (out, res_gone.get("foreign")))
 
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)
@@ -800,6 +802,88 @@ with tempfile.TemporaryDirectory() as d:                                       #
     check("review M8: a folder of your plugin folder holding a core's manifest or `.git` is never written",
           "тека ядра" in (cb_.write_refusal(sctx, [], env.store.root, env.home, "Notes/Imported/People/kai.md") or "")
           and "тека ядра" in (cb_.write_refusal(sctx, [], env.store.root, env.home, "Notes/Cloned/People/lia.md") or ""), "")
+
+# ------------------------------------------------------------------ final review (review-v3.20.0-final.md)
+with tempfile.TemporaryDirectory() as d:                                       # I1: a same_as in a note iCloud keeps
+    env = Env(d, local=[("Notes/People/zed.md", {"type": "person", "email": "zed@zorg.example",
+                                                 "same_as": "[[ZorgCore/People/fay|Fay]]"})])
+    p = env.plan()
+    check("final I1: a `same_as` someone keeps in a note iCloud keeps (your local index gives it) stops every bridge",
+          p["rows"] == [] and "Notes/People/zed.md" in p["foreign"], p)
+
+with tempfile.TemporaryDirectory() as d:                                       # I1: notes nobody could read
+    env = Env(d)
+    real = ci.evicted
+    ci.evicted = lambda roots, store_rel, blocks_rels: ["Notes/People/far.md", "Notes/People/away.md"]
+    try:
+        res = cb_.plan_result(env.sctx(), env.store)
+    finally:
+        ci.evicted = real
+    check("final I1: notes of your layer iCloud keeps and no local index gives — said, no code (their `same_as` "
+          "unchecked), `ctx index rebuild --download`", not res["code"] and res.get("blocked")
+          and "2" in res["blocked"] and "--download" in res["blocked"], res.get("blocked"))
+    env2 = Env(os.path.join(d, "two"), local=[("Partner/x.md", {"type": "note"})])
+    ci.evicted = lambda roots, store_rel, blocks_rels: ["Notes/People/far.md"]
+    try:
+        res2 = cb_.plan_result(env2.sctx(), env2.store)
+    finally:
+        ci.evicted = real
+    check("…with a local index of yours (it gives their frontmatter) — said, the code stays",
+          res2["code"] and not res2.get("blocked") and any("iCloud" in n for n in res2["notes"]), res2["notes"])
+
+with tempfile.TemporaryDirectory() as d:                                       # I2: rename, then undo
+    env = applied(d, {"ZorgCore/People/pia.md": "---\ntype: people\nemail: pia@zorg.example\n---\n# Pia Core\n"})
+    os.rename(os.path.join(env.vault, RHEA[0]), os.path.join(env.vault, "Notes/People/rhea-one.md"))
+    env.cli("undo")
+    write(os.path.join(env.vault, "Notes/People/pia.md"), "---\ntype: person\nemail: pia@zorg.example\n---\n# Pia\n")
+    _, _, res = env.cli("entity", "apply")
+    check("final I2: apply, rename, undo — our line stays ours, the new pair is planned",
+          res["foreign"] == [] and [r["path"] for r in res["rows"]] == ["Notes/People/pia.md"], res)
+    check("…and a note both bridged and someone else's is listed once, as someone else's (final M5)",
+          not (set(res["skipped"].get(cb_.BRIDGED, [])) & set(res["foreign"])), res["skipped"])
+
+with tempfile.TemporaryDirectory() as d:                                       # M5: bridged and someone else's
+    both = ('---\ntype: person\nemail: rhea@zorg.example\nzorg_card: "[[ZorgCore/People/rhea-core]]"\n'
+            'same_as: "[[ZorgCore/People/fay|Fay]]"\n---\n# Rhea One\n')
+    p = Env(d, {RHEA[0]: both}).plan()
+    check("final M5: a note bridged already that holds someone else's `same_as` is listed once — as someone else's",
+          RHEA[0] in p["foreign"] and RHEA[0] not in p["skipped"].get(cb_.BRIDGED, []), p["skipped"])
+
+with tempfile.TemporaryDirectory() as d:                                       # M1: a core inside the plugin folder
+    sub = ("schema: provider-registration/2\nid: sub-core\ntitle: Sub core\nkind: folder\nauthority: team\n"
+           "core_root: %s\nstale_after_days: 30\nstatus: active\n" % os.path.join(d, "vault", "Notes", "SubCore"))
+    env = Env(d, {"Notes/_System/providers/sub-core.yaml": sub,
+                  "Notes/SubCore/People/kai.md": "---\ntype: people\nemail: kai@zorg.example\n---\n# Kai Core\n",
+                  "Notes/People/kai.md": "---\ntype: person\nemail: kai@zorg.example\n---\n# Kai\n"})
+    p = env.plan()
+    check("final M1: a registered core inside the plugin folder is a core — its card is a bridge's target",
+          ("Notes/People/kai.md", "Notes/SubCore/People/kai.md") in rows(p), p)
+
+with tempfile.TemporaryDirectory() as d:                                       # M2: the store in ~/.grow-pm
+    env = Env(d)
+    sctx = env.sctx()
+    sctx = dict(sctx, text=sctx["text"].replace("| Notes | all | auto |", "| Notes | all | off |"))
+    why = cb_.write_refusal(sctx, [], env.store.root, env.home, RHEA[0])
+    check("final M2: with the vault's sync off the reason says the store is in ~/.grow-pm, not «інший вейлт»",
+          why and "~/.grow-pm" in why and "інший вейлт" not in why, why)
+
+with tempfile.TemporaryDirectory() as d:                                       # M5: the result of --apply
+    env = Env(d, {"ZorgCore/People/pia.md": "---\ntype: people\nemail: pia@zorg.example\n---\n# Pia Core\n",
+                  "Notes/People/pia.md": "---\ntype: person\nemail: pia@zorg.example\n---\n# Pia\n"})
+    _, _, res = env.cli("entity", "apply")
+    os.chmod(os.path.join(env.vault, RHEA[0]), 0o444)
+    try:
+        rc, out, res2 = env.cli("entity", "apply", "--apply", "--code", res["code"])
+    finally:
+        os.chmod(os.path.join(env.vault, RHEA[0]), 0o644)
+    check("final M5: CTX_RESULT `rows` after --apply is what was written", [r["path"] for r in res2["rows"]] ==
+          ["Notes/People/pia.md"], res2 and res2.get("rows"))
+
+import ctx as ctx_cli  # noqa: E402
+doc = " ".join((ctx_cli.__doc__ or "").split())
+check("final M4: ctx's usage text knows `entity apply` and that undo puts notes back; `entity apply --apply` writes",
+      "entity apply [--kind K]" in doc and "entity apply --apply --code C" in doc and "the notes `entity apply` wrote" in doc
+      and "`entity same|not-same` and `entity apply --apply`) take no store lock" in doc, "")
 
 # ------------------------------------------------------------------ acceptance finding: notes of yours iCloud keeps
 with tempfile.TemporaryDirectory() as d:

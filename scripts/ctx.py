@@ -21,7 +21,8 @@
                                 those blocks: for each block the pass took, the core's text (its hash, or "removed")
                                 goes into the repository's block state as rejected — written after the restore — and
                                 no sync applies it again, nor does `provider apply` unless told --choose BLOCK=theirs
-                                ("не застосовуватиметься, доки ядро не змінить блок: <repo>: <blocks>"). CTX_RESULT:
+                                ("не застосовуватиметься, доки ядро не змінить блок: <repo>: <blocks>"). Since v3.20.0
+                                the notes `entity apply` wrote go back too («повернуто нотаток: N», «не повернуто: …»). CTX_RESULT:
                                 rejected {repo: [blocks]}, rejected_failed {repo: why} (a state that could not take
                                 it: the undo stands, and says the sync may apply the text again)
   read --skill S [--product P]  the card plus what the skill's manifest entry names (reads only)
@@ -262,6 +263,18 @@
   entity pairs [--kind K] [--json]
                                 every open pair «можливо той самий» (two cards of one kind from different sources whose
                                 names are alike, not answered yet). Writes only the index
+  entity apply [--kind K] [--json]
+                                since v3.20.0: the bridges your notes lack — a card of yours an e-mail or your `same`
+                                joins to a card of another source, with no bridge yet, gets `same_as: "[[<card>|<title>]]"`
+                                (context-protocol §5h). A report: `запишу N мостів:`, what is skipped and why, `код звіту:
+                                <8 hex>`; writes only the index. No code when your answers or notes iCloud keeps (and no
+                                local index gives) cannot be read
+  entity apply --apply --code C
+                                writes that report alone into your plugin folder — one frontmatter line per note, in place,
+                                after a snapshot of the notes; `.state/bridges.json` and one journal line (op entity-apply);
+                                `ctx undo` takes it back. Another code: exit 4; --apply without --code, --code without
+                                --apply, no store or no code: exit 3; the index not read: exit 5. CTX_RESULT: rows
+                                (written), planned, skipped, snapshot
   entity same|not-same A B      your answer: A and B (a card's path or link, or a name one card alone carries) are, or are
                                 not, the same — kept in the store's `.state/entities.json` (context-entity-memory/1), the
                                 opposite answer replaced; `not-same` keeps them apart whatever the e-mail or a bridge
@@ -271,7 +284,7 @@
                                 read: exit 3. CTX_RESULT: action, cards, changed, snapshot
 
 `read` and `explain` take no lock and write nothing; `index`, `search` (but `search remember|forget`) and `entity` (but
-`entity same|not-same`) take no store lock and write only the index's folder.
+`entity same|not-same` and `entity apply --apply`) take no store lock and write only the index's folder.
 Every writing command takes the lock, refuses a store inside a provider's folder (and, since v3.14, a run when a
 registration is not read in time — 3 s each, 6 s for all: the boundary cannot be checked, exit 4), imports direct
 edits first, snapshots, writes, journals and compiles (`provider adopt --apply` imports first too, and then
@@ -854,12 +867,19 @@ def cmd_undo(a, c):
                                                 extra_dirs=[os.path.join(c.home, ".grow-pm", "providers")])
             for rel in dict.fromkeys(rel for rel, _, _ in items):    # as they are now: `ctx undo` of this undo needs them
                 path, _ = cbr.own_file(sctx, rel)
-                if path and os.path.isfile(path) and not cbr.write_refusal(sctx, regs, c.store.root, c.home, rel):
+                if path and os.path.isfile(path) and not ci.is_dataless(path) \
+                        and not cbr.write_refusal(sctx, regs, c.store.root, c.home, rel):
                     try:
                         cs.read_bytes(path)             # one iCloud has not downloaded: no copy, said by the revert
                     except (OSError, cs.StoreError):
                         continue
                     keep.append((rel, path))
+        previous = None
+        if items:
+            try:
+                previous = cbr.load_ledger(c.store)     # our lines before the restore: a renamed note keeps them ours
+            except cs.StoreError:
+                previous = None
         pre = co.snapshot(c.store, c.copies, c.home, "pre-undo", notes=keep or None)
         skipped = co.restore(target, c.store, c.copies)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
@@ -871,7 +891,7 @@ def cmd_undo(a, c):
         notes_done, notes_back, notes_kept = (cbr.revert_notes(sctx, regs, c.store.root, c.home, items) if items
                                               else ([], [], []))
         if items and existed:
-            cbr.keep_ours(sctx, c.store, items, now()[:10])    # our line a note still holds stays ours (review I3)
+            cbr.keep_ours(sctx, c.store, items, now()[:10], previous=previous, reverted=notes_back)   # ours stays ours
         if notes_back:
             print("повернуто нотаток: %d" % len(notes_back))
         for rel, why in notes_kept:
@@ -1427,12 +1447,16 @@ def _entity_apply(a, c):
         done = cbr.apply_plan(sctx, c.store, c.copies, c.home, res, regs, t[:10],
                               lambda notes: co.snapshot(c.store, c.copies, c.home, "entity-apply", notes=notes),
                               c.store.journal, t)
-    shown = dict(res, rows=done["written"], skipped=dict(res["skipped"], **done["skipped"]))
+    merged = {k: list(v) for k, v in res["skipped"].items()}
+    for k, v in done["skipped"].items():            # a reason of the plan and of the write: both lists kept (final M5)
+        merged[k] = list(dict.fromkeys(merged.get(k, []) + v))
+    shown = dict(res, rows=done["written"], skipped=merged)
     if not a.json:
         sys.stdout.write(cbr.render(shown, written=True))
         if done["written"]:
             print("скасувати: ctx undo")
-    return 0, dict(res, written=done["written"], skipped=shown["skipped"], snapshot=done["snapshot"])
+    return 0, dict(res, rows=done["written"], planned=res["rows"], written=done["written"], skipped=merged,
+                   snapshot=done["snapshot"])
 
 
 def _entity_answer(a, c, action, words):

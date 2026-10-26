@@ -46,9 +46,9 @@ except FileNotFoundError:
 def wrong(t):
     if len(t)>MAX: return "%d characters" % len(t)
     if "**" in t: return "markup **"
-    if len(re.findall(r"[.!?](?:\s|$)",t))>1: return "more than one sentence"
+    if len(re.findall(r"[.!?](?:\s|$)",re.sub(r"\b(?:e\.g|i\.e|etc)\.","",t)))>1: return "more than one sentence"
     if re.search(r"\b\d+ (?:skills|agents|commands|connectors|hooks)\b",t): return "a component count (README holds them)"
-    if re.search(r"\bv\d+(?:\.\d+)*\b|\b\d+\.\d+\.\d+\b|released \d{4}-\d{2}-\d{2}",t): return "a version or a release date"
+    if re.search(r"(?<![/\w])v\d+(?:\.\d+)+\b|\b\d+\.\d+\.\d+\b|released \d{4}-\d{2}-\d{2}",t): return "a version or a release date"
     return None
 bad=[(t, wrong(t)) for t in texts if wrong(t)]
 for t, why in bad: print("  description (%s): %s…" % (why, t[:60]))

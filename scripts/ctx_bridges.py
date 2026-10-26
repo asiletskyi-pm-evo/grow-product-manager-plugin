@@ -36,6 +36,7 @@ import ctx_common as cc  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_resolve as rv  # noqa: E402
+import ctx_search as cs_  # noqa: E402
 import ctx_store as cs  # noqa: E402
 
 N = cc.N
@@ -56,6 +57,10 @@ EVICTED = "нотатку не завантажено з iCloud (її дає л�
 NO_FM = "нотатка без frontmatter"
 HAS_FIELD = "уже має `%s`, але його ціль не знайдено — онови сам або ctx undo" % FIELD
 MEMORY_UNREAD = "твої відповіді same/not-same не прочитано — коду звіту немає, мости не пишуться (%s)"
+EVICTED_BLOCK = ("%d нотаток твого шару iCloud не завантажив, і жоден локальний індекс їх не дає — чуже `" + FIELD
+                 + "` у них не перевірено, коду звіту немає: ctx index rebuild --download")
+EVICTED_NOTE = ("%d нотаток твого шару iCloud не завантажив — їхній frontmatter перевірено за локальним індексом; "
+                "завантажити: ctx index rebuild --download")
 PENDING_FOREIGN = "%d нотаток індекс ще не прочитав — чуже `" + FIELD + "` у них не перевірено"
 DENIED = "міст, який заперечує твоє not-same (лише показ — прибери сам або ctx undo)"
 SKIP_ORDER = (BRIDGED, HAS_FIELD, FOREIGN, OUTSIDE, UNLINKABLE, UNREAD, EVICTED, NOT_LAYER, NO_FM)
@@ -263,9 +268,8 @@ def _registration_folders(sctx):
     out = []
     for f in files:
         try:
-            with open(f, encoding="utf-8", errors="replace") as fh:
-                text = fh.read(65536)
-        except OSError:
+            text = cs.read_text(f, timeout=cc.BOUNDARY_READ_S)[:65536]   # one iCloud keeps never hangs a dry run
+        except (OSError, UnicodeDecodeError, cs.StoreError):
             continue
         for m in _REG_PATH.finditer(text):
             d = (m.group(1) or m.group(2) or "").strip()
@@ -288,6 +292,8 @@ def write_refusal(sctx, regs, store_root, home, rel):
     if os.path.islink(path) or not ci._within(_fold(os.path.realpath(path)), _fold(os.path.realpath(root))):
         return "посилання (symlink)"
     storage = cc.storage_root(sctx.get("text") or "", home)
+    if _fold(storage) == _fold(os.path.join(home, ".grow-pm")):
+        return "сховище в ~/.grow-pm (синк вейлту off) — мости пишуться лише у вейлт зі сховищем"
     if not _under(path, storage):
         return "інший вейлт — поза коренем сховища"
     if "_system" in [x.casefold() for x in os.path.relpath(path, root).split(os.sep)[:-1]]:
@@ -345,8 +351,10 @@ def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, regs=None, store_root=No
     home = sctx.get("home") or os.path.expanduser("~")
     prefixes = [p for p in getattr(reg.resolver, "prefixes", ()) if p]
 
-    def yours(card):        # a note of your plugin folder — a local index's too, while iCloud keeps the file (v3.19.0)
-        return card.get("source") == "own" or any(card["path"] == p or card["path"].startswith(p + "/") for p in prefixes)
+    def yours(card):        # a note of your plugin folder — a local index's too, while iCloud keeps the file (v3.19.0);
+        if card.get("source") == "own":                     # a registered core inside the plugin folder is a core
+            return True
+        return card.get("origin") == "local" and any(card["path"] == p or card["path"].startswith(p + "/") for p in prefixes)
 
     def skip(why, path):
         skipped.setdefault(why, [])
@@ -355,8 +363,12 @@ def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, regs=None, store_root=No
 
     with cs.read_budget(timeout if timeout is not None else cs.read_timeout()):    # every note in one budget (M2)
         for e in reg.entities:
-            for c in e["cards"]:                     # a bridge your note keeps that your not-same denies: shown only
-                if c.get("source") == "own":
+            for c in e["cards"]:
+                if yours(c) and c.get("origin") != "index":   # a note iCloud keeps: its `same_as` by the local index
+                    t = (c.get("bridges") or {}).get(FIELD)
+                    if t and _target_key(t) not in our_targets:
+                        foreign.add(c["path"])
+                if c.get("source") == "own":         # a bridge your note keeps that your not-same denies: shown only
                     for target in c.get("bridges", {}).values():
                         hit = reg.resolver.resolve(target)
                         if isinstance(hit, str) and tuple(ce._pair(c["path"], hit)) in apart:
@@ -404,6 +416,9 @@ def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, regs=None, store_root=No
                 if not line:
                     skip(UNLINKABLE, c["path"])
                     continue
+                if ci.is_dataless(path):             # never a download started by a dry run (final M3)
+                    skip(EVICTED, c["path"])
+                    continue
                 try:
                     data = cs.read_bytes(path)
                     text = data.decode("utf-8")
@@ -427,6 +442,8 @@ def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, regs=None, store_root=No
     if foreign:
         rows = []
         skipped[FOREIGN] = foreign
+        if skipped.get(BRIDGED):                     # someone else's field: said once, there (final M5)
+            skipped[BRIDGED] = [x for x in skipped[BRIDGED] if x not in foreign]
     rows.sort(key=lambda r: r["path"])
     blob = json.dumps([[r["path"], r["line"], r["sha"]] for r in rows] + [foreign], ensure_ascii=False)
     return {"rows": rows, "skipped": skipped, "foreign": foreign, "denied": sorted(set(denied)),
@@ -447,6 +464,12 @@ def plan_result(sctx, store, kind=None, budget=None):
     if idx.problem and idx.problem not in notes:
         notes.append(idx.problem)
     blocked = MEMORY_UNREAD % reg.memory_problem if getattr(reg, "memory_problem", None) else None
+    evicted = ci.evicted(sctx.get("roots") or [], sctx.get("store_rel"), sctx.get("blocks_rels")) if sctx.get("roots") else []
+    if evicted:                                      # what nobody read cannot be checked for `same_as` (final I1)
+        if cs_.sources(sctx.get("text") or "", sctx.get("repos") or [], ("local",)):
+            notes.append(EVICTED_NOTE % len(evicted))
+        else:
+            blocked = blocked or EVICTED_BLOCK % len(evicted)
     if blocked:
         plan["code"] = ""
     if pending:
@@ -618,6 +641,9 @@ def revert_notes(sctx, regs, store_root, home, items):
         if not os.path.lexists(path):
             kept[rel] = GONE
             continue
+        if ci.is_dataless(path):
+            kept[rel] = UNREAD
+            continue
         try:
             cur = cs.read_bytes(path)
         except (OSError, cs.StoreError) as e:
@@ -655,20 +681,30 @@ def revert_notes(sctx, regs, store_root, home, items):
     return done, reverted, [(r, w) for r, w in kept.items() if r not in reverted]
 
 
-def keep_ours(sctx, store, items, day):
+def keep_ours(sctx, store, items, day, previous=None, reverted=()):
     """After an undo restored the store: a note of `items` that still holds our line exactly (one undo could not take
-    it out, or put it back) has it in the ledger again — never «someone else's» for a line the plugin wrote (review
-    I3). Returns the paths added back."""
+    it out, or put it back) has it in the ledger again — and so has one undo did not revert whose file is gone (renamed,
+    moved: our line lives on under another path, and the ledger's line is matched under any path) when the ledger
+    before the undo (`previous`) held it — never «someone else's» for a line the plugin wrote (review I3, final I2).
+    Returns the paths added back."""
     ledger = load_ledger(store)
     have = {(N(p), line) for p, f, line, _ in ledger["written"] if f == FIELD}
+    before = {(N(p), line) for p, f, line, _ in (previous or {}).get("written", []) if f == FIELD}
     added = []
     for rel, _, n in items:
         line = n.get("line")
         if not isinstance(line, str) or not line or (rel, line) in have:
             continue
         path, _ = own_file(sctx, rel)
+        if rel not in reverted and (rel, line) in before and not (path and os.path.lexists(path)):
+            ledger["written"].append([rel, FIELD, line, day])
+            have.add((rel, line))
+            added.append(rel)
+            continue
+        if not path or not os.path.isfile(path) or ci.is_dataless(path):
+            continue
         try:
-            text = cs.read_bytes(path).decode("utf-8") if path and os.path.isfile(path) else ""
+            text = cs.read_bytes(path).decode("utf-8")
         except (OSError, UnicodeDecodeError, cs.StoreError):
             continue
         if line in fm_lines(text):
