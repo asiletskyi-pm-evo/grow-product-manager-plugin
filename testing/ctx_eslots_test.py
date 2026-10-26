@@ -46,7 +46,8 @@ def write(path, text):
 LOCAL_NOTES = (   # path, type, frontmatter — a partner team's cards the user's own local index holds
     ("Partner/People/rhea-g.md", "person", {"type": "person", "email": "rhea@zorg.example", "role": "Growth PM"}),
     ("Partner/People/fay-g.md", "person", {"type": "person", "email": "fay@zorg.example", "role": "Analyst"}),
-)
+    ("Notes/People/gus-own.md", "person", {"type": "person", "email": "gus@zorg.example", "role": "Tech lead"}),
+)                 # gus-own: a note of your plugin folder iCloud evicted — the local index alone gives its card
 
 
 def local_index(path, vault):
@@ -200,6 +201,12 @@ with tempfile.TemporaryDirectory() as d:
           env.slots(PAY).get("team.members"))
     check("v3.18.1 Task 2 review M3: …and her answer says which card is not read yet",
           (env.slots(FAY).get("person.team") or {}).get("unread") == [FAY], env.slots(FAY).get("person.team"))
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    role = env.slots(GUS).get("person.role") or {}
+    check("v3.18.1 acceptance: your note the local index gives (its file evicted) is yours — `mine`, it wins over the core",
+          role.get("value") == "Tech lead" and role.get("origin", {}).get("level") == "mine", role)
 
 # the cascade over the levels of the cards (C6): pure, candidates in, an answer out
 cat = sl.load_catalogue()

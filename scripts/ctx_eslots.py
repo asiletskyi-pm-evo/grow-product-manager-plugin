@@ -32,6 +32,7 @@ import ctx_entity as ce  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_resolve as rv  # noqa: E402
 import ctx_slots as sl  # noqa: E402
+import provider_bundle as pb  # noqa: E402
 
 N = cc.N
 ITEM_KIND = {"team.members": "person", "team.missions": "mission", "team.parent": "team", "mission.teams": "team",
@@ -60,7 +61,7 @@ def _name_part(text):
         t = cells[0].replace("\x00", "|") if cells else ""
     else:
         t = _SEPARATORS.split(t, 1)[0]
-    return t.strip(" *_`").strip()
+    return re.sub(r"^[\W_]+|[\W_]+$", "", t).strip()      # `**Bea Two**`, `Bea Two ◌`, `⭐ Bea Two`
 
 
 def item_entity(reg, text, kind):
@@ -146,6 +147,10 @@ class _Slots:
         self.ranks = {r.get("id"): rv._rank(r) for r in (sctx or {}).get("repos") or ()}
         self._own, self._derived, self._values, self._items = {}, {}, {}, {}
 
+    def in_plugin_folder(self, path):
+        """Is `path` under a plugin folder of yours (the index names of the own roots)?"""
+        return any(path == p or path.startswith(p + "/") for p in self.reg.resolver.prefixes if p)
+
     def entity(self, text, kind):
         """item_entity, each (text, kind) once: hundreds of people name a few dozen teams."""
         key = (text, kind)
@@ -154,8 +159,8 @@ class _Slots:
         return self._items[key]
 
     def level(self, card):
-        if card["source"] == "own":
-            return "mine", None
+        if card["source"] == "own" or self.in_plugin_folder(card["path"]):
+            return "mine", None             # your note, read through a local index while iCloud keeps its file: yours
         if card.get("origin") == "local":
             return "local", None
         return "repo", self.ranks.get(card["source"])
@@ -201,7 +206,7 @@ class _Slots:
             out.append({"slot": slot, "level": level, "source": "mine" if level == "mine" else c["source"],
                         "card_source": c["source"], "rank": rank, "placed": True, "path": c["path"],
                         "date": c.get("date") or "", "text": "\n".join(items), "items": items,
-                        "private": private, "strict": private})   # private: names and sources only, no row
+                        "private": private, "strict": True})   # a card's list keeps what names an entity; private: no row
         self._own[key] = out
         return out
 
@@ -248,6 +253,13 @@ def candidates(reg, idx, ent, slot, cat, sctx, _s=None):
     return s.own(ent, slot) + s.derived(ent, slot)
 
 
+def record_candidates(shown):
+    """The candidates a store's team record gives team.members (ctx_resolve's `shown`) as the join takes them: your text
+    `mine`, a bound block its repository's; its items are the list's lines, kept as text when they name no card."""
+    return [dict(c, card_source=c["source"] if c.get("level") != "mine" else "own", path=c.get("record") or "",
+                 date=c.get("checked") or "", items=split_items(c["text"]), strict=False) for c in shown or ()]
+
+
 def _origin(c, how=None):
     d = {"level": c["level"], "source": c["card_source"], "path": c["path"], "date": c["date"]}
     if how:
@@ -282,6 +294,16 @@ def join_items(cands, reg, kind, strict, entity_of=None):
                 g["origins"].append(_origin(c, how))
             if c["level"] != "derived" and not c.get("private"):
                 g["rows"].append({"level": c["level"], "source": c["card_source"], "text": text})
+    if kind == "person":                                # a text item in another spelling of a person the list's other
+        named = {k: reg.of(k) for k in order if not isinstance(k, tuple)}   # sources name: one line with them
+        for k in [k for k in order if isinstance(k, tuple)]:
+            name = _name_part(groups[k]["label"])
+            hits = [e for e in named.values() if e and name and any(pb.same_person(name, x) for x in ce._names_of(e))]
+            if len(hits) == 1:
+                g, into = groups.pop(k), groups[hits[0]["id"]]
+                order.remove(k)
+                into["origins"] += [dict(o, how="alike") for o in g["origins"]]
+                into["rows"] += g["rows"]
     items = [groups[k] for k in order]
     for g in items:
         g["derived_only"] = all(o["level"] == "derived" for o in g["origins"])
@@ -299,12 +321,14 @@ def _value(reg, slot, c):
     return {"value": ce._plain(c["text"])}
 
 
-def slots_of(reg, idx, ent, cat, sctx, people=False, only=None):
+def slots_of(reg, idx, ent, cat, sctx, people=False, only=None, records=None):
     """{slot: answer} of the slots the cards of `ent` answer (ctx_slots.card_slots; `only` keeps those asked for), a slot
     with no candidate left out. A value: {slot, kind, value, entity?, origin, also: [{value, entity?, level, source, path,
     date}], diverges: [sources], why}; a list: {slot, kind, items (join_items), count, why}. Outside the People contour
     (`people` False) a person's slots are its identity alone — role, team, e-mail — which is all the catalogue gives a
-    person; nothing of a profile's body or judgement is ever read."""
+    person; nothing of a profile's body or judgement is ever read. `records(ent)` — the candidates of team.members the
+    store's team records matched with this team give (record_candidates), so `ctx entity` and `ctx read` say one
+    composition (plan C8)."""
     if not ent:
         return {}
     s = _Slots(reg, idx, cat, sctx, people=people)
@@ -316,11 +340,13 @@ def slots_of(reg, idx, ent, cat, sctx, people=False, only=None):
             continue                                    # outside People: a person's identity alone (review M8)
         info = sl.card_slot_info(cat, slot)
         cands = candidates(reg, idx, ent, slot, cat, sctx, _s=s)
+        if slot == "team.members" and records is not None:
+            cands = list(records(ent) or ()) + cands
         if not cands:
             continue
         unread = [c["path"] for c in ent["cards"] if c.get("home", True) and c.get("fields") is None]
         if info["kind"] == "list":
-            items = join_items(cands, reg, item_kind(slot), strict=True, entity_of=s.entity)
+            items = join_items(cands, reg, item_kind(slot), strict=False, entity_of=s.entity)
             if items:
                 out[slot] = {"slot": slot, "kind": "list", "items": items, "count": len(items), "why": rv.WHY_JOINED}
                 if unread:                              # a card whose fields no walk read yet (review M3)
@@ -357,18 +383,21 @@ def team_entity(reg, title):
     m = re.match(r"^(.*?)\s*\(([^)]*)\)\s*$", name)
     if m:
         tries += [m.group(1).strip(), m.group(2).strip()]
-    ids = []
+    by_how = {"name": [], "similar": []}
     for q in [t for t in tries if t]:
         found, how = reg.find(q, "team")
-        if how in ("name", "similar"):
-            ids += [e["id"] for e in found if e["id"] not in ids]
-        if len(ids) == 1 and how == "name":
-            break
-    if len(ids) == 1:
-        return reg.of(ids[0]), None
-    if not ids:
-        return None, "картки такої команди немає"
-    return None, "кілька карток: " + ", ".join(sorted(ids)[:5])
+        if how in by_how:
+            by_how[how] += [e["id"] for e in found if e["id"] not in by_how[how]]
+    for how in ("name", "similar"):                     # an exact name first, a name alike only when none is exact
+        ids = by_how[how]
+        indexed = [i for i in ids if any(c.get("origin") == "index" for c in (reg.of(i) or {}).get("cards", []))]
+        if len(ids) == 1:
+            return reg.of(ids[0]), None
+        if len(indexed) == 1:                           # a core's or your card before another team's in a local index
+            return reg.of(indexed[0]), None
+        if ids:
+            return None, "кілька карток: " + ", ".join(sorted(ids)[:5])
+    return None, "картки такої команди немає"
 
 
 def _who_short(o):
@@ -399,6 +428,8 @@ def member_lines(items, reg, idx, cat, sctx, limit=None):
         marks = list(dict.fromkeys(_who_short(o) for o in it["origins"]))
         if any(o.get("how") == "name" for o in it["origins"]):
             marks.append("за назвою")
+        if any(o.get("how") == "alike" for o in it["origins"]):
+            marks.append("схоже ім'я")
         if it.get("derived_only"):
             marks.append("лише виведене")
         out.append("- %s · %s" % (head, " · ".join(marks)))
@@ -433,9 +464,7 @@ def read_members(result, rec, origin, entities, cat):
         return rv.render_slot(result, origin) + (FROM_CARDS % (n, ent["label"]) + "\n" if n else "")
     if not shown and not cards:
         return None
-    recs = [dict(c, card_source=c["source"] if c.get("level") != "mine" else "own", path=c.get("record") or "",
-                 date=c.get("checked") or "", items=split_items(c["text"])) for c in shown]
-    items = join_items(recs + cards, reg, "person", strict=False, entity_of=s.entity)
+    items = join_items(record_candidates(shown) + cards, reg, "person", strict=False, entity_of=s.entity)
     head = []
     for c in shown:
         if c.get("level") == "mine":

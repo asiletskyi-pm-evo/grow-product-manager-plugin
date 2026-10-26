@@ -202,5 +202,44 @@ with tempfile.TemporaryDirectory() as d:
                            lambda: ((reg, idx, sctx), None), sl.load_catalogue())
     check("…and so does your `prefer repo:` for it", "Rhea One" not in text and "з карток ще 2" in text, text)
 
+# --- v3.18.1 acceptance findings (the user's data, 2026-10-26)
+def local_team_index(env):
+    """A local index of the user's that holds another team's card under the same team's name (as Growth's does)."""
+    con = sqlite3.connect(os.path.join(env.home, "zorg-brain.sqlite"))
+    con.execute("CREATE TABLE meta(k TEXT, v TEXT)")
+    con.execute("INSERT INTO meta VALUES ('vault_root', ?)", (env.vault,))
+    con.execute("CREATE TABLE notes(path TEXT PRIMARY KEY, title TEXT, type TEXT, fm_json TEXT)")
+    con.execute("CREATE VIRTUAL TABLE notes_fts USING fts5(path, title, body)")
+    con.execute("INSERT INTO notes VALUES (?, ?, ?, ?)", ("Partner/Team/Zorg Pay Team.md", "Zorg Pay Team", "team",
+                                                         json.dumps({"type": "team", "name": "Zorg Pay Team"})))
+    con.commit()
+    con.close()
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d, team=TEAM.replace("- [[Notes/People/rhea|Rhea One]] — PM\n", "- One Rhea ◌ — PM\n"))
+    local_team_index(env)
+    rc, out, _ = env.cli("read", "--skill", "task-creator")
+    zp = team_part(out, "Zorg Pay")
+    lines = [l for l in zp.splitlines() if l.startswith("- ")]
+    check("v3.18.1 acceptance: another team's card of a like name in a local index does not keep the record from its "
+          "core card — the exact name wins", "не зіставлено" not in zp and any("Fay Four" in l for l in lines), zp[-900:])
+    rhea = [l for l in lines if "Rhea" in l]
+    check("v3.18.1 acceptance: your row that names a person the list's other sources name, in another spelling («One "
+          "Rhea ◌»), is ONE line with them — `схоже ім'я` —, never a second line", len(rhea) == 1 and "схоже ім'я" in rhea[0]
+          and "zorg-core" in rhea[0] and "твоє" in rhea[0], rhea)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    rc, out, _ = env.cli("read", "--skill", "task-creator")
+    read_items = sorted(l[2:].split(" · ")[0].split(" — ")[0] for l in team_part(out, "Zorg Pay").splitlines()
+                        if l.startswith("- ") and "Jira Team ID" not in l)
+    rc2, out2, res2 = env.cli("entity", "Zorg Pay", "--slot", "team.members")
+    m = (((res2 or {}).get("entities") or [{}])[0].get("slots") or {}).get("team.members") or {}
+    ent_items = sorted(i["label"].split(" — ")[0] for i in m.get("items", []))
+    check("v3.18.1 C8: `ctx entity <team> --slot team.members` and `ctx read`'s team.members are one composition — "
+          "your record's items too (Ann Other), one line per person", rc2 == 0 and len(ent_items) == len(read_items)
+          and any("Ann Other" in x for x in ent_items), (read_items, ent_items))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

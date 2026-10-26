@@ -440,6 +440,11 @@ def _names(card):
     return [x for x in (card["label"], _stem(card["path"]), card.get("slug")) if x]
 
 
+def _names_of(ent):
+    """Every name an entity's cards carry: their titles, file names, slugs."""
+    return list(dict.fromkeys(x for c in ent["cards"] for x in _names(c)))
+
+
 def _norms(card):
     return {pb.norm_team(x) for x in _names(card) + list(card.get("aliases") or [])} - {""}
 
@@ -781,7 +786,7 @@ def _prepare(sctx, store, budget):
     return idx, reg, notes, read, pending
 
 
-def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None, prepared=None):
+def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None, prepared=None, records=None):
     """`ctx entity <request>` (plan C13–C14): {command, query, how, entities, mention, notes, read, pending}. One entity
     → its cards (identity only), related, maybe, its slots (v3.18.1, ctx_eslots — `slots`: the ids asked for, then
     nothing but them: no backlinks, no mentions), backlinks (with a local index's edges, plan C10), mentions (a work
@@ -801,7 +806,8 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None,
                "maybe": [dict(_brief(c), mine=c["mine"], **({"hint": c["hint"]} if c.get("hint") else {}))
                          for c in e["maybe"]]}
         if len(found) == 1:
-            one["slots"] = es.slots_of(reg, idx, e, sl.load_catalogue(), sctx, people=people, only=slots or None)
+            one["slots"] = es.slots_of(reg, idx, e, sl.load_catalogue(), sctx, people=people, only=slots or None,
+                                       records=(lambda ent: records(reg).get(ent["id"], [])) if records else None)
             if idx.problem and idx.problem not in notes:   # a busy index: a section's members are missing (review M6)
                 notes.append(idx.problem)
             if slots:
@@ -827,11 +833,11 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None,
     return out
 
 
-def run_many(sctx, queries, kind=None, skill=None, store=None, budget=None, slots=None):
+def run_many(sctx, queries, kind=None, skill=None, store=None, budget=None, slots=None, records=None):
     """`ctx entity --q A --q B …` (v3.18.1, plan C9c): the index refreshed once, one `run` per request —
     {command, requests: [run result], notes, read}."""
     prepared = _prepare(sctx, store, budget)
-    reqs = [run(sctx, q, kind=kind, skill=skill, slots=slots, prepared=prepared) for q in queries]
+    reqs = [run(sctx, q, kind=kind, skill=skill, slots=slots, prepared=prepared, records=records) for q in queries]
     return {"command": "entity", "requests": reqs, "notes": list(prepared[2]), "read": prepared[3]}
 
 

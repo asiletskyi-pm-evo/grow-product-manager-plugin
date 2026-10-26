@@ -42,6 +42,7 @@ iCloud). Stdlib only.
 import bisect
 import collections
 import datetime
+import functools
 import hashlib
 import json
 import os
@@ -185,10 +186,19 @@ def Root(source, path, vault=""):
     return {"source": source, "path": path, "vault": vault}
 
 
+@functools.lru_cache(maxsize=8192)
+def _real_dir(d):
+    """A folder's path with its links resolved — once per folder in a process (v3.18.1: a local index of thousands of
+    notes asked realpath of each, a stat of every part of every path)."""
+    return N(os.path.realpath(d))
+
+
 def _spellings(path):
-    """The path as given (absolute, normalised, NFC) and, when it differs, with its links resolved (/tmp on macOS)."""
+    """The path as given (absolute, normalised, NFC) and, when it differs, with its links resolved (/tmp on macOS) —
+    its folder's resolved once (_real_dir), the file itself by one lstat."""
     a = N(os.path.normpath(os.path.abspath(os.path.expanduser(N(path)))))
-    b = N(os.path.realpath(a))
+    d, name = os.path.split(a)
+    b = N(os.path.realpath(a)) if not name or os.path.islink(a) else N(os.path.join(_real_dir(d), name))
     return (a,) if a == b else (a, b)
 
 

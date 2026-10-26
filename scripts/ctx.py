@@ -302,6 +302,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_blocks as cb  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_entity as ce  # noqa: E402
+import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_store as cs  # noqa: E402
@@ -1272,6 +1273,31 @@ def _entity_action(a):
     return None, words
 
 
+def _team_records(c, repos):
+    """team.members of every store team record, by the team entity it matches (plan C8): a function of a registry that
+    gives {entity id: [record candidates]} — read once, read only (ctx_resolve.slot_context, as `ctx read`); no store,
+    or one that cannot be read: nothing."""
+    got = {}
+
+    def of(reg):
+        if "v" not in got:
+            out = {}
+            try:
+                if c.store.exists():
+                    sc = rv.slot_context(c.store, c.copies, repos, None, now())
+                    shown = {a["place"]: a["result"]["shown"] for a in rv.slot_answers(sc, "team.members")}
+                    for rec in sc["records"]:
+                        if rec.get("type") == "team" and shown.get(rec["id"]):
+                            ent, _ = es.team_entity(reg, rec.get("title"))
+                            if ent:
+                                out.setdefault(ent["id"], []).extend(es.record_candidates(shown[rec["id"]]))
+            except Exception:  # noqa: BLE001 — the cards still answer; a record that cannot be read adds nothing
+                out = {}
+            got["v"] = out
+        return got["v"]
+    return of
+
+
 NO_STORE_ANSWER = "немає сховища — відповідь не збережено"
 
 
@@ -1308,10 +1334,15 @@ def cmd_entity(a, c):
         queries = [q.strip() for q in a.q] if a.q else [" ".join(words).strip()]
         if not all(queries):
             raise Usage("entity takes a request: an e-mail, a Jira key, a path or a name (or pairs, same, not-same)")
+        try:
+            repos = crp.load_repos(c.text, c.home)
+        except Exception:  # noqa: BLE001 — a registration not read names no block's repository here
+            repos = []
+        records = _team_records(c, repos)
         if len(queries) > 1:
-            res = ce.run_many(sctx, queries, kind=a.kind, skill=a.skill, store=c.store, slots=a.slot)
+            res = ce.run_many(sctx, queries, kind=a.kind, skill=a.skill, store=c.store, slots=a.slot, records=records)
         else:
-            res = ce.run(sctx, queries[0], kind=a.kind, skill=a.skill, store=c.store, slots=a.slot)
+            res = ce.run(sctx, queries[0], kind=a.kind, skill=a.skill, store=c.store, slots=a.slot, records=records)
     if not res["read"]:
         why = "; ".join(res["notes"]) or "індексу немає"
         print(ce.NOT_READ % why)
