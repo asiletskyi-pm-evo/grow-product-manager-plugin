@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.19.0
+**Version:** 3.20.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.20.0** — **«Мости в нотатках»: the bridges your notes lack, written on your «так»** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). When an e-mail or your own `same` answer makes your person note and a core's card one person, nothing in your note said so — Obsidian, your scripts and other tools did not see it. Ask context-navigator «запиши мости в нотатки»: `ctx entity apply` reports which notes would get one frontmatter line `same_as: "[[<card>|<title>]]"`, what it skips and why, and a report code; only on your «так» does `--apply --code` write that report alone — into your plugin folder, never a core, one line per note with every other byte, the file's mode and its tags kept, after a snapshot. `ctx undo` takes it back: a note you have not touched byte for byte, one you edited loses our line alone. A `same_as` your own scripts keep is someone else's field: the plugin then writes nothing and says so. The plugin's card in Claude now shows one sentence instead of 5 000 characters of history; and a row «Ім'я, Ім'я — роль» of a core's team card joins both people.
 
 **New in v3.19.0** — **«Слоти з однієї сутності»: a person's role, a team's members — one answer from every card** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). A person's role, team and e-mail and a team's members, missions and parent are put together from all the cards of one entity — your note, a core's card, another team's card, and every person whose own `team:` names the team — by the cascade (yours first, then the cores, then a local index, then what other cards say), each piece with where it comes from. `ctx read`'s team members are one line per person, nothing of the section lost, and `ctx entity` shows the slots (`--slot`, several requests with one `--q` each). The 14 skills that work with people find a person through `ctx entity` — by e-mail first, several → you choose — never by a file name.
 
@@ -1078,5 +1080,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.19.0  
+**Version:** 3.20.0  
 **Last Updated:** October 2026
