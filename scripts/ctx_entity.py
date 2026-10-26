@@ -68,6 +68,9 @@ NOT_READ = "Базу не прочитано: %s"
 HINT_SCHEMA = "%s: підказок немає — незнайома схема"        # v3.18.1: a local index whose entities/edges are not (key,
                                                             # kind, path) / (src, dst, kind)
 HINT = "підказка %s"
+HINT_TABLE = "%s: таблиця %s незнайомої схеми — без неї"
+HINT_CUT = "%s: підказки прочитано не повністю (%s)"
+EDGE_LINKS = ("wikilink", "link", "embed")       # a local index's edge kinds that are links (`fm:<field>` too)
 BUSY_ANSWER = "індекс зайнятий — спробуй за хвилину; відповідь не збережено"
 SLOT_WORDS = {"person.role": "роль", "person.team": "команда", "person.email": "e-mail", "team.members": "склад",
               "team.missions": "місії", "team.parent": "батьківська команда", "mission.teams": "команди",
@@ -241,20 +244,26 @@ def _hint_sources(sctx, notes):
     whose table has other columns gets one line (HINT_SCHEMA) in `notes`. The caller closes the connections."""
     out = []
     for src in cs_.sources(sctx["text"], sctx["repos"], ("local",)):
+        con = None
         try:
             con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=cs_.OPEN_S)
             until = time.monotonic() + cs_.SOURCE_S
-            con.set_progress_handler(lambda: time.monotonic() > until, 10000)
+            con.set_progress_handler(lambda until=until: time.monotonic() > until, 10000)
             tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
             ents = "entities" in tables and {"key", "kind", "path"} <= set(cs_._columns(con, "entities"))
             edges = "edges" in tables and {"src", "dst", "kind"} <= set(cs_._columns(con, "edges"))
-            if ("entities" in tables and not ents) or ("edges" in tables and not edges):
+            odd = [t for t, ok in (("entities", ents), ("edges", edges)) if t in tables and not ok]
+            if odd and not (ents or edges):
                 notes.append(HINT_SCHEMA % src["id"])
+            elif odd:
+                notes.append(HINT_TABLE % (src["id"], odd[0]))
             if not (ents or edges):
                 con.close()
                 continue
             folder = cs_._local_root(con)
         except sqlite3.Error:
+            if con is not None:
+                con.close()
             continue                                  # local_cards says it did not answer
         out.append((src["id"], con, folder, ci.Root(src["id"], folder) if folder else None, ents, edges))
     return out
@@ -287,8 +296,14 @@ def _hint_pairs(sctx, reg, mem, notes):
                 for j in range(i + 1, len(cards)):
                     a, b = cards[i], cards[j]
                     k = tuple(_pair(a["path"], b["path"]))
-                    if a["kind"] != b["kind"] or reg.of(a["path"]) is reg.of(b["path"]) or k in answered or k in have:
+                    if a["kind"] != b["kind"] or reg.of(a["path"]) is reg.of(b["path"]) or k in answered or k in have \
+                            or a["source"] == b["source"]:      # one source's two cards: never a pair (as build)
                         continue
+                    if a["kind"] == "person":                   # two different e-mails are two people (v3.18.0)
+                        ma = {m for c in reg.of(a["path"])["cards"] for m in c["emails"]}
+                        mb = {m for c in reg.of(b["path"])["cards"] for m in c["emails"]}
+                        if ma and mb and not ma & mb:
+                            continue
                     have.add(k)
                     reg._pairs.append((a, b))
                     reg.hints[k] = sid
@@ -296,7 +311,7 @@ def _hint_pairs(sctx, reg, mem, notes):
                     reg.of(b["path"])["maybe"].append(dict(a, mine=b["path"], hint=sid))
 
 
-def local_edges(sctx, ent, own_paths, people=False, notes=None):
+def local_edges(sctx, ent, own_paths, people=False, notes=None, cache=None):
     """The notes a local index's `edges` link to a card of `ent` from (plan C10): only a note the plugin's own index does
     not hold (its own links decide for its notes), never the store, a blocks file or a scratch folder (the search's
     rules), never the entity's own cards — {path, title, date, sensitive, via[, field]}, a sensitive one's field only for
@@ -305,18 +320,26 @@ def local_edges(sctx, ent, own_paths, people=False, notes=None):
     targets = {c["path"] for c in ent["cards"]}
     own = {p.casefold() for p in own_paths}
     out = {}
-    for sid, con, folder, root, _, edges in _hint_sources(sctx, notes if notes is not None else []):
+    cache = {} if cache is None else cache            # src id → {name: [dst]}: every dst mapped once per run
+    for sid, con, folder, root, _, edges in _hint_sources(sctx, []):    # load() said what a schema lacks
         try:
             if not edges:
                 continue
             name = lambda p_: cs_._local_name(p_, vaults, folder, root)   # noqa: E731
-            dsts = [d for (d,) in con.execute("SELECT DISTINCT dst FROM edges") if cs_._usable(d) and name(d) in targets]
+            if sid not in cache:
+                by = cache[sid] = {}
+                for (d,) in con.execute("SELECT DISTINCT dst FROM edges"):
+                    if cs_._usable(d):
+                        by.setdefault(name(d), []).append(d)
+            dsts = [d for t in targets for d in cache[sid].get(t, ())]
             if not dsts:
                 continue
             cols = cs_._columns(con, "notes")
             fm_col = next((c for c in ("fm_json", "frontmatter_json") if c in cols), None)
             pick = [c for c in ("title", "type", "date", "mtime") if c in cols] + ([fm_col] if fm_col else [])
             for src, kind in con.execute("SELECT src, kind FROM edges WHERE dst IN (%s)" % ",".join("?" * len(dsts)), dsts):
+                if not (str(kind or "") in EDGE_LINKS or str(kind or "").startswith("fm:")):
+                    continue                            # a mention or a typed key is no link (review M3)
                 rel = name(src) if cs_._usable(src) else None
                 if not rel or not cs_._usable(rel) or not cs_._keep(sctx, rel) or rel in targets or rel.casefold() in own \
                         or rel in out:
@@ -334,7 +357,9 @@ def local_edges(sctx, ent, own_paths, people=False, notes=None):
                     d.pop("field", None)
                 d["via"] = sid
                 out[rel] = d
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            if notes is not None:
+                notes.append(HINT_CUT % (sid, cc.clip(str(e), 80)))
             continue
         finally:
             con.close()
@@ -452,6 +477,7 @@ class Registry:
         self.entities, self._by_path, self._pairs, self.resolver = entities, by_path, pairs, resolver
         self.skipped = list(skipped)     # your `same` answers that could not be applied: {cards, day, why}
         self.hints = {}                  # (path, path) → the local index whose `entities` offered the pair (v3.18.1)
+        self.edge_cache = {}             # a local index's edges, their targets mapped once (local_edges)
 
     def of(self, path):
         """The entity a card (or a page a work card links to) belongs to, or None."""
@@ -776,11 +802,13 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None,
                          for c in e["maybe"]]}
         if len(found) == 1:
             one["slots"] = es.slots_of(reg, idx, e, sl.load_catalogue(), sctx, people=people, only=slots or None)
+            if idx.problem and idx.problem not in notes:   # a busy index: a section's members are missing (review M6)
+                notes.append(idx.problem)
             if slots:
-                one["slots_asked"] = [s_ for s_ in slots if s_ in sl.card_slots(sl.load_catalogue(), e["kind"])]
+                one["slots_asked"] = list(slots)          # one of another kind is «—» too (review M2)
                 out["entities"].append(one)
                 continue
-            extra = local_edges(sctx, e, {N(p) for p in idx.paths() or ()}, people, notes)
+            extra = local_edges(sctx, e, {N(p) for p in idx.paths() or ()}, people, notes, cache=reg.edge_cache)
             one["backlinks"] = backlinks(idx, reg, e, people, extra)
             if idx.problem and idx.problem not in notes:      # a busy index: the lines are missing, and the user is told
                 notes.append(idx.problem)
@@ -855,7 +883,8 @@ def _who(o):
 
 
 def _where(o):
-    return " · ".join(x for x in (_who(o) if o["level"] != "derived" else "виведене", o["path"], o.get("date") or "") if x)
+    return " · ".join(x for x in (_who(o) if o["level"] != "derived" else "виведене", o["path"], (o.get("date") or "")[:10])
+                      if x)
 
 
 def _row(text):
@@ -880,10 +909,14 @@ def _slot_lines(slots):
             continue
         lines.append("    %s (%d):%s" % (name, a["count"], " не прочитано: " + ", ".join(a["unread"]) if a.get("unread") else ""))
         for it in a["items"][:SHOWN]:
-            row = next((_row(r["text"]) for r in it.get("rows") or ()), "")
+            rows = sorted(it.get("rows") or (), key=lambda r: {"mine": 0, "repo": 1, "local": 2}.get(r["level"], 3))
+            row = _row(rows[0]["text"]) if rows else ""     # the strongest source's row: yours first (review I3)
             lines.append("      %s — %s%s%s" % (it["label"], " · ".join(_who(o) for o in it["origins"]),
                                               " · лише виведене" if it.get("derived_only") else "",
                                               " · «%s»" % row if row and row != it["label"] else ""))
+            for r in rows[1:]:
+                if _row(r["text"]) != row:
+                    lines.append("        також: «%s» (%s)" % (_row(r["text"]), "твоє" if r["level"] == "mine" else r["source"]))
         if a["count"] > SHOWN:
             lines.append("      ще %d" % (a["count"] - SHOWN))
     return lines

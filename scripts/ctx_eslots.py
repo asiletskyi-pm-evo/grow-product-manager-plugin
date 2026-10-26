@@ -141,8 +141,8 @@ def _heading_slot(cat, kind, heading):
 class _Slots:
     """One assembly over a registry: the ranks of the registrations and the candidates found, each once."""
 
-    def __init__(self, reg, idx, cat, sctx):
-        self.reg, self.idx, self.cat = reg, idx, cat
+    def __init__(self, reg, idx, cat, sctx, people=False):
+        self.reg, self.idx, self.cat, self.people = reg, idx, cat, people
         self.ranks = {r.get("id"): rv._rank(r) for r in (sctx or {}).get("repos") or ()}
         self._own, self._derived, self._values, self._items = {}, {}, {}, {}
 
@@ -170,6 +170,9 @@ class _Slots:
         for c in ent["cards"]:
             if not c.get("home", True) or c["kind"] != info.get("record"):
                 continue
+            private = bool(c.get("sensitive")) and c["kind"] != "person" and not self.people
+            if private and info.get("kind") != "list":
+                continue                    # a sensitive team's or mission's value: never outside People (review I1)
             fields = c.get("fields")
             if fields is None:                          # not read yet (a card iCloud evicted since the upgrade):
                 fields = {"person.role": c.get("role"), "person.team": c.get("team"),   # the identity columns say it
@@ -197,7 +200,8 @@ class _Slots:
             level, rank = self.level(c)
             out.append({"slot": slot, "level": level, "source": "mine" if level == "mine" else c["source"],
                         "card_source": c["source"], "rank": rank, "placed": True, "path": c["path"],
-                        "date": c.get("date") or "", "text": "\n".join(items), "items": items})
+                        "date": c.get("date") or "", "text": "\n".join(items), "items": items,
+                        "private": private, "strict": private})   # private: names and sources only, no row
         self._own[key] = out
         return out
 
@@ -276,7 +280,7 @@ def join_items(cands, reg, kind, strict, entity_of=None):
             if key not in seen:                             # one origin per candidate, every row of it kept
                 seen.add(key)
                 g["origins"].append(_origin(c, how))
-            if c["level"] != "derived":
+            if c["level"] != "derived" and not c.get("private"):
                 g["rows"].append({"level": c["level"], "source": c["card_source"], "text": text})
     items = [groups[k] for k in order]
     for g in items:
@@ -303,7 +307,7 @@ def slots_of(reg, idx, ent, cat, sctx, people=False, only=None):
     person; nothing of a profile's body or judgement is ever read."""
     if not ent:
         return {}
-    s = _Slots(reg, idx, cat, sctx)
+    s = _Slots(reg, idx, cat, sctx, people=people)
     out = {}
     for slot in sl.card_slots(cat, ent["kind"]):
         if only and slot not in only:

@@ -685,5 +685,68 @@ with tempfile.TemporaryDirectory() as d:
           rc == 5 and "зайнят" in out and "не картка сутності" not in out
           and not os.path.isfile(os.path.join(env.store.state_dir, "entities.json")), (rc, out[-300:]))
 
+# --- v3.18.1 Task 3 review fixes
+def human(out):
+    return "\n".join(l for l in out.splitlines() if not l.startswith("CTX_RESULT"))
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(os.path.join(env.vault, "ZorgCore", "Teams", "zt-secret.md"),
+          "---\ntype: team\nsensitive: true\nparent: \"[[ZorgCore/Teams/team-alpha]]\"\n"
+          "members:\n  - \"[[ZorgCore/People/fay|Fay Four]] — on PIP, leaving in Nov\"\n---\n# ZT Secret\n")
+    write(os.path.join(env.vault, "Notes", "Teams", "zorg-pay-mine.md"),
+          "---\ntype: team\nmembers:\n  - \"[[Notes/People/rhea|Rhea One]] — Lead PM (mine)\"\n---\n# Zorg Pay mine\n")
+    env.idx.refresh(env.sctx["roots"], env.sctx["store_rel"], env.sctx["blocks_rels"])
+    rc, out, res = env.cli("entity", "ZorgCore/Teams/zt-secret.md")
+    check("v3.18.1 Task 3 review I1: a sensitive team card outside the People contour gives its members as names and "
+          "sources only — never its text («on PIP»), never its values", rc == 0 and "PIP" not in out and "Fay Four" in out
+          and "батьківська команда" not in human(out) and "parent" not in json.dumps((res or {}).get("entities")), out[-900:])
+    rc, out, res = env.cli("entity", "ZorgCore/Teams/zt-secret.md", "--skill", "one-on-one")
+    check("…the People contour sees its rows", "PIP" in out, out[-600:])
+    env.cli("migrate", "--apply")
+    env.cli("entity", "same", "Notes/Teams/zorg-pay-mine.md", PAY)
+    rc, out, _ = env.cli("entity", "Zorg Pay")
+    rl = [l for l in out.splitlines() if l.strip().startswith("Rhea One — ")]
+    check("v3.18.1 Task 3 review I3: a list item's row is your card's («Lead PM (mine)»), the core's other row a «також»",
+          rl and "Lead PM (mine)" in rl[0] and "також" in out and "— PM" in out, (rl, out[-900:]))
+    rc, out, _ = env.cli("entity", "Rhea One", "--slot", "team.members")
+    check("v3.18.1 Task 3 review M2: --slot of another kind — «склад: —», never the identity line",
+          "склад: —" in out and "e-mail: rhea" not in out and "команда:" not in out, out[-500:])
+    rc, out, _ = env.cli("entity", "Zorg Pay", "--slot", "person.role")
+    check("…and a team asked for a person's slot says «роль: —»", "роль: —" in out, out[-400:])
+    rc, out, _ = env.cli("entity", "pairs", "--slot", "person.role")
+    check("v3.18.1 Task 3 review M7: --slot with pairs, same or not-same is a usage error (exit 3)", rc == 3, (rc, out[-300:]))
+    rc, out, _ = env.cli("entity", "Rhea One")
+    check("v3.18.1 Task 3 review M4: a slot's date is a day, never a time", "T1" not in "".join(
+        l for l in out.splitlines() if l.startswith("    ")) and "T0" not in "".join(l for l in out.splitlines() if l.startswith("    ")), out[-700:])
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    hints_index(os.path.join(env.home, "zorg-brain.sqlite"), env.vault)
+    con = sqlite3.connect(os.path.join(env.home, "zorg-brain.sqlite"))
+    con.executemany("INSERT INTO entities VALUES (?, ?, ?, ?)", [
+        ("person:x", "person", "ZorgCore/People/rhea-core.md", "x"), ("person:x", "person", "ZorgCore/People/fay.md", "x"),
+        ("person:y", "person", "ZorgCore/People/cy-namesake.md", "y"), ("person:y", "person", "ZorgCore/People/dee-real.md", "y")])
+    con.executemany("INSERT INTO edges VALUES (?, ?, ?)", [("Partner/Notes/plan.md", ALPHA, "mention"),
+                                                           ("Partner/Notes/note2.md", ALPHA, "epic")])
+    con.execute("INSERT OR REPLACE INTO notes VALUES (?, ?, ?, ?)", ("Partner/Notes/note2.md", "note2", "note", "{}"))
+    con.commit()
+    con.close()
+    rc, out, _ = env.cli("entity", "pairs")
+    out = human(out)
+    check("v3.18.1 Task 3 review I2: a hint never pairs two people whose e-mails differ, nor two cards of one source",
+          "rhea-core.md ↔ ZorgCore/People/fay.md" not in out and "cy-namesake.md ↔ ZorgCore/People/dee-real.md" not in out
+          and "ZorgCore/People/dee-real.md ↔ ZorgCore/People/cy-namesake.md" not in out, out[-900:])
+    rc, out, _ = env.cli("entity", "Team Alpha")
+    out = human(out)
+    check("v3.18.1 Task 3 review M3: an edge that is no link (`mention`, `epic`) is no «хто посилається» line",
+          "note2" not in out, out[-700:])
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    hints_index(os.path.join(env.home, "zorg-brain.sqlite"), env.vault, odd=True)
+    rc, out, _ = env.cli("entity", "Team Alpha")
+    check("v3.18.1 Task 3 review M1: the unknown-schema line comes once", human(out).count("незнайома схема") == 1, out[-500:])
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

@@ -253,7 +253,12 @@
                                 list one item per entity. --slot SLOT (repeatable) keeps those slots alone, no backlinks nor
                                 mentions; an unknown one: exit 3. --q repeated: one refresh, a block per request
                                 (CTX_RESULT requests). A local index's own entities/edges are hints: pairs `(підказка <id>)`,
-                                backlink lines ` · <id>` — never a merge
+                                backlink lines ` · <id>` (links and `fm:` edges only) — never a merge. CTX_RESULT adds
+                                entities[].slots ({slot: value answer {value, entity?, origin, also, diverges, why} or list
+                                answer {items, count, why}}), entities[].slots_asked, maybe[].hint, backlinks.items[].via;
+                                `pairs`: pairs[].hint. --slot with pairs, same or not-same: exit 3. A sensitive team's,
+                                mission's or metric's card gives outside the People contour its members' names and
+                                sources alone
   entity pairs [--kind K] [--json]
                                 every open pair «можливо той самий» (two cards of one kind from different sources whose
                                 names are alike, not answered yet). Writes only the index
@@ -1286,6 +1291,8 @@ def cmd_entity(a, c):
             cr.manifest_for(cr.load_manifest(), a.skill)
         except KeyError:
             raise Usage("no such skill: %s" % a.skill)
+    if a.slot and action in ("same", "not-same", "pairs"):
+        raise Usage("--slot asks for an entity's slots: not with %s" % action)
     if action in ("same", "not-same"):
         return _entity_answer(a, c, action, words)
     sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
