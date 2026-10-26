@@ -43,6 +43,7 @@ import ctx_common as cc  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_search as cs_  # noqa: E402
 import ctx_store as cs  # noqa: E402
+import ctx_slots as sl  # noqa: E402
 import provider_bundle as pb  # noqa: E402
 
 N = cc.N
@@ -64,6 +65,13 @@ UNREAD_MEMORY = "пам'ять сутностей не прочитано (%s) �
 NOT_APPLIED = "твою відповідь same %s ↔ %s від %s не застосовано: %s"
 NOT_APPLIED_WHY = {"not-same": "її заперечує твоє not-same", "kinds": "картки різних видів"}
 NOT_READ = "Базу не прочитано: %s"
+HINT_SCHEMA = "%s: підказок немає — незнайома схема"        # v3.18.1: a local index whose entities/edges are not (key,
+                                                            # kind, path) / (src, dst, kind)
+HINT = "підказка %s"
+BUSY_ANSWER = "індекс зайнятий — спробуй за хвилину; відповідь не збережено"
+SLOT_WORDS = {"person.role": "роль", "person.team": "команда", "person.email": "e-mail", "team.members": "склад",
+              "team.missions": "місії", "team.parent": "батьківська команда", "mission.teams": "команди",
+              "mission.jira_projects": "проєкти Jira", "module.owner": "власник", "metric.owner": "власник"}
 
 
 # ------------------------------------------------------------------ your answers
@@ -226,6 +234,113 @@ def local_cards(sctx, own_paths):
     return cards, notes
 
 
+# ------------------------------------------------------------------ the hints of a local index (since v3.18.1, plan C10)
+def _hint_sources(sctx, notes):
+    """[(src id, connection, folder, root, has entities, has edges)] of every registered local index that keeps tables of
+    its own entities (`entities(key, kind, path)`) or edges (`edges(src, dst, kind)`); one of neither says nothing, one
+    whose table has other columns gets one line (HINT_SCHEMA) in `notes`. The caller closes the connections."""
+    out = []
+    for src in cs_.sources(sctx["text"], sctx["repos"], ("local",)):
+        try:
+            con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=cs_.OPEN_S)
+            until = time.monotonic() + cs_.SOURCE_S
+            con.set_progress_handler(lambda: time.monotonic() > until, 10000)
+            tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            ents = "entities" in tables and {"key", "kind", "path"} <= set(cs_._columns(con, "entities"))
+            edges = "edges" in tables and {"src", "dst", "kind"} <= set(cs_._columns(con, "edges"))
+            if ("entities" in tables and not ents) or ("edges" in tables and not edges):
+                notes.append(HINT_SCHEMA % src["id"])
+            if not (ents or edges):
+                con.close()
+                continue
+            folder = cs_._local_root(con)
+        except sqlite3.Error:
+            continue                                  # local_cards says it did not answer
+        out.append((src["id"], con, folder, ci.Root(src["id"], folder) if folder else None, ents, edges))
+    return out
+
+
+def _hint_pairs(sctx, reg, mem, notes):
+    """Add to `reg` the pairs a local index's `entities` offer (plan C10): two cards of one kind the plugin keeps in two
+    entities, under one key there, that you have not answered and that are no open pair yet — `hint`: the index's id.
+    Never a merge: your `same` decides."""
+    vaults = sctx.get("vaults") or []
+    answered = {tuple(_pair(x[0], x[1])) for w in ("same", "not_same") for x in (mem or {}).get(w, [])}
+    have = {tuple(_pair(a["path"], b["path"])) for a, b in reg._pairs}
+    for sid, con, folder, root, ents, _ in _hint_sources(sctx, notes):
+        try:
+            rows = con.execute("SELECT key, path FROM entities").fetchall() if ents else []
+        except sqlite3.Error:
+            rows = []
+        finally:
+            con.close()
+        groups = {}
+        for key, path in rows:
+            if not key or not cs_._usable(path):
+                continue
+            rel = cs_._local_name(path, vaults, folder, root)
+            card = next((c for c in (reg.of(rel) or {}).get("cards", []) if c["path"] == rel and c.get("home", True)), None)
+            if card and card not in groups.setdefault(key, []):
+                groups[key].append(card)
+        for cards in groups.values():
+            for i in range(len(cards)):
+                for j in range(i + 1, len(cards)):
+                    a, b = cards[i], cards[j]
+                    k = tuple(_pair(a["path"], b["path"]))
+                    if a["kind"] != b["kind"] or reg.of(a["path"]) is reg.of(b["path"]) or k in answered or k in have:
+                        continue
+                    have.add(k)
+                    reg._pairs.append((a, b))
+                    reg.hints[k] = sid
+                    reg.of(a["path"])["maybe"].append(dict(b, mine=a["path"], hint=sid))
+                    reg.of(b["path"])["maybe"].append(dict(a, mine=b["path"], hint=sid))
+
+
+def local_edges(sctx, ent, own_paths, people=False, notes=None):
+    """The notes a local index's `edges` link to a card of `ent` from (plan C10): only a note the plugin's own index does
+    not hold (its own links decide for its notes), never the store, a blocks file or a scratch folder (the search's
+    rules), never the entity's own cards — {path, title, date, sensitive, via[, field]}, a sensitive one's field only for
+    the People contour."""
+    vaults = sctx.get("vaults") or []
+    targets = {c["path"] for c in ent["cards"]}
+    own = {p.casefold() for p in own_paths}
+    out = {}
+    for sid, con, folder, root, _, edges in _hint_sources(sctx, notes if notes is not None else []):
+        try:
+            if not edges:
+                continue
+            name = lambda p_: cs_._local_name(p_, vaults, folder, root)   # noqa: E731
+            dsts = [d for (d,) in con.execute("SELECT DISTINCT dst FROM edges") if cs_._usable(d) and name(d) in targets]
+            if not dsts:
+                continue
+            cols = cs_._columns(con, "notes")
+            fm_col = next((c for c in ("fm_json", "frontmatter_json") if c in cols), None)
+            pick = [c for c in ("title", "type", "date", "mtime") if c in cols] + ([fm_col] if fm_col else [])
+            for src, kind in con.execute("SELECT src, kind FROM edges WHERE dst IN (%s)" % ",".join("?" * len(dsts)), dsts):
+                rel = name(src) if cs_._usable(src) else None
+                if not rel or not cs_._usable(rel) or not cs_._keep(sctx, rel) or rel in targets or rel.casefold() in own \
+                        or rel in out:
+                    continue
+                row = con.execute("SELECT %s FROM notes WHERE path = ?" % ", ".join(pick), (src,)).fetchone() if pick else None
+                meta = dict(zip(pick, row)) if row else {}
+                fm = {str(k).lower(): v for k, v in cs_._fm(meta.get(fm_col)).items()} if fm_col else {}
+                title = ci._text(meta.get("title")) or ci._text(fm.get("title")) or _stem(rel)
+                ntype = (ci._text(meta.get("type")) or ci._text(fm.get("type")) or "").lower()
+                field = kind[3:] if str(kind or "").startswith("fm:") else ""
+                d = _line({"path": rel, "title": title, "field": field,
+                           "date": cs_._first_date(fm, ci.DATE_KEYS) or cs_._file_day(meta.get("date") or meta.get("mtime")) or "",
+                           "sensitive": ci.sensitive_of(fm) or ntype in ci.PEOPLE_TYPES or ci.one_on_one(rel, title)}, people)
+                if not d.get("field"):
+                    d.pop("field", None)
+                d["via"] = sid
+                out[rel] = d
+        except sqlite3.Error:
+            continue
+        finally:
+            con.close()
+    return list(out.values())
+
+
 # ------------------------------------------------------------------ links
 class Resolver:
     """The note a link's target means (plan C5, the rules of `ctx search --get`). `notes`: {path: title, or {title,
@@ -336,6 +451,7 @@ class Registry:
     def __init__(self, entities, by_path, pairs, resolver, skipped=()):
         self.entities, self._by_path, self._pairs, self.resolver = entities, by_path, pairs, resolver
         self.skipped = list(skipped)     # your `same` answers that could not be applied: {cards, day, why}
+        self.hints = {}                  # (path, path) → the local index whose `entities` offered the pair (v3.18.1)
 
     def of(self, path):
         """The entity a card (or a page a work card links to) belongs to, or None."""
@@ -551,6 +667,7 @@ def load(sctx, idx, mem):
     resolver = Resolver(metas, prefixes)
     reg = build([_card(d, "index") for d in own] + local, mem, resolver)
     reg.unread = unread
+    _hint_pairs(sctx, reg, mem, notes)
     return reg, notes
 
 
@@ -562,6 +679,8 @@ def _line(row, people):
          "sensitive": bool(row.get("sensitive"))}
     if not d["sensitive"] or people:
         d["field"] = row.get("field", "")
+    if row.get("via"):
+        d["via"] = row["via"]
     return d
 
 
@@ -569,10 +688,10 @@ def _newest(items):
     return sorted(items, key=lambda d: (d["date"], d["path"]), reverse=True)
 
 
-def backlinks(idx, reg, ent, people=False):
+def backlinks(idx, reg, ent, people=False, extra=()):
     """{count, items}: the notes that link to a card (or a home page) of `ent` — each link's target resolved as `--get`
-    would, so a note of the same name elsewhere is never counted —, the entity's own cards left out; newest first, at
-    most SHOWN items, `count` all of them."""
+    would, so a note of the same name elsewhere is never counted —, the entity's own cards left out; then `extra` (the
+    edges of a local index, local_edges) for notes not among them; newest first, at most SHOWN items, `count` all."""
     homes = {c["path"] for c in ent["cards"]}
     found = {}
     for row in idx.links_to({ci.name_key(p) for p in homes}):
@@ -581,6 +700,8 @@ def backlinks(idx, reg, ent, people=False):
         hit = reg.resolver.resolve(row["target"])
         if isinstance(hit, str) and hit in homes:      # several notes answer the link: it counts for none of them
             found[row["path"]] = _line(row, people)
+    for d in extra:
+        found.setdefault(d["path"], d)
     items = _newest(found.values())
     return {"count": len(items), "items": items[:SHOWN]}
 
@@ -634,12 +755,16 @@ def _prepare(sctx, store, budget):
     return idx, reg, notes, read, pending
 
 
-def run(sctx, query, kind=None, skill=None, store=None, budget=None):
+def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None, prepared=None):
     """`ctx entity <request>` (plan C13–C14): {command, query, how, entities, mention, notes, read, pending}. One entity
-    → its cards (identity only), related, maybe, backlinks, mentions (a work entity's key); several → at most SEVERAL
-    of them, without backlinks; a Jira key no card holds → its mentions, when its prefix is known or a /browse/ link
-    names it; `read` False → no base answered (the caller exits 5). Refreshes the index; writes nothing else."""
-    idx, reg, notes, read, pending = _prepare(sctx, store, budget)
+    → its cards (identity only), related, maybe, its slots (v3.18.1, ctx_eslots — `slots`: the ids asked for, then
+    nothing but them: no backlinks, no mentions), backlinks (with a local index's edges, plan C10), mentions (a work
+    entity's key); several → at most SEVERAL of them, without backlinks; a Jira key no card holds → its mentions, when
+    its prefix is known or a /browse/ link names it; `read` False → no base answered (the caller exits 5). Refreshes the
+    index (`prepared`: what _prepare gave, for several requests at once); writes nothing else."""
+    import ctx_eslots as es     # it builds on this module: imported here, not at the top
+    idx, reg, notes, read, pending = prepared or _prepare(sctx, store, budget)
+    notes = list(notes)
     people = skill in PEOPLE_SKILLS
     found, how = reg.find(query, kind)
     out = {"command": "entity", "query": query, "how": how, "entities": [], "mention": None, "notes": notes,
@@ -647,9 +772,16 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None):
     for e in found[:SEVERAL]:
         one = {"id": e["id"], "kind": e["kind"], "label": e["label"], "key": e["key"],
                "cards": [_public_card(c) for c in e["cards"]], "related": [_brief(c) for c in e["related"]],
-               "maybe": [dict(_brief(c), mine=c["mine"]) for c in e["maybe"]]}
+               "maybe": [dict(_brief(c), mine=c["mine"], **({"hint": c["hint"]} if c.get("hint") else {}))
+                         for c in e["maybe"]]}
         if len(found) == 1:
-            one["backlinks"] = backlinks(idx, reg, e, people)
+            one["slots"] = es.slots_of(reg, idx, e, sl.load_catalogue(), sctx, people=people, only=slots or None)
+            if slots:
+                one["slots_asked"] = [s_ for s_ in slots if s_ in sl.card_slots(sl.load_catalogue(), e["kind"])]
+                out["entities"].append(one)
+                continue
+            extra = local_edges(sctx, e, {N(p) for p in idx.paths() or ()}, people, notes)
+            one["backlinks"] = backlinks(idx, reg, e, people, extra)
             if idx.problem and idx.problem not in notes:      # a busy index: the lines are missing, and the user is told
                 notes.append(idx.problem)
             one["mentions"] = mentions(idx, e["key"], {c["path"] for c in e["cards"]}, people) if e["key"] else \
@@ -667,10 +799,21 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None):
     return out
 
 
+def run_many(sctx, queries, kind=None, skill=None, store=None, budget=None, slots=None):
+    """`ctx entity --q A --q B …` (v3.18.1, plan C9c): the index refreshed once, one `run` per request —
+    {command, requests: [run result], notes, read}."""
+    prepared = _prepare(sctx, store, budget)
+    reqs = [run(sctx, q, kind=kind, skill=skill, slots=slots, prepared=prepared) for q in queries]
+    return {"command": "entity", "requests": reqs, "notes": list(prepared[2]), "read": prepared[3]}
+
+
 def pairs_result(sctx, kind=None, store=None, budget=None):
-    """`ctx entity pairs`: {command, action, pairs: [{a, b}], count, notes, read} — every open «maybe the same» pair."""
+    """`ctx entity pairs`: {command, action, pairs: [{a, b[, hint]}], count, notes, read} — every open «maybe the same»
+    pair; `hint` — the local index whose `entities` offered it (v3.18.1)."""
     _, reg, notes, read, _ = _prepare(sctx, store, budget)
-    pairs = [{"a": _brief(a), "b": _brief(b)} for a, b in reg.pairs() if kind is None or a["kind"] == kind]
+    pairs = [dict({"a": _brief(a), "b": _brief(b)}, **({"hint": reg.hints[tuple(_pair(a["path"], b["path"]))]}
+                                                       if tuple(_pair(a["path"], b["path"])) in reg.hints else {}))
+             for a, b in reg.pairs() if kind is None or a["kind"] == kind]
     return {"command": "entity", "action": "pairs", "pairs": pairs, "count": len(pairs), "notes": notes, "read": read}
 
 
@@ -699,16 +842,64 @@ def _values(cards, field):
 
 
 def _note_line(d):
-    return "%s — %s%s%s" % (d["title"], d["path"], " · " + d["date"] if d["date"] else "", " · sensitive" if d["sensitive"] else "")
+    return "%s — %s%s%s%s%s" % (d["title"], d["path"], " · " + d["date"] if d["date"] else "",
+                                " · поле " + d["field"] if d.get("field") else "", " · sensitive" if d["sensitive"] else "",
+                                " · " + d["via"] if d.get("via") else "")
+
+
+def _who(o):
+    """An origin in words: yours, a repository's or a local index's id, or what it was derived from."""
+    if o["level"] == "derived":
+        return "виведене (%s)" % o["path"]
+    return "твоє" if o["level"] == "mine" else o["source"]
+
+
+def _where(o):
+    return " · ".join(x for x in (_who(o) if o["level"] != "derived" else "виведене", o["path"], o.get("date") or "") if x)
+
+
+def _row(text):
+    """An item's row as it reads: a link as its label."""
+    return ci._WIKI.sub(lambda m: _plain("[[%s]]" % m.group(1).replace("\\|", "|")), text).strip()
+
+
+def _slot_lines(slots):
+    """The lines of an entity's slots (v3.18.1): a value with its origin and «також», a list one item a line."""
+    lines = []
+    for sid, a in slots.items():
+        name = SLOT_WORDS.get(sid, sid)
+        if a["kind"] == "value":
+            line = "    %s: %s (%s)" % (name, a["value"], _where(a["origin"]))
+            if a.get("diverges"):
+                line += " · різні значення: " + " · ".join(a["diverges"])
+            if a.get("also"):
+                line += " · також: " + ", ".join("%s (%s)" % (x["value"], _where(x)) for x in a["also"])
+            lines.append(line)
+            continue
+        lines.append("    %s (%d):" % (name, a["count"]))
+        for it in a["items"][:SHOWN]:
+            row = next((_row(r["text"]) for r in it.get("rows") or ()), "")
+            lines.append("      %s — %s%s%s" % (it["label"], " · ".join(_who(o) for o in it["origins"]),
+                                              " · лише виведене" if it.get("derived_only") else "",
+                                              " · «%s»" % row if row and row != it["label"] else ""))
+        if a["count"] > SHOWN:
+            lines.append("      ще %d" % (a["count"] - SHOWN))
+    return lines
 
 
 def render(res):
-    """The human lines of `run` / `pairs_result`."""
+    """The human lines of `run` / `run_many` / `pairs_result`."""
+    if "requests" in res:
+        blocks = ["\n".join(res.get("notes") or [])] if res.get("notes") else []
+        for r in res["requests"]:
+            blocks.append("— «%s»\n" % r["query"] + render(dict(r, notes=[n for n in r["notes"] if n not in res["notes"]])).rstrip("\n"))
+        return "\n\n".join(blocks) + "\n"
     lines = list(res.get("notes") or [])
     if res.get("action") == "pairs":
         for p in res["pairs"]:
-            lines.append("можливо той самий: %s ↔ %s — ctx entity same|not-same \"%s\" \"%s\""
-                         % (p["a"]["path"], p["b"]["path"], p["a"]["path"], p["b"]["path"]))
+            lines.append("можливо той самий: %s ↔ %s%s — ctx entity same|not-same \"%s\" \"%s\""
+                         % (p["a"]["path"], p["b"]["path"], " (%s)" % (HINT % p["hint"]) if p.get("hint") else "",
+                            p["a"]["path"], p["b"]["path"]))
         lines.append("відкритих пар: %d" % res["count"])
         return "\n".join(lines) + "\n"
     ents = res["entities"]
@@ -727,15 +918,23 @@ def render(res):
         lines.append("%s · %s%s" % (e["label"], e["kind"], " · " + e["key"] if e["key"] else ""))
         lines.append("  картки: " + " · ".join("%s · %s%s" % (c["source"], c["path"], " · sensitive" if c["sensitive"] else "")
                                                for c in cards))
-        ident = [(n, _values(cards, f)) for n, f in (("e-mail", "emails"), ("команда", "team"), ("роль", "role"))]
-        ident = [(n, v) for n, v in ident if v]
-        if ident:
-            lines.append("  " + " · ".join("%s: %s" % (n, v) for n, v in ident))
+        if e.get("slots") or e.get("slots_asked"):     # v3.18.1: the slots say the identity, with its origins
+            lines.append("  слоти:")
+            lines.extend(_slot_lines(e["slots"]))
+            lines.extend("    %s: —" % SLOT_WORDS.get(s_, s_) for s_ in e.get("slots_asked") or () if s_ not in e["slots"])
+        else:
+            ident = [(n, _values(cards, f)) for n, f in (("e-mail", "emails"), ("команда", "team"), ("роль", "role"))]
+            ident = [(n, v) for n, v in ident if v]
+            if ident:
+                lines.append("  " + " · ".join("%s: %s" % (n, v) for n, v in ident))
         for r in e["related"]:
             lines.append("  пов'язана з: %s — %s" % (r["label"], r["path"]))
         for m in e["maybe"]:
-            lines.append("  можливо той самий: %s — ctx entity same|not-same \"%s\" \"%s\"" % (m["path"], m["mine"], m["path"]))
-        for name, part in (("хто посилається", e["backlinks"]), ("згадки", e["mentions"])):
+            lines.append("  можливо той самий: %s%s — ctx entity same|not-same \"%s\" \"%s\""
+                         % (m["path"], " (%s)" % (HINT % m["hint"]) if m.get("hint") else "", m["mine"], m["path"]))
+        for name, part in (("хто посилається", e.get("backlinks")), ("згадки", e.get("mentions"))):
+            if part is None:                            # --slot: no backlinks, no mentions
+                continue
             if part["count"]:
                 lines.append("  %s (%d):" % (name, part["count"]))
                 lines.extend("    " + _note_line(d) for d in part["items"])

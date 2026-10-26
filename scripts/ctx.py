@@ -230,7 +230,7 @@
                                 варіанти, лише q), MRR, a line per class, the empty rows, the rows not found. Writes nothing
                                 but the index. No golden set, one that does not read, nothing to search: exit 3. CTX_RESULT:
                                 n, recall50, recall50_q_only, mrr, by_class, empty_n, empty_top5_mean, rows, hints, golden
-  entity <request…> [--kind K] [--skill S] [--json]    |    entity --q REQUEST …
+  entity <request…> [--kind K] [--skill S] [--slot SLOT …] [--json]    |    entity --q REQUEST [--q REQUEST …] …
                                 (since v3.18.0; scripts/ctx_entity.py) who someone or something is: the request is an
                                 e-mail, a Jira key, a card's path or link, a name or an alias, else a card alike; --kind
                                 person|team|mission|module|metric|work keeps one kind; --q for a request that is a word of
@@ -246,7 +246,14 @@
                                 a /browse/ link names it; else `Не знаю такої сутності: «…»` (`Поки не знаю «…» — індекс
                                 оновлюється: …` while the index has files to look at). Writes only the index. An unknown
                                 --skill or --kind: exit 3; nothing to search: exit 3; no base answered: exit 5 (`Базу не
-                                прочитано: …`). CTX_RESULT: query, how, entities, mention, several, notes
+                                прочитано: …`). CTX_RESULT: query, how, entities, mention, several, notes.
+                                Since v3.18.1 (scripts/ctx_eslots.py): one entity's `слоти:` — a person's role, team and
+                                e-mail, a team's members, missions and parent, a mission's teams and Jira projects, an owner —
+                                each with its origin (yours, a repository's, a local index's, derived) and its «також»; a
+                                list one item per entity. --slot SLOT (repeatable) keeps those slots alone, no backlinks nor
+                                mentions; an unknown one: exit 3. --q repeated: one refresh, a block per request
+                                (CTX_RESULT requests). A local index's own entities/edges are hints: pairs `(підказка <id>)`,
+                                backlink lines ` · <id>` — never a merge
   entity pairs [--kind K] [--json]
                                 every open pair «можливо той самий» (two cards of one kind from different sources whose
                                 names are alike, not answered yet). Writes only the index
@@ -1235,6 +1242,11 @@ def cmd_entity(a, c):
     action, words = _entity_action(a)
     if a.kind and a.kind not in ce.KINDS:
         raise Usage("--kind takes %s" % ", ".join(ce.KINDS))
+    cat = sl.load_catalogue()
+    for slot in a.slot or ():
+        if not sl.card_slot_info(cat, slot):
+            raise Usage("--slot takes a slot of an entity's cards: %s" % ", ".join(
+                dict.fromkeys(s_ for k in sl.CARD_KINDS for s_ in sl.card_slots(cat, k))))
     if a.skill:
         try:
             cr.manifest_for(cr.load_manifest(), a.skill)
@@ -1252,10 +1264,13 @@ def cmd_entity(a, c):
     else:
         if a.q and words:
             raise Usage("entity takes a request or --q, not both")
-        query = a.q or " ".join(words)
-        if not query.strip():
+        queries = [q.strip() for q in a.q] if a.q else [" ".join(words).strip()]
+        if not all(queries):
             raise Usage("entity takes a request: an e-mail, a Jira key, a path or a name (or pairs, same, not-same)")
-        res = ce.run(sctx, query.strip(), kind=a.kind, skill=a.skill, store=c.store)
+        if len(queries) > 1:
+            res = ce.run_many(sctx, queries, kind=a.kind, skill=a.skill, store=c.store, slots=a.slot)
+        else:
+            res = ce.run(sctx, queries[0], kind=a.kind, skill=a.skill, store=c.store, slots=a.slot)
     if not res["read"]:
         why = "; ".join(res["notes"]) or "індексу немає"
         print(ce.NOT_READ % why)
@@ -1280,6 +1295,10 @@ def _entity_answer(a, c, action, words):
     try:
         x, y = ce.card_of(reg, words[0]), ce.card_of(reg, words[1])
     except ValueError as e:
+        if reg.unread:                  # the index did not answer: a card it holds is no «не картка» (v3.18.1, C11)
+            line = ce.BUSY_ANSWER if reg.unread == ci.BUSY_NOTE else ce.NOT_READ % reg.unread
+            print(line)
+            return 5, dict(out, error=line)
         raise Usage(str(e))
     if x["path"] == y["path"]:
         raise Usage("одна й та сама картка: %s" % x["path"])
@@ -1936,7 +1955,8 @@ def build_parser():
     sp.add_argument("--pick", action="append", metavar="ID|PATH")
     sp.add_argument("--not", dest="not_", action="append", metavar="ID|PATH")
     sp.add_argument("--golden", metavar="PATH")
-    sp = sub.add_parser("entity", parents=[common]); sp.add_argument("words", nargs="*"); sp.add_argument("--q")
+    sp = sub.add_parser("entity", parents=[common]); sp.add_argument("words", nargs="*"); sp.add_argument("--q", action="append")
+    sp.add_argument("--slot", action="append")
     sp.add_argument("--kind"); sp.add_argument("--skill"); sp.add_argument("--json", action="store_true")
     kp = sub.add_parser("slot").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = kp.add_parser("bind", parents=[common]); sp.add_argument("repo"); sp.add_argument("target"); sp.add_argument("slot")
