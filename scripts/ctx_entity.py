@@ -769,9 +769,12 @@ def _prepare(sctx, store, budget):
     `read` — did any base answer (a built own index, or a card from a local index)."""
     notes, pending = [], 0
     idx = ci.Index(sctx["home"])
+    idx.busy_once = True                 # v3.20.0: a busy index is said once, not waited for at every read
     built = None
     if sctx.get("roots"):
         done, why = cs_._refresh(idx, sctx, ci.REFRESH_S if budget is None else budget, notes)
+        if why and ci._busy(why):
+            idx.probe()                  # held by another connection: the reads of this run do not wait for it
         pending = (done or {}).get("pending") or 0
         if why:
             notes.append(cs_.REFRESH_NOTE % why)

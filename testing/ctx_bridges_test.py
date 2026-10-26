@@ -454,5 +454,34 @@ with tempfile.TemporaryDirectory() as d:
     check("a journal line that names a core's card: undo never writes it (plan C7 in undo too)",
           read(core) == core0 and "не повернуто: %s" % RHEA[1] in out, out)
 
+# ------------------------------------------------------------------ Task 5: a busy index answers at once (plan C10.4)
+import time  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    _, _, res = env.cli("entity", "apply")
+    rhea0 = read(env.vault, RHEA[0])
+    folder = os.path.join(env.home, ".grow-pm", "index")
+    db = next(os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".sqlite"))
+    holder = subprocess.Popen([sys.executable, "-c", "import sqlite3, sys, time\n"
+                               "c = sqlite3.connect(sys.argv[1], isolation_level=None)\n"
+                               "c.execute('BEGIN EXCLUSIVE')\nprint('held', flush=True)\ntime.sleep(120)", db],
+                              stdout=subprocess.PIPE, text=True)
+    try:
+        holder.stdout.readline()
+        t0 = time.monotonic()
+        rc, out, _ = env.cli("entity", "Rhea")
+        t1 = time.monotonic()
+        rc2, out2, _ = env.cli("entity", "apply", "--apply", "--code", res["code"])
+        t2 = time.monotonic()
+    finally:
+        holder.kill()
+        holder.wait()
+    limit = cs_.OPEN_S + 2.5
+    check("v3.20.0 `ctx entity` on a busy index: exit 5 «зайнятий» within OPEN_S + a moment, not ~26 s (C10.4)",
+          rc == 5 and "зайнятий" in out and t1 - t0 < limit, (rc, round(t1 - t0, 1), out[:300]))
+    check("…`entity apply --apply` on a busy index: exit 5, nothing written, as quickly",
+          rc2 == 5 and read(env.vault, RHEA[0]) == rhea0 and t2 - t1 < limit, (rc2, round(t2 - t1, 1), out2[:300]))
+
 print("RESULT: %s" % ("GREEN ✅" if not fails else "RED ❌ (%d)" % fails))
 sys.exit(1 if fails else 0)

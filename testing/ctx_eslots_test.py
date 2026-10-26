@@ -317,5 +317,60 @@ except ctx_cli.Usage as e:
 check("v3.18.1 Task 2 review M9: `ctx slot prefer person.role mine` itself is the usage line of a card slot",
       "ctx entity" in msg and "--slot person.role" in msg, msg)
 
+# --- v3.20.0 Task 5: the deferred minors of v3.19.0 (plan C10)
+OPS = "ZorgCore/Teams/zorg-ops.md"
+OPS_TEXT = """---
+type: team
+aliases: [Zorg Ops]
+---
+# Zorg Ops
+
+## Люди
+
+| Хто | Роль |
+|---|---|
+| Fay Four, Bea Two | QA |
+
+## Склад команди
+
+- **Lead:** Rhea One, Bea Two
+- Cy Namesake, Gus Five — Dev
+- Ann Other і Fay Four — Support
+"""
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    card(env, OPS, OPS_TEXT)
+    env.idx.refresh(env.sctx["roots"], env.sctx["store_rel"], env.sctx["blocks_rels"])
+    env.reg, _ = ce.load(env.sctx, env.idx, ce.empty_memory())
+    ops = env.slots(OPS).get("team.members") or {}
+    got = {i["entity"] for i in ops.get("items", []) if i["entity"]}
+    ids = {k: (env.reg.of(v) or {}).get("id") for k, v in (("fay", FAY), ("gus", GUS), ("cy", "ZorgCore/People/cy-three.md"),
+                                                           ("bea", "ZorgCore/People/bea-two.md"), ("rhea", RHEA_CORE))}
+    check("v3.20.0 a row «Ім'я, Ім'я — роль» of a table joins each person, not the first only",
+          {ids["fay"], ids["bea"]} <= got, labels(ops))
+    check("…an inline `**Lead:** A, B` line is two items, each its entity",
+          {ids["rhea"], ids["bea"]} <= got, labels(ops))
+    check("…a name of two people (Cy Namesake) keeps the whole line apart: Gus is not joined from it",
+          ids["gus"] not in got, labels(ops))
+    check("…a part that names nobody (Ann Other) keeps the whole line one item: no Fay from it, no Ann",
+          item(ops, FAY, env.reg) is not None and "Ann Other" not in " ".join(labels(ops))
+          and not any("Support" in r["text"] for r in item(ops, FAY, env.reg)["rows"]), item(ops, FAY, env.reg))
+    fay = item(ops, FAY, env.reg) or {}
+    check("…a joined part keeps its line's text as its row", any("Fay Four, Bea Two" in r["text"] for r in fay.get("rows", [])),
+          fay)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    env.sctx = dict(env.sctx, repos=[r for r in env.sctx["repos"] if r.get("id") != "zorg-core"])
+    role = env.slots(RHEA_OWN, only=["person.role"]).get("person.role") or {}
+    gus_team = env.slots(GUS, only=["person.role"])
+    r = es.candidates(env.reg, env.idx, env.reg.of(RHEA_OWN), "person.role", env.cat, env.sctx)
+    core = [c for c in r if c["source"] == "zorg-core"]
+    check("v3.20.0 a card of a repository whose registration gives no rank takes its level in the cascade (after the "
+          "ranked repositories, before a local index), never «реєстрацію не прочитано»",
+          core and all(c["rank"] is not None for c in core)
+          and rv.resolve("person.role", env.cat, [dict(c) for c in core] + [cand("local", "zorg-brain", "B")], None)["shown"][0]
+          ["source"] == "zorg-core", core)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)
