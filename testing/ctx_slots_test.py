@@ -277,5 +277,15 @@ check("v3.18.1 check_catalogue: a card kind is a record only for `on: cards`; `a
       any("person.x" in e and "record" in e for e in errs) and any("team.z" in e and "answered_on" in e for e in errs)
       and any("team.z" in e and "card_names" in e for e in errs) and any("person.y" in e and "person.w" in e for e in errs), errs)
 
+PINNED_CARD_NAMES = (1, "3d69b30c8de81216a1efb9f2d11a8471c6808fa1")     # (card_names_version, card_names_digest): change the names, raise the version
+check("v3.18.1 Task 1 review I1: the card names are pinned to card_names_version — names or kinds of a card slot changed "
+      "without raising the version (so the index would not read the cards again) fail here",
+      (sl.card_names_version(cat), sl.card_names_digest(cat)) == PINNED_CARD_NAMES,
+      (sl.card_names_version(cat), sl.card_names_digest(cat)))
+check("…check_catalogue names a card_names_version that is no whole number from 1",
+      any("card_names_version" in e for e in sl.check_catalogue(dict(cat, card_names_version="two")))
+      and any("card_names_version" in e for e in sl.check_catalogue(dict(cat, card_names_version=0)))
+      and sl.check_catalogue(dict(cat, card_names_version=3)) == [], "")
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

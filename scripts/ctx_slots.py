@@ -12,7 +12,18 @@ references/context-protocol.md.
 - load_catalogue                    the catalogue as a tree; a file that cannot be read is a ValueError
 - check_catalogue                   the errors in a catalogue (none: it is clean)
 - slot_for                          the slot a record kind answers to a name with
-- slot_info                         a slot's own entry (kind, record, names, about), or None
+- slot_info                         a slot's own entry (kind, record, names, about), or None — a slot the records answer;
+                                    a slot answered on cards alone (`answered_on: cards`, v3.18.1) is None here
+- record_slots                      {id: entry} of the slots the records answer
+
+The slots of an entity's cards (since v3.18.1; scripts/ctx_eslots.py answers them):
+
+- CARD_KINDS, ANSWERED_ON           the kinds of card a slot is looked for on, and the values of `answered_on`
+- card_slot_info, card_slots        a card slot's entry, and the slots a kind of card answers, in the catalogue's order
+- card_slot_for, card_norm          the slot a card answers by a field or heading name (case, spaces, `_`, `-` aside)
+- card_names_by_kind                {kind: {name: slot}} — the names the index keeps a card's slot fields by
+- card_names_version, card_names_digest   the catalogue's `card_names_version` (the index reads the cards once more
+                                    when it grows), and what it stands for (a test pins the two together)
 
 What you decided about slots is kept in the store, in `<store>/.state/slots.json` (schema context-slots-memory/1) —
 not in a record and not in a registration. A key this version does not know is refused, never dropped: a new key needs
@@ -121,6 +132,9 @@ def check_catalogue(cat):
     errs = []
     if isinstance(cat, dict) and "schema" in cat and cat["schema"] != SCHEMA:
         errs.append("schema is %r, not %r" % (cat["schema"], SCHEMA))
+    if isinstance(cat, dict) and "card_names_version" in cat and (isinstance(cat["card_names_version"], bool) or str(
+            cat["card_names_version"]).strip() != str(card_names_version(cat))):
+        errs.append("card_names_version is %r, not a whole number from 1" % (cat["card_names_version"],))
     slots = _all_slots(cat)
     if not slots:
         return errs + ["the catalogue has no slots"]
@@ -183,8 +197,8 @@ def slot_for(cat, record, name):
 
 
 def slot_info(cat, slot_id):
-    """The catalogue's entry for `slot_id` (a mapping of kind, record, names and about), or None — a card-only slot too
-    (v3.18.1: the records do not know it)."""
+    """The catalogue's entry for `slot_id` (a mapping of kind, record, names and about) when the records answer it, else
+    None — for a slot answered on cards alone too (v3.18.1: card_slot_info gives that one)."""
     s = _slots(cat).get(slot_id)
     return s if isinstance(s, dict) else None
 
@@ -215,6 +229,25 @@ def card_slot_for(cat, kind, name):
         if v.get("record") == kind and want in {card_norm(n) for n in _card_names(v)}:
             return k
     return None
+
+
+def card_names_version(cat):
+    """The catalogue's `card_names_version` (since v3.18.1): a whole number ≥ 1 that grows whenever the names or the kind
+    of a slot answered on cards change; 1 when it is not there or not such a number."""
+    v = cat.get("card_names_version") if isinstance(cat, dict) else None
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return 1
+    return v if v >= 1 else 1
+
+
+def card_names_digest(cat):
+    """sha1 of what card_names_version stands for — every card slot's id, record, kind and names in order: a test pins
+    it to the version, so names changed without raising the version fail it."""
+    import hashlib
+    rows = [[k, v.get("record"), v.get("kind"), [card_norm(n) for n in _card_names(v)]] for k, v in _card_slot_items(cat)]
+    return hashlib.sha1(json.dumps(rows, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def card_names_by_kind(cat):

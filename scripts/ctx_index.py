@@ -99,8 +99,8 @@ META_VERSION = 4                    # the rules of note_meta (meta `meta_version
                                     # downloaded files once more (v3.17.0: a people type or a Step-P field is sensitive;
                                     # v3.18.0: the identity, link and mention rows of every note; v3.18.1: a card's slot
                                     # fields, no link or mention in code, Jira prefixes without JQL words, a work key's
-                                    # order). The slot names the fields were kept by are in meta `slot_names`: other
-                                    # names (the catalogue changed) read the files once more too, at the same version
+                                    # order). The catalogue's card_names_version the fields were kept by is meta
+                                    # `slot_names`: a higher one (names changed) reads the cards alone once more
 ENTITY_KINDS = {"people": "person", "person": "person", "team": "team", "mission": "mission", "module": "module",
                 "metric": "metric", "epic": "work", "feature": "work", "project": "work"}
                                     # a note's type → the kind of entity it is a card of (v3.18.0, plan C1)
@@ -108,7 +108,10 @@ ISSUE_KEY = re.compile(r"(?<![A-Za-z0-9])([A-Z][A-Z0-9]{1,9})-(\d{1,6})(?![A-Za-
 BROWSE_KEY = re.compile(r"/browse/([A-Z][A-Z0-9]{1,9}-\d{1,6})(?![0-9])")                   # a key a Jira link names
 _EMAIL = re.compile(r"^[^@\s<>()\[\],;:\"]+@[^@\s<>()\[\],;:\"]+\.[^@\s<>()\[\],;:\"]+$")
 _PREFIX = re.compile(r"(?<![A-Za-z0-9])[A-Z][A-Z0-9]{1,9}(?![A-Za-z0-9])")
-_PROJECT = re.compile(r"\bproject\s*(?:=|!=|\bin\b|\bnot\s+in\b)\s*\(?([^)]*?)(?:\)|\s+(?:and|or|order)\b|$)", re.I)
+_PROJECT = re.compile(r"\bproject\s*(?:=|\bin\b)\s*\(?([^)\n]*?)(?:\)|\s+(?:and|or|order)\b|$)", re.I | re.M)
+                                    # the projects a JQL names — never those it leaves out (`!=`, `not in`)
+_PREFIX_LIST = re.compile(r"\s*[A-Z][A-Z0-9]{1,9}(?:\s*[,;/ ]\s*[A-Z][A-Z0-9]{1,9})*\s*")
+_PROJECTS_URL = re.compile(r"/projects/([A-Z][A-Z0-9]{1,9})(?![A-Za-z0-9])")
 JQL_WORDS = frozenset(("AND", "OR", "NOT", "IN", "IS", "EMPTY", "NULL", "ORDER", "BY", "ASC", "DESC", "WAS", "CHANGED",
                        "DONE", "TODO", "OPEN", "CLOSED", "CURRENTUSER"))   # a JQL word is never a project (v3.18.1)
 WORK_KEY_FIELDS = ("jira", "key", "issue", "jirakey", "issuekey")   # a work card's own key fields (card_norm), first
@@ -669,16 +672,19 @@ def card_field_names():
     that cannot be read keeps no field."""
     if "names" not in _CARD_NAMES:
         try:
-            _CARD_NAMES["names"] = sl.card_names_by_kind(sl.load_catalogue())
+            cat = sl.load_catalogue()
+            _CARD_NAMES.update(names=sl.card_names_by_kind(cat), version=sl.card_names_version(cat),
+                               kinds={k: (sl.card_slot_info(cat, k) or {}).get("kind") for k in sl._all_slots(cat)})
         except ValueError:
-            _CARD_NAMES["names"] = {}
+            _CARD_NAMES.update(names={}, version=1, kinds={})
     return _CARD_NAMES["names"]
 
 
-def slot_names_key(names=None):
-    """sha1 of the names the slot fields are kept by (meta `slot_names`): other names → the files are read once more."""
-    names = card_field_names() if names is None else names
-    return hashlib.sha1(json.dumps(names, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+def slot_names_version():
+    """The catalogue's card_names_version (meta `slot_names`, v3.18.1): when it grows, the cards are read once more —
+    a number, never a hash, so two builds of different catalogues on one index do not read the vault again in turn."""
+    card_field_names()
+    return _CARD_NAMES.get("version", 1)
 
 
 def _slot_fields(kind, fm, names):
@@ -688,12 +694,13 @@ def _slot_fields(kind, fm, names):
     want = names.get(kind) or {}
     if not want:
         return {}
+    judgement = {sl.card_norm(x) for x in STEP_P_FIELDS}
     order = {}
     for i, n in enumerate(want):
         order.setdefault(want[n], {})[n] = i
     found = {}
     for k, v in fm.items():
-        if str(k).lower() in STEP_P_FIELDS or isinstance(v, dict) or not _filled(v):
+        if sl.card_norm(k) in judgement or isinstance(v, dict) or not _filled(v):     # `D-Type`, `One-On-One` too
             continue
         n = sl.card_norm(k)
         slot = want.get(n)
@@ -704,6 +711,8 @@ def _slot_fields(kind, fm, names):
     for slot, (_, v) in found.items():
         texts = [N(str(x)).strip() for x in (v if isinstance(v, list) else [v]) if not isinstance(x, (dict, list))]
         texts = [t for t in texts if t]
+        if slot == "person.email":                       # an address, as the identity keeps it (lower case)
+            texts = [t.lower() for t in texts if _EMAIL.match(t.lower())]
         if not texts:
             continue
         out[slot] = texts if cat_kinds.get(slot) == "list" else texts[0]
@@ -711,35 +720,33 @@ def _slot_fields(kind, fm, names):
 
 
 def _slot_kinds():
-    if "kinds" not in _CARD_NAMES:
-        try:
-            cat = sl.load_catalogue()
-            _CARD_NAMES["kinds"] = {k: (sl.card_slot_info(cat, k) or {}).get("kind") for k in sl._all_slots(cat)}
-        except ValueError:
-            _CARD_NAMES["kinds"] = {}
+    card_field_names()
     return _CARD_NAMES["kinds"]
 
 
 def _prefixes(fm):
     """The Jira project prefixes of a team's or a mission's `…jira…` fields (v3.18.1, v3.18.0 minor M2): a value that is
-    one prefix-shaped token, the prefix of a key, the projects of `project = X` / `project in (X, Y)` — never a JQL word."""
+    list of prefix-shaped tokens alone (`PROJ`, `PROJ, QQ`), the prefix of a key, a `/projects/X` link, the projects of
+    `project = X` / `project in (X, Y)` (never those `!=` or `not in` leave out) — never a JQL word."""
     out = set()
     for k, v in fm.items():
         if "jira" not in k.lower():
             continue
         for s_ in _strings(v):
             t = N(s_).strip()
-            if _PREFIX.fullmatch(t):
-                out.add(t)
+            if _PREFIX_LIST.fullmatch(t):                # `PROJ`, `PROJ, QQ`, `PROJ QQ`
+                out.update(_PREFIX.findall(t))
             out.update(m.group(1) for m in ISSUE_KEY.finditer(t))
+            out.update(_PROJECTS_URL.findall(t))         # …/projects/PROJ/board
             for m in _PROJECT.finditer(t):
                 out.update(_PREFIX.findall(m.group(1)))
     return sorted(x for x in out if x not in JQL_WORDS)
 
 
 def _work_key(rel, fm, title):
-    """A work card's Jira key (v3.18.1, v3.18.0 minor M7): its own key field (WORK_KEY_FIELDS), else its file name, else
-    its title — a name or a title only when it holds exactly one key («GPT-4 rollout PROJ-77» holds two: no key)."""
+    """A work card's Jira key (v3.18.1, v3.18.0 minor M7): its own key field (WORK_KEY_FIELDS), else the key of its file
+    name when the name holds exactly one, else — only when the name holds none — the one key of its title. A name or a
+    title of two keys («GPT-4 rollout PROJ-77») gives none."""
     for k, v in fm.items():
         if sl.card_norm(k) in WORK_KEY_FIELDS:
             for s_ in _strings(v):
@@ -790,7 +797,9 @@ def identity_of(rel, fm, title, names=None):
 
 
 _EMBED_WIKI = re.compile(r"(!?)\[\[([^\]\n]+?)\]\]")
-_CODE_SPAN = re.compile(r"(`+)(?!`).*?(?<!`)\1(?!`)")
+_CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)")
+_OPEN_FENCE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})(.*)$")
+_QUOTE = re.compile(r"^[ \t]{0,3}(?:>[ \t]?)+")
 
 
 def without_code(text):
@@ -798,14 +807,15 @@ def without_code(text):
     key is an example, not a link or a mention (v3.18.1, v3.18.0 minor M6). Lines keep their places."""
     out, fence = [], None
     for line in (text or "").split("\n"):
-        f = _FENCE.match(line)
+        bare = _QUOTE.sub("", line)                     # a fence in a callout or a quote too
+        m = _OPEN_FENCE.match(bare)
         if fence:
-            if f and f.group(1) == fence:
-                fence = None
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
+                fence = None                            # closed by the same sign, as long or longer, with no info string
             out.append("")
             continue
-        if f:
-            fence = f.group(1)
+        if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+            fence = m.group(1)
             out.append("")
             continue
         out.append(line)
@@ -1144,7 +1154,7 @@ class Index:
         con.execute("INSERT INTO meta(key, value) VALUES ('schema', ?)", (SCHEMA,))
         con.execute("INSERT INTO meta(key, value) VALUES ('near_version', ?)", (str(NEAR_VERSION),))
         con.execute("INSERT INTO meta(key, value) VALUES ('meta_version', ?)", (str(META_VERSION),))
-        con.execute("INSERT INTO meta(key, value) VALUES ('slot_names', ?)", (slot_names_key(),))
+        con.execute("INSERT INTO meta(key, value) VALUES ('slot_names', ?)", (str(slot_names_version()),))
         con.commit()
         return con
 
@@ -1167,18 +1177,30 @@ class Index:
 
     @staticmethod
     def _meta_stale(con):
-        """Is the index's `meta_version` lower than META_VERSION (none: 1), or this version's but its slot fields kept by
-        other names than the catalogue's now (meta `slot_names`, v3.18.1)? Then its walk reads every downloaded file once
-        more; a later build's rows are left alone (so two builds never read the files again and again in turn)."""
+        """Is the index's `meta_version` lower than META_VERSION (none: 1)? Then its walk reads every downloaded file
+        once more; a later build's rows are left alone."""
         row = con.execute("SELECT value FROM meta WHERE key='meta_version'").fetchone()
         try:
             stored = int(row[0]) if row else 1
         except (TypeError, ValueError):
             stored = 1
-        if stored != META_VERSION:
-            return stored < META_VERSION
-        names = con.execute("SELECT value FROM meta WHERE key='slot_names'").fetchone()
-        return not names or names[0] != slot_names_key()
+        return stored < META_VERSION
+
+    @staticmethod
+    def _names_again(con):
+        """The cards of an index whose slot fields were kept by an older card_names_version (meta `slot_names`, none: 0)
+        are marked unread (`fields_json` NULL) — the walk reads those files alone again — then the version; a later
+        catalogue's fields are left alone, so two builds never read the cards again and again in turn (v3.18.1)."""
+        row = con.execute("SELECT value FROM meta WHERE key='slot_names'").fetchone()
+        try:
+            stored = int(row[0]) if row else 0
+        except (TypeError, ValueError):
+            stored = 0
+        if stored >= slot_names_version():
+            return
+        con.execute("UPDATE ents SET fields_json = NULL WHERE kind != ''")
+        con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('slot_names', ?)", (str(slot_names_version()),))
+        con.commit()
 
     def _ro(self):
         """A read-only connection, or None when there is no index yet."""
@@ -1218,6 +1240,7 @@ class Index:
             stale = False
             try:
                 self._near_again(con)
+                self._names_again(con)
                 stale = self._meta_stale(con)
                 state = {} if res["rebuilt"] else self._state()
                 saved = state.get("queue") if not stale or state.get("reread") == META_VERSION else None
@@ -1248,7 +1271,6 @@ class Index:
         queue = _Walk(con, roots, store_rel, blocks_rels, deadline, res, reread=reread).run(saved)
         if reread and not res["pending"]:
             con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('meta_version', ?)", (str(META_VERSION),))
-            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('slot_names', ?)", (slot_names_key(),))
         when = _now()
         con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('updated', ?)", (when,))
         con.commit()
@@ -1413,7 +1435,8 @@ class Index:
                         v = json.loads(v or "null")
                     except ValueError:
                         v = None
-                    d[c[:-5]] = v if v is not None else ({} if c in ("bridges_json", "fields_json") else [])
+                    d[c[:-5]] = v if v is not None or c == "fields_json" else ({} if c == "bridges_json" else [])
+                                                 # fields None: a row whose slot fields no walk of v3.18.1 read yet
                 else:
                     d[c] = v or ""
             out.append(d)

@@ -19,6 +19,8 @@
 #   card_names  (since v3.18.1) more names, looked for on cards only (a frontmatter field or a section heading) — a name
 #             that would find the wrong block in a record (`Люди` over a table of roles) goes here, not in `names`
 schema: context-slots/1
+card_names_version: 1         # since v3.18.1: raise it whenever the names (names, card_names) or the kind of a slot
+                              # answered on cards change — the index then reads the cards once more (never back down)
 slots:
   product.description:
     kind: value

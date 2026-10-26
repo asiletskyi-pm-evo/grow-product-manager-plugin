@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""TC-ctx-3181-slots — scripts/ctx_eslots.py, the slots of one entity from its cards (since v3.18.1).
+
+The fictional Zorg vault of testing/fixtures/entity/ is copied to a temp dir, with a local index of the user's
+(zorg-brain) built beside it: a person's role by the cascade (yours, then a core's, then a local index's), a team's
+members joined by entity — from a section of the core's team card, and derived from each person's winning team —, a
+table of roles that is no member, a team's missions and a mission's teams both ways, a metric's owner, a person's body
+never read, nothing of a profile outside the People contour. Stdlib only; run from the repo root:
+
+  env -u GROW_PM_CONTEXT_PATH -u GROW_PM_PROVIDER_PATHS python3 testing/ctx_eslots_test.py
+"""
+import json, os, shutil, sqlite3, sys, tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import ctx_index as ci  # noqa: E402
+import ctx_resolve as rv  # noqa: E402
+import ctx_search as cs_  # noqa: E402
+import ctx_slots as sl  # noqa: E402
+import ctx_store as cs  # noqa: E402
+import ctx_entity as ce  # noqa: E402
+try:
+    import ctx_eslots as es  # noqa: E402
+except ImportError:
+    es = None
+
+FIX = os.path.join(ROOT, "testing", "fixtures", "entity")
+fails = 0
+
+
+def check(name, cond, detail=""):
+    global fails
+    fails += not cond
+    print(("✅" if cond else "❌"), name, ("" if cond else "-> " + str(detail)[:900]))
+
+
+def read(*parts):
+    return open(os.path.join(*parts), encoding="utf-8", newline="").read()
+
+
+def write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    open(path, "w", encoding="utf-8", newline="").write(text)
+
+
+LOCAL_NOTES = (   # path, type, frontmatter — a partner team's cards the user's own local index holds
+    ("Partner/People/rhea-g.md", "person", {"type": "person", "email": "rhea@zorg.example", "role": "Growth PM"}),
+    ("Partner/People/fay-g.md", "person", {"type": "person", "email": "fay@zorg.example", "role": "Analyst"}),
+)
+
+
+def local_index(path, vault):
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE meta(k TEXT, v TEXT)")
+    con.execute("INSERT INTO meta VALUES ('vault_root', ?)", (vault,))
+    con.execute("CREATE TABLE notes(path TEXT PRIMARY KEY, title TEXT, type TEXT, fm_json TEXT)")
+    con.execute("CREATE VIRTUAL TABLE notes_fts USING fts5(path, title, body)")
+    for p, t, fm in LOCAL_NOTES:
+        title = os.path.basename(p)[:-3]
+        con.execute("INSERT INTO notes VALUES (?, ?, ?, ?)", (p, title, t, json.dumps(fm)))
+        con.execute("INSERT INTO notes_fts VALUES (?, ?, ?)", (p, title, "text"))
+    con.commit()
+    con.close()
+
+
+class Env:
+    def __init__(self, d):
+        self.home = os.path.join(d, "home")
+        self.vault = os.path.join(d, "vault")
+        os.makedirs(os.path.join(self.home, ".grow-pm"))
+        shutil.copytree(os.path.join(FIX, "vault"), self.vault)
+        for dirpath, _, names in os.walk(self.vault):
+            for n in names:
+                p = os.path.join(dirpath, n)
+                if n.endswith(".yaml") and "{{VAULT}}" in read(p):
+                    write(p, read(p).replace("{{VAULT}}", self.vault))
+        self.text = read(FIX, "context.md").replace("{{VAULT}}", self.vault).replace("{{HOME}}", self.home)
+        write(os.path.join(self.home, ".grow-pm", "local-context.md"), self.text)
+        local_index(os.path.join(self.home, "zorg-brain.sqlite"), self.vault)
+        self.store = cs.Store(os.path.join(self.vault, "Notes", "_System", "context"))
+        self.sctx = cs_.context_for(self.home, self.text, store_root=self.store.root)
+        self.idx = ci.Index(self.home)
+        self.idx.refresh(self.sctx["roots"], self.sctx["store_rel"], self.sctx["blocks_rels"])
+        self.cat = sl.load_catalogue()
+        self.reg, _ = ce.load(self.sctx, self.idx, ce.empty_memory())
+
+    def slots(self, path, people=False, only=None):
+        return es.slots_of(self.reg, self.idx, self.reg.of(path), self.cat, self.sctx, people=people, only=only)
+
+
+if es is None:
+    check("v3.18.1 scripts/ctx_eslots.py exists", False, "no module ctx_eslots")
+    print("RESULT: RED ❌")
+    sys.exit(1)
+
+RHEA_OWN, RHEA_CORE, RHEA_G = "Notes/People/rhea.md", "ZorgCore/People/rhea-core.md", "Partner/People/rhea-g.md"
+FAY, GUS = "ZorgCore/People/fay.md", "ZorgCore/People/gus.md"
+PAY, OLD = "ZorgCore/Teams/zorg-pay.md", "ZorgCore/Teams/zorg-old.md"
+FAST, SLOW = "ZorgCore/Missions/fast-pay.md", "ZorgCore/Missions/slow-pay.md"
+CONV = "ZorgCore/Metrics/conversion.md"
+
+
+def labels(ans):
+    return [i["label"] for i in (ans or {}).get("items", [])]
+
+
+def item(ans, path, reg):
+    e = reg.of(path)
+    return next((i for i in (ans or {}).get("items", []) if e and i["entity"] == e["id"]), None)
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    reg = env.reg
+    rhea = env.slots(RHEA_OWN)
+    role = rhea.get("person.role") or {}
+    check("v3.18.1 person.role: your note's role wins the cascade, the core's position and a local index's role are «також» "
+          "with their source, path and date (C3, C6)",
+          role.get("value") == "PM" and role.get("origin", {}).get("level") == "mine" and role["origin"].get("path") == RHEA_OWN
+          and {(a["value"], a["source"]) for a in role.get("also", [])} == {("Product lead", "zorg-core"), ("Growth PM", "zorg-brain")}
+          and all(a.get("path") and "date" in a for a in role.get("also", [])), role)
+    check("…person.team and person.email are slots of the entity too — a team names its entity, shown by its label",
+          (rhea.get("person.team") or {}).get("value") == "Zorg Pay" and rhea["person.team"].get("entity") == PAY
+          and (rhea.get("person.email") or {}).get("value") == "rhea@zorg.example",
+          {k: (v or {}).get("value") for k, v in rhea.items()})
+    fay = env.slots(FAY)
+    check("…a value no card of yours gives: a core's, else a local index's (Fay's role comes from the partner card)",
+          (fay.get("person.role") or {}).get("value") == "Analyst" and fay["person.role"]["origin"]["level"] == "local",
+          fay.get("person.role"))
+
+    pay = env.slots(PAY)
+    mem = pay.get("team.members") or {}
+    ev, fy = item(mem, RHEA_OWN, reg), item(mem, FAY, reg)
+    check("v3.18.1 team.members: Rhea is one item — the core card's «Склад команди» names her (repo) and her winning team "
+          "derives her (derived, from your note) (C4, C5, C7)",
+          ev is not None and {(o["level"], o["path"]) for o in ev["origins"]} == {("repo", PAY), ("derived", RHEA_OWN)}
+          and sum(1 for i in mem.get("items", []) if i["entity"] == ev["entity"]) == 1, mem)
+    check("…Fay is only derived (her card's team), and says so",
+          fy is not None and fy.get("derived_only") is True and [o["level"] for o in fy["origins"]] == ["derived"], fy)
+    check("…the table of roles under «Люди» gives no member, nor a line that names no card (Ann Other) — a card's list "
+          "keeps the items that point at a person (C4)",
+          not any(l in ("PM", "QA", "Роль", "Кількість") or "Ann" in l for l in labels(mem)), labels(mem))
+    check("…an item keeps the rows of its sources: the core's line «… — PM» is Rhea's row (C7a)",
+          ev is not None and any("PM" in r["text"] and r["source"] == "zorg-core" for r in ev.get("rows", [])), ev)
+    check("…an item with a row of yours or a core's comes before one only derived",
+          [i["entity"] for i in mem.get("items", [])].index(ev["entity"]) < [i["entity"] for i in mem.get("items", [])].index(fy["entity"])
+          if ev and fy else False, labels(mem))
+    old = env.slots(OLD).get("team.members") or {}
+    check("v3.18.1 R9: members derive from the WINNING person.team — Rhea's core card says zorg-old, your note zorg-pay: "
+          "she is no member of zorg-old", item(old, RHEA_OWN, reg) is None, old)
+    check("…Gus, whose team is only in his card's body (`## Команда`), is nobody's member — a person's body is never read "
+          "(C3)", item(mem, GUS, reg) is None and not (env.slots(GUS).get("person.team") or {}).get("value"),
+          (labels(mem), env.slots(GUS).get("person.team")))
+
+    tm = pay.get("team.missions") or {}
+    fast, slow = item(tm, FAST, reg), item(tm, SLOW, reg)
+    check("v3.18.1 team.missions: fast-pay once (the team's field and the mission's `teams` both name it), slow-pay only "
+          "derived (its `teams` names the team, the team's field does not)",
+          fast is not None and {o["level"] for o in fast["origins"]} == {"repo", "derived"}
+          and slow is not None and slow.get("derived_only") is True, tm)
+    mt = env.slots(FAST).get("mission.teams") or {}
+    zp = item(mt, PAY, reg)
+    check("…and mission.teams the other way: zorg-pay once, from the mission's field and derived from the team's",
+          zp is not None and {o["level"] for o in zp["origins"]} == {"repo", "derived"}
+          and sum(1 for i in mt.get("items", []) if i["entity"] == zp["entity"]) == 1, mt)
+    check("…mission.jira_projects is the mission's own list", [i["label"] for i in (env.slots(FAST).get("mission.jira_projects") or {}).get("items", [])] == ["PROJ"],
+          env.slots(FAST).get("mission.jira_projects"))
+    own = env.slots(CONV).get("metric.owner") or {}
+    check("v3.18.1 metric.owner: a link names a person — the value is their label, with the entity it names",
+          own.get("entity") == (reg.of(FAY) or {}).get("id") and own.get("value") == (reg.of(FAY) or {}).get("label"), own)
+    check("…team.parent: the core card's parent", (pay.get("team.parent") or {}).get("entity") == (reg.of("ZorgCore/Teams/team-alpha.md") or {}).get("id"),
+          pay.get("team.parent"))
+
+    outside = json.dumps(env.slots(RHEA_OWN), ensure_ascii=False)
+    check("v3.18.1 outside the People contour a person's slots hold the identity alone — no judgement value of the profile",
+          set(env.slots(RHEA_OWN)) <= {"person.role", "person.team", "person.email"} and "D2" not in outside
+          and "tired" not in outside, outside[:300])
+    check("…`only` keeps the slots asked for", set(env.slots(PAY, only=["team.missions"])) == {"team.missions"}, "")
+
+    for slot_id, path in (("team.members", PAY), ("team.missions", PAY), ("mission.teams", FAST)):
+        ans = env.slots(path).get(slot_id) or {}
+        cands = es.candidates(reg, env.idx, reg.of(path), slot_id, env.cat, env.sctx)
+        ok = True
+        for it in ans.get("items", []):
+            naming = [c for c in cands if any(es.item_entity(reg, x, es.item_kind(slot_id))[0] == it["entity"]
+                                              for x in c["items"])] if it["entity"] else []
+            if it["entity"] and len(it["origins"]) != len(naming):
+                ok = False
+        check("v3.18.1 %s: no item loses a source — as many origins as candidates name its entity" % slot_id, ok, ans)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    con = sqlite3.connect(env.idx.db_path)
+    con.execute("UPDATE ents SET fields_json = NULL WHERE path = ?", (FAY,))    # read by v3.18.0, evicted since
+    con.commit()
+    con.close()
+    env.reg, _ = ce.load(env.sctx, env.idx, ce.empty_memory())
+    check("v3.18.1 Task 1 review I2: a card whose slot fields no walk read yet answers from its identity columns — Fay is "
+          "still a member of zorg-pay by her team", item(env.slots(PAY).get("team.members"), FAY, env.reg) is not None,
+          env.slots(PAY).get("team.members"))
+
+# the cascade over the levels of the cards (C6): pure, candidates in, an answer out
+cat = sl.load_catalogue()
+
+
+def cand(level, source, text, rank=None):
+    return {"level": level, "source": source, "text": text, "rank": rank, "placed": True}
+
+
+r = rv.resolve("person.role", cat, [cand("derived", "x.md", "C"), cand("local", "zorg-brain", "B"),
+                                    cand("repo", "zorg-core", "A", 1)], None)
+check("v3.18.1 the levels of the cards: a repository's card, then a local index's, then the derived (C6)",
+      [c["text"] for c in r["shown"]] == ["A"] and sorted(c["text"] for c in r["also"]) == ["B", "C"] and not r["diverges"], r)
+r = rv.resolve("person.role", cat, [cand("derived", "x.md", "C"), cand("local", "zorg-brain", "B")], None)
+check("…with no repository's card, the local index's wins — it is no «registration not read», and no tie with the derived",
+      [c["text"] for c in r["shown"]] == ["B"] and r["why"] != rv.WHY_UNREAD and not r["diverges"], r)
+r = rv.resolve("person.role", cat, [cand("repo", "core-a", "A", 1), cand("repo", "core-b", "B", 1)], None)
+check("…two cores of one rank with different values diverge (shown both), as the records' blocks do",
+      sorted(r["diverges"]) == ["core-a", "core-b"], r)
+
+# C1a: a card's slot stays out of the records' machinery
+import ctx as ctx_cli  # noqa: E402
+msg = ctx_cli._no_slot("person.role", cat)
+check("v3.18.1 `ctx slot prefer|bind|…` and `ctx explain` on a card's slot: a usage line that says the cards' cascade "
+      "decides it and how to see it (C1a)", "ctx entity" in msg and "--slot person.role" in msg
+      and "no slot" in ctx_cli._no_slot("product.nope", cat), msg)
+recs = [{"id": "team-zorg", "type": "team", "body": "## Team\n\n### Team Members\n\n- Bea\n\n#### Люди\n\n| Роль | N |\n|---|---|\n| PM | 1 |\n"}]
+props = sl.proposals(recs, [], {}, cat)
+check("…and `ctx validate` proposes no binding to a card's slot (`### Team Members` is no `person.team`, «Люди» no "
+      "team.members of a record)", not any(p_["slot"] in ("person.team", "team.parent", "team.missions") for p_ in props), props)
+r = rv.resolve("person.role", cat, [cand("repo", "core-a", "A", 1), cand("repo", "core-b", "B", 1)], None)
+check("…a card slot's divergence is shown both ways and no decision of the memory is applied to it",
+      len(r["shown"]) == 2 and r["decision"] is None, r)
+
+print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
+sys.exit(1 if fails else 0)

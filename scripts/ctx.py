@@ -560,7 +560,7 @@ def cmd_explain(a, c):
     cat = sl.load_catalogue()
     for slot in a.slots:
         if sl.slot_info(cat, slot) is None:
-            raise Usage(_no_slot(slot))
+            raise Usage(_no_slot(slot, cat))
     if a.skill:
         try:
             cr.manifest_for(cr.load_manifest(), a.skill)
@@ -1743,7 +1743,16 @@ def cmd_provider_sync(a, c):
     return 0, out
 
 
-def _no_slot(slot):
+def _no_slot(slot, cat=None):
+    """The usage line for a slot the records do not know: a slot of an entity's cards (v3.18.1, plan C1a) says who
+    decides it, anything else is not in the catalogue."""
+    try:
+        card = sl.card_slot_info(cat if cat is not None else sl.load_catalogue(), slot)
+    except ValueError:
+        card = None
+    if card:
+        return ("%s is a slot of an entity's cards: the cascade of the cards decides it, not a record's binding or "
+                "preference — see it with: ctx entity \"<who>\" --slot %s" % (slot, slot))
     return "no slot %r in the catalogue (references/context-slots.yaml)" % slot
 
 
@@ -1753,7 +1762,7 @@ def _slot_request(a, cat):
     a subsection or a heading is not empty, a preference is mine, all or repo:<id>. Anything else is a usage error."""
     req = {"slot": a.slot, "info": sl.slot_info(cat, a.slot)}
     if req["info"] is None and a.action != "forget":
-        raise Usage(_no_slot(a.slot))
+        raise Usage(_no_slot(a.slot, cat))
     if a.action == "bind":
         block, hash_, sub = a.target.partition("#")
         block = block.strip()

@@ -169,7 +169,8 @@ def _card(d, origin):
             "team": d.get("team") or "", "role": d.get("role") or "", "slug": d.get("slug") or "",
             "aliases": list(d.get("aliases") or []), "key": d.get("key") or "", "bridges": dict(d.get("bridges") or {}),
             "prefixes": list(d.get("prefixes") or []), "sensitive": bool(d.get("sensitive")), "date": d.get("date") or "",
-            "home": True}
+            "home": True, "fields": None if d.get("fields") is None else dict(d["fields"])}
+                                    # fields: the card's slot fields (v3.18.1); None — the index has not read them yet
 
 
 def local_cards(sctx, own_paths):
