@@ -45,7 +45,8 @@ _MARKER = re.compile(r"^\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+")
 _SEPARATORS = re.compile(r"\s+[—–-]\s+|:|,|\(")
 _TABLE_RULE = re.compile(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$|^\|\s*:?-+:?\s*\|\s*$")
 _EMAIL = re.compile(r"[^@\s<>()\[\],;:\"|`*]+@[^@\s<>()\[\],;:\"|`*]+\.[A-Za-z]{2,}")
-_LABEL_LINE = re.compile(r"^\*\*([^*\n]{1,40}?):?\*\*[ \t]*:?[ \t]*(.+)$")    # `**Lead:** A, B` (v3.20.0)
+_LABEL_LINE = re.compile(r"^\*\*([^*\n]{1,40}?)(?::\*\*|\*\*[ \t]*:)[ \t]*(.+)$")   # `**Lead:** A, B` (v3.20.0): a colon
+                                                                                 # makes a label — `**A, B** — роль` is names
 _NAME_SPLIT = re.compile(r"\s*(?:,|;|&|\s+(?:і|та|й|and)\s+)\s*")              # never `/`: a link's path has it
 UNRANKED = -10 ** 9                 # the rank of a repository card whose registration gives none: below every rank
 

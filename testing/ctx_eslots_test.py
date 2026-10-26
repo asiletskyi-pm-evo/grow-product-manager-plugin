@@ -336,6 +336,7 @@ aliases: [Zorg Ops]
 - **Lead:** Rhea One, Bea Two
 - Cy Namesake, Gus Five — Dev
 - Ann Other і Fay Four — Support
+- **Gus Five, Rhea One** — Payments
 """
 with tempfile.TemporaryDirectory() as d:
     env = Env(d)
@@ -351,11 +352,14 @@ with tempfile.TemporaryDirectory() as d:
     check("…an inline `**Lead:** A, B` line is two items, each its entity",
           {ids["rhea"], ids["bea"]} <= got, labels(ops))
     check("…a name of two people (Cy Namesake) keeps the whole line apart: Gus is not joined from it",
-          ids["gus"] not in got, labels(ops))
+          not any("Dev" in r["text"] for r in (item(ops, GUS, env.reg) or {}).get("rows", [])), item(ops, GUS, env.reg))
     check("…a part that names nobody (Ann Other) keeps the whole line one item: no Fay from it, no Ann",
           item(ops, FAY, env.reg) is not None and "Ann Other" not in " ".join(labels(ops))
           and not any("Support" in r["text"] for r in item(ops, FAY, env.reg)["rows"]), item(ops, FAY, env.reg))
     fay = item(ops, FAY, env.reg) or {}
+    check("…a bold pair «**A, B** — роль» (the core's own shape) is two items, the bold no label",
+          all(any("Payments" in r["text"] for r in (item(ops, x, env.reg) or {}).get("rows", [])) for x in (GUS, RHEA_CORE)),
+          labels(ops))
     check("…a joined part keeps its line's text as its row", any("Fay Four, Bea Two" in r["text"] for r in fay.get("rows", [])),
           fay)
 
