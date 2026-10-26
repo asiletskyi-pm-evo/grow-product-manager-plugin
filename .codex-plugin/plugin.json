@@ -24,7 +24,7 @@
   "interface": {
     "displayName": "Grow Product Manager",
     "shortDescription": "AI assistant for product managers: research, concepts, requirements, Jira tasks, planning, reports, meetings, people and team context — across Jira, Confluence, Figma and your notes.",
-    "longDescription": "33 skills across six contours — Product, Delivery, Knowledge, People, Design, Context — integrated with Jira, Confluence, Figma and Tableau. Bring your own organization context: the plugin ships no hardcoded brand or organization data.",
+    "longDescription": "Skills across six contours — Product, Delivery, Knowledge, People, Design, Context — integrated with Jira, Confluence, Figma and Tableau. Bring your own organization context: the plugin ships no hardcoded brand or organization data.",
     "developerName": "Andrii Siletskyi",
     "category": "Productivity",
     "websiteURL": "https://github.com/asiletskyi-pm-evo/grow-product-manager-plugin",

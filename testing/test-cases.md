@@ -8,7 +8,7 @@
 
 Plan `plans/2026-10-26-context-v3.20.0.md`. Each check failed before its code.
 
-- **TC-val-3200-description** | `bash testing/validate-consistency.sh` | expected: the plugin's description is one sentence of at most 200 characters with no `**` and no version, the same in `.claude-plugin/plugin.json`, the marketplace entry and `.codex-plugin/plugin.json` (`description` and `interface.shortDescription`); the marketplace's own description has no version either; the component counts are checked in README alone (check 10); a 5 089-character description with counts and a version tail fails
+- **TC-val-3200-description** | `bash testing/validate-consistency.sh` | expected: the plugin's description is one sentence of at most 200 characters with no `**`, no component count and no version or release date (`v3.20`, `1.2.3`, `released 2026-10-26`), the same in `.claude-plugin/plugin.json`, the marketplace entry and `.codex-plugin/plugin.json` (`description` and `interface.shortDescription`); the marketplace's own description has no version either; the Codex `longDescription` has no component count; a mismatch names the field that differs; the component counts are checked in README alone (check 10); a 5 089-character description with counts and a version tail fails
 
 ## Release v3.19.0 — slots of one entity (added 2026-10-26)
 
@@ -328,7 +328,7 @@ Ids follow `TC-<area>-<release>-<slug>`; the JCRL specification's ids are given 
 
 ### Stage 1 — Static lint (new checks)
 - **TC-val-260-hooks** | `hooks/hooks.json` + `scripts/` | valid JSON, events from the official list, every hook has `timeout`, every command points at an existing executable script, `.py` files compile | validator check 11 | expected: 2 hooks wired, 0 FAIL
-- **TC-val-260-counts** | manifests + README | `29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks` | check 10 | expected: 0 FAIL
+- **TC-val-260-counts** | manifests + README (README alone since v3.20.0, TC-val-3200-description) | `29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks` | check 10 | expected: 0 FAIL
 - **TC-lint-260-scope** | `scripts/*.py`, `scripts/*.sh` | org-data / org-signature / locale rules apply | `skill_lint.py` | expected: 0 FAIL
 
 ### Stage 2 — Script fixtures (run in the cloud clone, 2026-09-04 — pass)
@@ -362,7 +362,7 @@ Ids follow `TC-<area>-<release>-<slug>`; the JCRL specification's ids are given 
 - **TC-val-250-agents** | `agents/*.md` | frontmatter: name == file, description, tools or disallowedTools, model ∈ enum | validator check 7 | expected: 3 checked, 0 FAIL
 - **TC-val-250-commands** | `commands/*.md` | description, argument-hint, `disable-model-invocation: true` on every command | validator check 8 | expected: 4 checked, 0 FAIL
 - **TC-val-250-mcp** | `.mcp.json` ↔ `integration-strategy.md` *Declared connectors* | same key set both sides; valid JSON | validator check 9 | expected: 6 servers, 0 FAIL
-- **TC-val-250-counts** | plugin.json, marketplace.json, README | `29 skills, 3 agents, 4 commands, 6 connectors` matches disk | validator check 10 | expected: 0 FAIL
+- **TC-val-250-counts** | plugin.json, marketplace.json, README (README alone since v3.20.0, TC-val-3200-description) | `29 skills, 3 agents, 4 commands, 6 connectors` matches disk | validator check 10 | expected: 0 FAIL
 - **TC-lint-250-scope** | `agents/`, `commands/` | org-data / org-signature / locale / stale-name rules apply to component files | `skill_lint.py` (component_files) | expected: 0 FAIL on the clean tree
 
 ### Stage 1b — Seeded-leak test

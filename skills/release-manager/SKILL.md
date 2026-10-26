@@ -45,10 +45,10 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 ### Step 3 — Apply the bump (the 6 mandatory places)
 1. `.claude-plugin/plugin.json` — the `"version"` field. The description is not touched: since v3.20.0 it is one sentence of at most 200 characters with no version, no counts and no release history — what Claude shows on the plugin's card (validator check 1). A release that changes what the plugin is for rewrites that sentence; nothing else does.
 2. `.claude-plugin/marketplace.json` — the plugin entry's `"version"`; its description stays the same sentence as plugin.json.
-2a. `.codex-plugin/plugin.json` (since v3.0.1) — `"version"`; its `description` and `interface.shortDescription` are the same sentence as plugin.json (validator check 1).
+2a. `.codex-plugin/plugin.json` (since v3.0.1) — `"version"`; its `description` and `interface.shortDescription` are the same sentence as plugin.json, and `interface.longDescription` carries no component count (validator check 1).
 3. `README.md` — header + footer `**Version:**`; if skills changed: section headers, Skills Summary rows, "New in vX.Y.Z" overview paragraph.
 4. `CHANGELOG.md` — prepend the entry (Added/Changed/Fixed, files table with skill version bumps, Backwards compatibility note). No editorial placeholders — write the final text directly (pitfall P3).
-5. **Component counts** (since v2.5.0; README alone since v3.20.0) — the phrase `N skills, N agents, N commands, N connectors, N hooks` in README must equal what is on disk (`skills/*/`, `agents/*.md`, `commands/*.md`, `.mcp.json` keys). Validator check 10 fails the release otherwise. Adding an agent, a command or a connector is a MINOR bump.
+5. **Component counts** (since v2.5.0; README alone since v3.20.0) — the phrase `N skills, N agents, N commands, N connectors, N hooks` in README must equal what is on disk (`skills/*/`, `agents/*.md`, `commands/*.md`, `.mcp.json` keys, the events wired in `hooks/hooks.json`). Validator check 10 fails the release otherwise. Adding an agent, a command or a connector is a MINOR bump.
 
 This pipeline is also reachable as `/grow-product-manager:release [patch|minor|major]` — the command pre-answers Step 2's classification and changes nothing else.
 

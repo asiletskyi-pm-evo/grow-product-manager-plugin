@@ -30,22 +30,36 @@ FOOTER_COUNT=$(grep -cF "**Version:** $README_VER" README.md || true)
 # sentence, like other plugins' — no counts, no version, no release history (it
 # had grown to 5 089 characters, a changelog nobody reads on a settings card).
 # The version lives in the "version" fields alone; the counts in README (check 10).
-python3 - <<'PYEOF' || err "plugin description: keep one sentence of at most 200 characters, the same in plugin.json, the marketplace entry and the Codex manifest (description and shortDescription), with no '**' and no version"
+if ! python3 - <<'PYEOF'; then err "plugin description: keep one sentence of at most 200 characters, the same in plugin.json, the marketplace entry and the Codex manifest (description and shortDescription), with no '**' and no version"
 import json,re,sys
 MAX=200
 a=json.load(open(".claude-plugin/plugin.json"))["description"]
 m=json.load(open(".claude-plugin/marketplace.json"))
 entry=next((p.get("description","") for p in m.get("plugins",[]) if p.get("name")=="grow-product-manager"),"")
 texts=[a,entry,m.get("description","")]
+c={}
 try:
     c=json.load(open(".codex-plugin/plugin.json")); texts += [c["description"], c.get("interface",{}).get("shortDescription","")]
     same = c["description"]==a and c.get("interface",{}).get("shortDescription")==a
 except FileNotFoundError:
     same = True
-bad=[t[:60] for t in texts if len(t)>MAX or "**" in t or re.search(r"\bv?\d+\.\d+\.\d+\b",t)]
-for t in bad: print("  description: "+t+"…")
+def wrong(t):
+    if len(t)>MAX: return "%d characters" % len(t)
+    if "**" in t: return "markup **"
+    if len(re.findall(r"[.!?](?:\s|$)",t))>1: return "more than one sentence"
+    if re.search(r"\b\d+ (?:skills|agents|commands|connectors|hooks)\b",t): return "a component count (README holds them)"
+    if re.search(r"\bv\d+(?:\.\d+)*\b|\b\d+\.\d+\.\d+\b|released \d{4}-\d{2}-\d{2}",t): return "a version or a release date"
+    return None
+bad=[(t, wrong(t)) for t in texts if wrong(t)]
+for t, why in bad: print("  description (%s): %s…" % (why, t[:60]))
+if a!=entry: print("  differs: the marketplace entry's description from plugin.json's")
+if not same: print("  differs: .codex-plugin/plugin.json description or interface.shortDescription from plugin.json's")
+long_=c.get("interface",{}).get("longDescription","")
+if re.search(r"\b\d+ (?:skills|agents|commands|connectors|hooks)\b",long_):
+    print("  .codex-plugin/plugin.json interface.longDescription: a component count (README holds them)"); bad.append(1)
 sys.exit(0 if a and a==entry and same and not bad else 1)
 PYEOF
+else ok "plugin description: one sentence of $(python3 -c 'import json;print(len(json.load(open(".claude-plugin/plugin.json"))["description"]))') characters, the same in the three manifests"; fi
 
 # Codex manifest (since v3.0.1): same version and description as plugin.json,
 # plus the interface block that draws the card — logo files must exist.

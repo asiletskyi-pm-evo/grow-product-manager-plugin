@@ -67,7 +67,7 @@ Two design rules keep the linter honest: it is **stdlib-only** (PyYAML only adds
 
 ## Every example in the plugin is universal
 
-The plugin ships to other people's organizations, and its own manifest promises that it "ships no hardcoded brand or organization data". So an example is written for a reader who knows nothing about the team that wrote it:
+The plugin ships to other people's organizations, and it promises (README, the Codex card) that it "ships no hardcoded brand or organization data". So an example is written for a reader who knows nothing about the team that wrote it:
 
 - **Placeholders, not real values.** `PROJ-1234` for an issue, `SPACE` for a Confluence space, `example.com` for a host, `Product 1` for a product, `Surname1` for a person. If a doc needs a new placeholder, it joins that vocabulary rather than inventing a real-looking one.
 - **The authority behind a rule is nameable.** Either the plugin itself, a config key in `local-context.md`, or a named vendor — never a team the reader cannot look up. `per <Team> convention` becomes "follow the team's convention from `local-context.md` (`planning.link_convention`); default when unset — …".
