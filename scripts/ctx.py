@@ -1391,6 +1391,8 @@ def _entity_apply(a, c):
         return 3, dict(out, error=NO_STORE_APPLY)
     if a.apply and not a.code:
         raise Usage("entity apply --apply takes --code <the report's code>: run `ctx entity apply` first")
+    if a.code and not a.apply:
+        raise Usage("--code goes with --apply: `ctx entity apply --apply --code <code>`")
     sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
     if not a.apply:
         res = cbr.plan_result(sctx, c.store, kind=a.kind)
@@ -1406,6 +1408,8 @@ def _entity_apply(a, c):
         if not res["read"]:            # a plan without the index is not the plan the report showed: nothing written
             print(ce.NOT_READ % ("; ".join(res["notes"]) or "індексу немає"))
             return 5, dict(res, error="not read", written=[])
+        if res.get("blocked"):
+            raise cs.StoreError(res["blocked"])         # your not-same unread: never a bridge it might deny
         if res["code"] != a.code.strip().lower():
             raise co.Refused(cbr.CHANGED)               # refused before anything is touched, the copies included
         if res["rows"]:

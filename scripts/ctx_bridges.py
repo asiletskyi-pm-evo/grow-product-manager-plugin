@@ -23,11 +23,13 @@ someone else's field (your own scripts): then the plugin writes it nowhere and s
 Reads the index (ctx_index), the registry (ctx_entity), `.state/bridges.json`, `.state/entities.json` and the notes a
 row names; writes nothing but `run`'s index refresh (ctx_entity._prepare). Stdlib only.
 """
+import glob
 import hashlib
 import json
 import os
 import re
 import sys
+import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
@@ -48,11 +50,15 @@ BRIDGED = "уже мають міст"
 FOREIGN = "поле `%s` веде хтось інший — пропущено" % FIELD
 OUTSIDE = "картка поза вейлтом — Obsidian не відкриє посилання"
 UNLINKABLE = "назву картки не записати посиланням"
-UNREAD = "нотатку не прочитано (iCloud ще не завантажив?)"
-NOT_LAYER = "не в твоєму шарі — нотатка прийшла лише з локального індексу"
+UNREAD = "нотатку не прочитано (iCloud ще не завантажив?) — завантаж: ctx index rebuild --download"
+NOT_LAYER = "не в твоєму шарі"
+EVICTED = "нотатку не завантажено з iCloud (її дає лише локальний індекс) — завантаж: ctx index rebuild --download"
 NO_FM = "нотатка без frontmatter"
+HAS_FIELD = "уже має `%s`, але його ціль не знайдено — онови сам або ctx undo" % FIELD
+MEMORY_UNREAD = "твої відповіді same/not-same не прочитано — коду звіту немає, мости не пишуться (%s)"
+PENDING_FOREIGN = "%d нотаток індекс ще не прочитав — чуже `" + FIELD + "` у них не перевірено"
 DENIED = "міст, який заперечує твоє not-same (лише показ — прибери сам або ctx undo)"
-SKIP_ORDER = (BRIDGED, FOREIGN, OUTSIDE, UNLINKABLE, UNREAD, NOT_LAYER, NO_FM)
+SKIP_ORDER = (BRIDGED, HAS_FIELD, FOREIGN, OUTSIDE, UNLINKABLE, UNREAD, EVICTED, NOT_LAYER, NO_FM)
 KEY_EMAIL = "e-mail"
 KEY_SAME = "твоє same"
 
@@ -126,27 +132,45 @@ def ours(ledger):
     return {(N(p), line) for p, f, line, _ in ledger.get("written", []) if f == FIELD}
 
 
+_LINK_TARGET = re.compile(r"\[\[([^|\]#^]+)")
+
+
+def _target_key(text):
+    """A link's target as a comparable key: no `.md`, `/` separators, case folded."""
+    t = N(text or "").strip().replace("\\", "/")
+    t = t[:-3] if t.lower().endswith(".md") else t
+    return t.casefold()
+
+
+def _line_target(line):
+    m = _LINK_TARGET.search(line or "")
+    return _target_key(m.group(1)) if m else ""
+
+
 # ------------------------------------------------------------------ one line of a frontmatter
 _FM_KEY = re.compile(r"^%s[ \t]*:" % re.escape(FIELD), re.I)
 
 
 def frontmatter(text):
-    """(start, end, eol) of a note's frontmatter: `start` — the index after the opening `---` line, `end` — the index
-    where the closing `---` line begins, `eol` — the opening line's line ending; None for a note without one. A BOM
-    before the opening line is allowed."""
+    """(start, end, eol) of a note's frontmatter by the index's own rules (ctx_index._frontmatter): BOMs before it, an
+    opening line `---` (trailing spaces allowed), closed by the first line `---` or `...`. `start` — the index after the
+    opening line, `end` — where the closing line begins, `eol` — the ending of the line before the closing one (the
+    opening line's when the frontmatter is empty); None for a note without one, or one never closed."""
     t = text or ""
-    i = 1 if t.startswith("﻿") else 0
-    m = re.match(r"---[ \t]*(\r\n|\n)", t[i:])
-    if not m:
+    i = len(t) - len(t.lstrip("\ufeff"))
+    nl = t.find("\n", i)
+    if nl < 0 or t[i:nl].rstrip("\r ") != "---":
         return None
-    start = i + m.end()
-    pos = start
-    while pos < len(t):
+    start = pos = nl + 1
+    while pos <= len(t):
         nl = t.find("\n", pos)
-        line_end = len(t) if nl < 0 else nl + 1
-        if t[pos:line_end].rstrip("\r\n").rstrip(" \t") == "---":
-            return start, pos, m.group(1)
-        pos = line_end
+        line = t[pos:] if nl < 0 else t[pos:nl]
+        if line.rstrip("\r ") in ("---", "..."):
+            prev = t[:pos] if pos > start else t[:start]
+            return start, pos, "\r\n" if prev.endswith("\r\n") else "\n"
+        if nl < 0:
+            return None
+        pos = nl + 1
     return None
 
 
@@ -194,7 +218,8 @@ def bridge_line(target, label):
     link = N(target)[:-3] if N(target).lower().endswith(".md") else N(target)
     if not link or _UNSAFE_LINK.search(link):
         return None
-    label = re.sub(r'[\[\]|"\\\n\r]', "", N(label or "")).strip()
+    label = "".join(ch for ch in re.sub(r'[\[\]|"\\]', "", N(label or ""))
+                    if unicodedata.category(ch) not in ("Cc", "Cf", "Zl", "Zp")).strip()
     return '%s: "[[%s]]"' % (FIELD, link + ("|" + label if label else ""))
 
 
@@ -212,6 +237,82 @@ def own_file(sctx, rel):
     return None, None
 
 
+def _fold(p):
+    return N(os.path.normpath(os.path.abspath(p))).casefold()
+
+
+def _under(path, folder):
+    """Is `path` in `folder` — as written or with links resolved, without regard to case (APFS ignores it)?"""
+    if not folder:
+        return False
+    return any(ci._within(_fold(a), _fold(b)) for a in (path, os.path.realpath(path))
+               for b in (folder, os.path.realpath(folder)))
+
+
+_REG_PATH = re.compile(r"""^\s*(?:core_root|paths?)\s*:\s*['"]?([^'"\n#]+?)['"]?\s*$|^\s*-\s*['"]?(/[^'"\n#]+?)['"]?\s*$""", re.M)
+
+
+def _registration_folders(sctx):
+    """Every folder a registration file names — parsed or not (one that does not parse is no repository of sctx, and
+    its core may lie inside your plugin folder): `core_root`, `path(s)` and the list items under them, read raw."""
+    files = []
+    for root in sctx.get("roots") or ():
+        if root.get("source") == "own":
+            files += glob.glob(os.path.join(root["path"], "_System", "providers", "*.yaml"))
+    files += glob.glob(os.path.join(sctx.get("home") or os.path.expanduser("~"), ".grow-pm", "providers", "*.yaml"))
+    out = []
+    for f in files:
+        try:
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                text = fh.read(65536)
+        except OSError:
+            continue
+        for m in _REG_PATH.finditer(text):
+            d = (m.group(1) or m.group(2) or "").strip()
+            if d.startswith(("/", "~")):
+                out.append((os.path.expanduser(d), os.path.basename(f)))
+    return out
+
+
+def write_refusal(sctx, regs, store_root, home, rel):
+    """Why the note `rel` of your layer may not be written (plan C7, review I1/I4), or None. It must lie in the plugin
+    folder of its vault and in the storage root (`ctx` writes nowhere else), with its real path there too (no symlink,
+    no linked folder) — and in no repository's folder (a registered one, a registration file that does not parse, a
+    folder with a core's manifest or `.git` between it and the plugin folder), not in `_System/`, the store or
+    `~/.grow-pm`. Every comparison ignores letter case."""
+    path, _ = own_file(sctx, rel)
+    if not path:
+        return "не в теці плагіна"
+    root = next(os.path.normpath(r["path"]) for r in sctx["roots"] if r.get("source") == "own"
+                and ci._within(path, os.path.normpath(r["path"])))
+    if os.path.islink(path) or not ci._within(_fold(os.path.realpath(path)), _fold(os.path.realpath(root))):
+        return "посилання (symlink)"
+    storage = cc.storage_root(sctx.get("text") or "", home)
+    if not _under(path, storage):
+        return "інший вейлт — поза коренем сховища"
+    if "_system" in [x.casefold() for x in os.path.relpath(path, root).split(os.sep)[:-1]]:
+        return "_System/"
+    for repo in sctx.get("repos") or ():
+        for d in [repo.get("core_root")] + list(repo.get("paths") or ()):
+            if d and _under(path, d):
+                return "тека репозиторію %s" % (repo.get("id") or "?")
+    for d, name in _registration_folders(sctx):
+        if _under(path, d):
+            return "тека з реєстрації %s" % name
+    probe = os.path.dirname(path)
+    while ci._within(probe, root) and probe != root:
+        if os.path.isfile(os.path.join(probe, "_System", "provider-manifest.yaml")) or os.path.exists(os.path.join(probe, ".git")):
+            return "тека ядра (%s)" % os.path.relpath(probe, root)
+        probe = os.path.dirname(probe)
+    hit = cc.boundary_hit(path, regs or [])
+    if hit:
+        return "тека провайдера %s" % (hit.get("id") or "?")
+    for d, why in ((store_root, "сховище"), (os.path.join(home, ".grow-pm"), "~/.grow-pm")):
+        if d and _under(path, d):
+            return why
+    return None
+
+
 def _reg_rank(sctx):
     ranks = {r.get("id"): rv._rank(r) for r in sctx.get("repos") or ()}
 
@@ -225,87 +326,105 @@ def _sha(data):
     return hashlib.sha1(data).hexdigest()
 
 
-def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, timeout=None):
+def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, regs=None, store_root=None, timeout=None):
     """What `ctx entity apply` would write (plan C2–C4): {rows: [{path, target, label, line, key, kind, entity, sha}],
     skipped: {reason: [path]}, foreign: [path], denied: [(path, target)], code}. A row is a card of your layer, held by
     the plugin's index, whose entity holds a card of another source that your `same` or an e-mail joins it to directly,
-    and that has no bridge to its entity yet; its target — the strongest such card (a core's by rank, then a local
-    index's) whose file lies in the same vault. A `same_as` of your layer the ledger does not hold makes the field
-    someone else's: then no row at all. Reads each row's note (within `timeout`), never writes."""
+    and that has no bridge to its entity yet nor any `same_as`; its target — the strongest such card (a core's by rank,
+    then a local index's) whose file lies in the same vault; its note one plan C7 lets be written (write_refusal: the
+    report is what --apply writes). A `same_as` of your layer the ledger does not hold — by path and target — makes the
+    field someone else's: then no row at all. Reads each row's note (all within one `timeout`), never writes."""
     mine = ours(ledger)
-    our_paths = {p for p, _ in mine}
+    our_targets = {}
+    for p, line in mine:
+        our_targets.setdefault(p, set()).add(_line_target(line))
     same = {tuple(ce._pair(x[0], x[1])) for x in mem.get("same", [])}
     apart = {tuple(ce._pair(x[0], x[1])) for x in mem.get("not_same", [])}
-    foreign = {p for p in idx.field_links(FIELD, "own") if p not in our_paths}
+    foreign = {d["path"] for d in idx.field_links(FIELD, "own")
+               if _target_key(d["target"]) not in our_targets.get(d["path"], ())}
     rows, skipped, denied = [], {}, []
     rank = _reg_rank(sctx)
+    home = sctx.get("home") or os.path.expanduser("~")
+    prefixes = [p for p in getattr(reg.resolver, "prefixes", ()) if p]
+
+    def yours(card):        # a note of your plugin folder — a local index's too, while iCloud keeps the file (v3.19.0)
+        return card.get("source") == "own" or any(card["path"] == p or card["path"].startswith(p + "/") for p in prefixes)
 
     def skip(why, path):
         skipped.setdefault(why, [])
         if path not in skipped[why]:
             skipped[why].append(path)
 
-    for e in reg.entities:
-        for c in e["cards"]:                         # a bridge your note keeps that your not-same denies: shown only
-            if c.get("source") == "own":
+    with cs.read_budget(timeout if timeout is not None else cs.read_timeout()):    # every note in one budget (M2)
+        for e in reg.entities:
+            for c in e["cards"]:                     # a bridge your note keeps that your not-same denies: shown only
+                if c.get("source") == "own":
+                    for target in c.get("bridges", {}).values():
+                        hit = reg.resolver.resolve(target)
+                        if isinstance(hit, str) and tuple(ce._pair(c["path"], hit)) in apart:
+                            denied.append((c["path"], hit))
+            if kind and e["kind"] != kind:
+                continue
+            homes = [c for c in e["cards"] if c.get("home")]
+            others = [o for o in homes if not yours(o)]     # a note of yours is never a bridge's target
+            if not others:
+                continue
+            for c in homes:
+                if not yours(c):
+                    continue
+                if c.get("origin") != "index":
+                    skip(EVICTED, c["path"])
+                    continue
+                linked = set()
                 for target in c.get("bridges", {}).values():
                     hit = reg.resolver.resolve(target)
-                    if isinstance(hit, str) and tuple(ce._pair(c["path"], hit)) in apart:
-                        denied.append((c["path"], hit))
-        if kind and e["kind"] != kind:
-            continue
-        homes = [c for c in e["cards"] if c.get("home")]
-        others = [o for o in homes if o.get("source") != "own"]
-        if not others:
-            continue
-        for c in homes:
-            if c.get("source") != "own":
-                continue
-            if c.get("origin") != "index":
-                skip(NOT_LAYER, c["path"])
-                continue
-            linked = set()
-            for target in c.get("bridges", {}).values():
-                hit = reg.resolver.resolve(target)
-                if isinstance(hit, str) and hit != c["path"] and reg.of(hit) is e:
-                    linked.add(hit)
-            if any(p in linked for p in (o["path"] for o in others)):
-                skip(BRIDGED, c["path"])
-                continue
-            direct = [o for o in others if set(c["emails"]) & set(o["emails"])
-                      or tuple(ce._pair(c["path"], o["path"])) in same]
-            if not direct:
-                continue
-            path, vault = own_file(sctx, c["path"])
-            if not path:
-                skip(NOT_LAYER, c["path"])
-                continue
-            direct.sort(key=rank)
-            inside = [o for o in direct if not o["path"].startswith("@") and not os.path.isabs(o["path"])
-                      and os.path.lexists(os.path.join(vault, o["path"]))]
-            if not inside:
-                skip(OUTSIDE, c["path"])
-                continue
-            target = inside[0]
-            line = bridge_line(target["path"], target.get("label"))
-            if not line:
-                skip(UNLINKABLE, c["path"])
-                continue
-            try:
-                data = cs.read_bytes(path, timeout=timeout if timeout is not None else cs.read_timeout())
-                text = data.decode("utf-8")
-            except (OSError, UnicodeDecodeError, cs.StoreError):
-                skip(UNREAD, c["path"])
-                continue
-            if not frontmatter(text):
-                skip(NO_FM, c["path"])
-                continue
-            if any((c["path"], x) not in mine for x in fm_lines(text)):
-                foreign.add(c["path"])
-                continue
-            rows.append({"path": c["path"], "target": target["path"], "label": target.get("label") or "",
-                         "line": line, "key": KEY_EMAIL if set(c["emails"]) & set(target["emails"]) else KEY_SAME,
-                         "kind": e["kind"], "entity": e["label"], "sha": _sha(data)})
+                    if isinstance(hit, str) and hit != c["path"] and reg.of(hit) is e:
+                        linked.add(hit)
+                if any(p in linked for p in (o["path"] for o in others)):
+                    skip(BRIDGED, c["path"])
+                    continue
+                direct = [o for o in others if set(c["emails"]) & set(o["emails"])
+                          or tuple(ce._pair(c["path"], o["path"])) in same]
+                if not direct:
+                    continue
+                path, vault = own_file(sctx, c["path"])
+                if not path:
+                    skip(NOT_LAYER, c["path"])
+                    continue
+                why = write_refusal(sctx, regs, store_root, home, c["path"])
+                if why:
+                    skip(BOUNDARY % why, c["path"])
+                    continue
+                direct.sort(key=rank)
+                inside = [o for o in direct if not o["path"].startswith("@") and not os.path.isabs(o["path"])
+                          and os.path.lexists(os.path.join(vault, o["path"]))]
+                if not inside:
+                    skip(OUTSIDE, c["path"])
+                    continue
+                target = inside[0]
+                line = bridge_line(target["path"], target.get("label"))
+                if not line:
+                    skip(UNLINKABLE, c["path"])
+                    continue
+                try:
+                    data = cs.read_bytes(path)
+                    text = data.decode("utf-8")
+                except (OSError, UnicodeDecodeError, cs.StoreError):
+                    skip(UNREAD, c["path"])
+                    continue
+                if not frontmatter(text):
+                    skip(NO_FM, c["path"])
+                    continue
+                have = fm_lines(text)
+                if any((c["path"], x) not in mine for x in have):
+                    foreign.add(c["path"])
+                    continue
+                if have:                             # ours, its card gone: never a second key (review I3)
+                    skip(HAS_FIELD, c["path"])
+                    continue
+                rows.append({"path": c["path"], "target": target["path"], "label": target.get("label") or "",
+                             "line": line, "key": KEY_EMAIL if set(c["emails"]) & set(target["emails"]) else KEY_SAME,
+                             "kind": e["kind"], "entity": e["label"], "sha": _sha(data)})
     foreign = sorted(foreign)
     if foreign:
         rows = []
@@ -317,20 +436,25 @@ def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, timeout=None):
 
 
 def plan_result(sctx, store, kind=None, budget=None):
-    """`ctx entity apply` without --apply: {command, action, rows, skipped, foreign, denied, code, notes, read,
-    pending}. Refreshes the index (as `ctx entity`); reads your answers and the ledger (a ledger that cannot be read
-    stops the run: cs.StoreError)."""
+    """`ctx entity apply`'s plan: {command, action, rows, skipped, foreign, denied, code, notes, read, pending,
+    blocked}. Refreshes the index (as `ctx entity`); your answers are the ones the registry was built with — when they
+    could not be read, `blocked` says why and `code` is "" (review I5: a `not-same` of yours never ignored); a ledger
+    that cannot be read stops the run (cs.StoreError)."""
     idx, reg, notes, read, pending = ce._prepare(sctx, store, budget)
     ledger = load_ledger(store, timeout=None)
-    try:
-        mem = ce.load_memory(store, timeout=None)
-    except cs.StoreError:
-        mem = ce.empty_memory()             # _prepare said so in `notes`
-    plan = bridge_plan(sctx, idx, reg, ledger, mem, kind=kind)
+    regs, _ = cc.boundary_registrations(cc.vault_entries(sctx.get("text") or ""),
+                                        extra_dirs=[os.path.join(sctx.get("home") or "", ".grow-pm", "providers")])
+    plan = bridge_plan(sctx, idx, reg, ledger, getattr(reg, "memory", None) or ce.empty_memory(), kind=kind,
+                       regs=regs, store_root=store.root)
     if idx.problem and idx.problem not in notes:
         notes.append(idx.problem)
+    blocked = MEMORY_UNREAD % reg.memory_problem if getattr(reg, "memory_problem", None) else None
+    if blocked:
+        plan["code"] = ""
+    if pending:
+        notes.append(PENDING_FOREIGN % pending)
     return dict(plan, command="entity", action="apply", notes=list(notes), read=read and not idx.problem,
-                pending=pending)
+                pending=pending, blocked=blocked)
 
 
 # ------------------------------------------------------------------ the write (plan C6–C8)
@@ -340,74 +464,93 @@ BOUNDARY = "межа запису: %s — не пишу"
 OP = "entity-apply"
 
 
-def write_refusal(sctx, regs, store_root, home, rel):
-    """Why the note `rel` of your layer may not be written (plan C7), or None: it must lie in the plugin folder of its
-    vault, under no registered repository's folder (`core_root`, `paths`, a registration's read-only roots), the store,
-    `_System/` or `~/.grow-pm`, and be no link — nor lie, links resolved, outside the plugin folder."""
-    path, _ = own_file(sctx, rel)
-    if not path:
-        return "не в теці плагіна"
-    root = next(os.path.normpath(r["path"]) for r in sctx["roots"] if r.get("source") == "own"
-                and ci._within(path, os.path.normpath(r["path"])))
-    real_root = os.path.realpath(root)
-    if os.path.islink(path) or not ci._within(os.path.realpath(path), real_root):   # a linked folder on the way too
-        return "посилання (symlink)"
-    parts = os.path.relpath(path, root).split(os.sep)
-    if "_System" in parts[:-1]:
-        return "_System/"
-    for repo in sctx.get("repos") or ():
-        for d in [repo.get("core_root")] + list(repo.get("paths") or ()):
-            if d and (ci._within(path, os.path.normpath(d))
-                      or ci._within(os.path.realpath(path), os.path.realpath(d))):
-                return "тека репозиторію %s" % (repo.get("id") or "?")
-    if cc.boundary_hit(path, regs):
-        return "тека провайдера %s" % (cc.boundary_hit(path, regs).get("id") or "?")
-    for d, why in ((store_root, "сховище"), (os.path.join(home, ".grow-pm"), "~/.grow-pm")):
-        if d and ci._within(os.path.realpath(path), os.path.realpath(d)):
-            return why
-    return None
+def write_note(path, text):
+    """Write a note of yours in place — the same file, its mode, extended attributes and creation date kept (review
+    I7: a new file through a temp one would make a 0600 profile 0644 and lose its Finder tags). The guard of `ctx`
+    (cs.check_target) first; then flushed to disk. The snapshot taken before holds what it was."""
+    cs.check_target(path)
+    data = text.encode("utf-8")
+    with open(path, "r+b") as f:
+        f.seek(0)
+        f.write(data)
+        f.truncate()
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _snapshot_copies(snap):
+    """{index name: sha1} of the notes a snapshot keeps, or None when `snap` is no snapshot folder."""
+    if not snap or not os.path.isdir(snap):
+        return None
+    try:
+        with open(os.path.join(snap, "manifest.json"), encoding="utf-8") as f:
+            entries = json.load(f).get("notes") or []
+        return {N(k["path"]): _sha(cs.read_bytes(os.path.join(snap, k["file"]))) for k in entries}
+    except (OSError, ValueError, KeyError, TypeError, cs.StoreError):
+        return {}
 
 
 def apply_plan(sctx, store, copies, home, plan, regs, day, snapshot, journal, now):
-    """Write the rows of `plan` (plan_result, its code checked by the caller): each note checked against plan C7 and
-    read again — bytes other than the plan's → skipped (MOVED); a snapshot of the notes about to change first
-    (`snapshot(notes)` → its folder), then each line, then the ledger and one journal line {op entity-apply, notes:
-    [{path, line, before, after}], snapshot} — written even when a later note fails, for the notes already written.
-    Returns {written: [row], skipped: {reason: [path]}, snapshot}."""
+    """Write the rows of `plan` (plan_result, its code checked by the caller). The ledger is read first (one that cannot
+    be read: nothing written). Each note is checked against plan C7 and read — bytes other than the plan's → MOVED;
+    a snapshot of those notes (`snapshot(notes)` → its folder) whose copy of a note is not those bytes → MOVED too
+    (a save while it ran, review I6); each note read once more right before its line is written. Then one journal
+    line {op entity-apply, notes: [{path, line, before, after}], snapshot} and the ledger — for the notes written, even
+    when a later one fails (journal first). Returns {written: [row], skipped: {reason: [path]}, snapshot}."""
+    ledger = load_ledger(store)
     skipped, ready = {}, []
+
+    def skip(why, path):
+        skipped.setdefault(why, []).append(path)
+
     for r in plan["rows"]:
         why = write_refusal(sctx, regs, store.root, home, r["path"])
         if why:
-            skipped.setdefault(BOUNDARY % why, []).append(r["path"])
+            skip(BOUNDARY % why, r["path"])
             continue
         path, _ = own_file(sctx, r["path"])
         try:
             data = cs.read_bytes(path)
         except (OSError, cs.StoreError):
-            skipped.setdefault(UNREAD, []).append(r["path"])
+            skip(UNREAD, r["path"])
             continue
         if _sha(data) != r["sha"]:
-            skipped.setdefault(MOVED, []).append(r["path"])
+            skip(MOVED, r["path"])
             continue
-        ready.append((r, path, data.decode("utf-8")))
+        ready.append((r, path))
     if not ready:
         return {"written": [], "skipped": skipped, "snapshot": None}
-    snap = snapshot([(r["path"], path) for r, path, _ in ready])
+    snap = snapshot([(r["path"], path) for r, path in ready])
+    kept = _snapshot_copies(snap)
     written, notes = [], []
     try:
-        for r, path, text in ready:
-            new = insert_line(text, r["line"])
-            cs.atomic_write(path, new)
+        for r, path in ready:
+            if kept is not None and kept.get(r["path"]) != r["sha"]:
+                skip(MOVED, r["path"])
+                continue
+            try:
+                data = cs.read_bytes(path)
+            except (OSError, cs.StoreError):
+                skip(UNREAD, r["path"])
+                continue
+            if _sha(data) != r["sha"]:
+                skip(MOVED, r["path"])
+                continue
+            new = insert_line(data.decode("utf-8"), r["line"])
+            try:
+                write_note(path, new)
+            except cs.PathRefused as e:
+                skip(BOUNDARY % e, r["path"])
+                continue
             written.append(r)
             notes.append({"path": r["path"], "line": r["line"], "before": r["sha"],
                           "after": _sha(new.encode("utf-8"))})
     finally:
         if written:
-            ledger = load_ledger(store)
-            ledger["written"].extend([r["path"], FIELD, r["line"], day] for r in written)
-            save_ledger(store, ledger)
             journal({"ts": now, "op": OP, "ids": [], "source": "ctx-entity-apply", "reason": "", "snapshot": snap,
                      "notes": notes})
+            ledger["written"].extend([r["path"], FIELD, r["line"], day] for r in written)
+            save_ledger(store, ledger)
     return {"written": written, "skipped": skipped, "snapshot": snap}
 
 
@@ -476,7 +619,7 @@ def revert_notes(sctx, regs, store_root, home, items):
         if new is None:
             kept.append((rel, EDITED))
             continue
-        cs.atomic_write(path, new.decode("utf-8"))
+        write_note(path, new.decode("utf-8"))
         done.append({"path": rel, "line": n.get("line") or "", "before": _sha(cur), "after": _sha(new)})
         reverted.append(rel)
     return done, reverted, kept
@@ -513,9 +656,9 @@ def render(res, written=False):
     else:
         out.append("мостів записати нічого" if not written else "нічого не записано")
     skipped = res.get("skipped") or {}
-    if skipped:
+    if any(skipped.values()):
         out.append("пропущено:")
-        for why in SKIP_ORDER:
+        for why in list(SKIP_ORDER) + sorted(w for w in skipped if w not in SKIP_ORDER):    # every reason (review M1)
             paths = skipped.get(why) or []
             if paths:
                 out.append("  %s: %d %s (%s%s)" % (why, len(paths), notes_word(len(paths)), ", ".join(paths[:3]),
@@ -524,7 +667,9 @@ def render(res, written=False):
         out.append("%s: %s → %s" % (DENIED, path, target))
     for n in res.get("notes") or []:
         out.append(n)
-    if not written:
+    if res.get("blocked"):
+        out.append(res["blocked"])
+    elif not written:
         out.append("код звіту: %s" % res.get("code", ""))
         if rows:
             out.append("записати: ctx entity apply --apply --code %s" % res.get("code", ""))

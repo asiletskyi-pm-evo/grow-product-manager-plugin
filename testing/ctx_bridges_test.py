@@ -54,7 +54,7 @@ def tree_hash(top):
 class Env:
     """A temp home and vault with the entity fixture, {{VAULT}} and {{HOME}} filled in, a store, no local index."""
 
-    def __init__(self, d, extra=None):
+    def __init__(self, d, extra=None, local=None):
         self.d = d
         self.home = os.path.join(d, "home")
         self.vault = os.path.join(d, "vault")
@@ -68,7 +68,21 @@ class Env:
         for rel, text in (extra or {}).items():
             write(os.path.join(self.vault, rel), text)
         text = read(FIX, "context.md").replace("{{VAULT}}", self.vault).replace("{{HOME}}", self.home)
-        text = text.replace("### Vault Search MCP\n- zorg-brain: scope = own vault, index = %s/zorg-brain.sqlite\n" % self.home, "")
+        if local is None:
+            text = text.replace("### Vault Search MCP\n- zorg-brain: scope = own vault, index = %s/zorg-brain.sqlite\n" % self.home, "")
+        else:                                       # a local index of the user's: (path, frontmatter) of its notes
+            import sqlite3
+            con = sqlite3.connect(os.path.join(self.home, "zorg-brain.sqlite"))
+            con.execute("CREATE TABLE meta(k TEXT, v TEXT)")
+            con.execute("INSERT INTO meta VALUES ('vault_root', ?)", (self.vault,))
+            con.execute("CREATE TABLE notes(path TEXT PRIMARY KEY, title TEXT, type TEXT, fm_json TEXT)")
+            con.execute("CREATE VIRTUAL TABLE notes_fts USING fts5(path, title, body)")
+            for rel, fm in local:
+                title = os.path.basename(rel)[:-3]
+                con.execute("INSERT INTO notes VALUES (?, ?, ?, ?)", (rel, title, fm.get("type"), json.dumps(fm)))
+                con.execute("INSERT INTO notes_fts VALUES (?, ?, ?)", (rel, title, "text"))
+            con.commit()
+            con.close()
         self.ctx = os.path.join(self.home, ".grow-pm", "local-context.md")
         write(self.ctx, text)
         self.text = text
@@ -453,6 +467,219 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, _ = env.cli("undo")
     check("a journal line that names a core's card: undo never writes it (plan C7 in undo too)",
           read(core) == core0 and "не повернуто: %s" % RHEA[1] in out, out)
+
+# ------------------------------------------------------------------ Task 2–3 review (review-v3.20.0-task-2-3.md)
+def vault_with(d, extra):
+    return Env(d, extra)
+
+
+with tempfile.TemporaryDirectory() as d:                                       # I1: case and an unparsed registration
+    sub = ("schema: provider-registration/2\nid: sub-core\ntitle: Sub core\nkind: folder\nauthority: team\n"
+           "core_root: %s\nstale_after_days: 30\nstatus: active\n" % os.path.join(d, "vault", "notes", "subcore"))
+    broken = "foo: [unclosed\ncore_root: %s\n" % os.path.join(d, "vault", "Notes", "Broken")
+    kai = "---\ntype: person\nemail: kai@zorg.example\n---\n# Kai\n"
+    lia = "---\ntype: person\nemail: lia@zorg.example\n---\n# Lia\n"
+    env = Env(d, {"Notes/_System/providers/sub-core.yaml": sub, "Notes/_System/providers/broken.yaml": broken,
+                  "Notes/SubCore/People/kai.md": kai, "Notes/Broken/People/lia.md": lia,
+                  "ZorgCore/People/kai.md": "---\ntype: people\nemail: kai@zorg.example\n---\n# Kai Core\n",
+                  "ZorgCore/People/lia.md": "---\ntype: people\nemail: lia@zorg.example\n---\n# Lia Core\n"})
+    _, _, res = env.cli("entity", "apply")
+    rc, out, _ = env.cli("entity", "apply", "--apply", "--code", res["code"])
+    check("review I1: a core registered in another letter case, or by a registration that does not parse, is never "
+          "written — nor planned", read(env.vault, "Notes/SubCore/People/kai.md") == kai
+          and read(env.vault, "Notes/Broken/People/lia.md") == lia
+          and not any(r["path"].startswith(("Notes/SubCore", "Notes/Broken")) for r in res["rows"]), (res["rows"], out))
+
+with tempfile.TemporaryDirectory() as d:                                       # I2: `...` closes a frontmatter
+    dots = "---\ntype: person\nemail: rhea@zorg.example\n...\n# Rhea One\n\nIntro.\n\n---\n\nMore.\n"
+    env = Env(d, {RHEA[0]: dots})
+    _, _, res = env.cli("entity", "apply")
+    env.cli("entity", "apply", "--apply", "--code", res["code"])
+    got = read(env.vault, RHEA[0])
+    _, _, res2 = env.cli("entity", "apply")
+    check("review I2: a frontmatter closed by `...` (as the index reads it) gets the line before the `...`, the body "
+          "untouched, and the next run sees the bridge", got == dots.replace("\n...\n", "\n" + LINE + "\n...\n", 1)
+          and res2["rows"] == [] and RHEA[0] in res2["skipped"].get(cb_.BRIDGED, []), (got, res2))
+    t1, t2 = "\ufeff\ufeff--- \na: 1\n...\nbody\n---\nmore\n", "---\na: 1\n--- \r\nbody\n"
+    check("…frontmatter() and the index agree: BOMs, an opening `--- `, a close at `...` or `--- `, a body `---` no end",
+          t1[cb_.frontmatter(t1)[1]:].split("\n", 1)[1] == ci._frontmatter(t1)[1] == "body\n---\nmore\n"
+          and t2[cb_.frontmatter(t2)[1]:].split("\n", 1)[1] == ci._frontmatter(t2)[1] == "body\n"
+          and cb_.frontmatter("---\na: 1\n---\t\n") is None, (cb_.frontmatter(t1), ci._frontmatter(t1)))
+
+with tempfile.TemporaryDirectory() as d:                                       # I3: a second same_as key never
+    env = applied(d)
+    os.rename(os.path.join(env.vault, RHEA[1]), os.path.join(env.vault, "ZorgCore/People/rhea-one.md"))
+    _, _, res = env.cli("entity", "apply")
+    check("review I3: our `same_as` whose card moved: no second key — skipped and said",
+          res["rows"] == [] and RHEA[0] in res["skipped"].get(cb_.HAS_FIELD, []), res)
+
+with tempfile.TemporaryDirectory() as d:                                       # I4: a second vault
+    v2 = os.path.join(d, "vault2")
+    write(os.path.join(v2, "Notes2", "People", "ola.md"), "---\ntype: person\nemail: ola@zorg.example\n---\n# Ola\n")
+    write(os.path.join(v2, "Core2", "People", "ola.md"), "---\ntype: people\nemail: ola@zorg.example\n---\n# Ola Core\n")
+    reg2 = ("schema: provider-registration/2\nid: core-two\ntitle: Core two\nkind: folder\nauthority: org\n"
+            "core_root: %s\nstale_after_days: 30\nstatus: active\n" % os.path.join(v2, "Core2"))
+    env = Env(d, {"Notes/_System/providers/core-two.yaml": reg2})
+    text = read(env.ctx).replace("| 1 | %s | Notes | all | auto | never |" % env.vault,
+                                 "| 1 | %s | Notes | all | auto | never |\n| 2 | %s | Notes2 | all | auto | never |"
+                                 % (env.vault, v2))
+    write(env.ctx, text)
+    _, _, res = env.cli("entity", "apply")
+    rc, out, res2 = env.cli("entity", "apply", "--apply", "--code", res["code"])
+    check("review I4: a note of another vault's plugin folder (outside the storage root) is skipped in the report, and "
+          "--apply writes the rest: exit 0, not «refused»",
+          rc == 0 and LINE in read(env.vault, RHEA[0]) and "same_as" not in read(v2, "Notes2", "People", "ola.md")
+          and not any(r["path"].endswith("ola.md") for r in res["rows"]), (rc, out[-400:], res["rows"]))
+
+with tempfile.TemporaryDirectory() as d:                                       # I5: your answers not read
+    env = Env(d)
+    env.cli("entity", "not-same", RHEA[0], RHEA[1])
+    mem_path = os.path.join(env.store.state_dir, "entities.json")
+    os.chmod(mem_path, 0)
+    try:
+        rc, out, res = env.cli("entity", "apply")
+        rc2, out2, _ = env.cli("entity", "apply", "--apply", "--code", (res or {}).get("code") or "x")
+    finally:
+        os.chmod(mem_path, 0o644)
+    check("review I5: your answers not read — the report says so and gives no code; --apply writes nothing",
+          "записати:" not in out and not (res or {}).get("code") and rc2 != 0 and "same_as" not in read(env.vault, RHEA[0]),
+          (out[-300:], out2[-300:]))
+
+with tempfile.TemporaryDirectory() as d:                                       # I6, I7, M5: the write itself
+    env = Env(d)
+    path = os.path.join(env.vault, RHEA[0])
+    os.chmod(path, 0o600)
+    ino = os.stat(path).st_ino
+    _, _, res = env.cli("entity", "apply")
+    env.cli("entity", "apply", "--apply", "--code", res["code"])
+    st = os.stat(path)
+    check("review I7: the note keeps its mode (0600) and its inode (its extended attributes with it)",
+          (st.st_mode & 0o777) == 0o600 and st.st_ino == ino and LINE in read(path), oct(st.st_mode))
+
+    env2 = Env(os.path.join(d, "two"))
+    sctx = env2.sctx()
+    p2 = env2.plan()
+    target = os.path.join(env2.vault, RHEA[0])
+
+    def edit_during_snapshot(notes):
+        write(target, read(target) + "\nSaved by Obsidian meanwhile.\n")
+        return None
+    done = cb_.apply_plan(sctx, env2.store, [], env2.home, p2, [], "2026-10-26", edit_during_snapshot,
+                          lambda entry: None, "2026-10-26T10:00:00+03:00")
+    check("review I6: a save that lands while the snapshot runs is kept — the note is skipped, never overwritten",
+          done["written"] == [] and "Saved by Obsidian meanwhile." in read(target) and LINE not in read(target), done)
+
+    env3 = Env(os.path.join(d, "three"), {"ZorgCore/People/pia.md": "---\ntype: people\nemail: pia@zorg.example\n---\n# Pia Core\n",
+                                          "Notes/People/pia.md": "---\ntype: person\nemail: pia@zorg.example\n---\n# Pia\n"})
+    p3 = env3.plan()
+    lines, calls = [], []
+    real = cb_.insert_line
+
+    def second_fails(text, line):
+        calls.append(line)
+        if len(calls) == 2:
+            raise OSError("disk full")
+        return real(text, line)
+    cb_.insert_line = second_fails
+    try:
+        cb_.apply_plan(env3.sctx(), env3.store, [], env3.home, p3, [], "2026-10-26", lambda notes: "snap",
+                       lambda entry: lines.append(entry), "2026-10-26T10:00:00+03:00")
+    except OSError:
+        pass
+    finally:
+        cb_.insert_line = real
+    check("review M5: a failure after one note is written: the journal line and the ledger hold that note",
+          len(p3["rows"]) == 2 and lines and len(lines[0]["notes"]) == 1
+          and len(cb_.load_ledger(env3.store)["written"]) == 1, (p3["rows"], lines))
+
+with tempfile.TemporaryDirectory() as d:                                       # I6: the snapshot's copy itself
+    env = Env(d)
+    sctx = env.sctx()
+    p = env.plan()
+    target = os.path.join(env.vault, RHEA[0])
+    import ctx_ops as co  # noqa: E402
+
+    def save_during_snapshot(notes):
+        before = read(target)
+        write(target, before + "\nA save the snapshot caught.\n")
+        snap = co.snapshot(env.store, [], env.home, "entity-apply", notes=notes)
+        write(target, before)                                          # and undone before the write
+        return snap
+    done = cb_.apply_plan(sctx, env.store, [], env.home, p, [], "2026-10-26", save_during_snapshot,
+                          lambda entry: None, "2026-10-26T10:00:00+03:00")
+    check("review I6: a snapshot whose copy of the note is not the plan's bytes: the note is skipped (undo could not "
+          "put it back byte for byte)", done["written"] == [] and RHEA[0] in done["skipped"].get(cb_.MOVED, []), done)
+
+with tempfile.TemporaryDirectory() as d:                                       # M7 at the index's level
+    env = applied(d)
+    low = ("schema: provider-registration/2\nid: zorg-low\ntitle: Low core\nkind: folder\nauthority: personal\n"
+           "core_root: %s\nstale_after_days: 30\nstatus: active\n" % os.path.join(env.vault, "LowCore"))
+    write(os.path.join(env.vault, "Notes/_System/providers/zorg-low.yaml"), low)
+    write(os.path.join(env.vault, "LowCore/People/rhea-low.md"), "---\ntype: people\nemail: rhea@zorg.example\n---\n# Rhea Low\n")
+    write(os.path.join(env.vault, RHEA[0]), read(env.vault, RHEA[0]).replace(LINE, 'same_as: "[[LowCore/People/rhea-low|Rhea Low]]"'))
+    _, _, res = env.cli("entity", "apply")
+    check("review M7: our `same_as` turned by hand to another card of the same entity (a bridge still, no row): the "
+          "index sees a target the ledger does not hold — someone else's", RHEA[0] in res["foreign"], res)
+
+with tempfile.TemporaryDirectory() as d:                                       # M6, M7
+    env = applied(d)
+    env.cli("undo")
+    _, _, res = env.cli("entity", "apply")
+    check("review M6: after apply and undo the next report plans the bridge again — our line is no one else's",
+          res["foreign"] == [] and [r["path"] for r in res["rows"]] == [RHEA[0]], res)
+    env2 = applied(os.path.join(d, "two"))
+    write(os.path.join(env2.vault, RHEA[0]), read(env2.vault, RHEA[0]).replace(LINE, 'same_as: "[[ZorgCore/People/fay|Fay]]"'))
+    _, _, res2 = env2.cli("entity", "apply")
+    check("review M7: our `same_as` turned by hand to another card: someone else's now (the ledger's target differs)",
+          RHEA[0] in res2["foreign"], res2)
+
+check("review M9: the line takes the ending of the line before the closing one; a label loses control characters",
+      cb_.insert_line("---\na: 1\nb: 2\r\n---\n", "x: 1") == "---\na: 1\nb: 2\r\nx: 1\r\n---\n"
+      and cb_.insert_line("---\r\na: 1\n---\n", "x: 1") == "---\r\na: 1\nx: 1\n---\n"
+      and cb_.bridge_line("P/x.md", "Ann One\u0007") == 'same_as: "[[P/x|AnnOne]]"', "")
+check("review M1: the result shows every reason — a note changed while writing too",
+      cb_.MOVED in cb_.render({"rows": [], "skipped": {cb_.MOVED: ["a.md"]}}, written=True), "")
+
+with tempfile.TemporaryDirectory() as d:                                       # M10, M11
+    env = Env(d)
+    rc, out, _ = env.cli("entity", "apply", "--code", "abcd1234")
+    check("review M10: `--code` without `--apply` is exit 3", rc == 3, out)
+    _, _, res = env.cli("entity", "apply")
+    write(os.path.join(env.vault, RHEA[1]), read(env.vault, RHEA[1]).replace("# Rhea One", "# Rhea One-Core"))
+    _, _, res2 = env.cli("entity", "apply")
+    check("review M11: the code changes when only the line changes (the card's title)", res2["code"] != res["code"],
+          (res["code"], res2["code"]))
+    write(env.ctx, read(env.ctx).replace("- **Role:** pm", "- **Role:** pm\n- **Team note:** waiting edit"))
+    store0 = hashes(env.store.root)
+    copy0 = read(env.ctx)
+    rc, out, _ = env.cli("entity", "apply", "--apply", "--code", "deadbeef")
+    check("review M11: a refused --apply leaves an edit of local-context.md waiting — the store and the copy untouched",
+          rc == 4 and hashes(env.store.root) == store0 and read(env.ctx) == copy0, out)
+    mem = ce.empty_memory()
+    ce.answer(mem, "Notes/People/bea.md", "ZorgCore/People/bea-two.md", False, "2026-10-26")
+    p = env.plan(mem=mem)
+    check("review M11: a bridge of yours your not-same denies is shown",
+          ("Notes/People/bea.md", "ZorgCore/People/bea-two.md") in [tuple(x) for x in p["denied"]], p["denied"])
+    low = ("schema: provider-registration/2\nid: zorg-low\ntitle: Low core\nkind: folder\nauthority: personal\n"
+           "core_root: %s\nstale_after_days: 30\nstatus: active\n" % os.path.join(env.vault, "LowCore"))
+    write(os.path.join(env.vault, "Notes/_System/providers/zorg-low.yaml"), low)
+    write(os.path.join(env.vault, "LowCore/People/rhea-low.md"), "---\ntype: people\nemail: rhea@zorg.example\n---\n# Rhea Low\n")
+    p = env.plan()
+    check("review M11: the strongest card is the target — the org core (rank 1000) over a personal one (100)",
+          any(r["path"] == RHEA[0] and r["target"] == RHEA[1] for r in p["rows"]), p["rows"])
+
+# ------------------------------------------------------------------ acceptance finding: notes of yours iCloud keeps
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d, {"ZorgCore/People/vic.md": "---\ntype: people\nemail: vic@zorg.example\n---\n# Vic Core\n",
+                  "Notes/People/wen.md": "---\ntype: person\nemail: wen@zorg.example\n---\n# Wen\n"},
+              local=[("Notes/People/vic.md", {"type": "person", "email": "vic@zorg.example"}),
+                     ("Notes/People/wen-old.md", {"type": "person", "email": "wen@zorg.example"})])
+    p = env.plan()
+    check("a note of yours only a local index gives (iCloud keeps the file) is no row, and said; a note of yours is "
+          "never a bridge's target", not any(r["target"].startswith("Notes/") or r["path"] == "Notes/People/vic.md"
+                                              for r in p["rows"])
+          and "Notes/People/vic.md" in p["skipped"].get(cb_.EVICTED, [])
+          and not any(r["path"] == "Notes/People/wen.md" for r in p["rows"]), p)
 
 # ------------------------------------------------------------------ Task 5: a busy index answers at once (plan C10.4)
 import time  # noqa: E402
