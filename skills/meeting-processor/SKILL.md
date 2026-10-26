@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.18.1
+version: 0.18.2
 description: Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «розбери транскрипт зустрічі», «action items». EN — "summarize meeting".
 ---
 
@@ -163,6 +163,8 @@ If the source provides a pre-built summary (like Fireflies) — use it as a star
 3. **File/text** — as fallback for content
 
 Mark discrepancies: if a participant is on the calendar but not in the transcript → "invited, did not speak". If a speaker is in the transcript but not on the calendar → "not on invite, but participated".
+
+**Who each participant is (since v3.19.0).** With SHELL, resolve every participant — and every responsible person of an action item — in one call (`references/people-context-protocol.md` → Find a person): `ctx entity --q "<e-mail or name>" --q "<…>" --kind person --skill meeting-processor --slot person.role --slot person.team`, e-mail first. One entity → their role and team come from it, and a link to their card may stand in the notes; several or a near match → keep the name as spoken and list the candidates, never guess a person by a similar name; none → the name as given.
 
 ### M3 — Classify meeting type
 
@@ -333,7 +335,7 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.18.1", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.18.2", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
 2. Key decisions from the meeting may additionally be recorded as ADR-style records — offer, don't force: "The meeting produced N decisions. Log them in the decision log so the 'why' survives?" → invoke `decision-log` (log mode) once for the chosen decisions — one record per decision, and decision-log's own confidence question once for the whole batch (since v3.7.0) — passing per decision the decision-log row of `references/chaining.md`: what was decided, the context and options discussed, who decided, a link back to these notes, and the v3.7.0 fields only when said in the meeting, plus `evidence_classes` since v3.8.0. decision-log owns the `decision` artifact; do not hand-write `Decisions/` files here.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 

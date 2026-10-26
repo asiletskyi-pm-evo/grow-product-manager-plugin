@@ -12,7 +12,15 @@
 #   names     headings and field names the slot answers to, English and Ukrainian, matched without regard to case;
 #             the first is the name the manifest uses
 #   about     one line, in Ukrainian, on what the slot holds — it is shown beside the text when the slot is explained
+#   answered_on  (since v3.19.0) who answers the slot: `records` — the records of the store and the blocks in them (the
+#             default); `cards` — the cards of an entity alone (`ctx entity`, scripts/ctx_eslots.py), so `ctx read`,
+#             `ctx explain`, `ctx validate` and `ctx slot …` do not know it; `both`. A card-only slot's record is the
+#             kind of card it is looked for on: person | team | mission | module | metric
+#   card_names  (since v3.19.0) more names, looked for on cards only (a frontmatter field or a section heading) — a name
+#             that would find the wrong block in a record (`Люди` over a table of roles) goes here, not in `names`
 schema: context-slots/1
+card_names_version: 1         # since v3.19.0: raise it whenever the names (names, card_names) or the kind of a slot
+                              # answered on cards change — the index then reads the cards once more (never back down)
 slots:
   product.description:
     kind: value
@@ -130,7 +138,28 @@ slots:
       - Team Members
       - Склад команди
       - Учасники
+    answered_on: both
+    card_names:
+      - People
+      - Люди
+      - Склад
     about: "склад команди: люди, ролі, контакти"
+  team.missions:
+    kind: list
+    record: team
+    answered_on: cards
+    names:
+      - missions
+      - Місії
+    about: "місії, у яких працює команда"
+  team.parent:
+    kind: value
+    record: team
+    answered_on: cards
+    names:
+      - parent
+      - Батьківська команда
+    about: "команда чи підрозділ, до якого належить команда"
   profile.email:
     kind: value
     record: profile
@@ -167,3 +196,63 @@ slots:
       - People and external contacts
       - Люди і контакти
     about: "люди й зовнішні контакти: з ким і як спілкуватись"
+  person.role:
+    kind: value
+    record: person
+    answered_on: cards
+    names:
+      - role
+      - position
+      - Роль
+      - Посада
+    about: "роль людини: що вона робить у команді"
+  person.team:
+    kind: value
+    record: person
+    answered_on: cards
+    names:
+      - team
+      - Команда
+    about: "команда, у якій людина працює"
+  person.email:
+    kind: value
+    record: person
+    answered_on: cards
+    names:
+      - email
+      - E-mail
+      - Пошта
+    about: "робоча пошта людини"
+  mission.teams:
+    kind: list
+    record: mission
+    answered_on: cards
+    names:
+      - teams
+      - Команди
+    about: "команди, що працюють над місією"
+  mission.jira_projects:
+    kind: list
+    record: mission
+    answered_on: cards
+    names:
+      - jira_projects
+      - Jira projects
+      - Проєкти Jira
+    about: "проєкти Jira місії"
+  module.owner:
+    kind: value
+    record: module
+    answered_on: cards
+    names:
+      - owner
+      - Власник
+    about: "хто відповідає за модуль"
+  metric.owner:
+    kind: value
+    record: metric
+    answered_on: cards
+    names:
+      - owner
+      - Власник
+    about: "хто відповідає за метрику"

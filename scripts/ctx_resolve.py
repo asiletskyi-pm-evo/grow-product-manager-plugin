@@ -382,10 +382,14 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
 
 
 # ------------------------------------------------------------------ the cascade (spec §5.1, §5.2, §6)
-LEVEL_ORDER = {"rule": 0, "mine": 1, "repo": 2}
+LEVEL_ORDER = {"rule": 0, "mine": 1, "repo": 2, "local": 3, "derived": 4}
+                                      # local, derived: an entity's cards (v3.19.0, ctx_eslots) — a card a local index
+                                      # holds, then what another entity's card says of this one
 WHY_RULE = "правило ядра"
 WHY_MINE = "твоє перемагає (блок не є правилом ядра)"
-WHY_LIST = "список — виводяться всі кандидати; склеювання пунктів — у v3.17"
+WHY_LIST = "список — виводяться всі кандидати; team.members у ctx read склеєно за сутністю"
+LEVEL_WORDS = {"repo": "репозиторій", "local": "локальний індекс", "derived": "виведене"}
+WHY_JOINED = "список — пункти склеєно за сутністю"      # v3.19.0: one item per person, team or mission (ctx_eslots)
 WHY_ONLY = "єдиний кандидат"
 WHY_UNREAD = "реєстрацію не прочитано — показано без каскаду"
 
@@ -445,8 +449,9 @@ def divergence_hashes(kind, cands):
 
 
 def unread_registration(c):
-    """A repository's candidate whose registration was not read (no rank): its rank and its rules are unknown."""
-    return c.get("level") != "mine" and c.get("rank") is None
+    """A repository's candidate whose registration was not read (no rank): its rank and its rules are unknown. A card of
+    a local index or a derived candidate (v3.19.0) has no rank by nature: it is no such candidate."""
+    return c.get("level") in ("repo", "rule") and c.get("rank") is None
 
 
 def resolve(slot, cat, cands, mem):
@@ -484,7 +489,7 @@ def resolve(slot, cat, cands, mem):
 
 def _resolve_ranked(slot, cat, cands, mem):
     """`resolve` over your candidates and those whose registration was read (their rank is known)."""
-    kind = (sl.slot_info(cat, slot) or {}).get("kind")
+    kind = (sl.slot_info(cat, slot) or sl.card_slot_info(cat, slot) or {}).get("kind")
     mem = mem or {}
     pref = (mem.get("prefer") or {}).get(slot) or "mine"
     out = {"slot": slot, "kind": kind, "shown": [], "note": None, "also": [], "diverges": [], "why": "", "decision": None,
@@ -518,7 +523,7 @@ def _resolve_ranked(slot, cat, cands, mem):
         return out
     if mines:
         return settle([mines[0]], WHY_MINE if len(live) > 1 else WHY_ONLY)
-    top = [c for c in live if _rank_key(c) == _rank_key(live[0])]
+    top = [c for c in live if c.get("level") == live[0].get("level") and _rank_key(c) == _rank_key(live[0])]
     sides = _firsts(top)
     if len(sides) > 1 and len({key(c) for c in sides}) > 1:
         hashes = divergence_hashes(kind, top)
@@ -530,8 +535,11 @@ def _resolve_ranked(slot, cat, cands, mem):
         ids = [c["source"] for c in sides]
         return settle(sides, "рівний ранг %s, різний текст: %s" % (_rank_text(top[0]), ", ".join(ids)), diverges=ids)
     win = top[0]
-    lower = [c for c in live if _rank_key(c) != _rank_key(win) and key(c) != key(win)]
-    if lower:
+    lower = [c for c in live if (c.get("level"), _rank_key(c)) != (win.get("level"), _rank_key(win)) and key(c) != key(win)]
+    if lower and lower[0].get("level") != win.get("level"):      # a card of a lower level (v3.19.0): no rank to compare
+        why = "вищий рівень: %s перед %s" % (LEVEL_WORDS.get(win.get("level"), win.get("level")),
+                                             LEVEL_WORDS.get(lower[0].get("level"), lower[0].get("level")))
+    elif lower:
         why = "більший ранг: %s %s > %s %s" % (win["source"], _rank_text(win), lower[0]["source"], _rank_text(lower[0]))
     elif all(key(c) == key(win) for c in live):
         why = WHY_ONLY if len(live) == 1 else "однаковий текст у: " + ", ".join(c["source"] for c in _firsts(live))

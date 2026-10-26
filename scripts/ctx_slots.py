@@ -12,7 +12,18 @@ references/context-protocol.md.
 - load_catalogue                    the catalogue as a tree; a file that cannot be read is a ValueError
 - check_catalogue                   the errors in a catalogue (none: it is clean)
 - slot_for                          the slot a record kind answers to a name with
-- slot_info                         a slot's own entry (kind, record, names, about), or None
+- slot_info                         a slot's own entry (kind, record, names, about), or None — a slot the records answer;
+                                    a slot answered on cards alone (`answered_on: cards`, v3.19.0) is None here
+- record_slots                      {id: entry} of the slots the records answer
+
+The slots of an entity's cards (since v3.19.0; scripts/ctx_eslots.py answers them):
+
+- CARD_KINDS, ANSWERED_ON           the kinds of card a slot is looked for on, and the values of `answered_on`
+- card_slot_info, card_slots        a card slot's entry, and the slots a kind of card answers, in the catalogue's order
+- card_slot_for, card_norm          the slot a card answers by a field or heading name (case, spaces, `_`, `-` aside)
+- card_names_by_kind                {kind: {name: slot}} — the names the index keeps a card's slot fields by
+- card_names_version, card_names_digest   the catalogue's `card_names_version` (the index reads the cards once more
+                                    when it grows), and what it stands for (a test pins the two together)
 
 What you decided about slots is kept in the store, in `<store>/.state/slots.json` (schema context-slots-memory/1) —
 not in a record and not in a registration. A key this version does not know is refused, never dropped: a new key needs
@@ -55,6 +66,8 @@ CATALOGUE_PATH = os.path.join(PLUGIN_ROOT, "references", "context-slots.yaml")
 SCHEMA = "context-slots/1"
 KINDS = ("value", "text", "list")
 RECORDS = ("product", "team", "profile", "org")
+CARD_KINDS = ("person", "team", "mission", "module", "metric")   # the kinds of card a slot is looked for on (v3.19.0)
+ANSWERED_ON = ("records", "cards", "both")                    # who answers a slot: `answered_on` (records by default)
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 _SLOT_ID = re.compile(r"(?P<record>[a-z]+)\.(?P<name>[a-z0-9_]+)\Z")
 
@@ -75,14 +88,41 @@ def _norm(name):
     return " ".join(str(name).split()).casefold()
 
 
-def _slots(cat):
+def _all_slots(cat):
     s = cat.get("slots") if isinstance(cat, dict) else None
     return s if isinstance(s, dict) else {}
+
+
+def _answered_on(slot):
+    return (slot.get("answered_on") or "records") if isinstance(slot, dict) else "records"
+
+
+def _slots(cat):
+    """The slots the records answer (`answered_on` records or both): what the record side — `ctx read`, `ctx explain`,
+    `ctx validate`, `ctx slot …` — knows. A card-only slot (v3.19.0) is none of theirs."""
+    return {k: v for k, v in _all_slots(cat).items() if _answered_on(v) in ("records", "both")}
+
+
+def record_slots(cat):
+    """{id: entry} of the slots the records answer, in the catalogue's order."""
+    return dict(_slots(cat))
 
 
 def _names(slot):
     n = slot.get("names") if isinstance(slot, dict) else None
     return [x for x in n if isinstance(x, str) and x.strip()] if isinstance(n, list) else []
+
+
+def _card_names(slot):
+    """A card slot's names: its `names`, then its `card_names`."""
+    n = slot.get("card_names") if isinstance(slot, dict) else None
+    return _names(slot) + ([x for x in n if isinstance(x, str) and x.strip()] if isinstance(n, list) else [])
+
+
+def card_norm(name):
+    """A name as a card compares it — a frontmatter field or a heading: without regard to case, and without spaces, `_`,
+    `-` or any other sign, so `jira_projects`, `Jira projects` and `E-mail`/`email` are one name each."""
+    return re.sub(r"[\W_]+", "", cc.N(str(name)).casefold())
 
 
 def check_catalogue(cat):
@@ -92,20 +132,31 @@ def check_catalogue(cat):
     errs = []
     if isinstance(cat, dict) and "schema" in cat and cat["schema"] != SCHEMA:
         errs.append("schema is %r, not %r" % (cat["schema"], SCHEMA))
-    slots = _slots(cat)
+    if isinstance(cat, dict) and "card_names_version" in cat and (isinstance(cat["card_names_version"], bool) or str(
+            cat["card_names_version"]).strip() != str(card_names_version(cat))):
+        errs.append("card_names_version is %r, not a whole number from 1" % (cat["card_names_version"],))
+    slots = _all_slots(cat)
     if not slots:
         return errs + ["the catalogue has no slots"]
     owner = {}                                     # (record, normalised name) → the first slot that answers to it
+    card_owner = {}                                # (kind of card, card_norm name) → the first card slot (v3.19.0)
     for sid, slot in slots.items():
         if not isinstance(slot, dict):
             errs.append("slot %s: not a mapping of kind, record, names and about" % sid)
             continue
         m = _SLOT_ID.match(sid)
         record = slot.get("record")
+        on = slot.get("answered_on", "records")
+        records = CARD_KINDS if on == "cards" else RECORDS
         if slot.get("kind") not in KINDS:
             errs.append("slot %s: kind %r is none of %s" % (sid, slot.get("kind"), ", ".join(KINDS)))
-        if record not in RECORDS:
-            errs.append("slot %s: record %r is none of %s" % (sid, record, ", ".join(RECORDS)))
+        if on not in ANSWERED_ON:
+            errs.append("slot %s: answered_on %r is none of %s" % (sid, on, ", ".join(ANSWERED_ON)))
+        cn = slot.get("card_names")
+        if cn is not None and (not isinstance(cn, list) or not all(isinstance(x, str) and x.strip() for x in cn)):
+            errs.append("slot %s: card_names is not a list of names" % sid)
+        if record not in records:
+            errs.append("slot %s: record %r is none of %s" % (sid, record, ", ".join(records)))
         elif not m:
             errs.append("slot %r: the id is not <record>.<name> (lower case, digits and _)" % sid)
         elif m.group("record") != record:
@@ -120,10 +171,15 @@ def check_catalogue(cat):
             errs.append("slot %s: about is empty — one line on what the slot holds" % sid)
         elif "\n" in about:
             errs.append("slot %s: about is more than one line" % sid)
-        for n in (_names(slot) if record in RECORDS else ()):
+        for n in (_names(slot) if record in RECORDS and on in ("records", "both") else ()):
             first = owner.setdefault((record, _norm(n)), sid)
             if first != sid:
                 errs.append("name %r is answered to by both %s and %s — slot_for could not tell them apart" % (n, first, sid))
+        for n in (_card_names(slot) if record in CARD_KINDS and on in ("cards", "both") else ()):
+            first = card_owner.setdefault((record, card_norm(n)), sid)
+            if first != sid:
+                errs.append("name %r is answered to on a card by both %s and %s — card_slot_for could not tell them apart"
+                            % (n, first, sid))
     return errs
 
 
@@ -141,9 +197,68 @@ def slot_for(cat, record, name):
 
 
 def slot_info(cat, slot_id):
-    """The catalogue's entry for `slot_id` (a mapping of kind, record, names and about), or None."""
+    """The catalogue's entry for `slot_id` (a mapping of kind, record, names and about) when the records answer it, else
+    None — for a slot answered on cards alone too (v3.19.0: card_slot_info gives that one)."""
     s = _slots(cat).get(slot_id)
     return s if isinstance(s, dict) else None
+
+
+# ------------------------------------------------------------------ the slots of an entity's cards (since v3.19.0)
+def _card_slot_items(cat):
+    return [(k, v) for k, v in _all_slots(cat).items()
+            if isinstance(v, dict) and _answered_on(v) in ("cards", "both") and v.get("record") in CARD_KINDS]
+
+
+def card_slot_info(cat, slot_id):
+    """The entry of a slot the cards answer (`answered_on` cards or both), or None."""
+    return next((v for k, v in _card_slot_items(cat) if k == slot_id), None)
+
+
+def card_slots(cat, kind):
+    """The ids of the slots a card of `kind` answers, in the catalogue's order ([] for a kind with none: work)."""
+    return [k for k, v in _card_slot_items(cat) if v.get("record") == kind]
+
+
+def card_slot_for(cat, kind, name):
+    """The slot a card of `kind` answers by a frontmatter field or a heading called `name` (card_norm: case, spaces,
+    `_` and `-` do not count) — its names, then its card_names — or None."""
+    want = card_norm(name or "")
+    if not want:
+        return None
+    for k, v in _card_slot_items(cat):
+        if v.get("record") == kind and want in {card_norm(n) for n in _card_names(v)}:
+            return k
+    return None
+
+
+def card_names_version(cat):
+    """The catalogue's `card_names_version` (since v3.19.0): a whole number ≥ 1 that grows whenever the names or the kind
+    of a slot answered on cards change; 1 when it is not there or not such a number."""
+    v = cat.get("card_names_version") if isinstance(cat, dict) else None
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return 1
+    return v if v >= 1 else 1
+
+
+def card_names_digest(cat):
+    """sha1 of what card_names_version stands for — every card slot's id, record, kind and names in order: a test pins
+    it to the version, so names changed without raising the version fail it."""
+    import hashlib
+    rows = [[k, v.get("record"), v.get("kind"), [card_norm(n) for n in _card_names(v)]] for k, v in _card_slot_items(cat)]
+    return hashlib.sha1(json.dumps(rows, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def card_names_by_kind(cat):
+    """{kind: {card_norm name: slot id}} — every name a card of each kind answers a slot by (the index keeps the
+    frontmatter fields of these names: ctx_index.identity_of)."""
+    out = {}
+    for k, v in _card_slot_items(cat):
+        names = out.setdefault(v.get("record"), {})
+        for n in _card_names(v):
+            names.setdefault(card_norm(n), k)
+    return out
 
 
 # ------------------------------------------------------------------ the memory of your decisions
@@ -440,7 +555,7 @@ def proposals(records, repos, bindings, cat):
     ns_of = {}
     for r in repos or ():
         ns_of.setdefault(r.get("namespace") or r["id"], r["id"])
-    slots = [(sid, _names(slot)) for sid, slot in _slots(cat).items() if isinstance(slot, dict)]
+    slots = [(sid, _names(slot)) for sid, slot in _slots(cat).items() if isinstance(slot, dict)]   # the records' alone
     tied, sound, out = bindings or {}, {}, []
     for rec in records or ():
         for ns, bid, _, _, _ in cr._blocks(rec.get("body") or ""):

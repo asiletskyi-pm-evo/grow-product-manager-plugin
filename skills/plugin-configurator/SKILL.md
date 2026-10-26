@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.15.2
+version: 2.15.3
 description: Configure the plugin and your Obsidian vault — organization, products, teams, data sources — validate or view the config. Not the typed /status or /config commands. UA — «налаштуй плагін», «підключи Obsidian-вейлт», «покажи мій конфіг», «статус плагіна», «змінити роль», «налаштуй тестові акаунти», «налаштуй карту конкурентів». EN — "set my role".
 ---
 
@@ -16,7 +16,7 @@ Supports multiple organizations, products, and projects simultaneously.
 
 | Reference | Contains |
 |-----------|----------|
-| `references/onboarding-steps.md` (skill-local) | Onboarding Steps 1–17 in full detail + Planning setup + Focus setup (Extended add-ons) |
+| `references/onboarding-steps.md` (skill-local) | Onboarding Steps 1–17 in full detail + Planning setup + Focus setup (Extended add-ons); since v3.19.0 a team's members and the People roster are proposed from `ctx entity "<team>" --slot team.members` and written only once you confirm them (`references/people-context-protocol.md` → Find a person) |
 | `references/maintenance-modes.md` (skill-local) | Reinstall/Migration (RM-0..RM-6), Update (U-1..U-4), Validate (V-1..V-6), View (VW-1..VW-4), Versioning Protocol |
 | `references/test-mode.md` (root) | Test sandbox procedure (TM-0..TM-5) |
 

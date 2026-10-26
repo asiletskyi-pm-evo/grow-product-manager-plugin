@@ -1,6 +1,6 @@
 ---
 name: sprint-planning
-version: 0.6.1
+version: 0.6.2
 description: Sprint pre-planning — focuses from the roadmap, what is READY to pull, dependencies, capacity per member, assignees. Not daily focus (focus-advisor), not a quarter plan (quarterly-planning). UA — «сплануй спринт», «що можна взяти у спринт», «розподіли задачі спринта», «фокуси спринта».
 ---
 
@@ -53,7 +53,7 @@ Which sprint (default: next). **Sources:** (a) backlog; (b) approved quarterly r
 Derive from the active quarterly roadmap + project arcs (`project-planning`): which directions we pull this sprint and why. **Gate.**
 
 ### Step 3 — Per-sprint per-member capacity
-Gather from the PM a forecast of **working days / capacity for each person** (time off, partial days, parallel directions) — `capacity-model` sec. 3. **Gate.**
+The members are the team's people by `ctx entity "<team>" --slot team.members` (`references/people-context-protocol.md` → Find a person) — one line per person, your team record's members and the cards' joined, so nobody is counted twice; without SHELL, the team record's Members as written (not joined). Gather from the PM a forecast of **working days / capacity for each person** (time off, partial days, parallel directions) — `capacity-model` sec. 3. **Gate.**
 
 ### Step 3b — Carryover-risk + GTD-index (last sprint)
 **Delegate `product-reporter` `sprint-review`+`member-review`** for committed vs done and per-person throughput. Compute carryover risk (`capacity-model` sec. 3: capacity ÷ remainder) → reduce load on at-risk members, flag chronic overload.
@@ -80,7 +80,7 @@ Show what doesn't fit / is blocked → choice. Live recompute.
 Sprint plan (Confluence / assignment into the Jira sprint) — **gate before writing to Jira**. Approved plan → can be rendered as a `sprint-plan` report via product-reporter.
 
 ### Step 9 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.6.1", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.6.2", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Only Ready candidates go into the fill; Blocked — with an explanation, not silently.

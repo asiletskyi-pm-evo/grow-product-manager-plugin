@@ -1,6 +1,6 @@
 ---
 name: offboarding-guide
-version: 0.2.1
+version: 0.2.2
 description: Guide a manager through parting with an underperformer — evidence check, "can't" vs "won't", four-meeting algorithm, ARCV follow-ups. Not a routine review (performance-review). UA — «допоможи звільнити», «офбординг», «чи час прощатися». EN — "help me let someone go", "offboarding".
 ---
 
@@ -27,7 +27,7 @@ Companies need goals achieved — a rational stance. The core message: **don't "
 ## Pipeline
 
 ### Step 0 — Local context · Step P — Person context
-Load the person's profile: goals, last reports (Forecast QA), D-type, 1-1 history.
+Find the person first (`references/people-context-protocol.md` → Find a person: `ctx entity "<e-mail or name>" --kind person --skill offboarding-guide`; several → ask, never pick). Load the person's profile: goals, last reports (Forecast QA), D-type, 1-1 history.
 
 > **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
 > judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through

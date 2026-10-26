@@ -12,6 +12,52 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.19.0 (2026-10-26)
+
+**«Слоти з однієї сутності»: a person's role, a team's members — one answer from every card.** A person has a note of yours, a core's registry card and maybe another team's card; a team has its core card, your team record and every person whose `team:` names it. Until now a skill read one of them, or read them all and saw one person twice. Now an entity's slots — `person.role`, `person.team`, `person.email`, `team.members`, `team.missions`, `team.parent`, `mission.teams`, `mission.jira_projects`, `*.owner` — are put together from all of its cards by the cascade of the records (yours, then the cores by rank, then a local index's card, then what other cards say), each piece with where it comes from and its date, and a list is one line per person. `ctx read`'s `team.members` is joined the same way, and the 14 skills that work with people find a person through `ctx entity`, never by a file name.
+
+MINOR: new slot ids, new `ctx entity` flags (`--slot`, repeated `--q`), new behaviour in 14 skills. (Planned as v3.18.1 — the version follows the change.)
+
+### Added
+
+- **Slots of one entity** (`scripts/ctx_eslots.py`, `context-protocol.md` §5h, catalogue `context-slots.yaml` with `answered_on: cards`):
+  - a card answers a slot by a frontmatter field of the slot's names, else — never on a person's card, never on a sensitive note — by a section of those names (`Склад команди`, `Місії (матриця …)`, its sub-headings too);
+  - a list keeps the items that name an entity — a link, an e-mail, a name exactly one card carries — so a table of roles under `## Люди` is no member;
+  - **derived:** a person whose *winning* `person.team` names a team is one of its members; a team's missions and a mission's teams answer each other;
+  - **cascade:** a value is the first, the others `також: <value> (<whose> · <path> · <day>)`; a list is one item per entity with every origin, `лише виведене` when only the derivation names it;
+  - `ctx slot prefer|decide|bind|map` do not reach a card's slot; outside the People contour a person's slots are their identity alone, and a sensitive team's card gives names and sources only.
+- **`ctx entity`:** one entity's `слоти:`; `--slot <id>` (repeatable) for the slots alone (no backlinks, no mentions; an unanswered one `—`); `--q` repeated — several requests, one refresh of the index.
+- **Hints of a local index** that keeps its own `entities`/`edges`: a pair `можливо той самий: … (підказка <id>)` closed by your `same`/`not-same`; a backlink line ` · <id>` from a note the plugin's index does not hold. Never a merge, never a slot.
+- **`people-context-protocol.md` → «Find a person — `ctx entity`»:** e-mail first; several → ask, never pick; a near match is no match; only a core's card → a profile seeded with the identity and a one-link field (shown as a diff first); a team's people by `--slot team.members`; without SHELL — as before.
+
+### Changed
+
+- **`ctx read` — `team.members` one line per person:** the record's items, its team card's members and the members derived from the cards joined by entity (a name in another spelling of a person the list's other sources name: `схоже ім'я`); a section's prose and sub-headings follow, nothing lost; a team with no members of its own gets its card's. A core rule or `prefer repo:` prints as before with `з карток ще N`; a busy or absent index prints as before. `ctx entity <team> --slot team.members` gives the same composition.
+- **14 skills find people through `ctx entity`** (patch versions): `one-on-one` 0.2.2, `performance-review` 0.2.2, `goal-setter` 0.2.2, `hiring-designer` 0.2.2, `offboarding-guide` 0.2.2, `delegation-coach` 0.2.2, `meeting-processor` 0.18.2 (participants and action items, one call), `context-navigator` 0.3.2 (slots), `product-reporter` 0.10.2, `sprint-planning` 0.6.2, `task-creator` 0.15.2, `focus-advisor` 0.9.3, `decision-log` 0.5.2, `plugin-configurator` 2.15.3 (the team step proposes members from the cards, written only once you confirm). No description changed.
+- **Search index** (`context-provider-protocol.md` §10): a card's slot fields (`fields_json`, never a judgement field); `meta_version` 4 reads the files once in place; the catalogue's `card_names_version` re-reads the cards alone when the names change. A link or a Jira key inside code is neither a link nor a mention; Jira prefixes never come from JQL words; a work card's key comes from its own field first.
+- **`data-policy.md` Search rule 1:** a person's identity (name, e-mail, team, role, card path) as `ctx entity` and `ctx read`'s team members give it may be used by any skill — never a profile's body or a judgement field; a sensitive team's, mission's or metric's card gives its members' names and its path only. Under a core rule or `prefer repo:` `ctx entity --slot team.members` is the rule's list with `from_cards: N`, as `ctx read` prints it.
+- v3.18.0 minors: `field` in the text of `ctx entity`; `same` on a busy index exits 5; local cards dedupe without case; a folder's path is resolved once (a local index of thousands of notes).
+
+### Acceptance (a copy of the author's index, local index and store)
+
+- **Migration** of a copy of the real index: one 28 s walk, in place, `meta_version` 1 → 4.
+- **Regression of v3.18.0:** 646 person cards → 465 people, 0 doubles, 0 merges across different e-mails.
+- **Members:** 38 of 39 core teams, 530 items, 0 without an entity, 0 twice in a team; members only from the winning team (0 violations); missions ↔ teams symmetric (0).
+- **`ctx read` of the author's team:** 46 rows of two tables → 29 people, one line each, no row lost.
+- **Privacy:** 0 judgement values in the slots of 20 people with Step-P fields; real store and `~/.grow-pm` unchanged.
+- **Time:** `ctx entity <team>` 1.8–2.0 s, `--q` × 8 1.4 s, `ctx read` with team members +0.7 s, other reads unchanged.
+- Five findings fixed during the acceptance (path resolution 21.7 s → 1.8 s; your evicted notes counted as yours; a team record matched over another team's card; another spelling of a name; one composition in `ctx entity` and `ctx read`).
+
+### Known limits
+
+- A row «Ім'я, Ім'я — роль» in a core team card's people section joins the first name only (the second person still comes from their own `team:`); an inline `**Lead:** A, B` line stays one item.
+- A card of a repository whose registration gives no rank is shown after the cascade.
+- `ctx entity` on a busy index waits for each of its reads before exit 5 (as in v3.18.0).
+
+### Backwards compatibility
+
+The schema name stays `search-index/1`; an older build reading a newer index leaves it as it is (`meta_version` above its own). `ctx read` output changes only for `team.members`. A card's slot is unknown to `ctx slot …` and `ctx explain` (they say so).
+
 ## v3.18.0 (2026-10-22)
 
 **«Хто є хто»: one person, team or epic across your notes and the cores.** Your person note, a core's registry card and another team's card in your local index often describe one person — and until now each skill saw them apart. `ctx entity` joins them into one entity and answers «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X»: who it is, where its cards are, who links to it, and — for a Jira key with no card — where it is mentioned. It writes nothing into your notes.

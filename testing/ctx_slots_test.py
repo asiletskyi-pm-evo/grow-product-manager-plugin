@@ -52,9 +52,12 @@ want = {"product.description": "value", "product.url": "value", "product.jira_ke
         "product.locales": "list", "product.key_metrics": "text", "product.okrs": "text", "product.competitors": "list",
         "product.analytics_dashboards": "text", "product.design_system": "text", "product.test_accounts": "text",
         "product.scope": "text", "team.jira_team_id": "value", "team.members": "list", "profile.email": "value",
-        "org.key_metrics": "text", "org.data_sources": "text", "org.structure": "text", "org.people_rules": "text"}
+        "org.key_metrics": "text", "org.data_sources": "text", "org.structure": "text", "org.people_rules": "text",
+        "person.role": "value", "person.team": "value", "person.email": "value", "team.missions": "list",
+        "team.parent": "value", "mission.teams": "list", "mission.jira_projects": "list", "module.owner": "value",
+        "metric.owner": "value"}           # v3.18.1: the slots of an entity's cards (plan R2, C1)
 got = {k: v.get("kind") for k, v in (cat.get("slots") or {}).items()}
-check("the catalogue holds the 22 slots of the plan, with their kinds", got == want, (sorted(set(want) ^ set(got)), [k for k in want if got.get(k) != want[k]]))
+check("the catalogue holds the 22 slots of the plan and the 9 of the cards (v3.18.1), with their kinds", got == want, (sorted(set(want) ^ set(got)), [k for k in want if got.get(k) != want[k]]))
 check("every slot says what it holds, in one line", all(isinstance(s.get("about"), str) and s["about"].strip() and "\n" not in s["about"]
                                                            for s in cat["slots"].values()), "")
 check("team.members is described in the plan's words", cat["slots"]["team.members"]["about"] == "склад команди: люди, ролі, контакти"
@@ -245,6 +248,44 @@ with tempfile.TemporaryDirectory() as d:
         why = str(e)
     check("a memory of the wrong form is not saved, and the file stays", why is not None and "slots memory" in why
           and open(path, encoding="utf-8").read() == before, why)
+
+# --- v3.18.1 Task 1: the slots of an entity's cards (plan C1, C1a)
+ons = {k: (v.get("answered_on") or "records") for k, v in cat["slots"].items()}
+check("v3.18.1 the cards' own slots say `answered_on: cards`, team.members `answered_on: both`, the rest are the records' (C1a)",
+      ons["person.role"] == ons["team.missions"] == ons["team.parent"] == ons["mission.teams"] == ons["metric.owner"] == "cards"
+      and ons["team.members"] == "both" and ons["product.url"] == ons["team.jira_team_id"] == "records", ons)
+check("v3.18.1 a card-only slot is no record's: slot_for and slot_info do not see it, the records' slots do not list it",
+      sl.slot_for(cat, "team", "missions") is None and sl.slot_info(cat, "person.role") is None
+      and "team.parent" not in sl.record_slots(cat) and "team.members" in sl.record_slots(cat), "")
+check("v3.18.1 card_slot_for finds a card's slot by a field or heading name — `position`, «Посада», `jira_projects`, and the "
+      "card-only names of team.members («Люди», «Склад»), which no record answers to",
+      sl.card_slot_for(cat, "person", "position") == "person.role" and sl.card_slot_for(cat, "person", "Посада") == "person.role"
+      and sl.card_slot_for(cat, "mission", "jira_projects") == "mission.jira_projects"
+      and sl.card_slot_for(cat, "team", "Люди") == "team.members" and sl.card_slot_for(cat, "team", "Склад") == "team.members"
+      and sl.card_slot_for(cat, "team", "members") == "team.members" and sl.slot_for(cat, "team", "Люди") is None
+      and sl.card_slot_for(cat, "team", "Jira Team ID") is None and sl.card_slot_for(cat, "work", "owner") is None, "")
+check("v3.18.1 card_slots: the slots of a kind of card, in the catalogue's order",
+      sl.card_slots(cat, "person") == ["person.role", "person.team", "person.email"]
+      and sl.card_slots(cat, "team") == ["team.members", "team.missions", "team.parent"] and sl.card_slots(cat, "work") == [], "")
+errs = sl.check_catalogue({"schema": sl.SCHEMA, "slots": {
+    "person.x": {"kind": "value", "record": "person", "names": ["X"], "about": "x"},
+    "person.y": {"kind": "value", "record": "person", "answered_on": "cards", "names": ["Y"], "card_names": ["Job_role"], "about": "y"},
+    "person.w": {"kind": "value", "record": "person", "answered_on": "cards", "names": ["job role"], "about": "w"},
+    "team.z": {"kind": "list", "record": "team", "answered_on": "sometimes", "names": ["Z"], "card_names": "Q", "about": "z"}}})
+check("v3.18.1 check_catalogue: a card kind is a record only for `on: cards`; `answered_on` is records|cards|both; card_names is a "
+      "list; a card name two slots of a kind share is named",
+      any("person.x" in e and "record" in e for e in errs) and any("team.z" in e and "answered_on" in e for e in errs)
+      and any("team.z" in e and "card_names" in e for e in errs) and any("person.y" in e and "person.w" in e for e in errs), errs)
+
+PINNED_CARD_NAMES = (1, "3d69b30c8de81216a1efb9f2d11a8471c6808fa1")     # (card_names_version, card_names_digest): change the names, raise the version
+check("v3.18.1 Task 1 review I1: the card names are pinned to card_names_version — names or kinds of a card slot changed "
+      "without raising the version (so the index would not read the cards again) fail here",
+      (sl.card_names_version(cat), sl.card_names_digest(cat)) == PINNED_CARD_NAMES,
+      (sl.card_names_version(cat), sl.card_names_digest(cat)))
+check("…check_catalogue names a card_names_version that is no whole number from 1",
+      any("card_names_version" in e for e in sl.check_catalogue(dict(cat, card_names_version="two")))
+      and any("card_names_version" in e for e in sl.check_catalogue(dict(cat, card_names_version=0)))
+      and sl.check_catalogue(dict(cat, card_names_version=3)) == [], "")
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

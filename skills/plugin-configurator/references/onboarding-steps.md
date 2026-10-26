@@ -324,6 +324,8 @@ If yes:
 - Jira team ID (auto-discover from existing tasks if possible)
 - Members: name, role (FE, BE, Android, iOS, Design, Analytics, QA, PM), Jira accountId (auto-discover via `lookupJiraAccountId`)
 
+**9a′. Members from the team's card (since v3.19.0).** With SHELL, once the team is named, ask the context first: `python3 "<plugin root>/scripts/ctx.py" entity "<team name>" --kind team --skill plugin-configurator --slot team.members` (`references/people-context-protocol.md` → Find a person). One team → propose its members, one line per person and where each comes from (a core's card, a person's own `team:`), with their role and e-mail — for a person the list gives by name only, `ctx entity --q "<a>" --q "<b>" --kind person --skill plugin-configurator --slot person.role --slot person.email`; `схоже на «…» — не точний збіг` is no match: ask which team; the user confirms, removes or adds, and only the confirmed list is written to the team record — nothing is written without that confirmation. Several teams or none → say so and collect the members as below.
+
 **9b. Auto-discovery from Jira:**
 If Jira MCP is available and a product's Jira project is known:
 - Search for recent tasks to discover team field values
@@ -867,7 +869,7 @@ Configures the **People-contour** skills (`goal-setter`, `one-on-one`, `performa
 Collected via `AskUserQuestion`/dialog:
 
 1. **Vault People area** — where profiles live: the `People/` area of a configured vault (preferred) or the `~/.grow-pm/people/` fallback if no vault. Store the resolved path.
-2. **Team roster** — for each direct report: name, role, join date; optionally their current situational-leadership type (D1–D4). For each, create a minimal profile file (`People/<slug>.md`) and a roster line in `People/_roster.md`. Only `name`/`role`/`updated` are required — the rest fills in over time.
+2. **Team roster** — for each direct report: name, role, join date (since v3.19.0 the candidates come from the team's members, `ctx entity "<team>" --slot team.members`, and each person is found by `references/people-context-protocol.md` → Find a person, so a core's card seeds the profile with the identity — confirmed by the user before anything is written); optionally their current situational-leadership type (D1–D4). For each, create a minimal profile file (`People/<slug>.md`) and a roster line in `People/_roster.md`. Only `name`/`role`/`updated` are required — the rest fills in over time.
 3. **Default cadences** — default 1-1 cadence (weekly / biweekly / monthly; default: monthly for newer people, quarterly for >1-year) and default goal-report cadence (weekly / monthly).
 4. **Performance-review template** — register the employer's review template as a `performance-review` scope template (via `template-library: add`/`import`), or use the built-in `performance-review` structure. Store the chosen `template_id`.
 5. **HR-form field map (hiring)** — the employer's vacancy-form fields and their controlled values (e.g. selects for Budget / Team / Position / Employment type / Probation length). Store under `people.hr_form` so `hiring-designer` can map the universal vacancy profile onto the employer's form field-by-field. Values are employer-specific — nothing is hardcoded in the plugin.

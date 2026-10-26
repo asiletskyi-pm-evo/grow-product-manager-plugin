@@ -3746,7 +3746,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
         members = slot_in(res, "team.members")
         check("…team.members: your Team Members and the core's Members, both shown (a list shows every candidate), the header says what it is",
               outcomes_of(members) == [("mine", "shown"), ("zorg-core", "shown")] and members["kind"] == "list" and members["record"] == "team.alpha-a"
-              and members["winner"] is None and members["why"] == "список — виводяться всі кандидати; склеювання пунктів — у v3.17"
+              and members["winner"] is None and members["why"] == "список — виводяться всі кандидати; team.members у ctx read склеєно за сутністю"
               and "team.members · список · Team: Alpha (A)\n" in out and "  чому: список — виводяться всі кандидати" in out, (members, out[:1500]))
         mine_row, core_row = members["candidates"]
         check("…your row says where your text is; the block's — which block, which version, in which record, checked when",
@@ -4208,8 +4208,8 @@ need_15 = [
              "without the user's own yes for that block or slot"]),
     (mm15, ["since v3.15.0 the slots (`references/context-protocol.md` §5f)", "the answer per slot being `ctx slot decide <slot> <repo>`",
             "a yes being `ctx slot bind …` for each confirmed one", "### Context slots (only with a context store)"]),
-    (cfg15, ["version: 2.15.2"]),
-    (readme15, ["### 32. Context Connect (v0.5.0)", "| Context Connect | v0.5.0 |", "### 10. Plugin Configurator (v2.15.2)", "| Plugin Configurator | v2.15.2 |",
+    (cfg15, ["version: 2.15.3"]),
+    (readme15, ["### 32. Context Connect (v0.5.0)", "| Context Connect | v0.5.0 |", "### 10. Plugin Configurator (v2.15.3)", "| Plugin Configurator | v2.15.3 |",
                 "**Slots, the cascade and `ctx explain`** (since v3.15.0)", "and — at a refresh — the blocks you had switched off", "since v3.15.0 `explain` and `slot bind|map|prefer|decide|forget`"]),
     (hp15, ["since v3.15.0 slots and the cascade in `ctx read`, `ctx explain`, `ctx slot …`"]),
 ]

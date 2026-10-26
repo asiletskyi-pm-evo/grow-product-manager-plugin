@@ -1,6 +1,6 @@
 ---
 name: product-reporter
-version: 0.10.1
+version: 0.10.2
 description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a plan-vs-actual retro (quarterly-planning). UA — «звіт по спринту», «результати кварталу», «звіт по релізах», «які фічі виїхали в реліз», «QBR». EN — "board update".
 ---
 
@@ -130,7 +130,7 @@ Ask via AskUserQuestion: **Confluence (the product's space from local-context) /
 This mode does **not** use the Jira ops pipeline above. It follows `references/reporting-3t5f.md`. Two paths, chosen from the request ("build a goal report" vs "audit this report").
 
 ### G-0 — Person / direction context
-After Step 0, if the report is for a **person**, run **Step P** (`references/people-context-protocol.md`) to load their `active_goal_letter`, reporting cadence, and last Forecast QA. For a **direction**, resolve the direction goal (OKR) from `planning-core` / local-context. If no goal is known → say so and offer to chain to `goal-setter` (a 3T5F report without a Target is harmful).
+After Step 0, if the report is for a **person**, find them (`references/people-context-protocol.md` → Find a person: `ctx entity "<e-mail or name>" --kind person --skill product-reporter`; several → ask) and run **Step P** (`references/people-context-protocol.md`) to load their `active_goal_letter`, reporting cadence, and last Forecast QA. For a **direction**, resolve the direction goal (OKR) from `planning-core` / local-context. If no goal is known → say so and offer to chain to `goal-setter` (a 3T5F report without a Target is harmful).
 
 ### G-1 — Assemble the eight elements
 Pull what can be computed and leave the human parts to the person:
@@ -165,7 +165,7 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.10.1", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.10.2", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
    - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
 
