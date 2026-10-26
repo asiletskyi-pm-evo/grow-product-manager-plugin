@@ -179,6 +179,7 @@ def local_cards(sctx, own_paths):
     `notes` table with a `path` column) → `індекс <id> має незнайому схему — без нього` (cs_.SCHEMA_NOTE)."""
     cards, notes = [], []
     vaults = sctx.get("vaults") or []
+    own_folded = {p.casefold() for p in own_paths}    # one note under another case on a case-insensitive disk (v3.18.1)
     for src in cs_.sources(sctx["text"], sctx["repos"], ("local",)):
         try:
             con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=cs_.OPEN_S)
@@ -207,7 +208,7 @@ def local_cards(sctx, own_paths):
             if not cs_._usable(row["path"]):
                 continue
             rel = cs_._local_name(row["path"], vaults, folder, root)
-            if not cs_._usable(rel) or rel in own_paths or not cs_._keep(sctx, rel):
+            if not cs_._usable(rel) or rel.casefold() in own_folded or not cs_._keep(sctx, rel):
                 continue
             fm = {str(k).lower(): v for k, v in cs_._fm(row.get(fm_col)).items()} if fm_col else {}
             if row.get("type") and not fm.get("type"):

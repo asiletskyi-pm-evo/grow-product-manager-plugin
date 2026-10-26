@@ -4,6 +4,12 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v3.18.1 — slots of one entity (added 2026-10-26)
+
+Plan `plans/2026-10-23-context-v3.18.1.md`. Each check failed before its code. Fixture: `testing/fixtures/entity/`, widened.
+
+- **TC-ctx-3181-index** | `python3 testing/ctx_index_test.py`, `python3 testing/ctx_slots_test.py`, `python3 testing/ctx_entity_test.py` | expected: the catalogue holds the nine slots of the cards (`person.role|team|email`, `team.missions|parent`, `mission.teams|jira_projects`, `module.owner`, `metric.owner`) with `answered_on: cards`, `team.members` `answered_on: both` with card-only names «People», «Люди», «Склад»; a card-only slot is no record's (`slot_for`, `slot_info`, `record_slots` do not see it), `card_slot_for` finds a card's slot by a field or heading name without regard to case, spaces, `_` and `-`; `check_catalogue` names a bad `answered_on`, a `card_names` that is no list, a card kind as a record's, a card name two slots share; `identity_of` keeps a card's slot fields by those names (`role` before `position`, never a judgement field, never `profiles`); a link or a key in a fenced block or an inline code span is neither a link nor a mention; Jira prefixes from `project = X`, `project in (X, Y)`, a one-token value or a key — never `AND`, `ORDER`, `DONE`; a work key from its `jira` field, else a file name or title with exactly one key; a new index is `meta_version` 4 with meta `slot_names`, an index of v3.18.0 is read once in place (fields filled, sections unchanged, no rebuild) and the next refresh reads nothing, other slot names read once more at the same version, a later build's index is left alone, a row without slot fields is read again; a local index's note the own index holds under another case is not a card of its own
+
 ## Release v3.18.0 — who is who (added 2026-10-22)
 
 Plan `plans/2026-10-22-context-v3.18.0.md`. Each check failed before its code. Fixture: `testing/fixtures/entity/` (Zorg people, teams, a mission, an epic and its pages).

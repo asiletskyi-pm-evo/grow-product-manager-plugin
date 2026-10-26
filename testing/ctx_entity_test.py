@@ -535,5 +535,17 @@ with tempfile.TemporaryDirectory() as d:
     check("v3.18.0 final M1 (re-graded): a card iCloud evicted before its identity was read comes from the local index "
           "meanwhile", c is not None and c["origin"] == "local", c)
 
+# --- v3.18.1 Task 1: a local index's card of a note the own index holds, named in another case (v3.18.0 minor M5)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    con = sqlite3.connect(os.path.join(env.home, "zorg-brain.sqlite"))
+    con.execute("UPDATE notes SET path = 'notes/people/CY.md' WHERE path = 'Notes/People/cy.md'")
+    con.commit()
+    con.close()
+    reg, _ = env.registry()
+    paths = {c["path"] for e in reg.entities for c in e["cards"]}
+    check("v3.18.1 a local index's note the own index holds under another case is not a card of its own",
+          CY_OWN in paths and not any(p_.casefold() == CY_OWN.casefold() and p_ != CY_OWN for p_ in paths), sorted(paths))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

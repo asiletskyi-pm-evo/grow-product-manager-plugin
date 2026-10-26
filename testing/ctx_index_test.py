@@ -1349,7 +1349,7 @@ with tempfile.TemporaryDirectory() as d:
     sens, ver = coach_row(idx)
     check("v3.17.0 review M3: a re-read walk the budget stopped writes no version; the walk that ends writes it",
           r["pending"] > 0 and ver0 is None and sens == (1,) and ver == (str(ctx_index.META_VERSION),), (r, ver0, sens, ver))
-for stored, rereads in (("3", False), ("x", True)):
+for stored, rereads in ((str(ctx_index.META_VERSION + 1), False), ("x", True)):   # a later build's: one above this
     with tempfile.TemporaryDirectory() as d:
         env, idx, scope = coach_env(d)
         con = sqlite3.connect(idx.db_path)
@@ -1506,7 +1506,7 @@ with tempfile.TemporaryDirectory() as d:
     con.close()
     check("v3.18.0 an index of v3.17 (meta_version 2, no entity tables) gets the tables and their rows in place — "
           "the version 3, the sections as they were, nothing rebuilt",
-          ver == ("3",) and "Notes/People/bea.md" in cards_by_path(idx) and secs0 == secs1 and r1["rebuilt"] is False
+          ver == (str(ctx_index.META_VERSION),) and "Notes/People/bea.md" in cards_by_path(idx) and secs0 == secs1 and r1["rebuilt"] is False
           and len(opened1) > 0, (ver, secs0, secs1, r1))
     r2, opened2 = counting_refresh(env, idx, scope)
     check("…and the next refresh reads no file", opened2 == [], opened2[:3])
@@ -1590,6 +1590,97 @@ with tempfile.TemporaryDirectory() as d:
     got = (idx.cards(), idx.problem, idx.links_to({"bea"}), idx.problem, idx.mentions(None), idx.problem)
     check("v3.18.0 review I4: on an index of v3.17 (no entity tables yet) the reads give nothing and no «broken index»",
           got == ([], None, [], None, [], None), got)
+
+# --- v3.18.1 Task 1: the slot fields of a card, no links in code, Jira prefixes without JQL, a work card's key (C2, C11)
+ido = ctx_index.identity_of
+team_ = ido("ZorgCore/Teams/zorg-pay.md", {"type": "team", "missions": ["[[ZorgCore/Missions/fast-pay]]", "[[M2]]"],
+                                           "parent": "[[ZorgCore/Teams/core]]", "profiles": 12}, "Zorg Pay")
+check("v3.18.1 identity_of keeps a card's slot fields by the catalogue's names: a team's missions (a list) and parent (a "
+      "value) — not `profiles`, which no slot names",
+      team_.get("fields") == {"team.missions": ["[[ZorgCore/Missions/fast-pay]]", "[[M2]]"], "team.parent": "[[ZorgCore/Teams/core]]"},
+      team_.get("fields"))
+pers_ = ido("Notes/People/bea.md", {"type": "person", "position": "Analyst", "Team": "zorg-pay", "email": ["b@z.example"],
+                                    "d_type": "D3", "signals": ["tired"], "role": "PM"}, "Bea")
+check("…a person's role (`role` before `position`, the catalogue's order), team and e-mail — never a judgement field",
+      pers_.get("fields") == {"person.role": "PM", "person.team": "zorg-pay", "person.email": "b@z.example"}
+      and "tired" not in json.dumps(pers_) and "D3" not in json.dumps(pers_), pers_.get("fields"))
+check("…a work card keeps no slot fields; a field named in no slot of the card's kind is not kept",
+      ido("Notes/Epics/e.md", {"type": "epic", "owner": "Bea"}, "E").get("fields") == {}
+      and ido("ZorgCore/Metrics/m.md", {"type": "metric", "owner": "[[cy]]", "team": "x"}, "M").get("fields") == {"metric.owner": "[[cy]]"}, "")
+lk = {(l["field"], l["target"]) for l in ctx_index.links_of({}, "```\n[[A]] and [[B|b]]\n```\nsee `[[C]]` and [[D]]\n~~~py\n[[E]]\n~~~\n")}
+check("v3.18.1 a link in a fenced block or an inline code span is no link (v3.18.0 minor M6)", lk == {("", "D")}, lk)
+mk = dict(ctx_index.mentions_of("```\nPROJ-1\n```\n`PROJ-2` and PROJ-3"))
+check("…and no mention either", mk == {"PROJ-3": False}, mk)
+pf = ido("ZorgCore/Teams/t.md", {"type": "team", "jira": "project = PROJ AND status = DONE ORDER BY rank",
+                                 "jira_projects": ["QQ", "ZZ"], "jira_board": "https://jira.zorg.example/browse/AB-12"}, "T")["prefixes"]
+check("v3.18.1 the Jira prefixes of a team: `project = X`, a one-token list item, a key's prefix — never a JQL word "
+      "(v3.18.0 minor M2)", pf == ["AB", "PROJ", "QQ", "ZZ"], pf)
+check("…`project in (A, B)` names both, and a lone token value is a prefix",
+      ido("ZorgCore/Missions/m.md", {"type": "mission", "jira_filter": "project in (PROJ, QQ) AND resolution IS EMPTY",
+                                     "jira": "ZZ"}, "M")["prefixes"] == ["PROJ", "QQ", "ZZ"], "")
+check("v3.18.1 a work card's key: its `jira` field first, then a file name with one key, then a title with one key — "
+      "«GPT-4 rollout PROJ-77» names two, so neither (v3.18.0 minor M7)",
+      ido("Notes/Epics/GPT-4 rollout PROJ-77.md", {"type": "epic", "jira": "PROJ-1234"}, "GPT-4 rollout PROJ-77")["key"] == "PROJ-1234"
+      and ido("Notes/Epics/GPT-4 rollout PROJ-77.md", {"type": "epic"}, "GPT-4 rollout PROJ-77")["key"] == ""
+      and ido("Notes/Epics/Epic — PROJ-1234.md", {"type": "epic"}, "Epic — PROJ-1234")["key"] == "PROJ-1234"
+      and ido("Notes/Epics/rollout.md", {"type": "epic"}, "Rollout PROJ-55")["key"] == "PROJ-55", "")
+
+
+def meta_of(idx, key):
+    con = sqlite3.connect(idx.db_path)
+    try:
+        row = con.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    finally:
+        con.close()
+    return row[0] if row else None
+
+
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    check("v3.18.1 a new index is of meta_version 4 and knows the slot names it wrote with",
+          meta_of(idx, "meta_version") == "4" and meta_of(idx, "slot_names") == ctx_index.slot_names_key(), 
+          (meta_of(idx, "meta_version"), meta_of(idx, "slot_names")))
+    secs0 = sqlite3.connect(idx.db_path).execute("SELECT count(*) FROM sections").fetchone()
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE meta SET value = '3' WHERE key = 'meta_version'")
+    con.execute("DELETE FROM meta WHERE key = 'slot_names'")
+    con.execute("UPDATE ents SET fields_json = NULL")
+    con.commit()
+    con.close()
+    r1, opened1 = counting_refresh(env, idx, scope)
+    team_card = cards_by_path(idx).get("ZorgCore/Teams/team-alpha.md", {})
+    check("…an index of v3.18.0 (meta_version 3) reads its files once more in place: version 4, the fields filled, the "
+          "sections as they were, nothing rebuilt",
+          meta_of(idx, "meta_version") == "4" and isinstance(team_card.get("fields"), dict) and r1["rebuilt"] is False
+          and len(opened1) > 0 and sqlite3.connect(idx.db_path).execute("SELECT count(*) FROM sections").fetchone() == secs0,
+          (meta_of(idx, "meta_version"), team_card.get("fields"), r1))
+    _, opened2 = counting_refresh(env, idx, scope)
+    check("…and the next refresh reads no file", opened2 == [], opened2[:3])
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE meta SET value = 'other' WHERE key = 'slot_names'")
+    con.commit()
+    con.close()
+    _, opened3 = counting_refresh(env, idx, scope)
+    _, opened4 = counting_refresh(env, idx, scope)
+    check("v3.18.1 other slot names in the catalogue (the same META_VERSION) read the files once more, once",
+          len(opened3) > 0 and opened4 == [] and meta_of(idx, "slot_names") == ctx_index.slot_names_key(), (len(opened3), opened4))
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE meta SET value = '5' WHERE key = 'meta_version'")
+    con.execute("UPDATE meta SET value = 'later' WHERE key = 'slot_names'")
+    con.commit()
+    con.close()
+    _, opened5 = counting_refresh(env, idx, scope)
+    check("…but a later build's index (meta_version 5) is left as it is — no re-read, its names kept",
+          opened5 == [] and meta_of(idx, "slot_names") == "later", (opened5, meta_of(idx, "slot_names")))
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    con = sqlite3.connect(idx.db_path)
+    con.execute("UPDATE ents SET fields_json = NULL WHERE path = 'ZorgCore/People/dee-real.md'")   # a v3.18.0 build wrote it
+    con.commit()
+    con.close()
+    _, opened = counting_refresh(env, idx, scope)
+    check("v3.18.1 an identity row without slot fields (a v3.18.0 build wrote it) is read again, that file alone",
+          [os.path.basename(str(p_)) for p_ in opened] == ["dee-real.md"], opened)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

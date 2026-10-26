@@ -58,6 +58,7 @@ import urllib.parse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
 import ctx_stem as st  # noqa: E402
+import ctx_slots as sl  # noqa: E402
 import ctx_store as cs  # noqa: E402
 
 SCHEMA = "search-index/1"
@@ -94,9 +95,12 @@ STUB_CHARS = 200                    # a section shorter than this (its breadcrum
 NEAR_MIN, NEAR_CHARS = 400, 20_000  # near copies: the characters a key needs at least, and the ones it reads
 NEAR_VERSION = 2                    # the rules of near_key (meta `near_version`): an index of other rules gets its keys
                                     # again from its own sections (v3.16.2: a list of links is content)
-META_VERSION = 3                    # the rules of note_meta (meta `meta_version`): an index of other rules reads its
+META_VERSION = 4                    # the rules of note_meta (meta `meta_version`): an index of other rules reads its
                                     # downloaded files once more (v3.17.0: a people type or a Step-P field is sensitive;
-                                    # v3.18.0: the identity, link and mention rows of every note)
+                                    # v3.18.0: the identity, link and mention rows of every note; v3.18.1: a card's slot
+                                    # fields, no link or mention in code, Jira prefixes without JQL words, a work key's
+                                    # order). The slot names the fields were kept by are in meta `slot_names`: other
+                                    # names (the catalogue changed) read the files once more too, at the same version
 ENTITY_KINDS = {"people": "person", "person": "person", "team": "team", "mission": "mission", "module": "module",
                 "metric": "metric", "epic": "work", "feature": "work", "project": "work"}
                                     # a note's type → the kind of entity it is a card of (v3.18.0, plan C1)
@@ -104,6 +108,10 @@ ISSUE_KEY = re.compile(r"(?<![A-Za-z0-9])([A-Z][A-Z0-9]{1,9})-(\d{1,6})(?![A-Za-
 BROWSE_KEY = re.compile(r"/browse/([A-Z][A-Z0-9]{1,9}-\d{1,6})(?![0-9])")                   # a key a Jira link names
 _EMAIL = re.compile(r"^[^@\s<>()\[\],;:\"]+@[^@\s<>()\[\],;:\"]+\.[^@\s<>()\[\],;:\"]+$")
 _PREFIX = re.compile(r"(?<![A-Za-z0-9])[A-Z][A-Z0-9]{1,9}(?![A-Za-z0-9])")
+_PROJECT = re.compile(r"\bproject\s*(?:=|!=|\bin\b|\bnot\s+in\b)\s*\(?([^)]*?)(?:\)|\s+(?:and|or|order)\b|$)", re.I)
+JQL_WORDS = frozenset(("AND", "OR", "NOT", "IN", "IS", "EMPTY", "NULL", "ORDER", "BY", "ASC", "DESC", "WAS", "CHANGED",
+                       "DONE", "TODO", "OPEN", "CLOSED", "CURRENTUSER"))   # a JQL word is never a project (v3.18.1)
+WORK_KEY_FIELDS = ("jira", "key", "issue", "jirakey", "issuekey")   # a work card's own key fields (card_norm), first
 EMAIL_FIELDS = frozenset(("email", "emails", "mail", "emailaliases", "emailalias", "emailaddress", "emailaddresses"))
                                     # a card's own address fields (their names without `-` and `_`): `manager_email`
                                     # is someone else's (v3.18.0 review)
@@ -128,7 +136,7 @@ CREATE VIRTUAL TABLE sections_fts USING fts5(title, heading, tags, aliases, body
 ENTITY_DDL = """
 CREATE TABLE IF NOT EXISTS ents(note_id INTEGER PRIMARY KEY, hash TEXT, path TEXT, kind TEXT, label TEXT, emails_json TEXT,
                                 team TEXT, role TEXT, slug TEXT, aliases_json TEXT, key TEXT, bridges_json TEXT,
-                                prefixes_json TEXT);
+                                prefixes_json TEXT, fields_json TEXT);
 CREATE TABLE IF NOT EXISTS links(note_id INTEGER, field TEXT, target TEXT, tkey TEXT, anchor TEXT, label TEXT,
                                  embed INTEGER);
 CREATE INDEX IF NOT EXISTS links_tkey ON links(tkey);
@@ -141,7 +149,7 @@ CREATE INDEX IF NOT EXISTS mentions_note ON mentions(note_id);
                                     # (plan C11) — the path too, as SQLite gives a removed note's id to the next one
 ENTITY_TABLES = ("ents", "links", "mentions")
 ENTITY_COLS = ("kind", "label", "emails_json", "team", "role", "slug", "aliases_json", "key", "bridges_json",
-               "prefixes_json")
+               "prefixes_json", "fields_json")       # fields_json since v3.18.1: an earlier build's table gets it in place
 NOTE_COLS = ("path", "source", "title", "type", "product", "status", "date", "ttl_date", "confluence_id",
              "aliases_json", "tags_json", "sensitive", "hub", "version_key", "links_json", "hash", "near", "mtime",
              "size")
@@ -653,12 +661,109 @@ def _link_parts(inner):
     return N(target).strip().rstrip("\\").strip(), anchor.strip().rstrip("\\"), label.strip()   # `[[x\\|y]]` in a table
 
 
-def identity_of(rel, fm, title):
+_CARD_NAMES = {}
+
+
+def card_field_names():
+    """{kind: {card_norm name: slot id}} of the plugin's catalogue (ctx_slots.card_names_by_kind), read once; a catalogue
+    that cannot be read keeps no field."""
+    if "names" not in _CARD_NAMES:
+        try:
+            _CARD_NAMES["names"] = sl.card_names_by_kind(sl.load_catalogue())
+        except ValueError:
+            _CARD_NAMES["names"] = {}
+    return _CARD_NAMES["names"]
+
+
+def slot_names_key(names=None):
+    """sha1 of the names the slot fields are kept by (meta `slot_names`): other names → the files are read once more."""
+    names = card_field_names() if names is None else names
+    return hashlib.sha1(json.dumps(names, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _slot_fields(kind, fm, names):
+    """{slot id: value} of a card's frontmatter fields a slot of its kind is named by (v3.18.1, plan C2): a list slot's
+    texts (_strings), a value slot's first text; for each slot the first field in the catalogue's order of its names.
+    Never a judgement field (STEP_P_FIELDS), never a map."""
+    want = names.get(kind) or {}
+    if not want:
+        return {}
+    order = {}
+    for i, n in enumerate(want):
+        order.setdefault(want[n], {})[n] = i
+    found = {}
+    for k, v in fm.items():
+        if str(k).lower() in STEP_P_FIELDS or isinstance(v, dict) or not _filled(v):
+            continue
+        n = sl.card_norm(k)
+        slot = want.get(n)
+        if slot and (slot not in found or order[slot][n] < found[slot][0]):
+            found[slot] = (order[slot][n], v)
+    cat_kinds = _slot_kinds()
+    out = {}
+    for slot, (_, v) in found.items():
+        texts = [N(str(x)).strip() for x in (v if isinstance(v, list) else [v]) if not isinstance(x, (dict, list))]
+        texts = [t for t in texts if t]
+        if not texts:
+            continue
+        out[slot] = texts if cat_kinds.get(slot) == "list" else texts[0]
+    return out
+
+
+def _slot_kinds():
+    if "kinds" not in _CARD_NAMES:
+        try:
+            cat = sl.load_catalogue()
+            _CARD_NAMES["kinds"] = {k: (sl.card_slot_info(cat, k) or {}).get("kind") for k in sl._all_slots(cat)}
+        except ValueError:
+            _CARD_NAMES["kinds"] = {}
+    return _CARD_NAMES["kinds"]
+
+
+def _prefixes(fm):
+    """The Jira project prefixes of a team's or a mission's `…jira…` fields (v3.18.1, v3.18.0 minor M2): a value that is
+    one prefix-shaped token, the prefix of a key, the projects of `project = X` / `project in (X, Y)` — never a JQL word."""
+    out = set()
+    for k, v in fm.items():
+        if "jira" not in k.lower():
+            continue
+        for s_ in _strings(v):
+            t = N(s_).strip()
+            if _PREFIX.fullmatch(t):
+                out.add(t)
+            out.update(m.group(1) for m in ISSUE_KEY.finditer(t))
+            for m in _PROJECT.finditer(t):
+                out.update(_PREFIX.findall(m.group(1)))
+    return sorted(x for x in out if x not in JQL_WORDS)
+
+
+def _work_key(rel, fm, title):
+    """A work card's Jira key (v3.18.1, v3.18.0 minor M7): its own key field (WORK_KEY_FIELDS), else its file name, else
+    its title — a name or a title only when it holds exactly one key («GPT-4 rollout PROJ-77» holds two: no key)."""
+    for k, v in fm.items():
+        if sl.card_norm(k) in WORK_KEY_FIELDS:
+            for s_ in _strings(v):
+                m = ISSUE_KEY.search(N(s_))
+                if m:
+                    return m.group(0)
+    name = rel.rsplit("/", 1)[-1]
+    for text in (name[:-3] if name.lower().endswith(".md") else name, title or ""):
+        keys = {m.group(0) for m in ISSUE_KEY.finditer(N(text))}
+        if len(keys) == 1:
+            return keys.pop()
+        if keys:
+            return ""
+    return ""
+
+
+def identity_of(rel, fm, title, names=None):
     """The identity of a card (v3.18.0, plan C1–C2) — {kind, label, emails, team, role, slug, aliases, key, bridges,
-    prefixes} — or None for a note that is no card. Only these fields: never a profile's judgement or any other field.
+    prefixes, fields} — or None for a note that is no card. Only these fields: never a profile's judgement or any other field.
     `emails`: the e-mail-shaped texts of the card's own address fields (EMAIL_FIELDS), lower case; `role`: `role`, else
-    `position`; `key`: a work card's Jira key in its file name or title; `bridges`: {field: target} of every field that
-    is exactly one wiki link, a judgement field (STEP_P_FIELDS) never; `prefixes`: the Jira project prefixes a team's or a mission's `…jira…` fields name."""
+    `position`; `key`: a work card's Jira key (_work_key); `bridges`: {field: target} of every field that
+    is exactly one wiki link, a judgement field (STEP_P_FIELDS) never; `prefixes`: the Jira project prefixes a team's or a
+    mission's `…jira…` fields name (_prefixes); `fields` (since v3.18.1): {slot id: value} of the fields a slot of the
+    card's kind is named by (`names`: card_field_names() by default)."""
     fm = fm if isinstance(fm, dict) else {}
     types = [x.lower() for x in _strings(fm.get("type"))]
     kind = next((ENTITY_KINDS[x.strip()] for x in types if x.strip() in ENTITY_KINDS), None)
@@ -671,29 +776,40 @@ def identity_of(rel, fm, title):
                 s = N(s).strip().lower()
                 if _EMAIL.match(s) and s not in emails:
                     emails.append(s)
-    key = ""
-    if kind == "work":
-        name = rel.rsplit("/", 1)[-1]
-        m = ISSUE_KEY.search(name[:-3] if name.lower().endswith(".md") else name) or ISSUE_KEY.search(title or "")
-        key = m.group(0) if m else ""
+    key = _work_key(rel, fm, title) if kind == "work" else ""
     bridges = {}
     for k, v in fm.items():
         target = _one_link(v) if k not in STEP_P_FIELDS else None    # a judgement field is never identity (C9)
         if target:
             bridges[k] = target
-    prefixes = set()
-    if kind in ("team", "mission"):
-        for k, v in fm.items():
-            if "jira" in k:
-                for s in _strings(v):
-                    prefixes.update(_PREFIX.findall(s))
+    prefixes = _prefixes(fm) if kind in ("team", "mission") else []
     return {"kind": kind, "label": N(title or "").strip(), "emails": emails, "team": _text(fm.get("team")),
             "role": _text(fm.get("role")) or _text(fm.get("position")), "slug": _text(fm.get("slug")),
             "aliases": _items(fm.get("aliases") or fm.get("alias")), "key": key, "bridges": bridges,
-            "prefixes": sorted(prefixes)}
+            "prefixes": prefixes, "fields": _slot_fields(kind, fm, card_field_names() if names is None else names)}
 
 
 _EMBED_WIKI = re.compile(r"(!?)\[\[([^\]\n]+?)\]\]")
+_CODE_SPAN = re.compile(r"(`+)(?!`).*?(?<!`)\1(?!`)")
+
+
+def without_code(text):
+    """The text without its fenced blocks (``` or ~~~, their lines blanked) and its inline code spans — where a link or a
+    key is an example, not a link or a mention (v3.18.1, v3.18.0 minor M6). Lines keep their places."""
+    out, fence = [], None
+    for line in (text or "").split("\n"):
+        f = _FENCE.match(line)
+        if fence:
+            if f and f.group(1) == fence:
+                fence = None
+            out.append("")
+            continue
+        if f:
+            fence = f.group(1)
+            out.append("")
+            continue
+        out.append(line)
+    return _CODE_SPAN.sub(lambda m: " " * len(m.group(0)), "\n".join(out))
 
 
 def links_of(fm, body):
@@ -713,14 +829,14 @@ def links_of(fm, body):
     for k, v in (fm or {}).items():
         for s in _strings(v):
             add(k, s)
-    add("", body)
+    add("", without_code(body))
     return out
 
 
 def mentions_of(text):
     """[(key, browse)] of every Jira-key-shaped token of a text, once each, sorted; `browse` when a `/browse/<key>`
     link names it. Which prefixes count is decided when the rows are read (plan C6)."""
-    t = text or ""
+    t = without_code(text or "")
     browse = set(BROWSE_KEY.findall(t))
     keys = {m.group(0) for m in ISSUE_KEY.finditer(t)} | browse
     return [(k, k in browse) for k in sorted(keys)]
@@ -1007,6 +1123,9 @@ class Index:
                 cols = {r[1] for r in con.execute("PRAGMA table_info(notes)").fetchall()}
                 if row and row[0] == SCHEMA and set(NOTE_COLS) <= cols:    # a column short (an earlier build): rebuilt
                     con.executescript(ENTITY_DDL)       # an earlier build's file gets the tables in place (v3.18.0)
+                    if "fields_json" not in {r[1] for r in con.execute("PRAGMA table_info(ents)").fetchall()}:
+                        con.execute("ALTER TABLE ents ADD COLUMN fields_json TEXT")   # v3.18.1, in place
+                        con.commit()
                     return con, False
             except sqlite3.DatabaseError as e:
                 if _busy(e):
@@ -1025,6 +1144,7 @@ class Index:
         con.execute("INSERT INTO meta(key, value) VALUES ('schema', ?)", (SCHEMA,))
         con.execute("INSERT INTO meta(key, value) VALUES ('near_version', ?)", (str(NEAR_VERSION),))
         con.execute("INSERT INTO meta(key, value) VALUES ('meta_version', ?)", (str(META_VERSION),))
+        con.execute("INSERT INTO meta(key, value) VALUES ('slot_names', ?)", (slot_names_key(),))
         con.commit()
         return con
 
@@ -1047,14 +1167,18 @@ class Index:
 
     @staticmethod
     def _meta_stale(con):
-        """Is the index's `meta_version` lower than META_VERSION (none: 1)? Then its walk reads every downloaded file
-        once more; a later build's rows are left alone."""
+        """Is the index's `meta_version` lower than META_VERSION (none: 1), or this version's but its slot fields kept by
+        other names than the catalogue's now (meta `slot_names`, v3.18.1)? Then its walk reads every downloaded file once
+        more; a later build's rows are left alone (so two builds never read the files again and again in turn)."""
         row = con.execute("SELECT value FROM meta WHERE key='meta_version'").fetchone()
         try:
             stored = int(row[0]) if row else 1
         except (TypeError, ValueError):
             stored = 1
-        return stored < META_VERSION
+        if stored != META_VERSION:
+            return stored < META_VERSION
+        names = con.execute("SELECT value FROM meta WHERE key='slot_names'").fetchone()
+        return not names or names[0] != slot_names_key()
 
     def _ro(self):
         """A read-only connection, or None when there is no index yet."""
@@ -1124,6 +1248,7 @@ class Index:
         queue = _Walk(con, roots, store_rel, blocks_rels, deadline, res, reread=reread).run(saved)
         if reread and not res["pending"]:
             con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('meta_version', ?)", (str(META_VERSION),))
+            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('slot_names', ?)", (slot_names_key(),))
         when = _now()
         con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('updated', ?)", (when,))
         con.commit()
@@ -1272,8 +1397,10 @@ class Index:
         def read(con):
             if not self._has_entities(con):
                 return []
+            have = {r[1] for r in con.execute("PRAGMA table_info(ents)").fetchall()}   # v3.18.0's: no fields_json yet
             return con.execute("SELECT n.id, %s, %s FROM notes n %s WHERE e.kind != '' ORDER BY n.path"
-                               % (", ".join("n." + c for c in NOTE_COLS), ", ".join("e." + c for c in ENTITY_COLS),
+                               % (", ".join("n." + c for c in NOTE_COLS),
+                                  ", ".join(("e." + c) if c in have else ("NULL AS " + c) for c in ENTITY_COLS),
                                   self._FRESH)).fetchall()
 
         out = []
@@ -1286,7 +1413,7 @@ class Index:
                         v = json.loads(v or "null")
                     except ValueError:
                         v = None
-                    d[c[:-5]] = v if v is not None else ({} if c == "bridges_json" else [])
+                    d[c[:-5]] = v if v is not None else ({} if c in ("bridges_json", "fields_json") else [])
                 else:
                     d[c] = v or ""
             out.append(d)
@@ -1410,9 +1537,10 @@ class _Walk:
             con.execute("DELETE FROM %s WHERE note_id NOT IN (SELECT id FROM notes)" % tb)
         self.stale_ents = {r[0] for r in con.execute(
             "SELECT n.id FROM notes n LEFT JOIN ents e ON e.note_id = n.id "
-            "WHERE e.note_id IS NULL OR e.hash IS NOT n.hash OR e.path IS NOT n.path")}
+            "WHERE e.note_id IS NULL OR e.hash IS NOT n.hash OR e.path IS NOT n.path OR e.fields_json IS NULL")}
                                                      # read again whatever their mtime: no identity row, or one an older
-                                                     # build left behind when it changed the note
+                                                     # build left behind when it changed the note (v3.18.0 wrote no
+                                                     # slot fields: such a row is read again too, v3.18.1)
 
     def _outside(self, path):
         """Is this index name one of a root outside every vault (`@<its source>/…`)? A vault's own `@Name.md` is not."""
@@ -1618,7 +1746,8 @@ class _Walk:
                           ident.get("role", ""), ident.get("slug", ""),
                           json.dumps(ident.get("aliases", []), ensure_ascii=False), ident.get("key", ""),
                           json.dumps(ident.get("bridges", {}), ensure_ascii=False),
-                          json.dumps(ident.get("prefixes", []), ensure_ascii=False)))
+                          json.dumps(ident.get("prefixes", []), ensure_ascii=False),
+                          json.dumps(ident.get("fields", {}), ensure_ascii=False)))
         self.con.executemany("INSERT INTO links(note_id, field, target, tkey, anchor, label, embed) VALUES (?, ?, ?, ?, ?, ?, ?)",
                              [(nid, l["field"], l["target"], l["tkey"], l["anchor"], l["label"], int(l["embed"]))
                               for l in links])
