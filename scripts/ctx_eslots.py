@@ -335,7 +335,8 @@ def join_items(cands, reg, kind, strict, entity_of=None):
                 seen.add(key)
                 g["origins"].append(_origin(c, how))
             if c["level"] != "derived" and not c.get("private"):
-                g["rows"].append({"level": c["level"], "source": c["card_source"], "text": row})
+                g["rows"].append(dict({"level": c["level"], "source": c["card_source"], "text": row},
+                                      **({"part": text} if row != text else {})))   # one person of a row of several
     if kind == "person":                                # a text item in another spelling of a person the list's other
         named = {k: reg.of(k) for k in order if not isinstance(k, tuple)}   # sources name: one line with them
         for k in [k for k in order if isinstance(k, tuple)]:
@@ -482,6 +483,8 @@ def member_lines(items, reg, idx, cat, sctx, limit=None, team=None):
                 continue
         rows = sorted(it.get("rows") or (), key=lambda r: LEVEL_RANK.get(r["level"], 9))
         head = _clean_row(rows[0]["text"]) if rows else it["label"]
+        if rows and rows[0].get("part"):                   # a row of several people: whose line this is (review M5)
+            head = "%s — з рядка «%s»" % (it["label"], head)
         if not rows and it.get("entity"):
             ent = reg.of(it["entity"])
             sl_ = slots_of(reg, idx, ent, cat, sctx, only=["person.role", "person.email"]) if ent else {}

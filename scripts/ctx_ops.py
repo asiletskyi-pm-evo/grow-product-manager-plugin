@@ -163,6 +163,12 @@ def snapshot(store, copies, home, label, notes=None):
         p = os.path.join(snap, rel)
         cs.check_target(p)
         os.makedirs(os.path.dirname(p), exist_ok=True)
+        if rel.startswith("notes/"):                    # a note of yours (a person's profile too): yours alone to read
+            fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            os.chmod(p, 0o600)
+            continue
         with open(p, "wb") as f:
             f.write(data)
     manifest = {"label": label, "created": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),

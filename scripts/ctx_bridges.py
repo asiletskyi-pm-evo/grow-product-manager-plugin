@@ -335,13 +335,11 @@ def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, regs=None, store_root=No
     report is what --apply writes). A `same_as` of your layer the ledger does not hold — by path and target — makes the
     field someone else's: then no row at all. Reads each row's note (all within one `timeout`), never writes."""
     mine = ours(ledger)
-    our_targets = {}
-    for p, line in mine:
-        our_targets.setdefault(p, set()).add(_line_target(line))
+    mine_lines = {line for _, line in mine}          # a line is ours whatever its note is called now (a rename)
+    our_targets = {_line_target(line) for line in mine_lines}
     same = {tuple(ce._pair(x[0], x[1])) for x in mem.get("same", [])}
     apart = {tuple(ce._pair(x[0], x[1])) for x in mem.get("not_same", [])}
-    foreign = {d["path"] for d in idx.field_links(FIELD, "own")
-               if _target_key(d["target"]) not in our_targets.get(d["path"], ())}
+    foreign = {d["path"] for d in idx.field_links(FIELD, "own") if _target_key(d["target"]) not in our_targets}
     rows, skipped, denied = [], {}, []
     rank = _reg_rank(sctx)
     home = sctx.get("home") or os.path.expanduser("~")
@@ -372,9 +370,6 @@ def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, regs=None, store_root=No
             for c in homes:
                 if not yours(c):
                     continue
-                if c.get("origin") != "index":
-                    skip(EVICTED, c["path"])
-                    continue
                 linked = set()
                 for target in c.get("bridges", {}).values():
                     hit = reg.resolver.resolve(target)
@@ -386,6 +381,9 @@ def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, regs=None, store_root=No
                 direct = [o for o in others if set(c["emails"]) & set(o["emails"])
                           or tuple(ce._pair(c["path"], o["path"])) in same]
                 if not direct:
+                    continue
+                if c.get("origin") != "index":         # only a note that would be a row is sent to download (M4)
+                    skip(EVICTED, c["path"])
                     continue
                 path, vault = own_file(sctx, c["path"])
                 if not path:
@@ -416,7 +414,7 @@ def bridge_plan(sctx, idx, reg, ledger, mem, kind=None, regs=None, store_root=No
                     skip(NO_FM, c["path"])
                     continue
                 have = fm_lines(text)
-                if any((c["path"], x) not in mine for x in have):
+                if any(x not in mine_lines for x in have):
                     foreign.add(c["path"])
                     continue
                 if have:                             # ours, its card gone: never a second key (review I3)
@@ -460,22 +458,36 @@ def plan_result(sctx, store, kind=None, budget=None):
 # ------------------------------------------------------------------ the write (plan C6–C8)
 CHANGED = "звіт змінився — переглянь ще раз: ctx entity apply"
 MOVED = "нотатку змінено під час запису — пропущено"
+NOT_WRITTEN = "нотатку не записано: %s"
 BOUNDARY = "межа запису: %s — не пишу"
 OP = "entity-apply"
 
 
-def write_note(path, text):
+def write_note(path, text, original=None):
     """Write a note of yours in place — the same file, its mode, extended attributes and creation date kept (review
-    I7: a new file through a temp one would make a 0600 profile 0644 and lose its Finder tags). The guard of `ctx`
-    (cs.check_target) first; then flushed to disk. The snapshot taken before holds what it was."""
+    I7: a new file through a temp one would make a 0600 profile 0644 and lose its Finder tags; the standard library on
+    macOS cannot copy extended attributes). The guard of `ctx` (cs.check_target) first; then flushed to disk. Not
+    atomic: a write that fails half-way puts `original` (the bytes the caller read) back before it raises; the
+    snapshot taken before holds them too."""
     cs.check_target(path)
     data = text.encode("utf-8")
     with open(path, "r+b") as f:
-        f.seek(0)
-        f.write(data)
-        f.truncate()
-        f.flush()
-        os.fsync(f.fileno())
+        try:
+            f.seek(0)
+            f.write(data)
+            f.truncate()
+            f.flush()
+            os.fsync(f.fileno())
+        except BaseException:
+            if original is not None:
+                try:
+                    f.seek(0)
+                    f.write(original)
+                    f.truncate()
+                    f.flush()
+                except OSError:
+                    pass
+            raise
 
 
 def _snapshot_copies(snap):
@@ -538,9 +550,12 @@ def apply_plan(sctx, store, copies, home, plan, regs, day, snapshot, journal, no
                 continue
             new = insert_line(data.decode("utf-8"), r["line"])
             try:
-                write_note(path, new)
+                write_note(path, new, original=data)
             except cs.PathRefused as e:
                 skip(BOUNDARY % e, r["path"])
+                continue
+            except OSError as e:                     # a read-only note, a full disk: this one skipped, the rest goes on
+                skip(NOT_WRITTEN % (e.strerror or e), r["path"])
                 continue
             written.append(r)
             notes.append({"path": r["path"], "line": r["line"], "before": r["sha"],
@@ -557,6 +572,7 @@ def apply_plan(sctx, store, copies, home, plan, regs, day, snapshot, journal, no
 # ------------------------------------------------------------------ `ctx undo` (plan C9, R4)
 GONE = "файлу немає"
 EDITED = "змінено після запису"
+ROTATED = "знімка вже немає — нотатку змінено після запису, не чіпаю"
 
 
 def undo_notes(marks):
@@ -586,43 +602,82 @@ def _kept_copy(mark, rel):
 
 def revert_notes(sctx, regs, store_root, home, items):
     """Take back the changes `items` (undo_notes) made to your notes, the newest first (R4): a note whose bytes are what
-    the change left (`after`) gets the snapshot's copy (its sha1 must be `before`); a note changed since, of a change
-    `entity apply` made, loses our line alone when its frontmatter still holds it exactly; anything else — a note gone,
-    our line changed, a write plan C7 refuses — is left and said. Returns (journal notes [{path, line, before, after}]
-    of what was written — `ctx undo` of this undo uses them —, [path reverted], [(path, why)] not reverted)."""
-    done, reverted, kept = [], [], []
+    the change left (`after`) gets the snapshot's copy (its sha1 must be `before`); a note changed since loses our line
+    alone when its frontmatter still holds it exactly and the change added it (`entity apply`, or an undo that put it
+    back); a note that no longer holds it is left quietly — our line is gone already; anything else — a note gone, our
+    line changed, a write plan C7 refuses, a note that cannot be written — is left and said, once per note. Returns
+    (journal notes [{path, line, before, after, added}] of what was written — `ctx undo` of this undo uses them —,
+    [path reverted], [(path, why)] not reverted)."""
+    done, reverted, kept = [], [], {}
     for rel, mark, n in items:
         why = write_refusal(sctx, regs, store_root, home, rel)
         if why:
-            kept.append((rel, BOUNDARY % why))
+            kept[rel] = BOUNDARY % why
             continue
         path, _ = own_file(sctx, rel)
         if not os.path.lexists(path):
-            kept.append((rel, GONE))
+            kept[rel] = GONE
             continue
         try:
             cur = cs.read_bytes(path)
         except (OSError, cs.StoreError) as e:
-            kept.append((rel, "%s (%s)" % (UNREAD, getattr(e, "strerror", None) or e)))
+            kept[rel] = "%s (%s)" % (UNREAD, getattr(e, "strerror", None) or e)
             continue
-        new = None
-        if _sha(cur) == n.get("after"):
-            copy = _kept_copy(mark, rel)
-            if copy is not None and _sha(copy) == n.get("before"):
-                new = copy
-        if new is None and mark.get("op") == OP and isinstance(n.get("line"), str):
+        line = n.get("line") if isinstance(n.get("line"), str) else ""
+        adds = mark.get("op") == OP or bool(n.get("added"))       # the change put our line in
+        copy = _kept_copy(mark, rel) if _sha(cur) == n.get("after") else None
+        new = copy if copy is not None and _sha(copy) == n.get("before") else None
+        if new is None and adds and line:
             try:
-                text = remove_line(cur.decode("utf-8"), n["line"])
+                text = cur.decode("utf-8")
             except UnicodeDecodeError:
                 text = None
-            new = text.encode("utf-8") if text is not None else None
+            if text is not None and line not in fm_lines(text):
+                if fm_lines(text) and rel not in reverted:
+                    kept[rel] = EDITED                     # another `same_as` there now: yours, left as it is
+                continue                                   # else our line is gone already: nothing to take back
+            out = remove_line(text, line) if text is not None else None
+            new = out.encode("utf-8") if out is not None else None
         if new is None:
-            kept.append((rel, EDITED))
+            if rel not in reverted:
+                kept[rel] = ROTATED if _sha(cur) == n.get("after") else EDITED
             continue
-        write_note(path, new.decode("utf-8"))
-        done.append({"path": rel, "line": n.get("line") or "", "before": _sha(cur), "after": _sha(new)})
-        reverted.append(rel)
-    return done, reverted, kept
+        try:
+            write_note(path, new.decode("utf-8"), original=cur)
+        except (OSError, cs.PathRefused) as e:
+            kept[rel] = NOT_WRITTEN % (getattr(e, "strerror", None) or e)
+            continue
+        done.append({"path": rel, "line": line, "before": _sha(cur), "after": _sha(new),
+                     "added": bool(line) and line in fm_lines(new.decode("utf-8"))})
+        kept.pop(rel, None)
+        if rel not in reverted:
+            reverted.append(rel)
+    return done, reverted, [(r, w) for r, w in kept.items() if r not in reverted]
+
+
+def keep_ours(sctx, store, items, day):
+    """After an undo restored the store: a note of `items` that still holds our line exactly (one undo could not take
+    it out, or put it back) has it in the ledger again — never «someone else's» for a line the plugin wrote (review
+    I3). Returns the paths added back."""
+    ledger = load_ledger(store)
+    have = {(N(p), line) for p, f, line, _ in ledger["written"] if f == FIELD}
+    added = []
+    for rel, _, n in items:
+        line = n.get("line")
+        if not isinstance(line, str) or not line or (rel, line) in have:
+            continue
+        path, _ = own_file(sctx, rel)
+        try:
+            text = cs.read_bytes(path).decode("utf-8") if path and os.path.isfile(path) else ""
+        except (OSError, UnicodeDecodeError, cs.StoreError):
+            continue
+        if line in fm_lines(text):
+            ledger["written"].append([rel, FIELD, line, day])
+            have.add((rel, line))
+            added.append(rel)
+    if added:
+        save_ledger(store, ledger)
+    return added
 
 
 # ------------------------------------------------------------------ the report

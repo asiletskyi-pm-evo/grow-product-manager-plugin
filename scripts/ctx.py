@@ -855,22 +855,29 @@ def cmd_undo(a, c):
             for rel in dict.fromkeys(rel for rel, _, _ in items):    # as they are now: `ctx undo` of this undo needs them
                 path, _ = cbr.own_file(sctx, rel)
                 if path and os.path.isfile(path) and not cbr.write_refusal(sctx, regs, c.store.root, c.home, rel):
+                    try:
+                        cs.read_bytes(path)             # one iCloud has not downloaded: no copy, said by the revert
+                    except (OSError, cs.StoreError):
+                        continue
                     keep.append((rel, path))
         pre = co.snapshot(c.store, c.copies, c.home, "pre-undo", notes=keep or None)
         skipped = co.restore(target, c.store, c.copies)
+        with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
+            existed = json.load(f).get("store_existed")
+        if existed:
+            cs.atomic_write(jpath, journal)             # the history first: nothing after the restore may lose it
         for p in skipped:
             print("skipped (not a current copy): %s" % p)
         notes_done, notes_back, notes_kept = (cbr.revert_notes(sctx, regs, c.store.root, c.home, items) if items
                                               else ([], [], []))
+        if items and existed:
+            cbr.keep_ours(sctx, c.store, items, now()[:10])    # our line a note still holds stays ours (review I3)
         if notes_back:
             print("повернуто нотаток: %d" % len(notes_back))
         for rel, why in notes_kept:
             print("не повернуто: %s — %s" % (rel, why))
-        with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
-            existed = json.load(f).get("store_existed")
         reverted, kept, rejected, rejected_failed = [], [], {}, {}
         if existed:
-            cs.atomic_write(jpath, journal)
             t = now()
             c.store.journal(dict({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre},
                                  **({"notes": notes_done} if notes_done else {})))

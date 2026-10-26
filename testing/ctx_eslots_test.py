@@ -360,6 +360,11 @@ with tempfile.TemporaryDirectory() as d:
     check("…a bold pair «**A, B** — роль» (the core's own shape) is two items, the bold no label",
           all(any("Payments" in r["text"] for r in (item(ops, x, env.reg) or {}).get("rows", [])) for x in (GUS, RHEA_CORE)),
           labels(ops))
+    lines = es.member_lines(ops.get("items", []), env.reg, env.idx, env.cat, env.sctx)
+    pair = [l for l in lines if "Fay Four, Bea Two" in l]
+    check("…an expanded row prints once per person, each line naming its person (review M5)",
+          len(pair) >= 2 and len(set(pair)) == len(pair) and any(l.startswith("- Fay Four") for l in pair)
+          and any(l.startswith("- Bea Two") for l in pair), lines)
     check("…a joined part keeps its line's text as its row", any("Fay Four, Bea Two" in r["text"] for r in fay.get("rows", [])),
           fay)
 

@@ -668,6 +668,139 @@ with tempfile.TemporaryDirectory() as d:                                       #
     check("review M11: the strongest card is the target — the org core (rank 1000) over a personal one (100)",
           any(r["path"] == RHEA[0] and r["target"] == RHEA[1] for r in p["rows"]), p["rows"])
 
+# ------------------------------------------------------------------ Task 4–6 review (review-v3.20.0-task-4-6.md)
+with tempfile.TemporaryDirectory() as d:                                       # I1: a note undo cannot write
+    env = applied(d)
+    j_before = journal(env)
+    path = os.path.join(env.vault, RHEA[0])
+    os.chmod(path, 0o444)
+    try:
+        rc, out, res = env.cli("undo")
+    finally:
+        os.chmod(path, 0o644)
+    ops = [x.get("op") for x in journal(env)]
+    check("review I1: a note undo cannot write — said per note, the journal keeps its history and the undo line, the "
+          "ledger keeps our line still in the note", rc == 0 and "не повернуто: %s" % RHEA[0] in out
+          and ops[:len(j_before)] == [x.get("op") for x in j_before] and ops[-1] == "undo"
+          and [x[0] for x in cb_.load_ledger(env.store)["written"]] == [RHEA[0]], (rc, out[-300:], ops))
+    _, _, res = env.cli("entity", "apply")
+    check("…and the next report is not blocked by our own line", res["foreign"] == [], res)
+
+with tempfile.TemporaryDirectory() as d:                                       # I2: a note apply cannot write
+    env = Env(d, {"ZorgCore/People/pia.md": "---\ntype: people\nemail: pia@zorg.example\n---\n# Pia Core\n",
+                  "Notes/People/pia.md": "---\ntype: person\nemail: pia@zorg.example\n---\n# Pia\n"})
+    _, _, res = env.cli("entity", "apply")
+    os.chmod(os.path.join(env.vault, RHEA[0]), 0o444)
+    try:
+        rc, out, res2 = env.cli("entity", "apply", "--apply", "--code", res["code"])
+    finally:
+        os.chmod(os.path.join(env.vault, RHEA[0]), 0o644)
+    check("review I2: a note apply cannot write is skipped and said; the rest is written, exit 0",
+          rc == 0 and "same_as" in read(env.vault, "Notes/People/pia.md") and "same_as" not in read(env.vault, RHEA[0])
+          and cb_.NOT_WRITTEN.split(":")[0] in out, (rc, out[-400:]))
+
+with tempfile.TemporaryDirectory() as d:                                       # I3a: a renamed note
+    env = applied(d, {"ZorgCore/People/pia.md": "---\ntype: people\nemail: pia@zorg.example\n---\n# Pia Core\n"})
+    os.rename(os.path.join(env.vault, RHEA[0]), os.path.join(env.vault, "Notes/People/rhea-one.md"))
+    write(os.path.join(env.vault, "Notes/People/pia.md"), "---\ntype: person\nemail: pia@zorg.example\n---\n# Pia\n")
+    _, _, res = env.cli("entity", "apply")
+    check("review I3: a note you renamed after apply keeps our line ours — the next report plans the new pair",
+          res["foreign"] == [] and [r["path"] for r in res["rows"]] == ["Notes/People/pia.md"], res)
+
+with tempfile.TemporaryDirectory() as d:                                       # I3b: redo, edit, undo
+    env = applied(d)
+    env.cli("undo")
+    env.cli("undo")                                                            # the bridge is back
+    write(os.path.join(env.vault, RHEA[0]), read(env.vault, RHEA[0]) + "\nMine.\n")
+    rc, out, _ = env.cli("undo")
+    _, _, res = env.cli("entity", "apply")
+    check("review I3: apply, undo, undo, an edit, undo — our line goes (the redo added it), your edit stays, nothing "
+          "blocked later", LINE not in read(env.vault, RHEA[0]) and read(env.vault, RHEA[0]).endswith("\nMine.\n")
+          and res["foreign"] == [], (out[-300:], res.get("foreign")))
+
+with tempfile.TemporaryDirectory() as d:                                       # M1: a write that fails rolls back
+    env = Env(d)
+    path = os.path.join(env.vault, RHEA[0])
+    before = read(path)
+    real_write = os.write
+
+    class Boom(object):
+        pass
+    import builtins
+    real_open = builtins.open
+
+    def failing_open(p, mode="r", *a, **k):
+        f = real_open(p, mode, *a, **k)
+        if p == path and "+" in mode:
+            orig = f.write
+            state = {"n": 0}
+
+            def w(data):
+                state["n"] += 1
+                if state["n"] == 1:
+                    orig(b"#GARBAGE#" + data[:10])               # half a write: other bytes than the note's
+                    raise OSError(28, "No space left on device")
+                return orig(data)
+            f.write = w
+        return f
+    builtins.open = failing_open
+    try:
+        cb_.write_note(path, before.replace("---\n# Rhea", "x: 1\n---\n# Rhea"), original=before.encode("utf-8"))
+        raised = False
+    except OSError:
+        raised = True
+    finally:
+        builtins.open = real_open
+    check("review M1: an in-place write that fails half-way puts the note's bytes back, then raises",
+          raised and read(path) == before, read(path)[:120])
+
+with tempfile.TemporaryDirectory() as d:                                       # M2: the snapshot's copy
+    env = Env(d)
+    os.chmod(os.path.join(env.vault, RHEA[0]), 0o600)
+    _, _, res = env.cli("entity", "apply")
+    env.cli("entity", "apply", "--apply", "--code", res["code"])
+    snap = journal(env)[-1]["snapshot"]
+    st = os.stat(os.path.join(snap, "notes", "0.md"))
+    check("review M2: the snapshot's copy of a note is readable by you alone (0600)", (st.st_mode & 0o777) == 0o600,
+          oct(st.st_mode))
+
+with tempfile.TemporaryDirectory() as d:                                       # M4: evicted, yet bridged already
+    env = Env(d, {"ZorgCore/People/vic.md": "---\ntype: people\nemail: vic@zorg.example\n---\n# Vic Core\n"},
+              local=[("Notes/People/vic.md", {"type": "person", "email": "vic@zorg.example",
+                                              "zorg_card": "[[ZorgCore/People/vic]]"})])
+    p = env.plan()
+    check("review M4: a note iCloud keeps that is bridged already is «уже мають міст», never sent to download",
+          "Notes/People/vic.md" in p["skipped"].get(cb_.BRIDGED, []) and "Notes/People/vic.md" not in p["skipped"].get(cb_.EVICTED, []),
+          p["skipped"])
+
+with tempfile.TemporaryDirectory() as d:                                       # M6a: one line per note
+    env = applied(d)
+    write(os.path.join(env.vault, RHEA[0]), read(env.vault, RHEA[0]).replace(LINE + "\n", ""))
+    _, _, res = env.cli("entity", "apply")
+    env.cli("entity", "apply", "--apply", "--code", res["code"])
+    rc, out, _ = env.cli("undo", "--steps", "2")
+    check("review M6: one note, two applies, `undo --steps 2`: said once — put back, never «не повернуто» too",
+          "повернуто нотаток: 1" in out and "не повернуто" not in out and LINE not in read(env.vault, RHEA[0]), out[-400:])
+
+with tempfile.TemporaryDirectory() as d:                                       # M8: undo's copy check
+    env = applied(d)
+    j = journal(env)[-1]
+    man = json.load(open(os.path.join(j["snapshot"], "manifest.json"), encoding="utf-8"))
+    write(os.path.join(j["snapshot"], man["notes"][0]["file"]), "tampered\n")
+    rc, out, _ = env.cli("undo")
+    check("review M8: a snapshot copy whose sha1 is not `before` is never written back — our line alone goes",
+          read(env.vault, RHEA[0]) != "tampered\n" and LINE not in read(env.vault, RHEA[0]), read(env.vault, RHEA[0])[:80])
+
+with tempfile.TemporaryDirectory() as d:                                       # M8: a core's marker
+    env = Env(d, {"Notes/Imported/_System/provider-manifest.yaml": "id: imported\n",
+                  "Notes/Imported/People/kai.md": "---\ntype: person\nemail: kai@zorg.example\n---\n# Kai\n",
+                  "Notes/Cloned/.git/HEAD": "ref: refs/heads/main\n",
+                  "Notes/Cloned/People/lia.md": "---\ntype: person\nemail: lia@zorg.example\n---\n# Lia\n"})
+    sctx = env.sctx()
+    check("review M8: a folder of your plugin folder holding a core's manifest or `.git` is never written",
+          "тека ядра" in (cb_.write_refusal(sctx, [], env.store.root, env.home, "Notes/Imported/People/kai.md") or "")
+          and "тека ядра" in (cb_.write_refusal(sctx, [], env.store.root, env.home, "Notes/Cloned/People/lia.md") or ""), "")
+
 # ------------------------------------------------------------------ acceptance finding: notes of yours iCloud keeps
 with tempfile.TemporaryDirectory() as d:
     env = Env(d, {"ZorgCore/People/vic.md": "---\ntype: people\nemail: vic@zorg.example\n---\n# Vic Core\n",
