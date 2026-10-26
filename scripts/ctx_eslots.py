@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Grow PM — the slots of one entity, assembled from its cards (since v3.18.1).
+"""Grow PM — the slots of one entity, assembled from its cards (since v3.19.0).
 
 A person's role, a team's members, a mission's teams: the answer is put together from every card of one entity
 (ctx_entity: your note, a core's card, a card a local index of yours holds) and from what other cards say of it — a
@@ -144,6 +144,7 @@ class _Slots:
 
     def __init__(self, reg, idx, cat, sctx, people=False):
         self.reg, self.idx, self.cat, self.people = reg, idx, cat, people
+        self.problem = None
         self.ranks = {r.get("id"): rv._rank(r) for r in (sctx or {}).get("repos") or ()}
         self._own, self._derived, self._values, self._items = {}, {}, {}, {}
 
@@ -187,6 +188,8 @@ class _Slots:
             listing = info.get("kind") == "list"
             if (listing or not items) and c["kind"] != "person" and not c.get("sensitive") and c.get("origin") == "index":
                 got = self.idx.note(c["path"])           # a person's card is a profile: its body is never read (C3)
+                if self.idx.problem:
+                    self.problem = self.idx.problem       # a busy read among good ones: said, never half a list
                 exact, loose = [], []                    # a list: the field's items AND every section's (a count in
                 for heading, text in (got[1] if got else ()):     # `members: 12` hides no list); the strict join keeps
                     hit, is_exact = _heading_slot(self.cat, c["kind"], heading)   # what names an entity
@@ -343,8 +346,16 @@ def slots_of(reg, idx, ent, cat, sctx, people=False, only=None, records=None):
             continue                                    # outside People: a person's identity alone (review M8)
         info = sl.card_slot_info(cat, slot)
         cands = candidates(reg, idx, ent, slot, cat, sctx, _s=s)
+        exclusive, from_cards = False, 0
         if slot == "team.members" and records is not None:
-            cands = list(records(ent) or ()) + cands
+            got = records(ent) or {}
+            got = got if isinstance(got, dict) else {"cands": list(got), "exclusive": False}
+            if got.get("exclusive"):            # a core rule or your `prefer repo:` — its list alone, as `ctx read`
+                both = join_items(list(got["cands"]) + cands, reg, "person", strict=False, entity_of=s.entity)
+                from_cards = sum(1 for i in both if not any(o.get("record") for o in i["origins"]))
+                cands, exclusive = list(got["cands"]), True
+            else:
+                cands = list(got.get("cands") or ()) + cands
         if not cands:
             continue
         unread = [c["path"] for c in ent["cards"] if c.get("home", True) and c.get("fields") is None]
@@ -352,6 +363,8 @@ def slots_of(reg, idx, ent, cat, sctx, people=False, only=None, records=None):
             items = join_items(cands, reg, item_kind(slot), strict=False, entity_of=s.entity)
             if items:
                 out[slot] = {"slot": slot, "kind": "list", "items": items, "count": len(items), "why": rv.WHY_JOINED}
+                if exclusive:
+                    out[slot].update(why=rv.WHY_RULE, from_cards=from_cards)
                 if unread:                              # a card whose fields no walk read yet (review M3)
                     out[slot]["unread"] = unread
             continue
@@ -512,8 +525,8 @@ def read_members(result, rec, origin, entities, cat):
     ent, unmatched = team_entity(reg, rec.get("title"))
     s = _slots_for(reg, idx, cat, sctx)
     cards = s.own(ent, "team.members") + s.derived(ent, "team.members") if ent else []
-    if idx.problem:                                     # the index went busy during the read: nothing joined by halves
-        return (rv.render_slot(result, origin) if result else "") + NOT_JOINED % idx.problem + "\n" if result else None
+    if idx.problem or s.problem:                        # the index went busy during the read: nothing joined by halves
+        return (rv.render_slot(result, origin) if result else "") + NOT_JOINED % (idx.problem or s.problem) + "\n" if result else None
     recs = record_candidates(shown)
     if result and (result["why"] == rv.WHY_RULE or str(result.get("prefer", "")).startswith("repo:")):
         both = join_items(recs + cards, reg, "person", strict=False, entity_of=s.entity)

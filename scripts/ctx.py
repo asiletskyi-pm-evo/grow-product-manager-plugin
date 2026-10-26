@@ -247,7 +247,7 @@
                                 оновлюється: …` while the index has files to look at). Writes only the index. An unknown
                                 --skill or --kind: exit 3; nothing to search: exit 3; no base answered: exit 5 (`Базу не
                                 прочитано: …`). CTX_RESULT: query, how, entities, mention, several, notes.
-                                Since v3.18.1 (scripts/ctx_eslots.py): one entity's `слоти:` — a person's role, team and
+                                Since v3.19.0 (scripts/ctx_eslots.py): one entity's `слоти:` — a person's role, team and
                                 e-mail, a team's members, missions and parent, a mission's teams and Jira projects, an owner —
                                 each with its origin (yours, a repository's, a local index's, derived) and its «також»; a
                                 list one item per entity. --slot SLOT (repeatable) keeps those slots alone, no backlinks nor
@@ -568,7 +568,7 @@ def cmd_read(a, c):
 
 
 def _entities_for_read(c, repos):
-    """The registry `ctx read` joins team.members by (v3.18.1, plan C8), built the first time it is asked for: the index
+    """The registry `ctx read` joins team.members by (v3.19.0, plan C8), built the first time it is asked for: the index
     as it is — never refreshed, no lock, nothing written — and your answers; ((registry, index, search context), why)."""
     got = {}
 
@@ -594,7 +594,7 @@ def _load_entities(c, repos):
                 mem = ce.load_memory(c.store, timeout=cs_.OPEN_S)
             except cs.StoreError:
                 pass                             # without your answers, as `ctx entity` goes on
-        reg, _ = ce.load(sctx, idx, mem)
+        reg, _ = ce.load(sctx, idx, mem, hints=False)    # a read joins members: no pairs to offer (final review M1)
         if reg.unread:
             return None, reg.unread
         return (reg, idx, sctx), None
@@ -1287,12 +1287,16 @@ def _team_records(c, repos):
             try:
                 if c.store.exists():
                     sc = rv.slot_context(c.store, c.copies, repos, None, now())
-                    shown = {a["place"]: a["result"]["shown"] for a in rv.slot_answers(sc, "team.members")}
+                    results = {a["place"]: a["result"] for a in rv.slot_answers(sc, "team.members")}
                     for rec in sc["records"]:
-                        if rec.get("type") == "team" and shown.get(rec["id"]):
+                        r = results.get(rec["id"])
+                        if rec.get("type") == "team" and r and r["shown"]:
                             ent, _ = es.team_entity(reg, rec.get("title"))
                             if ent:
-                                out.setdefault(ent["id"], []).extend(es.record_candidates(shown[rec["id"]]))
+                                got_ = out.setdefault(ent["id"], {"cands": [], "exclusive": False})
+                                got_["cands"].extend(es.record_candidates(r["shown"]))
+                                if r["why"] == rv.WHY_RULE or str(r.get("prefer", "")).startswith("repo:"):
+                                    got_["exclusive"] = True       # the list `ctx read` prints alone (final review I2)
             except Exception:  # noqa: BLE001 — the cards still answer; a record that cannot be read adds nothing
                 out = {}
             got["v"] = out
@@ -1336,11 +1340,7 @@ def cmd_entity(a, c):
         queries = [q.strip() for q in a.q] if a.q else [" ".join(words).strip()]
         if not all(queries):
             raise Usage("entity takes a request: an e-mail, a Jira key, a path or a name (or pairs, same, not-same)")
-        try:
-            repos = crp.load_repos(c.text, c.home)
-        except Exception:  # noqa: BLE001 — a registration not read names no block's repository here
-            repos = []
-        records = _team_records(c, repos)
+        records = _team_records(c, sctx["repos"])       # the registrations context_for read, read once
         if len(queries) > 1:
             res = ce.run_many(sctx, queries, kind=a.kind, skill=a.skill, store=c.store, slots=a.slot, records=records)
         else:
@@ -1369,7 +1369,7 @@ def _entity_answer(a, c, action, words):
     try:
         x, y = ce.card_of(reg, words[0]), ce.card_of(reg, words[1])
     except ValueError as e:
-        if reg.unread:                  # the index did not answer: a card it holds is no «не картка» (v3.18.1, C11)
+        if reg.unread:                  # the index did not answer: a card it holds is no «не картка» (v3.19.0, C11)
             line = ce.BUSY_ANSWER if reg.unread == ci.BUSY_NOTE else ce.NOT_READ % reg.unread
             print(line)
             return 5, dict(out, error=line)
@@ -1837,7 +1837,7 @@ def cmd_provider_sync(a, c):
 
 
 def _no_slot(slot, cat=None):
-    """The usage line for a slot the records do not know: a slot of an entity's cards (v3.18.1, plan C1a) says who
+    """The usage line for a slot the records do not know: a slot of an entity's cards (v3.19.0, plan C1a) says who
     decides it, anything else is not in the catalogue."""
     try:
         card = sl.card_slot_info(cat if cat is not None else sl.load_catalogue(), slot)

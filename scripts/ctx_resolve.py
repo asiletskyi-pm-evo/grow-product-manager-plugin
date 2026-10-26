@@ -383,13 +383,13 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
 
 # ------------------------------------------------------------------ the cascade (spec §5.1, §5.2, §6)
 LEVEL_ORDER = {"rule": 0, "mine": 1, "repo": 2, "local": 3, "derived": 4}
-                                      # local, derived: an entity's cards (v3.18.1, ctx_eslots) — a card a local index
+                                      # local, derived: an entity's cards (v3.19.0, ctx_eslots) — a card a local index
                                       # holds, then what another entity's card says of this one
 WHY_RULE = "правило ядра"
 WHY_MINE = "твоє перемагає (блок не є правилом ядра)"
 WHY_LIST = "список — виводяться всі кандидати; team.members у ctx read склеєно за сутністю"
 LEVEL_WORDS = {"repo": "репозиторій", "local": "локальний індекс", "derived": "виведене"}
-WHY_JOINED = "список — пункти склеєно за сутністю"      # v3.18.1: one item per person, team or mission (ctx_eslots)
+WHY_JOINED = "список — пункти склеєно за сутністю"      # v3.19.0: one item per person, team or mission (ctx_eslots)
 WHY_ONLY = "єдиний кандидат"
 WHY_UNREAD = "реєстрацію не прочитано — показано без каскаду"
 
@@ -450,7 +450,7 @@ def divergence_hashes(kind, cands):
 
 def unread_registration(c):
     """A repository's candidate whose registration was not read (no rank): its rank and its rules are unknown. A card of
-    a local index or a derived candidate (v3.18.1) has no rank by nature: it is no such candidate."""
+    a local index or a derived candidate (v3.19.0) has no rank by nature: it is no such candidate."""
     return c.get("level") in ("repo", "rule") and c.get("rank") is None
 
 
@@ -536,7 +536,7 @@ def _resolve_ranked(slot, cat, cands, mem):
         return settle(sides, "рівний ранг %s, різний текст: %s" % (_rank_text(top[0]), ", ".join(ids)), diverges=ids)
     win = top[0]
     lower = [c for c in live if (c.get("level"), _rank_key(c)) != (win.get("level"), _rank_key(win)) and key(c) != key(win)]
-    if lower and lower[0].get("level") != win.get("level"):      # a card of a lower level (v3.18.1): no rank to compare
+    if lower and lower[0].get("level") != win.get("level"):      # a card of a lower level (v3.19.0): no rank to compare
         why = "вищий рівень: %s перед %s" % (LEVEL_WORDS.get(win.get("level"), win.get("level")),
                                              LEVEL_WORDS.get(lower[0].get("level"), lower[0].get("level")))
     elif lower:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TC-ctx-3181-read — `ctx read`: team.members one line per person (since v3.18.1, plan R1, C8, C8a).
+"""TC-ctx-3181-read — `ctx read`: team.members one line per person (since v3.19.0, plan R1, C8, C8a).
 
 The fictional Zorg vault of testing/fixtures/entity/ is copied to a temp dir with a store migrated from its
 local-context.md, where the team «Zorg Pay» lists its members by hand: the record's items, the core card's «Склад
@@ -302,6 +302,29 @@ with tempfile.TemporaryDirectory() as d:
                            lambda: ((reg, idx, sctx), None), sl.load_catalogue())
     check("v3.18.1 Task 4 review M5: `prefer all` shows every candidate in full, as before — no join",
           "склеєно за сутністю" not in text and "Rhea One" in text, text)
+
+# --- v3.18.1 final review fixes
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    sctx = cs_.context_for(env.home, env.text, store_root=os.path.join(env.vault, "Notes", "_System", "context"))
+    idx = ci.Index(env.home)
+    reg, _ = ce.load(sctx, idx, ce.empty_memory())
+    rule = {"level": "rule", "source": "zorg-core", "ns": "zorg-core", "block": "team", "version": "0.2", "rank": 500,
+            "text": "#### Members\n\n- [[Notes/People/rhea|Rhea One]] — PM\n", "record": "team.zorg-pay-zp", "how": "marker",
+            "placed": True}
+    ent = reg.of("ZorgCore/Teams/zorg-pay.md")
+    ans = es.slots_of(reg, idx, ent, sl.load_catalogue(), sctx, only=["team.members"],
+                      records=lambda e: {"cands": es.record_candidates([rule]), "exclusive": True})["team.members"]
+    check("v3.18.1 final review I2: under a core rule `ctx entity --slot team.members` is the rule's list, as `ctx read` "
+          "prints it, with how many more the cards name", [i["label"] for i in ans["items"]] == ["Rhea One"]
+          and ans.get("from_cards") == 1, ans)
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    rc, out, res = env.cli("read", "--skill", "one-on-one")
+    rc, out, res = env.cli("read", "--skill", "task-creator", "--json")
+    sl_ = (res or {}).get("slots", {}).get("team.members", {})
+    check("v3.18.1 final review M10: CTX_RESULT's `shown` holds source ids alone — the cards say so in their own key",
+          "картки" not in sl_.get("shown", []), sl_)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

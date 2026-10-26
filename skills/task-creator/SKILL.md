@@ -29,7 +29,7 @@ Key context used by this skill:
 - `product.jira_project_key` — for finding Epics and creating tasks
 - `user.jira_account_id` — for setting Reporter on tasks
 - `team.jira_team_id` — for setting Team field
-- `team.members` — for discovering assignees and roles: one line per person since v3.18.1 (`ctx read`; a named assignee is found by `references/people-context-protocol.md` → Find a person — `ctx entity "<e-mail or name>" --kind person --skill task-creator --slot person.role`; several → ask)
+- `team.members` — for discovering assignees and roles: one line per person since v3.19.0 (`ctx read`; a named assignee is found by `references/people-context-protocol.md` → Find a person — `ctx entity "<e-mail or name>" --kind person --skill task-creator --slot person.role`; several → ask)
 - `product.confluence_space` — for Confluence page links
 - `user.language` — for output language
 

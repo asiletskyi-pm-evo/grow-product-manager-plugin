@@ -13,10 +13,10 @@ references/context-protocol.md.
 - check_catalogue                   the errors in a catalogue (none: it is clean)
 - slot_for                          the slot a record kind answers to a name with
 - slot_info                         a slot's own entry (kind, record, names, about), or None — a slot the records answer;
-                                    a slot answered on cards alone (`answered_on: cards`, v3.18.1) is None here
+                                    a slot answered on cards alone (`answered_on: cards`, v3.19.0) is None here
 - record_slots                      {id: entry} of the slots the records answer
 
-The slots of an entity's cards (since v3.18.1; scripts/ctx_eslots.py answers them):
+The slots of an entity's cards (since v3.19.0; scripts/ctx_eslots.py answers them):
 
 - CARD_KINDS, ANSWERED_ON           the kinds of card a slot is looked for on, and the values of `answered_on`
 - card_slot_info, card_slots        a card slot's entry, and the slots a kind of card answers, in the catalogue's order
@@ -66,7 +66,7 @@ CATALOGUE_PATH = os.path.join(PLUGIN_ROOT, "references", "context-slots.yaml")
 SCHEMA = "context-slots/1"
 KINDS = ("value", "text", "list")
 RECORDS = ("product", "team", "profile", "org")
-CARD_KINDS = ("person", "team", "mission", "module", "metric")   # the kinds of card a slot is looked for on (v3.18.1)
+CARD_KINDS = ("person", "team", "mission", "module", "metric")   # the kinds of card a slot is looked for on (v3.19.0)
 ANSWERED_ON = ("records", "cards", "both")                    # who answers a slot: `answered_on` (records by default)
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 _SLOT_ID = re.compile(r"(?P<record>[a-z]+)\.(?P<name>[a-z0-9_]+)\Z")
@@ -99,7 +99,7 @@ def _answered_on(slot):
 
 def _slots(cat):
     """The slots the records answer (`answered_on` records or both): what the record side — `ctx read`, `ctx explain`,
-    `ctx validate`, `ctx slot …` — knows. A card-only slot (v3.18.1) is none of theirs."""
+    `ctx validate`, `ctx slot …` — knows. A card-only slot (v3.19.0) is none of theirs."""
     return {k: v for k, v in _all_slots(cat).items() if _answered_on(v) in ("records", "both")}
 
 
@@ -139,7 +139,7 @@ def check_catalogue(cat):
     if not slots:
         return errs + ["the catalogue has no slots"]
     owner = {}                                     # (record, normalised name) → the first slot that answers to it
-    card_owner = {}                                # (kind of card, card_norm name) → the first card slot (v3.18.1)
+    card_owner = {}                                # (kind of card, card_norm name) → the first card slot (v3.19.0)
     for sid, slot in slots.items():
         if not isinstance(slot, dict):
             errs.append("slot %s: not a mapping of kind, record, names and about" % sid)
@@ -198,12 +198,12 @@ def slot_for(cat, record, name):
 
 def slot_info(cat, slot_id):
     """The catalogue's entry for `slot_id` (a mapping of kind, record, names and about) when the records answer it, else
-    None — for a slot answered on cards alone too (v3.18.1: card_slot_info gives that one)."""
+    None — for a slot answered on cards alone too (v3.19.0: card_slot_info gives that one)."""
     s = _slots(cat).get(slot_id)
     return s if isinstance(s, dict) else None
 
 
-# ------------------------------------------------------------------ the slots of an entity's cards (since v3.18.1)
+# ------------------------------------------------------------------ the slots of an entity's cards (since v3.19.0)
 def _card_slot_items(cat):
     return [(k, v) for k, v in _all_slots(cat).items()
             if isinstance(v, dict) and _answered_on(v) in ("cards", "both") and v.get("record") in CARD_KINDS]
@@ -232,7 +232,7 @@ def card_slot_for(cat, kind, name):
 
 
 def card_names_version(cat):
-    """The catalogue's `card_names_version` (since v3.18.1): a whole number ≥ 1 that grows whenever the names or the kind
+    """The catalogue's `card_names_version` (since v3.19.0): a whole number ≥ 1 that grows whenever the names or the kind
     of a slot answered on cards change; 1 when it is not there or not such a number."""
     v = cat.get("card_names_version") if isinstance(cat, dict) else None
     try:

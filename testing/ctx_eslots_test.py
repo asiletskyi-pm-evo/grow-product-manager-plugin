@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TC-ctx-3181-slots — scripts/ctx_eslots.py, the slots of one entity from its cards (since v3.18.1).
+"""TC-ctx-3181-slots — scripts/ctx_eslots.py, the slots of one entity from its cards (since v3.19.0).
 
 The fictional Zorg vault of testing/fixtures/entity/ is copied to a temp dir, with a local index of the user's
 (zorg-brain) built beside it: a person's role by the cascade (yours, then a core's, then a local index's), a team's
@@ -47,6 +47,8 @@ LOCAL_NOTES = (   # path, type, frontmatter — a partner team's cards the user'
     ("Partner/People/rhea-g.md", "person", {"type": "person", "email": "rhea@zorg.example", "role": "Growth PM"}),
     ("Partner/People/fay-g.md", "person", {"type": "person", "email": "fay@zorg.example", "role": "Analyst"}),
     ("Notes/People/gus-own.md", "person", {"type": "person", "email": "gus@zorg.example", "role": "Tech lead"}),
+    ("ZorgCore/Teams/zorg-pay.md", "team", {"type": "team", "parent": "[[ZorgCore/Teams/team-alpha]]",
+                                            "aliases": ["Zorg Pay", "ZP"]}),
 )                 # gus-own: a note of your plugin folder iCloud evicted — the local index alone gives its card
 
 
@@ -207,6 +209,20 @@ with tempfile.TemporaryDirectory() as d:
     role = env.slots(GUS).get("person.role") or {}
     check("v3.18.1 acceptance: your note the local index gives (its file evicted) is yours — `mine`, it wins over the core",
           role.get("value") == "Tech lead" and role.get("origin", {}).get("level") == "mine", role)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    con = sqlite3.connect(env.idx.db_path)
+    con.execute("UPDATE ents SET fields_json = NULL WHERE path = ?", (PAY,))    # read by v3.18.0, evicted since
+    con.commit()
+    con.close()
+    env.reg, _ = ce.load(env.sctx, env.idx, ce.empty_memory())
+    par = env.slots(PAY).get("team.parent") or {}
+    check("v3.18.1 final review M4: a card whose fields no walk read (its file evicted) takes them from the same note's "
+          "frontmatter in a local index — its parent is back, not «не прочитано»",
+          par.get("entity") == (env.reg.of("ZorgCore/Teams/team-alpha.md") or {}).get("id") and not par.get("unread"), par)
+    check("…and the local index's copy is no second card", sum(1 for c in env.reg.of(PAY)["cards"] if c["path"] == PAY) == 1,
+          env.reg.of(PAY)["cards"])
 
 # the cascade over the levels of the cards (C6): pure, candidates in, an answer out
 cat = sl.load_catalogue()

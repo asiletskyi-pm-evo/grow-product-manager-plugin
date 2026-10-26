@@ -164,7 +164,7 @@ If the source provides a pre-built summary (like Fireflies) — use it as a star
 
 Mark discrepancies: if a participant is on the calendar but not in the transcript → "invited, did not speak". If a speaker is in the transcript but not on the calendar → "not on invite, but participated".
 
-**Who each participant is (since v3.18.1).** With SHELL, resolve every participant — and every responsible person of an action item — in one call (`references/people-context-protocol.md` → Find a person): `ctx entity --q "<e-mail or name>" --q "<…>" --kind person --skill meeting-processor --slot person.role --slot person.team`, e-mail first. One entity → their role and team come from it, and a link to their card may stand in the notes; several or a near match → keep the name as spoken and list the candidates, never guess a person by a similar name; none → the name as given.
+**Who each participant is (since v3.19.0).** With SHELL, resolve every participant — and every responsible person of an action item — in one call (`references/people-context-protocol.md` → Find a person): `ctx entity --q "<e-mail or name>" --q "<…>" --kind person --skill meeting-processor --slot person.role --slot person.team`, e-mail first. One entity → their role and team come from it, and a link to their card may stand in the notes; several or a near match → keep the name as spoken and list the candidates, never guess a person by a similar name; none → the name as given.
 
 ### M3 — Classify meeting type
 

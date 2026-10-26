@@ -65,7 +65,7 @@ UNREAD_MEMORY = "пам'ять сутностей не прочитано (%s) �
 NOT_APPLIED = "твою відповідь same %s ↔ %s від %s не застосовано: %s"
 NOT_APPLIED_WHY = {"not-same": "її заперечує твоє not-same", "kinds": "картки різних видів"}
 NOT_READ = "Базу не прочитано: %s"
-HINT_SCHEMA = "%s: підказок немає — незнайома схема"        # v3.18.1: a local index whose entities/edges are not (key,
+HINT_SCHEMA = "%s: підказок немає — незнайома схема"        # v3.19.0: a local index whose entities/edges are not (key,
                                                             # kind, path) / (src, dst, kind)
 HINT = "підказка %s"
 HINT_TABLE = "%s: таблиця %s незнайомої схеми — без неї"
@@ -181,7 +181,7 @@ def _card(d, origin):
             "aliases": list(d.get("aliases") or []), "key": d.get("key") or "", "bridges": dict(d.get("bridges") or {}),
             "prefixes": list(d.get("prefixes") or []), "sensitive": bool(d.get("sensitive")), "date": d.get("date") or "",
             "home": True, "fields": None if d.get("fields") is None else dict(d["fields"])}
-                                    # fields: the card's slot fields (v3.18.1); None — the index has not read them yet
+                                    # fields: the card's slot fields (v3.19.0); None — the index has not read them yet
 
 
 def local_cards(sctx, own_paths):
@@ -191,7 +191,7 @@ def local_cards(sctx, own_paths):
     `notes` table with a `path` column) → `індекс <id> має незнайому схему — без нього` (cs_.SCHEMA_NOTE)."""
     cards, notes = [], []
     vaults = sctx.get("vaults") or []
-    own_folded = {p.casefold() for p in own_paths}    # one note under another case on a case-insensitive disk (v3.18.1)
+    own_folded = {p.casefold() for p in own_paths}    # one note under another case on a case-insensitive disk (v3.19.0)
     for src in cs_.sources(sctx["text"], sctx["repos"], ("local",)):
         try:
             con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=cs_.OPEN_S)
@@ -237,7 +237,7 @@ def local_cards(sctx, own_paths):
     return cards, notes
 
 
-# ------------------------------------------------------------------ the hints of a local index (since v3.18.1, plan C10)
+# ------------------------------------------------------------------ the hints of a local index (since v3.19.0, plan C10)
 def _hint_sources(sctx, notes):
     """[(src id, connection, folder, root, has entities, has edges)] of every registered local index that keeps tables of
     its own entities (`entities(key, kind, path)`) or edges (`edges(src, dst, kind)`); one of neither says nothing, one
@@ -481,7 +481,7 @@ class Registry:
     def __init__(self, entities, by_path, pairs, resolver, skipped=()):
         self.entities, self._by_path, self._pairs, self.resolver = entities, by_path, pairs, resolver
         self.skipped = list(skipped)     # your `same` answers that could not be applied: {cards, day, why}
-        self.hints = {}                  # (path, path) → the local index whose `entities` offered the pair (v3.18.1)
+        self.hints = {}                  # (path, path) → the local index whose `entities` offered the pair (v3.19.0)
         self.edge_cache = {}             # a local index's edges, their targets mapped once (local_edges)
 
     def of(self, path):
@@ -676,7 +676,7 @@ def known_prefixes(cards):
     return out
 
 
-def load(sctx, idx, mem):
+def load(sctx, idx, mem, hints=True):
     """(Registry, notes) of a search context and an Index already refreshed: the own index's cards, the cards of the
     local indexes it does not hold, your answers `mem`; `notes` — the lines to show (an index that could not be read, a
     local index that did not answer or has another shape)."""
@@ -688,8 +688,15 @@ def load(sctx, idx, mem):
     metas = {}
     for n in idx.notes():
         metas[N(n["path"])] = {"title": n["title"], "source": n["source"], "sensitive": n["sensitive"], "date": n["date"]}
-    local, lnotes = local_cards(sctx, idx.identity_paths())      # a card the own index has not read yet: the local one
+    unread_fields = {N(d["path"]) for d in own if d.get("fields") is None}
+    local, lnotes = local_cards(sctx, idx.identity_paths() - unread_fields)   # a card the own index has not read yet
     notes.extend(lnotes)
+    by_path = {c["path"]: c for c in local}
+    for d in own:                                   # a card whose slot fields no walk read (its file evicted since the
+        twin = by_path.pop(N(d["path"]), None) if d.get("fields") is None else None   # upgrade): the same note's
+        if twin is not None:                        # frontmatter in a local index gives them (final review M4)
+            d["fields"] = twin["fields"]
+    local = list(by_path.values())
     for c in local:
         metas[c["path"]] = {"title": c["label"], "source": c["source"], "sensitive": c["sensitive"], "date": c["date"],
                             "origin": "local"}
@@ -698,7 +705,8 @@ def load(sctx, idx, mem):
     resolver = Resolver(metas, prefixes)
     reg = build([_card(d, "index") for d in own] + local, mem, resolver)
     reg.unread = unread
-    _hint_pairs(sctx, reg, mem, notes)
+    if hints:
+        _hint_pairs(sctx, reg, mem, notes)
     return reg, notes
 
 
@@ -788,7 +796,7 @@ def _prepare(sctx, store, budget):
 
 def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None, prepared=None, records=None):
     """`ctx entity <request>` (plan C13–C14): {command, query, how, entities, mention, notes, read, pending}. One entity
-    → its cards (identity only), related, maybe, its slots (v3.18.1, ctx_eslots — `slots`: the ids asked for, then
+    → its cards (identity only), related, maybe, its slots (v3.19.0, ctx_eslots — `slots`: the ids asked for, then
     nothing but them: no backlinks, no mentions), backlinks (with a local index's edges, plan C10), mentions (a work
     entity's key); several → at most SEVERAL of them, without backlinks; a Jira key no card holds → its mentions, when
     its prefix is known or a /browse/ link names it; `read` False → no base answered (the caller exits 5). Refreshes the
@@ -807,7 +815,7 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None,
                          for c in e["maybe"]]}
         if len(found) == 1:
             one["slots"] = es.slots_of(reg, idx, e, sl.load_catalogue(), sctx, people=people, only=slots or None,
-                                       records=(lambda ent: records(reg).get(ent["id"], [])) if records else None)
+                                       records=(lambda ent: records(reg).get(ent["id"], {})) if records else None)
             if idx.problem and idx.problem not in notes:   # a busy index: a section's members are missing (review M6)
                 notes.append(idx.problem)
             if slots:
@@ -834,7 +842,7 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None,
 
 
 def run_many(sctx, queries, kind=None, skill=None, store=None, budget=None, slots=None, records=None):
-    """`ctx entity --q A --q B …` (v3.18.1, plan C9c): the index refreshed once, one `run` per request —
+    """`ctx entity --q A --q B …` (v3.19.0, plan C9c): the index refreshed once, one `run` per request —
     {command, requests: [run result], notes, read}."""
     prepared = _prepare(sctx, store, budget)
     reqs = [run(sctx, q, kind=kind, skill=skill, slots=slots, prepared=prepared, records=records) for q in queries]
@@ -843,7 +851,7 @@ def run_many(sctx, queries, kind=None, skill=None, store=None, budget=None, slot
 
 def pairs_result(sctx, kind=None, store=None, budget=None):
     """`ctx entity pairs`: {command, action, pairs: [{a, b[, hint]}], count, notes, read} — every open «maybe the same»
-    pair; `hint` — the local index whose `entities` offered it (v3.18.1)."""
+    pair; `hint` — the local index whose `entities` offered it (v3.19.0)."""
     _, reg, notes, read, _ = _prepare(sctx, store, budget)
     pairs = [dict({"a": _brief(a), "b": _brief(b)}, **({"hint": reg.hints[tuple(_pair(a["path"], b["path"]))]}
                                                        if tuple(_pair(a["path"], b["path"])) in reg.hints else {}))
@@ -899,7 +907,7 @@ def _row(text):
 
 
 def _slot_lines(slots):
-    """The lines of an entity's slots (v3.18.1): a value with its origin and «також», a list one item a line."""
+    """The lines of an entity's slots (v3.19.0): a value with its origin and «також», a list one item a line."""
     lines = []
     for sid, a in slots.items():
         name = SLOT_WORDS.get(sid, sid)
@@ -959,7 +967,7 @@ def render(res):
         lines.append("%s · %s%s" % (e["label"], e["kind"], " · " + e["key"] if e["key"] else ""))
         lines.append("  картки: " + " · ".join("%s · %s%s" % (c["source"], c["path"], " · sensitive" if c["sensitive"] else "")
                                                for c in cards))
-        if e.get("slots") or e.get("slots_asked"):     # v3.18.1: the slots say the identity, with its origins
+        if e.get("slots") or e.get("slots_asked"):     # v3.19.0: the slots say the identity, with its origins
             lines.append("  слоти:")
             lines.extend(_slot_lines(e["slots"]))
             lines.extend("    %s: —" % SLOT_WORDS.get(s_, s_) for s_ in e.get("slots_asked") or () if s_ not in e["slots"])

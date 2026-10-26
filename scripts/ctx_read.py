@@ -300,7 +300,7 @@ def read_view(store, copies, skill, product=None, today=None, manifest=None, rep
     what is left of the caller's cs.read_budget), as a snapshot reads, and each block state and base once (the one _Repos
     of ctx_resolve.slot_context).
 
-    Since v3.18.1 `team.members` of a team record is one line per person (ctx_eslots.read_members) when `entities` is
+    Since v3.19.0 `team.members` of a team record is one line per person (ctx_eslots.read_members) when `entities` is
     given — a function that returns ((registry, index, search context), why), called the first time a team's members are
     read: the record's items, the matched team card's and the members derived from the cards joined by entity; a team
     with no members of its own gets those of its card."""
@@ -365,7 +365,7 @@ def _read_view(store, copies, skill, product, today, manifest, repos, skipped, c
         found = entry_of(slot, field, rec["id"] if rkind in ("product", "team") else None)
         joined = entities is not None and slot == "team.members" and rkind == "team"
         if found is None:
-            if joined:                          # no members of its own: those of its team card (v3.18.1)
+            if joined:                          # no members of its own: those of its team card (v3.19.0)
                 import ctx_eslots as es
                 try:
                     text = es.read_members(None, rec, origin, entities, catalogue)
@@ -373,8 +373,7 @@ def _read_view(store, copies, skill, product, today, manifest, repos, skipped, c
                     text = None
                 if text:
                     got = res["slots"].setdefault(slot, {"shown": [], "also": [], "diverges": []})
-                    if "картки" not in got["shown"]:
-                        got["shown"].append("картки")       # the list came from the cards alone (review M6)
+                    got["from_cards"] = True                # the list came from the cards alone (review M6, final M10)
                     return text, None
             return None, looked(slot, rec, field)
         result = found["result"]
@@ -386,7 +385,7 @@ def _read_view(store, copies, skill, product, today, manifest, repos, skipped, c
             used_part = (slot, result["kind"], c["text"])
             if c.get("ns") and c.get("block") and used_part not in given.get((c["ns"], c["block"]), ()):
                 given.setdefault((c["ns"], c["block"]), []).append(used_part)
-        if joined:                              # one line per person (v3.18.1, plan C8)
+        if joined:                              # one line per person (v3.19.0, plan C8)
             import ctx_eslots as es
             try:
                 return es.read_members(result, rec, origin, entities, catalogue), None

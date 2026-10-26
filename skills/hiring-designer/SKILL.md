@@ -69,7 +69,7 @@ Below ~30% similar experience/goals → decline.
 Assemble the offer = probation & post-probation goals + tasks + conditions + salary/bonuses + team list, presented (not emailed cold). Map to the employer's HR-form fields.
 
 ### Step 6 — On hire → create the profile (Step P)
-When a candidate is hired, first check they are not already in your context (`references/people-context-protocol.md` → Find a person: `ctx entity "<e-mail>" --kind person --skill hiring-designer` — a core's card seeds the new profile with their identity and a link to it), then create their person profile: assign a **curator**, start at **S1 style**, and set the **probation plan = the offer's goals** (plus small 1–2-week deliverables to see early whether they "carry"). Chain to `goal-setter` to commit the probation goals.
+When a candidate is hired, first check they are not already in your context (`references/people-context-protocol.md` → Find a person: `ctx entity "<e-mail>" --kind person --skill hiring-designer` — a core's card seeds the new profile with their identity and a link to it, shown to you as the diff before anything is written — Step P's P-c and P-d), then create their person profile: assign a **curator**, start at **S1 style**, and set the **probation plan = the offer's goals** (plus small 1–2-week deliverables to see early whether they "carry"). Chain to `goal-setter` to commit the probation goals.
 
 ### Step 7 — Feedback + self-improvement
 Per `self-improvement.md`.

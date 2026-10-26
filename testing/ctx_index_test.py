@@ -1749,5 +1749,28 @@ finally:
 check("v3.18.1 Task 2 review M4: a catalogue that cannot be read keeps no field (None — read again once it reads) and is "
       "card_names_version 0, below any real one", unread_fields is None and unread_ver == 0, (unread_fields, unread_ver))
 
+check("v3.18.1 final review M7: a `jira` value that starts with a prefix and words beside it (`PROJ board`) keeps the prefix",
+      ido("ZorgCore/Teams/t.md", {"type": "team", "jira": "PROJ board"}, "T")["prefixes"] == ["PROJ"]
+      and ido("ZorgCore/Teams/t.md", {"type": "team", "jira": "PROJ (payments)"}, "T")["prefixes"] == ["PROJ"], "")
+saved = dict(ctx_index._CARD_NAMES)
+real_load = ctx_index.sl.load_catalogue
+with tempfile.TemporaryDirectory() as d:
+    env, idx, scope = entity_env(d)
+    try:
+        ctx_index._CARD_NAMES.clear()
+        ctx_index.sl.load_catalogue = lambda *a_: (_ for _ in ()).throw(ValueError("cannot read"))
+        con = sqlite3.connect(idx.db_path)
+        con.execute("UPDATE ents SET fields_json = NULL WHERE kind != ''")   # rows a v3.18.0 build left
+        con.commit()
+        con.close()
+        _, first = counting_refresh(env, idx, scope)        # read once — with no catalogue, still no fields (NULL)
+        _, opened = counting_refresh(env, idx, scope)
+    finally:
+        ctx_index.sl.load_catalogue = real_load
+        ctx_index._CARD_NAMES.clear()
+        ctx_index._CARD_NAMES.update(saved)
+    check("v3.18.1 final review M3: while the catalogue cannot be read, a card with no fields is not read again on every "
+          "walk", first == [] and opened == [], (len(first), opened[:3]))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

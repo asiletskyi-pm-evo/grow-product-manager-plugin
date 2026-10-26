@@ -42,7 +42,7 @@ Per `local-context-protocol.md`.
 > a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step P — Person context
-Per `people-context-protocol.md`. Find the person first (`references/people-context-protocol.md` → Find a person, since v3.18.1: `ctx entity "<e-mail or name>" --kind person --skill one-on-one`; several → ask, never pick); their profile is the `people_dir` card of that entity. Load the profile: `d_type`, active goals, `one_on_one` history + last follow-up, `gtd_index` trend, `signals`. If no profile — offer to create one.
+Per `people-context-protocol.md`. Find the person first (`references/people-context-protocol.md` → Find a person, since v3.19.0: `ctx entity "<e-mail or name>" --kind person --skill one-on-one`; several → ask, never pick); their profile is the `people_dir` card of that entity. Load the profile: `d_type`, active goals, `one_on_one` history + last follow-up, `gtd_index` trend, `signals`. If no profile — offer to create one.
 
 ### Step T — Template resolution
 Per `template-protocol.md`: `artifact_type: one-on-one-notes` for prepare/analyze notes, `followup-arcv` for the actionable follow-up. Resolve the built-in templates; escape hatch "no template" uses the internal structure.

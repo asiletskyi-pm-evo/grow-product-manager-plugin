@@ -12,14 +12,14 @@
 #   names     headings and field names the slot answers to, English and Ukrainian, matched without regard to case;
 #             the first is the name the manifest uses
 #   about     one line, in Ukrainian, on what the slot holds — it is shown beside the text when the slot is explained
-#   answered_on  (since v3.18.1) who answers the slot: `records` — the records of the store and the blocks in them (the
+#   answered_on  (since v3.19.0) who answers the slot: `records` — the records of the store and the blocks in them (the
 #             default); `cards` — the cards of an entity alone (`ctx entity`, scripts/ctx_eslots.py), so `ctx read`,
 #             `ctx explain`, `ctx validate` and `ctx slot …` do not know it; `both`. A card-only slot's record is the
 #             kind of card it is looked for on: person | team | mission | module | metric
-#   card_names  (since v3.18.1) more names, looked for on cards only (a frontmatter field or a section heading) — a name
+#   card_names  (since v3.19.0) more names, looked for on cards only (a frontmatter field or a section heading) — a name
 #             that would find the wrong block in a record (`Люди` over a table of roles) goes here, not in `names`
 schema: context-slots/1
-card_names_version: 1         # since v3.18.1: raise it whenever the names (names, card_names) or the kind of a slot
+card_names_version: 1         # since v3.19.0: raise it whenever the names (names, card_names) or the kind of a slot
                               # answered on cards change — the index then reads the cards once more (never back down)
 slots:
   product.description:

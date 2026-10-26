@@ -98,7 +98,7 @@ NEAR_VERSION = 2                    # the rules of near_key (meta `near_version`
                                     # again from its own sections (v3.16.2: a list of links is content)
 META_VERSION = 4                    # the rules of note_meta (meta `meta_version`): an index of other rules reads its
                                     # downloaded files once more (v3.17.0: a people type or a Step-P field is sensitive;
-                                    # v3.18.0: the identity, link and mention rows of every note; v3.18.1: a card's slot
+                                    # v3.18.0: the identity, link and mention rows of every note; v3.19.0: a card's slot
                                     # fields, no link or mention in code, Jira prefixes without JQL words, a work key's
                                     # order). The catalogue's card_names_version the fields were kept by is meta
                                     # `slot_names`: a higher one (names changed) reads the cards alone once more
@@ -112,9 +112,10 @@ _PREFIX = re.compile(r"(?<![A-Za-z0-9])[A-Z][A-Z0-9]{1,9}(?![A-Za-z0-9])")
 _PROJECT = re.compile(r"\bproject\s*(?:=|\bin\b)\s*\(?([^)\n]*?)(?:\)|\s+(?:and|or|order)\b|$)", re.I | re.M)
                                     # the projects a JQL names — never those it leaves out (`!=`, `not in`)
 _PREFIX_LIST = re.compile(r"\s*[A-Z][A-Z0-9]{1,9}(?:\s*[,;/ ]\s*[A-Z][A-Z0-9]{1,9})*\s*")
+_LEAD_PREFIX = re.compile(r"^([A-Z][A-Z0-9]{1,9})(?=\s+[^\s=!])(?!\s+(?:in|not|is|was)\b)")
 _PROJECTS_URL = re.compile(r"/projects/([A-Z][A-Z0-9]{1,9})(?![A-Za-z0-9])")
 JQL_WORDS = frozenset(("AND", "OR", "NOT", "IN", "IS", "EMPTY", "NULL", "ORDER", "BY", "ASC", "DESC", "WAS", "CHANGED",
-                       "DONE", "TODO", "OPEN", "CLOSED", "CURRENTUSER"))   # a JQL word is never a project (v3.18.1)
+                       "DONE", "TODO", "OPEN", "CLOSED", "CURRENTUSER"))   # a JQL word is never a project (v3.19.0)
 WORK_KEY_FIELDS = ("jira", "key", "issue", "jirakey", "issuekey")   # a work card's own key fields (card_norm), first
 EMAIL_FIELDS = frozenset(("email", "emails", "mail", "emailaliases", "emailalias", "emailaddress", "emailaddresses"))
                                     # a card's own address fields (their names without `-` and `_`): `manager_email`
@@ -153,7 +154,7 @@ CREATE INDEX IF NOT EXISTS mentions_note ON mentions(note_id);
                                     # (plan C11) — the path too, as SQLite gives a removed note's id to the next one
 ENTITY_TABLES = ("ents", "links", "mentions")
 ENTITY_COLS = ("kind", "label", "emails_json", "team", "role", "slug", "aliases_json", "key", "bridges_json",
-               "prefixes_json", "fields_json")       # fields_json since v3.18.1: an earlier build's table gets it in place
+               "prefixes_json", "fields_json")       # fields_json since v3.19.0: an earlier build's table gets it in place
 NOTE_COLS = ("path", "source", "title", "type", "product", "status", "date", "ttl_date", "confluence_id",
              "aliases_json", "tags_json", "sensitive", "hub", "version_key", "links_json", "hash", "near", "mtime",
              "size")
@@ -188,7 +189,7 @@ def Root(source, path, vault=""):
 
 @functools.lru_cache(maxsize=8192)
 def _real_dir(d):
-    """A folder's path with its links resolved — once per folder in a process (v3.18.1: a local index of thousands of
+    """A folder's path with its links resolved — once per folder in a process (v3.19.0: a local index of thousands of
     notes asked realpath of each, a stat of every part of every path)."""
     return N(os.path.realpath(d))
 
@@ -691,14 +692,14 @@ def card_field_names():
 
 
 def slot_names_version():
-    """The catalogue's card_names_version (meta `slot_names`, v3.18.1): when it grows, the cards are read once more —
+    """The catalogue's card_names_version (meta `slot_names`, v3.19.0): when it grows, the cards are read once more —
     a number, never a hash, so two builds of different catalogues on one index do not read the vault again in turn."""
     card_field_names()
     return _CARD_NAMES.get("version", 1)
 
 
 def _slot_fields(kind, fm, names):
-    """{slot id: value} of a card's frontmatter fields a slot of its kind is named by (v3.18.1, plan C2): a list slot's
+    """{slot id: value} of a card's frontmatter fields a slot of its kind is named by (v3.19.0, plan C2): a list slot's
     texts (_strings), a value slot's first text; for each slot the first field in the catalogue's order of its names.
     Never a judgement field (STEP_P_FIELDS), never a map."""
     want = names.get(kind) or {}
@@ -735,7 +736,7 @@ def _slot_kinds():
 
 
 def _prefixes(fm):
-    """The Jira project prefixes of a team's or a mission's `…jira…` fields (v3.18.1, v3.18.0 minor M2): a value that is
+    """The Jira project prefixes of a team's or a mission's `…jira…` fields (v3.19.0, v3.18.0 minor M2): a value that is
     list of prefix-shaped tokens alone (`PROJ`, `PROJ, QQ`), the prefix of a key, a `/projects/X` link, the projects of
     `project = X` / `project in (X, Y)` (never those `!=` or `not in` leave out) — never a JQL word."""
     out = set()
@@ -746,6 +747,9 @@ def _prefixes(fm):
             t = N(s_).strip()
             if _PREFIX_LIST.fullmatch(t):                # `PROJ`, `PROJ, QQ`, `PROJ QQ`
                 out.update(_PREFIX.findall(t))
+            lead = _LEAD_PREFIX.match(t)                 # `PROJ board`, `PROJ (payments)` — its first token
+            if lead:
+                out.add(lead.group(1))
             out.update(m.group(1) for m in ISSUE_KEY.finditer(t))
             out.update(_PROJECTS_URL.findall(t))         # …/projects/PROJ/board
             for m in _PROJECT.finditer(t):
@@ -754,7 +758,7 @@ def _prefixes(fm):
 
 
 def _work_key(rel, fm, title):
-    """A work card's Jira key (v3.18.1, v3.18.0 minor M7): its own key field (WORK_KEY_FIELDS), else the key of its file
+    """A work card's Jira key (v3.19.0, v3.18.0 minor M7): its own key field (WORK_KEY_FIELDS), else the key of its file
     name when the name holds exactly one, else — only when the name holds none — the one key of its title. A name or a
     title of two keys («GPT-4 rollout PROJ-77») gives none."""
     for k, v in fm.items():
@@ -779,7 +783,7 @@ def identity_of(rel, fm, title, names=None):
     `emails`: the e-mail-shaped texts of the card's own address fields (EMAIL_FIELDS), lower case; `role`: `role`, else
     `position`; `key`: a work card's Jira key (_work_key); `bridges`: {field: target} of every field that
     is exactly one wiki link, a judgement field (STEP_P_FIELDS) never; `prefixes`: the Jira project prefixes a team's or a
-    mission's `…jira…` fields name (_prefixes); `fields` (since v3.18.1): {slot id: value} of the fields a slot of the
+    mission's `…jira…` fields name (_prefixes); `fields` (since v3.19.0): {slot id: value} of the fields a slot of the
     card's kind is named by (`names`: card_field_names() by default)."""
     fm = fm if isinstance(fm, dict) else {}
     types = [x.lower() for x in _strings(fm.get("type"))]
@@ -815,7 +819,7 @@ _QUOTE = re.compile(r"^[ \t]{0,3}(?:>[ \t]?)+")
 
 def without_code(text):
     """The text without its fenced blocks (``` or ~~~, their lines blanked) and its inline code spans — where a link or a
-    key is an example, not a link or a mention (v3.18.1, v3.18.0 minor M6). Lines keep their places."""
+    key is an example, not a link or a mention (v3.19.0, v3.18.0 minor M6). Lines keep their places."""
     out, fence = [], None
     for line in (text or "").split("\n"):
         bare = _QUOTE.sub("", line)                     # a fence in a callout or a quote too
@@ -1145,7 +1149,7 @@ class Index:
                 if row and row[0] == SCHEMA and set(NOTE_COLS) <= cols:    # a column short (an earlier build): rebuilt
                     con.executescript(ENTITY_DDL)       # an earlier build's file gets the tables in place (v3.18.0)
                     if "fields_json" not in {r[1] for r in con.execute("PRAGMA table_info(ents)").fetchall()}:
-                        con.execute("ALTER TABLE ents ADD COLUMN fields_json TEXT")   # v3.18.1, in place
+                        con.execute("ALTER TABLE ents ADD COLUMN fields_json TEXT")   # v3.19.0, in place
                         con.commit()
                     return con, False
             except sqlite3.DatabaseError as e:
@@ -1201,7 +1205,7 @@ class Index:
     def _names_again(con):
         """The cards of an index whose slot fields were kept by an older card_names_version (meta `slot_names`, none: 0)
         are marked unread (`fields_json` NULL) — the walk reads those files alone again — then the version; a later
-        catalogue's fields are left alone, so two builds never read the cards again and again in turn (v3.18.1). The
+        catalogue's fields are left alone, so two builds never read the cards again and again in turn (v3.19.0). The
         version is written before the walk: an older build that refreshes first fills those rows by its own names, and
         this build does not read them again until they change — a trade for never looping (review M5)."""
         row = con.execute("SELECT value FROM meta WHERE key='slot_names'").fetchone()
@@ -1449,7 +1453,7 @@ class Index:
                     except ValueError:
                         v = None
                     d[c[:-5]] = v if v is not None or c == "fields_json" else ({} if c == "bridges_json" else [])
-                                                 # fields None: a row whose slot fields no walk of v3.18.1 read yet
+                                                 # fields None: a row whose slot fields no walk of v3.19.0 read yet
                 else:
                     d[c] = v or ""
             out.append(d)
@@ -1573,10 +1577,13 @@ class _Walk:
             con.execute("DELETE FROM %s WHERE note_id NOT IN (SELECT id FROM notes)" % tb)
         self.stale_ents = {r[0] for r in con.execute(
             "SELECT n.id FROM notes n LEFT JOIN ents e ON e.note_id = n.id "
-            "WHERE e.note_id IS NULL OR e.hash IS NOT n.hash OR e.path IS NOT n.path OR e.fields_json IS NULL")}
+            "WHERE e.note_id IS NULL OR e.hash IS NOT n.hash OR e.path IS NOT n.path%s"
+            % (" OR (e.fields_json IS NULL AND e.kind != '')" if slot_names_version() else ""))}
+                                                     # a catalogue that cannot be read (version 0) keeps no field:
+                                                     # its NULL is no reason to read the cards on every walk
                                                      # read again whatever their mtime: no identity row, or one an older
                                                      # build left behind when it changed the note (v3.18.0 wrote no
-                                                     # slot fields: such a row is read again too, v3.18.1)
+                                                     # slot fields: such a row is read again too, v3.19.0)
 
     def _outside(self, path):
         """Is this index name one of a root outside every vault (`@<its source>/…`)? A vault's own `@Name.md` is not."""
