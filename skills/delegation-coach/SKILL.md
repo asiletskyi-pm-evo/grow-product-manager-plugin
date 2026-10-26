@@ -51,7 +51,7 @@ One row per activity:
 - Show the **level distribution** (% of activities at each level) — a low average = the skill has room to grow. Flag every level 1–4 routine item as a push-down candidate.
 
 ### Step 3 — Pick candidates (Step P)
-For each push-down candidate, propose a delegate from team profiles — the team's people by `ctx entity "<team>" --slot team.members` (`references/people-context-protocol.md` → Find a person), each one's profile as Step P finds it:
+For each push-down candidate, propose a delegate from team profiles — the team's people by `ctx entity "<team>" --kind team --skill delegation-coach --slot team.members` (`references/people-context-protocol.md` → Find a person), each one's profile as Step P finds it:
 - Read `d_type` and `gtd_index`. **Levels 5–7 only for consistently high GTD.** A D4 can take a full hand-off; a D1/D2 needs the S1→S2 immersion first.
 - If **no one to delegate to** → compute hiring/outsourcing ROI (`roi-frameworks.md`) and surface the argument ("not hiring" isn't a saving if it blocks bigger work).
 

@@ -93,14 +93,14 @@ Only `name`, `role`, and `updated` are strictly required. Everything else is fil
 One person may have several cards — your note in `people_dir`, a core's registry card, a card another team keeps that a local index of yours holds — and two people may share a name. Every skill that works with a person finds them the same way: the People contour through Step P, and `meeting-processor`, `context-navigator`, `product-reporter`, `sprint-planning`, `task-creator`, `focus-advisor`, `decision-log`, `plugin-configurator`. With SHELL:
 
 1. **By e-mail first**, else by the name the user or the source gives: `python3 "<plugin root>/scripts/ctx.py" entity "<e-mail or name>" --kind person --skill <your name> --slot person.role --slot person.team --slot person.email`. Several people at once — a meeting's participants, a sprint's assignees — in one call: `--q "<a>" --q "<b>" …` (one block per person).
-2. **One entity** → that person: their cards with their sources, and their role, team and e-mail, each with where it comes from (`context-protocol.md` §5h). Their **profile** is the card of your layer in `people_dir` among those cards; only a People-contour skill reads it (`data-policy.md`).
+2. **One entity** → that person: their cards with their sources, and their role, team and e-mail, each with where it comes from (`context-protocol.md` §5h). Their **profile** is the card of your layer in `people_dir` among those cards. Who reads which of its fields is unchanged: a People-contour skill reads it whole; a cross-contour reader (below: `task-creator`, `sprint-planning`, `focus-advisor`) only its listed fields, read-mostly; no other skill reads it (`data-policy.md`).
 3. **Several** (`кілька сутностей`) → show them and ask; never pick one. `схоже на «…» — не точний збіг` is no match either: ask. A `можливо той самий` line → say it once; the user settles it with `ctx entity same|not-same`.
 4. **None** (`Не знаю такої сутності`) → the person is not in your context: say so and go on with the name as given; a People-contour skill offers a profile (P-c).
-5. **Only a core's card** (no card in `people_dir`) → a People-contour skill offers a profile seeded with the identity the answer gives — name, e-mail, team, role — and one field that is exactly one link to that card (`core_card: "[[<its path>]]"`), so `ctx entity` joins the two by its shape; the write is gated (P-d).
-6. **A team's people** → `ctx entity "<team>" --slot team.members`: one line per person, with where each comes from; without SHELL, `ctx read`'s `team.members`, joined the same way. Who is in a team is never guessed from a folder of profiles.
+5. **Only a core's card** (no card in `people_dir`) → a People-contour skill offers a profile seeded with the identity the answer gives — name, e-mail, team, role — and one field that is exactly one link to that card (`core_card: "[[<its path>]]"`), so `ctx entity` joins the two by its shape; the write is gated (P-d). The offer is P-c's, with the seed shown as the diff the user confirms.
+6. **A team's people** → `ctx entity "<team>" --slot team.members`: one line per person, with where each comes from — the same composition as `ctx read`'s `team.members` (your team record's members and the team's cards, joined); for a person found only by derivation, their role and e-mail by `ctx entity --q "<a>" --q "<b>" --kind person --slot person.role --slot person.email`. Without SHELL: the team record's Members as written — not joined, so a person written twice is still twice. Who is in a team is never guessed from a folder of profiles.
 7. **Without SHELL**, or when `ctx entity` exits 3 or 5 → as before: the profile by its exact slug, then a fuzzy name match against the roster — and say in one line that the person was matched by name only.
 
-The answer never holds a judgement field; outside the People contour a person is their identity alone (name, e-mail, team, role, card path).
+The `ctx entity` answer never holds a judgement field; outside the People contour it gives a person's identity alone (name, e-mail, team, role, card path) — what a cross-contour reader takes from the profile itself is its listed fields, below.
 
 ---
 
@@ -126,6 +126,7 @@ Do not hard-stop. Offer:
 
 - **Create** → write a minimal profile (`name`, `role`, `updated`, plus whatever the current request already reveals), add a roster line, then continue.
 - **Skip** → continue in-session without persistence; warn that cross-session accumulation won't happen.
+- **Seed (since v3.18.1)** → when **Find a person** gave a core's card and no card of yours, the minimal profile is seeded with that answer's identity — name, e-mail, team, role — and `core_card: "[[<its path>]]"`, shown as the diff before it is written (P-d's gate).
 
 ### P-d. Update at the end (MANDATORY when the profile exists)
 

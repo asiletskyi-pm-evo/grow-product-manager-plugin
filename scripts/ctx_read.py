@@ -367,8 +367,14 @@ def _read_view(store, copies, skill, product, today, manifest, repos, skipped, c
         if found is None:
             if joined:                          # no members of its own: those of its team card (v3.18.1)
                 import ctx_eslots as es
-                text = es.read_members(None, rec, origin, entities, catalogue)
+                try:
+                    text = es.read_members(None, rec, origin, entities, catalogue)
+                except Exception:  # noqa: BLE001 — a members list joined is not worth a read
+                    text = None
                 if text:
+                    got = res["slots"].setdefault(slot, {"shown": [], "also": [], "diverges": []})
+                    if "картки" not in got["shown"]:
+                        got["shown"].append("картки")       # the list came from the cards alone (review M6)
                     return text, None
             return None, looked(slot, rec, field)
         result = found["result"]
@@ -382,7 +388,10 @@ def _read_view(store, copies, skill, product, today, manifest, repos, skipped, c
                 given.setdefault((c["ns"], c["block"]), []).append(used_part)
         if joined:                              # one line per person (v3.18.1, plan C8)
             import ctx_eslots as es
-            return es.read_members(result, rec, origin, entities, catalogue), None
+            try:
+                return es.read_members(result, rec, origin, entities, catalogue), None
+            except Exception as e:  # noqa: BLE001 — a members list joined is not worth a read: printed as before
+                return rv.render_slot(result, origin) + es.NOT_JOINED % cc.clip(str(e), 120) + "\n", None
         return rv.render_slot(result, origin), None
 
     def present(rkind, rec, name):

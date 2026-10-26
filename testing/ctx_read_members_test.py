@@ -241,5 +241,67 @@ with tempfile.TemporaryDirectory() as d:
           "your record's items too (Ann Other), one line per person", rc2 == 0 and len(ent_items) == len(read_items)
           and any("Ann Other" in x for x in ent_items), (read_items, ent_items))
 
+# --- v3.18.1 Task 4–5 review fixes
+PROSE = TEAM.replace("#### Members\n\n", "#### Members\n\nCore squad of five; contractors listed separately.\n\n##### Backend\n\n"
+                     ).replace("- Ann Other — QA\n", "##### Contractors\n\n- Ann Other — QA\n\n_Dee on leave until Nov._\n")
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d, team=PROSE)
+    rc, out, _ = env.cli("read", "--skill", "task-creator")
+    zp = team_part(out, "Zorg Pay")
+    check("v3.18.1 Task 4 review I1: no line of the section is lost — its prose, sub-headings and notes stay, after the "
+          "joined list", all(x in zp for x in ("Core squad of five; contractors listed separately.", "##### Backend",
+                                               "##### Contractors", "_Dee on leave until Nov._")) and "Rhea One" in zp, zp[-1200:])
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d, team=TEAM.replace("### Team: Zorg Pay (ZP)", "### Team: Checkout (Zorg Pay)"))
+    rc, out, _ = env.cli("read", "--skill", "task-creator")
+    co = team_part(out, "Checkout")
+    check("v3.18.1 Task 4 review I2: a team named in brackets («Checkout (Zorg Pay)») is not this record's card — "
+          "«не зіставлено»", "не зіставлено" in co and "Fay Four" not in co, co[-700:])
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    write(os.path.join(env.vault, "Notes", "Teams", "Zorg Pay.md"), "---\ntype: team\n---\n# Zorg Pay\n")
+    sctx = cs_.context_for(env.home, env.text, store_root=os.path.join(env.vault, "Notes", "_System", "context"))
+    ci.Index(env.home).refresh(sctx["roots"], sctx["store_rel"], sctx["blocks_rels"])
+    rc, out, _ = env.cli("read", "--skill", "task-creator")
+    zp = team_part(out, "Zorg Pay")
+    check("v3.18.1 Task 4 review M8: two cards of one team name — «кілька карток» says what to do: `ctx entity same`",
+          "кілька карток" in zp and "ctx entity same" in zp, zp[-600:])
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    text = read(env.ctx)
+    write(env.ctx, text.split("## Obsidian Vaults (Optional)")[0])      # no vault: nothing to index
+    rc, out, _ = env.cli("read", "--skill", "task-creator", "--store", os.path.join(env.vault, "Notes", "_System", "context"))
+    check("v3.18.1 Task 4 review M1: no vault and no index — the members as before, no «ctx index rebuild» line",
+          rc == 0 and "ctx index rebuild" not in out and "Ann Other — QA" in out, out[-500:])
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    real = es.read_members
+    es.read_members = lambda *a_, **k_: (_ for _ in ()).throw(RuntimeError("boom"))
+    try:
+        rc, out = env.inproc("read", "--skill", "task-creator")
+    finally:
+        es.read_members = real
+    check("v3.18.1 Task 4 review M3: a failure of the join never fails the read — the members as before and «пункти не "
+          "склеєно»", rc == 0 and "Ann Other — QA" in out and "пункти не склеєно" in out, (rc, out[-500:]))
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    sctx = cs_.context_for(env.home, env.text, store_root=os.path.join(env.vault, "Notes", "_System", "context"))
+    idx = ci.Index(env.home)
+    reg, _ = ce.load(sctx, idx, ce.empty_memory())
+    rule = {"level": "rule", "source": "zorg-core", "ns": "zorg-core", "block": "team", "version": "0.2", "rank": 500,
+            "text": "#### Members\n\n- [[Notes/People/rhea|Rhea One]] — PM\n", "record": "team.zorg-pay-zp", "how": "marker",
+            "placed": True}
+    result = {"slot": "team.members", "kind": "list", "shown": [rule], "note": None, "also": [], "diverges": [],
+              "why": rv.WHY_RULE, "decision": None, "prefer": "mine"}
+    text = es.read_members(result, {"id": "team.zorg-pay-zp", "title": "Team: Zorg Pay (ZP)"}, FakeOrigin(),
+                           lambda: ((reg, idx, sctx), None), sl.load_catalogue())
+    check("v3.18.1 Task 4 review M4: «з карток ще N» counts only the people the rule does not list (Rhea is in it)",
+          "з карток ще 1" in text, text)
+    result["why"], result["prefer"] = "перевага: all", "all"
+    text = es.read_members(result, {"id": "team.zorg-pay-zp", "title": "Team: Zorg Pay (ZP)"}, FakeOrigin(),
+                           lambda: ((reg, idx, sctx), None), sl.load_catalogue())
+    check("v3.18.1 Task 4 review M5: `prefer all` shows every candidate in full, as before — no join",
+          "склеєно за сутністю" not in text and "Rhea One" in text, text)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

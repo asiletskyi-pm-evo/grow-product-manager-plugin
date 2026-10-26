@@ -22,6 +22,8 @@ Plan `plans/2026-10-23-context-v3.18.1.md`. Each check failed before its code. F
 
 - **TC-ctx-3181-acceptance** | `python3 testing/ctx_read_members_test.py`, `python3 testing/ctx_eslots_test.py` | expected (findings of the acceptance on the user's data): your note a local index gives while iCloud keeps its file is `mine` and wins over the core; another team's card of a like name in a local index does not keep a record from its core card (the exact name, then an index's card); a row in another spelling of a person the list's other sources name is one line with them, `схоже ім'я`; `ctx entity <team> --slot team.members` and `ctx read` give one composition (the record's items too); `_spellings` resolves a folder once
 
+- **TC-ctx-3181-read-review** | `python3 testing/ctx_read_members_test.py` | expected (Task 4–5 review): a members section's prose, sub-headings and notes stay after the joined list; «Checkout (Zorg Pay)» is not Zorg Pay's record (the brackets alone never match); two cards of one team name say `ctx entity same`; no vault — the list as before, no `ctx index rebuild` line; a failure of the join never fails the read; `з карток ще N` counts the people a rule does not list; `prefer all` shows every candidate in full; people-context-protocol: who reads which profile fields (People whole, cross-contour readers their listed fields), the seed of P-c, without SHELL the Members as written
+
 ## Release v3.18.0 — who is who (added 2026-10-22)
 
 Plan `plans/2026-10-22-context-v3.18.0.md`. Each check failed before its code. Fixture: `testing/fixtures/entity/` (Zorg people, teams, a mission, an epic and its pages).

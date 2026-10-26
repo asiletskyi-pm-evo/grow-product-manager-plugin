@@ -53,7 +53,7 @@ Which sprint (default: next). **Sources:** (a) backlog; (b) approved quarterly r
 Derive from the active quarterly roadmap + project arcs (`project-planning`): which directions we pull this sprint and why. **Gate.**
 
 ### Step 3 — Per-sprint per-member capacity
-The members are the team's people by `ctx entity "<team>" --slot team.members` (`references/people-context-protocol.md` → Find a person; without SHELL, `ctx read`'s `team.members`, joined the same way) — one line per person, so nobody is counted twice. Gather from the PM a forecast of **working days / capacity for each person** (time off, partial days, parallel directions) — `capacity-model` sec. 3. **Gate.**
+The members are the team's people by `ctx entity "<team>" --slot team.members` (`references/people-context-protocol.md` → Find a person) — one line per person, your team record's members and the cards' joined, so nobody is counted twice; without SHELL, the team record's Members as written (not joined). Gather from the PM a forecast of **working days / capacity for each person** (time off, partial days, parallel directions) — `capacity-model` sec. 3. **Gate.**
 
 ### Step 3b — Carryover-risk + GTD-index (last sprint)
 **Delegate `product-reporter` `sprint-review`+`member-review`** for committed vs done and per-person throughput. Compute carryover risk (`capacity-model` sec. 3: capacity ÷ remainder) → reduce load on at-risk members, flag chronic overload.

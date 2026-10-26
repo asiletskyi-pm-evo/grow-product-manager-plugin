@@ -257,7 +257,8 @@ def record_candidates(shown):
     """The candidates a store's team record gives team.members (ctx_resolve's `shown`) as the join takes them: your text
     `mine`, a bound block its repository's; its items are the list's lines, kept as text when they name no card."""
     return [dict(c, card_source=c["source"] if c.get("level") != "mine" else "own", path=c.get("record") or "",
-                 date=c.get("checked") or "", items=split_items(c["text"]), strict=False) for c in shown or ()]
+                 date=c.get("checked") or "", items=split_items(c["text"]), strict=False, from_record=True)
+            for c in shown or ()]
 
 
 def _origin(c, how=None):
@@ -266,6 +267,8 @@ def _origin(c, how=None):
         d["how"] = how
     if c.get("contested"):                  # derived from one side of a value two repositories dispute (review M2)
         d["contested"] = True
+    if c.get("from_record"):                # a store record's or its block's item (ctx read), not a card's
+        d["record"] = True
     return d
 
 
@@ -375,14 +378,16 @@ _TEAM_TITLE = re.compile(r"^\s*team\s*:\s*", re.I)
 
 
 def team_entity(reg, title):
-    """(entity, why) of the team card a store's team record is: its name, the name without its `(…)`, the short name in
-    it — by a file name, title, slug or alias (exactly), else by the team's normalised names; exactly one team, else
-    (None, why). A record is no card: this matches, it never merges (plan C8)."""
+    """(entity, why) of the team card a store's team record is: its name, else the name without its `(…)` — never what
+    the brackets hold alone (a parent team or a product) — by a file name, title, slug or alias (exactly), else by the
+    team's normalised names; of several, the one card of an index before another team's card in a local index; exactly
+    one team, else (None, why; two cards: the `ctx entity same` that would make them one). A record is no card: this
+    matches, it never merges (plan C8)."""
     name = _TEAM_TITLE.sub("", N(title or "")).strip()
     tries = [name]
     m = re.match(r"^(.*?)\s*\(([^)]*)\)\s*$", name)
     if m:
-        tries += [m.group(1).strip(), m.group(2).strip()]
+        tries.append(m.group(1).strip())    # never the bracket alone: «Checkout (Zorg Pay)» is no Zorg Pay (review I2)
     by_how = {"name": [], "similar": []}
     for q in [t for t in tries if t]:
         found, how = reg.find(q, "team")
@@ -396,7 +401,9 @@ def team_entity(reg, title):
         if len(indexed) == 1:                           # a core's or your card before another team's in a local index
             return reg.of(indexed[0]), None
         if ids:
-            return None, "кілька карток: " + ", ".join(sorted(ids)[:5])
+            ids = sorted(ids)
+            return None, "кілька карток: " + ", ".join(ids[:5]) + (
+                " — це одна команда? ctx entity same \"%s\" \"%s\"" % (ids[0], ids[1]) if len(ids) == 2 else "")
     return None, "картки такої команди немає"
 
 
@@ -411,12 +418,19 @@ def _clean_row(text):
     return t
 
 
-def member_lines(items, reg, idx, cat, sctx, limit=None):
+DERIVED_SHOWN = 20                      # the people only derivation names, at most, in a joined list (review M7)
+
+
+def member_lines(items, reg, idx, cat, sctx, limit=None, team=None):
     """One line per item: the strongest source's row (else the label, and for a person found only by derivation their
     role and e-mail), every source, `за назвою` for a join by name, `лише виведене`; a row another source writes
     differently is «також»."""
-    out = []
+    out, derived = [], 0
     for it in items[:limit] if limit else items:
+        if it.get("derived_only"):
+            derived += 1
+            if derived > DERIVED_SHOWN:
+                continue
         rows = sorted(it.get("rows") or (), key=lambda r: LEVEL_RANK.get(r["level"], 9))
         head = _clean_row(rows[0]["text"]) if rows else it["label"]
         if not rows and it.get("entity"):
@@ -437,47 +451,97 @@ def member_lines(items, reg, idx, cat, sctx, limit=None):
             t = _clean_row(r["text"])
             if t != head:
                 out.append("  також: %s (%s)" % (t, _who_short(r)))
+    if derived > DERIVED_SHOWN:
+        out.append("- ще %d лише виведених — ctx entity \"%s\" --slot team.members" % (derived - DERIVED_SHOWN, team or "<команда>"))
     if limit and len(items) > limit:
         out.append("- ще %d" % (len(items) - limit))
     return out
 
 
+def _non_items(text):
+    """The lines of a members section that are no item — its prose, sub-headings, notes — in their order (the section's
+    own heading aside): a joined list never loses them (Task 4 review I1)."""
+    lines = (text or "").split("\n")
+    items = set(split_items(text))
+    out = []
+    for k, line in enumerate(lines):
+        s_ = line.strip()
+        if not s_ or (k == next((i for i, x in enumerate(lines) if x.strip()), -1) and s_.startswith("#")):
+            continue
+        if _TABLE_RULE.match(s_) or s_ in items or _MARKER.sub("", line).strip() in items:
+            continue
+        if "|" in s_ and k + 1 < len(lines) and _TABLE_RULE.match(lines[k + 1].strip()):
+            continue                                    # a table's header row
+        out.append(line.rstrip())
+    return out
+
+
+_SHARED = {}
+
+
+def _slots_for(reg, idx, cat, sctx):
+    """One _Slots for every team record of one read (Task 4 review M7): each person's team is decided once."""
+    if _SHARED.get("reg") is not reg:
+        _SHARED.update(reg=reg, s=_Slots(reg, idx, cat, sctx))
+    return _SHARED["s"]
+
+
+def _block_marks(c):
+    return ([rv.BY_NAME_MARK] if c.get("how") == rv.BY_NAME else []) + ([rv.EDITED_MARK] if c.get("edited") else []) \
+        + ([rv.RULE_MARK] if c.get("level") == "rule" else [])
+
+
 def read_members(result, rec, origin, entities, cat):
     """The text `ctx read` prints for team.members of the record `rec` (plan C8, C8a): the origin line of each source,
     then one line per person — the record's items (yours, a bound block's), the matched team card's and the derived ones
-    joined by entity. A core rule or your `prefer repo:` print as before, with `з карток ще N`; a busy or unbuilt index:
-    as before, with `пункти не склеєно: …`; a record no team card matches: its own items joined, with `команду «…» не
-    зіставлено з карткою: …`. `result` — ctx_resolve.resolve's answer (None: the record has no candidate); `entities()`
-    gives ((registry, index, search context), why); `origin` — ctx_read's _Origin."""
+    joined by entity —, then each source's lines that are no item (prose, sub-headings, notes) as they are. A core rule,
+    your `prefer repo:` or `prefer all` print as before (a rule and `repo:` with `з карток ще N` — the people the cards
+    name and the list does not); a busy index: as before with `пункти не склеєно: …`; no index to join by (no vault):
+    as before; a record no team card matches: its own items joined, with `команду «…» не зіставлено з карткою: …`.
+    `result` — ctx_resolve.resolve's answer (None: the record has no candidate); `entities()` gives ((registry, index,
+    search context), why); `origin` — ctx_read's _Origin."""
     shown = list((result or {}).get("shown") or ())
     got, why = entities()
     if not got:
-        return (rv.render_slot(result, origin) if result else "") + NOT_JOINED % why + "\n" if result else None
+        if not result:
+            return None
+        return rv.render_slot(result, origin) + (NOT_JOINED % why + "\n" if why else "")
     reg, idx, sctx = got
+    if result and result.get("prefer") == "all":
+        return rv.render_slot(result, origin)           # every candidate in full, as `prefer all` says
     ent, unmatched = team_entity(reg, rec.get("title"))
-    s = _Slots(reg, idx, cat, sctx)
+    s = _slots_for(reg, idx, cat, sctx)
     cards = s.own(ent, "team.members") + s.derived(ent, "team.members") if ent else []
-    for c in cards:
-        c["strict"] = True
+    if idx.problem:                                     # the index went busy during the read: nothing joined by halves
+        return (rv.render_slot(result, origin) if result else "") + NOT_JOINED % idx.problem + "\n" if result else None
+    recs = record_candidates(shown)
     if result and (result["why"] == rv.WHY_RULE or str(result.get("prefer", "")).startswith("repo:")):
-        n = len(join_items(cards, reg, "person", strict=True, entity_of=s.entity))
+        both = join_items(recs + cards, reg, "person", strict=False, entity_of=s.entity)
+        n = sum(1 for i in both if not any(o.get("record") for o in i["origins"]))
         return rv.render_slot(result, origin) + (FROM_CARDS % (n, ent["label"]) + "\n" if n else "")
     if not shown and not cards:
         return None
-    items = join_items(record_candidates(shown) + cards, reg, "person", strict=False, entity_of=s.entity)
+    items = join_items(recs + cards, reg, "person", strict=False, entity_of=s.entity)
     head = []
     for c in shown:
         if c.get("level") == "mine":
             head.append("> [твоє · %s]" % origin.clip(c["record"]))
         else:
-            head.append(origin.line(c["ns"], c["block"], c.get("version") or "", [], slots=["team.members"]))
+            head.append(origin.line(c["ns"], c["block"], c.get("version") or "", _block_marks(c), slots=["team.members"]))
     for c in cards:
         if c["level"] != "derived":
             head.append("> [картка %s · %s%s]" % (c["card_source"] if c["level"] != "mine" else "твоя", c["path"],
                                                   " · " + c["date"][:10] if c.get("date") else ""))
     if any(c["level"] == "derived" for c in cards):
         head.append("> [виведене з карток людей: %d]" % sum(1 for c in cards if c["level"] == "derived"))
-    lines = head + ["#### Members", JOINED % len(items)] + member_lines(items, reg, idx, cat, sctx)
+    heading = next((c.get("heading") for c in shown if c.get("heading")), None) or "Members"
+    lines = head + ["#### " + heading, JOINED % len(items)] + member_lines(items, reg, idx, cat, sctx,
+                                                                           team=ent["label"] if ent else None)
+    for c in shown:                                     # what is no item stays, under its source (review I1)
+        rest = _non_items(c["text"])
+        if rest:
+            lines.append("> [%s — інший текст секції]" % ("твоє" if c.get("level") == "mine" else c["source"]))
+            lines.extend(rest)
     if unmatched:
         lines.append(NOT_MATCHED % (_TEAM_TITLE.sub("", rec.get("title") or ""), unmatched))
     return "\n".join(lines) + "\n"

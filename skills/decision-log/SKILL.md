@@ -30,7 +30,7 @@ Product decisions evaporate from chats and meetings; three months later nobody r
 
 ```markdown
 # Decision: {title}
-- **Date / Owner:** {date} / {owner — the one accountable person; a link to their card when `ctx entity` finds exactly one (`references/people-context-protocol.md` → Find a person), else the name}
+- **Date / Owner:** {date} / {owner — the one accountable person; a link to their card when `ctx entity "<e-mail or name>" --kind person --skill decision-log` finds exactly one (`references/people-context-protocol.md` → Find a person), else the name}
 - **Decided by:** {everyone who took the decision, when more than the owner}
 - **Status:** active | superseded (→ [[link]])
 

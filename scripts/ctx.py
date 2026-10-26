@@ -582,6 +582,8 @@ def _entities_for_read(c, repos):
 def _load_entities(c, repos):
     try:
         sctx = cs_.context_for(c.home, c.text, store_root=c.store.root, repos=repos)
+        if not sctx["roots"] and not cs_.sources(sctx["text"], sctx["repos"], ("local",)):
+            return None, None                    # nothing to index, nothing to join by: the list as before, no line
         idx = ci.Index(c.home)
         built = idx.built()
         if built is not True:
