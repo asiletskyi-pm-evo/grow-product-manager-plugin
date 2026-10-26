@@ -1,6 +1,6 @@
 ---
 name: context-navigator
-version: 0.3.2
+version: 0.4.0
 description: Answer and search your context — notes, cores, local indexes. Not decisions (decision-log), dashboards (product-analysis), curated sources (knowledge-library). UA — «знайди в моєму контексті», «що в мене є про…», «хто за що відповідає», «де описане правило»; with source and date, live sources on request.
 ---
 
@@ -31,6 +31,12 @@ Answering from the graph has no judgment points of its own; a question that asks
 ## On each question
 **Who or what it is (since v3.18.0).** With SHELL, a question about a person, a team, a mission, a module, a metric, a work item or a Jira key — «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X» — first runs `python3 "<plugin root>/scripts/ctx.py" entity "<X>" --skill context-navigator` (`ctx entity "<X>" --skill context-navigator`, `references/search-protocol.md` §13): its lines say who it is, where its cards are and who links to it, and the route below answers the rest of the question. Since v3.19.0 they also hold its slots — a person's role, team and e-mail, a team's members («хто в команді X»), missions and parent, a mission's teams, an owner — each with where it comes from; quote them with their source (`references/people-context-protocol.md` → Find a person for a person's identity).
 
+**Bridges in your notes (since v3.20.0).** Only when the user asks — «запиши мости в нотатки», «зв'яжи мої нотатки з ядром», «додай посилання на картки ядра в мої нотатки» — never on your own initiative, never from another skill or a hook. Needs SHELL and FS; without them one line, `Мости в нотатки пише лише ctx на хості з файловою системою й shell`, and stop.
+1. Run `python3 "<plugin root>/scripts/ctx.py" entity apply` (`ctx entity apply`, `references/context-protocol.md` §5h) and show its report as it is: the bridges it would write (`<note> → <card> (e-mail|твоє same)`), what it skips and why, `код звіту: <code>`. «Мостів записати нічого» or «поле `same_as` веде хтось інший — пропущено» → say so and stop: never write the field by hand.
+2. Ask one question — write these N bridges into your notes? — and wait for the user's «так» in this conversation. Nothing else counts as a yes.
+3. On «так»: `python3 "<plugin root>/scripts/ctx.py" entity apply --apply --code <the code of step 1>`. Exit 4 (`звіт змінився`) → show the new report (step 1) and ask again; exit 5 → the index is busy, try in a minute; never retry with another code on your own.
+4. Show what it wrote and end with `Скасувати: ctx undo` — it puts the notes back (a line you changed since is left and said).
+
 **First the form** (`references/search-protocol.md` §13): a request for a fact gets an answer; a request for the notes themselves — «знайди нотатки про…», «що в мене є про…», «де в моїх нотатках…», «покажи нотатки про…», `--list` — gets a list. Then, with a provider, follow its `routing_hints` note when it exists, otherwise this default route, cheapest first. Without a provider every question takes the last row, except recording or revisiting a decision and a person, whose rows hold either way:
 
 | Question about | Route |
@@ -56,6 +62,7 @@ Every answer carries: the note path; for a number, its period and source; for sn
 Before a meeting note that names people is written into the user's vault: resolve the participants' e-mails with the resolver (`emails <list>`); every name in decisions, positions and actions with `names <list> --emails <list>` — resolved → a link to the registry card, ambiguous → keep the name and show the candidates, unresolved → ask. A short first name resolves only among the meeting's participants. Never guess a person by a similar surname. The note goes to the user's own layer, never into the core.
 
 ## What not to do
+- Write a bridge into a note by hand, or run `ctx entity apply --apply` without the user's «так» to the report whose code it carries (since v3.20.0).
 - Write anything under the provider's folders outside its `writable` paths (`references/context-provider-protocol.md` §7); a correction goes to the user's overlay note for that provider and, upstream, to the provider's owner.
 - Edit generated sections of the core's cards, or rank missions by the number of tickets.
 - Present the bundle as a security boundary — it is relevance only.
@@ -75,6 +82,8 @@ Before a meeting note that names people is written into the user's vault: resolv
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
 
 > Answer from a shared organisational context (a team's core) — who owns what, team and module scope, rules, missions, people, terms. Not decisions (decision-log), not dashboards (product-analysis), not curated sources (knowledge-library). UA — «хто за що відповідає», «що робить команда X», «де описане правило», «які місії у команди», «хто така людина X у структурі», «як у нас називають цей термін». EN — "who owns this", "what does team X do", "where is the rule for", "which missions does the team have", "who is X in the org", "answer from the shared context". Reads the provider's rules once per session and routes each answer through its graph (vault/v1), always with the note path and the snapshot date.
+
+Since v3.20.0 (bridges in your notes, `ctx entity apply`): UA — «запиши мости в нотатки», «зв'яжи мої нотатки з ядром», «додай посилання на картки ядра в мої нотатки»; EN — "write the bridges into my notes", "link my notes to the core's cards".
 
 Since v3.18.0 (who is who, `ctx entity`): UA — «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X»; EN — "who is X", "what is PROJ-1234", "what links to X".
 

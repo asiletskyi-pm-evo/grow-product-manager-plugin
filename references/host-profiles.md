@@ -66,6 +66,7 @@ These need FS. On a host without it, the skill says so in one line and stops ins
 - `experiment-tracker` → `registry.yaml`
 - the whole People contour (`one-on-one`, `performance-review`, `delegation-coach`, `offboarding-guide`, `hiring-designer`) → person profiles are strictly local by `people-context-protocol.md`
 - `template-library`, `knowledge-library` → local library and glossary
+- `ctx entity apply` (`context-navigator`, since v3.20.0) → writes bridges into the user's notes with a snapshot and `ctx undo`; it needs FS and SHELL — never written by hand in its place
 
 Read-only modes of these skills still work when the user pastes the data into the session.
 
