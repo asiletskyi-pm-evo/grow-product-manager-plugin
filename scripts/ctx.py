@@ -846,17 +846,34 @@ def cmd_undo(a, c):
         rejections = sync_rejections(marks[-a.steps:])      # the sync passes this undo takes back: what they took is not applied again
         jpath = os.path.join(c.store.state_dir, "journal.jsonl")
         journal = co._read(jpath)
-        pre = co.snapshot(c.store, c.copies, c.home, "pre-undo")
+        items = cbr.undo_notes(marks[-a.steps:])        # the notes `entity apply` (or an undo of it) changed (v3.20.0)
+        sctx, regs, keep = None, None, []
+        if items:
+            sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+            regs, _ = cc.boundary_registrations(cc.vault_entries(c.text),
+                                                extra_dirs=[os.path.join(c.home, ".grow-pm", "providers")])
+            for rel in dict.fromkeys(rel for rel, _, _ in items):    # as they are now: `ctx undo` of this undo needs them
+                path, _ = cbr.own_file(sctx, rel)
+                if path and os.path.isfile(path) and not cbr.write_refusal(sctx, regs, c.store.root, c.home, rel):
+                    keep.append((rel, path))
+        pre = co.snapshot(c.store, c.copies, c.home, "pre-undo", notes=keep or None)
         skipped = co.restore(target, c.store, c.copies)
         for p in skipped:
             print("skipped (not a current copy): %s" % p)
+        notes_done, notes_back, notes_kept = (cbr.revert_notes(sctx, regs, c.store.root, c.home, items) if items
+                                              else ([], [], []))
+        if notes_back:
+            print("повернуто нотаток: %d" % len(notes_back))
+        for rel, why in notes_kept:
+            print("не повернуто: %s — %s" % (rel, why))
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
             existed = json.load(f).get("store_existed")
         reverted, kept, rejected, rejected_failed = [], [], {}, {}
         if existed:
             cs.atomic_write(jpath, journal)
             t = now()
-            c.store.journal({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre})
+            c.store.journal(dict({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre},
+                                 **({"notes": notes_done} if notes_done else {})))
             # a sync pass taken back stays taken back: the core's texts it applied are remembered as rejected in the
             # block state — after the restore, which brought that state back to what it was before the pass
             rejected, rejected_failed = remember_rejected(c.store, rejections)
@@ -885,7 +902,8 @@ def cmd_undo(a, c):
             print("store removed — local-context.md is a single file again (the store is kept in %s)" % pre)
     return 0, {"command": "undo", "restored": target, "snapshot": pre, "store_removed": not existed, "skipped": skipped,
                "records_reverted": reverted, "records_not_reverted": kept, "rejected": rejected,
-               "rejected_failed": rejected_failed}
+               "rejected_failed": rejected_failed, "notes_reverted": notes_back,
+               "notes_not_reverted": [{"path": p, "why": w} for p, w in notes_kept]}
 
 
 def cmd_validate(a, c):

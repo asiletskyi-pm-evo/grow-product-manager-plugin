@@ -365,5 +365,94 @@ with tempfile.TemporaryDirectory() as d:
     check("a `same_as` someone added between the report and --apply: another code, nothing written",
           rc == 4 and "same_as" not in read(env.vault, RHEA[0]), out)
 
+# ------------------------------------------------------------------ Task 4: `ctx undo` (plan C9, R4)
+LINE = 'same_as: "[[ZorgCore/People/rhea-core|Rhea One]]"'
+
+
+def applied(d, extra=None):
+    env = Env(d, extra)
+    _, _, res = env.cli("entity", "apply")
+    rc, out, _ = env.cli("entity", "apply", "--apply", "--code", res["code"])
+    assert rc == 0, out
+    return env
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    rhea0 = read(env.vault, RHEA[0])
+    _, _, res = env.cli("entity", "apply")
+    env.cli("entity", "apply", "--apply", "--code", res["code"])
+    rc, out, res = env.cli("undo")
+    check("`ctx undo` after apply: the note as it was, byte for byte, and said",
+          rc == 0 and read(env.vault, RHEA[0]) == rhea0 and "повернуто нотаток: 1" in out, out)
+    check("…the ledger is back as it was (empty)", cb_.load_ledger(env.store)["written"] == [], "")
+    check("…the undo's journal line holds the note it reverted", (journal(env)[-1].get("notes") or [{}])[0].get("path") == RHEA[0],
+          journal(env)[-1])
+    rc, out, _ = env.cli("undo")
+    check("`ctx undo` again (the undo taken back): the bridge is in the note again, the ledger holds it",
+          rc == 0 and LINE in read(env.vault, RHEA[0]) and len(cb_.load_ledger(env.store)["written"]) == 1, out)
+    rc, out, _ = env.cli("undo")
+    check("…and once more: gone again", rc == 0 and read(env.vault, RHEA[0]) == rhea0, out)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    rhea0 = read(env.vault, RHEA[0])
+    _, _, res = env.cli("entity", "apply")
+    env.cli("entity", "apply", "--apply", "--code", res["code"])
+    write(os.path.join(env.vault, RHEA[0]), read(env.vault, RHEA[0]) + "\nMy own line after the apply.\n")
+    rc, out, _ = env.cli("undo")
+    check("a note you changed after apply: undo takes out our line alone, your change stays (R4)",
+          rc == 0 and read(env.vault, RHEA[0]) == rhea0 + "\nMy own line after the apply.\n", read(env.vault, RHEA[0]))
+
+with tempfile.TemporaryDirectory() as d:
+    env = applied(d)
+    edited = read(env.vault, RHEA[0]).replace(LINE, 'same_as: "[[ZorgCore/People/rhea-core|Rhea]]"')
+    write(os.path.join(env.vault, RHEA[0]), edited)
+    rc, out, _ = env.cli("undo")
+    check("our line changed by hand: the note is left as it is, and said «не повернуто»",
+          rc == 0 and read(env.vault, RHEA[0]) == edited and "не повернуто: %s" % RHEA[0] in out, out)
+
+with tempfile.TemporaryDirectory() as d:
+    env = applied(d)
+    env.cli("undo")
+    mine = read(env.vault, RHEA[0]).replace("updated: 2026-10-10\n", "updated: 2026-10-10\n" + LINE + "\n") + "\nMine.\n"
+    write(os.path.join(env.vault, RHEA[0]), mine)
+    rc, out, _ = env.cli("undo")
+    check("undo of an undo is a whole-file restore only: a note you changed since (our line typed back by hand) stays",
+          rc == 0 and read(env.vault, RHEA[0]) == mine and "не повернуто: %s" % RHEA[0] in out, out)
+
+with tempfile.TemporaryDirectory() as d:
+    env = applied(d)
+    os.remove(os.path.join(env.vault, RHEA[0]))
+    rc, out, _ = env.cli("undo")
+    check("the note is gone: undo says so and restores the store anyway",
+          rc == 0 and "не повернуто: %s" % RHEA[0] in out and not os.path.exists(os.path.join(env.vault, RHEA[0]))
+          and cb_.load_ledger(env.store)["written"] == [], out)
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    rhea0 = read(env.vault, RHEA[0])
+    _, _, res = env.cli("entity", "apply")
+    env.cli("entity", "apply", "--apply", "--code", res["code"])
+    env.cli("entity", "same", CY[0], CY[1])
+    rc, out, _ = env.cli("undo", "--steps", "2")
+    check("`undo --steps 2` over apply and `entity same`: the note back, the answer gone",
+          rc == 0 and read(env.vault, RHEA[0]) == rhea0 and not ce.load_memory(env.store)["same"], out)
+
+with tempfile.TemporaryDirectory() as d:
+    env = applied(d)
+    core = os.path.join(env.vault, RHEA[1])
+    core0 = read(core)
+    jpath = os.path.join(env.store.state_dir, "journal.jsonl")
+    lines = open(jpath, encoding="utf-8").read().splitlines()
+    last = json.loads(lines[-1])
+    last["notes"] = [{"path": RHEA[1], "line": "type: people", "before": last["notes"][0]["before"],
+                      "after": hashlib.sha1(core0.encode()).hexdigest()}]
+    lines[-1] = json.dumps(last, ensure_ascii=False, sort_keys=True)
+    open(jpath, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    rc, out, _ = env.cli("undo")
+    check("a journal line that names a core's card: undo never writes it (plan C7 in undo too)",
+          read(core) == core0 and "не повернуто: %s" % RHEA[1] in out, out)
+
 print("RESULT: %s" % ("GREEN ✅" if not fails else "RED ❌ (%d)" % fails))
 sys.exit(1 if fails else 0)

@@ -411,6 +411,77 @@ def apply_plan(sctx, store, copies, home, plan, regs, day, snapshot, journal, no
     return {"written": written, "skipped": skipped, "snapshot": snap}
 
 
+# ------------------------------------------------------------------ `ctx undo` (plan C9, R4)
+GONE = "файлу немає"
+EDITED = "змінено після запису"
+
+
+def undo_notes(marks):
+    """The notes the journal lines `marks` (the ones an undo takes back, oldest first) changed: [(rel, mark, note)],
+    the newest line first, each note of a line in its order."""
+    out = []
+    for m in reversed(marks):
+        for n in m.get("notes") or ():
+            if isinstance(n, dict) and isinstance(n.get("path"), str) and n["path"].strip():
+                out.append((N(n["path"]), m, n))
+    return out
+
+
+def _kept_copy(mark, rel):
+    """The bytes the snapshot of a journal line kept of the note `rel` before that change, or None (a rotated snapshot,
+    no copy)."""
+    snap = mark.get("snapshot")
+    try:
+        with open(os.path.join(snap, "manifest.json"), encoding="utf-8") as f:
+            entry = next((k for k in json.load(f).get("notes") or () if N(k.get("path", "")) == rel), None)
+        if entry:
+            return cs.read_bytes(os.path.join(snap, entry["file"]))
+    except (OSError, ValueError, TypeError, cs.StoreError):
+        pass
+    return None
+
+
+def revert_notes(sctx, regs, store_root, home, items):
+    """Take back the changes `items` (undo_notes) made to your notes, the newest first (R4): a note whose bytes are what
+    the change left (`after`) gets the snapshot's copy (its sha1 must be `before`); a note changed since, of a change
+    `entity apply` made, loses our line alone when its frontmatter still holds it exactly; anything else — a note gone,
+    our line changed, a write plan C7 refuses — is left and said. Returns (journal notes [{path, line, before, after}]
+    of what was written — `ctx undo` of this undo uses them —, [path reverted], [(path, why)] not reverted)."""
+    done, reverted, kept = [], [], []
+    for rel, mark, n in items:
+        why = write_refusal(sctx, regs, store_root, home, rel)
+        if why:
+            kept.append((rel, BOUNDARY % why))
+            continue
+        path, _ = own_file(sctx, rel)
+        if not os.path.lexists(path):
+            kept.append((rel, GONE))
+            continue
+        try:
+            cur = cs.read_bytes(path)
+        except (OSError, cs.StoreError) as e:
+            kept.append((rel, "%s (%s)" % (UNREAD, getattr(e, "strerror", None) or e)))
+            continue
+        new = None
+        if _sha(cur) == n.get("after"):
+            copy = _kept_copy(mark, rel)
+            if copy is not None and _sha(copy) == n.get("before"):
+                new = copy
+        if new is None and mark.get("op") == OP and isinstance(n.get("line"), str):
+            try:
+                text = remove_line(cur.decode("utf-8"), n["line"])
+            except UnicodeDecodeError:
+                text = None
+            new = text.encode("utf-8") if text is not None else None
+        if new is None:
+            kept.append((rel, EDITED))
+            continue
+        cs.atomic_write(path, new.decode("utf-8"))
+        done.append({"path": rel, "line": n.get("line") or "", "before": _sha(cur), "after": _sha(new)})
+        reverted.append(rel)
+    return done, reverted, kept
+
+
 # ------------------------------------------------------------------ the report
 def bridges_word(n):
     """«міст», «мости», «мостів» for n."""
