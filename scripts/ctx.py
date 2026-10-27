@@ -317,6 +317,7 @@ import ctx_blocks as cb  # noqa: E402
 import ctx_bootstrap as cbt  # noqa: E402
 import ctx_bridges as cbr  # noqa: E402
 import ctx_common as cc  # noqa: E402
+import ctx_consolidate as ccn  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
@@ -384,6 +385,8 @@ def writes(a):
         return getattr(a, "apply", False)
     if a.cmd == "validate":                             # since v3.22.0: --recheck writes the inbox and its memory
         return getattr(a, "recheck", False)
+    if a.cmd == "consolidate":                          # since v3.22.0: the inbox only
+        return True
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] == "apply":
@@ -1291,12 +1294,67 @@ def cmd_health(a, c):
                        len(plan["missing"]),
                        len(c.store.stray_files()), warnings, errors, csh.index_state(c.home), csh.snapshots(c.home),
                        csh.backups(c.home, c.context, c.text), today, unread_regs=skipped,
-                       recheck=_recheck_health(c, today))
+                       recheck=_recheck_health(c, today), consolidate=_consolidate_health(c, today))
     for level, text, fix in lines:
         print("%s %s%s" % (csh.MARK[level], text, (" — " + fix) if fix else ""))
     n = {k: sum(1 for l in lines if l[0] == k) for k in (csh.OK, csh.WARN, csh.ACT)}
     return 0, {"command": "health", "lines": [{"level": l, "text": t, "fix": f} for l, t, f in lines],
                "counts": n}
+
+
+def _consolidate_find(c, recs, today):
+    card = c.store.card_path
+    lines = None
+    if os.path.isfile(card):
+        try:
+            lines = cs.read_text(card).count("\n")
+        except (OSError, cs.StoreError):
+            lines = None
+    return ccn.find(recs, today, card_lines=lines)
+
+
+def cmd_consolidate(a, c):
+    """`consolidate [--now ISO] [--json]` (since v3.22.0, plan C13, R4): a line written twice, a relative date, a passed
+    deadline → REPLACE deltas of the inbox (ctx-consolidate); nothing written to a record. One op propose journal line
+    when something new was proposed. Records no longer current for 90+ days and a card over its budget are named with
+    their commands — archiving is no delta."""
+    c.need_store()
+    today = (a.now or now())[:10]
+    with co.lock(c.home):
+        c.guard()
+        box = ci_.load(c.store)
+        c.import_first()
+        recs = c.store.load()
+        res = _consolidate_find(c, recs, today)
+        props = ci_.propose(box, res["deltas"], "ctx-consolidate", recs, today) if res["deltas"] else []
+        added = [r for r in props if r["status"] == ci_.ADDED]
+        if added:
+            ci_.save(c.store, box, today)
+            c.store.journal({"ts": now(), "op": "propose", "skill": "ctx-consolidate",
+                             "ids": sorted({r["record"] for r in added}),
+                             "sigs": [e["sig"] for e in box["entries"] if e["n"] in {r["n"] for r in added}],
+                             "source": "ctx-consolidate"})
+    print("у скриньці +%d (усього %d) — /context inbox" % (len(added), len(box["entries"])) if added else
+          "нічого нового для скриньки")
+    for rid, since in res["archive"]:
+        print("неактуальне з %s: %s — ctx archive %s" % (since, rid, rid))
+    if res["card_over"]:
+        print("картка %d рядків (бюджет %d) — архівуй неактуальне або злий записи" % (res["card_over"], cs.CARD_MAX))
+    return 0, {"command": "consolidate", "results": props, "added": [r["n"] for r in added],
+               "archive": [rid for rid, _ in res["archive"]], "card_over": res["card_over"]}
+
+
+def _consolidate_health(c, today):
+    """How many new deltas consolidate would propose now — counted on a copy of the inbox, nothing written."""
+    import copy
+    try:
+        box = copy.deepcopy(ci_.load(c.store))
+        recs = c.store.load()
+    except cs.StoreError as e:
+        return str(e)
+    res = _consolidate_find(c, recs, today)
+    props = ci_.propose(box, res["deltas"], "ctx-consolidate", recs, today) if res["deltas"] else []
+    return sum(1 for r in props if r["status"] == ci_.ADDED) + len(res["archive"])
 
 
 def _recheck_health(c, today):
@@ -2820,6 +2878,7 @@ def build_parser():
     sp = sub.add_parser("undo", parents=[common]); sp.add_argument("--steps", type=int, default=1)
     sp = sub.add_parser("validate", parents=[common]); sp.add_argument("--recheck", action="store_true")
     sp.add_argument("--observed"); sp.add_argument("--now")
+    sp = sub.add_parser("consolidate", parents=[common]); sp.add_argument("--now"); sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("show", parents=[common]); sp.add_argument("ids", nargs="*"); sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("health", parents=[common]); sp.add_argument("--json", action="store_true")
     sub.add_parser("card", parents=[common])
@@ -2866,7 +2925,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
             "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
-            "inbox": cmd_inbox, "bootstrap": cmd_bootstrap}
+            "inbox": cmd_inbox, "bootstrap": cmd_bootstrap, "consolidate": cmd_consolidate}
 
 
 def emit(result, conflict=None):
