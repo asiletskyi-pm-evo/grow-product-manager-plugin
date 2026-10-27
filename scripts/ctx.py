@@ -343,6 +343,23 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
            "invalidate", "archive", "restore", "verify", "assign", "slot"}
 
 
+# The arguments of a writing command that are no free text a store keeps: paths, ids, numbers, the propose's deltas
+# (each one checked on its own, so one secret does not cost the others — ctx_inbox.propose).
+NOT_TEXT = {"cmd", "action", "context", "store", "home", "file", "body_file", "delta", "code", "which", "steps", "id",
+            "ids", "skill", "type", "parent", "after", "repo", "product", "label", "now"}
+
+
+def _free_text(a):
+    out = []
+    for k, v in vars(a).items():
+        if k in NOT_TEXT:
+            continue
+        for x in (v if isinstance(v, list) else [v]):
+            if isinstance(x, str):
+                out.append(x)
+    return out
+
+
 def writes(a):
     """Does this run write to the store? Every command of WRITING does, and `provider apply`, `provider sync` and (since
     v3.16.0) `search remember|forget`, (since v3.18.0) `entity same|not-same`; `migrate`, `provider adopt` and (since
@@ -704,7 +721,6 @@ def _write_one(c, op, rid, mutate, source, reason):
 
 
 def cmd_set(a, c):
-    cn.check(a.value, a.reason)
     c.need_store()
     spec = _field_spec(_record(c, a.id), a.field)
     err = sc.check_value(spec, a.value) if spec else None
@@ -755,7 +771,6 @@ def cmd_assign(a, c):
 
 
 def cmd_append(a, c):
-    cn.check(a.text, a.reason)
     return 0, _write_one(c, "append", a.id, lambda b: cs.append_line(b, a.text, under=a.under),
                          a.source or "ctx-append", a.reason)
 
@@ -765,7 +780,7 @@ def cmd_add(a, c):
     if a.type not in HEADINGS:
         raise Usage("add takes one of %s" % ", ".join(sorted(HEADINGS)))
     content = co._read(a.body_file) if a.body_file else ""
-    cn.check(a.title, content, a.reason)
+    cn.check(content)
     heading = HEADINGS[a.type] % a.title
     text = heading + "\n\n" + (content.rstrip("\n") + "\n\n" if content.strip() else "")
     with co.lock(c.home):
@@ -973,10 +988,12 @@ def cmd_validate(a, c):
             warnings.append("%s: verified %r is not a date — the store's freshness date applies" % (r["id"], r.get("verified")))
         if r.get("ttl_days") is not None and not str(r.get("ttl_days")).strip().isdigit():
             warnings.append("%s: ttl_days %r is not a whole number — the type's default applies" % (r["id"], r.get("ttl_days")))
-        kinds = cn.scan(r["body"])
+        own = r["body"]
+        for lo, hi in reversed(cc.managed_spans(own)):  # a provider's block is not yours to clean
+            own = own[:lo] + own[hi:]
+        kinds = cn.scan(own)
         if kinds:                                       # since v3.21.0: your own text may hold one — said, not refused
-            warnings.append("%s: %s" % (r["id"], cn.message(kinds).replace("не збережено: схоже", "схоже", 1)
-                                        + " — прибери це з запису"))
+            warnings.append("%s: %s" % (r["id"], cn.warning(kinds)))
         if sc.is_stale(r, state, now()[:10]):
             warnings.append("stale: %s (verified %s, TTL %s d) — ctx verify %s" % (r["id"], sc.verified_of(r, state), sc.ttl_of(r), r["id"]))
     for name in valid:
@@ -2362,6 +2379,8 @@ def main(argv=None):
         emit({"ok": False, "error": str(e)})
         return 3
     try:
+        if writes(a):                                   # since v3.21.0: no free text a write keeps may hold a secret
+            cn.check(*_free_text(a))
         c = Ctx(a)
         with cs.guard_roots(co.allowed_roots(c.home, c.text)):
             rc, res = COMMANDS[a.cmd](a, c)

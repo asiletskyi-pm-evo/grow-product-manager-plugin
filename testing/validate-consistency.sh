@@ -349,9 +349,15 @@ if [ -f testing/host-matrix.md ]; then
   MATRIX_ISSUES=$(python3 - <<'PY_MATRIX'
 import re
 m = open("testing/host-matrix.md", encoding="utf-8").read()
-hosts = ["claude-cowork", "codex-cli", "chatgpt", "codex-cloud"]
-rows = re.findall(r"^\| `[a-z-]+` \|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|", m, re.M)
-counts = [{k: sum(1 for r in rows if r[i].strip() == k) for k in ("full", "degraded", "n/a")} for i in range(4)]
+head = re.search(r"^\| Skill \|(.*)\| Degraded mode / reason \|$", m, re.M)
+if not head:
+    raise SystemExit("testing/host-matrix.md: no header row «| Skill | <hosts> | Degraded mode / reason |»")
+hosts = [h.strip() for h in head.group(1).split("|")]
+rows = [[c.strip() for c in r.split("|")[:len(hosts)]] for r in re.findall(r"^\| `[a-z-]+` \|(.*)$", m, re.M)]
+odd = sorted({c for r in rows for c in r if c not in ("full", "degraded", "n/a")})
+if odd:
+    print("testing/host-matrix.md: a cell is none of full / degraded / n/a: " + ", ".join(repr(c) for c in odd))
+counts = [{k: sum(1 for r in rows if r[i] == k) for k in ("full", "degraded", "n/a")} for i in range(len(hosts))]
 line = " · ".join("**%s** %d full / %d degraded / %d n/a" % (h, c["full"], c["degraded"], c["n/a"]) for h, c in zip(hosts, counts))
 if line not in m:
     print("testing/host-matrix.md: the summary line does not match the rows — expected: " + line)
@@ -362,7 +368,8 @@ if want not in readme:
     got = next((l for l in readme.splitlines() if l.startswith("| Per-skill result |")), "(no such row)")
     print("README.md: 'Per-skill result' row differs from testing/host-matrix.md — expected: %s · found: %s" % (want, got))
 PY_MATRIX
-)
+) || MATRIX_ISSUES="${MATRIX_ISSUES:+$MATRIX_ISSUES
+}the host-matrix check itself failed (python3 exit $?) — run it by hand: see validate-consistency.sh check 14"
   [ -z "$MATRIX_ISSUES" ] || { echo "$MATRIX_ISSUES" | while IFS= read -r line; do err "$line"; done; FAIL=1; }
 else
   err "testing/host-matrix.md is missing (skill × host × full/degraded/n-a)"

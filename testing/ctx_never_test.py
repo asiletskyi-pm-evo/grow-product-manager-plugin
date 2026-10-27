@@ -47,6 +47,10 @@ def rnokpp(nine):
 CARD = luhn_complete("4" + "1" * 7, 16)
 
 
+def spaced(n):
+    return " ".join(n[i:i + 4] for i in range(0, len(n), 4))
+
+
 def isbn_passing_luhn():
     """A valid ISBN-13 (978…) that Luhn takes for a card — the exclusion, not luck, lets it through."""
     for n in range(100000000, 100100000):
@@ -71,7 +75,8 @@ check("1.5 the IBAN in groups of four → iban", cn.scan(" ".join(IBAN[i:i + 4] 
 check("1.6 an IBAN with a wrong check → nothing", cn.scan(IBAN[:2] + "00" + IBAN[4:]) == [])
 check("1.7 РНОКПП with the word → rnokpp", cn.scan("ІПН: " + TAX) == ["rnokpp"])
 check("1.8 the same ten digits without the word → nothing", cn.scan("замовлення " + TAX) == [])
-check("1.9 a passport book (two Cyrillic capitals + 6 digits) → passport", cn.scan("МК 123456") == ["passport"])
+check("1.9 a passport book (two Cyrillic capitals + 6 digits) beside its word → passport; «МК №…» too",
+      cn.scan("паспорт МК 123456") == ["passport"] and cn.scan("Паспорт: МК №123456") == ["passport"])
 check("1.10 nine digits beside «ID-картка» → passport; alone → nothing",
       cn.scan("ID-картка 004512345") == ["passport"] and cn.scan("лот 004512345") == [])
 secrets = ["sk-ant-" + "a1B2" * 8, "ghp_" + "Zx9" * 12, "github_pat_" + "Q1w2E3" * 6, "glpat-" + "r4T5" * 6,
@@ -80,6 +85,18 @@ secrets = ["sk-ant-" + "a1B2" * 8, "ghp_" + "Zx9" * 12, "github_pat_" + "Q1w2E3"
            "-----BEGIN OPENSSH PRIVATE KEY-----", "password: Zorg2026secretPass", "**Token:** `a9f3k2m8x7q1w5e4`"]
 bad = [s for s in secrets if cn.scan(s) != ["secret"]]
 check("1.11 every form of a key or token, and a labelled password → secret", not bad, bad)
+more = {"card": ["Картка " + spaced(CARD) + ".", "картка " + CARD + ", термін 12/28", "card:" + CARD,
+                  "картка\u00a0" + "\u00a0".join(CARD[i:i + 4] for i in range(0, 16, 4))],
+        "iban": [IBAN.lower(), "IBAN:" + IBAN + "."],
+        "rnokpp": ["ИНН " + TAX],
+        "secret": ["password: Zorg!2026#Pass", "password: Abc12345", '"api_key": "abcd1234efgh5678ijkl"',
+                   "| token | Zorg2026secretPass |", "https://zorg.example/api?key=abcd1234efgh5678",
+                   "Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456", "https://zorg:Pa55word@git.zorg.example",
+                   "pass: hunter2abc", "pwd = Zorg!Pass#Word", "sk_live_" + "a1b2c3d4" * 3, "ya29." + "a0B1" * 6,
+                   "123456789:AA" + "b" * 33, "-----BEGIN PGP PRIVATE KEY BLOCK-----"]}
+bad = [(k, t) for k, ts in more.items() for t in ts if cn.scan(t) != [k]]
+check("1.12a the forms a review found slipping through — each caught as its kind", not bad,
+      [(k, t, cn.scan(t)) for k, t in bad])
 check("1.12 several kinds at once — in order, once each", cn.scan(CARD + " " + IBAN + " " + CARD) == ["card", "iban"])
 # --------------------------------------------------------------------------- 2. the look-alikes
 print("--- 2. what passes")
@@ -90,6 +107,14 @@ fine = ["PROJ-1234", "PROJ-1234, PROJ-98765", "2026-10-27", "27.10.2026 10:00", 
         "**Token:** stored in Keychain", "api key: ${ZORG_API_KEY}", "PROJ-10452.3", "Q4 2026 OKR 3.2",
         "конверсія 3,14159265 %", "версія 3.21.0", "https://zorg.example/dash/123456789012345",
         "Секція ТП 12", "Members: 22 профілі"]
+fine += ["ТЗ 202610", "КП 100500", "ПН 091025", "ВК 123456 переглядів", "МК 123456", "паспорт продукту, ARR 123456789",
+         "ТТН " + luhn_complete("2045", 14), "ТТН " + luhn_complete("59", 14),
+         "конверсія 0," + CARD, "token: zorg_api_token_v2", "secret: v3.21.0-beta1", "token: 2026-10-27T10:00:00+03:00",
+         "**Token:** stored-in-keychain", "password: see Keychain",
+         # each look-alike below passes by one guard alone (a mutation of that guard turns it red)
+         luhn_complete("1" * 8, 16), luhn_complete("7" * 8, 16), "  ".join(CARD[i:i + 4] for i in range(0, 16, 4)),  # two spaces: no card
+         "ID" + CARD, CARD + "x", "XK05" + "1212",
+         "ІПН " + TAX[:9] + str((int(TAX[9]) + 1) % 10), "паспортZМК123456", "password: abcdefghijkl"]
 bad = [s for s in fine if cn.scan(s)]
 check("2.1 task keys, dates, sums, phones, ISBNs, order numbers, UUIDs, hashes, env names, URLs → nothing", not bad,
       [(s, cn.scan(s)) for s in bad])
@@ -122,6 +147,14 @@ try:
     check("3.4 add whose title holds a РНОКПП with its word → exit 4", rc == 4, (rc, out[-300:]))
     rc, out, res = env.run("set", rid, "Role label", "Zorg PM", "--reason", "token: Zorg2026secretPass")
     check("3.5 a secret in --reason → exit 4 (the reason goes to the journal)", rc == 4, (rc, out[-300:]))
+    rc, out, res = env.run("append", rid, "--text", "- Zorg", "--reason", "pwd: Zorg!Pass#Word")
+    rc2, out2, res2 = env.run("add", "custom", "Zorg notes", "--reason", "token: Zorg2026secretPass")
+    check("3.5a a secret in --reason of append and of add → exit 4", rc == 4 and rc2 == 4, (rc, rc2, out2[-300:]))
+    rc, out, res = env.run("invalidate", "product.zorg-lite", "--reason", "token: Zorg2026secretPass")
+    rc2, out2, res2 = env.run("archive", "product.zorg-lite", "--reason", "pwd: Zorg!Pass#Word")
+    rc3, out3, res3 = env.run("set", rid, "Role label", "Zorg PM", "--source", "token: Zorg2026secretPass")
+    check("3.5b invalidate --reason, archive --reason, --source → exit 4 (one guard over every writing command)",
+          rc == 4 and rc2 == 4 and rc3 == 4, (rc, rc2, rc3, out[-300:]))
     leaked = []
     for root, _, files in os.walk(d):
         for f in files:
@@ -130,7 +163,7 @@ try:
                 t = open(p, encoding="utf-8", errors="replace").read()
             except OSError:
                 continue
-            if f != "body.md" and any(v in t for v in (CARD, IBAN, TAX, "Zorg2026secretPass", "a1B2" * 8)):
+            if f != "body.md" and any(v in t for v in (CARD, IBAN, TAX, "Zorg2026secretPass", "Zorg!Pass#Word", "a1B2" * 8)):
                 leaked.append(os.path.relpath(p, d))
     check("3.6 no value in any file — records, journal, copies, snapshots", not leaked, leaked)
     rc, out, res = env.run("set", rid, "Role label", "Zorg PM")
@@ -143,8 +176,20 @@ try:
     warn = [w for w in (res or {}).get("warnings", []) if "банківської картки" in w]
     check("3.9 validate warns: the record and the kind, never the value",
           warn and rid in warn[0] and CARD not in out, (out[-600:], res))
+    env.edit(env.ctx, "- **Jira Team ID:** <team-uuid-2>",
+             "<!-- zorg-core:begin id=team v=1 -->\n- card " + CARD + "\n<!-- zorg-core:end id=team -->")
+    env.run("sync")
+    rc, out, res = env.run("validate")
+    check("3.10 a value inside a provider's block → no warning (not yours to clean)",
+          not [w for w in res.get("warnings", []) if w.startswith("team.beta-b:")], res.get("warnings"))
 finally:
     shutil.rmtree(d, ignore_errors=True)
+
+import time  # noqa: E402
+t = time.time()
+cn.scan("-eyJ" * 40000)
+cn.scan("4" * 200000)
+check("4.1 long hostile lines scan in well under a second each", time.time() - t < 2.0, time.time() - t)
 
 print("\n%s — %d failure(s)" % ("GREEN" if not fails else "RED", fails))
 sys.exit(1 if fails else 0)
