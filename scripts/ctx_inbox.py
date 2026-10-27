@@ -54,7 +54,7 @@ PEOPLE_SKILLS = ("goal-setter", "one-on-one", "performance-review", "hiring-desi
                  "delegation-coach")
 # Asked at once (plan C3): field names as references/context-fields.yaml and onboarding-steps.md Step 16c give them.
 URGENT = {"profile": ("Name", "Role", "Role label", "Role scope", "Level home", "Email", "Work Email", "Language"),
-          "org": ("Domain", "Jira", "Confluence"),
+          "org": ("Domain", "Jira", "Confluence", "Jira instance", "Confluence instance"),
           "product": ("Jira Project Key", "Confluence Space", "URL")}
 
 

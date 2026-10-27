@@ -92,6 +92,24 @@ def _known(home):
     return out
 
 
+_NAMED = re.compile(r"(?<!\d)(20\d{2})-?([01]\d)-?([0-3]\d)(?:[-T_]?([0-2]\d)([0-5]\d)([0-5]\d))?(?!\d)")
+
+
+def _named_time(path):
+    """The time a backup's own name (or its folder's) carries — `….bak.20260825-104702`, `pre-x-2026-10-08/` — else None:
+    a copy's mtime is the copy's, the name says when the backup was made."""
+    for part in (os.path.basename(path), os.path.basename(os.path.dirname(path))):
+        m = _NAMED.search(part)
+        if m:
+            y, mo, d, hh, mm, ss = m.groups()
+            try:
+                t = datetime.datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0))
+            except ValueError:
+                continue
+            return t.strftime("%Y%m%dT%H%M%S")
+    return None
+
+
 def plan(home, context):
     known = _known(home)
     out = {"import": [], "known": [], "left": []}
@@ -107,7 +125,7 @@ def plan(home, context):
             out["left"].append({"path": p, "size": st.st_size, "why": "не схоже на local-context"})
             continue
         sha = hashlib.sha256(data).hexdigest()
-        when = datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y%m%dT%H%M%S")
+        when = _named_time(p) or datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y%m%dT%H%M%S")
         row = {"path": p, "size": st.st_size, "sha": sha, "when": when}
         if sha in known or sha in seen:
             out["known"].append(dict(row, snapshot=known.get(sha) or seen[sha]))

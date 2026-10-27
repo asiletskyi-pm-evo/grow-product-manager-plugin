@@ -78,6 +78,9 @@ try:
     imported = [n for n in snaps if n.endswith("-imported")]
     check("2.3 two snapshots <their time>-imported, the first named for 2026-05-05",
           rc == 0 and len(imported) == 2 and imported[0].startswith("20260505T135221"), (out[-500:], snaps))
+    named = [n for n in imported if n.startswith("20260630T000000")]
+    check("2.3a a backup whose name carries its day is named for it (2026-06-30.md), not for the copy's mtime",
+          named, imported)
     check("2.4 the snapshot holds the old text byte for byte, mode 0600",
           read(gp, "snapshots", imported[0], "copies", "0.md") == old_a
           and oct(os.stat(os.path.join(gp, "snapshots", imported[0], "copies", "0.md")).st_mode & 0o777) == "0o600")

@@ -90,11 +90,13 @@ try:
           re.search(r"^⚠ застарілі записи: 1 \(team\.alpha-a\) — ctx verify --stale$", text, re.M), text)
     check("2.3 an urgent entry in the inbox → ✋ /context inbox",
           re.search(r"^✋ у скриньці 1, термінових 1 — /context inbox$", text, re.M), text)
-    bk = [l for l in text.splitlines() if "копій поза знімками" in l]
-    check("2.4 the copies outside the snapshots: the backups folder, the .bak (unreadable — measured by stat) and "
-          "the vault's _backup_ folder, each with a size",
-          bk and "pre-zorg (3.1 КБ)" in bk[0] and "local-context.md.bak.20260101 (2.9 КБ)" in bk[0]
-          and "_backup_before_zorg (8.8 КБ)" in bk[0] and "ctx snapshot import" in bk[0], bk)
+    bk = [l for l in text.splitlines() if "копій у ~/.grow-pm/backups" in l or "local-context.md.bak*" in l
+          or "тек _backup_*" in l]
+    check("2.4 the copies outside the snapshots, a line per kind with its total: the backups folder, the .bak "
+          "(unreadable — measured by stat), the vault's _backup_ folder (named only)",
+          len(bk) == 3 and "pre-zorg (3.1 КБ)" in bk[0] and "ctx snapshot import" in bk[0]
+          and "local-context.md.bak.20260101 (2.9 КБ)" in bk[1] and "_backup_before_zorg (8.8 КБ)" in bk[2]
+          and "лише названо" in bk[2], bk)
     check("2.5 no search index → ⚠ ctx index rebuild", "⚠ індексу пошуку немає — ctx index rebuild" in text, text)
     check("2.6 snapshots counted", re.search(r"^✅ знімків: \d+, найновіший ", text, re.M), text)
     after = fingerprint(env.home, env.vault)

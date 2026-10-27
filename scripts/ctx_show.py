@@ -237,8 +237,16 @@ def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, e
                     "ctx index status" if old else ("ctx index rebuild --download" if dl else None)))
     out.append((OK if snaps else WARN, "знімків: %d%s" % (len(snaps), (", найновіший %s" % snaps[-1]) if snaps else ""),
                 None if snaps else "ctx snapshot"))
-    if baks:
-        out.append((WARN, "копій поза знімками: %d — %s" % (len(baks), "; ".join(
-            "%s (%s%s)" % (b["path"], human(b["size"]), "" if b["complete"] or b["size"] is None else "+")
-            for b in baks[:8])), "ctx snapshot import (копії форми local-context; теки вейлта лише названо)"))
+    for kind, title, fix in (("backups", "копій у ~/.grow-pm/backups", "ctx snapshot import"),
+                             ("bak", "копій local-context.md.bak* поруч із файлом", "ctx snapshot import"),
+                             ("vault", "тек _backup_* у вейлті", "лише названо — прибери, коли вони більше не потрібні")):
+        rows = [b for b in baks if b["kind"] == kind]
+        if not rows:
+            continue
+        sizes = [b["size"] for b in rows if b["size"] is not None]
+        partial = any(not b["complete"] for b in rows)
+        names = "; ".join("%s (%s)" % (os.path.basename(b["path"]), human(b["size"])) for b in rows[:6]) + \
+            ("; +%d" % (len(rows) - 6) if len(rows) > 6 else "")
+        out.append((WARN, "%s: %d, %s%s — %s" % (title, len(rows), human(sum(sizes)) if sizes else "не пораховано",
+                                                 "+" if partial else "", names), fix))
     return out
