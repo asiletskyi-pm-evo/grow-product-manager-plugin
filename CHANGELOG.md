@@ -12,6 +12,67 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.21.0 (2026-10-27)
+
+**«Скринька»: what skills learn about your context waits for your «так».** A skill that learned something about your context — a dashboard the product record lacks, a Jira key that moved, a product that closed — wrote it in silence or asked «зберегти?» at the end of a run. Now it proposes a delta, and the inbox keeps it: the urgent ones are asked at once in one question, the rest wait for one answer in the morning brief or `/grow-product-manager:context inbox`. A secret or a state or financial identifier never reaches the store. The first release of the programme «Петля контексту» (the configurator as a loop, the declared overlay, a core's own copy for MCP-only repositories, the vault's audit and graph follow).
+
+MINOR: new `ctx` commands (`propose`, `inbox`, `show`, `health`, `snapshot import`), a new typed command, a new end-of-run step in every skill.
+
+### Added
+
+- **The inbox** (`scripts/ctx_inbox.py`, `context-protocol.md` §5i, `.state/inbox.json` schema `context-inbox/1`):
+  - `ctx propose --skill S --delta JSON` — ADD a line, UPDATE a field (typed fields checked), INVALIDATE a record, NOOP «checked, still so»; the same change from two skills is one entry with the newest evidence; two values for one field are both kept and marked `⚠`; a rejected delta is remembered 180 days; a delta to a provider's block, a missing record, a heading or a region marker as a line, a skill the plugin does not have, a People-contour skill → refused;
+  - **urgent by a table, not by the skill**: any INVALIDATE, the profile's identity (`Name`, `Role`, `Role label`, `Role scope`, `Level home`, `Email`, `Work Email`, `Language`), an organisation's `Domain`, `Jira`, `Confluence`, `Jira instance`, `Confluence instance`, a product's `Jira Project Key`, `Confluence Space`, `URL`, any change to a team;
+  - `ctx inbox list` (numbered, `терміново` · `⚠` · `!` the record changed since, a code) and `ctx inbox accept|reject <N…|all> --code` — another code means the inbox changed since it was shown (exit 4); accept re-checks each delta (already so → taken quietly; the record gone → out; a field you changed since, a heading gone, both values of one field, a secret → held and said); one snapshot, one journal line, `ctx undo`;
+  - a proposal takes no snapshot (a run of every skill would rotate real ones out) and is no undo step; `ctx undo` of any change, `--steps N` too, keeps what was proposed after it.
+- **The end of a run in every skill** — one line before each `## Routing`: what the run learned goes to the inbox (`context-protocol.md` §5i); the People contour proposes nothing («no deltas»). `skill_lint` check 27 `[inbox-step]`. Without a store or a shell a skill asks «Зберегти?» as before (Context Enrichment).
+- **What the store never keeps** (`scripts/ctx_never.py`, `data-policy.md`): a card number (a network's range and length, Luhn), an IBAN (mod 97), a РНОКПП (its checksum and word), a passport number (beside its word), keys and tokens by form (`sk-…`, `gh?_…`, `glpat-…`, `xox?-…`, `AKIA…`, `AIza…`, `ya29.…`, a bot token, a JWT, a private key, `Bearer …`, a password in a URL or `key=` in a query, a labelled password) — refused by every writing command and every delta with exit 4, naming the kind, never the value; your own edit is imported and `validate` / `health` name the record and the kind. Health, religion, politics, family matters — a rule for skills.
+- **`ctx show`** — what the plugin knows about you: a line a record (who wrote it last, when, verified, `застаріле` / `неактуальне`, who reads it), the repositories' blocks, your answers, the inbox, edits waiting.
+- **`ctx health`** — ✅ / ⚠ / ✋ a line, each with the command that fixes it: stale and invalid records, store errors, edits waiting and conflicts, a secret in your text, the inbox, each repository's last sync, an unreadable registration or memory, the search index's age and the files iCloud has not downloaded, the snapshots, and the copies outside them (a line per kind; sizes by stat alone).
+- **`/grow-product-manager:context show | health | inbox`** — the seventh typed command; context-navigator 0.4.1 answers the same words in conversation («що ти про мене знаєш», «що в скриньці»).
+- **`ctx snapshot import [--apply --code]`** (`scripts/ctx_backups.py`) — the old backups of `local-context.md` under `~/.grow-pm` become `<their time>-imported` snapshots (never rotated, named for the time the backup's name carries), the originals go to the trash; a zip, a section, a yaml, a file holding a secret are left and said; the journal line is written before anything moves, so `ctx undo` takes back whatever part was done, and a snapshot is removed only when its original's text is back in its place.
+- **focus-advisor 0.9.4** shows the inbox in the morning brief (one question; headless: the lines only).
+- `testing/inbox-evals.md` — the expected deltas of ten skills.
+
+### Changed
+
+- `references/local-context-protocol.md` «Context Enrichment» points to the inbox; its old way stays for a host without a store or a shell and for «запам'ятай X».
+- `ctx undo` also puts back the old backups an import moved, and keeps the inbox's later proposals.
+- `skill_lint`'s taxonomy check reads a folder that starts with `_` (the `moc` row was there all along); `validate-consistency.sh` counts the host matrix's summary line and README's «Per-skill result» row from the matrix (README said 31 · 15/16 · 21/10 · 22/9), and checks README's Commands row.
+- `references/context-protocol.md` §10 — the programme's next releases.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/ctx_inbox.py`, `ctx_never.py`, `ctx_show.py`, `ctx_backups.py` | new |
+| `scripts/ctx.py` | `propose`, `inbox`, `show`, `health`, `snapshot import`, the guard over every writing command, `ctx undo` (inbox, backups) |
+| `scripts/ctx_ops.py` | `rotate` and `restore` leave imported snapshots alone |
+| `commands/context.md` | new — `/grow-product-manager:context` |
+| `skills/*/SKILL.md` (33) | the end-of-run line |
+| `skills/context-navigator/SKILL.md` | 0.4.0 → 0.4.1 — show, health, inbox |
+| `skills/focus-advisor/SKILL.md` | 0.9.3 → 0.9.4 — the inbox in the brief |
+| `references/context-protocol.md`, `local-context-protocol.md`, `data-policy.md`, `host-profiles.md`, `persistent-storage.md` | §5i, §5j, the command rows, exit 4, §8, §10; Context Enrichment; what the store never keeps; hosts; the recovery ladder |
+| `testing/ctx_inbox_test.py`, `ctx_never_test.py`, `ctx_show_test.py`, `ctx_snapshot_import_test.py`, `ctx_testenv.py` (new), `skill_lint.py`, `validate-consistency.sh`, `inbox-evals.md` (new), `trigger-evals.md`, `ctx_cli_test.py` | tests, check 27, the host-matrix check |
+
+### Acceptance (a copy of the author's store, `~/.grow-pm` and backups)
+
+- Ten skills' end-of-run step on the author's records: 10 entries, 5 urgent by the table, a core's block refused; `accept all` changed exactly 10 lines; `ctx undo` byte for byte.
+- The filter: 0 hits on the author's records; in 4 990 downloaded vault notes 0 in their own layer and 216 lines of a shared core — real tokens (JWT, `Bearer`, `?token=`) in pages taken from a wiki.
+- `show` 0.3 s, `health` 0.4 s, nothing changed; `snapshot import`: 17 snapshots byte for byte, 17 originals to the trash, `ctx undo` byte for byte.
+- The real vault, `~/.grow-pm` and the local index: 0 changes from the acceptance.
+
+### Known limits
+
+- A delta creates no record (a new product or team comes from the configurator, v3.22.0); INVALIDATE closes a whole record, not a line.
+- The core's suggestions into your sections (v3.23.0), `validate --recheck` (v3.22.0) and `ctx audit` (v4.0.0) do not propose deltas yet.
+- The ten skills' deltas are checked by `testing/inbox-evals.md` by hand, not by a script.
+- A conflict while importing your edits stops `propose` (exit 2) — the skill says so; the deltas are proposed again on the next run.
+
+### Backwards compatibility
+
+The index schema stays `search-index/1`. Nothing new is written unless a skill proposes (the inbox only) or you accept, reject or import with a code. A host without a store or a shell keeps «Зберегти?» as before.
+
 ## v3.20.0 (2026-10-26)
 
 **«Мости в нотатках»: the bridges your notes lack, written on your «так».** Since v3.18.0 `ctx entity` knows that your person note and a core's card are one person when an e-mail or your `same` answer joins them — but nothing in your note said so, and Obsidian, your scripts and other tools did not see the join. `ctx entity apply` reports the bridges your layer lacks and, only on your «так» to that report, writes them: one frontmatter line per note, a snapshot first, `ctx undo` to take it back. It is the only command of the plugin that writes into your notes, so it is the last release of the Context Core programme. Also: the plugin's card in Claude shows one sentence instead of 5 089 characters of history.

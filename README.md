@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.20.0
+**Version:** 3.21.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.21.0** — **«Скринька»: what skills learn about your context waits for your «так»** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A skill that learns something about your context during a run — a dashboard the product record lacks, a Jira key that moved, a product that closed — no longer writes it in silence or asks «зберегти?» at the end of every run: it proposes a delta (`ctx propose`), and the inbox keeps it. What matters most — who you are, your team, a product's keys, anything closed — is asked at once in one question; the rest is one line `У скриньці +N` and waits for the morning brief or `/grow-product-manager:context inbox`, taken or rejected in one answer, with `ctx undo`. A secret or a state or financial identifier never reaches the store — every writing command and every delta refuses it by its form, naming the kind, never the value. `/grow-product-manager:context show` says what the plugin knows about you and who wrote each record when; `health` says what wants looking after, each line with the command that fixes it; `ctx snapshot import` turns your old `local-context.md` backups into snapshots. The first release of the programme «Петля контексту».
 
 **New in v3.20.0** — **«Мости в нотатках»: the bridges your notes lack, written on your «так»** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). When an e-mail or your own `same` answer makes your person note and a core's card one person, nothing in your note said so — Obsidian, your scripts and other tools did not see it. Ask context-navigator «запиши мости в нотатки»: `ctx entity apply` reports which notes would get one frontmatter line `same_as: "[[<card>|<title>]]"`, what it skips and why, and a report code; only on your «так» does `--apply --code` write that report alone — into your plugin folder, never a core, one line per note with every other byte, the file's mode and its tags kept, after a snapshot. `ctx undo` takes it back: a note you have not touched byte for byte, one you edited loses our line alone. A `same_as` your own scripts keep is someone else's field: the plugin then writes nothing and says so. The plugin's card in Claude now shows one sentence instead of 5 000 characters of history; and a row «Ім'я, Ім'я — роль» of a core's team card joins both people.
 
@@ -1081,5 +1083,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.20.0  
+**Version:** 3.21.0  
 **Last Updated:** October 2026
