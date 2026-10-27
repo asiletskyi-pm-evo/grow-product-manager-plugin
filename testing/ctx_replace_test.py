@@ -80,6 +80,13 @@ check("1.12 a duplicate's removal with one copy left → nothing (the copy stays
       ci_.apply_to(dl(text="- a", value="", source=dup), one, "2026-10-27") == one["body"]
       and ci_.apply_to(dl(text="- a", value="", source=dup), two, "2026-10-27") == "- a\n- notes\n")
 
+sec = dict(REC, body="#### Risks\n\n- TBD\n\n#### Open questions\n\n- TBD\n- TBD\n")
+after = ci_.apply_to(dl(text="- TBD", value="", under="#### Open questions", source=dup), sec, "2026-10-27")
+check("1.13 a duplicate's removal stays in its section: Risks keeps its only copy, Open questions keeps one",
+      after == "#### Risks\n\n- TBD\n\n#### Open questions\n\n- TBD\n", after)
+check("1.14 … and with one copy left in that section, nothing", ci_.apply_to(
+    dl(text="- TBD", value="", under="#### Risks", source=dup), sec, "2026-10-27") == sec["body"])
+
 d = tempfile.mkdtemp(prefix="ctx-replace-")
 try:
     env = Env(d)

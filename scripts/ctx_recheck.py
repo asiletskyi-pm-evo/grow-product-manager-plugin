@@ -86,6 +86,11 @@ def _days(a, b):
         return 0
 
 
+def waiting(mem):
+    """The sightings still waiting for their second look (not yet 6 days apart)."""
+    return sum(1 for v in mem["seen"].values() if _days(v["first"], v["last"]) < CONFIRM_DAYS)
+
+
 def age(mem, today):
     return _days(mem["last_run"], today) if mem.get("last_run") else None
 
@@ -170,8 +175,9 @@ def run(obs, recs, mem, today):
             "role": any(f["from"] == "provider:identity" and f["field"] == "Role" for f in obs["facts"])}
     visible = {k: {v["key"]: v["name"] for v in chk[k]["values"]} for k in ("jira:visible", "confluence:visible")
                if k in chk}
-    inactive = {_n(x) for x in people.get("inactive", [])}
-    unknown = {_n(x) for x in people.get("unknown", [])}
+    active = {_n(x) for x in people.get("active", [])}
+    inactive = {_n(x) for x in people.get("inactive", [])} - active       # an active account of that name wins
+    unknown = {_n(x) for x in people.get("unknown", [])} - active
     role = next((f["value"] for f in obs["facts"] if f["from"] == "provider:identity" and f["field"] == "Role"), None)
     found, unresolved = {}, []
     live = [r for r in recs if not cs.has_status_region(r["body"]) and not str(r.get("owner") or "").startswith("provider:")]

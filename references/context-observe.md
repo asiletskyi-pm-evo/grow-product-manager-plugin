@@ -8,7 +8,7 @@
 - **Nothing of a meeting or a letter.** From a calendar or Fireflies the skill takes only who took part and how often; from mail only the domain of your address. It does not put an event's title, description, attendees' answers, a transcript, a subject or a body into the file. `ctx` drops `ref` and `evidence` of every `calendar:*`, `fireflies:*` and `mail:*` fact anyway and words the count itself.
 - **The file lives in the session's scratchpad**, never in the store or the vault, and is deleted after `ctx bootstrap --apply` or the recheck. Internal data stays in the session (`data-policy.md`).
 - **Say what did not answer.** Every connector the run tried is in `connectors` with `ok`, `absent` (not connected) or `error: <why>`. A fact from a connector that is not `ok` is refused; the recheck never reads «absent» as «gone».
-- **Budget.** At most one call per row of §3 per connector, a page of at most 100 results; a connector that does not answer in 20 s is `error: timeout`. A list that was cut by paging is not `complete`.
+- **Budget.** At most one call per row of §3 per connector, a page of at most 100 results for the bootstrap's activity searches; the recheck's lists (§4) are read **every page**. A connector that does not answer in 20 s is `error: timeout`. A list that was cut by paging is not `complete`.
 
 ## 2. The file — `context-observed/1`
 
@@ -61,15 +61,15 @@ The confidence is `ctx`'s, by where the fact came from:
 - `confluence:active` — ≥ 3 pages you created or edited in 90 days in the space;
 - `calendar:co-attendee` — ≥ 3 meetings together in 30 days.
 
-**What happens to a fact** (`ctx bootstrap`, `context-protocol.md` §5k): high and medium → a row of the table you confirm; low → a delta of the inbox, after the table is saved (its record must exist by then); a fact that agrees with your context → counted, not shown.
+**What happens to a fact** (`ctx bootstrap`, `context-protocol.md` §5k): high and medium → a row of the table you confirm; low → a delta of the inbox, after the table is saved (its record must exist by then); a fact that agrees with your context → counted, not shown. **Your answer (`user`) outranks every source** — it never clashes with what a connector says. A product is known by its Jira key or Confluence space before its name, so a project the connector names otherwise is the product you have; a Confluence fact alone never makes a new product. A value its field's type refuses (`context-fields.yaml`) is no row, said under the table.
 
 ## 4. The recheck — what is checked
 
 | Check | Call | In `checks` |
 |---|---|---|
-| a product's Jira key is still there | `getVisibleJiraProjects` (all pages) | `jira:visible` — `[{key, name}]` |
-| a product's Confluence space is still there | `getConfluenceSpaces` (all pages) | `confluence:visible` — `[{key, name}]` or keys |
-| a team's members are still active people of the site | `lookupJiraAccountId` for each name of `Members` | `atlassian:people` — `active`; `inactive` only for an account found and **deactivated**; `unknown` for a name the lookup found no one for (another spelling, a nickname — never evidence); `complete: true` when every member was looked up |
+| a product's Jira key is still there | `getVisibleJiraProjects` with `action: "browse"` (its default `create` hides the projects you only read), every page | `jira:visible` — `[{key, name}]` |
+| a product's Confluence space is still there | `getConfluenceSpaces` (global and your personal spaces), every page | `confluence:visible` — `[{key, name}]` or keys |
+| a team's members are still active people of the site | `lookupJiraAccountId` for each name of `Members` | `atlassian:people` — `active`; `inactive` only for an account found and **deactivated**; `unknown` for a name the lookup found no one for (another spelling, a nickname — never evidence); a name in `active` too (a namesake, an old account) is active; `complete: true` when every member was looked up |
 | the role a provider gives you | the provider's access bundle | a `provider:identity` fact with `field: Role` |
 
 A connector that is not `ok`, or a list that is not `complete`, checks nothing. `at` is required: it is the day of the look. A finding becomes a delta only when the next recheck, at least 6 days later, sees it again (`context-protocol.md` §5l).

@@ -110,8 +110,7 @@ try:
 
     rc, out, res = env.run("health")
     check("5.3 health names the last recheck and what waits for a second look",
-          "звірка з конекторами:" in out and ("помічено при звірці" in out or not json.loads(
-              read(env.store, ".state", "recheck.json"))["seen"]), out[-800:])
+          "звірка з конекторами:" in out and "помічено при звірці" not in out, out[-800:])
 
     # review I2: the same look run again is no second look
     env4 = Env(os.path.join(d, "four"))
@@ -163,6 +162,15 @@ try:
     env2.run("migrate", "--apply")
     rc, out, _ = env2.run("health")
     check("6.0 health before any recheck: «ще не звірялись»", "ще не звірялись" in out, out[-500:])
+    rc, out, _ = env.run("validate", "--recheck", "--observed", look("2026-11-12", inactive=("Bea Two",)))
+    rc, out, _ = env.run("health")
+    check("5.4 a fresh sighting waits: health says «помічено при звірці»", "помічено при звірці:" in out, out[-600:])
+    o = json.load(open(look("2026-11-20"), encoding="utf-8"))
+    o["checks"]["atlassian:people"]["active"].append("Bea Two")
+    json.dump(o, open(os.path.join(d, "both.json"), "w", encoding="utf-8"))
+    rc, out, res = env.run("validate", "--recheck", "--observed", os.path.join(d, "both.json"))
+    check("5.5 a name both active and inactive (a namesake, an old account) → active wins: no finding, forgotten",
+          not any(f["check"] == "member" for f in res["noticed"] + res["confirmed"]), res)
     rc, out, _ = env2.run("validate", "--recheck")
     check("6.1 --recheck without --observed → exit 3", rc == 3, out[-200:])
     p = os.path.join(env2.store, ".state", "recheck.json")

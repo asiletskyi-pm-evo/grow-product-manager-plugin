@@ -101,14 +101,14 @@ def passed(line, today):
 def _lines(body):
     """[(core)] of the body's own lines: outside managed regions and fenced code, not headings, not empty, not a
     table's rule."""
-    spans, fence, out, section = cc.managed_spans(body), False, [], 0
+    spans, fence, out, section = cc.managed_spans(body), False, [], None
     for off, core, _ in cs._lines(body):
         s = core.strip()
         if s.startswith("```") or s.startswith("~~~"):
             fence = not fence
             continue
         if not fence and cs._heading_text(core) is not None:
-            section += 1
+            section = s
             continue
         if fence or not s or cs._in_region(off, spans):
             continue
@@ -138,9 +138,10 @@ def find(recs, today, card_lines=None, card_max=cs.CARD_MAX):
             if key in seen:
                 if line not in gone:
                     gone.add(line)
-                    deltas.append({"op": "REPLACE", "record": r["id"], "text": line, "value": "",
-                                   "reason": "рядок двічі в одному розділі — лишаю один",
-                                   "source": {"kind": "derived:consolidate", "ref": "дубль", "at": today}})
+                    deltas.append(dict({"op": "REPLACE", "record": r["id"], "text": line, "value": "",
+                                        "reason": "рядок двічі в одному розділі — лишаю перший",
+                                        "source": {"kind": "derived:consolidate", "ref": "дубль", "at": today}},
+                                       **({"under": section} if section else {})))
                 continue
             seen.add(key)
             when = passed(line, t)

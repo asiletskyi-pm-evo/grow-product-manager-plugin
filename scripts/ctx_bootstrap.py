@@ -31,6 +31,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_schema as sc  # noqa: E402
 import ctx_sources as csrc  # noqa: E402
 import ctx_store as cs  # noqa: E402
 
@@ -38,6 +39,7 @@ TYPE_ORDER = {"profile": 0, "org": 1, "product": 2, "team": 3}
 PREFIX = {"org": "Organization", "product": "Product", "team": "Team"}
 LEVEL_UA = {"high": "висока", "medium": "середня", "low": "низька"}
 _RANK = {"high": 3, "medium": 2, "low": 1}
+ANCHORS = ("Jira Project Key", "Confluence Space")       # a product is known by these before its name
 # The sections Basic leaves for later (onboarding-steps.md Steps 4b–15 and the Extended add-ons); a team the table
 # created is no longer deferred.
 DEFERRED = ("judgment", "key-metrics", "teams", "repos", "cjm", "knowledge-library", "templates", "obsidian-vault",
@@ -48,7 +50,7 @@ PROFILE_ORDER = ("Name", "Role", "Role label", "Role scope", "Level home", "Emai
 # A field a record may hold under another name (Step 16c writes `Jira`; files from before say `Jira instance`).
 FIELD_ALIASES = {"Jira": ("Jira instance",), "Confluence": ("Confluence instance",), "Email": ("Work Email",)}
 MARKS = {"mine": "✋ твоє — лише номером", "clash": "⚠ два значення — лише номером",
-         "renamed": "≠ назва організації — лише номером", "orphan": "немає організації — візьми й організацію"}
+         "renamed": "≠ назва — лише номером", "orphan": "немає організації — візьми й організацію"}
 
 
 def _n(s):
@@ -117,12 +119,49 @@ def has_line(body, name, value):
     return False
 
 
+def _rank(f):
+    """Your answer outranks every source; then how sure the source is."""
+    return 4 if f["from"] == "user" else _RANK[f["confidence"]]
+
+
+def _by_anchor(recs, f):
+    """A product a fact names by its key or space though the connector calls it otherwise (a Jira project's own name)."""
+    if f["type"] != "product" or f["field"] not in ANCHORS:
+        return None
+    for r in recs:
+        if r["type"] == "product" and not cs.has_status_region(r["body"]):
+            now = cs.field_get(r["body"], f["field"])
+            if now and _n(f["value"]) in [_n(x) for x in re.split(r"[,;\s]+", now) if x]:
+                return r
+    return None
+
+
+def _kind(rec_type):
+    return rec_type if rec_type in ("profile", "product", "onboarding") else None
+
+
 def diff(obs, recs, srcs=None):
     srcs = srcs or csrc.empty()
     orgs = [r for r in recs if r["type"] == "org" and not cs.has_status_region(r["body"])]
-    resolved = []
+    teams = [r for r in recs if r["type"] == "team" and not cs.has_status_region(r["body"])]
+    alias = {}                                          # (type, title) → the record its key or space found
     for f in obs["facts"]:
-        rec = find(recs, f["type"], f["title"])
+        hit = None if find(recs, f["type"], f["title"], fallback=False) else _by_anchor(recs, f)
+        if hit:
+            alias[(f["type"], _n(f["title"]))] = hit
+    resolved, invalid, orphans = [], [], []
+    for f in obs["facts"]:
+        if f["field"]:                                  # a value its type refuses is no row (ctx set would refuse it)
+            spec = (sc.load_fields().get(_kind(f["type"])) or {}).get(f["field"])
+            err = sc.check_value(spec, f["value"]) if spec else None
+            if err:
+                invalid.append({"fact": "%s %s" % (f["type"], f["field"]), "why": err})
+                continue
+        rec = find(recs, f["type"], f["title"], fallback=False) or alias.get((f["type"], _n(f["title"]))) or \
+            find(recs, f["type"], f["title"])
+        if rec is None and f["from"].startswith("confluence:"):
+            orphans.append(f)                           # a space alone never makes a product
+            continue
         renamed = bool(rec) and f["type"] == "org" and _n(bare_title(rec)) != _n(f["title"])
         where = rec["id"] if rec else "%s:%s" % (f["type"], _n(f["title"]))
         what = f["field"] or ("list:" + f["list"] if f["list"] else "")
@@ -131,10 +170,11 @@ def diff(obs, recs, srcs=None):
     for where, what, line, f, rec, renamed in resolved:
         groups.setdefault((where, what, line), []).append((f, rec, renamed))
     rows, inbox, later, same, news = [], [], [], 0, {}
+    later_orphans = orphans
     order = lambda k: (TYPE_ORDER[groups[k][0][0]["type"]], k[0], k[1], k[2])
     for key in sorted(groups, key=order):
-        group = sorted(groups[key], key=lambda x: -_RANK[x[0]["confidence"]])
-        top = [x for x in group if x[0]["confidence"] == group[0][0]["confidence"]]
+        group = sorted(groups[key], key=lambda x: -_rank(x[0]))
+        top = [x for x in group if _rank(x[0]) == _rank(group[0][0])]
         values = []
         for x in top:
             if _n(x[0]["value"]) not in [_n(v[0]["value"]) for v in values]:
@@ -166,7 +206,8 @@ def diff(obs, recs, srcs=None):
                 if row is None:
                     row = news[nk] = {"new": True, "type": f["type"], "title": f["title"], "record": None,
                                       "fields": [], "lists": [], "from": f["from"], "confidence": f["confidence"],
-                                      "ref": f["ref"], "sign": "+", "mine": False, "clash": False, "renamed": False,
+                                      "ref": f["ref"], "sign": "+", "mine": False, "clash": False,
+                                      "renamed": f["type"] == "team" and len(teams) == 1 and f["from"] != "user",
                                       "orphan": False}
                     rows.append(row)
                 if f["field"]:
@@ -188,7 +229,8 @@ def diff(obs, recs, srcs=None):
             rows.append({"new": False, "type": f["type"], "title": f["title"], "record": rec["id"] if rec else None,
                          "field": f["field"], "list": f["list"], "now": now, "value": f["value"], "from": f["from"],
                          "confidence": f["confidence"], "ref": f["ref"], "sign": sign,
-                         "mine": sign == "~" and _mine(kind), "clash": clash, "renamed": renamed, "orphan": False})
+                         "mine": sign == "~" and _mine(kind) and f["from"] != "user",    # an answer now is yours
+                         "clash": clash, "renamed": renamed, "orphan": False})
     new_org = any(r["new"] and r["type"] == "org" for r in rows)
     for r in rows:
         if r["new"] and r["type"] in ("product", "team") and not orgs and not new_org:
@@ -200,7 +242,7 @@ def diff(obs, recs, srcs=None):
     for f in later:
         f["waits_for"] = titles.get((f["type"], _n(f["title"])))
     return {"rows": rows, "inbox": inbox, "later": [f for f in later if f["waits_for"]], "same": same,
-            "orphans": [f for f in later if not f["waits_for"]]}
+            "orphans": [f for f in later if not f["waits_for"]] + later_orphans, "invalid": invalid}
 
 
 def _src(x):
@@ -286,6 +328,9 @@ def render(d, connectors=None, dropped=None):
         tail.append("ще %d — коли візьмеш нові записи" % len(d["later"]))
     if d["orphans"]:
         tail.append("без запису, не піде нікуди: %d" % len(d["orphans"]))
+    if d.get("invalid"):
+        tail.append("не той тип значення: %d (%s)" % (len(d["invalid"]), "; ".join(
+            "%s — %s" % (x["fact"], x["why"]) for x in d["invalid"][:3])))
     if dropped:
         tail.append("відкинуто: %d (%s)" % (len(dropped), "; ".join(sorted({x["why"].split(":")[0] for x in dropped}))))
     silent = sorted(k for k, v in (connectors or {}).items() if v != "ok")

@@ -160,6 +160,8 @@ def _fact(raw, connectors):
     if frm.startswith(QUIET):
         f["evidence"] = None
         f["ref"] = (_COUNTED[frm] % count) if frm in _COUNTED and count is not None else None
+    if f["ref"] and len(f["ref"]) > 80:                 # where, not what: a tool, a key — never a page's title
+        f["ref"] = f["ref"][:79] + "…"
     if f["evidence"] and len(f["evidence"]) > EVIDENCE_MAX:
         raise ValueError("evidence — до %d знаків" % EVIDENCE_MAX)
     kinds = cn.scan(" \n".join(x for x in (f["title"], f["field"], f["list"], f["value"], f["ref"], f["evidence"]) if x))

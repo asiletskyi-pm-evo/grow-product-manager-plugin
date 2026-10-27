@@ -180,6 +180,10 @@ def normalize(raw):
             raise ValueError("an UPDATE carries a field and a value, not a heading, a region marker or a rule")
     elif op == "REPLACE":
         d["text"] = _text(raw, "text", need=True)
+        under = _text(raw, "under")
+        if under is not None and not under.startswith("#"):
+            raise ValueError("under is a heading line, e.g. «#### Risks»")
+        d["under"] = under
         v = raw.get("value")
         if not isinstance(v, str):
             raise ValueError("a REPLACE takes value: the new line, or \"\" to remove the line")
@@ -281,10 +285,10 @@ def apply_to(d, rec, today):
                 raise ValueError("%s: %s" % (new_field, err))
             if new_field != old_field and cs.field_get(body, new_field) is not None:
                 raise ValueError("поле %s уже є в записі — це UPDATE, не REPLACE" % new_field)
-        if not d["value"] and (d["source"].get("ref") == DUPLICATE and
-                               sum(1 for _, c, _ in cs._lines(body) if _norm(c) == _norm(d["text"])) < 2):
+        if not d["value"] and d["source"].get("ref") == DUPLICATE and \
+                sum(1 for c in _section(body, d.get("under")) if _norm(c) == _norm(d["text"])) < 2:
             return body                                 # a duplicate no more: the copy left stays
-        return replace_line(body, d["text"], d["value"])
+        return replace_line(body, d["text"], d["value"], under=d.get("under"))
     return body
 
 
@@ -295,17 +299,46 @@ def _norm(s):
     return " ".join((s or "").split()).casefold().rstrip(".;,")
 
 
-def replace_line(body, old, new):
+def _span(lines, under):
+    """(lo, hi) of the lines a REPLACE looks in: the whole body, or from the heading line `under` to the next heading."""
+    if under is None:
+        return 0, len(lines)
+    lo = next((k for k, (_, c, _) in enumerate(lines) if c.strip() == under.strip()), None)
+    if lo is None:
+        return 0, 0
+    hi = next((k for k in range(lo + 1, len(lines)) if cs._heading_text(lines[k][1]) is not None), len(lines))
+    return lo + 1, hi
+
+
+def _section(body, under):
+    lines = cs._lines(body)
+    lo, hi = _span(lines, under)
+    return [c for _, c, _ in lines[lo:hi]]
+
+
+def replace_line(body, old, new, under=None):
     """The body with the first line of your own text (not in fenced code) that reads `old` (spaces at its ends aside)
     made `new` — its indentation kept — or removed when `new` is empty; no such line → the body unchanged («уже так»);
-    the line only inside a provider's region → cs.RegionError."""
+    the line only inside a provider's region → cs.RegionError. With `under` (since v3.22.0) only the lines between that
+    heading and the next one; of two copies there, the later one goes."""
     spans, fence, in_region = cc.managed_spans(body), False, False
-    for off, core, end in cs._lines(body):
-        s = core.strip()
-        if s.startswith(("```", "~~~")):
+    lines = cs._lines(body)
+    lo, hi = _span(lines, under)
+    if under is not None and not new:                   # a duplicate's removal: the later copy, as the reason says
+        rng = list(range(hi - 1, lo - 1, -1))
+    else:
+        rng = range(lo, hi)
+    fences = set()
+    for k, (_, core, _) in enumerate(lines):
+        if core.strip().startswith(("```", "~~~")):
             fence = not fence
-            continue
-        if fence or s != old.strip():
+            fences.add(k)
+        elif fence:
+            fences.add(k)
+    for k in rng:
+        off, core, end = lines[k]
+        s = core.strip()
+        if k in fences or s != old.strip():
             continue
         if cs._in_region(off, spans):
             in_region = True
@@ -415,7 +448,8 @@ def what(d):
     if d["op"] == "ADD":
         return "+ «%s»%s" % (d["text"], (" під %s" % d["under"]) if d["under"] else "")
     if d["op"] == "REPLACE":
-        return ("«%s» → «%s»" % (d["text"], d["value"])) if d["value"] else "− «%s»" % d["text"]
+        where = (" під %s" % d["under"]) if d.get("under") else ""
+        return (("«%s» → «%s»" % (d["text"], d["value"])) if d["value"] else "− «%s»" % d["text"]) + where
     return "неактуальний: %s" % d["reason"]
 
 

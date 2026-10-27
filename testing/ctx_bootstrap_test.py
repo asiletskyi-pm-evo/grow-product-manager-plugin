@@ -75,8 +75,8 @@ try:
     check("A0 a local-context.md not yet in records: the table is shown", rc == 0 and "код:" in out, out[-400:])
     code0 = res["code"]
     rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", code0)
-    check("A0b … but the apply waits for the move into records (exit 4, says ctx migrate)",
-          rc == 4 and "ctx migrate" in out and not os.path.isdir(env.store), (rc, out[-300:]))
+    check("A0b … but the apply waits for the move into records (exit 3, says ctx migrate)",
+          rc == 3 and "ctx migrate" in out and not os.path.isdir(env.store), (rc, out[-300:]))
     env.run("migrate", "--apply")
     env.run("compile")
     before = state_bytes(env.store, [env.ctx])
@@ -211,8 +211,16 @@ try:
         {"type": "org", "title": "acme", "field": "Domain", "value": "acme.example", "from": "mail:domain"},
         {"type": "org", "title": "zorg", "field": "Confluence", "value": "https://zorg.atlassian.example/wiki",
          "from": "atlassian:site"},
-        {"type": "org", "title": "Zorg", "field": "Confluence", "value": "https://zorg-old.atlassian.example/wiki",
-         "from": "user"},
+        {"type": "org", "title": "zorg-old", "field": "Confluence", "value": "https://zorg-old.atlassian.example/wiki",
+         "from": "atlassian:site"},
+        {"type": "profile", "field": "Name", "value": "Alexander One", "from": "atlassian:user"},
+        {"type": "profile", "field": "Name", "value": "Alex One-Two", "from": "user"},
+        {"type": "product", "title": "Zorg Application", "field": "Jira Project Key", "value": "PROJ",
+         "from": "jira:active", "count": 9},
+        {"type": "product", "title": "Zorg Application", "from": "jira:active", "count": 9},
+        {"type": "product", "title": "Zorg Docs", "field": "Confluence Space", "value": "ZDOCS",
+         "from": "confluence:active", "count": 9},
+        {"type": "profile", "field": "Role", "value": "wizard", "from": "user"},
         {"type": "team", "title": "Alpha (A)", "list": "Members", "value": "Bea Tw", "from": "user"},
         {"type": "team", "title": "Gamma", "list": "Members", "value": "Ann Lee", "from": "user"},
         {"type": "team", "title": "Gamma", "from": "user"},
@@ -225,7 +233,14 @@ try:
     check("R1 a fact about «acme» attaches to the one organisation but is never taken by default",
           by3[("org", "Domain")]["renamed"] and not by3[("org", "Domain")]["default"] and "≠ назва" in out, res["rows"])
     conf = [r for r in res["rows"] if r.get("field") == "Confluence"]
-    check("R2 two values for Zorg's Confluence (a site, your answer, both high) → ⚠, neither default",
+    name = [r for r in res["rows"] if r.get("field") == "Name"]
+    check("R2b your answer outranks Atlassian: one Name row, yours, taken by default",
+          len(name) == 1 and name[0]["value"] == "Alex One-Two" and name[0]["from"] == "user" and name[0]["default"], name)
+    check("R2c a product named otherwise in Jira but with your key is your product: no new record",
+          not any(r["new"] and r["title"] in ("Zorg Application", "Zorg Docs") for r in res["rows"]), res["rows"])
+    check("R2d a role its type refuses is no row, said under the table",
+          not any(r.get("field") == "Role" for r in res["rows"]) and "не той тип значення: 1" in shown3, shown3[-600:])
+    check("R2 two values for Zorg's Confluence (two sites, both high) → ⚠, neither default",
           len(conf) == 2 and all(r["clash"] and not r["default"] for r in conf), conf)
     rc, out, _ = env3.run("bootstrap", "--observed", p3, "--apply", "--code", res["code"], "--take",
                           ",".join(str(r["n"]) for r in conf))
@@ -324,8 +339,8 @@ try:
     json.dump(o, open(nobs, "w", encoding="utf-8"), ensure_ascii=False)
     rc, out, res = run_bare(home3, "bootstrap", "--observed", nobs)
     rc, out, _ = run_bare(home3, "bootstrap", "--observed", nobs, "--apply", "--code", res["code"])
-    check("B9 no local-context.md but a store was there → a recovery, not a new user: exit 4, nothing written",
-          rc == 4 and "RM-1" in out and not os.path.exists(os.path.join(home3, ".grow-pm", "local-context.md")),
+    check("B9 no local-context.md but a store was there → a recovery, not a new user: exit 3, nothing written",
+          rc == 3 and "RM-1" in out and not os.path.exists(os.path.join(home3, ".grow-pm", "local-context.md")),
           (rc, out[-300:]))
 
     # ======================================================================= C. the file

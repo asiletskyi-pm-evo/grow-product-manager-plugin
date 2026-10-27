@@ -1382,7 +1382,7 @@ def _recheck_health(c, today):
         mem = crk.load(c.store)
     except cs.StoreError as e:
         return str(e)
-    return {"age": crk.age(mem, today), "noticed": len(mem["seen"]), "old": crk.OLD_DAYS}
+    return {"age": crk.age(mem, today), "noticed": crk.waiting(mem), "old": crk.OLD_DAYS}
 
 
 def cmd_card(a, c):
@@ -2684,6 +2684,8 @@ def cmd_bootstrap(a, c):
         for line in cbt.render(d, obs["connectors"], obs["dropped"]):
             print(line)
         print("код: %s" % cd if d["rows"] or d["inbox"] or d["later"] else "нічого нового — контекст уже такий")
+        if not c.store.exists() and not c.fresh:
+            print("local-context.md ще не в записах — щоб записати таблицю, спершу ctx migrate --apply")
         return 0, out
     if not a.code:
         raise Usage("--apply бере --code з таблиці (ctx bootstrap --observed F)")
@@ -2694,11 +2696,11 @@ def cmd_bootstrap(a, c):
     if c.fresh:
         held = [p for p in (c.store.records_dir, co._last_store_path(c.home)) if os.path.lexists(p)]
         if held:
-            raise co.Refused("local-context.md немає, але сховище контексту є (%s) — це відновлення, не новий "
-                             "користувач: «налаштуй плагін» (RM-1)" % held[0])
+            raise cs.StoreError("local-context.md немає, але сховище контексту є (%s) — це відновлення, не новий "
+                                "користувач: «налаштуй плагін» (RM-1)" % held[0])
     elif not c.store.exists():
-        raise co.Refused("local-context.md ще не в записах — спершу перенеси його (ctx migrate --apply, пункт оновлення "
-                         "«Move my context to records»), тоді таблиця запишеться")
+        raise cs.StoreError("local-context.md ще не в записах — спершу перенеси його (ctx migrate --apply, пункт "
+                            "оновлення «Move my context to records»), тоді таблиця запишеться")
     t = now()
     with co.lock(c.home):
         c.guard()
