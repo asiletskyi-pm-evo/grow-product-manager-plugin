@@ -2335,6 +2335,8 @@ def cmd_propose(a, c):
         a.skill = ci_.skill_name(a.skill)
     except ValueError as e:
         raise Usage(str(e))
+    if a.skill in ci_.CTX_OWN:                         # since v3.22.0: ctx's own proposers come only from its commands
+        raise Usage("%s — джерело самого ctx (bootstrap, validate --recheck, consolidate), не скіл" % a.skill)
     if a.skill not in (cr.load_manifest().get("skills") or {}):     # a name the plugin does not know is no skill's
         raise Usage("--skill names one of the plugin's skills (references/context-manifest.yaml), not %s"
                     % ("that" if cn.scan(a.skill) else a.skill))
@@ -2382,11 +2384,12 @@ def _inbox_code(c, mem, recs, given):
 
 def _note_delta(srcs, e):
     d, s = e["delta"], e["delta"]["source"]
-    key, value = ((csrc.field_key(d["field"]), d["value"]) if d["op"] == "UPDATE" else
-                  (csrc.line_key(d["text"]), d["text"]) if d["op"] == "ADD" else
-                  (csrc.line_key(d["value"]), d["value"]) if d["op"] == "REPLACE" and d.get("value") else (None, None))
-    if key:
-        csrc.note(srcs, d["record"], key, value, s["kind"], ref=s.get("ref"), at=s.get("at") or now())
+    at = s.get("at") or now()
+    if d["op"] == "UPDATE":
+        csrc.note(srcs, d["record"], csrc.field_key(d["field"]), d["value"], s["kind"], ref=s.get("ref"), at=at)
+    elif d["op"] in ("ADD", "REPLACE"):                 # the line it adds (a field's line as that field)
+        csrc.note_text(srcs, d["record"], d["text"] if d["op"] == "ADD" else d["value"], s["kind"], ref=s.get("ref"),
+                       at=at)
 
 
 def cmd_inbox(a, c):
