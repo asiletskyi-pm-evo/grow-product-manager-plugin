@@ -314,6 +314,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_backups as cbk  # noqa: E402
 import ctx_blocks as cb  # noqa: E402
+import ctx_bootstrap as cbt  # noqa: E402
 import ctx_bridges as cbr  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_entity as ce  # noqa: E402
@@ -322,6 +323,7 @@ import ctx_hints as ch  # noqa: E402
 import ctx_inbox as ci_  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_never as cn  # noqa: E402
+import ctx_observe as cob  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
@@ -349,7 +351,8 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
 # The arguments of a writing command that are no free text a store keeps: paths, ids, numbers, the propose's deltas
 # (each one checked on its own, so one secret does not cost the others — ctx_inbox.propose).
 NOT_TEXT = {"cmd", "action", "context", "store", "home", "file", "body_file", "delta", "code", "which", "steps", "id",
-            "ids", "skill", "type", "parent", "after", "repo", "product", "label", "now"}
+            "ids", "skill", "type", "parent", "after", "repo", "product", "label", "now", "observed", "take", "skip",
+            "only"}
 
 
 def _free_text(a):
@@ -376,6 +379,8 @@ def writes(a):
         return True
     if a.cmd == "propose" or (a.cmd == "inbox" and getattr(a, "action", None) in ("accept", "reject")):
         return True
+    if a.cmd == "bootstrap":                            # since v3.22.0: the table only with --apply
+        return getattr(a, "apply", False)
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] == "apply":
@@ -400,12 +405,16 @@ class Ctx:
             raise Usage("--store is for read commands only; writing commands use the context's own store")
         self.home = a.home or os.path.expanduser("~")
         found = cc.find_context(a.context, home=self.home)
+        self.fresh = False                       # since v3.22.0: `bootstrap` of a new user — no local-context.md yet
+        if not found and a.cmd == "bootstrap":
+            found = os.path.expanduser(a.context) if a.context else os.path.join(self.home, ".grow-pm", "local-context.md")
+            self.fresh = not os.path.lexists(found)
         if not found:
             raise cs.StoreError("no such file: %s (--context)" % a.context if a.context else
                                 "no local-context.md found (GROW_PM_CONTEXT_PATH, ~/.grow-pm)")
         self.found = found                       # as found, links not followed: the digest's summary is kept beside it
         self.context = os.path.realpath(found)
-        self.text = co._read(self.context)
+        self.text = "" if self.fresh else co._read(self.context)
         self.store = cs.Store(a.store or co.store_root_for(self.text, self.home))
         self.copies = co.copies_for(self.context, self.text, self.home)
 
@@ -2475,6 +2484,167 @@ def cmd_inbox(a, c):
                    inbox=ci_.counts(mem, today))
 
 
+# ------------------------------------------------------------------ bootstrap (since v3.22.0)
+def _bootstrap_recs(c):
+    """The records the table is compared with: the store's, or — no store — the file's sections, or nothing."""
+    if c.store.exists():
+        return c.store.load()
+    if c.fresh:
+        return []
+    return [dict(r, body=r["text"], source="local-context") for r in cs.assign_ids(cs.split_sections(c.text))]
+
+
+def _bootstrap_result(d, obs, cd):
+    return {"rows": d["rows"], "inbox": len(d["inbox"]), "same": d["same"], "dropped": obs["dropped"],
+            "connectors": obs["connectors"], "code": cd, "default": [r["n"] for r in d["rows"] if r["default"]]}
+
+
+def cmd_bootstrap(a, c):
+    """`bootstrap --observed F [--json]` — the table: what the connectors say against your context (plan C5); reads
+    only. `--apply --code C [--take N,…] [--skip N,…] [--only N,…]` — writes the rows taken (C6): with a store a
+    snapshot, the records, `.state/sources.json`, the low facts as inbox deltas, one journal line {op bootstrap}, the
+    compile; without a store and without local-context.md (a new user) the file from the skeleton, moved into records at
+    once. A local-context.md that is not in records yet: the table, but `--apply` waits for `ctx migrate --apply`."""
+    try:
+        obs = cob.load(a.observed)
+    except ValueError as e:
+        raise Usage(str(e))
+    today = now()[:10]
+    at = obs["at"] or today
+    srcs = csrc.load(c.store) if c.store.exists() else csrc.empty()
+    recs = _bootstrap_recs(c)
+    d = cbt.diff(obs, recs, srcs)
+    cd = cbt.code(d, recs)
+    out = dict(_bootstrap_result(d, obs, cd), command="bootstrap", applied=False)
+    if not a.apply:
+        for line in cbt.render(d, obs["connectors"], obs["dropped"]):
+            print(line)
+        print("код: %s" % cd if d["rows"] or d["inbox"] else "нічого нового — контекст уже такий")
+        return 0, out
+    if not a.code:
+        raise Usage("--apply бере --code з таблиці (ctx bootstrap --observed F)")
+    if a.code != cd:
+        raise co.Refused("таблиця змінилась — переглянь ще раз: ctx bootstrap --observed %s" % a.observed)
+    try:
+        take = cbt.chosen(d, a.take, a.skip, a.only)
+    except ValueError as e:
+        raise Usage(str(e))
+    if not c.store.exists() and not c.fresh:
+        raise co.Refused("local-context.md ще не в записах — спершу перенеси його (ctx migrate --apply, пункт оновлення "
+                         "«Move my context to records»), тоді таблиця запишеться")
+    t = now()
+    with co.lock(c.home):
+        c.guard()
+        if c.fresh:
+            ids, snap, written = _bootstrap_new(c, take, at, t)
+        else:
+            ids, snap, written = _bootstrap_store(c, a, take, cd, at, t)
+        recs = c.store.load()
+        mem = ci_.load(c.store)
+        props = ci_.propose(mem, cbt.deltas(d["inbox"], recs, at), "ctx-bootstrap", recs, t[:10])
+        new = [r for r in props if r["status"] in (ci_.ADDED, ci_.MERGED)]
+        if new:
+            ci_.save(c.store, mem, t[:10])
+        c.store.journal(dict({"ts": now(), "op": "bootstrap", "ids": ids, "rows": [r["n"] for r in take],
+                              "source": "ctx-bootstrap", "reason": "", "inbox": [e["sig"] for e in mem["entries"]
+                                                                                 if e["n"] in {r["n"] for r in new}]},
+                             **({"snapshot": snap} if snap and not c.fresh else {})))
+    print("записано: %s · у скриньці +%d%s" % (", ".join(ids) or "нічого", len([r for r in new if r["status"] == ci_.ADDED]),
+                                              " (back: ctx undo)" if snap else ""))
+    if c.fresh:
+        print("контекст у записах: %s — ctx undo повертає один файл" % c.store.root)
+    return 0, dict(out, applied=True, taken=[r["n"] for r in take], ids=ids, snapshot=snap, written=written,
+                   proposed=[r.get("n") for r in new])
+
+
+def _note_row(srcs, rid, field, value, r, at):
+    csrc.note(srcs, rid, csrc.field_key(field) if field else csrc.line_key(value), value, cbt.kind_of(r["from"]),
+              ref=r.get("ref"), at=at, confidence=r["confidence"])
+
+
+def _bootstrap_store(c, a, take, cd, at, t):
+    pre = c.import_first()
+    recs = c.store.load()
+    srcs = csrc.load(c.store)
+    if (pre["changed"] or pre["added"]) and cbt.code(cbt.diff(cob.load(a.observed), recs, srcs), recs) != cd:
+        raise co.Refused("правки з local-context.md змінили таблицю — переглянь ще раз: ctx bootstrap --observed %s"
+                         % a.observed)
+    if not take:                                        # nothing taken: no snapshot, no record (the inbox may still get some)
+        return [], None, []
+    by_id = {r["id"]: r for r in recs}
+    snap = co.snapshot(c.store, c.copies, c.home, "bootstrap")
+    changed = {}
+    for r in take:
+        if r["new"]:
+            continue
+        rec = changed.get(r["record"]) or by_id.get(r["record"])
+        if rec is None:                                 # a profile field and no profile record
+            continue
+        if r["record"] not in changed:
+            csrc.adopt(srcs, rec)
+        if r.get("field"):
+            body = cs.field_set(rec["body"], r["field"], r["value"])
+            _note_row(srcs, rec["id"], r["field"], r["value"], r, at)
+        else:
+            line, under = cbt.list_line(rec["body"], r["list"], r["value"])
+            body = cs.append_line(rec["body"], line, under=under)
+            _note_row(srcs, rec["id"], None, line, r, at)
+        changed[rec["id"]] = dict(rec, body=body, source="ctx-bootstrap", modified=t)
+    for rec in changed.values():
+        c.store.write(co.touch(rec, t))
+    ids = list(changed)
+    news = [r for r in take if r["new"]]
+    for r in sorted(news, key=lambda r: cbt.TYPE_ORDER[r["type"]]):
+        cur = c.store.load()
+        if r["type"] == "org":
+            after = cur[-1]["id"] if cur else None
+        else:
+            orgs = [x for x in cur if x["type"] == "org"]
+            if not orgs:
+                raise co.Refused("продукт чи команда потребує організації — візьми рядок організації")
+            parent = orgs[0]["id"]
+            kids = [x["id"] for x in cur if x["parent"] == parent and x["type"] == r["type"]] or \
+                [x["id"] for x in cur if x["parent"] == parent] or [parent]
+            after = kids[-1]
+        text = cbt.new_body(r)
+        rid = co._insert(c.store, [{"text": text, "type": r["type"], "title": "%s: %s" % (cbt.PREFIX[r["type"]],
+                                                                                         r["title"]), "after": after}],
+                         "ctx-bootstrap", t)[0]
+        for f in r["fields"]:
+            _note_row(srcs, rid, f["field"], f["value"], f, at)
+        ids.append(rid)
+    csrc.save(c.store, srcs)
+    written = co.compile_store(c.store, c.copies, t, c.home, snap)["written"] if ids else []
+    return ids, snap, written
+
+
+def _bootstrap_new(c, take, at, t):
+    """A new user: the file from the skeleton, then the move into records — `ctx undo` after it is one file again."""
+    try:
+        text = cbt.skeleton(take, t[:10], t, cbt.plugin_version())
+    except ValueError as e:
+        raise Usage(str(e))
+    cs.check_target(c.context)
+    os.makedirs(os.path.dirname(c.context), exist_ok=True)
+    cs.atomic_write(c.context, text)
+    rep = co.migrate(c.context, c.store.root, c.copies, c.home, True, t)
+    srcs = csrc.empty()
+    recs = c.store.load()
+    for r in take:
+        if r["new"]:
+            rec = cbt.find(recs, r["type"], r["title"])
+            for f in r["fields"]:
+                _note_row(srcs, rec["id"], f["field"], f["value"], f, at)
+        elif r["type"] == "profile" and r.get("field"):
+            _note_row(srcs, cbt.find(recs, "profile", None)["id"], r["field"], r["value"], r, at)
+    for rec in recs:                                    # the skeleton's own lines (Judgment defaults, the onboarding
+        for name, value in csrc.fields(rec["body"]):    # status): written by the configurator itself
+            if csrc.field_key(name) not in srcs["records"].get(rec["id"], {}):
+                csrc.note(srcs, rec["id"], csrc.field_key(name), value, "ctx-bootstrap", at=t)
+    csrc.save(c.store, srcs)
+    return [r["id"] for r in recs], rep.get("snapshot"), [c.context]
+
+
 # ---------------------------------------------------------------------- main
 def build_parser():
     common = Parser(add_help=False)
@@ -2513,6 +2683,10 @@ def build_parser():
     sp.add_argument("--source"); sp.add_argument("--reason")
     sp = sub.add_parser("snapshot", parents=[common]); sp.add_argument("action", nargs="?", choices=["import"])
     sp.add_argument("--label"); sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
+    sp = sub.add_parser("bootstrap", parents=[common]); sp.add_argument("--observed", required=True)
+    sp.add_argument("--apply", action="store_true"); sp.add_argument("--code"); sp.add_argument("--take", action="append")
+    sp.add_argument("--skip", action="append"); sp.add_argument("--only", action="append")
+    sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("propose", parents=[common]); sp.add_argument("--skill", required=True)
     sp.add_argument("--delta", action="append"); sp.add_argument("--file")
     xp = sub.add_parser("inbox").add_subparsers(dest="action", required=True, parser_class=Parser)
@@ -2568,7 +2742,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
             "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
-            "inbox": cmd_inbox}
+            "inbox": cmd_inbox, "bootstrap": cmd_bootstrap}
 
 
 def emit(result, conflict=None):

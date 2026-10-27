@@ -47,6 +47,7 @@ CHECKS = """
 25. judgment-binds       a P4/P6/P8 bind or §7-§9 row whose skill never cites judgment-points §7/§8/§9, or a live 'from / arrives in vX.Y.Z' at or below the plugin version
 26. provider-contract    a vault_*/brain_* tool cited in shipped docs that is not a row of the vault/v1 table in context-provider-protocol.md
 27. inbox-step           a SKILL.md without its end-of-run line (context-protocol.md §5i): the inbox, or — People contour — no deltas
+28. bootstrap-template   a heading or a deferred-step key of ctx bootstrap's skeleton (scripts/ctx_bootstrap.py) that onboarding Step 16c does not have
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1527,6 +1528,29 @@ for _p in skill_files:
         fail("inbox-step", f"skills/{_name}/SKILL.md: no end-of-run line «{_want}» citing context-protocol.md §5i")
     if _other in _t:
         fail("inbox-step", f"skills/{_name}/SKILL.md: the wrong end-of-run line for its contour («{_other}»)")
+
+# ============================================================ bootstrap template (28)
+# v3.22.0: `ctx bootstrap --apply` writes a new user's local-context.md from a skeleton in code. Its headings must be
+# the ones onboarding Step 16c writes, and every step it defers a key Steps 4b–15 know — or the configurator and the
+# code would build two different files.
+_bt = os.path.join(root, "scripts", "ctx_bootstrap.py")
+_ob = os.path.join(root, "skills", "plugin-configurator", "references", "onboarding-steps.md")
+if os.path.isfile(_bt) and os.path.isfile(_ob):
+    _src, _steps = open(_bt, encoding="utf-8").read(), open(_ob, encoding="utf-8").read()
+    _m16 = re.search(r"\*\*16c\. Generate the file:\*\*(.*?)\n\*\*Section formats\*\*", _steps, re.S)
+    _tpl = _m16.group(1) if _m16 else ""
+    if not _tpl:
+        fail("bootstrap-template", "onboarding-steps.md: Step 16c's template not found")
+    _hm = re.search(r"SKELETON_HEADINGS = \((.*?)\)\n", _src, re.S)
+    for _h in re.findall(r'"([^"]+)"', _hm.group(1) if _hm else ""):
+        if _h not in _tpl:
+            fail("bootstrap-template", f"scripts/ctx_bootstrap.py: skeleton heading «{_h}» is not in onboarding Step 16c")
+    _dm = re.search(r"DEFERRED = \((.*?)\)\n", _src, re.S)
+    for _k in re.findall(r'"([a-z-]+)"', _dm.group(1) if _dm else ""):
+        if not re.search(r"[`'\"]%s[`'\"]" % re.escape(_k), _steps):
+            fail("bootstrap-template", f"scripts/ctx_bootstrap.py: deferred step «{_k}» is not a key of onboarding-steps.md")
+    if not _hm or not _dm:
+        fail("bootstrap-template", "scripts/ctx_bootstrap.py: SKELETON_HEADINGS or DEFERRED not found")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

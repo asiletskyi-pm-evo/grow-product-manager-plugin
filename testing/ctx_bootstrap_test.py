@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""TC-ctx-3220-bootstrap — `ctx bootstrap`: the table of what the connectors say, and its apply (v3.22.0, plan C5, C6).
+
+The fictional observation file (testing/fixtures/bootstrap/observed-zorg.json) against the fictional typical context
+in a temp HOME + vault, migrated: the rows (`+`, `~`, `✋ твоє`, a new record), what goes to the inbox, what agrees;
+the table reads only; an apply with another code writes nothing; the apply — records, sources, the inbox, one journal
+line, the compile — and `ctx undo` byte for byte; a second run with nothing new writes nothing. Then a new user from an
+empty HOME: the file from the skeleton, moved into records, every field with its own source, `ctx undo` back to one
+file. A local-context.md not yet in records: the table, but no apply. Nothing of a meeting or a mail anywhere.
+Stdlib only; run from the repo root:
+
+  env -u GROW_PM_CONTEXT_PATH -u GROW_PM_PROVIDER_PATHS python3 testing/ctx_bootstrap_test.py
+"""
+import json, os, shutil, subprocess, sys, tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.join(ROOT, "testing"))
+from ctx_testenv import CTX, Env, read  # noqa: E402
+
+FIX = os.path.join(ROOT, "testing", "fixtures", "bootstrap", "observed-zorg.json")
+fails = 0
+
+
+def check(name, cond, detail=""):
+    global fails
+    fails += not cond
+    print(("✅" if cond else "❌"), name, ("" if cond else "-> " + str(detail)[:900]))
+
+
+def state_bytes(store, extra=()):
+    out = {}
+    for sub in ("records", ".state"):
+        base = os.path.join(store, sub)
+        for f in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+            p = os.path.join(base, f)
+            if os.path.isfile(p) and f != "journal.jsonl":
+                out[sub + "/" + f] = open(p, "rb").read()
+    for p in extra:
+        out[p] = open(p, "rb").read() if os.path.exists(p) else None
+    return out
+
+
+def all_text(*roots):
+    out = []
+    for root in roots:
+        for dp, _, fs in os.walk(root):
+            for f in fs:
+                try:
+                    out.append(open(os.path.join(dp, f), encoding="utf-8").read())
+                except (OSError, UnicodeDecodeError):
+                    pass
+    return "\n".join(out)
+
+
+def run_bare(home, *args):
+    env = dict(os.environ)
+    env.pop("GROW_PM_CONTEXT_PATH", None)
+    env.pop("GROW_PM_PROVIDER_PATHS", None)
+    p = subprocess.run([sys.executable, CTX] + list(args) + ["--home", home], capture_output=True, text=True, env=env,
+                       timeout=120)
+    lines = [l for l in p.stdout.splitlines() if l.strip()]
+    res = json.loads(lines[-1][len("CTX_RESULT "):]) if lines and lines[-1].startswith("CTX_RESULT ") else None
+    return p.returncode, p.stdout + p.stderr, res
+
+
+d = tempfile.mkdtemp(prefix="ctx-bootstrap-")
+try:
+    obs = os.path.join(d, "observed.json")
+    shutil.copy(FIX, obs)
+    # ======================================================================= A. an existing store
+    print("--- A. an existing store")
+    env = Env(d)
+    rc, out, res = env.run("bootstrap", "--observed", obs)
+    check("A0 a local-context.md not yet in records: the table is shown", rc == 0 and "код:" in out, out[-400:])
+    code0 = res["code"]
+    rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", code0)
+    check("A0b … but the apply waits for the move into records (exit 4, says ctx migrate)",
+          rc == 4 and "ctx migrate" in out and not os.path.isdir(env.store), (rc, out[-300:]))
+    env.run("migrate", "--apply")
+    env.run("compile")
+    before = state_bytes(env.store, [env.ctx])
+    rc, out, res = env.run("bootstrap", "--observed", obs)
+    rows = res["rows"]
+    by = {(r["type"], r.get("field") or ("new" if r["new"] else r.get("list"))): r for r in rows}
+    check("A1 the table reads only: nothing changed", state_bytes(env.store, [env.ctx]) == before)
+    check("A2 profile Email: another value, yours (migrated) → ~ ✋ твоє, not taken by default",
+          by[("profile", "Email")]["sign"] == "~" and by[("profile", "Email")]["mine"]
+          and not by[("profile", "Email")]["default"] and "✋ твоє" in out, rows)
+    check("A3 the organisation's Domain and Jira: + high, taken by default",
+          by[("org", "Domain")]["sign"] == "+" and by[("org", "Jira")]["default"]
+          and by[("org", "Domain")]["confidence"] == "high", rows)
+    check("A4 Zorg Pay: a new record row with its key, medium",
+          by[("product", "new")]["title"] == "Zorg Pay" and by[("product", "new")]["fields"][0]["value"] == "PAY"
+          and "новий запис Product: Zorg Pay" in out, rows)
+    check("A5 what agrees is counted, not shown (Name, Role, Zorg App's key and space, the team)",
+          res["same"] == 5 and not any(r.get("field") in ("Name", "Role") for r in rows), (res["same"], rows))
+    check("A6 the low facts go to the inbox (Tableau dashboard, a co-attendee); two dropped; fireflies did not answer",
+          res["inbox"] == 2 and len(res["dropped"]) == 2 and "у скриньку піде: 2" in out
+          and "fireflies (error: timeout)" in out, out[-500:])
+    check("A7 rows are numbered profile → organisation → product; the defaults named",
+          [r["n"] for r in rows] == [1, 2, 3, 4] and res["default"] == [2, 3, 4] and "візьму: 2, 3, 4" in out, rows)
+
+    rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", "deadbeef")
+    check("A8 another code → exit 4, nothing written", rc == 4 and state_bytes(env.store, [env.ctx]) == before,
+          out[-300:])
+    rc, out, res2 = env.run("bootstrap", "--observed", obs, "--apply", "--code", res["code"], "--take", "9")
+    check("A9 a row the table does not have → exit 3, nothing written",
+          rc == 3 and state_bytes(env.store, [env.ctx]) == before, out[-300:])
+
+    snaps0 = sorted(os.listdir(os.path.join(env.home, ".grow-pm", "snapshots")))
+    rc, out, ap = env.run("bootstrap", "--observed", obs, "--apply", "--code", res["code"])
+    org = env.record("org.zorg")
+    pay = [f for f in os.listdir(os.path.join(env.store, "records")) if "zorg-pay" in f]
+    srcs = json.load(open(os.path.join(env.store, ".state", "sources.json"), encoding="utf-8"))["records"]
+    check("A10 apply: the organisation's Domain and Jira written, the ✋ email not",
+          rc == 0 and "- **Domain:** zorg.example" in org and "- **Jira:** https://zorg.atlassian.example" in org
+          and "- **Email:** alex@personal.example" in env.record("profile"), (rc, out[-400:]))
+    check("A11 apply: Zorg Pay is a record under the organisation, with its key and an empty Dashboards",
+          pay and "- **Jira Project Key:** PAY" in env.record(pay[0][:-3]) and "#### Dashboards" in env.record(pay[0][:-3])
+          and read(env.ctx).index("### Product: Zorg Pay") > read(env.ctx).index("## Organization: Zorg"), pay)
+    check("A12 sources: Domain derived:mail:domain high; PAY derived:jira:active medium",
+          srcs["org.zorg"]["field:Domain"]["kind"] == "derived:mail:domain"
+          and srcs["org.zorg"]["field:Domain"]["confidence"] == "high"
+          and srcs[pay[0][:-3]]["field:Jira Project Key"]["confidence"] == "medium", srcs)
+    ib = json.load(open(os.path.join(env.store, ".state", "inbox.json"), encoding="utf-8"))["entries"]
+    texts = sorted(e["delta"].get("text") or "" for e in ib)
+    check("A13 the inbox: the dashboard as a line, the co-attendee as a row of the Members table, from ctx-bootstrap",
+          len(ib) == 2 and all(e["skills"] == ["ctx-bootstrap"] for e in ib)
+          and "| Cid Three | |" in texts and any("Zorg funnel" in x for x in texts)
+          and any(e["delta"].get("under") == "#### Members" for e in ib), ib)
+    j = [json.loads(l) for l in read(env.store, ".state", "journal.jsonl").splitlines() if l.strip()]
+    check("A14 one journal line op bootstrap with the rows taken and a snapshot; one new snapshot",
+          j[-1]["op"] == "bootstrap" and j[-1]["rows"] == [2, 3, 4] and j[-1].get("snapshot")
+          and len(sorted(os.listdir(os.path.join(env.home, ".grow-pm", "snapshots")))) == len(snaps0) + 1, j[-1])
+    text = all_text(env.store, os.path.join(env.home, ".grow-pm"))
+    check("A15 nothing of a meeting or a mail anywhere: no 1-1 title, no subject",
+          "звільнення" not in text and "bonus" not in text)
+
+    rc, out, again = env.run("bootstrap", "--observed", obs)
+    check("A16 a second look: only the ✋ row left", [r["field"] for r in again["rows"]] == ["Email"], again["rows"])
+    j0 = read(env.store, ".state", "journal.jsonl")
+    s1 = state_bytes(env.store, [env.ctx])
+    rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", again["code"])
+    check("A17 apply with nothing taken: no record, no snapshot, the inbox as it was",
+          rc == 0 and state_bytes(env.store, [env.ctx]) == s1 and "записано: нічого" in out, out[-300:])
+
+    rc, out, _ = env.run("undo")
+    after = state_bytes(env.store, [env.ctx])
+    check("A18 ctx undo of the apply → records, sources, inbox and local-context.md byte for byte",
+          rc == 0 and after == before, [k for k in set(before) | set(after) if before.get(k) != after.get(k)])
+    rc, out, res = env.run("bootstrap", "--observed", obs)
+    rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", res["code"], "--take", "1", "--skip", "4")
+    srcs = json.load(open(os.path.join(env.store, ".state", "sources.json"), encoding="utf-8"))["records"]
+    check("A19 --take 1 takes the ✋ row, --skip 4 leaves Zorg Pay",
+          rc == 0 and "- **Email:** a.one@zorg.example" in env.record("profile")
+          and srcs["profile"]["field:Email"]["kind"] == "derived:atlassian:user"
+          and not any("zorg-pay" in f for f in os.listdir(os.path.join(env.store, "records"))), out[-300:])
+    check("A20 the profile's other fields keep migrated (adopted before the write)",
+          srcs["profile"]["field:Name"]["kind"] == "migrated", srcs["profile"])
+
+    # ======================================================================= B. a new user
+    print("--- B. a new user, an empty HOME")
+    home = os.path.join(d, "new")
+    os.makedirs(home)
+    nobs = os.path.join(d, "new.json")
+    o = json.load(open(FIX, encoding="utf-8"))
+    o["facts"] = [f for f in o["facts"] if f["type"] != "org" or f["field"] == "Jira"] + [
+        {"type": "org", "title": "Zorg", "field": "Domain", "value": "zorg.example", "from": "mail:domain"},
+        {"type": "profile", "field": "Language", "value": "uk", "from": "user"}]
+    json.dump(o, open(nobs, "w", encoding="utf-8"), ensure_ascii=False)
+    rc, out, res = run_bare(home, "bootstrap", "--observed", nobs)
+    kinds = sorted((r["type"], r["new"]) for r in res["rows"])
+    check("B1 the table from nothing: profile fields, a new organisation, two products, a team — all taken by default",
+          rc == 0 and ("org", True) in kinds and kinds.count(("product", True)) == 2 and ("team", True) in kinds
+          and all(r["default"] for r in res["rows"]) and not os.path.exists(os.path.join(home, ".grow-pm")),
+          (rc, out[-600:]))
+    rc, out, ap = run_bare(home, "bootstrap", "--observed", nobs, "--apply", "--code", res["code"])
+    ctx = os.path.join(home, ".grow-pm", "local-context.md")
+    store = os.path.join(home, ".grow-pm", "_System", "context")
+    lc = read(ctx) if os.path.exists(ctx) else ""
+    check("B2 apply: local-context.md from the skeleton (Basic, Judgment defaults, teams not deferred)",
+          rc == 0 and "- **Mode:** basic" in lc and "- **Hypothesis first:** on" in lc
+          and "## Organization: Zorg" in lc and "### Product: Zorg App" in lc and "### Team: Alpha (A)" in lc
+          and "- **Language:** uk" in lc and "teams" not in lc.split("Deferred steps:")[1].split("\n")[0],
+          (rc, out[-500:], lc[:900]))
+    check("B3 … and in records at once, said in one line", os.path.isdir(os.path.join(store, "records"))
+          and "контекст у записах" in out, out[-300:])
+    rc, out, sh = run_bare(home, "show")
+    check("B4 every field has its own source", sh and sh["sources"]["own"] == sh["sources"]["fields"] > 10,
+          (sh or {}).get("sources"))
+    ib = json.load(open(os.path.join(store, ".state", "inbox.json"), encoding="utf-8"))["entries"]
+    check("B5 the co-attendee waits in the inbox for the new team", any("Cid Three" in (e["delta"].get("text") or "")
+                                                                       for e in ib), ib)
+    rc, out, _ = run_bare(home, "undo")
+    check("B6 ctx undo → the store removed, local-context.md one file again",
+          rc == 0 and not os.path.isdir(os.path.join(store, "records")) and os.path.exists(ctx), out[-300:])
+
+    home2 = os.path.join(d, "new2")
+    os.makedirs(home2)
+    o2 = dict(o, facts=[f for f in o["facts"] if f["type"] != "org"])
+    json.dump(o2, open(nobs, "w", encoding="utf-8"), ensure_ascii=False)
+    rc, out, res = run_bare(home2, "bootstrap", "--observed", nobs)
+    rc, out, _ = run_bare(home2, "bootstrap", "--observed", nobs, "--apply", "--code", res["code"])
+    check("B7 products with no organisation → exit 3, nothing written",
+          rc == 3 and "організації" in out and not os.path.exists(os.path.join(home2, ".grow-pm", "local-context.md")),
+          (rc, out[-300:]))
+
+    # ======================================================================= C. the file
+    open(nobs, "w").write("{not json")
+    rc, out, _ = env.run("bootstrap", "--observed", nobs)
+    check("C1 an observation file that is not JSON → exit 3", rc == 3 and "observation file" in out, out[-300:])
+finally:
+    shutil.rmtree(d, ignore_errors=True)
+
+print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
+sys.exit(1 if fails else 0)
