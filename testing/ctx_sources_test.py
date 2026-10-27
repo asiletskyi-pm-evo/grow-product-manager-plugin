@@ -114,6 +114,53 @@ try:
           rc == 3 and "sources" in out and '"extra"' in read(p) and "- **Language:** uk" in env.record("profile"),
           (rc, out[-300:]))
     open(p, "w", encoding="utf-8").write(good)
+
+    # review I4: the import never resets a sources file that cannot be read
+    bad = '{"schema": "context-sources/1", "records": {}, "extra": 2}'
+    open(p, "w", encoding="utf-8").write(bad)
+    env.edit(env.ctx, "- **Jira Project Key:** LITE", "- **Jira Project Key:** LIT2")
+    rc, out, _ = env.run("sync")
+    check("4.2 an import over a sources file that cannot be read: the import done, the file byte for byte",
+          rc == 0 and read(p) == bad and "LIT2" in env.record("product.zorg-lite"), (rc, out[-300:]))
+    rc, out, res = env.run("show")
+    check("4.3 show with a sources file that cannot be read: a warning, exit 0",
+          rc == 0 and "джерела полів не читаються" in out, (rc, out[-300:]))
+    open(p, "w", encoding="utf-8").write(good)
+
+    # review I1: inbox accept after an import keeps what the import noted
+    env2 = Env(os.path.join(d, "two"))
+    env2.run("migrate", "--apply")
+    env2.run("compile")
+    delta = {"op": "UPDATE", "record": "product.zorg-lite", "field": "Confluence Space", "value": "LITE",
+             "reason": "seen", "source": {"kind": "derived:confluence", "ref": "LITE", "at": "2026-10-27"}}
+    env2.run("propose", "--skill", "product-analysis", "--delta", json.dumps(delta))
+    rc, out, res = env2.run("inbox", "list")
+    env2.edit(env2.ctx, "- **Confluence Space:** ZAPP", "- **Confluence Space:** ZAP2")
+    rc, out, _ = env2.run("inbox", "accept", "all", "--code", res["code"])
+    rc, out, _ = env2.run("show", "product.zorg-app")
+    check("5.1 accept with an edit waiting: the edited field is the editor's, an untouched one keeps migrated",
+          "Confluence Space ← import:home · " in out and "Jira Project Key ← migrated · " in out, out[-500:])
+    rc, out, _ = env2.run("show", "product.zorg-lite")
+    check("5.2 accept on a record no write touched: its other fields keep migrated (adopted)",
+          "Jira Project Key ← migrated · " in out and "Confluence Space ← derived:confluence" in out, out[-500:])
+
+    # review I2: invalidate and a rename keep the fields' sources
+    rc, out, _ = env2.run("invalidate", "team.alpha-a", "--reason", "gone")
+    rc, out, _ = env2.run("show", "team.alpha-a")
+    check("5.3 invalidate: the fields keep migrated, not ctx-invalidate", "Jira Team ID ← migrated · " in out, out[-400:])
+    env2.edit(env2.ctx, "### Team: Beta (B)\n\n- **Jira Team ID:** <team-uuid-2>",
+              "### Team: Beta Two (B)\n\n- **Jira Team ID:** <team-uuid-3>")
+    rc, out, _ = env2.run("sync")
+    rc, out, sh = env2.run("show")
+    beta = [r["id"] for r in sh["records"] if r["title"].startswith("Team: Beta")]
+    rc, out, _ = env2.run("show", beta[0])
+    check("5.4 a rename with an edit: the edited field is the editor's", "Jira Team ID ← import:home · " in out, out[-400:])
+
+    # review M7: an appended text of two lines, one of them a field
+    rc, out, _ = env2.run("append", "product.zorg-app", "--text", "- **Owner:** Alex One\n- extra line")
+    rc, out, _ = env2.run("show", "product.zorg-app")
+    check("5.5 append of two lines: the field is noted as a field, the other line as a line",
+          "Owner ← user · " in out and "extra line ← user" in out, out[-500:])
 finally:
     shutil.rmtree(d, ignore_errors=True)
 

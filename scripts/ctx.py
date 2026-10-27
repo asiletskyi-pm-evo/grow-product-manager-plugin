@@ -730,11 +730,11 @@ def _write_one(c, op, rid, mutate, source, reason, note=None):
             return {"command": op, "id": rid, "changed": False, "imported": pre["changed"] + pre["added"]}
         t = now()
         snap = co.snapshot(c.store, c.copies, c.home, op)
-        c.store.write(co.touch(dict(rec, body=body, source=source, modified=t), t))
         if note:
             csrc.adopt(srcs, rec)
             note(srcs, rec)
             csrc.save(c.store, srcs)
+        c.store.write(co.touch(dict(rec, body=body, source=source, modified=t), t))
         c.store.journal({"ts": t, "op": op, "ids": [rid], "source": source, "reason": reason or "", "snapshot": snap})
         comp = co.compile_store(c.store, c.copies, t, c.home, snap)
     print("%s: %s · wrote %s" % (op, rid, ", ".join(comp["written"]) or "no copy"))
@@ -785,6 +785,7 @@ def cmd_assign(a, c):
         t = now()
         source = a.source or "ctx-assign"
         snap = co.snapshot(c.store, c.copies, c.home, "assign")
+        co.adopt_sources(c.store, rec)
         c.store.write(dict(rec, read_by=value, source=source, modified=t))     # who reads it — not a content check
         c.store.journal({"ts": t, "op": "assign", "ids": [a.id], "source": source, "reason": a.reason or "",
                          "snapshot": snap})
@@ -797,8 +798,7 @@ def cmd_assign(a, c):
 def cmd_append(a, c):
     return 0, _write_one(c, "append", a.id, lambda b: cs.append_line(b, a.text, under=a.under),
                          a.source or "ctx-append", a.reason,
-                         note=lambda m, rec: csrc.note(m, rec["id"], csrc.line_key(a.text), a.text, a.source or "user",
-                                                       at=now()))
+                         note=lambda m, rec: csrc.note_text(m, rec["id"], a.text, a.source or "user", at=now()))
 
 
 def cmd_add(a, c):
@@ -2415,6 +2415,8 @@ def cmd_inbox(a, c):
         except ValueError as e:
             raise Usage(str(e))
         c.import_first()
+        if srcs is not None:                            # the import notes its own fields: read them after it
+            srcs = csrc.load(c.store)
         recs = c.store.load()
         if a.action == "reject":
             snap = co.snapshot(c.store, c.copies, c.home, "inbox-reject")
@@ -2462,13 +2464,13 @@ def cmd_inbox(a, c):
         if done or gone:
             snap = co.snapshot(c.store, c.copies, c.home, "inbox-accept")
             t = now()
-            for rec in plan.values():
-                c.store.write(co.touch(rec, t))
             for rid in plan:                            # since v3.22.0: each field or line, where it came from
                 csrc.adopt(srcs, by_id[rid])
             for e in done:
                 _note_delta(srcs, e)
             csrc.save(c.store, srcs)
+            for rec in plan.values():
+                c.store.write(co.touch(rec, t))
             c.store.journal({"ts": t, "op": "inbox-accept", "ids": sorted(plan), "sigs": [e["sig"] for e in done],
                              "source": "ctx-inbox", "reason": "", "snapshot": snap})     # right after the records: undo finds it
             ci_.take(mem, done + [e for e, _ in gone])  # a record gone is no rejection: after a restore it may come back

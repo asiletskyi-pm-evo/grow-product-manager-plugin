@@ -145,6 +145,18 @@ def _lines_of(body):
     return [core for off, core, _ in cs._lines(body) if core.strip() and not cs._in_region(off, spans)]
 
 
+def note_text(mem, rid, text, kind, ref=None, at=None, confidence=None):
+    """Each line of an appended text: a `- **Field:** value` line as its field, any other line as itself."""
+    for line in (text or "").splitlines():
+        if not line.strip():
+            continue
+        m = cs.FIELD_RE.match(line)
+        if m:
+            note(mem, rid, field_key(m.group("name").strip()), m.group("value").strip(), kind, ref, at, confidence)
+        else:
+            note(mem, rid, line_key(line), line, kind, ref, at, confidence)
+
+
 def adopt(mem, rec):
     """Before `rec` is rewritten: each of its fields with no entry that applies keeps the source it had — the record's,
     as it is now — so a later write by someone else does not become theirs."""

@@ -44,6 +44,27 @@ MIN_COUNT = {"jira:active": 5, "confluence:active": 3, "calendar:co-attendee": 3
 _COUNTED = {"jira:active": "%d твоїх задач за 90 днів", "confluence:active": "%d твоїх сторінок за 90 днів",
             "calendar:co-attendee": "%d спільних зустрічей за 30 днів", "fireflies:participant": "%d записаних зустрічей"}
 QUIET = ("calendar:", "fireflies:", "mail:")        # only the count is kept: no title, no subject, no text
+# What each source may give (type, field | "list:<name>" | None for the record itself); `local-context` and `user` any.
+ALLOWED = {"atlassian:user": {("profile", "Name"), ("profile", "Email")},
+           "atlassian:site": {("org", "Jira"), ("org", "Confluence")},
+           "mail:domain": {("org", "Domain")},
+           "calendar:owner": {("profile", "Email")},
+           "provider:identity": {("team", None), ("profile", "Role")},
+           "jira:active": {("product", None), ("product", "Jira Project Key")},
+           "jira:visible": {("product", None), ("product", "Jira Project Key")},
+           "confluence:active": {("product", "Confluence Space")},
+           "confluence:visible": {("product", "Confluence Space")},
+           "calendar:co-attendee": {("team", "list:Members")},
+           "fireflies:participant": {("team", "list:Members")},
+           "tableau:owned": {("product", "list:Dashboards")}}
+# The shape a value of these fields must have — a meeting's title or a letter's subject has none of them.
+_NAME = re.compile(r"^(?:[^\W\d_][\w'’.-]*)(?: [^\W\d_][\w'’.-]*){0,4}\Z")
+SHAPES = {"Email": re.compile(r"^[^@\s:]+@[a-z0-9.-]+\.[a-z]{2,}\Z", re.I),
+          "Domain": re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)+\Z", re.I),
+          "Jira": re.compile(r"^https?://[^\s/]+/?\Z"), "Confluence": re.compile(r"^https?://[^\s/]+(?:/wiki)?/?\Z"),
+          "Jira Project Key": re.compile(r"^[A-Z][A-Z0-9_]{1,19}\Z"),
+          "Confluence Space": re.compile(r"^~?[A-Za-z0-9_-]{1,40}\Z"),
+          "list:Dashboards": re.compile(r"^[^\n]{1,120}https?://\S+\Z")}
 CHECKS = {"jira:visible": "values", "confluence:visible": "values", "atlassian:people": "people"}
 _FACT_KEYS = ("type", "title", "field", "list", "value", "from", "ref", "evidence", "count")
 _TOP_KEYS = ("schema", "at", "connectors", "facts", "checks")
@@ -73,9 +94,9 @@ def _line(v, key):
         return None
     if not isinstance(v, str):
         raise ValueError("%s is not text" % key)
-    v = " ".join(v.split()) if key != "value" else v.strip()
-    if "\n" in v or "\r" in v:
+    if len(v.strip().splitlines()) > 1:                 # every line break splitlines() knows, U+2028 too
         raise ValueError("%s takes one line" % key)
+    v = " ".join(v.split()) if key != "value" else v.strip()
     return v or None
 
 
@@ -89,10 +110,10 @@ def _fact(raw, connectors):
     if unknown:
         raise ValueError("невідомі ключі %s" % ", ".join(unknown))
     t = raw.get("type")
-    if t not in TYPES:
+    if not isinstance(t, str) or t not in TYPES:
         raise ValueError("type — один із %s" % ", ".join(TYPES))
     frm = raw.get("from")
-    if frm not in FROM:
+    if not isinstance(frm, str) or frm not in FROM:
         raise ValueError("from — один із %s" % ", ".join(sorted(FROM)))
     if not _connector_ok(frm, connectors):
         raise ValueError("%s: конектор не відповів (connectors)" % frm)
@@ -109,6 +130,19 @@ def _fact(raw, connectors):
     f["value"] = _line(raw.get("value"), "value") or ""
     if (f["field"] or f["list"]) and not f["value"]:
         raise ValueError("value порожнє")
+    if f["value"] and not (f["field"] or f["list"]):
+        raise ValueError("value без field чи list — факт про сам запис значення не має")
+    what = f["field"] or (("list:" + f["list"]) if f["list"] else None)
+    if frm in ALLOWED and (t, what) not in ALLOWED[frm]:
+        raise ValueError("%s не дає %s%s" % (frm, t, (" · " + what) if what else ""))
+    shape = SHAPES.get(what) or (_NAME if what in ("Name", "list:Members") else None)
+    if shape and not (shape.match(f["value"]) and (shape is not _NAME or all(w[0].isupper() for w in f["value"].split()))):
+        raise ValueError("%s не схоже на %s" % (what, "ім'я" if shape is _NAME else what))
+    if frm in ("mail:domain", "atlassian:site"):        # the organisation's name: the domain's or the site's own word
+        host = f["value"].split("://")[-1].split("/")[0]
+        if f["title"].casefold() not in (host.split(".")[0].casefold(), host.casefold()):
+            raise ValueError("%s: назва організації — слово з домену чи сайту (%s); іншу назву дає відповідь (user)"
+                             % (frm, host.split(".")[0]))
     for k in ("title", "field", "list"):
         if f[k] and (_MARKUP.search(f[k]) or "*" in f[k] or f[k].startswith("#")):
             raise ValueError("%s — назва, не розмітка" % k)
@@ -121,11 +155,11 @@ def _fact(raw, connectors):
     if frm in MIN_COUNT and (count or 0) < MIN_COUNT[frm]:
         raise ValueError("нижче порогу: %s потребує ≥ %d, є %d" % (frm, MIN_COUNT[frm], count or 0))
     f["ref"], f["evidence"] = _line(raw.get("ref"), "ref"), _line(raw.get("evidence"), "evidence")
-    if f["evidence"] and len(f["evidence"]) > EVIDENCE_MAX:
-        raise ValueError("evidence — до %d знаків" % EVIDENCE_MAX)
     if frm.startswith(QUIET):
         f["evidence"] = None
         f["ref"] = (_COUNTED[frm] % count) if frm in _COUNTED and count is not None else None
+    if f["evidence"] and len(f["evidence"]) > EVIDENCE_MAX:
+        raise ValueError("evidence — до %d знаків" % EVIDENCE_MAX)
     kinds = cn.scan(" \n".join(x for x in (f["title"], f["field"], f["list"], f["value"], f["ref"], f["evidence"]) if x))
     if f["field"] and f["value"]:
         kinds = kinds or cn.scan("%s: %s" % (f["field"], f["value"]))
@@ -187,7 +221,7 @@ def parse(raw):
     for k, v in conn.items():
         if k not in CONNECTORS and not (isinstance(k, str) and re.match(r"provider:[a-z0-9][a-z0-9-]*\Z", k)):
             raise ValueError("unknown connector %s — one of %s or provider:<id>" % (k, ", ".join(CONNECTORS)))
-        if not isinstance(v, str) or not (v in ("ok", "absent") or v.startswith("error")):
+        if not isinstance(v, str) or not (v in ("ok", "absent", "error") or v.startswith("error:")):
             raise ValueError("connector %s: ok, absent or error: …" % k)
     facts = raw.get("facts", [])
     if not isinstance(facts, list):

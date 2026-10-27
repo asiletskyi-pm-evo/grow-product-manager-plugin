@@ -632,11 +632,12 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
     for e in plan["edits"]:
         store.write(touch(dict(recs[e["id"]], body=e["text"], source=src(e["copy"]), modified=now), now))
         changed.append(e["id"])
-    _note_imports(store, [(recs[e["id"]], e["text"], src(e["copy"])) for e in plan["edits"]], now)
+    noted = [(recs[e["id"]], e["text"], src(e["copy"])) for e in plan["edits"]]
     for r in plan["renames"]:
         store.write(touch(dict(recs[r["id"]], body=r["text"], title=r["title"], type=r.get("type") or recs[r["id"]]["type"],
                                source=src(r["copy"]), modified=now), now))
         changed.append(r["id"])
+        noted.append((recs[r["id"]], r["text"], src(r["copy"])))
     for c in plan["conflicts"]:
         if resolve[c["id"]] == "file":
             ver = next((c["versions"][p] for p in copies if p in c["versions"]), None)
@@ -647,6 +648,7 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
             else:
                 store.write(touch(dict(recs[c["id"]], body=ver, source=source or "import:resolve", modified=now), now))
                 changed.append(c["id"])
+                noted.append((recs[c["id"]], ver, source or "import:resolve"))
     order = store.state().get("order", [])
     for rid in plan["removes"] + plan["missing"]:
         rec = recs.get(rid) or _from_copy(store, copies, rid, now)
@@ -659,6 +661,8 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
             store.write(touch(recs[rid], now))
     moved = _reorder(store, plan["reorder"]) if plan["reorder"] else []
     added = _insert(store, [dict(a, source=src(a.get("copy"))) for a in plan["adds"]], source, now) if plan["adds"] else []
+    _note_imports(store, noted, now, added=[(rid, a["text"], src(a.get("copy"))) for rid, a in zip(added, plan["adds"])],
+                  removed=removed)
     _reparent(store)
     ids = changed + removed + [i for i in moved if i not in changed] + added
     ids += [i for i in plan["record_changes"] if i not in ids]
@@ -667,11 +671,24 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
             "compiled": compile_store(store, copies, now, home, snap)}
 
 
-def _note_imports(store, items, now):
-    """Since v3.22.0: the fields an imported edit changed are the editor's in `.state/sources.json`, the others keep
-    theirs. A sources file that cannot be read is left as it is — the next write that needs it says so."""
+def adopt_sources(store, old):
+    """Since v3.22.0, before a rewrite that is no content of its own (invalidate, restore, assign): the record's fields
+    with no entry keep the source they have now. A sources file that cannot be read is left as it is."""
     import ctx_sources as csrc
-    if not items:
+    try:
+        mem = csrc.load(store)
+    except cs.StoreError:
+        return
+    csrc.adopt(mem, old)
+    csrc.save(store, mem)
+
+
+def _note_imports(store, items, now, added=(), removed=()):
+    """Since v3.22.0: the fields an imported edit changed are the editor's in `.state/sources.json`, the others keep
+    theirs; a section added in the file is the editor's whole; a record removed is forgotten. A sources file that cannot
+    be read is left as it is — the next write that needs it says so."""
+    import ctx_sources as csrc
+    if not (items or added or removed):
         return
     try:
         mem = csrc.load(store)
@@ -679,6 +696,10 @@ def _note_imports(store, items, now):
         return
     for old, body, kind in items:
         csrc.note_import(mem, old, body, kind, now)
+    for rid, body, kind in added:
+        csrc.note_body(mem, rid, body, kind, at=now)
+    for rid in removed:
+        csrc.forget(mem, rid)
     csrc.save(store, mem)
 
 
@@ -814,6 +835,7 @@ def invalidate(store, copies, home, rid, reason, now):
     if recs[rid]["type"] == "header":
         raise Refused("the file header cannot be marked invalid")
     snap = snapshot(store, copies, home, "invalidate")
+    adopt_sources(store, recs[rid])
     body = cs.set_status_region(recs[rid]["body"], now[:10], reason.strip())
     store.write(dict(recs[rid], body=body, source="ctx-invalidate", modified=now))
     store.journal({"ts": now, "op": "invalidate", "ids": [rid], "source": "ctx-invalidate", "reason": reason,
@@ -865,6 +887,7 @@ def restore_record(store, copies, home, rid, now):
             raise Refused("id %s is taken by a current record — archive or rename it first" % rid if arch else
                           "%s is current — nothing to restore" % rid)
         snap = snapshot(store, copies, home, "restore")
+        adopt_sources(store, recs[rid])
         store.write(touch(dict(recs[rid], body=cs.clear_status_region(recs[rid]["body"]), source="ctx-restore",
                                modified=now), now))
     else:

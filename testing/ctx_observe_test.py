@@ -66,6 +66,52 @@ check("2.3 what stays of them is a count ctx words itself",
       by[("team", "Alpha (A)", "Members", "Cid Three")]["ref"] == "6 спільних зустрічей за 30 днів",
       by[("team", "Alpha (A)", "Members", "Cid Three")])
 
+for name, fact in (("a 1-1's title as a co-attendee's value",
+                    {"type": "team", "title": "Alpha (A)", "list": "Members", "value": "1-1 Cid: розмова про звільнення",
+                     "from": "calendar:co-attendee", "count": 5}),
+                   ("a sentence as a co-attendee's name",
+                    {"type": "team", "title": "Alpha (A)", "list": "Members", "value": "Розмова про звільнення",
+                     "from": "calendar:co-attendee", "count": 5}),
+                   ("a meeting's title as a product's field",
+                    {"type": "product", "title": "Zorg App", "field": "Description", "value": "1-1 Cid",
+                     "from": "calendar:co-attendee", "count": 5}),
+                   ("a letter's subject as the domain", {"type": "org", "title": "Zorg", "field": "Domain",
+                                                         "value": "Re: quarterly bonus for Bea", "from": "mail:domain"}),
+                   ("a letter's subject as the organisation's name",
+                    {"type": "org", "title": "Quarterly bonus", "field": "Domain", "value": "zorg.example",
+                     "from": "mail:domain"}),
+                   ("an e-mail from Jira activity", {"type": "profile", "field": "Email", "value": "x@zorg.example",
+                                                     "from": "jira:active", "count": 9}),
+                   ("a value on a fact about the record itself",
+                    {"type": "team", "title": "Alpha (A)", "value": "anything", "from": "provider:identity"}),
+                   ("a key that is no key", {"type": "product", "title": "Zorg App", "field": "Jira Project Key",
+                                             "value": "the zorg project", "from": "jira:active", "count": 9}),
+                   ("a dashboard with no link", {"type": "product", "title": "Zorg App", "list": "Dashboards",
+                                                 "value": "Zorg funnel", "from": "tableau:owned"}),
+                   ("a line break U+2028", {"type": "product", "title": "Zorg App", "field": "URL",
+                                            "value": "https://x.example\u2028### Product: Evil", "from": "user"}),
+                   ("a list as from", {"type": "profile", "field": "Name", "value": "X", "from": ["user"]})):
+    r = raw()
+    r["facts"] = [fact]
+    o = parse(r)
+    check("2.x dropped, the text nowhere: %s" % name, not o["facts"] and len(o["dropped"]) == 1
+          and not any(w in json.dumps(o, ensure_ascii=False) for w in ("звільнення", "bonus", "Evil")), o)
+r = raw()
+r["facts"] = [{"type": "team", "title": "Alpha (A)", "list": "Members", "value": "Cid Three",
+               "from": "calendar:co-attendee", "count": 5, "evidence": "x" * 300}]
+check("2.y a quiet fact's long evidence is dropped, not the fact", len(parse(r)["facts"]) == 1, parse(r))
+r = raw()
+r["facts"] = [{"type": "profile", "field": "Name", "value": "X", "from": "user", "evidence": "x" * 201}]
+check("2.z an evidence of 201 characters drops the fact", not parse(r)["facts"], parse(r))
+r = raw()
+r["connectors"]["calendar"] = "errored-but-fine"
+try:
+    parse(r)
+    ok = False
+except ValueError:
+    ok = True
+check("2.w a connector status is ok, absent, error or error: …", ok)
+
 # ------------------------------------------------------------------ 3. the skill cannot decide what ctx decides
 r = raw()
 r["facts"][0]["confidence"] = "high"
@@ -137,6 +183,19 @@ for kind, n in cob.MIN_COUNT.items():
 for f in cob.FROM:
     check("5.y the document names the source %s and its confidence" % f, ("`%s`" % f) in doc)
 check("5.z every source has a confidence", all(cob.level_of(f, None) in cob.LEVELS for f in cob.FROM))
+LEVEL_WORD = {"high": "high", "medium": "medium", "low": "low"}
+rows = {m.group(1): m.group(2) for m in re.finditer(r"^\| `([a-z:-]+)` \|.*\| ([a-z /]+) \|$", doc, re.M)}
+for f in cob.FROM:
+    want = {cob.level_of(f, None)} | ({cob.level_of(f, "Role")} if f == "provider:identity" else set())
+    got = set(w.strip() for w in rows.get(f, "").split("/"))
+    check("5.w the document's confidence of %s is the code's (%s)" % (f, ", ".join(sorted(want))), got == want,
+          (f, rows.get(f)))
+for f, allowed in cob.ALLOWED.items():
+    line = next((l for l in doc.splitlines() if l.startswith("| `%s` |" % f)), "")
+    for typ, what in allowed:
+        word = (what or "").replace("list:", "")
+        check("5.v the document's row of %s names what it may give: %s %s" % (f, typ, word or "(the record)"),
+              (word in line) if word else True, line)
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

@@ -40,19 +40,21 @@ The confidence is `ctx`'s, by where the fact came from:
 | `from` | Call (pattern) | Gives | Confidence |
 |---|---|---|---|
 | `atlassian:user` | `atlassianUserInfo` | the profile's `Name`, `Email` | high |
-| `atlassian:site` | `getAccessibleAtlassianResources` | the organisation's `Jira`, `Confluence` (the site's URL) | high |
-| `mail:domain` | your address (from `atlassianUserInfo` or the mail connector's profile) | the organisation's `Domain` and its name, when you have no organisation yet | high |
+| `atlassian:site` | `getAccessibleAtlassianResources` | the organisation's `Jira`, `Confluence` (the site's URL, nothing after the host but `/wiki`) | high |
+| `mail:domain` | your address (from `atlassianUserInfo` or the mail connector's profile) | the organisation's `Domain` | high |
 | `calendar:owner` | `list_calendars` — the primary calendar's id | the profile's `Email` | high |
 | `provider:identity` | a registered provider's access bundle (`provider_bundle.py`: your mail → team → role) | the team (the record itself) — high; the profile's `Role` — medium | high / medium |
 | `local-context` | your `local-context.md` as it is | any field it already has | high |
 | `user` | your answer to a question of the configurator | any field | high |
 | `jira:active` | `searchJiraIssuesUsingJql`: `(assignee = currentUser() OR reporter = currentUser() OR comment ~ currentUser()) AND updated >= -90d`, grouped by project | a product with its `Jira Project Key` | medium |
 | `confluence:active` | `searchConfluenceUsingCql`: `contributor = currentUser() AND lastmodified >= now("-90d")`, grouped by space | the product's `Confluence Space` | medium |
-| `jira:visible` | `getVisibleJiraProjects` without your activity | a project you can see | low |
-| `confluence:visible` | `getConfluenceSpaces` without your activity | a space you can see | low |
-| `calendar:co-attendee` | `list_events` of the last 30 days — only the attendees | a name for the team's `Members` | low |
-| `fireflies:participant` | `fireflies_get_transcripts` of the last 30 days — only the participants | a name for the team's `Members` | low |
-| `tableau:owned` | Tableau `list-workbooks` / `search-content` owned by you | a line for the product's `Dashboards` | low |
+| `jira:visible` | `getVisibleJiraProjects` without your activity | a product you can see, with its `Jira Project Key` | low |
+| `confluence:visible` | `getConfluenceSpaces` without your activity | a product's `Confluence Space` you can see | low |
+| `calendar:co-attendee` | `list_events` of the last 30 days — only the attendees | a name for the team's `Members` list | low |
+| `fireflies:participant` | `fireflies_get_transcripts` of the last 30 days — only the participants | a name for the team's `Members` list | low |
+| `tableau:owned` | Tableau `list-workbooks` / `search-content` owned by you | a line for the product's `Dashboards` list: «name — link» | low |
+
+**A source gives only what its row says** — a fact asking more of it is dropped: a calendar never gives a product's field, Jira activity never gives your e-mail. `local-context` and `user` may give any field. And **the value must have its field's shape**, or the fact is dropped: `Email` an address, `Domain` a domain, `Jira` / `Confluence` the site's URL, `Jira Project Key` capitals and digits, `Confluence Space` a space key, a `Dashboards` line a name and a link, `Name` and a `Members` line a person's name — at most five words, each with a capital letter, no digits. A meeting's title or a letter's subject has none of these shapes. The organisation's name from `mail:domain` or `atlassian:site` is the domain's or the site's own word (`zorg.example` → `Zorg`); another name comes from your answer (`user`). A fact about the record itself (no `field`, no `list`) carries no `value`.
 
 **Thresholds** — below them the fact is dropped («нижче порогу»):
 - `jira:active` — ≥ 5 issues of yours in 90 days in the project;

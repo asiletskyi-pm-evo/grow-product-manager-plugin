@@ -151,7 +151,7 @@ def _text(d, key, need=False, one_line=True):
     v = v.strip()
     if need and not v:
         raise ValueError("%s is empty" % key)
-    if one_line and ("\n" in v or "\r" in v):
+    if one_line and len(v.splitlines()) > 1:            # every break splitlines() knows (U+2028 too), as the records do
         raise ValueError("%s takes one line" % key)
     return v or None
 
