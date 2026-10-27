@@ -33,9 +33,17 @@ check("0.2 «next week» → week of its Monday", ccn.absolute("- review next we
 check("0.3 «минулого місяця» → the month", ccn.absolute("- запуск минулого місяця", base) == "- запуск 2026-09")
 check("0.4 a word that only contains one is not one: «todayish», «завтрашній»",
       ccn.absolute("- todayish, завтрашній", base) is None)
-check("0.5 a passed deadline and a passed quarter", ccn.passed("- launch by 2026-09-30", base) == "2026-09-30"
-      and ccn.passed("- ship in Q3 2026", base) == "Q3 2026" and ccn.passed("- ship in Q4 2026", base) is None
+check("0.5 a passed deadline and a passed quarter after до / by / until", ccn.passed("- launch by 2026-09-30", base)
+      == "2026-09-30" and ccn.passed("- ship by Q3 2026", base) == "Q3 2026" and ccn.passed("- ship by Q4 2026", base) is None
       and ccn.passed("- до 2026-12-01", base) is None)
+check("0.6 never a deadline: a result «у Q3 2026», a baseline, a field line, a table row, a deadline moved ahead",
+      ccn.passed("- Baseline: CR 2.1% у Q1 2026", base) is None and ccn.passed("- Результат в Q3 2026: +12% GMV", base) is None
+      and ccn.passed("- **Строк:** до 2026-09-30", base) is None
+      and ccn.passed("| Checkout redesign | до 2026-09-30 | done |", base) is None
+      and ccn.passed("- до 2026-09-30, продовжено до 2027-03-31", base) is None)
+check("0.7 never a relative date: in a link, a name, a possessive, Tomorrow.io",
+      ccn.absolute("- https://x.example/today/report", base) is None and ccn.absolute("- екран «Сьогодні»", base) is None
+      and ccn.absolute("- today's numbers", base) is None and ccn.absolute("- Tomorrow.io weather", base) is None)
 
 EXTRA = """
 #### Notes
@@ -44,7 +52,12 @@ EXTRA = """
 - weekly sync with  Bea
 - Next review next week
 - Launch by 2026-09-30
-- Pricing test in Q3 2026
+- Pricing test by Q3 2026
+- Baseline 2.1% у Q1 2026
+
+#### Owners
+
+- Weekly sync with Bea
 
 ```
 - same
@@ -70,7 +83,7 @@ try:
               + datetime.timedelta(weeks=1)).isoformat()
     check("1.1 four REPLACE deltas: the second of a line written twice, the passed deadline, the past quarter, the "
           "relative date", rc == 0 and got == sorted([("- weekly sync with  Bea", ""), ("- Launch by 2026-09-30", ""),
-                                                     ("- Pricing test in Q3 2026", ""),
+                                                     ("- Pricing test by Q3 2026", ""),
                                                      ("- Next review next week", "- Next review week of %s" % monday)])
           and all(e["skills"] == ["ctx-consolidate"] for e in ib), (out[-400:], got))
     check("1.2 fenced code and a provider's block are never touched; no record written",
@@ -94,11 +107,22 @@ try:
     app = env.record("product.zorg-app")
     check("2.1 accept: the duplicate, the deadline and the quarter gone, the date absolute",
           rc == 0 and "weekly sync with  Bea" not in app and "Weekly sync with Bea" in app and "2026-09-30" not in app
-          and "Q3 2026" not in app and "- Next review week of %s" % monday in app, app)
+          and "Q3 2026" not in app and "- Next review week of %s" % monday in app
+          and app.count("Weekly sync with Bea") == 2 and "Baseline 2.1% у Q1 2026" in app, app)
     rc, out, _ = env.run("undo")
     check("2.2 ctx undo → the records byte for byte",
           {f: read(env.store, "records", f) for f in os.listdir(os.path.join(env.store, "records"))} == r0, out[-300:])
 
+    # review I5: a duplicate fixed by hand before the accept — the copy left stays
+    env.run("consolidate")
+    env.edit(env.ctx, "- weekly sync with  Bea\n", "")
+    env.run("sync")
+    rc, out, res = env.run("inbox", "list")
+    rc, out, res = env.run("inbox", "accept", "all", "--code", res["code"])
+    check("2.3 the duplicate removed by hand first: accept keeps the one copy left",
+          env.record("product.zorg-app").count("Weekly sync with Bea") == 2, env.record("product.zorg-app"))
+    rc, out, res = env.run("consolidate", "--now", "garbage")
+    check("2.4 consolidate --now garbage → exit 3", rc == 3, out[-200:])
     env.run("invalidate", "product.zorg-lite", "--reason", "closed")
     rc, out, res = env.run("consolidate")
     check("3.0 no longer current since today → not named yet", "ctx archive" not in out, out[-300:])

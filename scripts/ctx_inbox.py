@@ -237,16 +237,17 @@ def skill_name(raw):
     return m.group(1)
 
 
-def _replaced_field(d):
-    m = cs.FIELD_RE.match(d.get("text") or "")
+def _field_of(line):
+    m = cs.FIELD_RE.match((line or "").strip())
     return m.group("name").strip() if m else None
 
 
 def urgent(d, rec):
     if d["op"] == "INVALIDATE" or (rec and rec["type"] == "team" and d["op"] != "NOOP"):
         return True
-    field = d["field"] if d["op"] == "UPDATE" else _replaced_field(d) if d["op"] == "REPLACE" else None
-    return bool(rec) and field in URGENT.get(rec["type"], ())
+    fields = [d["field"]] if d["op"] == "UPDATE" else \
+        [_field_of(d.get("text")), _field_of(d.get("value"))] if d["op"] == "REPLACE" else []
+    return bool(rec) and any(f in URGENT.get(rec["type"], ()) for f in fields if f)
 
 
 def _kind(rec):
@@ -272,19 +273,47 @@ def apply_to(d, rec, today):
     if d["op"] == "INVALIDATE":
         return body if cs.has_status_region(body) else cs.set_status_region(body, today, d["reason"])
     if d["op"] == "REPLACE":
+        new_field, old_field = _field_of(d["value"]), _field_of(d["text"])
+        if new_field:                                   # a field's new line: its value checked as UPDATE checks it
+            spec = (sc.load_fields().get(_kind(rec)) or {}).get(new_field)
+            err = sc.check_value(spec, cs.FIELD_RE.match(d["value"].strip()).group("value").strip()) if spec else None
+            if err:
+                raise ValueError("%s: %s" % (new_field, err))
+            if new_field != old_field and cs.field_get(body, new_field) is not None:
+                raise ValueError("поле %s уже є в записі — це UPDATE, не REPLACE" % new_field)
+        if not d["value"] and (d["source"].get("ref") == DUPLICATE and
+                               sum(1 for _, c, _ in cs._lines(body) if _norm(c) == _norm(d["text"])) < 2):
+            return body                                 # a duplicate no more: the copy left stays
         return replace_line(body, d["text"], d["value"])
     return body
 
 
+DUPLICATE = "дубль"                                     # ctx consolidate's ref for a line written twice
+
+
+def _norm(s):
+    return " ".join((s or "").split()).casefold().rstrip(".;,")
+
+
 def replace_line(body, old, new):
-    """The body with the first line that reads `old` (spaces at its ends aside) made `new`, or removed when `new` is
-    empty; no such line → the body unchanged («уже так»); the line inside a provider's region → cs.RegionError."""
-    spans = cc.managed_spans(body)
+    """The body with the first line of your own text (not in fenced code) that reads `old` (spaces at its ends aside)
+    made `new` — its indentation kept — or removed when `new` is empty; no such line → the body unchanged («уже так»);
+    the line only inside a provider's region → cs.RegionError."""
+    spans, fence, in_region = cc.managed_spans(body), False, False
     for off, core, end in cs._lines(body):
-        if core.strip() == old.strip():
-            if cs._in_region(off, spans):
-                raise cs.RegionError("the line is inside a provider's block")
-            return body[:off] + ((new + end) if new else "") + body[off + len(core) + len(end):]
+        s = core.strip()
+        if s.startswith(("```", "~~~")):
+            fence = not fence
+            continue
+        if fence or s != old.strip():
+            continue
+        if cs._in_region(off, spans):
+            in_region = True
+            continue
+        indent = core[:len(core) - len(core.lstrip())]
+        return body[:off] + ((indent + new.strip() + end) if new else "") + body[off + len(core) + len(end):]
+    if in_region:
+        raise cs.RegionError("the line is inside a provider's block")
     return body
 
 

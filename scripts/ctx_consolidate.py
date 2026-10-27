@@ -29,11 +29,12 @@ RELATIVE = {"позавчора": ("day", -2), "вчора": ("day", -1), "сь�
             "yesterday": ("day", -1), "today": ("day", 0), "tomorrow": ("day", 1),
             "last week": ("week", -1), "this week": ("week", 0), "next week": ("week", 1),
             "last month": ("month", -1), "this month": ("month", 0), "next month": ("month", 1)}
-_REL = re.compile(r"(?<![\w-])(%s)(?![\w-])" % "|".join(sorted((re.escape(k) for k in RELATIVE), key=len, reverse=True)),
-                  re.I)
+_REL = re.compile(r"(?<![\w'’.-])(%s)(?![\w'’-]|\.\w)" % "|".join(sorted((re.escape(k) for k in RELATIVE), key=len,
+                                                                          reverse=True)))    # lower case: «Сьогодні» is a name
 _UK = re.compile(r"[а-яіїєґ]", re.I)
 _DEADLINE = re.compile(r"(?<![\w-])(?:до|until|by|due|deadline:?|дедлайн:?|строк:?)\s+(\d{4}-\d{2}-\d{2})(?![\d-])", re.I)
-_QUARTER = re.compile(r"(?<![\w-])(?:до|у|в|in|by|until)\s+Q([1-4])\s*'?(\d{4})(?!\d)", re.I)
+_QUARTER = re.compile(r"(?<![\w-])(?:до|by|until)\s+Q([1-4])\s*'?(\d{4})(?!\d)", re.I)     # «у Q3» is a result, not a deadline
+_ANYDATE = re.compile(r"(?<![\d-])(\d{4}-\d{2}-\d{2})(?![\d-])")
 _SINCE = re.compile(r"Неактуально з (\d{4}-\d{2}-\d{2})")
 
 
@@ -60,7 +61,10 @@ def _shift(base, unit, k):
 
 
 def absolute(line, base):
-    """The line with each relative date made absolute from `base` (a date), or None when it holds none."""
+    """The line with each relative date made absolute from `base` (a date), or None when it holds none — or holds a
+    link (a word in a URL is no date)."""
+    if "://" in line:
+        return None
     def sub(m):
         unit, k = RELATIVE[m.group(1).lower()]
         when = _shift(base, unit, k)
@@ -72,7 +76,12 @@ def absolute(line, base):
 
 
 def passed(line, today):
-    """A deadline the line names that is before today — the date as text — or None."""
+    """A deadline the line names that is before today — the date as text — or None. A field line or a table row is
+    never one (a record's field, a roadmap's row stay), nor a line that also names a date still ahead (a deadline moved)."""
+    if cs.FIELD_RE.match(line) or line.lstrip().startswith("|"):
+        return None
+    if any((_day(d) or today) >= today for d in _ANYDATE.findall(line)):
+        return None
     for m in _DEADLINE.finditer(line):
         d = _day(m.group(1))
         if d and d < today:
@@ -88,17 +97,20 @@ def passed(line, today):
 def _lines(body):
     """[(core)] of the body's own lines: outside managed regions and fenced code, not headings, not empty, not a
     table's rule."""
-    spans, fence, out = cc.managed_spans(body), False, []
+    spans, fence, out, section = cc.managed_spans(body), False, [], 0
     for off, core, _ in cs._lines(body):
         s = core.strip()
         if s.startswith("```") or s.startswith("~~~"):
             fence = not fence
             continue
-        if fence or not s or cs._in_region(off, spans) or cs._heading_text(core) is not None:
+        if not fence and cs._heading_text(core) is not None:
+            section += 1
+            continue
+        if fence or not s or cs._in_region(off, spans):
             continue
         if set(s) <= set("|-: "):
             continue
-        out.append(core)
+        out.append((section, core))
     return out
 
 
@@ -116,14 +128,14 @@ def find(recs, today, card_lines=None, card_max=cs.CARD_MAX):
             continue
         base = _day(r.get("modified")) or t
         seen, gone = set(), set()
-        for core in _lines(r["body"]):
+        for section, core in _lines(r["body"]):
             line = core.strip()
-            key = _norm(line)
+            key = (section, _norm(line))                # twice in one section; the same line in two sections stays
             if key in seen:
                 if line not in gone:
                     gone.add(line)
                     deltas.append({"op": "REPLACE", "record": r["id"], "text": line, "value": "",
-                                   "reason": "рядок двічі в записі — лишаю перший",
+                                   "reason": "рядок двічі в одному розділі — лишаю один",
                                    "source": {"kind": "derived:consolidate", "ref": "дубль", "at": today}})
                 continue
             seen.add(key)

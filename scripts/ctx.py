@@ -54,6 +54,17 @@
                                 making (`proposal: ctx slot bind <repo> <block>[#<sub>] <slot>`: an unbound block of a registered
                                 repository whose heading answers a slot's names; never the plugin's `team` block). CTX_RESULT
                                 adds slot_proposals [{repo, block, sub, slot}]
+  bootstrap --observed F [--apply --code C [--take N,…] [--skip N,…] | [--only N,…]] [--json]
+                                since v3.22.0: an observation file (references/context-observe.md) against your context —
+                                one table, read only; --apply writes the rows taken (a snapshot, the records, the sources of
+                                each field, the low facts as ctx-bootstrap inbox deltas); a new user's local-context.md from
+                                the onboarding skeleton, moved into records (context-protocol.md §5k)
+  validate --recheck --observed F
+                                since v3.22.0: the records against the connectors; a finding becomes a ctx-recheck delta
+                                only on a second look 6+ days later — the look's day is the file's `at` (§5l); writes the
+                                inbox and .state/recheck.json
+  consolidate [--now ISO]       since v3.22.0: duplicates, relative dates, passed deadlines → ctx-consolidate REPLACE deltas;
+                                no record written (§5m)
   card                          regenerate INDEX.md only
   repo list [--json]            the repositories (provider registrations) a product draws context blocks
                                 from: kind, products, rank, access and, from the block state, how many blocks you
@@ -1081,7 +1092,7 @@ CHECK_NAMES = {"jira": "Jira-ключі", "confluence": "простори Conflu
 
 
 def cmd_recheck(a, c):
-    """`validate --recheck --observed F [--now ISO]` (since v3.22.0, plan C9): the records against what the connectors
+    """`validate --recheck --observed F` (since v3.22.0, plan C9; the day of the look is the file's `at`): the records against what the connectors
     say. A finding seen the first time waits in `.state/recheck.json`; seen again at least 6 days later it becomes a
     delta of the inbox (ctx-recheck) — urgent ones by the inbox's table. Writes only the inbox, the memory and, when
     something was proposed, one journal line {op propose, skill ctx-recheck}; the records it found as they should be are
@@ -1092,9 +1103,9 @@ def cmd_recheck(a, c):
         obs = cob.load(a.observed)
     except ValueError as e:
         raise Usage(str(e))
-    today = (a.now or now())[:10]
-    if not re.match(r"\d{4}-\d{2}-\d{2}$", today):
-        raise Usage("--now is a date or an ISO time")
+    if not obs.get("at"):
+        raise Usage("validate --recheck needs the observation's at (the day the connectors were read)")
+    today = obs["at"]
     with co.lock(c.home):
         c.guard()
         mem_rk = crk.load(c.store)
@@ -1103,7 +1114,7 @@ def cmd_recheck(a, c):
         recs = c.store.load()
         res = crk.run(obs, recs, mem_rk, today)
         props = ci_.propose(box, res["deltas"], "ctx-recheck", recs, today) if res["deltas"] else []
-        new = [r for r in props if r["status"] in (ci_.ADDED, ci_.MERGED)]
+        new = [r for r in props if r["status"] == ci_.ADDED]
         if new:
             ci_.save(c.store, box, today)
             c.store.journal({"ts": now(), "op": "propose", "skill": "ctx-recheck",
@@ -1302,6 +1313,13 @@ def cmd_health(a, c):
                "counts": n}
 
 
+def cbt_day(s):
+    try:
+        return datetime.date.fromisoformat(s)
+    except ValueError:
+        return None
+
+
 def _consolidate_find(c, recs, today):
     card = c.store.card_path
     lines = None
@@ -1320,6 +1338,8 @@ def cmd_consolidate(a, c):
     their commands — archiving is no delta."""
     c.need_store()
     today = (a.now or now())[:10]
+    if not re.match(r"\d{4}-\d{2}-\d{2}$", today) or cbt_day(today) is None:
+        raise Usage("--now is a date or an ISO time")
     with co.lock(c.home):
         c.guard()
         box = ci_.load(c.store)
@@ -2877,7 +2897,7 @@ def build_parser():
         sp.add_argument("--reason")
     sp = sub.add_parser("undo", parents=[common]); sp.add_argument("--steps", type=int, default=1)
     sp = sub.add_parser("validate", parents=[common]); sp.add_argument("--recheck", action="store_true")
-    sp.add_argument("--observed"); sp.add_argument("--now")
+    sp.add_argument("--observed")
     sp = sub.add_parser("consolidate", parents=[common]); sp.add_argument("--now"); sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("show", parents=[common]); sp.add_argument("ids", nargs="*"); sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("health", parents=[common]); sp.add_argument("--json", action="store_true")

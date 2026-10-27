@@ -69,7 +69,7 @@ The confidence is `ctx`'s, by where the fact came from:
 |---|---|---|
 | a product's Jira key is still there | `getVisibleJiraProjects` (all pages) | `jira:visible` — `[{key, name}]` |
 | a product's Confluence space is still there | `getConfluenceSpaces` (all pages) | `confluence:visible` — `[{key, name}]` or keys |
-| a team's members are still active people of the site | `lookupJiraAccountId` for each name of `Members` | `atlassian:people` — `active`, `inactive` (the lookup found no one, or a deactivated account) |
+| a team's members are still active people of the site | `lookupJiraAccountId` for each name of `Members` | `atlassian:people` — `active`; `inactive` only for an account found and **deactivated**; `unknown` for a name the lookup found no one for (another spelling, a nickname — never evidence); `complete: true` when every member was looked up |
 | the role a provider gives you | the provider's access bundle | a `provider:identity` fact with `field: Role` |
 
-A connector that is not `ok`, or a list that is not `complete`, checks nothing. A finding becomes a delta only when the next recheck, at least 6 days later, sees it again (`context-protocol.md` §5l).
+A connector that is not `ok`, or a list that is not `complete`, checks nothing. `at` is required: it is the day of the look. A finding becomes a delta only when the next recheck, at least 6 days later, sees it again (`context-protocol.md` §5l).

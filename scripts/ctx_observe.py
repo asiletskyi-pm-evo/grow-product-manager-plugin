@@ -195,7 +195,7 @@ def _checks(raw):
                 else:
                     raise ValueError("check %s: a value is a key or {key, name}" % name)
         else:
-            for k in ("active", "inactive"):
+            for k in ("active", "inactive", "unknown"):
                 vals = body.get(k, [])
                 if not isinstance(vals, list) or not all(isinstance(x, str) and x.strip() for x in vals):
                     raise ValueError("check %s: %s is a list of names" % (name, k))

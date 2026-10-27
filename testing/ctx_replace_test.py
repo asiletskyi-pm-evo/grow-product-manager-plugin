@@ -51,6 +51,35 @@ d0 = ci_.normalize({"op": "REPLACE", "record": "team.alpha-a", "text": "| Bea Tw
                     "source": SRC})
 check("1.6 value \"\" removes; what() says «− …»", d0["value"] == "" and ci_.what(d0).startswith("− «"), d0)
 
+# review I5, I7, M2, M3
+REC = {"id": "product.zorg-app", "type": "product", "title": "Product: Zorg App",
+       "body": "### Product: Zorg App\n\n- **Jira Project Key:** PROJ\n- note\n  - nested one\n\n```\n- in code\n```\n"}
+def dl(**kw):
+    return ci_.normalize(dict({"op": "REPLACE", "record": "product.zorg-app", "reason": "x", "source": SRC}, **kw))
+check("1.7 a plain line made a key field → urgent", ci_.urgent(dl(text="- note", value="- **URL:** https://z.example"),
+                                                                REC))
+try:
+    ci_.apply_to(dl(text="- note", value="- **Jira Project Key:** NEW"), REC, "2026-10-27")
+    ok = False
+except ValueError:
+    ok = True
+check("1.8 a REPLACE that adds a field the record already has → refused (an UPDATE's job)", ok)
+try:
+    ci_.apply_to(dl(text="- note", value="- **URL:** not a url"), REC, "2026-10-27")
+    ok = False
+except ValueError:
+    ok = True
+check("1.9 a field's new line is checked against its type", ok)
+check("1.10 indentation kept", "  - nested two\n" in ci_.apply_to(dl(text="- nested one", value="- nested two"), REC,
+                                                                    "2026-10-27"))
+check("1.11 a line in fenced code is no match", ci_.apply_to(dl(text="- in code", value=""), REC, "2026-10-27") == REC["body"])
+dup = dict(SRC, ref="дубль")
+one = dict(REC, body="- a\n- notes\n")
+two = dict(REC, body="- a\n- a\n- notes\n")
+check("1.12 a duplicate's removal with one copy left → nothing (the copy stays)",
+      ci_.apply_to(dl(text="- a", value="", source=dup), one, "2026-10-27") == one["body"]
+      and ci_.apply_to(dl(text="- a", value="", source=dup), two, "2026-10-27") == "- a\n- notes\n")
+
 d = tempfile.mkdtemp(prefix="ctx-replace-")
 try:
     env = Env(d)
