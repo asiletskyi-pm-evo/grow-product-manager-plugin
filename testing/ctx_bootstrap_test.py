@@ -80,10 +80,12 @@ try:
     env.run("migrate", "--apply")
     env.run("compile")
     before = state_bytes(env.store, [env.ctx])
+    jbefore = read(env.store, ".state", "journal.jsonl")
     rc, out, res = env.run("bootstrap", "--observed", obs)
     rows = res["rows"]
     by = {(r["type"], r.get("field") or ("new" if r["new"] else r.get("list"))): r for r in rows}
-    check("A1 the table reads only: nothing changed", state_bytes(env.store, [env.ctx]) == before)
+    check("A1 the table reads only: nothing changed, the journal neither",
+          state_bytes(env.store, [env.ctx]) == before and read(env.store, ".state", "journal.jsonl") == jbefore)
     check("A2 profile Email: another value, yours (migrated) → ~ ✋ твоє, not taken by default",
           by[("profile", "Email")]["sign"] == "~" and by[("profile", "Email")]["mine"]
           and not by[("profile", "Email")]["default"] and "✋ твоє" in out, rows)
@@ -101,6 +103,15 @@ try:
     check("A7 rows are numbered profile → organisation → product; the defaults named",
           [r["n"] for r in rows] == [1, 2, 3, 4] and res["default"] == [2, 3, 4] and "візьму: 2, 3, 4" in out, rows)
 
+    alt = os.path.join(d, "alt.json")
+    o_alt = json.load(open(FIX, encoding="utf-8"))
+    o_alt["facts"][4]["value"] = "https://zorg2.atlassian.example"
+    o_alt["facts"][4]["title"] = "Zorg2"
+    json.dump(o_alt, open(alt, "w", encoding="utf-8"), ensure_ascii=False)
+    rc, out, res_alt = env.run("bootstrap", "--observed", alt)
+    rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", res_alt["code"])
+    check("A8a the code of another table → exit 4, nothing written", rc == 4 and res_alt["code"] != res["code"]
+          and state_bytes(env.store, [env.ctx]) == before, out[-300:])
     rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", "deadbeef")
     check("A8 another code → exit 4, nothing written", rc == 4 and state_bytes(env.store, [env.ctx]) == before,
           out[-300:])
@@ -108,11 +119,39 @@ try:
     check("A9 a row the table does not have → exit 3, nothing written",
           rc == 3 and state_bytes(env.store, [env.ctx]) == before, out[-300:])
 
+    rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", res["code"], "--only", "2", "--take", "3")
+    check("A9b --only with --take → exit 3", rc == 3 and "--only" in out, out[-200:])
+    ibp = os.path.join(env.store, ".state", "inbox.json")
+    open(ibp, "w").write('{"schema": "context-inbox/1", "next": 1, "entries": [], "rejected": [], "x": 1}')
+    j1 = read(env.store, ".state", "journal.jsonl")
+    rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", res["code"])
+    check("A9c an inbox that cannot be read → exit 3 before anything is written",
+          rc == 3 and state_bytes(env.store, [env.ctx]) == dict(before, **{".state/inbox.json": read(ibp).encode()})
+          and read(env.store, ".state", "journal.jsonl") == j1, (rc, out[-300:]))
+    os.remove(ibp)
+    rc, out, res = env.run("bootstrap", "--observed", obs)
+    env.edit(env.ctx, "## Organization: Zorg\n", "## Organization: Zorg\n\n- **Domain:** zorg.edited\n")
+    rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", res["code"])
+    check("A9g an edit waiting in local-context.md changes the table → exit 4 after the import, no row written",
+          rc == 4 and "правки з local-context.md" in out and "- **Domain:** zorg.example" not in env.record("org.zorg"),
+          (rc, out[-300:]))
+    env.edit(env.ctx, "## Organization: Zorg\n\n- **Domain:** zorg.edited\n", "## Organization: Zorg\n")
+    env.run("sync")
+    rc, out, res = env.run("bootstrap", "--observed", obs)
+    env.run("set", "org.zorg", "Domain", "zorg.other")
+    rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", res["code"])
+    check("A9e a record a row touches changed since the table was shown (ctx set) → exit 4, nothing written",
+          rc == 4 and "таблиця змінилась" in out, (rc, out[-300:]))
+    env.run("undo")
+    before = state_bytes(env.store, [env.ctx])
+    rc, out, res = env.run("bootstrap", "--observed", obs)
     snaps0 = sorted(os.listdir(os.path.join(env.home, ".grow-pm", "snapshots")))
     rc, out, ap = env.run("bootstrap", "--observed", obs, "--apply", "--code", res["code"])
     org = env.record("org.zorg")
     pay = [f for f in os.listdir(os.path.join(env.store, "records")) if "zorg-pay" in f]
     srcs = json.load(open(os.path.join(env.store, ".state", "sources.json"), encoding="utf-8"))["records"]
+    check("A10b an absent organisation field goes right under the heading, not into «#### Tableau»",
+          org.index("- **Domain:**") < org.index("#### Tableau"), org)
     check("A10 apply: the organisation's Domain and Jira written, the ✋ email not",
           rc == 0 and "- **Domain:** zorg.example" in org and "- **Jira:** https://zorg.atlassian.example" in org
           and "- **Email:** alex@personal.example" in env.record("profile"), (rc, out[-400:]))
@@ -142,8 +181,9 @@ try:
     j0 = read(env.store, ".state", "journal.jsonl")
     s1 = state_bytes(env.store, [env.ctx])
     rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", again["code"])
-    check("A17 apply with nothing taken: no record, no snapshot, the inbox as it was",
-          rc == 0 and state_bytes(env.store, [env.ctx]) == s1 and "записано: нічого" in out, out[-300:])
+    check("A17 apply with nothing taken and nothing new for the inbox: nothing written, the journal neither",
+          rc == 0 and state_bytes(env.store, [env.ctx]) == s1 and "записано: нічого" in out
+          and read(env.store, ".state", "journal.jsonl") == j0, out[-300:])
 
     rc, out, _ = env.run("undo")
     after = state_bytes(env.store, [env.ctx])
@@ -158,6 +198,63 @@ try:
           and not any("zorg-pay" in f for f in os.listdir(os.path.join(env.store, "records"))), out[-300:])
     check("A20 the profile's other fields keep migrated (adopted before the write)",
           srcs["profile"]["field:Name"]["kind"] == "migrated", srcs["profile"])
+
+    # ======================================================================= A'. review cases
+    print("--- A'. the organisation named otherwise, two values, the lines")
+    env3 = Env(os.path.join(d, "three"))
+    env3.edit(env3.ctx, "| Bea Two | Eng |\n", "| Bea Two | Eng |\n\nNote: contractors are not listed.\n")
+    env3.edit(env3.ctx, "- **Jira Team ID:** <team-uuid-2>\n", "- **Jira Team ID:** <team-uuid-2>\n\n#### Members\n\n- Ann Leeson\n")
+    env3.run("migrate", "--apply")
+    env3.run("compile")
+    o3 = json.load(open(FIX, encoding="utf-8"))
+    o3["facts"] = [
+        {"type": "org", "title": "acme", "field": "Domain", "value": "acme.example", "from": "mail:domain"},
+        {"type": "org", "title": "zorg", "field": "Confluence", "value": "https://zorg.atlassian.example/wiki",
+         "from": "atlassian:site"},
+        {"type": "org", "title": "Zorg", "field": "Confluence", "value": "https://zorg-old.atlassian.example/wiki",
+         "from": "user"},
+        {"type": "team", "title": "Alpha (A)", "list": "Members", "value": "Bea Tw", "from": "user"},
+        {"type": "team", "title": "Gamma", "list": "Members", "value": "Ann Lee", "from": "user"},
+        {"type": "team", "title": "Gamma", "from": "user"},
+        {"type": "team", "title": "Beta (B)", "list": "Members", "value": "Ann Lee", "from": "user"}]
+    p3 = os.path.join(d, "o3.json")
+    json.dump(o3, open(p3, "w", encoding="utf-8"), ensure_ascii=False)
+    rc, out, res = env3.run("bootstrap", "--observed", p3)
+    shown3 = out
+    by3 = {(r["type"], r.get("field") or r.get("list") or "new"): r for r in res["rows"]}
+    check("R1 a fact about «acme» attaches to the one organisation but is never taken by default",
+          by3[("org", "Domain")]["renamed"] and not by3[("org", "Domain")]["default"] and "≠ назва" in out, res["rows"])
+    conf = [r for r in res["rows"] if r.get("field") == "Confluence"]
+    check("R2 two values for Zorg's Confluence (a site, your answer, both high) → ⚠, neither default",
+          len(conf) == 2 and all(r["clash"] and not r["default"] for r in conf), conf)
+    rc, out, _ = env3.run("bootstrap", "--observed", p3, "--apply", "--code", res["code"], "--take",
+                          ",".join(str(r["n"]) for r in conf))
+    check("R3 taking both values of one field → exit 3", rc == 3 and "два значення" in out, out[-300:])
+    check("R4 «Bea Tw» is not «Bea Two», «Ann Lee» is not «Ann Leeson»: rows, not counted as there",
+          sum(1 for r in res["rows"] if r.get("list") == "Members") == 2, res["rows"])
+    gamma = by3.get(("team", "new"))
+    check("R5 a new team carries its member line, shown in its row", gamma and gamma["lists"][0]["value"] == "Ann Lee"
+          and "Members: Ann Lee" in shown3, gamma)
+    rc, out, _ = env3.run("bootstrap", "--observed", p3, "--apply", "--code", res["code"])
+    team = [f for f in os.listdir(os.path.join(env3.store, "records")) if "gamma" in f]
+    check("R6 apply: the new team's Members subsection holds the line; Bea Tw lands inside the Alpha table",
+          team and "#### Members\n\n- Ann Lee" in env3.record(team[0][:-3])
+          and "| Bea Two | Eng |\n| Bea Tw | |\n\nNote:" in env3.record("team.alpha-a"),
+          (out[-300:], env3.record("team.alpha-a")))
+    o4 = {"schema": "context-observed/1", "at": "2026-10-27", "connectors": {"tableau": "ok"},
+          "facts": [{"type": "product", "title": "Zorg Lite", "list": "Dashboards",
+                     "value": "Lite funnel — https://tableau.zorg.example/lite", "from": "tableau:owned"}]}
+    p4 = os.path.join(d, "o4.json")
+    json.dump(o4, open(p4, "w", encoding="utf-8"), ensure_ascii=False)
+    rc, out, res = env3.run("bootstrap", "--observed", p4)
+    rc, out, _ = env3.run("bootstrap", "--observed", p4, "--apply", "--code", res["code"])
+    j = [json.loads(l) for l in read(env3.store, ".state", "journal.jsonl").splitlines() if l.strip()]
+    check("R7 only proposals: one op propose line (skill ctx-bootstrap), no snapshot",
+          rc == 0 and j[-1]["op"] == "propose" and j[-1]["skill"] == "ctx-bootstrap" and "snapshot" not in j[-1], j[-1])
+    rc, out, _ = env3.run("undo")
+    ib = json.load(open(os.path.join(env3.store, ".state", "inbox.json"), encoding="utf-8"))["entries"]
+    check("R8 ctx undo of the change before them keeps those proposals", any("Lite funnel" in (e["delta"].get("text") or "")
+                                                                            for e in ib), ib)
 
     # ======================================================================= B. a new user
     print("--- B. a new user, an empty HOME")
@@ -201,9 +298,21 @@ try:
     o2 = dict(o, facts=[f for f in o["facts"] if f["type"] != "org"])
     json.dump(o2, open(nobs, "w", encoding="utf-8"), ensure_ascii=False)
     rc, out, res = run_bare(home2, "bootstrap", "--observed", nobs)
-    rc, out, _ = run_bare(home2, "bootstrap", "--observed", nobs, "--apply", "--code", res["code"])
-    check("B7 products with no organisation → exit 3, nothing written",
+    orph = [r["n"] for r in res["rows"] if r["orphan"]]
+    check("B7 products with no organisation: marked, not taken by default", orph and "немає організації" in out
+          and not any(r["default"] for r in res["rows"] if r["orphan"]), res["rows"])
+    rc, out, _ = run_bare(home2, "bootstrap", "--observed", nobs, "--apply", "--code", res["code"], "--take", str(orph[0]))
+    check("B8 … taken by number → exit 3, nothing written",
           rc == 3 and "організації" in out and not os.path.exists(os.path.join(home2, ".grow-pm", "local-context.md")),
+          (rc, out[-300:]))
+    home3 = os.path.join(d, "new3")
+    os.makedirs(os.path.join(home3, ".grow-pm"))
+    open(os.path.join(home3, ".grow-pm", ".ctx-last-store"), "w").write("/somewhere/_System/context\n")
+    json.dump(o, open(nobs, "w", encoding="utf-8"), ensure_ascii=False)
+    rc, out, res = run_bare(home3, "bootstrap", "--observed", nobs)
+    rc, out, _ = run_bare(home3, "bootstrap", "--observed", nobs, "--apply", "--code", res["code"])
+    check("B9 no local-context.md but a store was there → a recovery, not a new user: exit 4, nothing written",
+          rc == 4 and "RM-1" in out and not os.path.exists(os.path.join(home3, ".grow-pm", "local-context.md")),
           (rc, out[-300:]))
 
     # ======================================================================= C. the file

@@ -410,7 +410,8 @@ class Ctx:
         found = cc.find_context(a.context, home=self.home)
         self.fresh = False                       # since v3.22.0: `bootstrap` of a new user — no local-context.md yet
         if not found and a.cmd == "bootstrap":
-            found = os.path.expanduser(a.context) if a.context else os.path.join(self.home, ".grow-pm", "local-context.md")
+            found = os.path.expanduser(a.context or os.environ.get("GROW_PM_CONTEXT_PATH") or
+                                       os.path.join(self.home, ".grow-pm", "local-context.md"))
             self.fresh = not os.path.lexists(found)
         if not found:
             raise cs.StoreError("no such file: %s (--context)" % a.context if a.context else
@@ -2575,16 +2576,21 @@ def _bootstrap_recs(c):
 
 
 def _bootstrap_result(d, obs, cd):
-    return {"rows": d["rows"], "inbox": len(d["inbox"]), "same": d["same"], "dropped": obs["dropped"],
+    return {"rows": d["rows"], "inbox": len(d["inbox"]), "later": len(d["later"]), "same": d["same"],
+            "dropped": obs["dropped"],
             "connectors": obs["connectors"], "code": cd, "default": [r["n"] for r in d["rows"] if r["default"]]}
 
 
 def cmd_bootstrap(a, c):
     """`bootstrap --observed F [--json]` — the table: what the connectors say against your context (plan C5); reads
-    only. `--apply --code C [--take N,…] [--skip N,…] [--only N,…]` — writes the rows taken (C6): with a store a
-    snapshot, the records, `.state/sources.json`, the low facts as inbox deltas, one journal line {op bootstrap}, the
-    compile; without a store and without local-context.md (a new user) the file from the skeleton, moved into records at
-    once. A local-context.md that is not in records yet: the table, but `--apply` waits for `ctx migrate --apply`."""
+    only. `--apply --code C [--take N,…] [--skip N,…] | [--only N,…]` — writes the rows taken (C6). Every check comes
+    first, under the lock, before anything is written: the code against the records as they are (and again after the
+    edits waiting are imported), the rows, the inbox and the sources readable. With a store: a snapshot, the records,
+    `.state/sources.json`, the low facts as inbox deltas (ctx-bootstrap), one journal line {op bootstrap, sigs}, the
+    compile — `ctx undo` takes it all back. Nothing taken and nothing new for the inbox → nothing written; only new
+    proposals → one {op propose} line, as `ctx propose` writes. Without a store and without local-context.md (a new
+    user): the file from the skeleton, moved into records at once. A local-context.md not in records yet, or a store
+    with no local-context.md: the table, never the apply."""
     try:
         obs = cob.load(a.observed)
     except ValueError as e:
@@ -2599,42 +2605,36 @@ def cmd_bootstrap(a, c):
     if not a.apply:
         for line in cbt.render(d, obs["connectors"], obs["dropped"]):
             print(line)
-        print("код: %s" % cd if d["rows"] or d["inbox"] else "нічого нового — контекст уже такий")
+        print("код: %s" % cd if d["rows"] or d["inbox"] or d["later"] else "нічого нового — контекст уже такий")
         return 0, out
     if not a.code:
         raise Usage("--apply бере --code з таблиці (ctx bootstrap --observed F)")
-    if a.code != cd:
-        raise co.Refused("таблиця змінилась — переглянь ще раз: ctx bootstrap --observed %s" % a.observed)
     try:
-        take = cbt.chosen(d, a.take, a.skip, a.only)
+        cbt.chosen(d, a.take, a.skip, a.only)
     except ValueError as e:
         raise Usage(str(e))
-    if not c.store.exists() and not c.fresh:
+    if c.fresh:
+        held = [p for p in (c.store.records_dir, co._last_store_path(c.home)) if os.path.lexists(p)]
+        if held:
+            raise co.Refused("local-context.md немає, але сховище контексту є (%s) — це відновлення, не новий "
+                             "користувач: «налаштуй плагін» (RM-1)" % held[0])
+    elif not c.store.exists():
         raise co.Refused("local-context.md ще не в записах — спершу перенеси його (ctx migrate --apply, пункт оновлення "
                          "«Move my context to records»), тоді таблиця запишеться")
     t = now()
     with co.lock(c.home):
         c.guard()
-        if c.fresh:
-            ids, snap, written = _bootstrap_new(c, take, at, t)
-        else:
-            ids, snap, written = _bootstrap_store(c, a, take, cd, at, t)
-        recs = c.store.load()
-        mem = ci_.load(c.store)
-        props = ci_.propose(mem, cbt.deltas(d["inbox"], recs, at), "ctx-bootstrap", recs, t[:10])
-        new = [r for r in props if r["status"] in (ci_.ADDED, ci_.MERGED)]
-        if new:
-            ci_.save(c.store, mem, t[:10])
-        c.store.journal(dict({"ts": now(), "op": "bootstrap", "ids": ids, "rows": [r["n"] for r in take],
-                              "source": "ctx-bootstrap", "reason": "", "inbox": [e["sig"] for e in mem["entries"]
-                                                                                 if e["n"] in {r["n"] for r in new}]},
-                             **({"snapshot": snap} if snap and not c.fresh else {})))
-    print("записано: %s · у скриньці +%d%s" % (", ".join(ids) or "нічого", len([r for r in new if r["status"] == ci_.ADDED]),
-                                              " (back: ctx undo)" if snap else ""))
+        res = _bootstrap_new(c, a, obs, at, t) if c.fresh else _bootstrap_store(c, a, obs, at, t)
+    added = [r for r in res["props"] if r["status"] == ci_.ADDED]
+    print("записано: %s · у скриньці +%d%s" % (", ".join(res["ids"]) or "нічого", len(added),
+                                              " (back: ctx undo)" if res["snapshot"] else ""))
+    for n, why in res["not_written"]:
+        print("№%d не записано: %s" % (n, why))
     if c.fresh:
         print("контекст у записах: %s — ctx undo повертає один файл" % c.store.root)
-    return 0, dict(out, applied=True, taken=[r["n"] for r in take], ids=ids, snapshot=snap, written=written,
-                   proposed=[r.get("n") for r in new])
+    return 0, dict(out, applied=True, taken=res["taken"], ids=res["ids"], snapshot=res["snapshot"],
+                   written=res["written"], proposed=[r["n"] for r in added],
+                   not_written=[n for n, _ in res["not_written"]])
 
 
 def _note_row(srcs, rid, field, value, r, at):
@@ -2642,15 +2642,40 @@ def _note_row(srcs, rid, field, value, r, at):
               ref=r.get("ref"), at=at, confidence=r["confidence"])
 
 
-def _bootstrap_store(c, a, take, cd, at, t):
+def _bootstrap_check(a, obs, recs, srcs, why):
+    d = cbt.diff(obs, recs, srcs)
+    if cbt.code(d, recs) != a.code:
+        raise co.Refused("%s — переглянь ще раз: ctx bootstrap --observed %s" % (why, a.observed))
+    try:
+        return d, cbt.chosen(d, a.take, a.skip, a.only)
+    except ValueError as e:
+        raise Usage(str(e))
+
+
+def _bootstrap_propose(c, box, facts, at, t):
+    recs = c.store.load()
+    props = ci_.propose(box, cbt.deltas(facts, recs, at), "ctx-bootstrap", recs, t[:10]) if facts else []
+    added = {r["n"] for r in props if r["status"] == ci_.ADDED}
+    return props, [e["sig"] for e in box["entries"] if e["n"] in added]
+
+
+def _bootstrap_store(c, a, obs, at, t):
+    box = ci_.load(c.store)                             # everything that must read, before anything is written
+    srcs = csrc.load(c.store)
+    _bootstrap_check(a, obs, c.store.load(), srcs, "таблиця змінилась")
     pre = c.import_first()
     recs = c.store.load()
-    srcs = csrc.load(c.store)
-    if (pre["changed"] or pre["added"]) and cbt.code(cbt.diff(cob.load(a.observed), recs, srcs), recs) != cd:
-        raise co.Refused("правки з local-context.md змінили таблицю — переглянь ще раз: ctx bootstrap --observed %s"
-                         % a.observed)
-    if not take:                                        # nothing taken: no snapshot, no record (the inbox may still get some)
-        return [], None, []
+    if pre["changed"] or pre["added"] or pre.get("removed"):
+        srcs = csrc.load(c.store)
+    d, take = _bootstrap_check(a, obs, recs, srcs, "правки з local-context.md змінили таблицю")
+    res = {"ids": [], "snapshot": None, "written": [], "taken": [], "not_written": [], "props": []}
+    if not take:
+        res["props"], sigs = _bootstrap_propose(c, box, d["inbox"], at, t)
+        if sigs:                                        # proposals only: a line as `ctx propose` writes
+            ci_.save(c.store, box, t[:10])
+            c.store.journal({"ts": t, "op": "propose", "skill": "ctx-bootstrap", "ids": sorted({
+                r["record"] for r in res["props"] if r["status"] == ci_.ADDED}), "sigs": sigs, "source": "ctx-bootstrap"})
+        return res
     by_id = {r["id"]: r for r in recs}
     snap = co.snapshot(c.store, c.copies, c.home, "bootstrap")
     changed = {}
@@ -2658,31 +2683,29 @@ def _bootstrap_store(c, a, take, cd, at, t):
         if r["new"]:
             continue
         rec = changed.get(r["record"]) or by_id.get(r["record"])
-        if rec is None:                                 # a profile field and no profile record
+        if rec is None:
+            res["not_written"].append((r["n"], "запису %s немає" % (r["record"] or r["type"])))
             continue
         if r["record"] not in changed:
             csrc.adopt(srcs, rec)
         if r.get("field"):
-            body = cs.field_set(rec["body"], r["field"], r["value"])
+            body = cbt.put_field(rec["body"], r["field"], r["value"])
             _note_row(srcs, rec["id"], r["field"], r["value"], r, at)
         else:
-            line, under = cbt.list_line(rec["body"], r["list"], r["value"])
-            body = cs.append_line(rec["body"], line, under=under)
+            body, line = cbt.add_line(rec["body"], r["list"], r["value"])
             _note_row(srcs, rec["id"], None, line, r, at)
         changed[rec["id"]] = dict(rec, body=body, source="ctx-bootstrap", modified=t)
+        res["taken"].append(r["n"])
+    news = sorted([r for r in take if r["new"]], key=lambda r: cbt.TYPE_ORDER[r["type"]])
     for rec in changed.values():
         c.store.write(co.touch(rec, t))
     ids = list(changed)
-    news = [r for r in take if r["new"]]
-    for r in sorted(news, key=lambda r: cbt.TYPE_ORDER[r["type"]]):
+    for r in news:
         cur = c.store.load()
         if r["type"] == "org":
             after = cur[-1]["id"] if cur else None
         else:
-            orgs = [x for x in cur if x["type"] == "org"]
-            if not orgs:
-                raise co.Refused("продукт чи команда потребує організації — візьми рядок організації")
-            parent = orgs[0]["id"]
+            parent = [x["id"] for x in cur if x["type"] == "org"][0]   # chosen() made sure there is one
             kids = [x["id"] for x in cur if x["parent"] == parent and x["type"] == r["type"]] or \
                 [x["id"] for x in cur if x["parent"] == parent] or [parent]
             after = kids[-1]
@@ -2692,14 +2715,23 @@ def _bootstrap_store(c, a, take, cd, at, t):
                          "ctx-bootstrap", t)[0]
         for f in r["fields"]:
             _note_row(srcs, rid, f["field"], f["value"], f, at)
+        for x in r["lists"]:
+            _note_row(srcs, rid, None, "- " + x["value"], x, at)
         ids.append(rid)
+        res["taken"].append(r["n"])
     csrc.save(c.store, srcs)
-    written = co.compile_store(c.store, c.copies, t, c.home, snap)["written"] if ids else []
-    return ids, snap, written
+    res["props"], sigs = _bootstrap_propose(c, box, d["inbox"] + d["later"], at, t)
+    c.store.journal({"ts": t, "op": "bootstrap", "ids": ids, "rows": res["taken"], "source": "ctx-bootstrap",
+                     "reason": "", "sigs": sigs, "snapshot": snap})     # the proposals ride it: undo takes them too
+    if sigs:
+        ci_.save(c.store, box, t[:10])
+    res.update(ids=ids, snapshot=snap, written=co.compile_store(c.store, c.copies, t, c.home, snap)["written"])
+    return res
 
 
-def _bootstrap_new(c, take, at, t):
+def _bootstrap_new(c, a, obs, at, t):
     """A new user: the file from the skeleton, then the move into records — `ctx undo` after it is one file again."""
+    d, take = _bootstrap_check(a, obs, [], csrc.empty(), "таблиця змінилась")
     try:
         text = cbt.skeleton(take, t[:10], t, cbt.plugin_version())
     except ValueError as e:
@@ -2712,9 +2744,11 @@ def _bootstrap_new(c, take, at, t):
     recs = c.store.load()
     for r in take:
         if r["new"]:
-            rec = cbt.find(recs, r["type"], r["title"])
+            rec = cbt.find(recs, r["type"], r["title"], fallback=False)
             for f in r["fields"]:
                 _note_row(srcs, rec["id"], f["field"], f["value"], f, at)
+            for x in r["lists"]:
+                _note_row(srcs, rec["id"], None, "- " + x["value"], x, at)
         elif r["type"] == "profile" and r.get("field"):
             _note_row(srcs, cbt.find(recs, "profile", None)["id"], r["field"], r["value"], r, at)
     for rec in recs:                                    # the skeleton's own lines (Judgment defaults, the onboarding
@@ -2722,7 +2756,16 @@ def _bootstrap_new(c, take, at, t):
             if csrc.field_key(name) not in srcs["records"].get(rec["id"], {}):
                 csrc.note(srcs, rec["id"], csrc.field_key(name), value, "ctx-bootstrap", at=t)
     csrc.save(c.store, srcs)
-    return [r["id"] for r in recs], rep.get("snapshot"), [c.context]
+    box = ci_.load(c.store)
+    props, sigs = _bootstrap_propose(c, box, d["inbox"] + d["later"], at, t)
+    c.store.journal({"ts": t, "op": "bootstrap", "ids": [r["id"] for r in recs], "rows": [r["n"] for r in take],
+                     "source": "ctx-bootstrap", "reason": ""})
+    if sigs:
+        ci_.save(c.store, box, t[:10])
+        c.store.journal({"ts": t, "op": "propose", "skill": "ctx-bootstrap", "ids": [], "sigs": sigs,
+                         "source": "ctx-bootstrap"})
+    return {"ids": [r["id"] for r in recs], "snapshot": rep.get("snapshot"), "written": [c.context],
+            "taken": [r["n"] for r in take], "not_written": [], "props": props}
 
 
 # ---------------------------------------------------------------------- main

@@ -590,7 +590,8 @@ def _level(core):
 
 def append_line(body, text, under=None):
     """Add `text` after the last non-empty line of the body, or of the subsection whose heading line is
-    `under` (up to the next heading of the same or a higher level). An identical line there → unchanged;
+    `under` (up to the next heading of the same or a higher level); a table row (since v3.22.0) after the last row of
+    the first table there. An identical line there → unchanged;
     a place inside a provider's managed region → RegionError."""
     lines, spans = _lines(body), cc.managed_spans(body)
     lo, hi = 0, len(lines)
@@ -603,6 +604,12 @@ def append_line(body, text, under=None):
     if any(core.rstrip() == text.rstrip() for _, core, _ in lines[lo:hi]):
         return body
     last = max((k for k in range(lo, hi) if lines[k][1].strip()), default=lo)
+    if text.lstrip().startswith("|"):                   # since v3.22.0: a table row goes after the table's last row,
+        rows = [k for k in range(lo, hi) if lines[k][1].strip().startswith("|")]    # not after a note below it
+        if rows:
+            last = rows[0]
+            while last + 1 < hi and lines[last + 1][1].strip().startswith("|"):
+                last += 1
     off, core, end = lines[last]
     at = off + len(core) + len(end)
     if _in_region(at if end else off + len(core), spans):
