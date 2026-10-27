@@ -344,6 +344,26 @@ if [ -f testing/host-matrix.md ]; then
   done
   N_ROWS=$(grep -cE '^\| `[a-z-]+` \|' testing/host-matrix.md)
   [ "$N_ROWS" = "$(echo "$SKILL_NAMES" | wc -l | tr -d ' ')" ] || err "testing/host-matrix.md: $N_ROWS skill rows, expected one per skill"
+  # v3.21.0: the matrix's summary line and README's "Per-skill result" row are counted from the rows —
+  # README said 31 · 15/16 · 21/10 · 22/9 for two releases after the matrix moved on.
+  MATRIX_ISSUES=$(python3 - <<'PY_MATRIX'
+import re
+m = open("testing/host-matrix.md", encoding="utf-8").read()
+hosts = ["claude-cowork", "codex-cli", "chatgpt", "codex-cloud"]
+rows = re.findall(r"^\| `[a-z-]+` \|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|", m, re.M)
+counts = [{k: sum(1 for r in rows if r[i].strip() == k) for k in ("full", "degraded", "n/a")} for i in range(4)]
+line = " · ".join("**%s** %d full / %d degraded / %d n/a" % (h, c["full"], c["degraded"], c["n/a"]) for h, c in zip(hosts, counts))
+if line not in m:
+    print("testing/host-matrix.md: the summary line does not match the rows — expected: " + line)
+cell = lambda c: " / ".join("%d %s" % (c[k], k) for k in ("full", "degraded", "n/a") if c[k]) or "—"
+want = "| Per-skill result | " + " | ".join(cell(c) for c in counts) + " |"
+readme = open("README.md", encoding="utf-8").read()
+if want not in readme:
+    got = next((l for l in readme.splitlines() if l.startswith("| Per-skill result |")), "(no such row)")
+    print("README.md: 'Per-skill result' row differs from testing/host-matrix.md — expected: %s · found: %s" % (want, got))
+PY_MATRIX
+)
+  [ -z "$MATRIX_ISSUES" ] || { echo "$MATRIX_ISSUES" | while IFS= read -r line; do err "$line"; done; FAIL=1; }
 else
   err "testing/host-matrix.md is missing (skill × host × full/degraded/n-a)"
 fi
@@ -460,6 +480,7 @@ for f in README.md; do
   grep -qF "$N_COMMANDS commands"    "$f" || err "$f: does not state '$N_COMMANDS commands' (actual count)"
   grep -qF "$N_CONNECTORS connectors" "$f" || err "$f: does not state '$N_CONNECTORS connectors' (actual count)"
   grep -qF "$N_HOOKS hooks"          "$f" || err "$f: does not state '$N_HOOKS hooks' (actual count)"
+  grep -qF "| Commands | ✅ $N_COMMANDS, user-only | ✅ $N_COMMANDS, migrated" "$f" || err "$f: the host table's Commands row does not state $N_COMMANDS commands for both hosts"
 done
 ok "component counts: $N_SKILLS skills, $N_AGENTS agents, $N_COMMANDS commands, $N_CONNECTORS connectors, $N_HOOKS hooks"
 

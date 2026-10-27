@@ -695,7 +695,7 @@ if os.path.isfile(schema_p):
         fail("vault-types", "vault-schema.md: TYPE_FOLDER_MAP Reference block not found")
 
     # taxonomy rows: | type | skill | folder | description |
-    taxonomy = set(re.findall(r"^\|\s*([a-z][a-z0-9-]+)\s*\|[^|]*\|\s*[A-Z][\w/{}-]*\s*\|", st, re.M))
+    taxonomy = set(re.findall(r"^\|\s*([a-z][a-z0-9-]+)\s*\|[^|]*\|\s*_?[A-Z][\w/{}-]*\s*\|", st, re.M))
     for t in sorted(taxonomy - set(folder_map)):
         fail("vault-types", f"vault-schema.md: type '{t}' is in the taxonomy but missing from TYPE_FOLDER_MAP")
     for t in sorted(set(folder_map) - taxonomy):
