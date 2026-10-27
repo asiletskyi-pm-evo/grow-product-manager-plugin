@@ -45,12 +45,23 @@ DEFERRED = ("judgment", "key-metrics", "teams", "repos", "cjm", "knowledge-libra
             "tableau-full", "analytics-extended")
 LISTS = {"product": ("Dashboards",), "team": ("Members",)}       # the subsections a new record gets
 PROFILE_ORDER = ("Name", "Role", "Role label", "Role scope", "Level home", "Email", "Work Email", "Language")
+# A field a record may hold under another name (Step 16c writes `Jira`; files from before say `Jira instance`).
+FIELD_ALIASES = {"Jira": ("Jira instance",), "Confluence": ("Confluence instance",), "Email": ("Work Email",)}
 MARKS = {"mine": "✋ твоє — лише номером", "clash": "⚠ два значення — лише номером",
          "renamed": "≠ назва організації — лише номером", "orphan": "немає організації — візьми й організацію"}
 
 
 def _n(s):
     return " ".join((s or "").split()).casefold()
+
+
+def _same(a, b):
+    """Equal values, a link and a bare host alike: `https://x.example/` is `x.example`."""
+    norm = lambda s: re.sub(r"^https?://", "", _n(s)).rstrip("/")
+    return norm(a) == norm(b)
+
+
+
 
 
 def kind_of(frm):
@@ -131,8 +142,12 @@ def diff(obs, recs, srcs=None):
         clash = len(values) > 1
         for f, rec, renamed in values:
             if f["field"]:
-                now = cs.field_get(rec["body"], f["field"]) if rec else None
-                sign = "=" if now is not None and _n(now) == _n(f["value"]) else ("+" if now is None else "~")
+                held = [v for v in [cs.field_get(rec["body"], n) for n in (f["field"],) + FIELD_ALIASES.get(f["field"], ())]
+                        if v is not None] if rec else []
+                now = (cs.field_get(rec["body"], f["field"]) if rec else None)
+                if now is None and held:
+                    now = held[0]
+                sign = "=" if any(_same(v, f["value"]) for v in held) else ("+" if now is None else "~")
             elif f["list"]:
                 now = None
                 sign = "=" if rec and has_line(rec["body"], f["list"], f["value"]) else "+"

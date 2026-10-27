@@ -193,7 +193,7 @@ try:
     rc, out, _ = env.run("bootstrap", "--observed", obs, "--apply", "--code", res["code"], "--take", "1", "--skip", "4")
     srcs = json.load(open(os.path.join(env.store, ".state", "sources.json"), encoding="utf-8"))["records"]
     check("A19 --take 1 takes the ✋ row, --skip 4 leaves Zorg Pay",
-          rc == 0 and "- **Email:** a.one@zorg.example" in env.record("profile")
+          rc == 0 and "- **Email:** alex.one@zorg.example" in env.record("profile")
           and srcs["profile"]["field:Email"]["kind"] == "derived:atlassian:user"
           and not any("zorg-pay" in f for f in os.listdir(os.path.join(env.store, "records"))), out[-300:])
     check("A20 the profile's other fields keep migrated (adopted before the write)",
@@ -255,6 +255,19 @@ try:
     ib = json.load(open(os.path.join(env3.store, ".state", "inbox.json"), encoding="utf-8"))["entries"]
     check("R8 ctx undo of the change before them keeps those proposals", any("Lite funnel" in (e["delta"].get("text") or "")
                                                                             for e in ib), ib)
+
+    o5 = {"schema": "context-observed/1", "at": "2026-10-27", "connectors": {"atlassian": "ok"},
+          "facts": [{"type": "org", "title": "zorg", "field": "Jira", "value": "https://zorg.atlassian.example/",
+                     "from": "atlassian:site"},
+                    {"type": "profile", "field": "Email", "value": "a.one@zorg.example", "from": "atlassian:user"}]}
+    p5 = os.path.join(d, "o5.json")
+    json.dump(o5, open(p5, "w", encoding="utf-8"), ensure_ascii=False)
+    env5 = Env(os.path.join(d, "five"))
+    env5.edit(env5.ctx, "## Organization: Zorg\n", "## Organization: Zorg\n\n- **Jira instance:** zorg.atlassian.example\n")
+    env5.run("migrate", "--apply")
+    rc, out, res = env5.run("bootstrap", "--observed", p5)
+    check("R9 a field under its older name (Jira instance, Work Email) with the same value, a link or a bare host → agrees",
+          rc == 0 and not res["rows"] and res["same"] == 2, (res["rows"], out[-300:]))
 
     # ======================================================================= B. a new user
     print("--- B. a new user, an empty HOME")

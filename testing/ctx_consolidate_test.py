@@ -41,6 +41,9 @@ check("0.6 never a deadline: a result «у Q3 2026», a baseline, a field line, 
       and ccn.passed("- **Строк:** до 2026-09-30", base) is None
       and ccn.passed("| Checkout redesign | до 2026-09-30 | done |", base) is None
       and ccn.passed("- до 2026-09-30, продовжено до 2027-03-31", base) is None)
+check("0.8 a standing rule is no date: «data up to *yesterday*», «станом на сьогодні», «до завтра»",
+      ccn.absolute("- Order tables carry data only up to *yesterday*", base) is None
+      and ccn.absolute("- ціни станом на сьогодні", base) is None and ccn.absolute("- дані до завтра", base) is None)
 check("0.7 never a relative date: in a link, a name, a possessive, Tomorrow.io",
       ccn.absolute("- https://x.example/today/report", base) is None and ccn.absolute("- екран «Сьогодні»", base) is None
       and ccn.absolute("- today's numbers", base) is None and ccn.absolute("- Tomorrow.io weather", base) is None)

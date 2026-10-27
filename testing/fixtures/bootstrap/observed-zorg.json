@@ -5,7 +5,7 @@
                 "provider:zorg-brain": "ok"},
  "facts": [
   {"type": "profile", "field": "Name", "value": "Alex One", "from": "atlassian:user", "ref": "atlassianUserInfo"},
-  {"type": "profile", "field": "Email", "value": "a.one@zorg.example", "from": "atlassian:user", "ref": "atlassianUserInfo"},
+  {"type": "profile", "field": "Email", "value": "alex.one@zorg.example", "from": "atlassian:user", "ref": "atlassianUserInfo"},
   {"type": "profile", "field": "Role", "value": "pm", "from": "provider:identity", "ref": "zorg-brain access-bundles"},
   {"type": "org", "title": "Zorg", "field": "Domain", "value": "zorg.example", "from": "mail:domain",
    "ref": "Re: quarterly bonus for Bea"},

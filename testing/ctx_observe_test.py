@@ -129,6 +129,14 @@ check("3.3 a fact from a connector that did not answer is refused (atlassian abs
       not any(f["from"].split(":")[0] in ("atlassian", "jira", "confluence") for f in o["facts"])
       and any("не відповів" in d["why"] for d in o["dropped"]), o["facts"])
 r = raw()
+r["connectors"]["mail"] = "absent"
+o = parse(r)
+check("3.3b the mail's domain from Atlassian's address: kept when atlassian answered and mail did not",
+      any(f["from"] == "mail:domain" for f in o["facts"]), o["dropped"])
+r["connectors"]["atlassian"] = "absent"
+o = parse(r)
+check("3.3c … dropped when neither answered", not any(f["from"] == "mail:domain" for f in o["facts"]), o["facts"])
+r = raw()
 r["facts"].append({"type": "product", "title": "Zorg App", "field": "URL", "value": "https://ci.zorg.example/?token=ghp_"
                    + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8", "from": "user"})
 o = parse(r)

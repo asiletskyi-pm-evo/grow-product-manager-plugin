@@ -84,6 +84,8 @@ def _connector_ok(frm, connectors):
     need = FROM[frm]
     if need is None:
         return True
+    if frm == "mail:domain":                            # your address comes from Atlassian or from the mail connector
+        return connectors.get("mail") == "ok" or connectors.get("atlassian") == "ok"
     if need == "provider":
         return any(k.startswith("provider:") and v == "ok" for k, v in connectors.items())
     return connectors.get(need) == "ok"

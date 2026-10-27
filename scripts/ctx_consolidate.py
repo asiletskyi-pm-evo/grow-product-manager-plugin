@@ -32,6 +32,8 @@ RELATIVE = {"позавчора": ("day", -2), "вчора": ("day", -1), "сь�
 _REL = re.compile(r"(?<![\w'’.-])(%s)(?![\w'’-]|\.\w)" % "|".join(sorted((re.escape(k) for k in RELATIVE), key=len,
                                                                           reverse=True)))    # lower case: «Сьогодні» is a name
 _UK = re.compile(r"[а-яіїєґ]", re.I)
+# «data up to yesterday», «станом на сьогодні»: a standing rule, not a date — never made absolute
+_STANDING = re.compile(r"(?:up to|until|as of|since|до|по|станом на|з)\s*[*_«\"]*\s*$", re.I)
 _DEADLINE = re.compile(r"(?<![\w-])(?:до|until|by|due|deadline:?|дедлайн:?|строк:?)\s+(\d{4}-\d{2}-\d{2})(?![\d-])", re.I)
 _QUARTER = re.compile(r"(?<![\w-])(?:до|by|until)\s+Q([1-4])\s*'?(\d{4})(?!\d)", re.I)     # «у Q3» is a result, not a deadline
 _ANYDATE = re.compile(r"(?<![\d-])(\d{4}-\d{2}-\d{2})(?![\d-])")
@@ -66,6 +68,8 @@ def absolute(line, base):
     if "://" in line:
         return None
     def sub(m):
+        if _STANDING.search(line[:m.start()]):
+            return m.group(0)
         unit, k = RELATIVE[m.group(1).lower()]
         when = _shift(base, unit, k)
         if unit == "week":
