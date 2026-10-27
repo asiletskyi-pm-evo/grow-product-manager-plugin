@@ -331,6 +331,7 @@ import ctx_search as cs_  # noqa: E402
 import ctx_schema as sc  # noqa: E402
 import ctx_show as csh  # noqa: E402
 import ctx_slots as sl  # noqa: E402
+import ctx_sources as csrc  # noqa: E402
 import ctx_synced as sy  # noqa: E402
 
 HEADINGS = {"product": "### Product: %s", "team": "### Team: %s", "org": "## Organization: %s",
@@ -705,11 +706,14 @@ def cmd_verify(a, c):
     return 0, {"command": "verify", "ids": done}
 
 
-def _write_one(c, op, rid, mutate, source, reason):
+def _write_one(c, op, rid, mutate, source, reason, note=None):
+    """One record changed by `mutate`; since v3.22.0 `note(sources, rec)` notes where the change came from
+    (`.state/sources.json` — read before the snapshot, so a file that cannot be read stops the write first)."""
     c.need_store()
     with co.lock(c.home):
         c.guard()
         pre = c.import_first()
+        srcs = csrc.load(c.store) if note else None
         rec = _record(c, rid)
         body = mutate(rec["body"])
         if body == rec["body"]:
@@ -718,6 +722,10 @@ def _write_one(c, op, rid, mutate, source, reason):
         t = now()
         snap = co.snapshot(c.store, c.copies, c.home, op)
         c.store.write(co.touch(dict(rec, body=body, source=source, modified=t), t))
+        if note:
+            csrc.adopt(srcs, rec)
+            note(srcs, rec)
+            csrc.save(c.store, srcs)
         c.store.journal({"ts": t, "op": op, "ids": [rid], "source": source, "reason": reason or "", "snapshot": snap})
         comp = co.compile_store(c.store, c.copies, t, c.home, snap)
     print("%s: %s · wrote %s" % (op, rid, ", ".join(comp["written"]) or "no copy"))
@@ -731,7 +739,9 @@ def cmd_set(a, c):
     err = sc.check_value(spec, a.value) if spec else None
     if err:
         raise ValueError("%s: %s" % (a.field, err))
-    return 0, _write_one(c, "set", a.id, lambda b: cs.field_set(b, a.field, a.value), a.source or "ctx-set", a.reason)
+    return 0, _write_one(c, "set", a.id, lambda b: cs.field_set(b, a.field, a.value), a.source or "ctx-set", a.reason,
+                         note=lambda m, rec: csrc.note(m, rec["id"], csrc.field_key(a.field), a.value,
+                                                       a.source or "user", at=now()))
 
 
 def _readers_value(text):
@@ -777,7 +787,9 @@ def cmd_assign(a, c):
 
 def cmd_append(a, c):
     return 0, _write_one(c, "append", a.id, lambda b: cs.append_line(b, a.text, under=a.under),
-                         a.source or "ctx-append", a.reason)
+                         a.source or "ctx-append", a.reason,
+                         note=lambda m, rec: csrc.note(m, rec["id"], csrc.line_key(a.text), a.text, a.source or "user",
+                                                       at=now()))
 
 
 def cmd_add(a, c):
@@ -791,6 +803,7 @@ def cmd_add(a, c):
     with co.lock(c.home):
         c.guard()
         c.import_first()
+        srcs = csrc.load(c.store)
         recs = c.store.load()
         ids = [r["id"] for r in recs]
         if a.after:
@@ -812,6 +825,8 @@ def cmd_add(a, c):
         title = heading.lstrip("#").strip()
         new = co._insert(c.store, [{"text": text, "type": a.type, "title": title, "after": after}],
                          a.source or "ctx-add", t)
+        csrc.note_body(srcs, new[0], text, a.source or "user", at=t)
+        csrc.save(c.store, srcs)
         c.store.journal({"ts": t, "op": "add", "ids": new, "source": a.source or "ctx-add", "reason": a.reason or "",
                          "snapshot": snap})
         comp = co.compile_store(c.store, c.copies, t, c.home, snap)
@@ -1132,6 +1147,11 @@ def cmd_show(a, c):
     today = now()[:10]
     rows = csh.records(c.store, today)
     want = set(a.ids or [])
+    try:
+        srcs = csrc.load(c.store)
+    except cs.StoreError as e:
+        srcs = None
+        print("джерела полів не читаються: %s" % e)
     unknown = sorted(want - {r["id"] for r in rows})
     if unknown:
         raise cs.StoreError("no record %s — `ctx list` shows the ids" % ", ".join(unknown))
@@ -1143,7 +1163,12 @@ def cmd_show(a, c):
             r["id"], r["title"], r["source"], r["modified"], r["verified"], (" (TTL %s дн)" % r["ttl"]) if r["ttl"] else "",
             (" · читає: %s" % r["read_by"]) if r["read_by"] else "", (" · " + ", ".join(marks)) if marks else ""))
         if want:
-            print(_record(c, r["id"])["body"].rstrip("\n"))
+            rec = _record(c, r["id"])
+            print(rec["body"].rstrip("\n"))
+            if srcs is not None:                        # since v3.22.0: where each field came from
+                print("джерела:")
+                for x in csrc.of(srcs, rec):
+                    print("  %s %s" % (x["label"], csrc.describe(x)))
             print()
     repo_rows = csh.repos(c.text, c.home, c.store)
     mem = csh.memories(c.store, today)
@@ -1161,8 +1186,14 @@ def cmd_show(a, c):
         print("твої відповіді: слоти %s · same/not-same %s · пошук %s · мости %s · скринька %s" % (
             mem.get("slots"), mem.get("entities"), mem.get("search"), mem.get("bridges"),
             ib if isinstance(ib, str) else "%d (термінових %d)" % (ib["entries"], ib["urgent"])))
+    cov = None
+    if srcs is not None:
+        own, total = csrc.coverage(srcs, c.store.load())
+        cov = {"own": own, "fields": total}
+        if not want:
+            print("полів із власним джерелом: %d з %d (решта — за джерелом запису)" % (own, total))
     return 0, {"command": "show", "records": [r for r in rows if not want or r["id"] in want], "repos": repo_rows,
-               "memories": mem}
+               "memories": mem, "sources": cov}
 
 
 def cmd_health(a, c):
@@ -2340,6 +2371,15 @@ def _inbox_code(c, mem, recs, given):
         raise co.Refused("скринька змінилась — переглянь ще раз: ctx inbox list")
 
 
+def _note_delta(srcs, e):
+    d, s = e["delta"], e["delta"]["source"]
+    key, value = ((csrc.field_key(d["field"]), d["value"]) if d["op"] == "UPDATE" else
+                  (csrc.line_key(d["text"]), d["text"]) if d["op"] == "ADD" else
+                  (csrc.line_key(d["value"]), d["value"]) if d["op"] == "REPLACE" and d.get("value") else (None, None))
+    if key:
+        csrc.note(srcs, d["record"], key, value, s["kind"], ref=s.get("ref"), at=s.get("at") or now())
+
+
 def cmd_inbox(a, c):
     out = {"command": "inbox", "action": a.action}
     if not c.store.exists():
@@ -2358,6 +2398,7 @@ def cmd_inbox(a, c):
     with co.lock(c.home):
         c.guard()
         mem = ci_.load(c.store)
+        srcs = csrc.load(c.store) if a.action == "accept" else None
         recs = c.store.load()
         _inbox_code(c, mem, recs, a.code)        # what was shown, before anything is imported
         try:
@@ -2414,6 +2455,11 @@ def cmd_inbox(a, c):
             t = now()
             for rec in plan.values():
                 c.store.write(co.touch(rec, t))
+            for rid in plan:                            # since v3.22.0: each field or line, where it came from
+                csrc.adopt(srcs, by_id[rid])
+            for e in done:
+                _note_delta(srcs, e)
+            csrc.save(c.store, srcs)
             c.store.journal({"ts": t, "op": "inbox-accept", "ids": sorted(plan), "sigs": [e["sig"] for e in done],
                              "source": "ctx-inbox", "reason": "", "snapshot": snap})     # right after the records: undo finds it
             ci_.take(mem, done + [e for e, _ in gone])  # a record gone is no rejection: after a restore it may come back

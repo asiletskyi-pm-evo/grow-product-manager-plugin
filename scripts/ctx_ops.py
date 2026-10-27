@@ -632,6 +632,7 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
     for e in plan["edits"]:
         store.write(touch(dict(recs[e["id"]], body=e["text"], source=src(e["copy"]), modified=now), now))
         changed.append(e["id"])
+    _note_imports(store, [(recs[e["id"]], e["text"], src(e["copy"])) for e in plan["edits"]], now)
     for r in plan["renames"]:
         store.write(touch(dict(recs[r["id"]], body=r["text"], title=r["title"], type=r.get("type") or recs[r["id"]]["type"],
                                source=src(r["copy"]), modified=now), now))
@@ -664,6 +665,21 @@ def apply_sync(store, plan, copies, home, source, reason, now, resolve=None, acc
     store.journal({"ts": now, "op": "sync", "ids": ids, "source": source or "import", "reason": reason, "snapshot": snap})
     return {"changed": changed, "removed": removed, "added": added, "moved": moved, "snapshot": snap,
             "compiled": compile_store(store, copies, now, home, snap)}
+
+
+def _note_imports(store, items, now):
+    """Since v3.22.0: the fields an imported edit changed are the editor's in `.state/sources.json`, the others keep
+    theirs. A sources file that cannot be read is left as it is — the next write that needs it says so."""
+    import ctx_sources as csrc
+    if not items:
+        return
+    try:
+        mem = csrc.load(store)
+    except cs.StoreError:
+        return
+    for old, body, kind in items:
+        csrc.note_import(mem, old, body, kind, now)
+    csrc.save(store, mem)
 
 
 def _reparent(store):

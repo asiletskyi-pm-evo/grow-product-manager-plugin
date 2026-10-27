@@ -54,8 +54,9 @@ def memories(store, today):
     import ctx_hints as ch
     import ctx_slots as sl
     out = {}
+    import ctx_sources as csrc
     for name, load in (("slots", sl.load_memory), ("entities", ce.load_memory), ("search", ch.load),
-                       ("bridges", cbr.load_ledger)):
+                       ("bridges", cbr.load_ledger), ("sources", csrc.load)):
         try:
             mem = load(store)
             out[name] = len(mem.get("written") or []) if name == "bridges" else _count(mem)
