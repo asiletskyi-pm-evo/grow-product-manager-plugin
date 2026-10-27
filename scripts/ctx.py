@@ -312,6 +312,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_backups as cbk  # noqa: E402
 import ctx_blocks as cb  # noqa: E402
 import ctx_bridges as cbr  # noqa: E402
 import ctx_common as cc  # noqa: E402
@@ -366,6 +367,8 @@ def writes(a):
     v3.16.0) `search remember|forget`, (since v3.18.0) `entity same|not-same`; `migrate`, `provider adopt` and (since
     v3.20.0) `entity apply` only with --apply. A plain search, `--get` and `search
     eval` write no store. (A `provider sync` that synced nothing saves no summary: `main`.)"""
+    if a.cmd == "snapshot" and getattr(a, "action", None) == "import":
+        return getattr(a, "apply", False)
     if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) in ("apply", "sync")):
         return True
     if a.cmd == "search" and getattr(a, "action", None) in ("remember", "forget"):
@@ -815,7 +818,49 @@ def cmd_add(a, c):
     return 0, {"command": "add", "id": new[0], "after": after, "snapshot": snap, "written": comp["written"]}
 
 
+def cmd_snapshot_import(a, c):
+    """`snapshot import [--apply --code C]` (since v3.21.0): the old backups of local-context.md as snapshots. A dry run
+    lists what it would import, what a snapshot already holds and what it leaves, and `код звіту`; `--apply --code` writes
+    the snapshots (`<their time>-imported`, out of the rotation), moves the originals to the trash, one journal line
+    {op snapshot-import, moves, snapshots} with a snapshot of the store; `ctx undo` puts them back. No store: exit 3."""
+    c.need_store()
+    p = cbk.plan(c.home, c.context)
+    cd = cbk.code(p)
+    for r in p["import"]:
+        print("імпортую: %s (%s, %s)" % (r["path"], csh.human(r["size"]), r["when"][:8]))
+    for r in p["known"]:
+        print("уже в знімку %s: %s — оригінал у кошик" % (r["snapshot"], r["path"]))
+    for r in p["left"]:
+        print("не імпортую: %s (%s) — %s" % (r["path"], csh.human(r["size"]), r["why"]))
+    out = {"command": "snapshot", "action": "import", "import": p["import"], "known": p["known"], "left": p["left"],
+           "code": cd}
+    if not a.apply:
+        print("нічого імпортувати" if not (p["import"] or p["known"]) else "код звіту: %s" % cd)
+        return 0, out
+    if not a.code:
+        raise Usage("snapshot import --apply takes --code from the report")
+    if a.code != cd:
+        raise co.Refused("звіт змінився — переглянь ще раз: ctx snapshot import")
+    if not (p["import"] or p["known"]):
+        print("нічого імпортувати")
+        return 0, out
+    with co.lock(c.home):
+        c.guard()
+        c.import_first()
+        snap = co.snapshot(c.store, c.copies, c.home, "snapshot-import")
+        done = cbk.apply(p, c.home, c.context, datetime.datetime.now())
+        c.store.journal({"ts": now(), "op": "snapshot-import", "ids": [], "source": "ctx-snapshot-import", "reason": "",
+                         "snapshot": snap, "moves": done["moves"], "snapshots": done["snapshots"]})
+    for path in done["changed"]:
+        print("не імпортовано: %s — змінився після звіту" % path)
+    print("знімків створено: %d · оригіналів у кошику: %d (30 днів; back: ctx undo)" % (
+        len(done["snapshots"]), len(done["moves"])))
+    return 0, dict(out, snapshots=done["snapshots"], moves=done["moves"], changed=done["changed"], snapshot=snap)
+
+
 def cmd_snapshot(a, c):
+    if a.action == "import":
+        return cmd_snapshot_import(a, c)
     c.need_store()
     path = co.snapshot(c.store, c.copies, c.home, a.label or "manual")
     print(path)
@@ -924,6 +969,12 @@ def cmd_undo(a, c):
             cbr.keep_ours(sctx, c.store, items, now()[:10], previous=previous, reverted=notes_back)   # ours stays ours
         if notes_back:
             print("повернуто нотаток: %d" % len(notes_back))
+        for m in reversed(marks[-a.steps:]):             # since v3.21.0: an import of old backups — the originals back
+            if m.get("op") == "snapshot-import":
+                back, kept_b = cbk.revert(m.get("moves") or [], m.get("snapshots") or [], c.home)
+                print("повернуто бекапів: %d" % len(back))
+                for path, why in kept_b:
+                    print("бекап не повернуто: %s — %s" % (path, why))
         for rel, why in notes_kept:
             print("не повернуто: %s — %s" % (rel, why))
         reverted, kept, rejected, rejected_failed = [], [], {}, {}
@@ -2373,7 +2424,8 @@ def build_parser():
     sp = sub.add_parser("add", parents=[common]); sp.add_argument("type"); sp.add_argument("title")
     sp.add_argument("--parent"); sp.add_argument("--after"); sp.add_argument("--body-file")
     sp.add_argument("--source"); sp.add_argument("--reason")
-    sp = sub.add_parser("snapshot", parents=[common]); sp.add_argument("--label")
+    sp = sub.add_parser("snapshot", parents=[common]); sp.add_argument("action", nargs="?", choices=["import"])
+    sp.add_argument("--label"); sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
     sp = sub.add_parser("propose", parents=[common]); sp.add_argument("--skill", required=True)
     sp.add_argument("--delta", action="append"); sp.add_argument("--file")
     xp = sub.add_parser("inbox").add_subparsers(dest="action", required=True, parser_class=Parser)

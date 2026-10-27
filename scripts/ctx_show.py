@@ -116,7 +116,7 @@ def backups(home, context, text, budget=BACKUP_BUDGET_S):
     if os.path.isdir(bk):
         for name in sorted(os.listdir(bk)):
             found.append((os.path.join(bk, name), "backups"))
-    for folder in sorted({gp, os.path.dirname(context)}):
+    for folder in sorted({os.path.realpath(gp), os.path.dirname(os.path.realpath(context))}):
         for p in sorted(glob.glob(os.path.join(glob.escape(folder), "local-context.md.bak*"))):
             found.append((p, "bak"))
     for root, _folder in cc.vault_entries(text):
@@ -131,9 +131,9 @@ def backups(home, context, text, budget=BACKUP_BUDGET_S):
                     found.append((os.path.join(root, name), "vault"))
     out, seen = [], set()
     for p, kind in found:
-        if p in seen:
+        if os.path.realpath(p) in seen:
             continue
-        seen.add(p)
+        seen.add(os.path.realpath(p))
         size, complete = _size(p, deadline) if time.monotonic() <= deadline else (None, False)
         out.append({"path": p, "kind": kind, "size": size, "complete": complete})
     return out

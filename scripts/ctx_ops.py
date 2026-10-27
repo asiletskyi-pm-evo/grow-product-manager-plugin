@@ -92,6 +92,7 @@ def lock(home, stale_s=120):
 
 # --------------------------------------------------------------- snapshots
 SNAP_RE = re.compile(r"^(\d{8}T\d{6})")
+IMPORTED_RE = re.compile(r"^\d{8}T\d{6}-imported(?:-\d+)?$")       # ctx_backups.IMPORTED_RE
 
 
 def _files(folder, prefix):
@@ -189,7 +190,7 @@ def rotate(snap_root, keep_last=20, keep_daily_days=14, now=None, protect=None):
     dated = []
     for name in os.listdir(snap_root) if os.path.isdir(snap_root) else []:
         m = SNAP_RE.match(name)
-        if m:
+        if m and not IMPORTED_RE.match(name):          # since v3.21.0: an imported old backup is kept for good
             dated.append((datetime.datetime.strptime(m.group(1), "%Y%m%dT%H%M%S"), name))
     dated.sort(reverse=True)
     keep = {name for _, name in dated[:keep_last]}
