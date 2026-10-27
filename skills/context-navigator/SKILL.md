@@ -1,6 +1,6 @@
 ---
 name: context-navigator
-version: 0.4.0
+version: 0.4.1
 description: Answer and search your context — notes, cores, local indexes. Not decisions (decision-log), dashboards (product-analysis), curated sources (knowledge-library). UA — «знайди в моєму контексті», «що в мене є про…», «хто за що відповідає», «де описане правило»; with source and date, live sources on request.
 ---
 
@@ -36,6 +36,8 @@ Answering from the graph has no judgment points of its own; a question that asks
 2. Ask one question — write these N bridges into your notes? — and wait for the user's «так» in this conversation. Nothing else counts as a yes.
 3. On «так»: `python3 "<plugin root>/scripts/ctx.py" entity apply --apply --code <the code of step 1>`. Exit 4 (`звіт змінився`) → show the new report (step 1) and ask again; exit 5 → the index is busy, try in a minute; never retry with another code on your own.
 4. Show what it wrote and end with `Скасувати: ctx undo` — it puts the notes back (a line you changed since is left and said). `ctx undo` takes back the last change: when anything was written since (`entity same`, a sync), it goes first — say so.
+
+**Your context — show, health, inbox (since v3.21.0).** «що ти про мене знаєш», «звідки ти це знаєш», «здоров'я контексту», «що в скриньці», «що скіли запропонували запам'ятати» → follow `commands/context.md` «Run» with the action the words ask for (`show`, `health`, `inbox`) — the same as the typed `/grow-product-manager:context`. The inbox is taken or rejected only on the user's own answer in this conversation, with the code of the list shown.
 
 **First the form** (`references/search-protocol.md` §13): a request for a fact gets an answer; a request for the notes themselves — «знайди нотатки про…», «що в мене є про…», «де в моїх нотатках…», «покажи нотатки про…», `--list` — gets a list. Then, with a provider, follow its `routing_hints` note when it exists, otherwise this default route, cheapest first. Without a provider every question takes the last row, except recording or revisiting a decision and a person, whose rows hold either way:
 
@@ -82,6 +84,8 @@ Before a meeting note that names people is written into the user's vault: resolv
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
 
 > Answer from a shared organisational context (a team's core) — who owns what, team and module scope, rules, missions, people, terms. Not decisions (decision-log), not dashboards (product-analysis), not curated sources (knowledge-library). UA — «хто за що відповідає», «що робить команда X», «де описане правило», «які місії у команди», «хто така людина X у структурі», «як у нас називають цей термін». EN — "who owns this", "what does team X do", "where is the rule for", "which missions does the team have", "who is X in the org", "answer from the shared context". Reads the provider's rules once per session and routes each answer through its graph (vault/v1), always with the note path and the snapshot date.
+
+Since v3.21.0 (your context, `ctx show | health | inbox`): UA — «що ти про мене знаєш», «звідки ти це знаєш», «здоров'я контексту», «що в скриньці», «що скіли запропонували запам'ятати»; EN — "what do you know about me", "context health", "what is in the inbox". Typed: `/grow-product-manager:context show | health | inbox`.
 
 Since v3.20.0 (bridges in your notes, `ctx entity apply`): UA — «запиши мости в нотатки», «зв'яжи мої нотатки з ядром», «додай посилання на картки ядра в мої нотатки»; EN — "write the bridges into my notes", "link my notes to the core's cards".
 

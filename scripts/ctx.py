@@ -328,6 +328,7 @@ import ctx_repos as crp  # noqa: E402
 import ctx_resolve as rv  # noqa: E402
 import ctx_search as cs_  # noqa: E402
 import ctx_schema as sc  # noqa: E402
+import ctx_show as csh  # noqa: E402
 import ctx_slots as sl  # noqa: E402
 import ctx_synced as sy  # noqa: E402
 
@@ -971,6 +972,17 @@ def cmd_undo(a, c):
 
 def cmd_validate(a, c):
     c.need_store()
+    errors, warnings, proposals = _validate(c)
+    for e in errors:
+        print("error: " + e)
+    for w in warnings:
+        print("warning: " + w)
+    print("valid" if not errors else "%d error(s)" % len(errors))
+    return (3 if errors else 0), {"command": "validate", "errors": errors, "warnings": warnings, "slot_proposals": proposals}
+
+
+def _validate(c):
+    """(errors, warnings, slot proposals) of the store — what `validate` prints and `health` counts. Reads only."""
     errors, warnings = [], []
     try:
         recs = c.store.load()
@@ -1046,12 +1058,65 @@ def cmd_validate(a, c):
         slot_errors, slot_warnings, proposals = rv.validate_slots(c.store, c.copies, repos, skipped, now())
         errors += slot_errors
         warnings += slot_warnings
-    for e in errors:
-        print("error: " + e)
-    for w in warnings:
-        print("warning: " + w)
-    print("valid" if not errors else "%d error(s)" % len(errors))
-    return (3 if errors else 0), {"command": "validate", "errors": errors, "warnings": warnings, "slot_proposals": proposals}
+    return errors, warnings, proposals
+
+
+# ---------------------------------------------------------------------- show and health (since v3.21.0)
+def cmd_show(a, c):
+    """`show [ID …] [--json]`: what the plugin knows about you — one line a record (who wrote it last, when, verified,
+    stale or no longer current, who reads it), the repositories' blocks, your answers and the inbox; with ids, those
+    records' text too. Reads only: no lock, no network, nothing written."""
+    c.need_store()
+    today = now()[:10]
+    rows = csh.records(c.store, today)
+    want = set(a.ids or [])
+    unknown = sorted(want - {r["id"] for r in rows})
+    if unknown:
+        raise cs.StoreError("no record %s — `ctx list` shows the ids" % ", ".join(unknown))
+    for r in rows:
+        if want and r["id"] not in want:
+            continue
+        marks = [m for m, on in (("застаріле", r["stale"]), ("неактуальне", r["invalid"])) if on]
+        print("%s — %s · писав %s %s · перевірено %s%s%s%s" % (
+            r["id"], r["title"], r["source"], r["modified"], r["verified"], (" (TTL %s дн)" % r["ttl"]) if r["ttl"] else "",
+            (" · читає: %s" % r["read_by"]) if r["read_by"] else "", (" · " + ", ".join(marks)) if marks else ""))
+        if want:
+            print(_record(c, r["id"])["body"].rstrip("\n"))
+            print()
+    repo_rows = csh.repos(c.text, c.home, c.store)
+    mem = csh.memories(c.store, today)
+    if not want:
+        for r in repo_rows:
+            print("репозиторій %s: блоків %s · версія %s · перевірено %s" % (
+                r["id"], r["blocks"] or "—", r["version"] or "—", r["checked"] or "—"))
+        ib = mem.get("inbox")
+        print("твої відповіді: слоти %s · same/not-same %s · пошук %s · мости %s · скринька %s" % (
+            mem.get("slots"), mem.get("entities"), mem.get("search"), mem.get("bridges"),
+            ib if isinstance(ib, str) else "%d (термінових %d)" % (ib["entries"], ib["urgent"])))
+    return 0, {"command": "show", "records": [r for r in rows if not want or r["id"] in want], "repos": repo_rows,
+               "memories": mem}
+
+
+def cmd_health(a, c):
+    """`health [--json]`: what wants looking after, one line each — ✅ fine · ⚠ worth a look · ✋ do something — with the
+    command that fixes it. Reads only: no lock, no network, nothing written, nothing iCloud evicted is opened. Exit 0."""
+    c.need_store()
+    today = now()[:10]
+    try:                                                # a record that does not parse is health's first error, not a crash
+        errors, warnings, _ = _validate(c)
+        recs = csh.records(c.store, today)
+        plan = co.plan_sync(c.store, c.copies)
+    except cs.StoreError as e:
+        errors, warnings, recs, plan = [str(e)], [], [], {"conflicts": [], "missing": [], "unread": True}
+    lines = csh.health(recs, csh.memories(c.store, today), csh.repos(c.text, c.home, c.store),
+                       sum(co.pending(plan).values()) if not plan.get("unread") else 0, len(plan["conflicts"]),
+                       len(plan["missing"]),
+                       len(c.store.stray_files()), warnings, errors, csh.index_state(c.home), csh.snapshots(c.home),
+                       csh.backups(c.home, c.context, c.text), today)
+    for level, text, fix in lines:
+        print("%s %s%s" % (csh.MARK[level], text, (" — " + fix) if fix else ""))
+    n = {k: sum(1 for l in lines if l[0] == k) for k in (csh.OK, csh.WARN, csh.ACT)}
+    return 0, {"command": "health", "lines": [{"level": l, "text": t, "fix": f} for l, t, f in lines], **n}
 
 
 def cmd_card(a, c):
@@ -2318,6 +2383,8 @@ def build_parser():
         sp.add_argument("--reason")
     sp = sub.add_parser("undo", parents=[common]); sp.add_argument("--steps", type=int, default=1)
     sub.add_parser("validate", parents=[common])
+    sp = sub.add_parser("show", parents=[common]); sp.add_argument("ids", nargs="*"); sp.add_argument("--json", action="store_true")
+    sp = sub.add_parser("health", parents=[common]); sp.add_argument("--json", action="store_true")
     sub.add_parser("card", parents=[common])
     rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
@@ -2361,7 +2428,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
-            "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose,
+            "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
             "inbox": cmd_inbox}
 
 
