@@ -111,5 +111,61 @@ finally:
         os.chmod(locked, 0o600)
     shutil.rmtree(d, ignore_errors=True)
 
+# ----------------------------------------------------------------------- every line of health(), one at a time
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import datetime  # noqa: E402
+import ctx_show as csh  # noqa: E402
+rec = {"id": "product.zorg-app", "type": "product", "title": "Product: Zorg App", "source": "x", "modified": "2026-10-01",
+       "verified": "2026-10-01", "ttl": 90, "stale": False, "invalid": False, "read_by": None}
+mem = {"slots": 0, "entities": 0, "search": 0, "bridges": 0, "inbox": {"entries": 0, "urgent": 0, "old": 0}}
+fresh = {"updated": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "skipped_dataless": 0}
+
+
+def H(**kw):
+    a = dict(recs=[rec], mem=mem, repo_rows=[], pending=0, conflicts=0, missing=0, stray=0, warnings=[], errors=[],
+             idx=fresh, snaps=["20261027T100000-set"], baks=[], today="2026-10-27")
+    a.update(kw)
+    return [(l, t, f) for l, t, f in csh.health(**a)]
+
+
+def has(lines, level, part):
+    return any(l == level and part in t for l, t, f in lines)
+
+
+row = {"id": "zorg-core", "kind": "folder", "sync": "daily", "paused": False, "blocks": 3, "version": "1",
+       "checked": "2026-10-20", "outcome": None, "error": None}
+check("5.1 a sync that did not end well → ⚠ with ctx provider plan",
+      has(H(repo_rows=[dict(row, outcome="unreachable")]), "warn", "останній синк — unreachable"))
+check("5.2 a repository's state that does not read → ✋", has(H(repo_rows=[dict(row, error="bad json")]), "act", "стан не читається"))
+check("5.3 a secret in your record (validate's warning) → ✋",
+      has(H(warnings=["profile: схоже на IBAN — таке не варто тримати в контексті, прибери це з запису"]), "act", "profile"))
+old_idx = {"updated": (datetime.datetime.now().astimezone() - datetime.timedelta(days=3)).isoformat(timespec="seconds"),
+           "skipped_dataless": 0}
+check("5.4 an index older than 36 h → ⚠, a fresh one ✅",
+      has(H(idx=old_idx), "warn", "індекс пошуку") and has(H(), "ok", "індекс пошуку"))
+check("5.5 an invalidated record → ⚠ неактуальні", has(H(recs=[dict(rec, invalid=True)]), "warn", "неактуальні"))
+check("5.6 a memory that does not read → ✋", has(H(mem=dict(mem, slots="slots memory not valid")), "act", "пам'ять slots"))
+check("5.7 a conflict or a missing record file → ✋; edits waiting alone → ⚠",
+      has(H(conflicts=1), "act", "конфліктів: 1") and has(H(missing=1), "act", "файлів записів немає")
+      and has(H(pending=2), "warn", "правок чекає імпорту: 2"))
+lines = H(pending=1, warnings=["1 change(s) waiting — `ctx sync`"])
+check("5.8 an edit waiting is said once, not again as a validate warning",
+      sum(1 for l, t, f in lines if "чекає" in t or "validate" in t) == 1, lines)
+check("5.9 a registration that does not read → ✋", has(H(unread_regs=[("zorg.yaml", "not YAML")]), "act", "zorg.yaml"))
+check("5.10 a store error and no records → no «усі свіжі» beside it",
+      not has(H(recs=[], errors=["record not valid: x.md"]), "ok", "усі свіжі"))
+big = os.path.join(tempfile.mkdtemp(prefix="ctx-walk-"), "_backup_x")
+for i in range(30):
+    os.makedirs(os.path.join(big, "d%02d" % i, "e"))
+import time  # noqa: E402
+size, complete = csh._size(big, time.monotonic() - 1)
+check("5.11 the walk's budget holds (a tree of empty folders too): over it → not complete", not complete, (size, complete))
+shutil.rmtree(os.path.dirname(big), ignore_errors=True)
+idx_bad = os.path.join(tempfile.mkdtemp(prefix="ctx-idx-"), ".grow-pm", "index")
+os.makedirs(idx_bad)
+open(os.path.join(idx_bad, "index.json"), "w").write("[1, 2]")
+check("5.12 an index.json that is not an object → no index, no crash",
+      csh.index_state(os.path.dirname(os.path.dirname(idx_bad))) is None)
+
 print("\n%s — %d failure(s)" % ("GREEN" if not fails else "RED", fails))
 sys.exit(1 if fails else 0)

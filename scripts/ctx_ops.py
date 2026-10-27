@@ -215,6 +215,8 @@ def restore(snap_dir, store, copies):
     """Put the store and the compiled copies back as the snapshot holds them. The copies are the current
     ones, matched by position (0 = home copy, 1 = vault mirror): a path in the manifest is never written
     or deleted. Returns the manifest entries with no current copy (skipped)."""
+    if IMPORTED_RE.match(os.path.basename(os.path.normpath(snap_dir))):     # since v3.21.0: an old backup's copy
+        raise Refused("%s is an imported old backup — read it, do not restore the store from it" % snap_dir)
     with open(os.path.join(snap_dir, "manifest.json"), encoding="utf-8") as f:
         manifest = json.load(f)
     entries = manifest.get("copies", [])

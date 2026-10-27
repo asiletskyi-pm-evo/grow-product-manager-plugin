@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
 """Grow PM — old backups of local-context.md become snapshots (since v3.21.0): `ctx snapshot import`.
 
-Before the context store, every rewrite left a copy: `~/.grow-pm/backups/**`, `local-context.md.bak*` beside the file.
+Before the context store, every rewrite left a copy: `~/.grow-pm/backups/**`, `~/.grow-pm/local-context.md.bak*`.
 Those of local-context.md's form become snapshots `~/.grow-pm/snapshots/<their time>-imported/` (kept out of the
 rotation), and the originals go to the trash (30 days) — only on `--apply` with the code of the report the user saw.
-Anything else (a zip, a section, a yaml, a vault's `_backup_*` folder) is named and left where it is. Semantics:
+Anything else (a zip, a section, a yaml, a file holding what the store never keeps, anything outside ~/.grow-pm — a
+vault's `_backup_*` folder, a `.bak` beside a context file elsewhere) is named and left where it is. Semantics:
 references/context-protocol.md §8.
 
-- plan(home, context)        what an import would do: {import: [...], known: [...], left: [...]} — reads only
+- plan(home)                 what an import would do: {import: [...], known: [...], left: [...]} — reads ~/.grow-pm only
 - code(p)                    8 hex of the plan: an apply with another code is refused
-- apply(p, home)             write the snapshots, move the originals to the trash; returns the moves and the snapshots
-- revert(moves, snaps, home) `ctx undo` of an import: the originals back from the trash, the imported snapshots gone
+- planned_moves(p, home, now)  each row's trash path and snapshot name, decided before anything moves — the journal
+                             line carries them, so `ctx undo` can take back whatever part of an apply was done
+- apply(moves, home, context)  the snapshots, then the moves; a row that fails is said and the rest goes on
+- revert(moves, home)        `ctx undo` of an import: an original back from the trash; its snapshot is removed only
+                             when the original's own text is back in its place — else the snapshot stays (the text
+                             survives in one place at least)
 - IMPORTED_RE                the snapshot names rotate() leaves alone
 
 Stdlib only.
 """
 import datetime
+import errno
 import hashlib
 import json
 import os
@@ -24,21 +30,23 @@ import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_never as cn  # noqa: E402
 import ctx_store as cs  # noqa: E402
 
 LABEL = "imported"
 IMPORTED_RE = re.compile(r"^\d{8}T\d{6}-%s(?:-\d+)?$" % LABEL)
 MAX_BYTES = 4 * 1024 * 1024
-_FORM = re.compile(r"^## User Profile\b|^> Configurator version", re.M)
+_PROFILE = re.compile(r"^## User Profile\b", re.M)
+_SECOND = re.compile(r"^> Configurator version|^## Onboarding Status\b|^## Organization:|^> Generated", re.M)
 
 
 def _grow(home):
     return os.path.join(home, ".grow-pm")
 
 
-def candidates(home, context):
-    """[path] of the files to look at: every file under ~/.grow-pm/backups/, and local-context.md.bak* beside the
-    canonical copy and beside `context`. Links are not followed."""
+def candidates(home):
+    """[path] of the files to look at: every file under ~/.grow-pm/backups/ and ~/.grow-pm/local-context.md.bak*.
+    Links are not followed, and nothing outside ~/.grow-pm is looked at."""
     out = []
     bk = os.path.join(_grow(home), "backups")
     if os.path.isdir(bk) and not os.path.islink(bk):
@@ -48,44 +56,34 @@ def candidates(home, context):
                 p = os.path.join(root, f)
                 if not os.path.islink(p):
                     out.append(p)
-    seen = {os.path.realpath(x) for x in out}
-    for folder in sorted({os.path.realpath(_grow(home)), os.path.dirname(os.path.realpath(context))}):
-        try:
-            names = sorted(os.listdir(folder))
-        except OSError:
-            continue
-        for n in names:
-            p = os.path.join(folder, n)
-            if n.startswith("local-context.md.bak") and os.path.isfile(p) and not os.path.islink(p) \
-                    and os.path.realpath(p) not in seen:
-                seen.add(os.path.realpath(p))
-                out.append(p)
+    try:
+        names = sorted(os.listdir(_grow(home)))
+    except OSError:
+        names = []
+    for n in names:
+        p = os.path.join(_grow(home), n)
+        if n.startswith("local-context.md.bak") and os.path.isfile(p) and not os.path.islink(p):
+            out.append(p)
     return out
 
 
-def _form(data):
-    """Is this a local-context.md: text whose first line is a `# ` title, with its profile heading or the version line."""
-    if len(data) > MAX_BYTES:
-        return False
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        return False
+def _form(text):
+    """Is this a local-context.md: a `# ` title first, the profile heading, and one more of its marks (the version
+    line, the onboarding or an organisation section) — a note that only has a «## User Profile» is not one."""
     first = next((l for l in text.splitlines() if l.strip()), "")
-    return first.startswith("# ") and bool(_FORM.search(text))
+    return first.startswith("# ") and bool(_PROFILE.search(text)) and bool(_SECOND.search(text))
 
 
 def _known(home):
-    """{sha256 of a compiled copy: snapshot name} over the existing snapshots (their copies/0.md)."""
+    """{sha256 of the text: snapshot name} over the imported snapshots only — a regular one rotates away."""
     root, out = os.path.join(_grow(home), "snapshots"), {}
     try:
-        names = sorted(os.listdir(root))
+        names = sorted(n for n in os.listdir(root) if IMPORTED_RE.match(n))
     except OSError:
         return out
     for n in names:
-        p = os.path.join(root, n, "copies", "0.md")
         try:
-            with open(p, "rb") as f:
+            with open(os.path.join(root, n, "copies", "0.md"), "rb") as f:
                 out.setdefault(hashlib.sha256(f.read()).hexdigest(), n)
         except OSError:
             continue
@@ -110,19 +108,36 @@ def _named_time(path):
     return None
 
 
-def plan(home, context):
+def plan(home):
     known = _known(home)
     out = {"import": [], "known": [], "left": []}
     seen = {}
-    for p in candidates(home, context):
+    for p in candidates(home):
         try:
             st = os.lstat(p)
-            data = cs.read_bytes(p) if st.st_size <= MAX_BYTES else b""
-        except (OSError, cs.StoreError) as e:
-            out["left"].append({"path": p, "size": None, "why": "не читається (%s)" % (getattr(e, "strerror", None) or e)})
+        except OSError as e:
+            out["left"].append({"path": p, "size": None, "why": "не читається (%s)" % (e.strerror or e)})
             continue
-        if not _form(data):
+        if st.st_size > MAX_BYTES:
+            out["left"].append({"path": p, "size": st.st_size, "why": "завеликий для local-context"})
+            continue
+        try:
+            data = cs.read_bytes(p)
+        except (OSError, cs.StoreError) as e:
+            out["left"].append({"path": p, "size": st.st_size,
+                                "why": "не читається (%s)" % (getattr(e, "strerror", None) or e)})
+            continue
+        try:
+            text = data.decode("utf-8").lstrip("﻿")
+        except UnicodeDecodeError:
+            text = None
+        if text is None or not _form(text):
             out["left"].append({"path": p, "size": st.st_size, "why": "не схоже на local-context"})
+            continue
+        kinds = cn.scan(text)
+        if kinds:                       # a snapshot never rotates: it must not keep what the store never keeps
+            out["left"].append({"path": p, "size": st.st_size,
+                                "why": "схоже на %s — не імпортую, прибери сам" % cn._names(kinds)})
             continue
         sha = hashlib.sha256(data).hexdigest()
         when = _named_time(p) or datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y%m%dT%H%M%S")
@@ -140,81 +155,135 @@ def code(p):
     return hashlib.sha1(json.dumps(rows).encode("utf-8")).hexdigest()[:8]
 
 
-def _trash_target(home, path, when):
-    root = os.path.join(_grow(home), "trash")
-    base = when + "-" + os.path.basename(path).replace(os.sep, "_")
-    target, k = os.path.join(root, base + ".md"), 2
-    while os.path.exists(target):
-        target, k = os.path.join(root, "%s-%d.md" % (base, k)), k + 1
-    return target
-
-
-def apply(p, home, context, now):
-    """Write a snapshot per row of `import` (copies/0.md + manifest, mode 0600), then move every original of `import` and
-    `known` to the trash. Returns {snapshots: [name], moves: [[original, trash path]]}. A file that changed since the
-    plan (another hash) is left, said by the caller through `changed`."""
-    root = os.path.join(_grow(home), "snapshots")
-    os.makedirs(root, exist_ok=True)
+def planned_moves(p, home, now):
+    """[{path, sha, trash, snapshot, made}] — each original's trash path (free now, distinct within the plan) and, for a
+    row of `import`, the snapshot it becomes (`made`); for a row of `known`, the imported snapshot holding its text."""
     stamp = now.strftime("%Y%m%dT%H%M%S")
-    made, moves, changed = [], [], []
+    troot, sroot = os.path.join(_grow(home), "trash"), os.path.join(_grow(home), "snapshots")
+    taken_t, taken_s, out, first = set(), set(), [], {}
     for row in p["import"] + p["known"]:
-        try:
-            data = cs.read_bytes(row["path"])
-        except (OSError, cs.StoreError):
-            changed.append(row["path"])
-            continue
-        if hashlib.sha256(data).hexdigest() != row["sha"]:
-            changed.append(row["path"])
-            continue
+        base = stamp + "-" + os.path.basename(row["path"])
+        t, k = os.path.join(troot, base + ".md"), 2
+        while os.path.exists(t) or t in taken_t:
+            t, k = os.path.join(troot, "%s-%d.md" % (base, k)), k + 1
+        taken_t.add(t)
         if row in p["import"]:
-            base = "%s-%s" % (row["when"], LABEL)
-            name, k = base, 2
-            while os.path.exists(os.path.join(root, name)):
-                name, k = "%s-%d" % (base, k), k + 1
-            snap = os.path.join(root, name)
-            cs.check_target(snap)
-            os.makedirs(os.path.join(snap, "copies"))
-            target = os.path.join(snap, "copies", "0.md")
-            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "wb") as f:
-                f.write(data)
-            manifest = {"label": LABEL, "imported": True, "from": row["path"], "sha": row["sha"],
-                        "created": datetime.datetime.strptime(row["when"], "%Y%m%dT%H%M%S").astimezone()
-                        .isoformat(timespec="seconds"), "store_existed": None,
-                        "copies": [{"path": os.path.abspath(context), "file": "copies/0.md", "existed": True}]}
-            with open(os.path.join(snap, "manifest.json"), "w", encoding="utf-8") as f:
-                json.dump(manifest, f, ensure_ascii=False, indent=1)
-            made.append(name)
-        target = _trash_target(home, row["path"], stamp)
-        cs.check_target(target)
-        os.makedirs(os.path.dirname(target), exist_ok=True)
+            sbase = "%s-%s" % (row["when"], LABEL)
+            s, k = sbase, 2
+            while os.path.exists(os.path.join(sroot, s)) or s in taken_s:
+                s, k = "%s-%d" % (sbase, k), k + 1
+            taken_s.add(s)
+            first[row["sha"]] = s
+            out.append({"path": row["path"], "sha": row["sha"], "trash": t, "snapshot": s, "made": True})
+        else:
+            out.append({"path": row["path"], "sha": row["sha"], "trash": t,
+                        "snapshot": first.get(row["sha"]) or row["snapshot"], "made": False})
+    return out
+
+
+def _sha(path):
+    try:
+        return hashlib.sha256(cs.read_bytes(path)).hexdigest()
+    except (OSError, cs.StoreError):
+        return None
+
+
+def _move(src, dst):
+    """Move a file; across volumes copy then remove, and when the remove fails take the copy back — never two copies."""
+    try:
+        os.rename(src, dst)
+        return
+    except OSError as e:
+        if e.errno != errno.EXDEV:
+            raise
+    shutil.copy2(src, dst)
+    try:
+        os.remove(src)
+    except OSError:
         try:
-            os.rename(row["path"], target)
+            os.remove(dst)
         except OSError:
-            shutil.copy2(row["path"], target)
-            os.remove(row["path"])
-        moves.append([row["path"], target])
-    return {"snapshots": made, "moves": moves, "changed": changed}
+            pass
+        raise
 
 
-def revert(moves, snaps, home):
-    """The originals back from the trash (only to a free place), the imported snapshots removed. Returns
-    (back, kept: [(path, why)])."""
+def _write_snapshot(sroot, m, data, context):
+    snap = os.path.join(sroot, m["snapshot"])
+    cs.check_target(snap)
+    os.makedirs(os.path.join(snap, "copies"))
+    target = os.path.join(snap, "copies", "0.md")
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    manifest = {"label": LABEL, "imported": True, "from": m["path"], "sha": m["sha"],
+                "created": datetime.datetime.strptime(m["snapshot"][:15], "%Y%m%dT%H%M%S").astimezone()
+                .isoformat(timespec="seconds"),
+                "copies": [{"path": os.path.abspath(context), "file": "copies/0.md", "existed": True}]}
+    with open(os.path.join(snap, "manifest.json"), "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=1)
+    if _sha(target) != m["sha"]:
+        raise OSError("знімок %s записано не так" % m["snapshot"])
+
+
+def apply(moves, home, context):
+    """Each move in turn: its snapshot first (a row of `import`), then the original to the trash — never a move whose
+    text is in no snapshot. A row whose file changed since the plan, or that fails, is said in `failed` and left; the
+    rest goes on. Returns {done: [move], failed: [(path, why)]}."""
+    sroot = os.path.join(_grow(home), "snapshots")
+    os.makedirs(sroot, exist_ok=True)
+    done, failed, written = [], [], set()
+    for m in moves:
+        try:
+            cs.check_target(m["path"])
+            data = cs.read_bytes(m["path"])
+            if hashlib.sha256(data).hexdigest() != m["sha"]:
+                failed.append((m["path"], "змінився після звіту"))
+                continue
+            if m["made"]:
+                _write_snapshot(sroot, m, data, context)
+                written.add(m["snapshot"])
+            elif m["snapshot"] not in written and not os.path.isfile(os.path.join(sroot, m["snapshot"], "copies", "0.md")):
+                failed.append((m["path"], "знімка з його текстом немає — лишаю на місці"))
+                continue
+            cs.check_target(m["trash"])
+            os.makedirs(os.path.dirname(m["trash"]), exist_ok=True)
+            if os.path.lexists(m["trash"]):
+                raise OSError("у кошику вже є %s" % os.path.basename(m["trash"]))
+            _move(m["path"], m["trash"])
+            done.append(m)
+        except (OSError, cs.StoreError, cs.PathRefused) as e:
+            failed.append((m["path"], str(getattr(e, "strerror", None) or e)))
+    return {"done": done, "failed": failed}
+
+
+def revert(moves, home):
+    """`ctx undo` of an import. Per move: the original back from the trash when its place is free; a snapshot the
+    import made removed only when the original's own text is in its place now — and no other original that shares it
+    is still away. Returns (back, kept: [(path, why)])."""
     back, kept = [], []
-    for orig, target in moves:
-        if not os.path.isfile(target):
-            kept.append((orig, "його вже немає в кошику"))
+    sroot = os.path.join(_grow(home), "snapshots")
+    for m in moves:
+        orig, target = m["path"], m["trash"]
+        if os.path.isfile(target) and not os.path.lexists(orig):
+            try:
+                cs.check_target(orig)
+                os.makedirs(os.path.dirname(orig), exist_ok=True)
+                _move(target, orig)
+                back.append(orig)
+            except (OSError, cs.PathRefused) as e:
+                kept.append((orig, "не повернуто: %s" % (getattr(e, "strerror", None) or e)))
+        elif os.path.isfile(target):
+            kept.append((orig, "на його місці інший файл — оригінал лишився в кошику: %s" % target))
+    home_again = {}
+    for m in moves:
+        home_again.setdefault(m.get("snapshot"), []).append(os.path.isfile(m["path"]) and _sha(m["path"]) == m["sha"])
+    for m in moves:
+        snap = m.get("snapshot")
+        if not (m.get("made") and snap and IMPORTED_RE.match(snap) and os.path.isdir(os.path.join(sroot, snap))):
             continue
-        if os.path.exists(orig):
-            kept.append((orig, "на його місці вже інший файл"))
-            continue
-        cs.check_target(orig)
-        os.makedirs(os.path.dirname(orig), exist_ok=True)
-        os.rename(target, orig)
-        back.append(orig)
-    root = os.path.join(_grow(home), "snapshots")
-    for name in snaps:
-        if IMPORTED_RE.match(name) and os.path.isdir(os.path.join(root, name)):
-            cs.check_target(os.path.join(root, name))
-            shutil.rmtree(os.path.join(root, name))
+        if all(home_again.get(snap) or [False]):
+            cs.check_target(os.path.join(sroot, snap))
+            shutil.rmtree(os.path.join(sroot, snap))
+        else:
+            kept.append((m["path"], "знімок %s лишився — у ньому текст цього бекапа" % snap))
     return back, kept

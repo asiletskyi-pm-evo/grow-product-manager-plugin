@@ -452,7 +452,8 @@ def cmd_status(a, c):
     invalid = [r["id"] for r in recs if cs.has_status_region(r["body"])]
     archived = len(c.store.archived())
     snaps = os.path.join(c.home, ".grow-pm", "snapshots")
-    last = sorted(n for n in os.listdir(snaps) if co.SNAP_RE.match(n))[-1:] if os.path.isdir(snaps) else []
+    last = sorted(n for n in os.listdir(snaps) if co.SNAP_RE.match(n) and not co.IMPORTED_RE.match(n))[-1:] \
+        if os.path.isdir(snaps) else []
     print("store: %s · records %d · card %d lines" % (c.store.root, len(recs), card))
     print("freshness: %d stale · %d invalid · %d archived" % (len(stale), len(invalid), archived))
     print("last snapshot: %s" % (last[0] if last else "none"))
@@ -824,7 +825,7 @@ def cmd_snapshot_import(a, c):
     the snapshots (`<their time>-imported`, out of the rotation), moves the originals to the trash, one journal line
     {op snapshot-import, moves, snapshots} with a snapshot of the store; `ctx undo` puts them back. No store: exit 3."""
     c.need_store()
-    p = cbk.plan(c.home, c.context)
+    p = cbk.plan(c.home)
     cd = cbk.code(p)
     for r in p["import"]:
         print("імпортую: %s (%s, %s)" % (r["path"], csh.human(r["size"]), r["when"][:8]))
@@ -848,19 +849,24 @@ def cmd_snapshot_import(a, c):
         c.guard()
         c.import_first()
         snap = co.snapshot(c.store, c.copies, c.home, "snapshot-import")
-        done = cbk.apply(p, c.home, c.context, datetime.datetime.now())
+        moves = cbk.planned_moves(p, c.home, datetime.datetime.now())
+        # the journal line first, with every planned move: an apply cut short is still taken back by `ctx undo`
         c.store.journal({"ts": now(), "op": "snapshot-import", "ids": [], "source": "ctx-snapshot-import", "reason": "",
-                         "snapshot": snap, "moves": done["moves"], "snapshots": done["snapshots"]})
-    for path in done["changed"]:
-        print("не імпортовано: %s — змінився після звіту" % path)
-    print("знімків створено: %d · оригіналів у кошику: %d (30 днів; back: ctx undo)" % (
-        len(done["snapshots"]), len(done["moves"])))
-    return 0, dict(out, snapshots=done["snapshots"], moves=done["moves"], changed=done["changed"], snapshot=snap)
+                         "snapshot": snap, "moves": moves})
+        done = cbk.apply(moves, c.home, c.context)
+    for path, why in done["failed"]:
+        print("не імпортовано: %s — %s" % (path, why))
+    made = [m["snapshot"] for m in done["done"] if m["made"]]
+    print("знімків створено: %d · оригіналів у кошику: %d (30 днів; back: ctx undo)" % (len(made), len(done["done"])))
+    return 0, dict(out, snapshots=made, moves=[[m["path"], m["trash"]] for m in done["done"]],
+                   failed=[{"path": a, "why": b} for a, b in done["failed"]], snapshot=snap)
 
 
 def cmd_snapshot(a, c):
     if a.action == "import":
         return cmd_snapshot_import(a, c)
+    if cc.slugify(a.label or "") == cbk.LABEL:
+        raise Usage("the label «imported» is the old backups' — choose another")
     c.need_store()
     path = co.snapshot(c.store, c.copies, c.home, a.label or "manual")
     print(path)
@@ -976,7 +982,7 @@ def cmd_undo(a, c):
             print("повернуто нотаток: %d" % len(notes_back))
         for m in reversed(marks[-a.steps:]):             # since v3.21.0: an import of old backups — the originals back
             if m.get("op") == "snapshot-import":
-                back, kept_b = cbk.revert(m.get("moves") or [], m.get("snapshots") or [], c.home)
+                back, kept_b = cbk.revert([x for x in (m.get("moves") or []) if isinstance(x, dict)], c.home)
                 print("повернуто бекапів: %d" % len(back))
                 for path, why in kept_b:
                     print("бекап не повернуто: %s — %s" % (path, why))
@@ -1141,6 +1147,12 @@ def cmd_show(a, c):
             print()
     repo_rows = csh.repos(c.text, c.home, c.store)
     mem = csh.memories(c.store, today)
+    try:
+        waiting = sum(co.pending(co.plan_sync(c.store, c.copies)).values())
+    except cs.StoreError:
+        waiting = 0
+    if waiting:
+        print("правок у local-context.md чекає імпорту: %d — тут ще без них; ctx sync" % waiting)
     if not want:
         for r in repo_rows:
             print("репозиторій %s: блоків %s · версія %s · перевірено %s" % (
@@ -1155,7 +1167,8 @@ def cmd_show(a, c):
 
 def cmd_health(a, c):
     """`health [--json]`: what wants looking after, one line each — ✅ fine · ⚠ worth a look · ✋ do something — with the
-    command that fixes it. Reads only: no lock, no network, nothing written, nothing iCloud evicted is opened. Exit 0."""
+    command that fixes it. Reads only: no lock, no network, nothing written; the copies outside the snapshots by stat alone
+    (a backup iCloud evicted is never brought down). Exit 0."""
     c.need_store()
     today = now()[:10]
     try:                                                # a record that does not parse is health's first error, not a crash
@@ -1164,11 +1177,13 @@ def cmd_health(a, c):
         plan = co.plan_sync(c.store, c.copies)
     except cs.StoreError as e:
         errors, warnings, recs, plan = [str(e)], [], [], {"conflicts": [], "missing": [], "unread": True}
-    lines = csh.health(recs, csh.memories(c.store, today), csh.repos(c.text, c.home, c.store),
+    skipped = []
+    repo_rows = csh.repos(c.text, c.home, c.store, skipped=skipped)
+    lines = csh.health(recs, csh.memories(c.store, today), repo_rows,
                        sum(co.pending(plan).values()) if not plan.get("unread") else 0, len(plan["conflicts"]),
                        len(plan["missing"]),
                        len(c.store.stray_files()), warnings, errors, csh.index_state(c.home), csh.snapshots(c.home),
-                       csh.backups(c.home, c.context, c.text), today)
+                       csh.backups(c.home, c.context, c.text), today, unread_regs=skipped)
     for level, text, fix in lines:
         print("%s %s%s" % (csh.MARK[level], text, (" — " + fix) if fix else ""))
     n = {k: sum(1 for l in lines if l[0] == k) for k in (csh.OK, csh.WARN, csh.ACT)}

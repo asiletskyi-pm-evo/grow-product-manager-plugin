@@ -23,7 +23,7 @@ Any other first word → one line, `Невідома дія: <слово> — /g
 
 ## Run
 
-Step 0-host (`references/host-profiles.md` §3). Without SHELL or without a context store (the session digest shows no `context: records …` line) → one line, `Сховища контексту немає — /context працює зі сховищем; твій local-context.md: <шлях>`, then show `local-context.md`'s section headings and stop.
+Step 0-host (`references/host-profiles.md` §3). Without SHELL, or without a context store — the session digest shows no `context: records …` line, or, on a host without the digest (Codex CLI), `{storage_root}/_System/context/.state/` does not exist; `ctx health` exiting 3 with `no store at …` says the same — one line, `Сховища контексту немає — /context працює зі сховищем; твій local-context.md: <шлях>`, then show `local-context.md`'s section headings and stop.
 
 Otherwise run `python3 "<plugin root>/scripts/ctx.py" <show|health|inbox list>` and give its lines as they are (they are Ukrainian already), with nothing added but, for `inbox`, the question below.
 

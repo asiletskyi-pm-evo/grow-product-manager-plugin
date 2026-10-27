@@ -365,7 +365,8 @@ If user data is lost or corrupted, recovery follows this priority:
 
 | Priority | Source | How to restore |
 |----------|--------|---------------|
-| 1 (best) | `~/.grow-pm/backups/` | Copy latest backup → `~/.grow-pm/` |
+| 1 (best) | `~/.grow-pm/snapshots/` (with a context store) | `ctx undo` takes back the last change; an old backup turned into a snapshot by `ctx snapshot import` (since v3.21.0) is `snapshots/<time>-imported/copies/0.md` — copy that file to `~/.grow-pm/local-context.md` |
+| 1a | `~/.grow-pm/backups/` | Copy latest backup → `~/.grow-pm/` (after `ctx snapshot import` the `local-context.md` copies are in the snapshots, the originals 30 days in `~/.grow-pm/trash/`) |
 | 2 | Obsidian Vault (if configured) | Reconstruct from vault mirror (see Vault Recovery Protocol) |
 | 3 | Legacy locations | Search workspace/outputs, session dirs |
 | 4 | Manual | User re-creates via Onboarding |

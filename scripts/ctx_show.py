@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Grow PM — what the plugin knows about you, and what wants looking after (since v3.21.0): `ctx show`, `ctx health`.
 
-Both read only: no lock, no network, nothing written, and a file iCloud has not downloaded is never opened (sizes come
-from stat). Semantics: references/context-protocol.md §5j. The commands themselves live in ctx.py.
+Both read only: no lock, no network, nothing written. The copies outside the snapshots are measured by stat alone,
+so a backup iCloud evicted is never brought down; the store itself (records, card, state, registrations) is read as
+every `ctx` command reads it. Semantics: references/context-protocol.md §5j. The commands themselves live in ctx.py.
 
 - records(store, today)         one row a record: title, type, who wrote it last, when, verified, stale/invalid, read_by
 - memories(store)               what your answers hold: slots, same/not-same, bridges, the inbox
@@ -67,11 +68,11 @@ def memories(store, today):
     return out
 
 
-def repos(text, home, store):
+def repos(text, home, store, skipped=None):
     import ctx_blocks as cb
     import ctx_repos as crp
     out = []
-    for r in crp.load_repos(text, home, skipped=[]):
+    for r in crp.load_repos(text, home, skipped=skipped if skipped is not None else []):
         row = {"id": r["id"], "kind": r.get("kind"), "sync": r.get("sync"), "paused": r.get("status") == "paused",
                "blocks": None, "version": None, "checked": None, "outcome": None, "error": None}
         if store.exists():
@@ -97,6 +98,8 @@ def _size(path, deadline):
         return 0, True
     total = 0
     for root, dirs, files in os.walk(path):
+        if time.monotonic() > deadline:
+            return total, False
         for f in files:
             try:
                 total += os.lstat(os.path.join(root, f)).st_size
@@ -153,7 +156,8 @@ def index_state(home):
     p = os.path.join(home, ".grow-pm", "index", "index.json")
     try:
         with open(p, encoding="utf-8") as f:
-            return json.load(f)
+            v = json.load(f)
+        return v if isinstance(v, dict) else None
     except (OSError, ValueError):
         return None
 
@@ -164,7 +168,8 @@ def snapshots(home):
         names = sorted(n for n in os.listdir(root) if os.path.isdir(os.path.join(root, n)))
     except OSError:
         names = []
-    return names
+    import ctx_backups as cbk
+    return [n for n in names if not cbk.IMPORTED_RE.match(n)]
 
 
 def _hours_since(iso):
@@ -177,13 +182,22 @@ def _hours_since(iso):
         return None
 
 
-def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, errors, idx, snaps, baks, today):
-    """The lines of `ctx health`: (level, text, fix)."""
+_FROM_PLAN = ("change(s) waiting", "conflict:", "stray file", "is missing on disk")
+
+
+def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, errors, idx, snaps, baks, today,
+           unread_regs=()):
+    """The lines of `ctx health`: (level, text, fix). What the sync plan already counts (edits waiting, conflicts,
+    stray and missing files) is said once, not again among validate's warnings and errors."""
     out = []
     stale = [r["id"] for r in recs if r["stale"]]
     invalid = [r["id"] for r in recs if r["invalid"]]
-    out.append((WARN, "застарілі записи: %d (%s)" % (len(stale), ", ".join(stale[:5])), "ctx verify --stale")
-               if stale else (OK, "записів: %d, усі свіжі" % len(recs), None))
+    errors = [e for e in errors if not any(x in e for x in _FROM_PLAN)]
+    warnings = [w for w in warnings if not any(x in w for x in _FROM_PLAN)]
+    if stale:
+        out.append((WARN, "застарілі записи: %d (%s)" % (len(stale), ", ".join(stale[:5])), "ctx verify --stale"))
+    elif recs:
+        out.append((OK, "записів: %d, усі свіжі" % len(recs), None))
     if invalid:
         out.append((WARN, "неактуальні записи: %d (%s)" % (len(invalid), ", ".join(invalid[:5])),
                     "ctx archive <id> або ctx restore <id>"))
@@ -201,6 +215,8 @@ def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, e
     other = [w for w in warnings if w not in secret and not w.startswith("stale:")]
     if other:
         out.append((WARN, "попереджень validate: %d" % len(other), "ctx validate"))
+    for path, why in list(unread_regs)[:5]:
+        out.append((ACT, "реєстрацію репозиторію не прочитано: %s — %s" % (os.path.basename(str(path)), why), "ctx repo list"))
     if stray:
         out.append((WARN, "сторонні файли у сховищі: %d" % stray, "ctx status"))
     ib = mem.get("inbox")
@@ -234,11 +250,13 @@ def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, e
         text = "індекс пошуку: оновлено %s%s" % ((idx.get("updated") or "—")[:16].replace("T", " "),
                                                  ("; не завантажено з iCloud: %d" % dl) if dl else "")
         out.append((WARN if old or dl else OK, text,
-                    "ctx index status" if old else ("ctx index rebuild --download" if dl else None)))
+                    "ctx index status (оновлює його)" if old else ("ctx index rebuild --download" if dl else None)))
     out.append((OK if snaps else WARN, "знімків: %d%s" % (len(snaps), (", найновіший %s" % snaps[-1]) if snaps else ""),
                 None if snaps else "ctx snapshot"))
-    for kind, title, fix in (("backups", "копій у ~/.grow-pm/backups", "ctx snapshot import"),
-                             ("bak", "копій local-context.md.bak* поруч із файлом", "ctx snapshot import"),
+    for kind, title, fix in (("backups", "копій у ~/.grow-pm/backups", "ctx snapshot import бере копії local-context; "
+                                                                         "решту, як zip чи yaml, прибери сам"),
+                             ("bak", "копій local-context.md.bak* поруч із файлом",
+                              "ctx snapshot import (лише ті, що в ~/.grow-pm)"),
                              ("vault", "тек _backup_* у вейлті", "лише названо — прибери, коли вони більше не потрібні")):
         rows = [b for b in baks if b["kind"] == kind]
         if not rows:

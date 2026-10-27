@@ -4182,8 +4182,9 @@ need_15 = [
             "a new key, or a new meaning of one, needs a new schema, `context-slots-memory/2`", "v3.15.0 treats a `/2` file as a memory it cannot read",
             "One line, printed once before `Відсутнє:` and not under each candidate", "`jira_team_field` is a team's name, not a Jira Team ID",
             "a block id that is not an id (`bind` does not check that the block exists", "the publisher's `slot=` in the begin marker of the block's base",
-            "Search — Step 0.5 across several repositories", "entities and cross-links, which also join the items of a list",
-            "the overlay, the person and the provider kit — v3.18", "the configurator as a loop", "— v3.18"]),
+            # §10's roadmap since v3.21.0 (the programme «Петля контексту»): what shipped, what is next
+            "Shipped by v3.20.0: search across repositories (§5g)", "entities and cross-links (§5h)",
+            "the declared overlay `overlays/<repo>.yaml`", "the configurator as a loop", "— v3.22.0"]),
     (pp15, ["**A slot — `slot=`** (since v3.15.0)", "`<!-- <namespace>:begin id=<block> v=<version> slot=<slot> -->`", "`xslot=` is no attribute",
             "A holder's own binding of the block (`ctx slot bind`) wins over the attribute for the whole block",
             "the plugin binds the block itself", "nothing else of the block is bound",
