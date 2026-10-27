@@ -207,6 +207,8 @@ IF vault_level > L0 AND vault sync_mode != "off":
 ## Skill Chaining
 ← `quarterly-planning` (`quarter-review` actuals for its retro; since v3.6.0 also its board readout, rendered here as the board-update `ops-report` from the retro and plan data it passes — no new fetch; scope and destination come from the caller when it passes them; a board readout from quarterly-planning arrives with `destination: chat draft` and `visuals: none`, so Steps 5–6 are skipped and nothing is published until the user asks) · ← `sprint-planning` (`sprint-review` + `member-review`) · ← `project-planning` (`initiative-status`) · ← `goal-setter` (3T5F reporting) · ← `performance-review` (goal report and member-review data) · ← `focus-advisor` (rituals, unread goal reports) · → `goal-setter` (a goal report with no known Target)
 
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

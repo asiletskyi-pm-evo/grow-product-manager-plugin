@@ -281,6 +281,8 @@ At the beginning of Knowledge Library skill execution (after Step 0 context load
 - **`references/self-improvement.md`** — self-improvement protocol
 - **`references/template-protocol.md`** — artifact template protocol (sibling skill `template-library`)
 
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

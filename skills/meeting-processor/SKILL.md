@@ -384,6 +384,8 @@ The full procedure — the discovery steps and the prompts to show — lives in 
 - **`references/search-mode.md`** — Search mode workflow S1–S4 with the fan-out delegation rule (skill-local)
 - **`skills/one-on-one/SKILL.md`** — dedicated handler for 1-1 meetings (redirect target)
 
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

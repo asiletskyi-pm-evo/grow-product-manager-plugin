@@ -104,6 +104,8 @@ Mirror push rejected non-fast-forward → mirror diverged: never force into a pr
 ## Skill Chaining
 ← any skill-changing work (feature PRs) · → `write-concept` (release notes draft for major releases) · → Confluence changelog page · → vault release record.
 
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

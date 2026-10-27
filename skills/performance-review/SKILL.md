@@ -89,6 +89,8 @@ Per `self-improvement.md`.
 - *"Проведи ревʼю аналітика Олени за півріччя"* → Step P + product-reporter (Forecast QA 92%, GTD 0.72→0.81, D3→approaching D4) → Section 1 with 6 NVC feedback items, Section 2 with 3 SMARTCBP plan goals → recommendation: **development** toward D4 + more delegation → offers to deliver via one-on-one.
 - *"Готую ревʼю, він недотягує цілі й не хоче рости"* → evidence shows Forecast QA 61%, flat GTD, "doesn't want" signals → recommendation: **yellow card** → chains to offboarding-guide's evidence path (goals+reports already exist).
 
+**End of run — no deltas (since v3.21.0).** This skill proposes nothing to the inbox: its context lives in person profiles, which never go through it (`references/context-protocol.md` §5i).
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

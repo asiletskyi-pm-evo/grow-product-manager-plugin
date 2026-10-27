@@ -88,6 +88,8 @@ Contract (analogous to experiment-tracker stale-check): `mode=coverage headless=
 - *"Ось транскрипт 1-1, розбери"* → signals (wants mentoring role; friction with a QA colleague) → applies "Did you tell them yourself?" on the QA friction → ARCV follow-up (manager-owned) → updates profile signals, offers to chain to goal-setter.
 - *"З ким я давно не бачився один-на-один?"* → coverage list: "Maria — 6 weeks (overdue), Ivan — 3 weeks" → offers Friday slots.
 
+**End of run — no deltas (since v3.21.0).** This skill proposes nothing to the inbox: its context lives in person profiles, which never go through it (`references/context-protocol.md` §5i).
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

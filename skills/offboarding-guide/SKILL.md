@@ -88,6 +88,8 @@ Per `self-improvement.md`.
 - *"Евіденс є, він 'не хоче'. Що далі?"* → runs the motivation-tools pre-screen (career ladder + sabbatical untried) → if PM still proceeds → guides Meeting 1 with an ARCV follow-up draft and a 1-month check reminder.
 - *"Провалив випробувальний, готую розмову"* → Meeting-3 dismissal script (facts, no personal blame) + agreed team message with the three required elements + reassignment task list → chains to hiring-designer for the role re-design.
 
+**End of run — no deltas (since v3.21.0).** This skill proposes nothing to the inbox: its context lives in person profiles, which never go through it (`references/context-protocol.md` §5i).
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

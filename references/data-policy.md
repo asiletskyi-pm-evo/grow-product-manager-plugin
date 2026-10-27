@@ -83,6 +83,13 @@ Step 0.5 of every skill searches the user's own base and, when it is not enough,
 
 ---
 
+## What the context store never keeps (since v3.21.0)
+
+1. **Never stored, by code.** A secret (a key, a token, a password, a private key, a `Bearer` token, a password in a URL) and a state or financial identifier (a card number, an IBAN, a РНОКПП, a passport number) are refused by `ctx` before they reach a record, the inbox, the journal or a snapshot — every writing command and every delta, by form (`scripts/ctx_never.py`). The refusal names the kind, never the value. Your own edit of `local-context.md` is imported as it is; `ctx validate` and `ctx health` then name the record and the kind so you can take it out. A record holds an environment variable's **name**, never its value.
+2. **Never proposed, by rule.** A skill never forms a delta about anyone's health, religion or beliefs, political views, union membership, ethnicity, sexual life, criminal record or family matters, and never one from a People-contour note (a profile, a 1-1, a review, an offboarding case). The People-contour skills propose nothing at all (`context-protocol.md` §5i).
+3. **«Не запам'ятовуй у цій сесії».** After those words a skill proposes nothing until the session ends.
+4. **The inbox is the user's.** A delta's evidence is a short quote or a path (≤ 200 characters), never a note's text; the inbox lives in the store's `.state/`, with the same reach as the records.
+
 ## Reference
 
 This policy applies in addition to (not instead of) the integration strategy described in `integration-strategy.md`. Both documents must be read and followed before any skill begins data gathering.

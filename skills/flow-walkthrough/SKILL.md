@@ -129,6 +129,8 @@ IF vault_level > L0 AND sync_mode != "off":
 
 `examples/marketplace-review-flow.md` — the single-leg reference walk (leave a review in a marketplace buyer app, iPhone app on a Mac): expected step list, expected frictions, and the driver facts it taught. `examples/marketplace-order-to-review-flow.md` — the three-leg reference (test buyer orders → test seller confirms and ships → buyer reviews) with hand-offs and sandbox confirmations. Use them to dry-run `audit` and to sanity-check a new driver.
 
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

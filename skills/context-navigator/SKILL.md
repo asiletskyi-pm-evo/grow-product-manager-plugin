@@ -79,6 +79,8 @@ Before a meeting note that names people is written into the user's vault: resolv
 ## Skill Chaining
 → `decision-log` (a decision surfaces that the user wants recorded) · → `product-analysis` (live numbers beyond the core's actuals) · → `context-connect` (connect a provider, refresh or widen the bundle) · → `meeting-processor` (a transcript to process; people resolve as above) · → `one-on-one` / `performance-review` (a person's profile — this skill gives a person's identity only, §13).
 
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
