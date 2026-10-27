@@ -327,6 +327,7 @@ import ctx_observe as cob  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
+import ctx_recheck as crk  # noqa: E402
 import ctx_repos as crp  # noqa: E402
 import ctx_resolve as rv  # noqa: E402
 import ctx_search as cs_  # noqa: E402
@@ -381,6 +382,8 @@ def writes(a):
         return True
     if a.cmd == "bootstrap":                            # since v3.22.0: the table only with --apply
         return getattr(a, "apply", False)
+    if a.cmd == "validate":                             # since v3.22.0: --recheck writes the inbox and its memory
+        return getattr(a, "recheck", False)
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] == "apply":
@@ -1058,6 +1061,8 @@ def cmd_undo(a, c):
 
 def cmd_validate(a, c):
     c.need_store()
+    if a.recheck or a.observed:
+        return cmd_recheck(a, c)
     errors, warnings, proposals = _validate(c)
     for e in errors:
         print("error: " + e)
@@ -1065,6 +1070,67 @@ def cmd_validate(a, c):
         print("warning: " + w)
     print("valid" if not errors else "%d error(s)" % len(errors))
     return (3 if errors else 0), {"command": "validate", "errors": errors, "warnings": warnings, "slot_proposals": proposals}
+
+
+CHECK_NAMES = {"jira": "Jira-ключі", "confluence": "простори Confluence", "member": "учасники команд",
+               "role": "роль від провайдера"}
+
+
+def cmd_recheck(a, c):
+    """`validate --recheck --observed F [--now ISO]` (since v3.22.0, plan C9): the records against what the connectors
+    say. A finding seen the first time waits in `.state/recheck.json`; seen again at least 6 days later it becomes a
+    delta of the inbox (ctx-recheck) — urgent ones by the inbox's table. Writes only the inbox, the memory and, when
+    something was proposed, one journal line {op propose, skill ctx-recheck}; the records it found as they should be are
+    printed for `ctx verify`. A connector that did not answer checks nothing."""
+    if not (a.recheck and a.observed):
+        raise Usage("validate --recheck бере --observed F (файл спостережень, references/context-observe.md)")
+    try:
+        obs = cob.load(a.observed)
+    except ValueError as e:
+        raise Usage(str(e))
+    today = (a.now or now())[:10]
+    if not re.match(r"\d{4}-\d{2}-\d{2}$", today):
+        raise Usage("--now is a date or an ISO time")
+    with co.lock(c.home):
+        c.guard()
+        mem_rk = crk.load(c.store)
+        box = ci_.load(c.store)
+        c.import_first()
+        recs = c.store.load()
+        res = crk.run(obs, recs, mem_rk, today)
+        props = ci_.propose(box, res["deltas"], "ctx-recheck", recs, today) if res["deltas"] else []
+        new = [r for r in props if r["status"] in (ci_.ADDED, ci_.MERGED)]
+        if new:
+            ci_.save(c.store, box, today)
+            c.store.journal({"ts": now(), "op": "propose", "skill": "ctx-recheck",
+                             "ids": sorted({r["record"] for r in new}),
+                             "sigs": [e["sig"] for e in box["entries"] if e["n"] in {r["n"] for r in new}],
+                             "source": "ctx-recheck"})
+        crk.save(c.store, mem_rk)
+        cd = ci_.code(box, recs)
+    print("перевірено: %s" % (", ".join("%s (%d)" % (CHECK_NAMES[k], sum(k in v for v in res["checked"].values()))
+                                         for k in CHECK_NAMES if k not in res["unchecked"]) or "нічого"))
+    if res["unchecked"]:
+        print("не перевірено: %s — конектор не відповів, список неповний чи даних немає"
+              % ", ".join(CHECK_NAMES[k] for k in res["unchecked"]))
+    for f in res["noticed"]:
+        print("помічено: %s · %s %s — перевірю ще раз не раніше ніж через %d дн після %s" % (
+            f["record"], CHECK_NAMES[f["check"]], f["item"], crk.CONFIRM_DAYS, f["first"]))
+    for f in res["unresolved"]:
+        print("перевір сам: %s · %s" % (f["record"], f["why"]))
+    for i, r in enumerate(props, 1):
+        if r["status"] in (ci_.REFUSED, ci_.SECRET, ci_.BLOCK):
+            print("знахідка %d: %s" % (i, r.get("why")))
+    added = [r for r in props if r["status"] == ci_.ADDED]
+    urgent = sorted({r["n"] for r in new if r.get("urgent")})
+    if new:
+        print("у скриньці +%d (усього %d)%s — /context inbox" % (len(added), len(box["entries"]), (
+            " · термінові №%s — запитай зараз, код %s" % (", ".join(map(str, urgent)), cd)) if urgent else ""))
+    if res["fine"]:
+        print("як і було: %s — ctx verify %s" % (", ".join(res["fine"]), " ".join(res["fine"])))
+    return 0, {"command": "validate", "recheck": True, "checked": res["checked"], "unchecked": res["unchecked"],
+               "noticed": res["noticed"], "confirmed": res["confirmed"], "unresolved": res["unresolved"],
+               "results": props, "added": [r["n"] for r in added], "urgent": urgent, "code": cd, "fine": res["fine"]}
 
 
 def _validate(c):
@@ -1223,12 +1289,21 @@ def cmd_health(a, c):
                        sum(co.pending(plan).values()) if not plan.get("unread") else 0, len(plan["conflicts"]),
                        len(plan["missing"]),
                        len(c.store.stray_files()), warnings, errors, csh.index_state(c.home), csh.snapshots(c.home),
-                       csh.backups(c.home, c.context, c.text), today, unread_regs=skipped)
+                       csh.backups(c.home, c.context, c.text), today, unread_regs=skipped,
+                       recheck=_recheck_health(c, today))
     for level, text, fix in lines:
         print("%s %s%s" % (csh.MARK[level], text, (" — " + fix) if fix else ""))
     n = {k: sum(1 for l in lines if l[0] == k) for k in (csh.OK, csh.WARN, csh.ACT)}
     return 0, {"command": "health", "lines": [{"level": l, "text": t, "fix": f} for l, t, f in lines],
                "counts": n}
+
+
+def _recheck_health(c, today):
+    try:
+        mem = crk.load(c.store)
+    except cs.StoreError as e:
+        return str(e)
+    return {"age": crk.age(mem, today), "noticed": len(mem["seen"]), "old": crk.OLD_DAYS}
 
 
 def cmd_card(a, c):
@@ -2700,7 +2775,8 @@ def build_parser():
         sp = xp.add_parser(act, parents=[common]); sp.add_argument("which", nargs="+"); sp.add_argument("--code")
         sp.add_argument("--reason")
     sp = sub.add_parser("undo", parents=[common]); sp.add_argument("--steps", type=int, default=1)
-    sub.add_parser("validate", parents=[common])
+    sp = sub.add_parser("validate", parents=[common]); sp.add_argument("--recheck", action="store_true")
+    sp.add_argument("--observed"); sp.add_argument("--now")
     sp = sub.add_parser("show", parents=[common]); sp.add_argument("ids", nargs="*"); sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("health", parents=[common]); sp.add_argument("--json", action="store_true")
     sub.add_parser("card", parents=[common])

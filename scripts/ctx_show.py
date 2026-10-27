@@ -187,7 +187,7 @@ _FROM_PLAN = ("change(s) waiting", "conflict:", "stray file", "is missing on dis
 
 
 def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, errors, idx, snaps, baks, today,
-           unread_regs=()):
+           unread_regs=(), recheck=None, consolidate=None):
     """The lines of `ctx health`: (level, text, fix). What the sync plan already counts (edits waiting, conflicts,
     stray and missing files) is said once, not again among validate's warnings and errors."""
     out = []
@@ -229,7 +229,23 @@ def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, e
             (", старших за %d днів: %d" % (ci_.OLD_DAYS, ib["old"])) if ib["old"] else ""), "/context inbox"))
     else:
         out.append((OK, "скринька порожня", None))
-    for name in ("slots", "entities", "search", "bridges"):
+    if isinstance(recheck, str):                        # since v3.22.0: the records against the connectors
+        out.append((ACT, "пам'ять recheck не читається: %s" % recheck, "ctx status"))
+    elif recheck is not None:
+        if recheck["age"] is None:
+            out.append((WARN, "записи ще не звірялись із конекторами", "/context recheck"))
+        else:
+            out.append((WARN if recheck["age"] > recheck["old"] else OK, "звірка з конекторами: %s" % (
+                "сьогодні" if recheck["age"] <= 0 else "%d дн тому" % recheck["age"]),
+                "/context recheck" if recheck["age"] > recheck["old"] else None))
+        if recheck["noticed"]:
+            out.append((WARN, "помічено при звірці: %d — перевірю ще раз через тиждень" % recheck["noticed"], None))
+    if isinstance(consolidate, str):
+        out.append((ACT, "consolidate не порахувався: %s" % consolidate, "ctx status"))
+    elif consolidate:
+        out.append((WARN, "consolidate знайде %d (дублі, відносні дати, минулі строки)" % consolidate,
+                    "/context consolidate"))
+    for name in ("slots", "entities", "search", "bridges", "sources"):
         if isinstance(mem.get(name), str):
             out.append((ACT, "пам'ять %s не читається: %s" % (name, mem[name]), "ctx status"))
     for r in repo_rows:
