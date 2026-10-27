@@ -83,6 +83,8 @@ Per `self-improvement.md`.
 - *"Я потонув в операційці, що делегувати?"* → mines calendar+Jira → audit table of 14 activities, 9 at levels 1–4 → flags "A/B readout prep" and "stakeholder status prep" as top push-downs → proposes Firstname (D3, GTD 0.81) at target level 6 with an S1→S4 plan.
 - *"Немає кому делегувати розбір багрепортів"* → computes ROI of a junior analyst hire vs the PM's hours → positive payback → drafts the argument for the manager + a role hand-off plan (chains to hiring-designer).
 
+**End of run — no deltas (since v3.21.0).** This skill proposes nothing to the inbox: its context lives in person profiles, which never go through it (`references/context-protocol.md` §5i).
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

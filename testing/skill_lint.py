@@ -46,6 +46,7 @@ CHECKS = """
 24. evidence-classes     the §4 class enum drifts, an invented class in a label, a P7-bound skill that never cites Gate Check 6, or a stale gate-check count
 25. judgment-binds       a P4/P6/P8 bind or §7-§9 row whose skill never cites judgment-points §7/§8/§9, or a live 'from / arrives in vX.Y.Z' at or below the plugin version
 26. provider-contract    a vault_*/brain_* tool cited in shipped docs that is not a row of the vault/v1 table in context-provider-protocol.md
+27. inbox-step           a SKILL.md without its end-of-run line (context-protocol.md §5i): the inbox, or — People contour — no deltas
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -695,7 +696,7 @@ if os.path.isfile(schema_p):
         fail("vault-types", "vault-schema.md: TYPE_FOLDER_MAP Reference block not found")
 
     # taxonomy rows: | type | skill | folder | description |
-    taxonomy = set(re.findall(r"^\|\s*([a-z][a-z0-9-]+)\s*\|[^|]*\|\s*[A-Z][\w/{}-]*\s*\|", st, re.M))
+    taxonomy = set(re.findall(r"^\|\s*([a-z][a-z0-9-]+)\s*\|[^|]*\|\s*_?[A-Z][\w/{}-]*\s*\|", st, re.M))
     for t in sorted(taxonomy - set(folder_map)):
         fail("vault-types", f"vault-schema.md: type '{t}' is in the taxonomy but missing from TYPE_FOLDER_MAP")
     for t in sorted(set(folder_map) - taxonomy):
@@ -1508,6 +1509,24 @@ if os.path.isfile(_cpp):
                                           f"(context-provider-protocol.md §2) nor a plugin-internal name")
 else:
     fail("provider-contract", "references/context-provider-protocol.md is missing — the provider contract has no source")
+
+# ============================================================ inbox step (27)
+# --------------------------------------------------- 27. inbox step
+# v3.21.0: every skill ends its run with the inbox step (references/context-protocol.md §5i); the People contour
+# proposes nothing and says so. A skill without the line would keep writing in silence or asking «зберегти?».
+PEOPLE_CONTOUR = {"goal-setter", "one-on-one", "performance-review", "hiring-designer", "offboarding-guide",
+                  "delegation-coach"}
+for _p in skill_files:
+    _name = os.path.basename(os.path.dirname(_p))
+    _t = open(_p, encoding="utf-8").read()
+    _want = "**End of run — no deltas (since v3.21.0).**" if _name in PEOPLE_CONTOUR else \
+        "**End of run — the inbox (since v3.21.0).**"
+    _other = "**End of run — the inbox (since v3.21.0).**" if _name in PEOPLE_CONTOUR else \
+        "**End of run — no deltas (since v3.21.0).**"
+    if _want not in _t or "context-protocol.md` §5i" not in _t:
+        fail("inbox-step", f"skills/{_name}/SKILL.md: no end-of-run line «{_want}» citing context-protocol.md §5i")
+    if _other in _t:
+        fail("inbox-step", f"skills/{_name}/SKILL.md: the wrong end-of-run line for its contour («{_other}»)")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

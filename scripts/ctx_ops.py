@@ -92,6 +92,7 @@ def lock(home, stale_s=120):
 
 # --------------------------------------------------------------- snapshots
 SNAP_RE = re.compile(r"^(\d{8}T\d{6})")
+IMPORTED_RE = re.compile(r"^\d{8}T\d{6}-imported(?:-\d+)?$")       # ctx_backups.IMPORTED_RE
 
 
 def _files(folder, prefix):
@@ -189,7 +190,7 @@ def rotate(snap_root, keep_last=20, keep_daily_days=14, now=None, protect=None):
     dated = []
     for name in os.listdir(snap_root) if os.path.isdir(snap_root) else []:
         m = SNAP_RE.match(name)
-        if m:
+        if m and not IMPORTED_RE.match(name):          # since v3.21.0: an imported old backup is kept for good
             dated.append((datetime.datetime.strptime(m.group(1), "%Y%m%dT%H%M%S"), name))
     dated.sort(reverse=True)
     keep = {name for _, name in dated[:keep_last]}
@@ -214,6 +215,8 @@ def restore(snap_dir, store, copies):
     """Put the store and the compiled copies back as the snapshot holds them. The copies are the current
     ones, matched by position (0 = home copy, 1 = vault mirror): a path in the manifest is never written
     or deleted. Returns the manifest entries with no current copy (skipped)."""
+    if IMPORTED_RE.match(os.path.basename(os.path.normpath(snap_dir))):     # since v3.21.0: an old backup's copy
+        raise Refused("%s is an imported old backup — read it, do not restore the store from it" % snap_dir)
     with open(os.path.join(snap_dir, "manifest.json"), encoding="utf-8") as f:
         manifest = json.load(f)
     entries = manifest.get("copies", [])

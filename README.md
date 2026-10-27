@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.20.0
+**Version:** 3.21.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.21.0** — **«Скринька»: what skills learn about your context waits for your «так»** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A skill that learns something about your context during a run — a dashboard the product record lacks, a Jira key that moved, a product that closed — no longer writes it in silence or asks «зберегти?» at the end of every run: it proposes a delta (`ctx propose`), and the inbox keeps it. What matters most — who you are, your team, a product's keys, anything closed — is asked at once in one question; the rest is one line `У скриньці +N` and waits for the morning brief or `/grow-product-manager:context inbox`, taken or rejected in one answer, with `ctx undo`. A secret or a state or financial identifier never reaches the store — every writing command and every delta refuses it by its form, naming the kind, never the value. `/grow-product-manager:context show` says what the plugin knows about you and who wrote each record when; `health` says what wants looking after, each line with the command that fixes it; `ctx snapshot import` turns your old `local-context.md` backups into snapshots. The first release of the programme «Петля контексту».
 
 **New in v3.20.0** — **«Мости в нотатках»: the bridges your notes lack, written on your «так»** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). When an e-mail or your own `same` answer makes your person note and a core's card one person, nothing in your note said so — Obsidian, your scripts and other tools did not see it. Ask context-navigator «запиши мости в нотатки»: `ctx entity apply` reports which notes would get one frontmatter line `same_as: "[[<card>|<title>]]"`, what it skips and why, and a report code; only on your «так» does `--apply --code` write that report alone — into your plugin folder, never a core, one line per note with every other byte, the file's mode and its tags kept, after a snapshot. `ctx undo` takes it back: a note you have not touched byte for byte, one you edited loses our line alone. A `same_as` your own scripts keep is someone else's field: the plugin then writes nothing and says so. The plugin's card in Claude now shows one sentence instead of 5 000 characters of history; and a row «Ім'я, Ім'я — роль» of a core's team card joins both people.
 
@@ -511,7 +513,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 20. Focus Advisor (v0.9.3) — NEW in v1.31.0, complete in v1.33.0
+### 20. Focus Advisor (v0.9.4) — NEW in v1.31.0, complete in v1.33.0
 
 **Description:** PM attention dispatcher — the 4th height of the suite, above structure/quarter/sprint. Scans the PM's context (sprint cycle position, calendar meetings needing preparation, important unanswered emails, open action items from recent meetings, Jira tails), ranks the signals, and recommends 1–3 focuses with reasons, cost of delay, and a chained next step. Recommends and chains — never executes another skill's work; the PM decides.
 
@@ -622,7 +624,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
-### 33. Context Navigator (v0.4.0) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0, bridges in your notes since v3.20.0
+### 33. Context Navigator (v0.4.1) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0, bridges in your notes since v3.20.0
 
 **Description:** Since v3.17.0 it answers and searches from your whole context — your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct — with or without a shared core: an answer with a source and a date for every statement, or a list of notes, and a «Де шукав» line naming each source; `/grow-product-manager:find` runs the same search. With a shared core it answers from it instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
 
@@ -654,7 +656,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Quarterly Planning | v0.8.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.4.2 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
-| Focus Advisor | v0.9.3 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
+| Focus Advisor | v0.9.4 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.1 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
 | Feedback Triage | v0.7.1 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
@@ -665,7 +667,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Offboarding Guide | v0.2.2 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
 | Context Connect | v0.5.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
-| Context Navigator | v0.4.0 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
+| Context Navigator | v0.4.1 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---
 
@@ -897,7 +899,7 @@ Besides skills, the plugin ships four kinds of host-level components. They are d
 
 Every protocol keeps a fallback chain (named agent → `general-purpose` with the same prompt, reported → sequential in-session passes with a role reset, reported → inline with the reduced-independence marker), so nothing breaks in a host without plugin agents. Codex does not load `agents/*.md`; `.codex/agents/*.toml` ports the three for manual use there, generated from these files (check 14 keeps them paired, and since v3.8.0 keeps their instructions identical apart from the host note).
 
-**Commands — `commands/` (6 commands).** Service entry points that are **user-only** (`disable-model-invocation: true`) — the model never routes a conversation into them, which also keeps them out of trigger collisions. On Codex, which migrates commands into routable skills, the same guarantee comes from each description opening with *"Typed command … only"* (validator check 13, trigger-evals L):
+**Commands — `commands/` (7 commands).** Service entry points that are **user-only** (`disable-model-invocation: true`) — the model never routes a conversation into them, which also keeps them out of trigger collisions. On Codex, which migrates commands into routable skills, the same guarantee comes from each description opening with *"Typed command … only"* (validator check 13, trigger-evals L):
 
 | Command | Arguments | Does |
 |---|---|---|
@@ -907,6 +909,7 @@ Every protocol keeps a fallback chain (named agent → `general-purpose` with th
 | `/grow-product-manager:glossary-lint` | `[file]` | Gate 3 team-language lint over a file or pasted text, standalone |
 | `/grow-product-manager:setup` | `--show \| --write-gate on\|off` | Host-level toggles (the write gate) and whether the hooks environment is wired in this session |
 | `/grow-product-manager:find` | `<запит> [--list] [--all]` | The search of your context, typed (since v3.17.0): `context-navigator`'s answer with a source and a date for every statement, `--list` for the notes instead, `--all` for the session's live sources too; ends with `Де шукав: …` |
+| `/grow-product-manager:context` | `show [запис] \| health \| inbox` | Your context, typed (since v3.21.0): `show` — what the plugin knows about you, who wrote each record last and when it was verified; `health` — what wants looking after, each line with the command that fixes it; `inbox` — what skills learned, taken or rejected in one answer |
 
 **Hooks — `hooks/hooks.json` (3 hooks).** All three run in the session's own environment and **fail open** — a script error can never block a session.
 
@@ -930,9 +933,9 @@ The plugin is defined against Claude Code / Cowork and degrades by **observed ca
 | Filesystem `~/.grow-pm/`, vault | ✅ | ✅ | ❌ on web / mobile → `storage_mode: session`, artifact exported at the end; ✅ in the desktop app with a *Local Project* (attached folder, read/write) → behaves as the Codex column | own sandbox → via connector or the repo |
 | Subagents (checker, debater, extractor) | ✅ automatic | ⚠️ only on explicit request → sequential in-session passes (`.codex/agents/` for manual use) | ❌ | ⚠️ |
 | Hooks (context digest, write gate) | ✅ | ❌ ([openai/codex#17331](https://github.com/openai/codex/issues/17331)) → Step 0a in full, in-skill confirmation before writes | ❌ | ❌ |
-| Commands | ✅ 6, user-only | ✅ 6, migrated to typed-only skills | ❌ | ⚠️ |
+| Commands | ✅ 7, user-only | ✅ 7, migrated to typed-only skills | ❌ | ⚠️ |
 | Skill descriptions | full while the listing fits 1% of the context window; over it, the least-used skills show names only — descriptions stay within 400 characters (v3.10.1) | shortened to fit one shared ≈15k-character budget (~190 chars each on a host with 80 skills) — descriptions are ordered for that cut | ? | ? |
-| Per-skill result | 31 full | 15 full / 16 degraded | 21 degraded / 10 n/a | 22 degraded / 9 n/a |
+| Per-skill result | 33 full | 17 full / 16 degraded | 22 degraded / 11 n/a | 23 degraded / 10 n/a |
 
 **Codex card.** `.codex-plugin/plugin.json` carries the `interface` block Codex and ChatGPT render — display name, category, brand color and the logo in `assets/` (`logo.png` 512, `composer-icon.png` 128). Claude Code has no logo field, so it reads `.claude-plugin/` only; validator check 1 keeps the two manifests' version and description identical.
 
@@ -1080,5 +1083,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.20.0  
+**Version:** 3.21.0  
 **Last Updated:** October 2026

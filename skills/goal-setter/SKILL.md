@@ -103,6 +103,8 @@ Per `self-improvement.md`.
 - *"Це нормальна ціль: 'покращити конверсію'?"* → `audit` mode → 8-check table shows S/M/C/T failures → returns "increase checkout conversion from 2.1% to 3.0% (+0.9 p.p. vs H1) by 2026-12-31".
 - *"Зроби OKR для напрямку Q&A на квартал"* → OKR path: 1 Objective + 3 Key Results, public, stretch → offers to cascade personal SMARTCBP goals for the owners underneath.
 
+**End of run — no deltas (since v3.21.0).** This skill proposes nothing to the inbox: its context lives in person profiles, which never go through it (`references/context-protocol.md` §5i).
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

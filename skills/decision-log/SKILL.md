@@ -96,6 +96,8 @@ Frontmatter per `vault-schema.md`: `type: decision`, `product`, `tags` (topic, a
 ## Skill Chaining
 ← `meeting-processor` (M10: key decisions from MoM) · ← `experiment-tracker` (decide mode) · ← `quarterly-planning` retro / `project-planning` replan (scope decisions) · ← `feedback-triage`, `goal-setter`, `one-on-one` (decision outcomes) · ← any skill with a decision outcome · → `task-creator` (when the decision spawns work) · → `focus-advisor` (overdue `revisit_by` dates surface as tactical signals — `focus-signals.md` §6).
 
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

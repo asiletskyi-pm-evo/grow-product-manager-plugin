@@ -89,6 +89,8 @@ Per `self-improvement.md`.
 - *"Відкриваємо вакансію продуктового аналітика"* → Step 1 chains to goal-setter for the 3/6/12-month goal letter → builds the 5-section vacancy profile mapped to the employer HR-form → 3 killer questions with numeric thresholds + If/Then → candidate-documents checklist.
 - *"Оціни трьох кандидатів на цю роль"* → builds the goal × experience table from their artifacts/answers → flags Candidate B at 22% fit (decline) → drafts the offer for Candidate A with probation goals.
 
+**End of run — no deltas (since v3.21.0).** This skill proposes nothing to the inbox: its context lives in person profiles, which never go through it (`references/context-protocol.md` §5i).
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:

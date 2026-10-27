@@ -186,6 +186,7 @@ Commands in `commands/` carry `disable-model-invocation: true`; the model must n
 | L8 | /grow-product-manager:status | `status` command (explicit invocation — the only way in); Claude: n/a — the host runs a typed command before any routing, so the row is scored on Codex only |
 | L9 | вимкни підтвердження перед записом у Confluence | plugin-configurator or none (conversation) → point to `/grow-product-manager:setup --write-gate off` — NOT the `setup` command itself (added v2.6.0; plugin-configurator accepted since v3.5.0, when it learned to explain the command) |
 | L10 | знайди в моєму контексті про ліміт фото | context-navigator — NOT `find` command (added v3.17.0: the conversational search is the skill) |
+| L11 | що ти про мене знаєш і що в скриньці | context-navigator — NOT `context` command (added v3.21.0: the conversational show/inbox is the skill; `/grow-product-manager:context` only when typed) |
 
 ### Group M — Flow walkthrough vs neighbours (added 2026-09-10, v3.1.0)
 

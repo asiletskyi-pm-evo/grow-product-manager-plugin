@@ -312,13 +312,16 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_backups as cbk  # noqa: E402
 import ctx_blocks as cb  # noqa: E402
 import ctx_bridges as cbr  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
+import ctx_inbox as ci_  # noqa: E402
 import ctx_index as ci  # noqa: E402
+import ctx_never as cn  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
@@ -326,6 +329,7 @@ import ctx_repos as crp  # noqa: E402
 import ctx_resolve as rv  # noqa: E402
 import ctx_search as cs_  # noqa: E402
 import ctx_schema as sc  # noqa: E402
+import ctx_show as csh  # noqa: E402
 import ctx_slots as sl  # noqa: E402
 import ctx_synced as sy  # noqa: E402
 
@@ -341,14 +345,35 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
            "invalidate", "archive", "restore", "verify", "assign", "slot"}
 
 
+# The arguments of a writing command that are no free text a store keeps: paths, ids, numbers, the propose's deltas
+# (each one checked on its own, so one secret does not cost the others — ctx_inbox.propose).
+NOT_TEXT = {"cmd", "action", "context", "store", "home", "file", "body_file", "delta", "code", "which", "steps", "id",
+            "ids", "skill", "type", "parent", "after", "repo", "product", "label", "now"}
+
+
+def _free_text(a):
+    out = []
+    for k, v in vars(a).items():
+        if k in NOT_TEXT:
+            continue
+        for x in (v if isinstance(v, list) else [v]):
+            if isinstance(x, str):
+                out.append(x)
+    return out
+
+
 def writes(a):
     """Does this run write to the store? Every command of WRITING does, and `provider apply`, `provider sync` and (since
     v3.16.0) `search remember|forget`, (since v3.18.0) `entity same|not-same`; `migrate`, `provider adopt` and (since
     v3.20.0) `entity apply` only with --apply. A plain search, `--get` and `search
     eval` write no store. (A `provider sync` that synced nothing saves no summary: `main`.)"""
+    if a.cmd == "snapshot" and getattr(a, "action", None) == "import":
+        return getattr(a, "apply", False)
     if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) in ("apply", "sync")):
         return True
     if a.cmd == "search" and getattr(a, "action", None) in ("remember", "forget"):
+        return True
+    if a.cmd == "propose" or (a.cmd == "inbox" and getattr(a, "action", None) in ("accept", "reject")):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
@@ -427,7 +452,8 @@ def cmd_status(a, c):
     invalid = [r["id"] for r in recs if cs.has_status_region(r["body"])]
     archived = len(c.store.archived())
     snaps = os.path.join(c.home, ".grow-pm", "snapshots")
-    last = sorted(n for n in os.listdir(snaps) if co.SNAP_RE.match(n))[-1:] if os.path.isdir(snaps) else []
+    last = sorted(n for n in os.listdir(snaps) if co.SNAP_RE.match(n) and not co.IMPORTED_RE.match(n))[-1:] \
+        if os.path.isdir(snaps) else []
     print("store: %s · records %d · card %d lines" % (c.store.root, len(recs), card))
     print("freshness: %d stale · %d invalid · %d archived" % (len(stale), len(invalid), archived))
     print("last snapshot: %s" % (last[0] if last else "none"))
@@ -759,6 +785,7 @@ def cmd_add(a, c):
     if a.type not in HEADINGS:
         raise Usage("add takes one of %s" % ", ".join(sorted(HEADINGS)))
     content = co._read(a.body_file) if a.body_file else ""
+    cn.check(content)
     heading = HEADINGS[a.type] % a.title
     text = heading + "\n\n" + (content.rstrip("\n") + "\n\n" if content.strip() else "")
     with co.lock(c.home):
@@ -792,7 +819,54 @@ def cmd_add(a, c):
     return 0, {"command": "add", "id": new[0], "after": after, "snapshot": snap, "written": comp["written"]}
 
 
+def cmd_snapshot_import(a, c):
+    """`snapshot import [--apply --code C]` (since v3.21.0): the old backups of local-context.md as snapshots. A dry run
+    lists what it would import, what a snapshot already holds and what it leaves, and `код звіту`; `--apply --code` writes
+    the snapshots (`<their time>-imported`, out of the rotation), moves the originals to the trash, one journal line
+    {op snapshot-import, moves, snapshots} with a snapshot of the store; `ctx undo` puts them back. No store: exit 3."""
+    c.need_store()
+    p = cbk.plan(c.home)
+    cd = cbk.code(p)
+    for r in p["import"]:
+        print("імпортую: %s (%s, %s)" % (r["path"], csh.human(r["size"]), r["when"][:8]))
+    for r in p["known"]:
+        print("уже в знімку %s: %s — оригінал у кошик" % (r["snapshot"], r["path"]))
+    for r in p["left"]:
+        print("не імпортую: %s (%s) — %s" % (r["path"], csh.human(r["size"]), r["why"]))
+    out = {"command": "snapshot", "action": "import", "import": p["import"], "known": p["known"], "left": p["left"],
+           "code": cd}
+    if not a.apply:
+        print("нічого імпортувати" if not (p["import"] or p["known"]) else "код звіту: %s" % cd)
+        return 0, out
+    if not a.code:
+        raise Usage("snapshot import --apply takes --code from the report")
+    if a.code != cd:
+        raise co.Refused("звіт змінився — переглянь ще раз: ctx snapshot import")
+    if not (p["import"] or p["known"]):
+        print("нічого імпортувати")
+        return 0, out
+    with co.lock(c.home):
+        c.guard()
+        c.import_first()
+        snap = co.snapshot(c.store, c.copies, c.home, "snapshot-import")
+        moves = cbk.planned_moves(p, c.home, datetime.datetime.now())
+        # the journal line first, with every planned move: an apply cut short is still taken back by `ctx undo`
+        c.store.journal({"ts": now(), "op": "snapshot-import", "ids": [], "source": "ctx-snapshot-import", "reason": "",
+                         "snapshot": snap, "moves": moves})
+        done = cbk.apply(moves, c.home, c.context)
+    for path, why in done["failed"]:
+        print("не імпортовано: %s — %s" % (path, why))
+    made = [m["snapshot"] for m in done["done"] if m["made"]]
+    print("знімків створено: %d · оригіналів у кошику: %d (30 днів; back: ctx undo)" % (len(made), len(done["done"])))
+    return 0, dict(out, snapshots=made, moves=[[m["path"], m["trash"]] for m in done["done"]],
+                   failed=[{"path": a, "why": b} for a, b in done["failed"]], snapshot=snap)
+
+
 def cmd_snapshot(a, c):
+    if a.action == "import":
+        return cmd_snapshot_import(a, c)
+    if re.match(r"^%s(?:-\d+)?$" % cbk.LABEL, cc.slugify(a.label or "")):
+        raise Usage("the label «imported» is the old backups' — choose another")
     c.need_store()
     path = co.snapshot(c.store, c.copies, c.home, a.label or "manual")
     print(path)
@@ -880,6 +954,18 @@ def cmd_undo(a, c):
                 previous = cbr.load_ledger(c.store)     # our lines before the restore: a renamed note keeps them ours
             except cs.StoreError:
                 previous = None
+        entries = c.store.journal_entries()
+        at = max((i for i, e in enumerate(entries) if e.get("snapshot") == target), default=len(entries))
+        later = {s for e in entries[at + 1:] if e.get("op") == "propose" for s in (e.get("sigs") or [])}
+        inbox_before = None
+        if later:                                       # since v3.21.0: what skills proposed after the change undone —
+            try:                                        # in the inbox now, or in a later change's snapshot when it was
+                now_box = ci_.load(c.store)             # taken or rejected inside the span undone
+            except cs.StoreError as e:
+                now_box = None
+                print("скринька не читається: %s — пропозиції після цієї зміни лишаються лише в знімку pre-undo" % e)
+            inbox_before = ci_.union([ci_.load_path(os.path.join(m["snapshot"], "state", ci_.FILE))
+                                      for m in marks[-a.steps + 1:] if a.steps > 1] + [now_box])
         pre = co.snapshot(c.store, c.copies, c.home, "pre-undo", notes=keep or None)
         skipped = co.restore(target, c.store, c.copies)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
@@ -894,6 +980,12 @@ def cmd_undo(a, c):
             cbr.keep_ours(sctx, c.store, items, now()[:10], previous=previous, reverted=notes_back)   # ours stays ours
         if notes_back:
             print("повернуто нотаток: %d" % len(notes_back))
+        for m in reversed(marks[-a.steps:]):             # since v3.21.0: an import of old backups — the originals back
+            if m.get("op") == "snapshot-import":
+                back, kept_b = cbk.revert([x for x in (m.get("moves") or []) if isinstance(x, dict)], c.home)
+                print("повернуто бекапів: %d" % len(back))
+                for path, why in kept_b:
+                    print("бекап не повернуто: %s — %s" % (path, why))
         for rel, why in notes_kept:
             print("не повернуто: %s — %s" % (rel, why))
         reverted, kept, rejected, rejected_failed = [], [], {}, {}
@@ -904,6 +996,13 @@ def cmd_undo(a, c):
             # a sync pass taken back stays taken back: the core's texts it applied are remembered as rejected in the
             # block state — after the restore, which brought that state back to what it was before the pass
             rejected, rejected_failed = remember_rejected(c.store, rejections)
+            if inbox_before is not None:                # proposals are no undo steps: the later ones stay in the inbox
+                try:
+                    mem = ci_.load(c.store)
+                    if ci_.merge_back(mem, inbox_before, later):
+                        ci_.save(c.store, mem, t[:10])
+                except cs.StoreError as e:
+                    print("скриньку не відновлено: %s — ctx inbox list" % e)
             # an import's snapshot holds the copies as they were on disk then — already edited; rebuild them
             # from the restored records so the edit is undone and nothing waits to be imported again. A compile's
             # own snapshot (a mirror created or rewritten) is the one case whose copies must stay as restored.
@@ -935,6 +1034,17 @@ def cmd_undo(a, c):
 
 def cmd_validate(a, c):
     c.need_store()
+    errors, warnings, proposals = _validate(c)
+    for e in errors:
+        print("error: " + e)
+    for w in warnings:
+        print("warning: " + w)
+    print("valid" if not errors else "%d error(s)" % len(errors))
+    return (3 if errors else 0), {"command": "validate", "errors": errors, "warnings": warnings, "slot_proposals": proposals}
+
+
+def _validate(c):
+    """(errors, warnings, slot proposals) of the store — what `validate` prints and `health` counts. Reads only."""
     errors, warnings = [], []
     try:
         recs = c.store.load()
@@ -952,6 +1062,12 @@ def cmd_validate(a, c):
             warnings.append("%s: verified %r is not a date — the store's freshness date applies" % (r["id"], r.get("verified")))
         if r.get("ttl_days") is not None and not str(r.get("ttl_days")).strip().isdigit():
             warnings.append("%s: ttl_days %r is not a whole number — the type's default applies" % (r["id"], r.get("ttl_days")))
+        own = r["body"]
+        for lo, hi in reversed(cc.managed_spans(own)):  # a provider's block is not yours to clean
+            own = own[:lo] + own[hi:]
+        kinds = cn.scan(own)
+        if kinds:                                       # since v3.21.0: your own text may hold one — said, not refused
+            warnings.append("%s: %s" % (r["id"], cn.warning(kinds)))
         if sc.is_stale(r, state, now()[:10]):
             warnings.append("stale: %s (verified %s, TTL %s d) — ctx verify %s" % (r["id"], sc.verified_of(r, state), sc.ttl_of(r), r["id"]))
     for name in valid:
@@ -1004,12 +1120,75 @@ def cmd_validate(a, c):
         slot_errors, slot_warnings, proposals = rv.validate_slots(c.store, c.copies, repos, skipped, now())
         errors += slot_errors
         warnings += slot_warnings
-    for e in errors:
-        print("error: " + e)
-    for w in warnings:
-        print("warning: " + w)
-    print("valid" if not errors else "%d error(s)" % len(errors))
-    return (3 if errors else 0), {"command": "validate", "errors": errors, "warnings": warnings, "slot_proposals": proposals}
+    return errors, warnings, proposals
+
+
+# ---------------------------------------------------------------------- show and health (since v3.21.0)
+def cmd_show(a, c):
+    """`show [ID …] [--json]`: what the plugin knows about you — one line a record (who wrote it last, when, verified,
+    stale or no longer current, who reads it), the repositories' blocks, your answers and the inbox; with ids, those
+    records' text too. Reads only: no lock, no network, nothing written."""
+    c.need_store()
+    today = now()[:10]
+    rows = csh.records(c.store, today)
+    want = set(a.ids or [])
+    unknown = sorted(want - {r["id"] for r in rows})
+    if unknown:
+        raise cs.StoreError("no record %s — `ctx list` shows the ids" % ", ".join(unknown))
+    for r in rows:
+        if want and r["id"] not in want:
+            continue
+        marks = [m for m, on in (("застаріле", r["stale"]), ("неактуальне", r["invalid"])) if on]
+        print("%s — %s · писав %s %s · перевірено %s%s%s%s" % (
+            r["id"], r["title"], r["source"], r["modified"], r["verified"], (" (TTL %s дн)" % r["ttl"]) if r["ttl"] else "",
+            (" · читає: %s" % r["read_by"]) if r["read_by"] else "", (" · " + ", ".join(marks)) if marks else ""))
+        if want:
+            print(_record(c, r["id"])["body"].rstrip("\n"))
+            print()
+    repo_rows = csh.repos(c.text, c.home, c.store)
+    mem = csh.memories(c.store, today)
+    try:
+        waiting = sum(co.pending(co.plan_sync(c.store, c.copies)).values())
+    except cs.StoreError:
+        waiting = 0
+    if waiting:
+        print("правок у local-context.md чекає імпорту: %d — тут ще без них; ctx sync" % waiting)
+    if not want:
+        for r in repo_rows:
+            print("репозиторій %s: блоків %s · версія %s · перевірено %s" % (
+                r["id"], r["blocks"] or "—", r["version"] or "—", r["checked"] or "—"))
+        ib = mem.get("inbox")
+        print("твої відповіді: слоти %s · same/not-same %s · пошук %s · мости %s · скринька %s" % (
+            mem.get("slots"), mem.get("entities"), mem.get("search"), mem.get("bridges"),
+            ib if isinstance(ib, str) else "%d (термінових %d)" % (ib["entries"], ib["urgent"])))
+    return 0, {"command": "show", "records": [r for r in rows if not want or r["id"] in want], "repos": repo_rows,
+               "memories": mem}
+
+
+def cmd_health(a, c):
+    """`health [--json]`: what wants looking after, one line each — ✅ fine · ⚠ worth a look · ✋ do something — with the
+    command that fixes it. Reads only: no lock, no network, nothing written; the copies outside the snapshots by stat alone
+    (a backup iCloud evicted is never brought down). Exit 0."""
+    c.need_store()
+    today = now()[:10]
+    try:                                                # a record that does not parse is health's first error, not a crash
+        errors, warnings, _ = _validate(c)
+        recs = csh.records(c.store, today)
+        plan = co.plan_sync(c.store, c.copies)
+    except cs.StoreError as e:
+        errors, warnings, recs, plan = [str(e)], [], [], {"conflicts": [], "missing": [], "unread": True}
+    skipped = []
+    repo_rows = csh.repos(c.text, c.home, c.store, skipped=skipped)
+    lines = csh.health(recs, csh.memories(c.store, today), repo_rows,
+                       sum(co.pending(plan).values()) if not plan.get("unread") else 0, len(plan["conflicts"]),
+                       len(plan["missing"]),
+                       len(c.store.stray_files()), warnings, errors, csh.index_state(c.home), csh.snapshots(c.home),
+                       csh.backups(c.home, c.context, c.text), today, unread_regs=skipped)
+    for level, text, fix in lines:
+        print("%s %s%s" % (csh.MARK[level], text, (" — " + fix) if fix else ""))
+    n = {k: sum(1 for l in lines if l[0] == k) for k in (csh.OK, csh.WARN, csh.ACT)}
+    return 0, {"command": "health", "lines": [{"level": l, "text": t, "fix": f} for l, t, f in lines],
+               "counts": n}
 
 
 def cmd_card(a, c):
@@ -2081,6 +2260,175 @@ def cmd_provider(a, c):
     raise Usage("provider takes adopt, plan, apply or sync")
 
 
+# ---------------------------------------------------------------------- the inbox (since v3.21.0)
+NO_STORE_INBOX = "немає сховища — скринька живе у сховищі; скіл питає «Зберегти?», як у Context Enrichment"
+
+
+def _deltas(a):
+    """The deltas of `propose`: each --delta (an object or a list), then --file's (the same)."""
+    out = []
+    for raw in list(a.delta or []) + ([co._read(a.file)] if a.file else []):
+        try:
+            v = json.loads(raw)
+        except ValueError as e:
+            raise Usage("a delta is JSON: %s" % e)
+        out.extend(v if isinstance(v, list) else [v])
+    if not out:
+        raise Usage("propose takes --delta JSON or --file F")
+    return out
+
+
+def _inbox_line(mem, recs):
+    n = ci_.counts(mem, now()[:10])
+    return "у скриньці %d%s — /context inbox" % (n["entries"], (" (термінових %d)" % n["urgent"]) if n["urgent"] else "")
+
+
+def cmd_propose(a, c):
+    """`propose --skill S (--delta JSON | --file F)`: the deltas into the inbox (`.state/inbox.json`). The lock, the
+    guard, the inbox read (one that cannot be read stops the run before anything is imported), the edits waiting
+    imported, the inbox written, one journal line {op propose, skill, sigs} — no snapshot (plan C4: a skill's every run
+    would rotate real ones out); `ctx inbox reject` takes a proposal back, and `ctx undo` of any change keeps the
+    entries proposed after it. Exit 4 when a delta held what the store never keeps, 3 when one was malformed or named
+    no record — the others are kept either way. No store: exit 3."""
+    raws = _deltas(a)
+    try:
+        a.skill = ci_.skill_name(a.skill)
+    except ValueError as e:
+        raise Usage(str(e))
+    if a.skill not in (cr.load_manifest().get("skills") or {}):     # a name the plugin does not know is no skill's
+        raise Usage("--skill names one of the plugin's skills (references/context-manifest.yaml), not %s"
+                    % ("that" if cn.scan(a.skill) else a.skill))
+    out = {"command": "propose", "skill": a.skill, "results": [], "added": [], "urgent": [], "code": None}
+    if not c.store.exists():
+        print(NO_STORE_INBOX)
+        return 3, dict(out, error=NO_STORE_INBOX)
+    with co.lock(c.home):
+        c.guard()
+        mem = ci_.load(c.store)
+        c.import_first()
+        recs = c.store.load()
+        today = now()[:10]
+        res = ci_.propose(mem, raws, a.skill, recs, today)
+        new = [r for r in res if r["status"] in (ci_.ADDED, ci_.MERGED)]
+        if new:
+            ci_.save(c.store, mem, today)
+            c.store.journal({"ts": now(), "op": "propose", "skill": a.skill, "ids": sorted({r["record"] for r in new}),
+                             "sigs": [e["sig"] for e in mem["entries"] if e["n"] in {r["n"] for r in new}],
+                             "source": "ctx-propose"})
+        out.update(results=res, added=[r["n"] for r in res if r["status"] == ci_.ADDED],
+                   urgent=sorted({r["n"] for r in new if r.get("urgent")}), code=ci_.code(mem, recs),
+                   noop=sum(1 for r in res if r["status"] == ci_.NOOP), inbox=ci_.counts(mem, today))
+    for i, r in enumerate(res, 1):
+        if r["status"] in (ci_.REFUSED, ci_.SECRET, ci_.BLOCK):
+            print("дельта %d: %s" % (i, r["why"]))
+    added = len(out["added"])
+    if new:
+        print("у скриньці +%d (усього %d)%s — /context inbox" % (
+            added, out["inbox"]["entries"], (" · термінові №%s — запитай зараз, код %s" % (
+                ", ".join(map(str, out["urgent"])), out["code"])) if out["urgent"] else ""))
+    else:
+        print("нічого нового для скриньки")
+    rc = 4 if any(r["status"] in (ci_.SECRET, ci_.BLOCK) for r in res) else \
+        3 if any(r["status"] == ci_.REFUSED for r in res) else 0
+    return rc, out
+
+
+def _inbox_code(c, mem, recs, given):
+    if not given:
+        raise Usage("accept і reject беруть --code з ctx inbox list")
+    if given != ci_.code(mem, recs):
+        raise co.Refused("скринька змінилась — переглянь ще раз: ctx inbox list")
+
+
+def cmd_inbox(a, c):
+    out = {"command": "inbox", "action": a.action}
+    if not c.store.exists():
+        print(NO_STORE_INBOX)
+        return 3, dict(out, error=NO_STORE_INBOX)
+    today = now()[:10]
+    if a.action == "list":
+        mem, recs = ci_.load(c.store), c.store.load()
+        lines = ci_.render(mem, recs, today)
+        for l in lines:
+            print(l)
+        cd = ci_.code(mem, recs)
+        print("скринька порожня" if not lines else "код: %s" % cd)
+        return 0, dict(out, entries=[dict(e, moved=ci_.moved(e, recs)) for e in mem["entries"]],
+                       clashes=sorted(ci_.clashes(mem)), code=cd, inbox=ci_.counts(mem, today))
+    with co.lock(c.home):
+        c.guard()
+        mem = ci_.load(c.store)
+        recs = c.store.load()
+        _inbox_code(c, mem, recs, a.code)        # what was shown, before anything is imported
+        try:
+            chosen = ci_.pick(mem, a.which)
+        except ValueError as e:
+            raise Usage(str(e))
+        c.import_first()
+        recs = c.store.load()
+        if a.action == "reject":
+            snap = co.snapshot(c.store, c.copies, c.home, "inbox-reject")
+            ci_.reject(mem, chosen, today, a.reason or "")
+            ci_.save(c.store, mem, today)
+            c.store.journal({"ts": now(), "op": "inbox-reject", "ids": [], "sigs": [e["sig"] for e in chosen],
+                             "source": "ctx-inbox", "reason": a.reason or "", "snapshot": snap})
+            print("відхилено: №%s · %s (back: ctx undo)" % (", ".join(str(e["n"]) for e in chosen), _inbox_line(mem, recs)))
+            return 0, dict(out, rejected=[e["n"] for e in chosen], snapshot=snap, inbox=ci_.counts(mem, today))
+        by_id = {r["id"]: r for r in recs}
+        plan, done, held, gone = {}, [], [], []
+        pairs = {}
+        for e in chosen:
+            if e["delta"]["op"] == "UPDATE":
+                pairs.setdefault((e["delta"]["record"], e["delta"]["field"]), []).append(e)
+        twice = {e["n"] for group in pairs.values() if len({x["delta"]["value"] for x in group}) > 1 for e in group}
+        for e in chosen:
+            d = e["delta"]
+            if e["n"] in twice:
+                held.append((e, "два значення для одного поля — прийми одне номером"))
+                continue
+            try:
+                cn.check(*ci_.texts(d))
+            except cn.NeverStore as err:
+                held.append((e, str(err)))
+                continue
+            rec = plan.get(d["record"]) or by_id.get(d["record"])
+            if rec is None:
+                gone.append((e, "запис зник"))
+                continue
+            if d["op"] == "UPDATE":
+                now_v = cs.field_get(rec["body"], d["field"])
+                if now_v not in (e["was"], d["value"]):
+                    held.append((e, "поле змінилось: було «%s», тепер «%s»" % (e["was"] or "—", now_v or "—")))
+                    continue
+            try:
+                body = ci_.apply_to(d, rec, today)
+            except (cs.RegionError, ValueError) as err:
+                held.append((e, str(err) if isinstance(err, ValueError) else "це блок ядра"))
+                continue
+            if body != rec["body"]:
+                plan[d["record"]] = dict(rec, body=body, source="inbox:%s" % e["skills"][0], modified=now())
+            done.append(e)
+        snap, written = None, []
+        if done or gone:
+            snap = co.snapshot(c.store, c.copies, c.home, "inbox-accept")
+            t = now()
+            for rec in plan.values():
+                c.store.write(co.touch(rec, t))
+            c.store.journal({"ts": t, "op": "inbox-accept", "ids": sorted(plan), "sigs": [e["sig"] for e in done],
+                             "source": "ctx-inbox", "reason": "", "snapshot": snap})     # right after the records: undo finds it
+            ci_.take(mem, done + [e for e, _ in gone])  # a record gone is no rejection: after a restore it may come back
+            ci_.save(c.store, mem, today)
+            if plan:
+                written = co.compile_store(c.store, c.copies, t, c.home, snap)["written"]
+    for e, why in held + gone:
+        print("№%d не прийнято: %s" % (e["n"], why))
+    print("прийнято: %s · %s%s" % (", ".join("№%d" % e["n"] for e in done) or "нічого", _inbox_line(mem, recs),
+                                   " (back: ctx undo)" if snap else ""))
+    return 0, dict(out, accepted=[e["n"] for e in done], held=[e["n"] for e, _ in held],
+                   gone=[e["n"] for e, _ in gone], ids=sorted(plan), snapshot=snap, written=written,
+                   inbox=ci_.counts(mem, today))
+
+
 # ---------------------------------------------------------------------- main
 def build_parser():
     common = Parser(add_help=False)
@@ -2117,9 +2465,19 @@ def build_parser():
     sp = sub.add_parser("add", parents=[common]); sp.add_argument("type"); sp.add_argument("title")
     sp.add_argument("--parent"); sp.add_argument("--after"); sp.add_argument("--body-file")
     sp.add_argument("--source"); sp.add_argument("--reason")
-    sp = sub.add_parser("snapshot", parents=[common]); sp.add_argument("--label")
+    sp = sub.add_parser("snapshot", parents=[common]); sp.add_argument("action", nargs="?", choices=["import"])
+    sp.add_argument("--label"); sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
+    sp = sub.add_parser("propose", parents=[common]); sp.add_argument("--skill", required=True)
+    sp.add_argument("--delta", action="append"); sp.add_argument("--file")
+    xp = sub.add_parser("inbox").add_subparsers(dest="action", required=True, parser_class=Parser)
+    sp = xp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
+    for act in ("accept", "reject"):
+        sp = xp.add_parser(act, parents=[common]); sp.add_argument("which", nargs="+"); sp.add_argument("--code")
+        sp.add_argument("--reason")
     sp = sub.add_parser("undo", parents=[common]); sp.add_argument("--steps", type=int, default=1)
     sub.add_parser("validate", parents=[common])
+    sp = sub.add_parser("show", parents=[common]); sp.add_argument("ids", nargs="*"); sp.add_argument("--json", action="store_true")
+    sp = sub.add_parser("health", parents=[common]); sp.add_argument("--json", action="store_true")
     sub.add_parser("card", parents=[common])
     rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
@@ -2163,7 +2521,8 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
-            "index": cmd_index, "search": cmd_search, "entity": cmd_entity}
+            "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
+            "inbox": cmd_inbox}
 
 
 def emit(result, conflict=None):
@@ -2180,6 +2539,10 @@ def main(argv=None):
         emit({"ok": False, "error": str(e)})
         return 3
     try:
+        if writes(a):                                   # since v3.21.0: no free text a write keeps may hold a secret
+            cn.check(*_free_text(a))
+            if a.cmd == "set":                          # «API key: abcd…» is a secret only read together
+                cn.check("%s: %s" % (a.field, a.value))
         c = Ctx(a)
         with cs.guard_roots(co.allowed_roots(c.home, c.text)):
             rc, res = COMMANDS[a.cmd](a, c)
@@ -2195,7 +2558,7 @@ def main(argv=None):
         print("ctx: %s" % e)
         emit({"ok": False, "command": a.cmd, "error": str(e)}, conflict=e.payload)
         return 2
-    except (co.Refused, co.Busy, cs.RegionError, cs.PathRefused) as e:
+    except (co.Refused, co.Busy, cs.RegionError, cs.PathRefused, cn.NeverStore) as e:
         print("ctx: refused — %s" % e)
         emit({"ok": False, "command": a.cmd, "error": str(e)})
         return 4

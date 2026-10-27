@@ -193,6 +193,8 @@ Every skill carries a three-line block that points here; its first line is alway
 
 ## Context Enrichment
 
+**With a context store and SHELL (since v3.21.0)** a skill does not ask here: what it learned becomes a delta of the inbox at the end of its run — urgent ones asked at once in one question, the rest one line `У скриньці +N` — `references/context-protocol.md` §5i. The People contour proposes nothing. What follows is the way **without a store or without SHELL**, and for what the user asked to remember in so many words (then `ctx set` / `ctx append` at once with a store). Never save a secret, a state or financial identifier, or a person's health, religion, politics or family matters (`references/data-policy.md`).
+
 During execution, skills may discover new information that should be saved to `local-context.md`. When this happens:
 
 1. Inform the user: "I found new information: [description]. Would you like to save it to the plugin context?"

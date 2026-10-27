@@ -2575,7 +2575,7 @@ NAV = read(ROOT, "skills", "context-navigator", "SKILL.md")
 NAV_FM = NAV.split("\n---", 1)[0]
 check("v3.17.0: context-navigator 0.3.0 searches your whole context — the description says so, a missing shared core is "
       "one line and the search goes on, §13 and the «Де шукав» line are named",
-      ("version: 0.3.0" in NAV_FM or "version: 0.3.1" in NAV_FM or "version: 0.3.2" in NAV_FM or "version: 0.4.0" in NAV_FM) and "знайди в моєму контексті" in NAV_FM and len(NAV_FM.split("description: ", 1)[-1].split("\n")[0]) <= 400
+      ("version: 0.3.0" in NAV_FM or "version: 0.3.1" in NAV_FM or "version: 0.3.2" in NAV_FM or "version: 0.4.0" in NAV_FM or "version: 0.4.1" in NAV_FM) and "знайди в моєму контексті" in NAV_FM and len(NAV_FM.split("description: ", 1)[-1].split("\n")[0]) <= 400
       and "`Спільне ядро не підключене — шукаю у твоїй базі`" in NAV and "§13" in NAV and "`Де шукав: …`" in NAV
       and "None → say that no shared context is connected and offer `context-connect`; never invent" not in NAV)
 

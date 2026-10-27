@@ -99,6 +99,8 @@ A `slot binding:` warning (a binding that does nothing, a block that cannot be g
 ## Skill Chaining
 → `plugin-configurator` (Validate / Update after a new context; the provider row in Validate; the same slot package — unconfirmed bindings and divergences — in Validate) · → `context-navigator` (answers from the provider's graph) · → `task-creator` (writes only into the project the Jira write scope names).
 
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
 ## Routing
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0 and with the daily-sync phrases of v3.14.0:

@@ -67,6 +67,7 @@ These need FS. On a host without it, the skill says so in one line and stops ins
 - the whole People contour (`one-on-one`, `performance-review`, `delegation-coach`, `offboarding-guide`, `hiring-designer`) → person profiles are strictly local by `people-context-protocol.md`
 - `template-library`, `knowledge-library` → local library and glossary
 - `ctx entity apply` (`context-navigator`, since v3.20.0) → writes bridges into the user's notes with a snapshot and `ctx undo`; it needs FS and SHELL — never written by hand in its place
+- The inbox, `ctx show`, `ctx health`, `ctx snapshot import` (since v3.21.0, `context-protocol.md` §5i–§5j) → need FS and SHELL with a store; without them a skill asks «Знайшов нове: … Зберегти?» as before and edits `local-context.md` on «так» (`local-context-protocol.md` → Context Enrichment), and `/grow-product-manager:context` says in one line that it needs the store
 
 Read-only modes of these skills still work when the user pastes the data into the session.
 
