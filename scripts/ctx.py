@@ -318,6 +318,7 @@ import ctx_common as cc  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
+import ctx_inbox as ci_  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_never as cn  # noqa: E402
 import ctx_store as cs  # noqa: E402
@@ -350,6 +351,8 @@ def writes(a):
     if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) in ("apply", "sync")):
         return True
     if a.cmd == "search" and getattr(a, "action", None) in ("remember", "forget"):
+        return True
+    if a.cmd == "propose" or (a.cmd == "inbox" and getattr(a, "action", None) in ("accept", "reject")):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
@@ -884,6 +887,13 @@ def cmd_undo(a, c):
                 previous = cbr.load_ledger(c.store)     # our lines before the restore: a renamed note keeps them ours
             except cs.StoreError:
                 previous = None
+        entries = c.store.journal_entries()
+        at = max((i for i, e in enumerate(entries) if e.get("snapshot") == target), default=len(entries))
+        later = {s for e in entries[at + 1:] if e.get("op") == "propose" for s in (e.get("sigs") or [])}
+        try:                                            # since v3.21.0: what skills proposed after the change undone
+            inbox_before = ci_.load(c.store) if later else None
+        except cs.StoreError:
+            inbox_before = None
         pre = co.snapshot(c.store, c.copies, c.home, "pre-undo", notes=keep or None)
         skipped = co.restore(target, c.store, c.copies)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
@@ -908,6 +918,13 @@ def cmd_undo(a, c):
             # a sync pass taken back stays taken back: the core's texts it applied are remembered as rejected in the
             # block state — after the restore, which brought that state back to what it was before the pass
             rejected, rejected_failed = remember_rejected(c.store, rejections)
+            if inbox_before is not None:                # proposals are no undo steps: the later ones stay in the inbox
+                try:
+                    mem = ci_.load(c.store)
+                    if ci_.merge_back(mem, inbox_before, later):
+                        ci_.save(c.store, mem, t[:10])
+                except cs.StoreError as e:
+                    print("скриньку не відновлено: %s — ctx inbox list" % e)
             # an import's snapshot holds the copies as they were on disk then — already edited; rebuild them
             # from the restored records so the edit is undone and nothing waits to be imported again. A compile's
             # own snapshot (a mirror created or rewritten) is the one case whose copies must stay as restored.
@@ -2089,6 +2106,155 @@ def cmd_provider(a, c):
     raise Usage("provider takes adopt, plan, apply or sync")
 
 
+# ---------------------------------------------------------------------- the inbox (since v3.21.0)
+NO_STORE_INBOX = "немає сховища — скринька живе у сховищі; скіл питає «Зберегти?», як у Context Enrichment"
+
+
+def _deltas(a):
+    """The deltas of `propose`: each --delta (an object or a list), then --file's (the same)."""
+    out = []
+    for raw in list(a.delta or []) + ([co._read(a.file)] if a.file else []):
+        try:
+            v = json.loads(raw)
+        except ValueError as e:
+            raise Usage("a delta is JSON: %s" % e)
+        out.extend(v if isinstance(v, list) else [v])
+    if not out:
+        raise Usage("propose takes --delta JSON or --file F")
+    return out
+
+
+def _inbox_line(mem, recs):
+    n = ci_.counts(mem, now()[:10])
+    return "у скриньці %d%s — /context inbox" % (n["entries"], (" (термінових %d)" % n["urgent"]) if n["urgent"] else "")
+
+
+def cmd_propose(a, c):
+    """`propose --skill S (--delta JSON | --file F)`: the deltas into the inbox (`.state/inbox.json`). The lock, the
+    guard, the inbox read (one that cannot be read stops the run before anything is imported), the edits waiting
+    imported, the inbox written, one journal line {op propose, skill, sigs} — no snapshot (plan C4: a skill's every run
+    would rotate real ones out); `ctx inbox reject` takes a proposal back, and `ctx undo` of any change keeps the
+    entries proposed after it. Exit 4 when a delta held what the store never keeps, 3 when one was malformed or named
+    no record — the others are kept either way. No store: exit 3."""
+    raws = _deltas(a)
+    out = {"command": "propose", "skill": a.skill, "results": [], "added": [], "urgent": [], "code": None}
+    if not c.store.exists():
+        print(NO_STORE_INBOX)
+        return 3, dict(out, error=NO_STORE_INBOX)
+    with co.lock(c.home):
+        c.guard()
+        mem = ci_.load(c.store)
+        c.import_first()
+        recs = c.store.load()
+        today = now()[:10]
+        res = ci_.propose(mem, raws, a.skill, recs, today)
+        new = [r for r in res if r["status"] in (ci_.ADDED, ci_.MERGED)]
+        if new:
+            ci_.save(c.store, mem, today)
+            c.store.journal({"ts": now(), "op": "propose", "skill": a.skill, "ids": sorted({r["record"] for r in new}),
+                             "sigs": [e["sig"] for e in mem["entries"] if e["n"] in {r["n"] for r in new}],
+                             "source": "ctx-propose"})
+        out.update(results=res, added=[r["n"] for r in res if r["status"] == ci_.ADDED],
+                   urgent=sorted({r["n"] for r in new if r.get("urgent")}), code=ci_.code(mem, recs),
+                   noop=sum(1 for r in res if r["status"] == ci_.NOOP), inbox=ci_.counts(mem, today))
+    for i, r in enumerate(res, 1):
+        if r["status"] in (ci_.REFUSED, ci_.SECRET):
+            print("дельта %d: %s" % (i, r["why"]))
+    added = len(out["added"])
+    if new:
+        print("у скриньці +%d (усього %d)%s — /context inbox" % (
+            added, out["inbox"]["entries"], (" · термінові №%s — запитай зараз, код %s" % (
+                ", ".join(map(str, out["urgent"])), out["code"])) if out["urgent"] else ""))
+    else:
+        print("нічого нового для скриньки")
+    rc = 4 if any(r["status"] == ci_.SECRET for r in res) else 3 if any(r["status"] == ci_.REFUSED for r in res) else 0
+    return rc, out
+
+
+def _inbox_code(c, mem, recs, given):
+    if not given:
+        raise Usage("accept і reject беруть --code з ctx inbox list")
+    if given != ci_.code(mem, recs):
+        raise co.Refused("скринька змінилась — переглянь ще раз: ctx inbox list")
+
+
+def cmd_inbox(a, c):
+    out = {"command": "inbox", "action": a.action}
+    if not c.store.exists():
+        print(NO_STORE_INBOX)
+        return 3, dict(out, error=NO_STORE_INBOX)
+    today = now()[:10]
+    if a.action == "list":
+        mem, recs = ci_.load(c.store), c.store.load()
+        lines = ci_.render(mem, recs, today)
+        for l in lines:
+            print(l)
+        cd = ci_.code(mem, recs)
+        print("скринька порожня" if not lines else "код: %s" % cd)
+        return 0, dict(out, entries=[dict(e, moved=ci_.moved(e, recs)) for e in mem["entries"]],
+                       clashes=sorted(ci_.clashes(mem)), code=cd, inbox=ci_.counts(mem, today))
+    with co.lock(c.home):
+        c.guard()
+        mem = ci_.load(c.store)
+        recs = c.store.load()
+        _inbox_code(c, mem, recs, a.code)        # what was shown, before anything is imported
+        try:
+            chosen = ci_.pick(mem, a.which)
+        except ValueError as e:
+            raise Usage(str(e))
+        c.import_first()
+        recs = c.store.load()
+        if a.action == "reject":
+            snap = co.snapshot(c.store, c.copies, c.home, "inbox-reject")
+            ci_.reject(mem, chosen, today, a.reason or "")
+            ci_.save(c.store, mem, today)
+            c.store.journal({"ts": now(), "op": "inbox-reject", "ids": [], "sigs": [e["sig"] for e in chosen],
+                             "source": "ctx-inbox", "reason": a.reason or "", "snapshot": snap})
+            print("відхилено: №%s · %s (back: ctx undo)" % (", ".join(str(e["n"]) for e in chosen), _inbox_line(mem, recs)))
+            return 0, dict(out, rejected=[e["n"] for e in chosen], snapshot=snap, inbox=ci_.counts(mem, today))
+        by_id = {r["id"]: r for r in recs}
+        plan, done, held, gone = {}, [], [], []
+        for e in chosen:
+            d = e["delta"]
+            rec = plan.get(d["record"]) or by_id.get(d["record"])
+            if rec is None:
+                gone.append((e, "запис зник"))
+                continue
+            if d["op"] == "UPDATE":
+                now_v = cs.field_get(rec["body"], d["field"])
+                if now_v not in (e["was"], d["value"]):
+                    held.append((e, "поле змінилось: було «%s», тепер «%s»" % (e["was"] or "—", now_v or "—")))
+                    continue
+            try:
+                body = ci_.apply_to(d, rec, today)
+            except (cs.RegionError, ValueError) as err:
+                held.append((e, str(err) if isinstance(err, ValueError) else "це блок ядра"))
+                continue
+            if body != rec["body"]:
+                plan[d["record"]] = dict(rec, body=body, source="inbox:%s" % e["skills"][0], modified=now())
+            done.append(e)
+        snap, written = None, []
+        if done or gone:
+            snap = co.snapshot(c.store, c.copies, c.home, "inbox-accept")
+            t = now()
+            for rec in plan.values():
+                c.store.write(co.touch(rec, t))
+            ci_.take(mem, done)
+            ci_.reject(mem, [e for e, _ in gone], today, "запис зник")
+            ci_.save(c.store, mem, today)
+            c.store.journal({"ts": t, "op": "inbox-accept", "ids": sorted(plan), "sigs": [e["sig"] for e in done],
+                             "source": "ctx-inbox", "reason": "", "snapshot": snap})
+            if plan:
+                written = co.compile_store(c.store, c.copies, t, c.home, snap)["written"]
+    for e, why in held + gone:
+        print("№%d не прийнято: %s" % (e["n"], why))
+    print("прийнято: %s · %s%s" % (", ".join("№%d" % e["n"] for e in done) or "нічого", _inbox_line(mem, recs),
+                                   " (back: ctx undo)" if snap else ""))
+    return 0, dict(out, accepted=[e["n"] for e in done], held=[e["n"] for e, _ in held],
+                   gone=[e["n"] for e, _ in gone], ids=sorted(plan), snapshot=snap, written=written,
+                   inbox=ci_.counts(mem, today))
+
+
 # ---------------------------------------------------------------------- main
 def build_parser():
     common = Parser(add_help=False)
@@ -2126,6 +2292,13 @@ def build_parser():
     sp.add_argument("--parent"); sp.add_argument("--after"); sp.add_argument("--body-file")
     sp.add_argument("--source"); sp.add_argument("--reason")
     sp = sub.add_parser("snapshot", parents=[common]); sp.add_argument("--label")
+    sp = sub.add_parser("propose", parents=[common]); sp.add_argument("--skill", required=True)
+    sp.add_argument("--delta", action="append"); sp.add_argument("--file")
+    xp = sub.add_parser("inbox").add_subparsers(dest="action", required=True, parser_class=Parser)
+    sp = xp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
+    for act in ("accept", "reject"):
+        sp = xp.add_parser(act, parents=[common]); sp.add_argument("which", nargs="+"); sp.add_argument("--code")
+        sp.add_argument("--reason")
     sp = sub.add_parser("undo", parents=[common]); sp.add_argument("--steps", type=int, default=1)
     sub.add_parser("validate", parents=[common])
     sub.add_parser("card", parents=[common])
@@ -2171,7 +2344,8 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
-            "index": cmd_index, "search": cmd_search, "entity": cmd_entity}
+            "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose,
+            "inbox": cmd_inbox}
 
 
 def emit(result, conflict=None):
