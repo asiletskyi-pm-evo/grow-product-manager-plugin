@@ -951,10 +951,15 @@ def cmd_undo(a, c):
         entries = c.store.journal_entries()
         at = max((i for i, e in enumerate(entries) if e.get("snapshot") == target), default=len(entries))
         later = {s for e in entries[at + 1:] if e.get("op") == "propose" for s in (e.get("sigs") or [])}
-        try:                                            # since v3.21.0: what skills proposed after the change undone
-            inbox_before = ci_.load(c.store) if later else None
-        except cs.StoreError:
-            inbox_before = None
+        inbox_before = None
+        if later:                                       # since v3.21.0: what skills proposed after the change undone —
+            try:                                        # in the inbox now, or in a later change's snapshot when it was
+                now_box = ci_.load(c.store)             # taken or rejected inside the span undone
+            except cs.StoreError as e:
+                now_box = None
+                print("скринька не читається: %s — пропозиції після цієї зміни лишаються лише в знімку pre-undo" % e)
+            inbox_before = ci_.union([ci_.load_path(os.path.join(m["snapshot"], "state", ci_.FILE))
+                                      for m in marks[-a.steps + 1:] if a.steps > 1] + [now_box])
         pre = co.snapshot(c.store, c.copies, c.home, "pre-undo", notes=keep or None)
         skipped = co.restore(target, c.store, c.copies)
         with open(os.path.join(target, "manifest.json"), encoding="utf-8") as f:
@@ -2270,6 +2275,10 @@ def cmd_propose(a, c):
     entries proposed after it. Exit 4 when a delta held what the store never keeps, 3 when one was malformed or named
     no record — the others are kept either way. No store: exit 3."""
     raws = _deltas(a)
+    try:
+        a.skill = ci_.skill_name(a.skill)
+    except ValueError as e:
+        raise Usage(str(e))
     out = {"command": "propose", "skill": a.skill, "results": [], "added": [], "urgent": [], "code": None}
     if not c.store.exists():
         print(NO_STORE_INBOX)
@@ -2291,7 +2300,7 @@ def cmd_propose(a, c):
                    urgent=sorted({r["n"] for r in new if r.get("urgent")}), code=ci_.code(mem, recs),
                    noop=sum(1 for r in res if r["status"] == ci_.NOOP), inbox=ci_.counts(mem, today))
     for i, r in enumerate(res, 1):
-        if r["status"] in (ci_.REFUSED, ci_.SECRET):
+        if r["status"] in (ci_.REFUSED, ci_.SECRET, ci_.BLOCK):
             print("дельта %d: %s" % (i, r["why"]))
     added = len(out["added"])
     if new:
@@ -2300,7 +2309,8 @@ def cmd_propose(a, c):
                 ", ".join(map(str, out["urgent"])), out["code"])) if out["urgent"] else ""))
     else:
         print("нічого нового для скриньки")
-    rc = 4 if any(r["status"] == ci_.SECRET for r in res) else 3 if any(r["status"] == ci_.REFUSED for r in res) else 0
+    rc = 4 if any(r["status"] in (ci_.SECRET, ci_.BLOCK) for r in res) else \
+        3 if any(r["status"] == ci_.REFUSED for r in res) else 0
     return rc, out
 
 
@@ -2347,8 +2357,21 @@ def cmd_inbox(a, c):
             return 0, dict(out, rejected=[e["n"] for e in chosen], snapshot=snap, inbox=ci_.counts(mem, today))
         by_id = {r["id"]: r for r in recs}
         plan, done, held, gone = {}, [], [], []
+        pairs = {}
+        for e in chosen:
+            if e["delta"]["op"] == "UPDATE":
+                pairs.setdefault((e["delta"]["record"], e["delta"]["field"]), []).append(e)
+        twice = {e["n"] for group in pairs.values() if len({x["delta"]["value"] for x in group}) > 1 for e in group}
         for e in chosen:
             d = e["delta"]
+            if e["n"] in twice:
+                held.append((e, "два значення для одного поля — прийми одне номером"))
+                continue
+            try:
+                cn.check(*ci_.texts(d))
+            except cn.NeverStore as err:
+                held.append((e, str(err)))
+                continue
             rec = plan.get(d["record"]) or by_id.get(d["record"])
             if rec is None:
                 gone.append((e, "запис зник"))
@@ -2372,11 +2395,10 @@ def cmd_inbox(a, c):
             t = now()
             for rec in plan.values():
                 c.store.write(co.touch(rec, t))
-            ci_.take(mem, done)
-            ci_.reject(mem, [e for e, _ in gone], today, "запис зник")
-            ci_.save(c.store, mem, today)
             c.store.journal({"ts": t, "op": "inbox-accept", "ids": sorted(plan), "sigs": [e["sig"] for e in done],
-                             "source": "ctx-inbox", "reason": "", "snapshot": snap})
+                             "source": "ctx-inbox", "reason": "", "snapshot": snap})     # right after the records: undo finds it
+            ci_.take(mem, done + [e for e, _ in gone])  # a record gone is no rejection: after a restore it may come back
+            ci_.save(c.store, mem, today)
             if plan:
                 written = co.compile_store(c.store, c.copies, t, c.home, snap)["written"]
     for e, why in held + gone:

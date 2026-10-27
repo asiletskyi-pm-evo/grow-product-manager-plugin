@@ -114,9 +114,9 @@ try:
                            "--delta", delta("UPDATE", "team.beta-b", field="Jira Team ID", value="<t3>"),
                            "--delta", delta("ADD", "setting.focus-focus-advisor", text="- Zorg weekly review"))
     st = [r["status"] for r in res["results"]]
-    check("1.9 a value outside its type, no record, an unknown key, a provider's block → refused, each said; "
-          "the good one kept; exit 3",
-          rc == 3 and st == ["refused"] * 4 + ["added"] and "немає запису product.nope" in out
+    check("1.9 a value outside its type, no record, an unknown key → refused, a provider's block → provider-block, "
+          "each said; the good one kept; exit 4 (a managed region is a refusal, §3)",
+          rc == 4 and st == ["refused"] * 3 + ["provider-block", "added"] and "немає запису product.nope" in out
           and "colour" in out and "блок ядра" in out and "Role" in out, (rc, st, out[-700:]))
     secret = "sk-ant-" + "Zq7x" * 8
     rc, out, res = env.run("propose", "--skill", "requirements-creator", "--delta",
@@ -126,6 +126,24 @@ try:
           rc == 4 and "секрет" in out and secret not in out and secret not in raw, (rc, out[-300:]))
     rc, out, res = env.run("propose", "--skill", "one-on-one", "--delta", delta("ADD", "profile", text="- likes mornings"))
     check("1.11 a People-contour skill → refused", rc == 3 and "People" in out, (rc, out[-300:]))
+    tok = "ghp_" + "Zx9" * 12
+    rc, out, res = env.run("propose", "--skill", tok, "--delta", delta("ADD", "profile", text="- x"))
+    rc2, out2, _ = env.run("propose", "--skill", "focus-advisor", "--delta",
+                           json.dumps({"op": "ADD", "record": "profile", "text": "- y", "reason": "r",
+                                       "source": {"kind": "skill", "at": "2026-10-27" + tok}}))
+    raw = read(env.store, ".state", "inbox.json") + read(env.store, ".state", "journal.jsonl")
+    check("1.10a a token as --skill or after source.at's date → refused, nowhere kept (review I2)",
+          rc in (3, 4) and rc2 == 3 and tok not in raw and tok not in out + out2, (rc, rc2, out[-200:], out2[-200:]))
+    rc, out, res = env.run("propose", "--skill", "grow-product-manager:one-on-one", "--delta",
+                           delta("ADD", "profile", text="- likes mornings"))
+    check("1.11a a People skill under the plugin's prefix → refused too (review M9)", rc == 3 and "People" in out,
+          (rc, out[-200:]))
+    bad = [delta("ADD", "product.zorg-lite", text="## Zorg Ghost"), delta("ADD", "product.zorg-lite", text="<!-- x -->"),
+           delta("ADD", "product.zorg-lite", text="---"), delta("UPDATE", "product.zorg-lite", field="URL",
+                                                               value="https://z.example <!-- zorg-core:end id=x -->")]
+    rc, out, res = env.run("propose", "--skill", "focus-advisor", *[x for b in bad for x in ("--delta", b)])
+    check("1.11b a heading, a region marker, a rule as ADD, a marker in a value → refused (review I3)",
+          rc == 3 and [r["status"] for r in res["results"]] == ["refused"] * 4, (rc, out[-500:]))
     s1 = snaps(env)
     for i in range(30):
         env.run("propose", "--skill", "focus-advisor", "--delta",
@@ -192,6 +210,63 @@ try:
     env.run("inbox", "reject", "4", "--code", res["code"])
     rc, out, _ = env.run("undo")
     check("3.11 ctx undo of a reject → the entry back, byte for byte", rc == 0 and state_bytes(env) == before)
+    # ----------------------------------------------------------------------- 3b. the branches a review found unpinned
+    print("--- 3b. re-checks on accept")
+    rc, out, res = env.run("inbox", "list")
+    old_code = res["code"]
+    env.run("propose", "--skill", "cjm-research", "--delta",
+            delta("ADD", "product.zorg-app", text="- Zorg weekly funnel", evidence="first"))
+    rc, out, res = env.run("inbox", "accept", "all", "--code", old_code)
+    check("3b.1 a new proposal on a record already listed → the old code is refused (Review Focus)", rc == 4, (rc, out[-200:]))
+    env.run("propose", "--skill", "product-analysis", "--delta",
+            delta("ADD", "product.zorg-app", text="- Zorg weekly funnel", evidence="second"))
+    e = [x for x in inbox(env)["entries"] if x["delta"].get("text") == "- Zorg weekly funnel"][0]
+    check("3b.2 a merge keeps the newest evidence", e["delta"]["evidence"] == "second", e)
+    n_week = e["n"]
+    env.run("append", "product.zorg-app", "--text", "- Zorg weekly funnel")
+    env.run("propose", "--skill", "product-research", "--delta", delta("ADD", "product.zorg-lite", text="- Zorg Lite FAQ"))
+    n_lite = [x["n"] for x in inbox(env)["entries"] if x["delta"].get("text") == "- Zorg Lite FAQ"][0]
+    env.run("propose", "--skill", "sprint-planning", "--delta",
+            delta("ADD", "team.alpha-a", text="| Zorg QA | QA |", under="#### Members"))
+    n_team = [x["n"] for x in inbox(env)["entries"] if x["delta"].get("text") == "| Zorg QA | QA |"][0]
+    env.edit(env.ctx, "#### Members\n", "#### People\n")
+    env.run("sync")
+    env.run("archive", "product.zorg-lite", "--reason", "closed")
+    rc, out, res = env.run("inbox", "list")
+    rc, out, res = env.run("inbox", "accept", str(n_week), str(n_lite), str(n_team), "--code", res["code"])
+    ib = inbox(env)
+    check("3b.3 «уже так» → taken quietly; a record gone → out of the inbox, not remembered as rejected; "
+          "a heading gone → held and said",
+          rc == 0 and n_week in res["accepted"] and n_lite in res["gone"] and n_team in res["held"]
+          and "subsection not found" in out and not any(x["n"] in (n_week, n_lite) for x in ib["entries"])
+          and any(x["n"] == n_team for x in ib["entries"]) and len(ib["rejected"]) == 1, (out[-600:], res))
+    env.run("restore", "product.zorg-lite")
+    rc, out, res = env.run("propose", "--skill", "product-research", "--delta",
+                           delta("ADD", "product.zorg-lite", text="- Zorg Lite FAQ"))
+    check("3b.4 after a restore the same delta is welcome again (review M3)", rc == 0 and res["added"], res)
+    env.run("propose", "--skill", "task-creator", "--delta",
+            delta("UPDATE", "product.zorg-lite", field="Jira Project Key", value="ZL1"))
+    env.run("propose", "--skill", "product-reporter", "--delta",
+            delta("UPDATE", "product.zorg-lite", field="Jira Project Key", value="ZL2"))
+    pair = [x["n"] for x in inbox(env)["entries"] if x["delta"].get("field") == "Jira Project Key"
+            and x["delta"]["record"] == "product.zorg-lite"]
+    rc, out, res = env.run("inbox", "list")
+    rc, out, res = env.run("inbox", "accept", *map(str, pair), "--code", res["code"])
+    check("3b.5 both values of one field in one accept → both held «два значення» (review M7)",
+          rc == 0 and sorted(res["held"]) == sorted(pair) and "два значення" in out, (out[-400:], res))
+    p = os.path.join(env.store, ".state", "inbox.json")
+    box = json.load(open(p, encoding="utf-8"))
+    box["entries"][0]["delta"]["text" if box["entries"][0]["delta"]["op"] == "ADD" else "reason"] = \
+        "token: " + "Zorg2026secretPass"
+    box["entries"][0]["sig"] = __import__("hashlib").sha1(json.dumps(
+        [box["entries"][0]["delta"].get(k) for k in ("op", "record", "field", "value", "text", "under")],
+        ensure_ascii=False).encode("utf-8")).hexdigest()
+    open(p, "w", encoding="utf-8").write(json.dumps(box))
+    rc, out, res = env.run("inbox", "list")
+    rc, out, res = env.run("inbox", "accept", str(box["entries"][0]["n"]), "--code", res["code"])
+    check("3b.6 a secret in a hand-edited inbox is held at accept, never written (review M2)",
+          rc == 0 and res["held"] == [box["entries"][0]["n"]] and "Zorg2026secretPass" not in
+          "".join(read(env.store, "records", f) for f in os.listdir(os.path.join(env.store, "records"))), (out[-300:], res))
     # ----------------------------------------------------------------------- 4. undo keeps later proposals
     print("--- 4. undo keeps what was proposed after the change it takes back")
     env.run("set", "profile", "Language", "uk")
@@ -207,6 +282,19 @@ try:
     rc, out, res = env.run("inbox", "accept", str(n_new), "--code", res["code"])
     check("4.2 and it can be taken", rc == 0 and "Zorg capacity 80%" in env.record("setting.planning-planning-suite"),
           out[-300:])
+    env.run("set", "profile", "Language", "pl")
+    for t_ in ("- Zorg span A", "- Zorg span B"):
+        env.run("propose", "--skill", "focus-advisor", "--delta", delta("ADD", "setting.focus-focus-advisor", text=t_))
+    na, nb = [x["n"] for x in inbox(env)["entries"] if x["delta"].get("text") in ("- Zorg span A", "- Zorg span B")]
+    rc, out, res = env.run("inbox", "list")
+    env.run("inbox", "accept", str(na), "--code", res["code"])
+    rc, out, res = env.run("inbox", "list")
+    env.run("inbox", "reject", str(nb), "--code", res["code"])
+    rc, out, res = env.run("undo", "--steps", "3")
+    texts_ = [x["delta"].get("text") for x in inbox(env)["entries"]]
+    check("4.2a undo --steps 3 over a set, an accept and a reject → both proposals back in the inbox (review I1)",
+          rc == 0 and "- Zorg span A" in texts_ and "- Zorg span B" in texts_
+          and "Zorg span A" not in env.record("setting.focus-focus-advisor"), (out[-300:], texts_))
     rc, out, res = env.run("validate")
     check("4.3 validate is happy with the store after all of it", rc == 0 and not res["errors"], res)
     p = os.path.join(env.store, ".state", "inbox.json")
@@ -218,6 +306,19 @@ try:
     open(p, "w", encoding="utf-8").write(good)
 finally:
     shutil.rmtree(d, ignore_errors=True)
+
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import ctx_inbox as ci_  # noqa: E402
+mem = ci_.empty()
+d0 = json.loads(delta("ADD", "profile", text="- Zorg old"))
+mem["rejected"] = [[ci_.sig(ci_.normalize(d0)), "2026-01-01", "old"]]
+recs = [{"id": "profile", "type": "profile", "title": "User Profile", "body": "## User Profile\n\n- **Name:** Z\n"}]
+r_old = ci_.propose(mem, [d0], "focus-advisor", recs, "2026-10-27")[0]["status"]
+mem2 = ci_.empty()
+mem2["rejected"] = [[ci_.sig(ci_.normalize(d0)), "2026-10-01", "recent"]]
+r_new = ci_.propose(mem2, [d0], "focus-advisor", recs, "2026-10-27")[0]["status"]
+check("5.1 a rejection older than 180 days is forgotten; a recent one holds", r_old == "added" and r_new == "rejected-before",
+      (r_old, r_new))
 
 print("\n%s — %d failure(s)" % ("GREEN" if not fails else "RED", fails))
 sys.exit(1 if fails else 0)

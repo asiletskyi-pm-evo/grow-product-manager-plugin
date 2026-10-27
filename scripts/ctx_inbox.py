@@ -48,11 +48,13 @@ EVIDENCE_MAX = 200
 REJECT_DAYS = 180
 OLD_DAYS = 30
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
+_MARKUP = re.compile(r"<!--|-->")
+_SKILL = re.compile(r"^(?:[a-z0-9-]+:)?([a-z0-9][a-z0-9-]*)$")
 PEOPLE_SKILLS = ("goal-setter", "one-on-one", "performance-review", "hiring-designer", "offboarding-guide",
                  "delegation-coach")
 # Asked at once (plan C3): field names as references/context-fields.yaml and onboarding-steps.md Step 16c give them.
 URGENT = {"profile": ("Name", "Role", "Role label", "Role scope", "Level home", "Email", "Work Email", "Language"),
-          "org": ("Domain",),
+          "org": ("Domain", "Jira", "Confluence"),
           "product": ("Jira Project Key", "Confluence Space", "URL")}
 
 
@@ -170,8 +172,13 @@ def normalize(raw):
     if op == "UPDATE":
         d["field"] = _text(raw, "field", need=True)
         d["value"] = _text(raw, "value", need=True)
+        if _MARKUP.search(d["field"]) or "*" in d["field"] or _MARKUP.search(d["value"]):
+            raise ValueError("an UPDATE carries a field and a value, not a heading, a region marker or a rule")
     elif op == "ADD":
         d["text"] = _text(raw, "text", need=True)
+        if _MARKUP.search(d["text"]) or d["text"].lstrip().startswith("#") or d["text"].strip() in ("---", "..."):
+            raise ValueError("an ADD is one line of a record — not a heading, a region marker or a rule "
+                             "(a new record comes from the configurator)")
         under = _text(raw, "under")
         if under is not None and not under.startswith("#"):
             raise ValueError("under is a heading line, e.g. «#### Metrics»")
@@ -188,7 +195,7 @@ def normalize(raw):
     if not isinstance(src, dict) or sorted(set(src) - set(_SOURCE_KEYS)):
         raise ValueError("source is {kind, ref, at}")
     s = {"kind": _text(src, "kind", need=True), "ref": _text(src, "ref"), "at": _text(src, "at")}
-    if s["at"] is not None and not _DAY.match(s["at"][:10]):
+    if s["at"] is not None and not _DAY.match(s["at"]):
         raise ValueError("source.at is a date, YYYY-MM-DD")
     d["source"] = s
     return d
@@ -203,7 +210,15 @@ def texts(d):
     """Every text of a delta the store would keep — what the never-store filter reads."""
     s = d.get("source") or {}
     return [d.get(k) for k in ("record", "field", "value", "text", "under", "reason", "evidence")] + \
-           [s.get("kind"), s.get("ref")]
+           [s.get("kind"), s.get("ref"), s.get("at")]
+
+
+def skill_name(raw):
+    """The skill's own name: `grow-product-manager:one-on-one` → `one-on-one`; anything else → ValueError."""
+    m = _SKILL.match((raw or "").strip())
+    if not m:
+        raise ValueError("--skill is a skill's name, e.g. focus-advisor")
+    return m.group(1)
 
 
 def urgent(d, rec):
@@ -238,8 +253,8 @@ def apply_to(d, rec, today):
 
 
 # ------------------------------------------------------------------ the inbox
-ADDED, MERGED, ALREADY, NOOP, BEFORE, REFUSED, SECRET = "added", "merged", "already", "noop", "rejected-before", \
-    "refused", "never-store"
+ADDED, MERGED, ALREADY, NOOP, BEFORE, REFUSED, SECRET, BLOCK = "added", "merged", "already", "noop", \
+    "rejected-before", "refused", "never-store", "provider-block"
 
 
 def propose(mem, raws, skill, recs, today):
@@ -273,7 +288,7 @@ def propose(mem, raws, skill, recs, today):
         try:
             body = apply_to(d, rec, today)
         except cs.RegionError:
-            out.append({"status": REFUSED, "record": d["record"],
+            out.append({"status": BLOCK, "record": d["record"],
                         "why": "це блок ядра — пропозиції ядру прийдуть у v3.23.0"})
             continue
         except ValueError as e:
@@ -307,7 +322,8 @@ def propose(mem, raws, skill, recs, today):
 
 def code(mem, recs):
     by_id = {r["id"]: cs.sha_text(r["body"]) for r in recs}
-    shown = [[e["n"], e["sig"], by_id.get(e["delta"]["record"], "")] for e in sorted(mem["entries"], key=lambda e: e["n"])]
+    shown = [[e["n"], e["sig"], by_id.get(e["delta"]["record"], ""), json.dumps(e["delta"], sort_keys=True)]
+             for e in sorted(mem["entries"], key=lambda e: e["n"])]
     return hashlib.sha1(json.dumps(shown).encode("utf-8")).hexdigest()[:8]
 
 
@@ -383,6 +399,29 @@ def reject(mem, entries, day, why):
     for e in entries:
         if e["sig"] not in have:
             mem["rejected"].append([e["sig"], day, why or ""])
+
+
+def load_path(path):
+    """An inbox file at `path` (a snapshot's state/inbox.json); None when it is not there or does not read."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return _clean(json.load(f))
+    except (OSError, ValueError):
+        return None
+
+
+def union(mems):
+    """One inbox of every entry the given inboxes hold (the newest copy of an identity wins), for merge_back."""
+    out = empty()
+    by_sig = {}
+    for m in mems:
+        if not m:
+            continue
+        out["next"] = max(out["next"], m["next"])
+        for e in m["entries"]:
+            by_sig[e["sig"]] = e
+    out["entries"] = sorted(by_sig.values(), key=lambda e: e["n"])
+    return out
 
 
 def merge_back(mem, before, sigs):
