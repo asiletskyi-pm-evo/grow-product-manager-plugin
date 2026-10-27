@@ -209,8 +209,9 @@ def sig(d):
 def texts(d):
     """Every text of a delta the store would keep — what the never-store filter reads."""
     s = d.get("source") or {}
+    pair = ["%s: %s" % (d["field"], d["value"])] if d.get("field") and d.get("value") else []
     return [d.get(k) for k in ("record", "field", "value", "text", "under", "reason", "evidence")] + \
-           [s.get("kind"), s.get("ref"), s.get("at")]
+           [s.get("kind"), s.get("ref"), s.get("at")] + pair
 
 
 def skill_name(raw):
@@ -272,7 +273,7 @@ def propose(mem, raws, skill, recs, today):
         try:
             cn.check(*texts(d))
         except cn.NeverStore as e:
-            out.append({"status": SECRET, "record": d["record"], "why": str(e)})
+            out.append({"status": SECRET, "why": str(e)})          # not even the record id: it may be what was caught
             continue
         if skill in PEOPLE_SKILLS:
             out.append({"status": REFUSED, "record": d["record"],

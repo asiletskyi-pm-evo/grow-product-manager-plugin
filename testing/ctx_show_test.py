@@ -85,7 +85,8 @@ try:
     # ----------------------------------------------------------------------- health
     rc, out, res = env.run("health")
     text = "\n".join(l for l in out.splitlines() if not l.startswith("CTX_"))
-    check("2.1 exit 0, ✅ ⚠ ✋ counted in the result", rc == 0 and res["act"] >= 1 and res["warn"] >= 1, (rc, text))
+    check("2.1 exit 0, ✅ ⚠ ✋ counted in the result", rc == 0 and res["counts"]["act"] >= 1 and res["counts"]["warn"] >= 1
+          and res["counts"]["ok"] >= 1 and res["ok"] is True, (rc, text))
     check("2.2 a stale record → ⚠ with ctx verify --stale",
           re.search(r"^⚠ застарілі записи: 1 \(team\.alpha-a\) — ctx verify --stale$", text, re.M), text)
     check("2.3 an urgent entry in the inbox → ✋ /context inbox",

@@ -153,7 +153,19 @@ try:
     check("2.9 status's last snapshot is never an imported one", "imported" not in
           [l for l in out.splitlines() if l.startswith("last snapshot")][0], out[-300:])
     rc, out, _ = env.run("snapshot", "--label", "imported")
-    check("2.10 a manual snapshot may not take the label «imported»", rc == 3, (rc, out[-200:]))
+    rc2, out2, _ = env.run("snapshot", "--label", "imported-2")
+    check("2.10 a manual snapshot may not take the label «imported» or «imported-2»", rc == 3 and rc2 == 3, (rc, rc2))
+    late = os.path.join(root, "20991231T000000-imported")
+    shutil.copytree(os.path.join(root, imported[0]), late)
+    rc, out, _ = env.run("status")
+    check("2.10a status skips an imported snapshot even when its name sorts last (final review M5)",
+          "20991231" not in [l for l in out.splitlines() if l.startswith("last snapshot")][0], out[-300:])
+    try:
+        co.restore(late, None, [])
+        check("2.10b restore refuses an imported snapshot", False, "no refusal")
+    except co.Refused:
+        check("2.10b restore refuses an imported snapshot", True)
+    shutil.rmtree(late)
     rc, out, res = env.run("snapshot", "import")
     check("2.11 a second dry run: nothing to import", rc == 0 and not res["import"] and not res["known"], out[-300:])
     # undo: the place of one original taken, another's trash copy purged

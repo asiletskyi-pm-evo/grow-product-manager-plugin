@@ -134,6 +134,24 @@ try:
     raw = read(env.store, ".state", "inbox.json") + read(env.store, ".state", "journal.jsonl")
     check("1.10a a token as --skill or after source.at's date → refused, nowhere kept (review I2)",
           rc in (3, 4) and rc2 == 3 and tok not in raw and tok not in out + out2, (rc, rc2, out[-200:], out2[-200:]))
+    sec = "Zorg2026Secret77"
+    rc, out, res = env.run("propose", "--skill", "requirements-creator",
+                           "--delta", delta("UPDATE", "product.zorg-app", field="Password", value=sec),
+                           "--delta", delta("ADD", "profile", text="- Zorg note", evidence="token: " + sec),
+                           "--delta", json.dumps({"op": "ADD", "record": "profile", "text": "- Zorg n2", "reason": "r",
+                                                  "source": {"kind": "skill", "ref": "https://z.example/?token=" + sec}}),
+                           "--delta", json.dumps({"op": "ADD", "record": "token: " + sec, "text": "- x", "reason": "r",
+                                                  "source": {"kind": "skill"}}))
+    raw = read(env.store, ".state", "inbox.json") + read(env.store, ".state", "journal.jsonl")
+    check("1.10b a secret as field+value, in the evidence, in source.ref, in the record id → never-store, nowhere kept, "
+          "not even echoed (final review I1, I3, M1)",
+          rc == 4 and [r["status"] for r in res["results"]] == ["never-store"] * 4 and sec not in raw and sec not in out,
+          (rc, out[-500:]))
+    rc, out, _ = env.run("propose", "--skill", "sk-abcdefghijklmnopqrstuvwxyz0123", "--delta",
+                         delta("ADD", "profile", text="- y"))
+    rc2, out2, _ = env.run("propose", "--skill", "zorg-helper", "--delta", delta("ADD", "profile", text="- y"))
+    check("1.10c a --skill the plugin does not have → exit 3, a token-like one not echoed (final review I2)",
+          rc == 3 and rc2 == 3 and "sk-abcdefghij" not in out and "zorg-helper" in out2, (out[-300:], out2[-300:]))
     rc, out, res = env.run("propose", "--skill", "grow-product-manager:one-on-one", "--delta",
                            delta("ADD", "profile", text="- likes mornings"))
     check("1.11a a People skill under the plugin's prefix → refused too (review M9)", rc == 3 and "People" in out,
@@ -304,6 +322,14 @@ try:
     check("4.4 an inbox of another shape → exit 3, the file untouched (never reset)",
           rc == 3 and "inbox" in out and '"later"' in read(p), (rc, out[-300:]))
     open(p, "w", encoding="utf-8").write(good)
+    box = json.loads(good)
+    if box["entries"]:
+        box["entries"][0]["sig"] = "0" * 40
+        open(p, "w", encoding="utf-8").write(json.dumps(box))
+        rc, out, _ = env.run("inbox", "list")
+        check("4.5 an entry whose identity does not hold its delta → the inbox refused, never used (final review M5)",
+              rc == 3 and "inbox not valid" in out, (rc, out[-300:]))
+        open(p, "w", encoding="utf-8").write(good)
 finally:
     shutil.rmtree(d, ignore_errors=True)
 

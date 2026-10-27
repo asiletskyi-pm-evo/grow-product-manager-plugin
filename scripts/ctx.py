@@ -865,7 +865,7 @@ def cmd_snapshot_import(a, c):
 def cmd_snapshot(a, c):
     if a.action == "import":
         return cmd_snapshot_import(a, c)
-    if cc.slugify(a.label or "") == cbk.LABEL:
+    if re.match(r"^%s(?:-\d+)?$" % cbk.LABEL, cc.slugify(a.label or "")):
         raise Usage("the label «imported» is the old backups' — choose another")
     c.need_store()
     path = co.snapshot(c.store, c.copies, c.home, a.label or "manual")
@@ -1187,7 +1187,8 @@ def cmd_health(a, c):
     for level, text, fix in lines:
         print("%s %s%s" % (csh.MARK[level], text, (" — " + fix) if fix else ""))
     n = {k: sum(1 for l in lines if l[0] == k) for k in (csh.OK, csh.WARN, csh.ACT)}
-    return 0, {"command": "health", "lines": [{"level": l, "text": t, "fix": f} for l, t, f in lines], **n}
+    return 0, {"command": "health", "lines": [{"level": l, "text": t, "fix": f} for l, t, f in lines],
+               "counts": n}
 
 
 def cmd_card(a, c):
@@ -2294,6 +2295,9 @@ def cmd_propose(a, c):
         a.skill = ci_.skill_name(a.skill)
     except ValueError as e:
         raise Usage(str(e))
+    if a.skill not in (cr.load_manifest().get("skills") or {}):     # a name the plugin does not know is no skill's
+        raise Usage("--skill names one of the plugin's skills (references/context-manifest.yaml), not %s"
+                    % ("that" if cn.scan(a.skill) else a.skill))
     out = {"command": "propose", "skill": a.skill, "results": [], "added": [], "urgent": [], "code": None}
     if not c.store.exists():
         print(NO_STORE_INBOX)
@@ -2537,6 +2541,8 @@ def main(argv=None):
     try:
         if writes(a):                                   # since v3.21.0: no free text a write keeps may hold a secret
             cn.check(*_free_text(a))
+            if a.cmd == "set":                          # «API key: abcd…» is a secret only read together
+                cn.check("%s: %s" % (a.field, a.value))
         c = Ctx(a)
         with cs.guard_roots(co.allowed_roots(c.home, c.text)):
             rc, res = COMMANDS[a.cmd](a, c)

@@ -155,6 +155,9 @@ try:
     rc3, out3, res3 = env.run("set", rid, "Role label", "Zorg PM", "--source", "token: Zorg2026secretPass")
     check("3.5b invalidate --reason, archive --reason, --source → exit 4 (one guard over every writing command)",
           rc == 4 and rc2 == 4 and rc3 == 4, (rc, rc2, rc3, out[-300:]))
+    rc, out, res = env.run("set", "product.zorg-app", "API key", "abcd1234efgh5678")
+    check("3.5c a field and a value that are a secret only together («API key: abcd…») → exit 4 (final review I1)",
+          rc == 4 and "abcd1234efgh5678" not in out, (rc, out[-300:]))
     leaked = []
     for root, _, files in os.walk(d):
         for f in files:
@@ -163,7 +166,7 @@ try:
                 t = open(p, encoding="utf-8", errors="replace").read()
             except OSError:
                 continue
-            if f != "body.md" and any(v in t for v in (CARD, IBAN, TAX, "Zorg2026secretPass", "Zorg!Pass#Word", "a1B2" * 8)):
+            if f != "body.md" and any(v in t for v in (CARD, IBAN, TAX, "Zorg2026secretPass", "Zorg!Pass#Word", "a1B2" * 8, "abcd1234efgh5678")):
                 leaked.append(os.path.relpath(p, d))
     check("3.6 no value in any file — records, journal, copies, snapshots", not leaked, leaked)
     rc, out, res = env.run("set", rid, "Role label", "Zorg PM")
