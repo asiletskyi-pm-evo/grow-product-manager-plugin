@@ -360,6 +360,10 @@ For each configured vault:
 
 Add to the validation report output.
 
+### V-5b. Recheck the records against the connectors (since v3.22.0, with a context store and SHELL)
+
+After the connections are tested, the same connectors answer the recheck: read them **read-only** by root `references/context-observe.md` §4 (the visible Jira projects and Confluence spaces in full, each team member's account, the provider's role), write the observation file, run `python3 "<plugin root>/scripts/ctx.py" validate --recheck --observed <file>`. A finding seen the first time is only noticed; the second sighting a week later becomes an inbox delta (`context-protocol.md` §5l). Urgent ones → one question as §5i says; the rest → `У скриньці +N — /context inbox`. Then `ctx verify <ids>` for the records it printed as they should be. The readiness report gets one line: «Звірка з конекторами: перевірено N, помічено K, у скриньку M».
+
 ### V-6. Produce readiness report
 
 Present a comprehensive report:

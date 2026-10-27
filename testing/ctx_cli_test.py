@@ -4184,7 +4184,7 @@ need_15 = [
             "a block id that is not an id (`bind` does not check that the block exists", "the publisher's `slot=` in the begin marker of the block's base",
             # §10's roadmap since v3.21.0 (the programme «Петля контексту»): what shipped, what is next
             "Shipped by v3.20.0: search across repositories (§5g)", "entities and cross-links (§5h)",
-            "the declared overlay `overlays/<repo>.yaml`", "the configurator as a loop", "— v3.22.0"]),
+            "the declared overlay `overlays/<repo>.yaml`", "the configurator as a loop", "— v3.23.0"]),
     (pp15, ["**A slot — `slot=`** (since v3.15.0)", "`<!-- <namespace>:begin id=<block> v=<version> slot=<slot> -->`", "`xslot=` is no attribute",
             "A holder's own binding of the block (`ctx slot bind`) wins over the attribute for the whole block",
             "the plugin binds the block itself", "nothing else of the block is bound",
@@ -4209,8 +4209,8 @@ need_15 = [
              "without the user's own yes for that block or slot"]),
     (mm15, ["since v3.15.0 the slots (`references/context-protocol.md` §5f)", "the answer per slot being `ctx slot decide <slot> <repo>`",
             "a yes being `ctx slot bind …` for each confirmed one", "### Context slots (only with a context store)"]),
-    (cfg15, ["version: 2.15.3"]),
-    (readme15, ["### 32. Context Connect (v0.5.0)", "| Context Connect | v0.5.0 |", "### 10. Plugin Configurator (v2.15.3)", "| Plugin Configurator | v2.15.3 |",
+    (cfg15, ["version: 2.16.0"]),
+    (readme15, ["### 32. Context Connect (v0.5.0)", "| Context Connect | v0.5.0 |", "### 10. Plugin Configurator (v2.16.0)", "| Plugin Configurator | v2.16.0 |",
                 "**Slots, the cascade and `ctx explain`** (since v3.15.0)", "and — at a refresh — the blocks you had switched off", "since v3.15.0 `explain` and `slot bind|map|prefer|decide|forget`"]),
     (hp15, ["since v3.15.0 slots and the cascade in `ctx read`, `ctx explain`, `ctx slot …`"]),
 ]
