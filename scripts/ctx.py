@@ -319,6 +319,7 @@ import ctx_entity as ce  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
 import ctx_index as ci  # noqa: E402
+import ctx_never as cn  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
@@ -700,6 +701,7 @@ def _write_one(c, op, rid, mutate, source, reason):
 
 
 def cmd_set(a, c):
+    cn.check(a.value, a.reason)
     c.need_store()
     spec = _field_spec(_record(c, a.id), a.field)
     err = sc.check_value(spec, a.value) if spec else None
@@ -750,6 +752,7 @@ def cmd_assign(a, c):
 
 
 def cmd_append(a, c):
+    cn.check(a.text, a.reason)
     return 0, _write_one(c, "append", a.id, lambda b: cs.append_line(b, a.text, under=a.under),
                          a.source or "ctx-append", a.reason)
 
@@ -759,6 +762,7 @@ def cmd_add(a, c):
     if a.type not in HEADINGS:
         raise Usage("add takes one of %s" % ", ".join(sorted(HEADINGS)))
     content = co._read(a.body_file) if a.body_file else ""
+    cn.check(a.title, content, a.reason)
     heading = HEADINGS[a.type] % a.title
     text = heading + "\n\n" + (content.rstrip("\n") + "\n\n" if content.strip() else "")
     with co.lock(c.home):
@@ -952,6 +956,10 @@ def cmd_validate(a, c):
             warnings.append("%s: verified %r is not a date — the store's freshness date applies" % (r["id"], r.get("verified")))
         if r.get("ttl_days") is not None and not str(r.get("ttl_days")).strip().isdigit():
             warnings.append("%s: ttl_days %r is not a whole number — the type's default applies" % (r["id"], r.get("ttl_days")))
+        kinds = cn.scan(r["body"])
+        if kinds:                                       # since v3.21.0: your own text may hold one — said, not refused
+            warnings.append("%s: %s" % (r["id"], cn.message(kinds).replace("не збережено: схоже", "схоже", 1)
+                                        + " — прибери це з запису"))
         if sc.is_stale(r, state, now()[:10]):
             warnings.append("stale: %s (verified %s, TTL %s d) — ctx verify %s" % (r["id"], sc.verified_of(r, state), sc.ttl_of(r), r["id"]))
     for name in valid:
@@ -2195,7 +2203,7 @@ def main(argv=None):
         print("ctx: %s" % e)
         emit({"ok": False, "command": a.cmd, "error": str(e)}, conflict=e.payload)
         return 2
-    except (co.Refused, co.Busy, cs.RegionError, cs.PathRefused) as e:
+    except (co.Refused, co.Busy, cs.RegionError, cs.PathRefused, cn.NeverStore) as e:
         print("ctx: refused — %s" % e)
         emit({"ok": False, "command": a.cmd, "error": str(e)})
         return 4
