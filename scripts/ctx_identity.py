@@ -13,8 +13,10 @@ key nobody knows or another schema is never rewritten (StoreError). Stdlib only.
 """
 import json
 import os
+import re
 
 import ctx_store as cs
+import provider_bundle as pb
 
 SCHEMA = "context-identity/1"
 FIELDS = ("team", "role")
@@ -76,6 +78,34 @@ def _same(a, b):
     return " ".join(str(a or "").split()).casefold() == " ".join(str(b or "").split()).casefold()
 
 
+def _team_key(v):
+    """A team's key as the role model writes it: `team-alpha` and `alpha` are one team (as ctx_repos reads it)."""
+    v = " ".join(str(v or "").split()).casefold()
+    return v[len("team-"):] if v.startswith("team-") else v
+
+
+def _role_profile(v):
+    """A role as a profile of the role model: the word itself, else the profile its title answers (`Product Manager`
+    → pm) — only when a hint matches; a word no hint knows («legacy») stays itself."""
+    v = " ".join(str(v or "").split())
+    for prof, rx in pb.DEFAULT_ROLE_HINTS.items():
+        if v.casefold() == prof.casefold():
+            return prof
+    for prof, rx in list(pb.DEFAULT_ROLE_HINTS.items()) + [("pm", PM_HINT)]:
+        if re.search(rx, v, re.I):
+            return prof
+    return v.casefold()
+
+
+PM_HINT = r"product manager|product owner|\bpm\b|продакт|менеджер продукту"   # the builder's fallback, said by name
+
+
+def _agree(field, mine, core):
+    if field == "team":
+        return _team_key(mine) == _team_key(core)
+    return _same(mine, core) or _role_profile(mine) == _role_profile(core)
+
+
 def compare(bundle, mine, mem, repo_id):
     """[{field, core, core_from, mine, mine_from, state: same | ask | kept | taken}] — `mine` is {field: (value, source)}
     (a value None: you said nothing — no question). `kept` / `taken`: your answer still holds (the core says what it said
@@ -88,7 +118,7 @@ def compare(bundle, mine, mem, repo_id):
         val, src = mine.get(f, (None, None))
         row = {"field": f, "core": core, "core_title": title, "core_from": bundle.get("%s_from" % f) or "—", "mine": val,
                "mine_from": src or "—"}
-        if val is None or _same(val, core):
+        if val is None or _agree(f, val, core):
             row["state"] = "same" if val is not None else "none"
         else:
             ans = answers.get(f)

@@ -234,6 +234,8 @@ def restore(snap_dir, store, copies):
             p = os.path.join(store.overlays_dir, name)
             if not name.startswith(".") and os.path.isfile(p):
                 os.remove(p)
+        if not os.listdir(store.overlays_dir) and not os.path.isdir(os.path.join(snap_dir, "overlays")):
+            os.rmdir(store.overlays_dir)                # made after the snapshot and empty now: gone, as it was
     if os.path.isfile(store.card_path):
         os.remove(store.card_path)
     if manifest.get("store_existed"):

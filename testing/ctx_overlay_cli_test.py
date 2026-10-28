@@ -145,6 +145,10 @@ with tempfile.TemporaryDirectory() as d:
           and sorted(j["ids"]) == sorted(res.get("written") or []), (out, j))
     rc, out, res = ctx(home, ctxp, "overlay", "plan", "zorg-core")
     check("…the plan after it has nothing to rewrite", rc == 0 and "оверлей накладається" not in out, out)
+    rc, out, res = ctx(home, ctxp, "explain", "team.members")
+    line = [l for l in out.splitlines() if "zorg-core" in l and "team#Members" in l]
+    check("explain marks the overlaid block «з твоїм оверлеєм», not «з твоїми правками»",
+          line and "з твоїм оверлеєм" in line[0] and "з твоїми правками" not in line[0], out[-800:])
 
     n = len(journal(store))
     rc, out, res = ctx(home, ctxp, "overlay", "apply", "zorg-core", "--code", ctx(home, ctxp, "overlay", "plan", "zorg-core")[2]["code"])
@@ -197,7 +201,7 @@ with tempfile.TemporaryDirectory() as d:
           == ["gamma"] and journal(store)[-1]["action"] == "answer", out)
     rc, out, res = ctx(home, ctxp, "health")
     check("…health: no ✋ about the overlay any more, a ✅ line with what applies",
-      "чекають рішення" not in out and "✅ оверлей zorg-core: поправок діє 1" in out, out)
+      "рішення (" not in out and "✅ оверлей zorg-core: поправок діє 1" in out, out)
     rc, out, res = ctx(home, ctxp, "overlay", "answer", "zorg-core", "gamma", "expects", "--expects", "1")
     check("answer expects with the same number: unchanged, exit 0", rc == 0 and "unchanged" in out, out)
     rc, out, res = ctx(home, ctxp, "overlay", "answer", "zorg-core", "gamma", "retarget", "--path", "#Teams map")

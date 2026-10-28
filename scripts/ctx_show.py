@@ -249,8 +249,10 @@ def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, e
         if o.get("error"):
             out.append((ACT, "оверлей не прочитано: %s" % o["error"], "/context overlay"))
         elif o["held"]:
-            out.append((ACT, "оверлей %s: %d поправ%s чекають рішення (%s)" % (o["repo"], len(o["held"]),
-                        "ка" if len(o["held"]) == 1 else "ок", ", ".join(o["held"][:5])), "/context overlay"))
+            n = len(o["held"])
+            out.append((ACT, "оверлей %s: %d %s рішення (%s)" % (o["repo"], n, "поправка чекає" if n == 1 else "поправки чекають"
+                        if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else "поправок чекають", ", ".join(o["held"][:5])),
+                        "/context overlay"))
         else:
             out.append((OK, "оверлей %s: поправок діє %d" % (o["repo"], o["applied"]), None))
         if not o.get("error") and o.get("edited"):

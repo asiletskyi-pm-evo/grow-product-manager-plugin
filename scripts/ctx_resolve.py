@@ -201,7 +201,10 @@ class _Repos:
         return {"slot": slot, "source": reg["id"] if reg else ns, "level": "rule" if rule and how != BY_NAME else "repo",
                 "record": rec["id"], "block": bid, "ns": ns, "version": str(version) if version else None,
                 "checked": checked[:10] if isinstance(checked, str) and checked else None,
-                "edited": bool(known and region is not None and cs.sha_text(cb.norm(region)) not in known),
+                "edited": bool(known and region is not None and cs.sha_text(cb.norm(region)) not in known
+                               and cs.sha_text(cb.norm(region)) != entry.get("overlay_sha")),
+                "overlaid": bool(region is not None and entry.get("overlay_sha")
+                                 and cs.sha_text(cb.norm(region)) == entry.get("overlay_sha")),
                 "rule": rule, "how": how, "heading": _heading(text), "text": text, "rank": _rank(reg),
                 "placed": placed, "place": place, "sub": sub}
 
@@ -276,7 +279,7 @@ def _own(slot, rec, names, aliases, place, field):
             if not loose and _answers_any(cores[start], is_field, other) and not _answers_any(cores[start], is_field, mine):
                 continue
             return {"slot": slot, "source": "mine", "level": "mine", "record": rec["id"], "block": None, "ns": None,
-                    "version": None, "checked": sc.verified_of(rec, None), "edited": False, "rule": False, "how": None,
+                    "version": None, "checked": sc.verified_of(rec, None), "edited": False, "overlaid": False, "rule": False, "how": None,
                     "heading": _heading(text), "text": text, "rank": None, "placed": True, "place": place, "sub": None}
     return None
 
@@ -676,6 +679,7 @@ def slot_answers(sctx, slot, field=None, unplaced=None):
 NOTE_LINE = "твоя примітка до правила"
 BY_NAME_MARK = "за назвою, без прив'язки"
 EDITED_MARK = "з твоїми правками"
+OVERLAY_MARK = "з твоїм оверлеєм"                 # since v3.23.0: the region the overlay wrote (context-protocol.md §5n)
 RULE_MARK = "правило ядра"
 ALSO_LINE = "також: %s каже інакше — ctx explain %s"
 DIVERGE_LINE = "⚠ розбіжність між репозиторіями — вирішити: ctx slot decide %s %s"
@@ -714,6 +718,7 @@ def render_slot(res, origin):
             head = ("> [" + " · ".join([MINE_WORD, origin.clip(c["record"])] + extra) + "]") if lined else None
         else:
             marks = ([BY_NAME_MARK] if c.get("how") == BY_NAME else []) + ([EDITED_MARK] if c.get("edited") else []) \
+                + ([OVERLAY_MARK] if c.get("overlaid") else []) \
                 + ([RULE_MARK] if c.get("level") == "rule" else [])
             head = origin.line(c["ns"], c["block"], c.get("version") or "", marks + extra,
                                slots=[] if c.get("how") == BY_NAME else [slot])
@@ -968,6 +973,8 @@ def _row(c, outcome, reason=None, command=None):
         row["checked"] = c["checked"]
     if c.get("level") != "mine":
         row.update(block=c["block"], edited=bool(c.get("edited")), rule=c.get("level") == "rule", how=c.get("how"), rank=c.get("rank"))
+        if c.get("overlaid"):
+            row["overlaid"] = True
         if c.get("sub"):
             row["sub"] = c["sub"]
         if c.get("version"):
@@ -1038,6 +1045,7 @@ def _row_line(row):
             bits.append("станом на " + row["checked"])
         bits += [BY_NAME_MARK] if row.get("how") == BY_NAME else [HOW_WORDS[row["how"]]] if row.get("how") in HOW_WORDS else []
         bits += [EDITED_MARK] if row.get("edited") else []
+        bits += [OVERLAY_MARK] if row.get("overlaid") else []
         bits += [RULE_MARK] if row.get("rule") else []
     line = OUTCOME_MARKS[row["outcome"]] + " " + " · ".join(bits)
     if row.get("reason"):

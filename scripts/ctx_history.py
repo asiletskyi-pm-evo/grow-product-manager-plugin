@@ -23,6 +23,7 @@ import ctx_store as cs  # noqa: E402
 
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 PROVIDER_OPS = ("provider-apply", "provider-sync")
+LINE_OPS = ("overlay", "undo", "identity")        # said as one line, never as the block text they rewrote
 ROWS_PER_BLOCK = 10
 OP_WORDS = {"sync": "імпорт прямих правок", "set": "поле", "append": "рядок", "add": "новий запис", "migrate": "перенесення в записи",
             "invalidate": "неактуальне", "archive": "в архів", "restore": "повернено", "verify": "перевірено", "assign": "хто читає",
@@ -73,7 +74,7 @@ def _block_rows(store, repo, bid, was, now_sha):
             rows.append("| %s | %s | %s |" % (_cell(bid), _cell(olds[k] if k < len(olds) else ""),
                                                _cell(news[k] if k < len(news) else "")))
     if not rows:
-        return ["| %s | — | лише версія |" % _cell(bid)]
+        return []                                       # the version alone: said once under the table (`build`)
     return rows[:ROWS_PER_BLOCK] + (["| %s | … | ще %d |" % (_cell(bid), len(rows) - ROWS_PER_BLOCK)] if len(rows) > ROWS_PER_BLOCK else [])
 
 
@@ -96,8 +97,10 @@ def _line(entry):
         bits.append(", ".join(str(x) for x in entry["ids"][:6]) + (" …" if len(entry["ids"]) > 6 else ""))
     if entry.get("skill"):
         bits.append(str(entry["skill"]))
+    if entry.get("overlay"):
+        bits.append("блоки: " + ", ".join(sorted(entry["overlay"])))
     if entry.get("reason"):
-        bits.append(str(entry["reason"]))
+        bits.append(os.path.basename(str(entry["reason"])) if op == "undo" else str(entry["reason"]))
     return "- " + " · ".join(b.replace("\n", " ") for b in bits)
 
 
@@ -127,13 +130,18 @@ def build(store, month):
             out += [head, "", "%s · %s%s" % ((e.get("ts") or "")[11:16], "синк ядра" if e["op"] == "provider-sync" else "оновлення ядра",
                                              (" · v%s → v%s" % (frm, to)) if frm and to and frm != to else ""), ""]
             taken, was = e.get("taken") or {}, e.get("was") or {}
-            rows = [r for bid in sorted(taken) for r in _block_rows(store, repo, bid, was.get(bid), taken[bid])]
+            per = {bid: _block_rows(store, repo, bid, was.get(bid), taken[bid]) for bid in sorted(taken)}
+            rows = [r for bid in sorted(per) for r in per[bid]]
             if rows:
                 out += ["| Блок | Було | Стало |", "|---|---|---|"] + rows + [""]
-            for k in ("pending", "overlay_held"):
-                if e.get(k):
-                    out.append("- %s: %s" % ("чекає рішення" if k == "pending" else "оверлей чекає рішення",
-                                             ", ".join(e[k] if isinstance(e[k], list) else sorted(e[k]))))
+            same = [bid for bid in sorted(per) if not per[bid]]
+            if same:
+                out.append("- лише версія: %s" % ", ".join(same))
+            if e.get("pending"):
+                out.append("- чекає рішення: %s" % ", ".join(e["pending"]))
+            held = e.get("overlay_held") or {}
+            if held:
+                out.append("- оверлей чекає рішення: %s" % ", ".join("%s (%s)" % (i, b) for b in sorted(held) for i in held[b]))
             if e.get("proposed"):
                 out.append("- пропозицій ядра у твої секції: %d (у скриньці)" % len(e["proposed"]))
             out.append("")
@@ -141,12 +149,12 @@ def build(store, month):
         if not own:
             continue
         out += ["## Твої зміни — %s" % day, ""]
-        rows = [c for e in own for c in e.get("changes") or []]
+        rows = [c for e in own if e.get("op") not in LINE_OPS for c in e.get("changes") or []]
         if rows:
             out += ["| Запис | Що | Було | Стало |", "|---|---|---|---|"]
             out += ["| %s | %s | %s | %s |" % (_cell(c.get("id")), _cell(c.get("where")), _cell(c.get("was")), _cell(c.get("became")))
                     for c in rows] + [""]
-        lines = [_line(e) for e in own if not e.get("changes")]
+        lines = [_line(e) for e in own if not e.get("changes") or e.get("op") in LINE_OPS]
         if lines:
             out += lines + [""]
     return "\n".join(out)

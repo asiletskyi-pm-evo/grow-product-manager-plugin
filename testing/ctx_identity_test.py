@@ -144,5 +144,17 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = ctx(home, ctxp, "identity", "check", "zorg-core", "--bundle", os.path.join(d, "nope.json"))
     check("a bundle file that is not there: exit 3", rc == 3, out)
 
+import ctx_identity as cid  # noqa: E402
+rows = {r["field"]: r["state"] for r in cid.compare({"team": "feedback-x", "role": "pm"},
+                                                    {"team": ("team-feedback-x", "реєстрація"), "role": ("Product Manager", "user")},
+                                                    cid.empty(), "zorg-core")}
+check("the same team with and without team-, «Product Manager» and pm — no question", rows == {"team": "same", "role": "same"}, rows)
+rows = {r["field"]: r["state"] for r in cid.compare({"team": "beta", "role": "pm"}, {"team": ("team-alpha", "r"), "role": ("legacy", "u")},
+                                                    cid.empty(), "zorg-core")}
+check("…another team and a role word no hint knows are asked", rows == {"team": "ask", "role": "ask"}, rows)
+rows = {r["field"]: r["state"] for r in cid.compare({"team": "alpha", "role": "analyst"}, {"team": ("alpha", "r"), "role": ("Data analyst", "u")},
+                                                    cid.empty(), "zorg-core")}
+check("…«Data analyst» is the analyst profile", rows["role"] == "same", rows)
+
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

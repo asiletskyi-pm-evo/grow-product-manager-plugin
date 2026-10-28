@@ -443,8 +443,8 @@ with tempfile.TemporaryDirectory() as d:
           open(ov.path_of(store.root, "zorg-core"), encoding="utf-8").read() == first, "")
     with guard(home, text):
         co.restore(snap0, store, copies)
-    check("restore of a snapshot taken before any overlay removes the file made since",
-          not os.path.exists(ov.path_of(store.root, "zorg-core")), os.listdir(store.root))
+    check("restore of a snapshot taken before any overlay removes the file made since, and the empty folder",
+          not os.path.exists(ov.path_of(store.root, "zorg-core")) and not os.path.exists(store.overlays_dir), os.listdir(store.root))
     put_overlay(home, text, store, OPS)
     m = json.load(open(os.path.join(snap0, "manifest.json"), encoding="utf-8"))
     m.pop("overlays_known", None)                       # a snapshot of v3.22, which knew no overlay
