@@ -547,17 +547,18 @@ def _cut(text):
     return t if len(t) <= CHANGE_CLIP else t[:CHANGE_CLIP - 1] + "…"
 
 
-def _hidden(text):
+def _hidden(text, label=None):
+    """The text, or «[приховано: <вид>]» when it — or `<label>: <text>`, as a field line reads — holds a secret or an
+    identifier (a labelled secret, `API key: …`, is caught only with its label)."""
     import ctx_never as cn                              # here: ctx_never needs nothing of the store
-    kinds = cn.scan(text)
+    kinds = cn.scan(text) or (cn.scan("%s: %s" % (label, text)) if label and text else [])
     return "[приховано: %s]" % cn._names(kinds) if kinds else text
 
 
 def _body_of(path):
     if not os.path.isfile(path):
         return None
-    with open(path, encoding="utf-8", newline="") as f:
-        return parse_record(f.read())["body"]
+    return parse_record(read_text(path))["body"]       # within the time budget: an evicted file never hangs a write
 
 
 def _own_headings(body):
@@ -605,7 +606,7 @@ def journal_changes(snapshot, records_dir, ids):
                 at = j1 if after is not None else i1
                 name = next((heads[k] for k in range(min(at, len(b) if after is not None else len(a)), -1, -1) if k in heads), "")
                 was, became = "\n".join(x.rstrip() for x in olds), "\n".join(x.rstrip() for x in news)
-            out.append({"id": rid, "where": name, "was": _cut(_hidden(was)), "became": _cut(_hidden(became))})
+            out.append({"id": rid, "where": name, "was": _cut(_hidden(was, name)), "became": _cut(_hidden(became, name))})
             if len(out) >= CHANGES_MAX:
                 return out
     return out

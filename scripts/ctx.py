@@ -2820,11 +2820,17 @@ def cmd_identity(a, c):
         if a.action == "take":
             if prof is None:
                 raise Usage("no profile record to write the role into")
+            value = bundle.get("role_enum") or bundle["role"]          # the plugin's value, not the role model's id
+            spec = _field_spec(prof, "Role")
+            err = sc.check_value(spec, value) if spec else None
+            if err:
+                raise Usage("Role: %s — the core's role %s is no value of the profile; set it yourself: ctx set %s Role <value>"
+                            % (err, bundle["role"], prof["id"]))
             srcs = csrc.load(c.store)
             csrc.adopt(srcs, prof)
-            csrc.note(srcs, prof["id"], csrc.field_key("Role"), bundle["role"], "repo:%s" % repo["id"], at=t)
+            csrc.note(srcs, prof["id"], csrc.field_key("Role"), value, "repo:%s" % repo["id"], at=t)
             csrc.save(c.store, srcs)
-            c.store.write(co.touch(dict(prof, body=cs.field_set(prof["body"], "Role", bundle["role"]), source="repo:%s" % repo["id"],
+            c.store.write(co.touch(dict(prof, body=cs.field_set(prof["body"], "Role", value), source="repo:%s" % repo["id"],
                                         modified=t), t))
             ids = [prof["id"]]
         cid.answer(mem, repo["id"], a.field, "mine" if a.action == "keep" else "core", bundle[a.field], mval, t[:10])
@@ -3392,6 +3398,14 @@ def emit(result, conflict=None):
     print("CTX_RESULT " + json.dumps(result, ensure_ascii=False))
 
 
+def _journal_size(c):
+    """The journal's size in bytes (None: none) — a write that added no line leaves the month's changelog as it is."""
+    try:
+        return os.path.getsize(os.path.join(c.store.state_dir, "journal.jsonl"))
+    except OSError:
+        return None
+
+
 def main(argv=None):
     try:
         a = build_parser().parse_args(argv)
@@ -3406,9 +3420,10 @@ def main(argv=None):
                 cn.check("%s: %s" % (a.field, a.value))
         c = Ctx(a)
         with cs.guard_roots(co.allowed_roots(c.home, c.text)):
+            before = _journal_size(c) if writes(a) else None
             rc, res = COMMANDS[a.cmd](a, c)
             idle = a.cmd == "provider" and a.action == "sync" and not res.get("synced")    # a sync that synced nothing
-            if rc == 0 and writes(a) and c.store.exists():   # since v3.23.0: the month's changelog follows every write
+            if rc == 0 and writes(a) and c.store.exists() and _journal_size(c) != before:   # since v3.23.0: the changelog
                 try:
                     chi.write(c.store, now()[:7])
                 except Exception:  # noqa: BLE001 — a derived note never changes the command's result

@@ -93,7 +93,7 @@ with tempfile.TemporaryDirectory() as d:
     jb, fb = bundle(home, d, "b.two@zorg.example")              # the core: team alpha, role analyst; you: pm
     rc, out, res = ctx(home, ctxp, "identity", "check", "zorg-core", "--bundle", fb)
     check("check: the role differs — both values with their source, the commands; the team agrees",
-          rc == 0 and res.get("questions") == 1 and "роль: ядро — analyst · People/b-two.md: «Data analyst» → analyst" in out
+          rc == 0 and res.get("questions") == 1 and "роль: ядро — analyst (product_analyst) · People/b-two.md: «Data analyst» → analyst" in out
           and "роль: ти — pm · ← migrated (джерело запису)" in out and "ctx identity keep zorg-core role" in out
           and "команда: збігається (alpha)" in out, out)
     before = open(os.path.join(store.state_dir, "journal.jsonl"), encoding="utf-8").read()
@@ -118,11 +118,11 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = ctx(home, ctxp, "identity", "take", "zorg-core", "role", "--bundle", fb)
     prof = [r for r in store.load() if r["type"] == "profile"][0]
     srcs = json.load(open(os.path.join(store.state_dir, "sources.json"), encoding="utf-8"))
-    check("take role: your profile says the core's role, its source repo:zorg-core",
-          rc == 0 and "- **Role:** analyst" in prof["body"] and any(e.get("kind") == "repo:zorg-core"
+    check("take role: your profile says the core's role as the plugin's value (product_analyst), its source repo:zorg-core",
+          rc == 0 and "- **Role:** product_analyst" in prof["body"] and any(e.get("kind") == "repo:zorg-core"
                                                                     for e in srcs["records"][prof["id"]].values()), (out, prof["body"]))
     rc, out, res = ctx(home, ctxp, "identity", "check", "zorg-core", "--bundle", fb)
-    check("…then the check agrees", res.get("questions") == 0 and "роль: збігається (analyst)" in out, out)
+    check("…then the check agrees", res.get("questions") == 0 and "роль: збігається (product_analyst)" in out, out)
     rc, out, res = ctx(home, ctxp, "identity", "take", "zorg-core", "team", "--bundle", fb)
     check("take team: not here — context-connect rebuilds the bundle with --team (exit 3)", rc == 3 and "context-connect" in out, out)
 
@@ -155,6 +155,20 @@ check("…another team and a role word no hint knows are asked", rows == {"team"
 rows = {r["field"]: r["state"] for r in cid.compare({"team": "alpha", "role": "analyst"}, {"team": ("alpha", "r"), "role": ("Data analyst", "u")},
                                                     cid.empty(), "zorg-core")}
 check("…«Data analyst» is the analyst profile", rows["role"] == "same", rows)
+
+rows = {r["field"]: r["state"] for r in cid.compare({"team": "alpha", "role": "analyst", "role_enum": "product_analyst"},
+                                                    {"team": ("alpha", "r"), "role": ("product_analyst", "u")}, cid.empty(), "zorg-core")}
+check("your profile's product_analyst and the core's analyst agree (role_enum)", rows["role"] == "same", rows)
+check("propose-only gives role_enum", bundle(os.path.join(tempfile.gettempdir()), tempfile.mkdtemp(), "b.two@zorg.example")[0].get("role_enum")
+      == "product_analyst", "")
+
+rows = {r["field"]: r["state"] for r in cid.compare({"team": "beta", "team_from": "--team", "role": "pm", "role_from": "типово → pm"},
+                                                    {"team": ("alpha", "r"), "role": ("legacy", "u")}, cid.empty(), "zorg-core")}
+check("a team you named (--team) or a default role is not the core's word: no question", rows == {"team": "unsaid", "role": "unsaid"}, rows)
+
+rows = {r["field"]: r["state"] for r in cid.compare({"team": "alpha", "role": "leadership", "role_enum": "head_of_product"},
+                                                    {"team": ("alpha", "r"), "role": ("head_of_product", "u")}, cid.empty(), "zorg-core")}
+check("head_of_product in your profile and the core's leadership agree through role_enum", rows["role"] == "same", rows)
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

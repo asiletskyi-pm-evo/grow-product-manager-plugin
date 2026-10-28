@@ -23,6 +23,8 @@ import ctx_store as cs  # noqa: E402
 
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 PROVIDER_OPS = ("provider-apply", "provider-sync")
+BASE_READ_S = 1.0
+OWN_ROWS_PER_DAY = 40                                   # a day's table of your changes, then «ще N»
 LINE_OPS = ("overlay", "undo", "identity")        # said as one line, never as the block text they rewrote
 ROWS_PER_BLOCK = 10
 OP_WORDS = {"sync": "імпорт прямих правок", "set": "поле", "append": "рядок", "add": "новий запис", "migrate": "перенесення в записи",
@@ -43,9 +45,8 @@ def _base(store, repo, sha):
         return None
     path = os.path.join(store.state_dir, "blocks", repo, sha + ".md")
     try:
-        with open(path, encoding="utf-8", newline="") as f:
-            return f.read()
-    except OSError:
+        return cs.read_text(path, timeout=BASE_READ_S)  # an evicted base costs a second, never a hang
+    except (OSError, UnicodeDecodeError, cs.StoreError):
         return None
 
 
@@ -104,12 +105,30 @@ def _line(entry):
     return "- " + " · ".join(b.replace("\n", " ") for b in bits)
 
 
+def _entries(store):
+    """The journal's lines; a line that does not parse (cut by a crash) is passed over, never a reason to stop."""
+    path = os.path.join(store.state_dir, "journal.jsonl")
+    try:
+        text = cs.read_text(path, timeout=5.0)
+    except (OSError, UnicodeDecodeError, cs.StoreError):
+        return []
+    out = []
+    for line in text.splitlines():
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(e, dict):
+            out.append(e)
+    return out
+
+
 def build(store, month):
     """The note of `month` (YYYY-MM): its frontmatter, title and sections, the newest day first."""
     if not MONTH.match(month or ""):
         raise ValueError("month is YYYY-MM, not %r" % month)
     days = {}
-    for e in store.journal_entries():
+    for e in _entries(store):
         ts = str(e.get("ts") or "")
         if ts[:7] != month:
             continue
@@ -153,7 +172,8 @@ def build(store, month):
         if rows:
             out += ["| Запис | Що | Було | Стало |", "|---|---|---|---|"]
             out += ["| %s | %s | %s | %s |" % (_cell(c.get("id")), _cell(c.get("where")), _cell(c.get("was")), _cell(c.get("became")))
-                    for c in rows] + [""]
+                    for c in rows[:OWN_ROWS_PER_DAY]]
+            out += (["| … | ще %d змін | | |" % (len(rows) - OWN_ROWS_PER_DAY)] if len(rows) > OWN_ROWS_PER_DAY else []) + [""]
         lines = [_line(e) for e in own if not e.get("changes") or e.get("op") in LINE_OPS]
         if lines:
             out += lines + [""]
@@ -169,10 +189,9 @@ def write(store, month):
     text = build(store, month)
     path = path_of(store, month)
     try:
-        with open(path, encoding="utf-8", newline="") as f:
-            if f.read() == text:
-                return path, False
-    except OSError:
+        if cs.read_text(path, timeout=BASE_READ_S) == text:
+            return path, False
+    except (OSError, UnicodeDecodeError, cs.StoreError):
         pass
     os.makedirs(cs.check_target(os.path.dirname(path)), exist_ok=True)
     cs.atomic_write(path, text)

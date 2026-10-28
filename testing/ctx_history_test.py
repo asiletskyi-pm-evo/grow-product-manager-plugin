@@ -88,6 +88,16 @@ with tempfile.TemporaryDirectory() as d:
     became = [c["became"] for c in j.get("changes") or []]
     check("an import whose line holds a card number: the value is hidden, its kind named",
           j["op"] == "sync" and became and all("4111" not in b for b in became) and any(b.startswith("[приховано:") for b in became), j)
+    lc = open(ctxp, encoding="utf-8").read()
+    open(ctxp, "w", encoding="utf-8").write(lc.replace("- a new line about Zorg\n", "- a new line about Zorg\n- **API key:** abcd1234efgh5678\n", 1))
+    rc, out, res = ctx(home, ctxp, "sync")
+    j = journal(store)[-1]
+    check("a labelled secret (API key: …) is hidden in the journal too", "abcd1234efgh5678" not in json.dumps(j, ensure_ascii=False)
+          and any(c["became"].startswith("[приховано:") for c in j.get("changes") or []), j)
+    os.remove(note)
+    rc, out, res = ctx(home, ctxp, "set", "product.zorg-app", "Jira Project Key", "ZORG")
+    check("a write that added no journal line writes no changelog", "unchanged" in out and not os.path.exists(note), out[-200:])
+    ctx(home, ctxp, "history", "--write", "--month", month)
     long = "x" * 400
     rc, out, res = ctx(home, ctxp, "set", "product.zorg-app", "Notes", long)
     j = journal(store)[-1]
@@ -99,7 +109,10 @@ with tempfile.TemporaryDirectory() as d:
     with open(os.path.join(store.state_dir, "journal.jsonl"), "a", encoding="utf-8") as f:
         f.write(json.dumps({"ts": month + "-01T09:00:00+03:00", "op": "sync", "ids": ["org.zorg"], "source": "import",
                             "reason": "a line of v3.22", "snapshot": "/nowhere"}) + "\n")
+    with open(os.path.join(store.state_dir, "journal.jsonl"), "a", encoding="utf-8") as f:
+        f.write('{"ts": "%s-02T09:00:00+03:00", "op": "sy' % month + "\n")
     text_m = ch.build(store, month)
+    check("history: a torn journal line is passed over, the rest still read", "a line of v3.22" in text_m, "")
     check("history: a v3.22 line is listed with what changed and no values", "a line of v3.22" in text_m and "org.zorg" in text_m, text_m)
     check("history: the note's form — frontmatter, title, newest day first, own changes as a table",
           text_m.startswith("---\ntype: system\nkind: context-history\nmonth: %s\n---\n" % month)

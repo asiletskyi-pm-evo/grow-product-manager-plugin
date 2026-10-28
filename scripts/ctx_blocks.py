@@ -863,6 +863,13 @@ def _fields(lines):
     return out
 
 
+def _specific(value):
+    """Is a field's value worth proposing wherever your text holds it? Not a single plain word (`active`, `yes`, `TBD`):
+    such a value is said in too many places to mean this block. A number, a link, a key, two words or more — yes."""
+    v = value.strip()
+    return len(v) >= SUGGEST_MIN_VALUE and (len(v.split()) > 1 or bool(re.search(r"[\d@/:.\-_]", v)))
+
+
 def _unbullet(line):
     """A line without its list marker (`- `, `* `, `1. `): the core's prose line and yours as a bullet are the same."""
     return re.sub(r"^(?:[-*+]|\d+[.)])\s+", "", line.strip())
@@ -883,11 +890,29 @@ def core_suggestions(old, new, records, ops, rid, from_v, to_v, today):
     for o in ov.for_block(ops, bid):
         for x0, x1 in ov.locate(a, o["target"].get("path", "")):
             touched.update(ln.strip() for ln in a[x0:x1])
-    fa, fb = _fields(a), _fields(b)
-    fields = {k: (fa[k][1], fb[k][1]) for k in fa if k in fb and fa[k][1] != fb[k][1] and len(fa[k][1]) >= SUGGEST_MIN_VALUE
-              and not any(ov.FIELD.match(t) and " ".join(ov.FIELD.match(t).group(2).split()).casefold() == k for t in touched)}
+    ops_ = difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+    pairs = {}                                          # (label, old value) → {new values}: fields paired by position
+    for tag, i1, i2, j1, j2 in ops_:
+        if tag != "replace":
+            continue
+        news = [ov.FIELD.match(y.rstrip("\r")) for y in b[j1:j2]]
+        used = set()
+        for x in a[i1:i2]:
+            mx = ov.FIELD.match(x.rstrip("\r"))
+            if not mx or x.strip() in touched:
+                continue
+            k = " ".join(mx.group(2).split()).casefold()
+            hit = next((n for n, my in enumerate(news) if my and n not in used
+                        and " ".join(my.group(2).split()).casefold() == k), None)
+            if hit is None:
+                continue
+            used.add(hit)
+            old_v, new_v = mx.group(3).strip(), news[hit].group(3).strip()
+            if old_v != new_v and _specific(old_v):
+                pairs.setdefault((k, old_v), set()).add(new_v)
+    fields = {key: next(iter(v)) for key, v in pairs.items() if len(v) == 1}     # two new values for one old: none
     lines = []
-    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+    for tag, i1, i2, j1, j2 in ops_:
         if tag != "replace" or i2 - i1 != j2 - j1:
             continue
         for x, y in zip(a[i1:i2], b[j1:j2]):
@@ -906,9 +931,9 @@ def core_suggestions(old, new, records, ops, rid, from_v, to_v, today):
             m = ov.FIELD.match(ln)
             hit = None
             if m:
-                k = " ".join(m.group(2).split()).casefold()
-                if k in fields and m.group(3).strip() == fields[k][0]:
-                    hit = (st, "%s %s" % (m.group(1).strip(), fields[k][1]), "%s: %s → %s" % (m.group(2), fields[k][0], fields[k][1]))
+                k = (" ".join(m.group(2).split()).casefold(), m.group(3).strip())
+                if k in fields:
+                    hit = (st, "%s %s" % (m.group(1).strip(), fields[k]), "%s: %s → %s" % (m.group(2), k[1], fields[k]))
             if hit is None and st:
                 bullet = st[:len(st) - len(_unbullet(st))]
                 pair = next((y for x, y in lines if x == _unbullet(st)), None)
@@ -1446,7 +1471,10 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
             state["blocks"][bid]["host"] = made[0]
         res["written"].extend(made)
     save_state(store, rid, state)
-    proposed = _suggest(store, rid, old, taken, theirs, ops, now, fetched.get("version"))
+    try:                                                # the proposals never cost the pass its journal line
+        proposed = _suggest(store, rid, old, taken, theirs, ops, now, fetched.get("version"))
+    except Exception:  # noqa: BLE001 — records are written: the journal line and the compile must follow
+        proposed = []
     prune_bases(store, rid, state)
     line = {"ts": now, "op": op, "source": source, "from_v": old.get("version") or base_version(old),
             "to_v": fetched.get("version"), "ids": res["written"], "decisions": decisions, "pending": pending,

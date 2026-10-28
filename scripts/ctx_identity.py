@@ -100,10 +100,12 @@ def _role_profile(v):
 PM_HINT = r"product manager|product owner|\bpm\b|продакт|менеджер продукту"   # the builder's fallback, said by name
 
 
-def _agree(field, mine, core):
+def _agree(field, mine, core, enum=None):
+    """Do your value and the core's say the same? A team by its key; a role by the role model's id (`analyst`), by the
+    plugin's value the builder maps it to (`product_analyst`, `role_enum`) or by the profile a title answers."""
     if field == "team":
         return _team_key(mine) == _team_key(core)
-    return _same(mine, core) or _role_profile(mine) == _role_profile(core)
+    return _same(mine, core) or (enum is not None and _same(mine, enum)) or _role_profile(mine) == _role_profile(core)
 
 
 def compare(bundle, mine, mem, repo_id):
@@ -116,9 +118,14 @@ def compare(bundle, mine, mem, repo_id):
         core = bundle.get(f)
         title = bundle.get("team_title") if f == "team" else None
         val, src = mine.get(f, (None, None))
+        if f == "role" and bundle.get("role_enum") and bundle["role_enum"] != core:
+            title = bundle["role_enum"]                     # what the profile would say: the plugin's value
         row = {"field": f, "core": core, "core_title": title, "core_from": bundle.get("%s_from" % f) or "—", "mine": val,
                "mine_from": src or "—"}
-        if val is None or _agree(f, val, core):
+        said = str(row["core_from"])
+        if said.startswith(("--team", "--role", "типово")):     # you named it, or nothing in the core says it: no question
+            row["state"] = "unsaid"
+        elif val is None or _agree(f, val, core, bundle.get("role_enum") if f == "role" else None):
             row["state"] = "same" if val is not None else "none"
         else:
             ans = answers.get(f)
@@ -139,6 +146,8 @@ def render(rows, repo_id):
         core = r["core"] + (" (%s)" % r["core_title"] if r.get("core_title") and r["core_title"] != r["core"] else "")
         if r["state"] == "same":
             lines.append("%s: збігається (%s)" % (w, r["mine"]))
+        elif r["state"] == "unsaid":
+            lines.append("%s: ядро цього не каже (%s · %s)" % (w, core, r["core_from"]))
         elif r["state"] == "none":
             lines.append("%s: ядро — %s · %s (у тебе не вказано)" % (w, core, r["core_from"]))
         elif r["state"] == "kept":

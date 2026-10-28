@@ -802,6 +802,7 @@ def main():
         print(json.dumps(dict(team=team, role=role, role_title=role_title, files=len(files), pages=conf,
                               email=email, team_title=tb.get("title", team),           # since v3.23.0: where each came from
                               team_from="--team" if a.team else "access-bundles.json: emails", role_from=role_from,
+                              role_enum=(m.get("role_enum_map") or DEFAULT_ROLE_ENUM).get(role, "other"),
                               modules=tb.get("modules", []), missions=tb.get("missions", []), metrics=tb.get("metrics", []),
                               dashboards=tb.get("dashboards", []), union_of=tb.get("union_of", [])), ensure_ascii=False, indent=1))
         if existing or in_place:

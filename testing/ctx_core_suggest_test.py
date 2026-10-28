@@ -112,6 +112,18 @@ check("core_suggestions: a field your overlay touches is not proposed", [p["text
 props = cb.core_suggestions(SCOPE, S5, [{"id": "p", "body": "- **Board:** PROJ-board-7\n\n- **Board:** PROJ-board-7\n"}], [],
                             "zorg-core", "0.4", "0.5", "2026-10-20")
 check("core_suggestions: the same line twice in a record is one proposal", len(props) == 1, props)
+# --- review v3.23.0 tasks 5–7: I2 fields by position, M6 a plain word
+L_OLD = region("teams", "0.4", "### Teams\n#### Alpha\n- **Lead:** Ann Zorg\n#### Beta\n- **Lead:** Bob Zorg")
+L_NEW = region("teams", "0.5", "### Teams\n#### Gamma\n- **Lead:** Cid Zorg\n#### Alpha\n- **Lead:** Ann Zorg\n#### Beta\n- **Lead:** Dee Zorg")
+props = cb.core_suggestions(L_OLD, L_NEW, [{"id": "t", "body": "- **Lead:** Ann Zorg\n- **Lead:** Bob Zorg\n"}], [], "zorg-core",
+                            "0.4", "0.5", "2026-10-20")
+check("fields are paired by position: a new team's lead at the top proposes nothing for Alpha; Beta's change is proposed",
+      [(p["text"], p["value"]) for p in props] == [("- **Lead:** Bob Zorg", "- **Lead:** Dee Zorg")], props)
+G_OLD = region("scope", "0.4", "### Scope\n- **Status:** active\n- **Board:** PROJ board")
+G_NEW = region("scope", "0.5", "### Scope\n- **Status:** paused\n- **Board:** PROJ board 2")
+props = cb.core_suggestions(G_OLD, G_NEW, [{"id": "t", "body": "- **Status:** active\n- **Board:** PROJ board\n"}], [], "zorg-core",
+                            "0.4", "0.5", "2026-10-20")
+check("a single plain word (Status: active) is never proposed; a specific value is", [p["text"] for p in props] == ["- **Board:** PROJ board"], props)
 SHORT_OLD = region("scope", "0.4", "### Scope\n- **Size:** XS\nshort line")
 SHORT_NEW = region("scope", "0.5", "### Scope\n- **Size:** S\nshorter line")
 check("core_suggestions: a value shorter than 3 characters and a line shorter than 12 — nothing",
@@ -169,6 +181,20 @@ with tempfile.TemporaryDirectory() as d:                          # an edited bl
     res = apply_of(home, text, copies, store, published(store, teams=region("teams", "0.5", "### Teams map\n- Alpha, Beta, Gamma")))
     check("a block whose change touches nothing of yours proposes nothing", inbox(store) == [] and "proposed" not in journal(store)[-1],
           inbox(store))
+
+with tempfile.TemporaryDirectory() as d:                          # I5: a failing proposal never costs the journal line
+    home, text, copies, store, ctxp = migrated(d)
+    f = published(store)
+    with guard(home, text):
+        cb.adopt(store, copies, home, REPO, f, NOW, True)
+    real = cb._suggest
+    cb._suggest = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+    try:
+        res = apply_of(home, text, copies, store, published(store, scope=S5))
+    finally:
+        cb._suggest = real
+    check("a proposal that fails: the pass still has its journal line and its compile", res["changed"] and res["compiled"]
+          and journal(store)[-1]["op"] == "provider-apply" and "proposed" not in journal(store)[-1], journal(store)[-1])
 
 # ------------------------------------------------------------------ propose refuses the source
 with tempfile.TemporaryDirectory() as d:
