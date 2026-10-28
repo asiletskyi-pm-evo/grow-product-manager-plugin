@@ -387,7 +387,7 @@ def propose(mem, raws, skill, recs, today):
             body = apply_to(d, rec, today)
         except cs.RegionError:
             out.append({"status": BLOCK, "record": d["record"],
-                        "why": "це блок ядра — пропозиції ядру прийдуть у v3.23.0"})
+                        "why": "це блок ядра — поправку до ядра пише оверлей: ctx overlay add (context-protocol.md §5n)"})
             continue
         except ValueError as e:
             out.append({"status": REFUSED, "record": d["record"], "why": str(e)})

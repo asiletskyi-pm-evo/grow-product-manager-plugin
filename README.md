@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.22.0
+**Version:** 3.23.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.23.0** — **«Оверлей і журнал»: your corrections to a core are declared, and you can read what changed** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A correction you keep to a team's shared core is an operation in `overlays/<repo>.yaml` — replace, remove, append, ignore or alias, with your reason — laid again after every refresh and daily sync, so a core release over a block you did not edit asks nothing. When the core fixes what you corrected, you get one question, «прибрати поправку?»; a prose note of corrections moves into the overlay through `context-connect` with one «так». A value the core changed that you copied into your own sections arrives in the inbox. `ctx history` writes a note a month with «Було | Стало» of the core's releases and your own changes; `ctx identity` puts the core's team and role for your e-mail beside yours with both sources. A team that wants to share its context copies `examples/provider-kit/zorg-core/` and colleagues connect it with one command (`ctx repo add`). Measured on the author's real context: a core release in one confirmation with 0 questions, and the correction the core fixed asked about exactly once.
 
 **New in v3.22.0** — **«Конфігуратор-петля»: the configurator reads first and asks at most five questions** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). Setting up no longer starts with an interview: the configurator reads your connectors read-only — Atlassian first, then the calendar, your mail's domain, Fireflies and Tableau if they are connected — and `ctx bootstrap` shows one table: what each field says now, what it would say, where that came from and how sure it is. What a connector cannot be sure of goes to the inbox instead; a value you gave yourself is never taken but by number. Basic is at most five decisions — you, your role, your products, your team, the table — and saving it creates your context store at once, with the source of every field (`ctx show <id>`). Once a week the morning brief checks your records against the connectors (`ctx validate --recheck`): a finding becomes an inbox delta only when a second look a week later sees it again, never from a connector that did not answer. `/grow-product-manager:context consolidate` proposes removing a duplicate line, making a relative date absolute and dropping a passed deadline — as proposals, never a write. Measured on the author's real context: 0 false closures, and a new user's setup in under three minutes of questions.
 
@@ -911,7 +913,7 @@ Every protocol keeps a fallback chain (named agent → `general-purpose` with th
 | `/grow-product-manager:glossary-lint` | `[file]` | Gate 3 team-language lint over a file or pasted text, standalone |
 | `/grow-product-manager:setup` | `--show \| --write-gate on\|off` | Host-level toggles (the write gate) and whether the hooks environment is wired in this session |
 | `/grow-product-manager:find` | `<запит> [--list] [--all]` | The search of your context, typed (since v3.17.0): `context-navigator`'s answer with a source and a date for every statement, `--list` for the notes instead, `--all` for the session's live sources too; ends with `Де шукав: …` |
-| `/grow-product-manager:context` | `show [запис] \| health \| inbox \| recheck \| consolidate` | Your context, typed (since v3.21.0): `show` — what the plugin knows about you, who wrote each record last and when it was verified, since v3.22.0 the source of each field; `health` — what wants looking after, each line with the command that fixes it; `inbox` — what skills learned, taken or rejected in one answer; since v3.22.0 `recheck` — your records against the connectors, `consolidate` — duplicates and stale dates as proposals |
+| `/grow-product-manager:context` | `show [запис] \| health \| inbox \| recheck \| consolidate \| overlay \| history` | Your context, typed (since v3.21.0): `show` — what the plugin knows about you, who wrote each record last and when it was verified, since v3.22.0 the source of each field; `health` — what wants looking after, each line with the command that fixes it; `inbox` — what skills learned, taken or rejected in one answer; since v3.22.0 `recheck` — your records against the connectors, `consolidate` — duplicates and stale dates as proposals; since v3.23.0 `overlay` — your corrections to a core, `history` — what changed, a note a month |
 
 **Hooks — `hooks/hooks.json` (3 hooks).** All three run in the session's own environment and **fail open** — a script error can never block a session.
 
@@ -1085,5 +1087,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.22.0  
+**Version:** 3.23.0  
 **Last Updated:** October 2026
