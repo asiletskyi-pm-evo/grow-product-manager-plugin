@@ -48,6 +48,7 @@ CHECKS = """
 26. provider-contract    a vault_*/brain_* tool cited in shipped docs that is not a row of the vault/v1 table in context-provider-protocol.md
 27. inbox-step           a SKILL.md without its end-of-run line (context-protocol.md §5i): the inbox, or — People contour — no deltas
 28. bootstrap-template   a heading or a deferred-step key of ctx bootstrap's skeleton (scripts/ctx_bootstrap.py) that onboarding Step 16c does not have
+29. command-size         a commands/*.md over 4096 bytes — Codex CLI silently does not migrate it into a skill
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1551,6 +1552,16 @@ if os.path.isfile(_bt) and os.path.isfile(_ob):
             fail("bootstrap-template", f"scripts/ctx_bootstrap.py: deferred step «{_k}» is not a key of onboarding-steps.md")
     if not _hm or not _dm:
         fail("bootstrap-template", "scripts/ctx_bootstrap.py: SKELETON_HEADINGS or DEFERRED not found")
+
+# ============================================================ command size (29)
+# v3.22.0: host-smoke's Codex leg listed 39 of 40 — Codex CLI (0.153) migrates a command into a skill only up to 4 KiB
+# and drops a larger one without a word. Measured by bisection; the details of a command belong in references/.
+COMMAND_MAX = 4096
+for _c in sorted(glob.glob(os.path.join(root, "commands", "*.md"))):
+    _n = os.path.getsize(_c)
+    if _n > COMMAND_MAX:
+        fail("command-size", f"commands/{os.path.basename(_c)}: {_n} bytes > {COMMAND_MAX} — Codex will not migrate it; "
+                             "move the details into references/")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

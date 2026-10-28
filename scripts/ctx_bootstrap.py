@@ -144,13 +144,19 @@ def diff(obs, recs, srcs=None):
     srcs = srcs or csrc.empty()
     orgs = [r for r in recs if r["type"] == "org" and not cs.has_status_region(r["body"])]
     teams = [r for r in recs if r["type"] == "team" and not cs.has_status_region(r["body"])]
+    facts = obs["facts"]
+    if not orgs:                                        # no organisation yet: the site's word and the domain's are one
+        named = [f for f in facts if f["type"] == "org"]
+        title = next((f["title"] for src in ("user", "atlassian:site", "mail:domain", "local-context")
+                      for f in named if f["from"] == src), None)
+        facts = [dict(f, title=title) if f["type"] == "org" else f for f in facts]
     alias = {}                                          # (type, title) → the record its key or space found
-    for f in obs["facts"]:
+    for f in facts:
         hit = None if find(recs, f["type"], f["title"], fallback=False) else _by_anchor(recs, f)
         if hit:
             alias[(f["type"], _n(f["title"]))] = hit
-    resolved, invalid, orphans = [], [], []
-    for f in obs["facts"]:
+    resolved, invalid, orphans, spaces = [], [], [], []
+    for f in facts:
         if f["field"]:                                  # a value its type refuses is no row (ctx set would refuse it)
             spec = (sc.load_fields().get(_kind(f["type"])) or {}).get(f["field"])
             err = sc.check_value(spec, f["value"]) if spec else None
@@ -160,7 +166,7 @@ def diff(obs, recs, srcs=None):
         rec = find(recs, f["type"], f["title"], fallback=False) or alias.get((f["type"], _n(f["title"]))) or \
             find(recs, f["type"], f["title"])
         if rec is None and f["from"].startswith("confluence:"):
-            orphans.append(f)                           # a space alone never makes a product
+            spaces.append(f)                            # a space alone never makes a product: it joins one the table makes
             continue
         renamed = bool(rec) and f["type"] == "org" and _n(bare_title(rec)) != _n(f["title"])
         where = rec["id"] if rec else "%s:%s" % (f["type"], _n(f["title"]))
@@ -231,6 +237,13 @@ def diff(obs, recs, srcs=None):
                          "confidence": f["confidence"], "ref": f["ref"], "sign": sign,
                          "mine": sign == "~" and _mine(kind) and f["from"] != "user",    # an answer now is yours
                          "clash": clash, "renamed": renamed, "orphan": False})
+    for f in spaces:
+        row = news.get((f["type"], _n(f["title"])))
+        if row is not None and f["confidence"] != "low" and f["field"]:
+            row["fields"].append({"field": f["field"], "value": f["value"], "from": f["from"],
+                                  "confidence": f["confidence"], "ref": f["ref"]})
+        else:
+            orphans.append(f)
     new_org = any(r["new"] and r["type"] == "org" for r in rows)
     for r in rows:
         if r["new"] and r["type"] in ("product", "team") and not orgs and not new_org:

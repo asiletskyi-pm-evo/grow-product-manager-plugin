@@ -321,6 +321,22 @@ try:
     check("B6 ctx undo → the store removed, local-context.md one file again",
           rc == 0 and not os.path.isdir(os.path.join(store, "records")) and os.path.exists(ctx), out[-300:])
 
+    home4 = os.path.join(d, "new4")
+    os.makedirs(home4)
+    o4n = dict(o, facts=[f for f in o["facts"] if f["type"] != "org"] + [
+        {"type": "org", "title": "zorgsite", "field": "Jira", "value": "https://zorgsite.atlassian.example",
+         "from": "atlassian:site"},
+        {"type": "org", "title": "zorg", "field": "Domain", "value": "zorg.example", "from": "mail:domain"}])
+    p4n = os.path.join(d, "new4.json")
+    json.dump(o4n, open(p4n, "w", encoding="utf-8"), ensure_ascii=False)
+    rc, out, res = run_bare(home4, "bootstrap", "--observed", p4n)
+    orgs = [r for r in res["rows"] if r["new"] and r["type"] == "org"]
+    app = [r for r in res["rows"] if r["new"] and r["title"] == "Zorg App"]
+    check("B10 a new user's site and mail domain are one organisation (the site's word), not two",
+          len(orgs) == 1 and orgs[0]["title"] == "zorgsite" and len(orgs[0]["fields"]) == 2, orgs)
+    check("B11 a Confluence space joins the new product of its name; alone it would make none",
+          app and any(f["field"] == "Confluence Space" for f in app[0]["fields"]), app)
+
     home2 = os.path.join(d, "new2")
     os.makedirs(home2)
     o2 = dict(o, facts=[f for f in o["facts"] if f["type"] != "org"])
