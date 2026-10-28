@@ -187,7 +187,7 @@ _FROM_PLAN = ("change(s) waiting", "conflict:", "stray file", "is missing on dis
 
 
 def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, errors, idx, snaps, baks, today,
-           unread_regs=(), recheck=None, consolidate=None):
+           unread_regs=(), recheck=None, consolidate=None, overlays=()):
     """The lines of `ctx health`: (level, text, fix). What the sync plan already counts (edits waiting, conflicts,
     stray and missing files) is said once, not again among validate's warnings and errors."""
     out = []
@@ -245,6 +245,14 @@ def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, e
     elif consolidate:
         out.append((WARN, "consolidate знайде %d (дублі, відносні дати, минулі строки)" % consolidate,
                     "/context consolidate"))
+    for o in overlays:                                  # since v3.23.0: your declared corrections to a core
+        if o.get("error"):
+            out.append((ACT, "оверлей не прочитано: %s" % o["error"], "/context overlay"))
+        elif o["held"]:
+            out.append((ACT, "оверлей %s: %d поправ%s чекають рішення (%s)" % (o["repo"], len(o["held"]),
+                        "ка" if len(o["held"]) == 1 else "ок", ", ".join(o["held"][:5])), "/context overlay"))
+        else:
+            out.append((OK, "оверлей %s: поправок діє %d" % (o["repo"], o["applied"]), None))
     for name in ("slots", "entities", "search", "bridges", "sources"):
         if isinstance(mem.get(name), str):
             out.append((ACT, "пам'ять %s не читається: %s" % (name, mem[name]), "ctx status"))

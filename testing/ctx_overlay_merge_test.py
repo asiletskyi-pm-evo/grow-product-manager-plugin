@@ -159,6 +159,10 @@ with tempfile.TemporaryDirectory() as d:
     after = tree(store)
     check("…and every file but the block state is byte for byte", {k: v for k, v in after.items() if "blocks" not in k}
           == {k: v for k, v in before.items() if "blocks" not in k}, set(after) ^ set(before))
+    mask = lambda t: json.dumps({b: {k: v for k, v in e.items() if k != "checked"} for b, e in json.loads(t)["blocks"].items()})
+    check("…and the block state has no overlay key (the times of the check aside)",
+          mask(after[".state/blocks/zorg-core.json"]) == mask(before[".state/blocks/zorg-core.json"])
+          and b"overlay" not in after[".state/blocks/zorg-core.json"], "")
 
 # ------------------------------------------------------------------ first application, then a core release
 with tempfile.TemporaryDirectory() as d:
@@ -257,6 +261,9 @@ with tempfile.TemporaryDirectory() as d:
           and rg["teams"].endswith("- Gamma (overlay)\n<!-- zorg-core:end id=teams -->") and rg["scope"] == S5, rg)
     j = journal(store)[-1]
     check("…the journal line names the held ones", j.get("overlay_held") == {"team": ["members"], "scope": ["only"]}, j)
+    sec = sy.render_section(dict(sy._result(LATER, "changed", **sy._counts(res5, cb._theirs(f5)[0])), repo="zorg-core"), apply=res5)
+    check("…the sync's report has a part for the held corrections", "### Оверлей чекає рішення" in sec
+          and "members (team)" in sec and "/context overlay" in sec, sec)
     check("…the apply's result carries them for the question", sorted(x["id"] for rs in res5["overlay"].values() for x in rs
                                                                       if x["state"] == "held") == ["members", "only"], res5["overlay"])
 
@@ -311,6 +318,91 @@ with tempfile.TemporaryDirectory() as d:
     check("ctx undo: the records, the state and the overlay file as before the pass",
           code == 0 and {k: v for k, v in after.items() if k.startswith(("records", ".state/blocks", "overlays"))}
           == {k: v for k, v in before.items() if k.startswith(("records", ".state/blocks", "overlays"))}, out[-600:])
+
+# ------------------------------------------------------------------ review v3.23.0 tasks 1–2
+def overlaid_store(d):
+    home, text, copies, store, ctxp = migrated(d)
+    f = published(store)
+    adopt(home, text, copies, store, f)
+    put_overlay(home, text, store, OPS)
+    apply_of(home, text, copies, store, f)
+    return home, text, copies, store, ctxp, f
+
+
+def edit_teams(store, copies, home, text, old, new):
+    rec = [r for r in store.load() if "zorg-core:begin id=teams" in r["body"]][0]
+    store.write(dict(rec, body=rec["body"].replace(old, new)))
+    with guard(home, text):
+        co.apply_sync(store, co.plan_sync(store, copies), copies, home, None, "", NOW)
+
+
+with tempfile.TemporaryDirectory() as d:                          # I2: you take the overlay's line out by hand
+    home, text, copies, store, ctxp, f = overlaid_store(d)
+    edit_teams(store, copies, home, text, "- Alpha, Beta\n- Gamma (overlay)", "- Alpha, Beta")
+    p = plan_of(store, copies, f)
+    row = [r for r in p["rows"] if r["block"] == "teams"][0]
+    check("a hand revert to the core's text: '=' (it is the core's text) with the note, not laid again",
+          row["sign"] == "=" and not row.get("reoverlay")
+          and "оверлей не накладено" in row["note"] and p["changes"] == 0, (row["sign"], row.get("reoverlay"), row["note"]))
+    apply_of(home, text, copies, store, f)
+    check("…apply leaves it as you wrote it", regions(store)["teams"] == TEAMS, regions(store)["teams"])
+    rv = cb.reoverlay(store, copies, home, REPO, NOW, ov.load(store.root, "zorg-core")["ops"])
+    check("…and ctx overlay plan calls it yours too", [r["state"] for r in rv["rows"] if r["block"] == "teams"] == ["edited"], rv["rows"])
+    T5 = region("teams", "0.5", "### Teams map\n- Alpha, Beta, Delta")
+    p5 = plan_of(store, copies, published(store, teams=T5))
+    check("…a core release then asks (⚠), it does not overwrite your revert",
+          [r["sign"] for r in p5["rows"] if r["block"] == "teams"] == ["⚠"], [(r["block"], r["sign"]) for r in p5["rows"]])
+    res = apply_of(home, text, copies, store, published(store, teams=T5), choose={"teams": "both"})
+    check("both: one region with the core's text and yours, no overlay inside it", "- Gamma (overlay)" not in regions(store)["teams"]
+          and "<!-- ctx:both theirs -->" in regions(store)["teams"], regions(store)["teams"])
+    j = journal(store)[-1]
+    check("the journal names no overlay applied to the block kept as yours", "teams" not in (j.get("overlay") or {}), j)
+
+with tempfile.TemporaryDirectory() as d:                          # a new block of the core gets the overlay; − has no note
+    home, text, copies, store, ctxp, f = overlaid_store(d)
+    put_overlay(home, text, store, OPS + [op("okr", "okr", "", "append", value=["- mine"])])
+    OKR = region("okr", "0.1", "### OKR\n- grow")
+    f2 = dict(published(store), blocks={"scope": SCOPE, "okr": OKR})
+    p2 = plan_of(store, copies, f2)
+    signs = {r["block"]: (r["sign"], r["note"]) for r in p2["rows"]}
+    check("a block the core removed: '−' with no word about your edits", signs["teams"][0] == "−"
+          and "твої правки" not in signs["teams"][1], signs)
+    with guard(home, text):
+        res = cb.apply(store, copies, home, REPO, f2, {}, ["okr"], NOW)
+    check("a new block (+, --add) is written with the overlay on it", regions(store).get("okr") ==
+          region("okr", "0.1", "### OKR\n- grow\n- mine") and "teams" not in regions(store), regions(store))
+    check("…its state remembers the overlay", cb.load_state(store, "zorg-core")["blocks"]["okr"].get("overlay_sha"), "")
+
+with tempfile.TemporaryDirectory() as d:                          # M1: a pending block is not «applied» in the journal
+    home, text, copies, store, ctxp, f = overlaid_store(d)
+    edit_teams(store, copies, home, text, "- Gamma (overlay)", "- Gamma (overlay)\n- mine")
+    S5 = region("scope", "0.5", "### Scope of work\nThe user works on Zorg App only, and Lite.")
+    T5 = region("teams", "0.5", "### Teams map\n- Alpha, Beta, Delta")
+    res = apply_of(home, text, copies, store, published(store, scope=S5, teams=T5))
+    j = journal(store)[-1]
+    check("a pending ⚠ block is in no overlay key of the journal", res["pending"] == ["teams"] and "teams" not in (j.get("overlay") or {})
+          and "teams" not in (j.get("overlay_held") or {}) and j.get("overlay", {}).get("scope") == ["only"], j)
+
+with tempfile.TemporaryDirectory() as d:                          # M5: a lagging source holds the overlay laid again
+    home, text, copies, store, ctxp, f = overlaid_store(d)
+    put_overlay(home, text, store, OPS + [op("delta", "teams", "", "append", value=["- Delta (overlay)"])])
+    S3 = region("scope", "0.3", "### Scope of work\nThe user works on Zorg App only.")
+    lag = dict(published(store), blocks={"scope": S3, "teams": TEAMS}, version="0.3")
+    p = plan_of(store, copies, lag)
+    ans = sy.decide(p, cb._theirs(lag)[0])
+    check("a source behind your bases: the sync holds the row the overlay would rewrite", p["lagging"] and "teams" in ans["hold"]
+          and "teams" in ans["held_behind"], (p["lagging"], ans))
+
+with tempfile.TemporaryDirectory() as d:                          # M10: restore keeps your hidden files in overlays/
+    home, text, copies, store, ctxp = migrated(d)
+    put_overlay(home, text, store, OPS)
+    with guard(home, text):
+        snap = co.snapshot(store, copies, home, "x")
+    open(os.path.join(store.overlays_dir, ".zorg-core.yaml.swp"), "w").write("swap")
+    with guard(home, text):
+        co.restore(snap, store, copies)
+    check("restore leaves a hidden file in overlays/ as it is", os.path.isfile(os.path.join(store.overlays_dir, ".zorg-core.yaml.swp"))
+          and os.path.isfile(ov.path_of(store.root, "zorg-core")), os.listdir(store.overlays_dir))
 
 # ------------------------------------------------------------------ snapshots keep the overlay file
 with tempfile.TemporaryDirectory() as d:

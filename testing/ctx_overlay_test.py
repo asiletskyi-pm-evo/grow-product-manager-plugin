@@ -240,6 +240,30 @@ check("aliases: the names an applied alias adds, with the value its path finds",
 check("aliases: a held alias (found 2, expects 1) adds nothing",
       ov.aliases(R, [op(op="alias", path="#Members", value=["X"])], has) == [], "")
 
+# --- review v3.23.0 tasks 1–2: I1, M3, M7, M8, M9
+for ns in ("1c-core", "zorg_core", "Zorg"):
+    out, res = ov.overlay(region("teams", "- Alpha", ns=ns), [dict(op(op="append", value="- Gamma"), target={"block": "teams"})], has)
+    check("a namespace of any shape (%s): the overlay applies" % ns, out.endswith("- Alpha\n- Gamma\n<!-- %s:end id=teams -->" % ns)
+          and res and res[0]["state"] == "applied", (out, res))
+for what, bad in {"a marker in a value": '    value: "- x <!-- zorg-core:end id=scope -->"\n',
+                  "a line break in a value": '    value: "a\\nb"\n',
+                  "a marker in a reason": '    value: "x"\n    reason: "see -->"\n'}.items():
+    text = GOOD.replace('      - "- also: the Q&A widget"\n      - "- also: comparison, A, B"\n', "").replace("    value:\n", bad)
+    check("parse refuses %s" % what, raises(ov.parse, text) is not None, text[-300:])
+check("parse refuses reason: true (not text)", raises(ov.parse, GOOD.replace('reason: "першоджерело каже +30%"   # a comment', "reason: true")) is not None, "")
+check("parse reads a file that starts with a BOM", ov.parse("\ufeff" + GOOD) == doc, "")
+F = "### Members\n```bash\n# Members\necho x\n```\n- Ann\n\n### Scope\nS"
+check("locate: a # line inside a fenced code block is no heading", ov.locate(F.split("\n"), "#Members") == [(0, 7)],
+      ov.locate(F.split("\n"), "#Members"))
+out, res = ov.overlay(R, [op(op="append", value="End.", id="a"), op(op="replace", path="field:Jira", value="ZZ", id="b")], has)
+check("an append to the block and a field edit inside it do not clash", [r["state"] for r in res] == ["applied", "applied"]
+      and "- **Jira:** ZZ" in out and out.endswith("Lists and filters.\nEnd.\n<!-- zorg-core:end id=team -->"), res)
+out, res = ov.overlay(R, [op(op="append", path="#Scope", value="X", id="a"), op(op="replace", path='match:"Lists"', value="L", id="b")], has)
+check("an append after a line another operation replaces does clash", [r["state"] for r in res] == ["error", "error"], res)
+E = region("team", "A\n\n- **X:** 1\n- **Y:** 2")
+out, res = ov.overlay(E, [op(op="remove", path="field:X", id="x"), op(op="remove", path="field:Y", id="y")], has)
+check("two removals that meet at the end leave no trailing blank line", out == region("team", "A"), repr(out))
+
 # ------------------------------------------------------------------ load / save
 with tempfile.TemporaryDirectory() as d:
     check("load: no file → None", ov.load(d, "zorg-core") is None, "")

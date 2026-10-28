@@ -226,9 +226,14 @@ def restore(snap_dir, store, copies):
     for p in [store.records_dir, store.state_dir, store.archive_dir, store.card_path] + list(copies[:len(entries)]) \
             + ([store.overlays_dir] if overlays else []):
         cs.check_target(p)
-    for folder in (store.records_dir, store.state_dir, store.archive_dir) + ((store.overlays_dir,) if overlays else ()):
+    for folder in (store.records_dir, store.state_dir, store.archive_dir):
         if os.path.isdir(folder):
             shutil.rmtree(folder)
+    if overlays and os.path.isdir(store.overlays_dir):  # a folder you edit by hand: its hidden files (.swp, .DS_Store) stay
+        for name in os.listdir(store.overlays_dir):
+            p = os.path.join(store.overlays_dir, name)
+            if not name.startswith(".") and os.path.isfile(p):
+                os.remove(p)
     if os.path.isfile(store.card_path):
         os.remove(store.card_path)
     if manifest.get("store_existed"):
@@ -236,7 +241,7 @@ def restore(snap_dir, store, copies):
                             ("overlays", store.overlays_dir)):
             src = os.path.join(snap_dir, sub)
             if os.path.isdir(src):
-                shutil.copytree(src, target)
+                shutil.copytree(src, target, dirs_exist_ok=True)
         if os.path.isfile(os.path.join(snap_dir, "INDEX.md")):
             shutil.copy2(os.path.join(snap_dir, "INDEX.md"), store.card_path)
     skipped = []

@@ -338,6 +338,7 @@ import ctx_never as cn  # noqa: E402
 import ctx_observe as cob  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
+import ctx_overlay as ov  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_recheck as crk  # noqa: E402
 import ctx_repos as crp  # noqa: E402
@@ -398,6 +399,8 @@ def writes(a):
         return getattr(a, "recheck", False)
     if a.cmd == "consolidate":                          # since v3.22.0: the inbox only
         return True
+    if a.cmd == "overlay":                              # since v3.23.0: show and plan read only
+        return getattr(a, "action", None) in ("apply", "add", "rm", "answer")
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] == "apply":
@@ -1305,12 +1308,38 @@ def cmd_health(a, c):
                        len(plan["missing"]),
                        len(c.store.stray_files()), warnings, errors, csh.index_state(c.home), csh.snapshots(c.home),
                        csh.backups(c.home, c.context, c.text), today, unread_regs=skipped,
-                       recheck=_recheck_health(c, today), consolidate=_consolidate_health(c, today))
+                       recheck=_recheck_health(c, today), consolidate=_consolidate_health(c, today),
+                       overlays=_overlay_health(c))
     for level, text, fix in lines:
         print("%s %s%s" % (csh.MARK[level], text, (" — " + fix) if fix else ""))
     n = {k: sum(1 for l in lines if l[0] == k) for k in (csh.OK, csh.WARN, csh.ACT)}
     return 0, {"command": "health", "lines": [{"level": l, "text": t, "fix": f} for l, t, f in lines],
                "counts": n}
+
+
+def _overlay_health(c):
+    """[{repo, error | held: [ids], applied: n}] — each registered repository's overlay file (none: not listed), read only."""
+    out = []
+    try:
+        repos = crp.load_repos(c.text, c.home)
+    except Exception:  # noqa: BLE001 — health never fails over a registration
+        return out
+    for repo in repos:
+        if not os.path.isfile(ov.path_of(c.store.root, repo["id"])):
+            continue
+        try:
+            doc = ov.load(c.store.root, repo["id"])
+            res = cb.reoverlay(c.store, c.copies, c.home, repo, now(), doc["ops"])
+        except ov.Unreadable as e:
+            out.append({"repo": repo["id"], "error": cb.clip(e, cb.NOTE_CLIP)})
+            continue
+        except (cs.StoreError, OSError) as e:
+            out.append({"repo": repo["id"], "error": cb.clip(e, cb.NOTE_CLIP)})
+            continue
+        results = [x for r in res["rows"] for x in r["results"]]
+        out.append({"repo": repo["id"], "held": [x["id"] for x in results if x["state"] != "applied"],
+                    "applied": sum(1 for x in results if x["state"] == "applied")})
+    return out
 
 
 def cbt_day(s):
@@ -2442,6 +2471,183 @@ def cmd_slot(a, c):
     return 0, out
 
 
+# ------------------------------------------------------------------ `ctx overlay` (since v3.23.0)
+NO_OVERLAY = "оверлею немає — поправку до ядра додає ctx overlay add <repo> --block <id> --op <op> --reason <чому>"
+
+
+def _overlay_repos(c, a):
+    """The repositories `ctx overlay` speaks of: the one named (registered, else exit 3), else every registered one
+    that has an overlay file."""
+    if a.repo:
+        return [_repository(c, a.repo)]
+    skipped = []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    for path, why in skipped:
+        print("unreadable registration: %s (%s)" % (path, why))
+    return [r for r in repos if os.path.isfile(ov.path_of(c.store.root, r["id"]))]
+
+
+def _overlay_doc(c, rid):
+    """The overlay document of `rid` (an empty one when there is no file); a file that cannot be read → Usage (exit 3),
+    the file untouched."""
+    try:
+        doc = ov.load(c.store.root, rid)
+    except ov.Unreadable as e:
+        raise Usage("оверлей не прочитано: %s — файл не змінено; виправ його або заміни: ctx overlay apply %s --file <чернетка>"
+                    % (e, rid))
+    return doc or {"schema": ov.SCHEMA, "repo": rid, "ops": []}
+
+
+def _checked_doc(doc, rid):
+    """The document as the file would hold it (parsed back from its canonical text): an operation that is not one → Usage."""
+    try:
+        return ov.parse(ov.dump(dict(doc, repo=rid)))
+    except ov.Unreadable as e:
+        raise Usage("операція не підходить: %s" % e)
+
+
+def cmd_overlay(a, c):
+    """Your declared corrections to a repository's blocks, `overlays/<repo>.yaml` (references/context-protocol.md §5n).
+    `show` and `plan` read only; `plan` and `apply` take `--file` (a draft — the migration of a prose overlay note);
+    `apply` needs the code its plan printed (another → exit 4, nothing written); `add`, `rm`, `answer` change the file and
+    lay it over the regions in one run. Every write: the lock, the guard, the edits waiting imported, one snapshot, one
+    journal line (`op: overlay`), `ctx undo` takes it back."""
+    c.need_store()
+    if a.action in ("show", "plan"):
+        repos = _overlay_repos(c, a)
+        if not repos:
+            print(NO_OVERLAY)
+            return 0, {"command": "overlay", "action": a.action, "repos": []}
+        out, rc = [], 0
+        for k, repo in enumerate(repos):
+            if k:
+                print()
+            if a.action == "plan" and a.file:
+                try:
+                    doc = ov.parse(co._read(a.file))
+                except ov.Unreadable as e:
+                    raise Usage("чернетка %s: %s" % (a.file, e))
+                if doc["repo"] != repo["id"]:
+                    raise Usage("чернетка %s — для %s, не для %s" % (a.file, doc["repo"], repo["id"]))
+            else:
+                try:
+                    doc = ov.load(c.store.root, repo["id"])
+                except ov.Unreadable as e:
+                    print("оверлей не прочитано: %s" % cb.clip(e, cb.NOTE_CLIP))
+                    out.append({"repo": repo["id"], "error": str(e)})
+                    rc = 3
+                    continue
+                if doc is None:
+                    print("%s · %s" % (cb.clip(repo["id"], cb.HEADER_CLIP), NO_OVERLAY))
+                    out.append({"repo": repo["id"], "ops": []})
+                    continue
+            res = cb.reoverlay(c.store, c.copies, c.home, repo, now(), doc["ops"])
+            print(cb.render_overlay(res, doc["ops"], show_diff=a.action == "plan"))
+            out.append({"repo": repo["id"], "ops": doc["ops"], "rows": [dict((k2, v) for k2, v in r.items() if k2 not in ("before", "after"))
+                                                                       for r in res["rows"]], "code": res["code"]})
+        data = {"command": "overlay", "action": a.action, "repos": out}
+        if a.repo and out:
+            data.update(out[0])
+        return rc, data
+    repo = _repository(c, a.repo)
+    rid = repo["id"]
+    if a.action == "apply" and not a.code:
+        raise Usage("apply needs the code its plan printed: ctx overlay plan %s%s" % (rid, " --file " + a.file if a.file else ""))
+    t = now()
+    with co.lock(c.home):
+        c.guard()
+        c.import_first()
+        what = None
+        if a.action == "apply":
+            if a.file:
+                try:
+                    doc = ov.parse(co._read(a.file))
+                except ov.Unreadable as e:
+                    raise Usage("чернетка %s: %s" % (a.file, e))
+                if doc["repo"] != rid:
+                    raise Usage("чернетка %s — для %s, не для %s" % (a.file, doc["repo"], rid))
+            else:
+                doc = _overlay_doc(c, rid)
+            shown = cb.reoverlay(c.store, c.copies, c.home, repo, t, doc["ops"])
+            if shown["code"] != a.code:
+                raise co.Refused("оверлей або записи змінились — переглянь ще раз: ctx overlay plan %s%s"
+                                 % (rid, " --file " + a.file if a.file else ""))
+        else:
+            doc = _overlay_doc(c, rid)
+            ops = [dict(o) for o in doc["ops"]]
+            ids = [o["id"] for o in ops]
+            if a.action == "add":
+                if a.id and a.id in ids:
+                    raise Usage("операція %s уже є — змінити її: ctx overlay answer %s %s …" % (a.id, rid, a.id))
+                new = {"target": {"block": a.block, "path": a.path} if a.path else {"block": a.block}, "op": a.op,
+                       "expects": 1 if a.expects is None else a.expects, "created": t[:10]}
+                if a.id:
+                    new["id"] = a.id
+                if a.value:
+                    new["value"] = a.value if (len(a.value) > 1 or a.op == "alias") else a.value[0]
+                if a.value_ref:
+                    new["value_ref"] = a.value_ref
+                if a.reason:
+                    new["reason"] = a.reason
+                raw = {"schema": ov.SCHEMA, "repo": rid, "ops": [dict(o) for o in ops]}
+                text = ov.dump(raw).rstrip("\n")
+                try:                                    # the new operation as the file would hold it: parse the whole
+                    doc = ov.parse(_with_op(text, new))
+                except ov.Unreadable as e:
+                    raise Usage("операція не підходить: %s" % e)
+                what = doc["ops"][-1]["id"]
+            else:
+                if a.op_id not in ids:
+                    raise Usage("операції %s немає в оверлеї %s (є: %s)" % (a.op_id, rid, ", ".join(ids) or "—"))
+                at = ids.index(a.op_id)
+                what = a.op_id
+                if a.action == "rm" or a.how == "drop":
+                    ops.pop(at)
+                elif a.how == "retarget":
+                    if not a.path:
+                        raise Usage("retarget needs --path")
+                    ops[at] = dict(ops[at], target={"block": ops[at]["target"]["block"], "path": a.path})
+                else:
+                    if a.expects is None:
+                        raise Usage("expects needs --expects N")
+                    if ops[at]["expects"] == a.expects:
+                        print("unchanged — %s already expects %d" % (a.op_id, a.expects))
+                        return 0, {"command": "overlay", "action": a.action, "repo": rid, "changed": False}
+                    ops[at] = dict(ops[at], expects=a.expects)
+                doc = _checked_doc(dict(doc, ops=ops), rid)
+        res = cb.reoverlay(c.store, c.copies, c.home, repo, t, doc["ops"], doc=doc, apply=True, action=a.action, what=what)
+    print(cb.render_overlay(res, doc["ops"], show_diff=True))
+    if res["changed"]:
+        print("записано: %s · знімок %s (назад: ctx undo)" % (", ".join(res["written"]) or "лише оверлей", res["snapshot"]))
+    else:
+        print("без змін")
+    out = {"command": "overlay", "action": a.action, "repo": rid, "changed": res["changed"], "written": res["written"],
+           "snapshot": res["snapshot"], "code": res["code"]}
+    if a.action == "add":
+        out.update(created=t[:10], id=what)
+    return 0, out
+
+
+def _with_op(text, op):
+    """The canonical text of a document plus one operation in the file's own syntax (its id may be absent: parse makes it)."""
+    q = lambda s: json.dumps(str(s), ensure_ascii=False)
+    tgt = op["target"]
+    lines = [text.replace("ops: []", "ops:"), "  - target: {block: %s%s}" % (q(tgt["block"]), (", path: %s" % q(tgt["path"])) if tgt.get("path") else ""),
+             "    op: %s" % q(op["op"])]
+    if op.get("id"):
+        lines.append("    id: %s" % q(op["id"]))
+    if "value" in op:
+        v = op["value"]
+        lines.append("    value: %s" % ("[%s]" % ", ".join(q(x) for x in v) if isinstance(v, list) else q(v)))
+    if "value_ref" in op:
+        lines.append("    value_ref: %s" % q(op["value_ref"]))
+    lines.append("    expects: %d" % op["expects"])
+    for k in ("reason", "created"):
+        if op.get(k):
+            lines.append("    %s: %s" % (k, q(op[k])))
+    return "\n".join(lines) + "\n"
+
+
 def cmd_provider(a, c):
     if a.action == "adopt":
         return cmd_provider_adopt(a, c)
@@ -2921,6 +3127,19 @@ def build_parser():
     sp.add_argument("--slot", action="append")
     sp.add_argument("--kind"); sp.add_argument("--skill"); sp.add_argument("--json", action="store_true")
     sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
+    op_ = sub.add_parser("overlay").add_subparsers(dest="action", required=True, parser_class=Parser)
+    for act in ("show", "plan"):
+        sp = op_.add_parser(act, parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--json", action="store_true")
+        if act == "plan":
+            sp.add_argument("--file")
+    sp = op_.add_parser("apply", parents=[common]); sp.add_argument("repo"); sp.add_argument("--file"); sp.add_argument("--code")
+    sp = op_.add_parser("add", parents=[common]); sp.add_argument("repo"); sp.add_argument("--block", required=True)
+    sp.add_argument("--path"); sp.add_argument("--op", required=True); sp.add_argument("--value", action="append")
+    sp.add_argument("--value-ref", dest="value_ref"); sp.add_argument("--expects", type=int); sp.add_argument("--reason")
+    sp.add_argument("--id")
+    sp = op_.add_parser("rm", parents=[common]); sp.add_argument("repo"); sp.add_argument("op_id")
+    sp = op_.add_parser("answer", parents=[common]); sp.add_argument("repo"); sp.add_argument("op_id")
+    sp.add_argument("how", choices=("drop", "retarget", "expects")); sp.add_argument("--path"); sp.add_argument("--expects", type=int)
     kp = sub.add_parser("slot").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = kp.add_parser("bind", parents=[common]); sp.add_argument("repo"); sp.add_argument("target"); sp.add_argument("slot")
     sp.add_argument("--team")
@@ -2945,7 +3164,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
+            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot, "overlay": cmd_overlay,
             "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
             "inbox": cmd_inbox, "bootstrap": cmd_bootstrap, "consolidate": cmd_consolidate}
 

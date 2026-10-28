@@ -54,7 +54,9 @@ REPO_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 OP_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
 FIELD = re.compile(r"^(\s*[-*]\s+\*\*(.+?):\*\*)(.*)$")
-BEGIN = re.compile(r"<!--\s*[a-z][a-z0-9-]*:begin\s+id=([A-Za-z0-9_.-]+)")
+BEGIN = re.compile(r"<!--\s*[^\s:>]+:begin\s+id=([A-Za-z0-9_.-]+)")      # any namespace, as ctx_blocks reads it
+FENCE = re.compile(r"^\s*(```|~~~)")
+MARKER = re.compile(r"<!--|-->")
 ALL = "ALL"                                             # `ignored`: the whole block
 
 
@@ -131,7 +133,8 @@ KEY_LINE = re.compile(r"^([A-Za-z_][\w-]*):(?:\s+(.*))?$")
 
 
 def _lines(text):
-    for lineno, raw in enumerate((text or "").replace("\r\n", "\n").split("\n"), 1):
+    text = (text or "").lstrip("\ufeff")                # a file saved with a BOM is the same file
+    for lineno, raw in enumerate(text.replace("\r\n", "\n").split("\n"), 1):
         line = cc._strip_value_comment(raw)
         if not line.strip() or line.strip() in ("---", "..."):
             continue
@@ -288,8 +291,11 @@ def _check(top):
                 raise Unreadable("%s: the id %r twice" % (where, oid))
             ids.add(oid)
         for k in ("reason", "created"):
-            if raw.get(k) is not None and not isinstance(raw.get(k), (str, int)):
+            if raw.get(k) is not None and (isinstance(raw.get(k), bool) or not isinstance(raw.get(k), (str, int))):
                 raise Unreadable("%s: %s must be text" % (where, k))
+        texts = ([val] if isinstance(val, str) else list(val or [])) + [ref or "", str(raw.get("reason") or "")]
+        if any(MARKER.search(x) or "\n" in x or "\r" in x for x in texts):
+            raise Unreadable("%s: a value, value_ref or reason holds a line break or a marker (<!-- -->)" % where)
         op = {"id": oid, "target": {"block": block.strip(), "path": path} if path else {"block": block.strip()},
               "op": kind, "expects": exp}
         if val is not None:
@@ -361,14 +367,21 @@ def locate(lines, path):
     kind, what = parse_path(path)
     if kind == "all":
         return [(0, len(lines))]
-    out = []
+    out, fenced, inside = [], [], False
+    for line in lines:                                  # a `#` line inside a fenced code block is no heading
+        if FENCE.match(line):
+            fenced.append(True)
+            inside = not inside
+        else:
+            fenced.append(inside)
+    head = lambda k: None if fenced[k] else HEADING.match(lines[k].rstrip("\r"))
     for i, line in enumerate(lines):
         if kind == "heading":
-            m = HEADING.match(line.rstrip("\r"))
+            m = head(i)
             if m and _heading_is(m.group(2), what):
                 level, j = len(m.group(1)), i + 1
                 while j < len(lines):
-                    h = HEADING.match(lines[j].rstrip("\r"))
+                    h = head(j)
                     if h and len(h.group(1)) <= level:
                         break
                     j += 1
@@ -424,6 +437,27 @@ def _ref_name(ref):
     return rec.strip(), head.strip()
 
 
+def _append_at(lines, kind, s, e):
+    """Where an append puts its lines: after the last non-blank line of a subsection or of the block; after the line."""
+    if kind == "heading":
+        return _last(lines, s, e)
+    if kind == "all":
+        at = e
+        while at > s and not lines[at - 1].strip():
+            at -= 1
+        return at
+    return s + 1
+
+
+def _clash_spans(lines, op, spans):
+    """The lines an operation touches, for the clash check: an append only the line it follows (so an append to a block
+    or a subsection does not clash with an edit elsewhere in it)."""
+    if op["op"] != "append":
+        return spans
+    kind = parse_path(op["target"].get("path", ""))[0]
+    return [(max(a - 1, 0), max(a, 1)) for a in (_append_at(lines, kind, s, e) for s, e in spans)]
+
+
 def _evaluate(region, ops, ref_exists):
     """(the lines, [(op, spans, result)]) — what each operation of this block finds and whether it may apply."""
     head, lines, tail, crlf = _inner(region)
@@ -440,7 +474,8 @@ def _evaluate(region, ops, ref_exists):
         elif op.get("value_ref") and not ref_exists(op["value_ref"]):
             res["state"], res["why"] = "held", "value_ref %s — такої підсекції у твоїх записах немає" % op["value_ref"]
         out.append((op, spans, res))
-    live = [(op, spans, res) for op, spans, res in out if res["state"] == "applied" and op["op"] in TEXT_OPS]
+    live = [(op, _clash_spans(lines, op, spans), res) for op, spans, res in out
+            if res["state"] == "applied" and op["op"] in TEXT_OPS]
     for i, (a, sa, ra) in enumerate(live):
         for b, sb, rb in live[i + 1:]:
             if any(x0 < y1 and y0 < x1 for x0, x1 in sa for y0, y1 in sb):
@@ -448,6 +483,17 @@ def _evaluate(region, ops, ref_exists):
                     r["state"] = "error"
                     r["why"] = (r["why"] + "; " if r["why"] else "") + "ті самі рядки, що в %s" % other
     return (head, lines, tail, crlf), out
+
+
+def _merged(edits):
+    """The edits from the last to the first, two removals whose ranges meet (each took a blank line) joined into one."""
+    out = []
+    for a, b, new in sorted(edits, key=lambda x: (x[0], x[1])):
+        if out and not new and not out[-1][2] and a < out[-1][1]:
+            out[-1] = (out[-1][0], max(b, out[-1][1]), [])
+        else:
+            out.append((a, b, new))
+    return reversed(out)
 
 
 def overlay(region, ops, ref_exists=lambda ref: True):
@@ -486,14 +532,13 @@ def overlay(region, ops, ref_exists=lambda ref: True):
                     a -= 1                              # nothing after it: no trailing blank line
                 edits.append((a, b, []))
             else:                                       # append
-                at = _last(lines, s, e) if kind in ("heading", "all") and e > s else s + 1
-                if kind == "all":
-                    at = e
-                    while at > s and not lines[at - 1].strip():
-                        at -= 1
+                at = _append_at(lines, kind, s, e)
                 edits.append((at, at, _vlines(op["value"])))
-    for a, b, new in sorted(edits, key=lambda x: (x[0], x[1]), reverse=True):
+    ended = bool(lines) and bool(lines[-1].strip())
+    for a, b, new in _merged(edits):
         lines[a:b] = new
+    while ended and lines and not lines[-1].strip():    # two removals that met at the end leave no blank line behind
+        lines.pop()
     return _join(head, lines, tail, crlf), [res for _, _, res in evald]
 
 
