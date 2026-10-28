@@ -1,0 +1,18 @@
+# A colleague's declared corrections to this core — overlays/zorg-core.yaml in their own store
+# (references/context-protocol.md §5n). Not part of the core: an example of what a colleague may write.
+schema: context-overlay/1
+repo: zorg-core
+ops:
+  - id: scope-lite
+    target: {block: scope}
+    op: append
+    value: "Zorg Lite too (my team serves both)."
+    expects: 1
+    reason: "the core lists Zorg App only"
+    created: "2026-10-28"
+  - id: alpha-names
+    target: {block: teams, path: 'match:"Alpha — reviews and catalog"'}
+    op: ignore
+    expects: 1
+    reason: "my own Teams section is the source"
+    created: "2026-10-28"

@@ -334,6 +334,7 @@ import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
 import ctx_history as chi  # noqa: E402
 import ctx_identity as cid  # noqa: E402
+import ctx_kit as ckit  # noqa: E402
 import ctx_inbox as ci_  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_never as cn  # noqa: E402
@@ -368,7 +369,7 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
 # (each one checked on its own, so one secret does not cost the others — ctx_inbox.propose).
 NOT_TEXT = {"cmd", "action", "context", "store", "home", "file", "body_file", "delta", "code", "which", "steps", "id",
             "ids", "skill", "type", "parent", "after", "repo", "product", "label", "now", "observed", "take", "skip",
-            "only", "bundle"}
+            "only", "bundle", "folder", "email"}
 
 
 def _free_text(a):
@@ -401,6 +402,8 @@ def writes(a):
         return getattr(a, "recheck", False)
     if a.cmd == "consolidate":                          # since v3.22.0: the inbox only
         return True
+    if a.cmd == "repo" and getattr(a, "action", None) == "add":     # since v3.23.0: only with --apply
+        return getattr(a, "apply", False)
     if a.cmd == "identity":                             # since v3.23.0: check reads only
         return getattr(a, "action", None) in ("keep", "take")
     if a.cmd == "overlay":                              # since v3.23.0: show and plan read only
@@ -1550,7 +1553,96 @@ def cmd_repo(a, c):
         return cmd_repo_list(a, c)
     if a.action == "status":
         return cmd_repo_status(a, c)
-    raise Usage("repo takes list or status")
+    if a.action == "kit-check":
+        return cmd_repo_kit_check(a, c)
+    if a.action == "add":
+        return cmd_repo_add(a, c)
+    raise Usage("repo takes list, status, kit-check or add")
+
+
+def cmd_repo_kit_check(a, c):
+    """`repo kit-check <folder>` (since v3.23.0): is the folder a sound provider kit (context-provider-protocol.md §9)?
+    Reads only. Exit 0 sound (warnings said), 3 with every fault named."""
+    warnings = []
+    m, model, problems = ckit.check(os.path.abspath(os.path.expanduser(a.folder)), warnings)
+    for p in problems:
+        print("вада: %s" % p)
+    for w in warnings:
+        print("увага: %s" % w)
+    if not problems:
+        print("набір у порядку: %s · ядро %s · команд %d · блоків у файлі — див. ctx repo add" % (
+            m.s("id"), (model or {}).get("version") or "?", len((model or {}).get("teams") or {})))
+    return (3 if problems else 0), {"command": "repo", "action": "kit-check", "problems": problems, "warnings": warnings,
+                                    "id": m.s("id") if m else None}
+
+
+def _kit_add_plan(c, a):
+    """(the dry run's facts, its text): the kit checked, the identity, the registration, the blocks it brings."""
+    folder = os.path.abspath(os.path.expanduser(a.folder))
+    warnings = []
+    m, model, problems = ckit.check(folder, warnings)
+    if problems:
+        raise Usage("набір має вади — ctx repo kit-check %s:\n  %s" % (a.folder, "\n  ".join(problems)))
+    rid = m.s("id")
+    skipped = []
+    if rid in [r["id"] for r in crp.load_repos(c.text, c.home, skipped=skipped)]:
+        raise Usage("%s уже зареєстровано — оновлення: ctx provider plan %s" % (rid, rid))
+    try:
+        ident = ckit.identity(folder, m, model, a.email, team=a.team, role=a.role)
+    except ValueError as e:
+        raise Usage(str(e))
+    text = ckit.registration(folder, m, model, ident, now()[:10])
+    where = os.path.join(ckit.registrations_dir(c.store.root, c.text, c.home), "%s.yaml" % rid)
+    if os.path.lexists(where):
+        raise Usage("файл реєстрації вже є: %s — нічого не записано" % where)
+    repo = crp.normalise(cc.read_yaml_subset(text))
+    fetched = crp.fetch(repo)
+    if fetched.get("error"):
+        raise Usage("блоки набору не читаються: %s" % fetched["error"])
+    p = cb.plan(c.store, c.copies, repo, fetched, now())
+    adds = [r["block"] for r in p["rows"] if r["sign"] == "+"]
+    code = cs.sha_text(json.dumps([text, adds, fetched.get("version")], ensure_ascii=False))[:8]
+    lines = ["набір %s · ядро %s · %s" % (rid, model.get("version") or "?", folder),
+             "команда: %s (%s) · %s" % (ident["team"], ident["team_title"], ident["team_from"]),
+             "роль: %s · %s" % (ident["role"], ident["role_from"]),
+             "реєстрація: %s (sync: off — щоденний синк вмикає context-connect)" % where,
+             "блоки: %s → %s" % (", ".join("+ " + b for b in adds) or "жодного нового",
+                                 cb._home_record(repo, {}, c.store.load(), m.s("title") or rid) or "новий запис «%s»" % (m.s("title") or rid))]
+    lines += ["увага: %s" % w for w in warnings] + ["код: %s" % code]
+    return {"id": rid, "ident": ident, "text": text, "where": where, "repo": repo, "fetched": fetched, "adds": adds,
+            "code": code}, "\n".join(lines)
+
+
+def cmd_repo_add(a, c):
+    """`repo add <folder> --email E [--team T] [--role R] [--apply --code C]` (since v3.23.0): a provider kit from
+    nothing in one command once shown — the kit checked, your team and role resolved, the registration written beside
+    your store, every block of the kit added (`provider apply --add`, its own snapshot and journal line). Without
+    --apply it reads only and prints a code; another code → exit 4, nothing written. The core folder is only read."""
+    c.need_store()
+    facts, text = _kit_add_plan(c, a)
+    if not a.apply:
+        print(text)
+        return 0, {"command": "repo", "action": "add", "id": facts["id"], "code": facts["code"], "blocks": facts["adds"],
+                   "registration": facts["where"], "team": facts["ident"]["team"], "role": facts["ident"]["role"]}
+    if not a.code:
+        raise Usage("--apply needs the code the dry run printed: ctx repo add %s --email %s" % (a.folder, a.email))
+    with co.lock(c.home):
+        c.guard()
+        c.import_first()
+        facts, text = _kit_add_plan(c, a)
+        if facts["code"] != a.code:
+            raise co.Refused("набір або сховище змінились — переглянь ще раз: ctx repo add %s --email %s" % (a.folder, a.email))
+        os.makedirs(cs.check_target(os.path.dirname(facts["where"])), exist_ok=True)
+        cs.atomic_write(facts["where"], facts["text"])
+        res = cb.apply(c.store, c.copies, c.home, facts["repo"], facts["fetched"], {}, facts["adds"], now())
+        card = _refresh_card(c)
+    print(text)
+    print(cb.render_apply(res))
+    print("реєстрацію записано: %s" % facts["where"])
+    if card:
+        print(card)
+    return 0, {"command": "repo", "action": "add", "id": facts["id"], "registration": facts["where"], "written": res["written"],
+               "snapshot": res["snapshot"], "blocks": facts["adds"]}
 
 
 def _index_scope(c):
@@ -3228,6 +3320,9 @@ def build_parser():
     rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
+    sp = rp.add_parser("kit-check", parents=[common]); sp.add_argument("folder")
+    sp = rp.add_parser("add", parents=[common]); sp.add_argument("folder"); sp.add_argument("--email", required=True)
+    sp.add_argument("--team"); sp.add_argument("--role"); sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
     ip = sub.add_parser("index").add_subparsers(dest="action", required=True, parser_class=Parser)
     ip.add_parser("status", parents=[common])
     ip.add_parser("rebuild", parents=[common]).add_argument("--download", action="store_true")

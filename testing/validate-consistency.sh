@@ -473,6 +473,18 @@ else
   ok "search_types: every skill's types in context-manifest.yaml match its SKILL_CONTEXT_MAP row"
 fi
 
+# --- 20. The example provider kit stays sound (v3.23.0) ---------------------
+# examples/provider-kit/zorg-core is what a team copies to share its context; it must
+# pass the plugin's own kit check (ctx_kit.check), or the example teaches a broken kit.
+KIT_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import ctx_kit; m, model, p = ctx_kit.check('examples/provider-kit/zorg-core'); print('\n'.join(p))" 2>&1)
+if [ -n "$KIT_ERRS" ]; then
+  while IFS= read -r line; do err "provider kit example: $line"; done <<EOF
+$KIT_ERRS
+EOF
+else
+  ok "provider kit example: examples/provider-kit/zorg-core passes ctx_kit.check"
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.
