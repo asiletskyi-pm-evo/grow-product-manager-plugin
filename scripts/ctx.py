@@ -332,12 +332,16 @@ import ctx_consolidate as ccn  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
+import ctx_history as chi  # noqa: E402
+import ctx_identity as cid  # noqa: E402
+import ctx_kit as ckit  # noqa: E402
 import ctx_inbox as ci_  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_never as cn  # noqa: E402
 import ctx_observe as cob  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
+import ctx_overlay as ov  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_recheck as crk  # noqa: E402
 import ctx_repos as crp  # noqa: E402
@@ -365,7 +369,7 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
 # (each one checked on its own, so one secret does not cost the others — ctx_inbox.propose).
 NOT_TEXT = {"cmd", "action", "context", "store", "home", "file", "body_file", "delta", "code", "which", "steps", "id",
             "ids", "skill", "type", "parent", "after", "repo", "product", "label", "now", "observed", "take", "skip",
-            "only"}
+            "only", "bundle", "folder", "email"}
 
 
 def _free_text(a):
@@ -398,6 +402,12 @@ def writes(a):
         return getattr(a, "recheck", False)
     if a.cmd == "consolidate":                          # since v3.22.0: the inbox only
         return True
+    if a.cmd == "repo" and getattr(a, "action", None) == "add":     # since v3.23.0: only with --apply
+        return getattr(a, "apply", False)
+    if a.cmd == "identity":                             # since v3.23.0: check reads only
+        return getattr(a, "action", None) in ("keep", "take")
+    if a.cmd == "overlay":                              # since v3.23.0: show and plan read only
+        return getattr(a, "action", None) in ("apply", "add", "rm", "answer")
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] == "apply":
@@ -1031,6 +1041,10 @@ def cmd_undo(a, c):
         for rel, why in notes_kept:
             print("не повернуто: %s — %s" % (rel, why))
         reverted, kept, rejected, rejected_failed = [], [], {}, {}
+        hist = os.path.join(c.store.root, "history")
+        if not existed and os.path.isdir(hist):         # since v3.23.0: the changelog is derived — no store, no notes of it
+            import shutil
+            shutil.rmtree(cs.check_target(hist))
         if existed:
             t = now()
             c.store.journal(dict({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre},
@@ -1305,12 +1319,40 @@ def cmd_health(a, c):
                        len(plan["missing"]),
                        len(c.store.stray_files()), warnings, errors, csh.index_state(c.home), csh.snapshots(c.home),
                        csh.backups(c.home, c.context, c.text), today, unread_regs=skipped,
-                       recheck=_recheck_health(c, today), consolidate=_consolidate_health(c, today))
+                       recheck=_recheck_health(c, today), consolidate=_consolidate_health(c, today),
+                       overlays=_overlay_health(c))
     for level, text, fix in lines:
         print("%s %s%s" % (csh.MARK[level], text, (" — " + fix) if fix else ""))
     n = {k: sum(1 for l in lines if l[0] == k) for k in (csh.OK, csh.WARN, csh.ACT)}
     return 0, {"command": "health", "lines": [{"level": l, "text": t, "fix": f} for l, t, f in lines],
                "counts": n}
+
+
+def _overlay_health(c):
+    """[{repo, error | held: [ids], applied: n}] — each registered repository's overlay file (none: not listed), read only."""
+    out = []
+    try:
+        repos = crp.load_repos(c.text, c.home)
+    except Exception:  # noqa: BLE001 — health never fails over a registration
+        return out
+    for repo in repos:
+        if not ov.REPO_ID.match(str(repo.get("id"))) or not os.path.isfile(ov.path_of(c.store.root, repo["id"])):
+            continue                                    # an id no overlay file can have: none to report
+        try:
+            doc = ov.load(c.store.root, repo["id"])
+            res = cb.reoverlay(c.store, c.copies, c.home, repo, now(), doc["ops"])
+        except ov.Unreadable as e:
+            out.append({"repo": repo["id"], "error": cb.clip(e, cb.NOTE_CLIP)})
+            continue
+        except (cs.StoreError, OSError) as e:
+            out.append({"repo": repo["id"], "error": cb.clip(e, cb.NOTE_CLIP)})
+            continue
+        results = [x for r in res["rows"] for x in r["results"]]
+        live = [x for r in res["rows"] if r["state"] in ("rewrite", "same") for x in r["results"]]
+        out.append({"repo": repo["id"], "held": [x["id"] for x in results if x["state"] != "applied"],
+                    "applied": sum(1 for x in live if x["state"] == "applied"),
+                    "edited": sorted({r["block"] for r in res["rows"] if r["state"] in ("edited", "behind")})})
+    return out
 
 
 def cbt_day(s):
@@ -1511,7 +1553,97 @@ def cmd_repo(a, c):
         return cmd_repo_list(a, c)
     if a.action == "status":
         return cmd_repo_status(a, c)
-    raise Usage("repo takes list or status")
+    if a.action == "kit-check":
+        return cmd_repo_kit_check(a, c)
+    if a.action == "add":
+        return cmd_repo_add(a, c)
+    raise Usage("repo takes list, status, kit-check or add")
+
+
+def cmd_repo_kit_check(a, c):
+    """`repo kit-check <folder>` (since v3.23.0): is the folder a sound provider kit (context-provider-protocol.md §9)?
+    Reads only. Exit 0 sound (warnings said), 3 with every fault named."""
+    warnings = []
+    m, model, problems = ckit.check(os.path.abspath(os.path.expanduser(a.folder)), warnings)
+    for p in problems:
+        print("вада: %s" % p)
+    for w in warnings:
+        print("увага: %s" % w)
+    if not problems:
+        print("набір у порядку: %s · ядро %s · команд %d · блоків у файлі — див. ctx repo add" % (
+            m.s("id"), (model or {}).get("version") or "?", len((model or {}).get("teams") or {})))
+    return (3 if problems else 0), {"command": "repo", "action": "kit-check", "problems": problems, "warnings": warnings,
+                                    "id": m.s("id") if m else None}
+
+
+def _kit_add_plan(c, a):
+    """(the dry run's facts, its text): the kit checked, the identity, the registration, the blocks it brings."""
+    folder = os.path.abspath(os.path.expanduser(a.folder))
+    warnings = []
+    m, model, problems = ckit.check(folder, warnings)
+    if problems:
+        raise Usage("набір має вади — ctx repo kit-check %s:\n  %s" % (a.folder, "\n  ".join(problems)))
+    rid = m.s("id")
+    skipped = []
+    if rid in [r["id"] for r in crp.load_repos(c.text, c.home, skipped=skipped)]:
+        raise Usage("%s уже зареєстровано — оновлення: ctx provider plan %s" % (rid, rid))
+    try:
+        ident = ckit.identity(folder, m, model, a.email, team=a.team, role=a.role)
+    except ValueError as e:
+        raise Usage(str(e))
+    text = ckit.registration(folder, m, model, ident, now()[:10])
+    where = os.path.join(ckit.registrations_dir(c.store.root, c.text, c.home), "%s.yaml" % rid)
+    if os.path.lexists(where):
+        raise Usage("файл реєстрації вже є: %s — нічого не записано" % where)
+    repo = crp.normalise(cc.read_yaml_subset(text))
+    fetched = crp.fetch(repo)
+    if fetched.get("error"):
+        raise Usage("блоки набору не читаються: %s" % fetched["error"])
+    p = cb.plan(c.store, c.copies, repo, fetched, now())
+    adds = [r["block"] for r in p["rows"] if r["sign"] == "+"]
+    code = cs.sha_text(json.dumps([text, adds, fetched.get("version")], ensure_ascii=False))[:8]
+    lines = ["набір %s · ядро %s · %s" % (rid, model.get("version") or "?", folder),
+             "команда: %s (%s) · %s" % (ident["team"], ident["team_title"], ident["team_from"]),
+             "роль: %s · %s" % (ident["role"], ident["role_from"]),
+             "Jira: запис — ask (context-connect спитає, чи є в тебе свій проєкт)",
+             "реєстрація: %s (sync: off — щоденний синк вмикає context-connect)" % where,
+             "блоки: %s → %s" % (", ".join("+ " + b for b in adds) or "жодного нового",
+                                 cb._home_record(repo, {}, c.store.load(), m.s("title") or rid) or "новий запис «%s»" % (m.s("title") or rid))]
+    lines += ["увага: %s" % w for w in warnings] + ["код: %s" % code]
+    return {"id": rid, "ident": ident, "text": text, "where": where, "repo": repo, "fetched": fetched, "adds": adds,
+            "code": code}, "\n".join(lines)
+
+
+def cmd_repo_add(a, c):
+    """`repo add <folder> --email E [--team T] [--role R] [--apply --code C]` (since v3.23.0): a provider kit from
+    nothing in one command once shown — the kit checked, your team and role resolved, the registration written beside
+    your store, every block of the kit added (`provider apply --add`, its own snapshot and journal line). Without
+    --apply it reads only and prints a code; another code → exit 4, nothing written. The core folder is only read."""
+    c.need_store()
+    facts, text = _kit_add_plan(c, a)
+    if not a.apply:
+        print(text)
+        return 0, {"command": "repo", "action": "add", "id": facts["id"], "code": facts["code"], "blocks": facts["adds"],
+                   "registration": facts["where"], "team": facts["ident"]["team"], "role": facts["ident"]["role"]}
+    if not a.code:
+        raise Usage("--apply needs the code the dry run printed: ctx repo add %s --email %s" % (a.folder, a.email))
+    with co.lock(c.home):
+        c.guard()
+        c.import_first()
+        facts, text = _kit_add_plan(c, a)
+        if facts["code"] != a.code:
+            raise co.Refused("набір або сховище змінились — переглянь ще раз: ctx repo add %s --email %s" % (a.folder, a.email))
+        res = cb.apply(c.store, c.copies, c.home, facts["repo"], facts["fetched"], {}, facts["adds"], now())
+        os.makedirs(cs.check_target(os.path.dirname(facts["where"])), exist_ok=True)    # after the blocks: a failed
+        cs.atomic_write(facts["where"], facts["text"])                                  # apply leaves no registration
+        card = _refresh_card(c)
+    print(text)
+    print(cb.render_apply(res))
+    print("реєстрацію записано: %s" % facts["where"])
+    if card:
+        print(card)
+    return 0, {"command": "repo", "action": "add", "id": facts["id"], "registration": facts["where"], "written": res["written"],
+               "snapshot": res["snapshot"], "blocks": facts["adds"]}
 
 
 def _index_scope(c):
@@ -2442,6 +2574,289 @@ def cmd_slot(a, c):
     return 0, out
 
 
+# ------------------------------------------------------------------ `ctx overlay` (since v3.23.0)
+NO_OVERLAY = "оверлею немає — поправку до ядра додає ctx overlay add <repo> --block <id> --op <op> --reason <чому>"
+
+
+def _overlay_repos(c, a):
+    """The repositories `ctx overlay` speaks of: the one named (registered, else exit 3), else every registered one
+    that has an overlay file."""
+    if a.repo:
+        return [_repository(c, a.repo)]
+    skipped = []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    for path, why in skipped:
+        print("unreadable registration: %s (%s)" % (path, why))
+    return [r for r in repos if ov.REPO_ID.match(str(r.get("id"))) and os.path.isfile(ov.path_of(c.store.root, r["id"]))]
+
+
+def _overlay_doc(c, rid):
+    """The overlay document of `rid` (an empty one when there is no file); a file that cannot be read → Usage (exit 3),
+    the file untouched."""
+    try:
+        doc = ov.load(c.store.root, rid)
+    except ov.Unreadable as e:
+        raise Usage("оверлей не прочитано: %s — файл не змінено; виправ його або заміни: ctx overlay apply %s --file <чернетка>"
+                    % (e, rid))
+    return doc or {"schema": ov.SCHEMA, "repo": rid, "ops": []}
+
+
+def _checked_doc(doc, rid):
+    """The document as the file would hold it (parsed back from its canonical text): an operation that is not one → Usage."""
+    try:
+        return ov.parse(ov.dump(dict(doc, repo=rid)))
+    except ov.Unreadable as e:
+        raise Usage("операція не підходить: %s" % e)
+
+
+def cmd_overlay(a, c):
+    """Your declared corrections to a repository's blocks, `overlays/<repo>.yaml` (references/context-protocol.md §5n).
+    `show` and `plan` read only; `plan` and `apply` take `--file` (a draft — the migration of a prose overlay note);
+    `apply` needs the code its plan printed (another → exit 4, nothing written); `add`, `rm`, `answer` change the file and
+    lay it over the regions in one run. Every write: the lock, the guard, the edits waiting imported, one snapshot, one
+    journal line (`op: overlay`), `ctx undo` takes it back."""
+    c.need_store()
+    if a.action == "plan" and a.file and not a.repo:      # a draft names its repository
+        try:
+            a.repo = ov.parse(co._read(a.file))["repo"]
+        except ov.Unreadable as e:
+            raise Usage("чернетка %s: %s" % (a.file, e))
+    if a.action in ("show", "plan"):
+        repos = _overlay_repos(c, a)
+        if not repos:
+            print(NO_OVERLAY)
+            return 0, {"command": "overlay", "action": a.action, "repos": []}
+        out, rc = [], 0
+        for k, repo in enumerate(repos):
+            if k:
+                print()
+            if a.action == "plan" and a.file:
+                try:
+                    doc = ov.parse(co._read(a.file))
+                except ov.Unreadable as e:
+                    raise Usage("чернетка %s: %s" % (a.file, e))
+                if doc["repo"] != repo["id"]:
+                    raise Usage("чернетка %s — для %s, не для %s" % (a.file, doc["repo"], repo["id"]))
+            else:
+                try:
+                    doc = ov.load(c.store.root, repo["id"])
+                except ov.Unreadable as e:
+                    print("оверлей не прочитано: %s" % cb.clip(e, cb.NOTE_CLIP))
+                    out.append({"repo": repo["id"], "error": str(e)})
+                    rc = 3
+                    continue
+                if doc is None:
+                    print("%s · %s" % (cb.clip(repo["id"], cb.HEADER_CLIP), NO_OVERLAY))
+                    out.append({"repo": repo["id"], "ops": []})
+                    continue
+            res = cb.reoverlay(c.store, c.copies, c.home, repo, now(), doc["ops"])
+            print(cb.render_overlay(res, doc["ops"], show_diff=a.action == "plan"))
+            kinds = cn.scan("\n".join(_overlay_texts(doc)))
+            if kinds:
+                print("увага: %s — apply цього не запише" % cn.message(kinds))
+            out.append({"repo": repo["id"], "ops": doc["ops"], "rows": [dict((k2, v) for k2, v in r.items() if k2 not in ("before", "after"))
+                                                                       for r in res["rows"]], "code": res["code"]})
+        data = {"command": "overlay", "action": a.action, "repos": out}
+        if a.repo and out:
+            data.update(out[0])
+        return rc, data
+    repo = _repository(c, a.repo)
+    rid = repo["id"]
+    if a.action == "apply" and not a.code:
+        raise Usage("apply needs the code its plan printed: ctx overlay plan %s%s" % (rid, " --file " + a.file if a.file else ""))
+    t = now()
+    with co.lock(c.home):
+        c.guard()
+        c.import_first()
+        what = None
+        if a.action == "apply":
+            if a.file:
+                try:
+                    doc = ov.parse(co._read(a.file))
+                except ov.Unreadable as e:
+                    raise Usage("чернетка %s: %s" % (a.file, e))
+                if doc["repo"] != rid:
+                    raise Usage("чернетка %s — для %s, не для %s" % (a.file, doc["repo"], rid))
+            else:
+                doc = _overlay_doc(c, rid)
+            shown = cb.reoverlay(c.store, c.copies, c.home, repo, t, doc["ops"])
+            if shown["code"] != a.code:
+                raise co.Refused("оверлей або записи змінились — переглянь ще раз: ctx overlay plan %s%s"
+                                 % (rid, " --file " + a.file if a.file else ""))
+        else:
+            doc = _overlay_doc(c, rid)
+            ops = [dict(o) for o in doc["ops"]]
+            ids = [o["id"] for o in ops]
+            if a.action == "add":
+                if a.id and a.id in ids:
+                    raise Usage("операція %s уже є — змінити її: ctx overlay answer %s %s …" % (a.id, rid, a.id))
+                new = {"target": {"block": a.block, "path": a.path} if a.path else {"block": a.block}, "op": a.op,
+                       "expects": 1 if a.expects is None else a.expects, "created": t[:10]}
+                if a.id:
+                    new["id"] = a.id
+                if a.value:
+                    new["value"] = a.value if (len(a.value) > 1 or a.op == "alias") else a.value[0]
+                if a.value_ref:
+                    new["value_ref"] = a.value_ref
+                if a.reason:
+                    new["reason"] = a.reason
+                raw = {"schema": ov.SCHEMA, "repo": rid, "ops": [dict(o) for o in ops]}
+                text = ov.dump(raw).rstrip("\n")
+                try:                                    # the new operation as the file would hold it: parse the whole
+                    doc = ov.parse(_with_op(text, new))
+                except ov.Unreadable as e:
+                    raise Usage("операція не підходить: %s" % e)
+                what = doc["ops"][-1]["id"]
+            else:
+                if a.op_id not in ids:
+                    raise Usage("операції %s немає в оверлеї %s (є: %s)" % (a.op_id, rid, ", ".join(ids) or "—"))
+                at = ids.index(a.op_id)
+                what = a.op_id
+                if a.action == "rm" or a.how == "drop":
+                    ops.pop(at)
+                elif a.how == "retarget":
+                    if not a.path:
+                        raise Usage("retarget needs --path")
+                    ops[at] = dict(ops[at], target={"block": ops[at]["target"]["block"], "path": a.path})
+                else:
+                    if a.expects is None:
+                        raise Usage("expects needs --expects N")
+                    if ops[at]["expects"] == a.expects:
+                        print("unchanged — %s already expects %d" % (a.op_id, a.expects))
+                        return 0, {"command": "overlay", "action": a.action, "repo": rid, "changed": False}
+                    ops[at] = dict(ops[at], expects=a.expects)
+                doc = _checked_doc(dict(doc, ops=ops), rid)
+        cn.check(*_overlay_texts(doc))                  # a draft or a hand-edited file: no secret goes into the store
+        res = cb.reoverlay(c.store, c.copies, c.home, repo, t, doc["ops"], doc=doc, apply=True, action=a.action, what=what)
+    print(cb.render_overlay(res, doc["ops"], show_diff=True))
+    if res["changed"]:
+        print("записано: %s · знімок %s (назад: ctx undo)" % (", ".join(res["written"]) or "лише оверлей", res["snapshot"]))
+    else:
+        print("без змін")
+    out = {"command": "overlay", "action": a.action, "repo": rid, "changed": res["changed"], "written": res["written"],
+           "snapshot": res["snapshot"], "code": res["code"]}
+    if a.action == "add":
+        out.update(created=t[:10], id=what)
+    return 0, out
+
+
+def _overlay_texts(doc):
+    """Every free text of an overlay document — what the never-store filter reads before it is written."""
+    return ov.texts_of(doc)
+
+
+def _with_op(text, op):
+    """The canonical text of a document plus one operation in the file's own syntax (its id may be absent: parse makes it)."""
+    q = lambda s: json.dumps(str(s), ensure_ascii=False)
+    tgt = op["target"]
+    head = text[:-len("ops: []")] + "ops:" if text.endswith("ops: []") else text    # only the empty list of an empty file
+    lines = [head, "  - target: {block: %s%s}" % (q(tgt["block"]), (", path: %s" % q(tgt["path"])) if tgt.get("path") else ""),
+             "    op: %s" % q(op["op"])]
+    if op.get("id"):
+        lines.append("    id: %s" % q(op["id"]))
+    if "value" in op:
+        v = op["value"]
+        lines.append("    value: %s" % ("[%s]" % ", ".join(q(x) for x in v) if isinstance(v, list) else q(v)))
+    if "value_ref" in op:
+        lines.append("    value_ref: %s" % q(op["value_ref"]))
+    lines.append("    expects: %d" % op["expects"])
+    for k in ("reason", "created"):
+        if op.get(k):
+            lines.append("    %s: %s" % (k, q(op[k])))
+    return "\n".join(lines) + "\n"
+
+
+def _identity_mine(c, repo):
+    """{team: (value, source), role: (value, source)} — your role in the profile with its source, the team your
+    registration names."""
+    prof = next((r for r in c.store.load() if r["type"] == "profile"), None)
+    role = cs.field_get(prof["body"], "Role") if prof else None
+    src = None
+    if prof and role:
+        try:
+            x = next((x for x in csrc.of(csrc.load(c.store), prof) if x["label"].casefold() == "role"), None)
+        except cs.StoreError:
+            x = None
+        src = csrc.describe(x) if x else None
+    team = repo.get("team") or None
+    reg = repo.get("_file") or repo.get("file") or "%s.yaml" % repo["id"]
+    return {"role": (role or None, src), "team": (team, "реєстрація %s" % os.path.basename(str(reg)) if team else None)}, prof
+
+
+def cmd_identity(a, c):
+    """`identity check|keep|take REPO [FIELD] --bundle F` (context-protocol.md §5r): the core's team and role for your
+    e-mail beside yours, both with their source; `keep` / `take` answer — a writing command (lock, snapshot, one journal
+    line `op: identity`); `take role` also writes the core's role into your profile (source repo:<id>)."""
+    c.need_store()
+    repo = _repository(c, a.repo)
+    try:
+        bundle = cid.read_bundle(a.bundle)
+    except ValueError as e:
+        raise Usage(str(e))
+    if a.action == "check":
+        mem = cid.load(c.store)
+        mine, _ = _identity_mine(c, repo)
+        rows = cid.compare(bundle, mine, mem, repo["id"])
+        print(cid.render(rows, repo["id"], a.bundle))
+        return 0, {"command": "identity", "action": "check", "repo": repo["id"], "rows": rows,
+                   "questions": sum(1 for r in rows if r["state"] == "ask")}
+    if a.field not in cid.FIELDS:
+        raise Usage("the field is team or role")
+    if a.action == "take" and a.field == "team":
+        raise Usage("команду змінює context-connect: перезбери пакет з --team %s (connect-steps.md §3) — тут лише keep" % bundle["team"])
+    t = now()
+    with co.lock(c.home):
+        c.guard()
+        mem = cid.load(c.store)                         # one that cannot be read stops here, before anything is written
+        c.import_first()
+        mine, prof = _identity_mine(c, repo)
+        mval = mine[a.field][0]
+        snap = co.snapshot(c.store, c.copies, c.home, "identity")
+        ids = []
+        if a.action == "take":
+            if prof is None:
+                raise Usage("no profile record to write the role into")
+            value = bundle.get("role_enum") or bundle["role"]          # the plugin's value, not the role model's id
+            spec = _field_spec(prof, "Role")
+            err = sc.check_value(spec, value) if spec else None
+            if err:
+                raise Usage("Role: %s — the core's role %s is no value of the profile; set it yourself: ctx set %s Role <value>"
+                            % (err, bundle["role"], prof["id"]))
+            srcs = csrc.load(c.store)
+            csrc.adopt(srcs, prof)
+            csrc.note(srcs, prof["id"], csrc.field_key("Role"), value, "repo:%s" % repo["id"], at=t)
+            csrc.save(c.store, srcs)
+            c.store.write(co.touch(dict(prof, body=cs.field_set(prof["body"], "Role", value), source="repo:%s" % repo["id"],
+                                        modified=t), t))
+            ids = [prof["id"]]
+        cid.answer(mem, repo["id"], a.field, "mine" if a.action == "keep" else "core", bundle[a.field], mval, t[:10])
+        cid.save(c.store, mem)
+        c.store.journal({"ts": t, "op": "identity", "action": a.action, "repo": repo["id"], "what": a.field, "ids": ids,
+                         "source": "ctx-identity", "snapshot": snap})
+        if ids:
+            co.compile_store(c.store, c.copies, t, c.home, snap)
+    print("identity %s: %s %s — ядро %s, твоє %s · знімок %s (назад: ctx undo)" % (a.action, repo["id"], a.field, bundle[a.field],
+                                                                                  mval, snap))
+    return 0, {"command": "identity", "action": a.action, "repo": repo["id"], "field": a.field, "snapshot": snap}
+
+
+def cmd_history(a, c):
+    """`history [--month YYYY-MM] [--write] [--json]`: the human changelog of the store (references/context-protocol.md
+    §5p) — printed, or with --write written to `history/YYYY-MM.md` only when its text changed. No lock, no journal line:
+    the note is derived from the journal and the base texts."""
+    c.need_store()
+    month = a.month or now()[:7]
+    if not chi.MONTH.match(month):
+        raise Usage("--month takes YYYY-MM, not %r" % month)
+    text = chi.build(c.store, month)
+    if a.write:
+        path, changed = chi.write(c.store, month)
+        print("%s: %s" % ("записано" if changed else "без змін", path))
+        return 0, {"command": "history", "month": month, "path": path, "changed": changed}
+    print(text)
+    return 0, {"command": "history", "month": month, "text": text if a.json else None}
+
+
 def cmd_provider(a, c):
     if a.action == "adopt":
         return cmd_provider_adopt(a, c)
@@ -2490,7 +2905,7 @@ def cmd_propose(a, c):
     except ValueError as e:
         raise Usage(str(e))
     if a.skill in ci_.CTX_OWN:                         # since v3.22.0: ctx's own proposers come only from its commands
-        raise Usage("%s — джерело самого ctx (bootstrap, validate --recheck, consolidate), не скіл" % a.skill)
+        raise Usage("%s — джерело самого ctx (bootstrap, validate --recheck, consolidate, provider apply), не скіл" % a.skill)
     if a.skill not in (cr.load_manifest().get("skills") or {}):     # a name the plugin does not know is no skill's
         raise Usage("--skill names one of the plugin's skills (references/context-manifest.yaml), not %s"
                     % ("that" if cn.scan(a.skill) else a.skill))
@@ -2907,6 +3322,9 @@ def build_parser():
     rp = sub.add_parser("repo").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
+    sp = rp.add_parser("kit-check", parents=[common]); sp.add_argument("folder")
+    sp = rp.add_parser("add", parents=[common]); sp.add_argument("folder"); sp.add_argument("--email", required=True)
+    sp.add_argument("--team"); sp.add_argument("--role"); sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
     ip = sub.add_parser("index").add_subparsers(dest="action", required=True, parser_class=Parser)
     ip.add_parser("status", parents=[common])
     ip.add_parser("rebuild", parents=[common]).add_argument("--download", action="store_true")
@@ -2921,6 +3339,26 @@ def build_parser():
     sp.add_argument("--slot", action="append")
     sp.add_argument("--kind"); sp.add_argument("--skill"); sp.add_argument("--json", action="store_true")
     sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
+    ip_ = sub.add_parser("identity").add_subparsers(dest="action", required=True, parser_class=Parser)
+    sp = ip_.add_parser("check", parents=[common]); sp.add_argument("repo"); sp.add_argument("--bundle", required=True)
+    sp.add_argument("--json", action="store_true")
+    for act in ("keep", "take"):
+        sp = ip_.add_parser(act, parents=[common]); sp.add_argument("repo"); sp.add_argument("field"); sp.add_argument("--bundle", required=True)
+    sp = sub.add_parser("history", parents=[common]); sp.add_argument("--month"); sp.add_argument("--write", action="store_true")
+    sp.add_argument("--json", action="store_true")
+    op_ = sub.add_parser("overlay").add_subparsers(dest="action", required=True, parser_class=Parser)
+    for act in ("show", "plan"):
+        sp = op_.add_parser(act, parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--json", action="store_true")
+        if act == "plan":
+            sp.add_argument("--file")
+    sp = op_.add_parser("apply", parents=[common]); sp.add_argument("repo"); sp.add_argument("--file"); sp.add_argument("--code")
+    sp = op_.add_parser("add", parents=[common]); sp.add_argument("repo"); sp.add_argument("--block", required=True)
+    sp.add_argument("--path"); sp.add_argument("--op", required=True); sp.add_argument("--value", action="append")
+    sp.add_argument("--value-ref", dest="value_ref"); sp.add_argument("--expects", type=int); sp.add_argument("--reason")
+    sp.add_argument("--id")
+    sp = op_.add_parser("rm", parents=[common]); sp.add_argument("repo"); sp.add_argument("op_id")
+    sp = op_.add_parser("answer", parents=[common]); sp.add_argument("repo"); sp.add_argument("op_id")
+    sp.add_argument("how", choices=("drop", "retarget", "expects")); sp.add_argument("--path"); sp.add_argument("--expects", type=int)
     kp = sub.add_parser("slot").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = kp.add_parser("bind", parents=[common]); sp.add_argument("repo"); sp.add_argument("target"); sp.add_argument("slot")
     sp.add_argument("--team")
@@ -2945,7 +3383,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
+            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot, "overlay": cmd_overlay, "history": cmd_history, "identity": cmd_identity,
             "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
             "inbox": cmd_inbox, "bootstrap": cmd_bootstrap, "consolidate": cmd_consolidate}
 
@@ -2954,6 +3392,14 @@ def emit(result, conflict=None):
     if conflict is not None:
         print("CTX_CONFLICT " + json.dumps(conflict, ensure_ascii=False))
     print("CTX_RESULT " + json.dumps(result, ensure_ascii=False))
+
+
+def _journal_size(c):
+    """The journal's size in bytes (None: none) — a write that added no line leaves the month's changelog as it is."""
+    try:
+        return os.path.getsize(os.path.join(c.store.state_dir, "journal.jsonl"))
+    except OSError:
+        return None
 
 
 def main(argv=None):
@@ -2970,8 +3416,14 @@ def main(argv=None):
                 cn.check("%s: %s" % (a.field, a.value))
         c = Ctx(a)
         with cs.guard_roots(co.allowed_roots(c.home, c.text)):
+            before = _journal_size(c) if writes(a) else None
             rc, res = COMMANDS[a.cmd](a, c)
             idle = a.cmd == "provider" and a.action == "sync" and not res.get("synced")    # a sync that synced nothing
+            if rc == 0 and writes(a) and c.store.exists() and _journal_size(c) != before:   # since v3.23.0: the changelog
+                try:
+                    chi.write(c.store, now()[:7])
+                except Exception:  # noqa: BLE001 — a derived note never changes the command's result
+                    pass
             if rc == 0 and writes(a) and not idle:      # since v3.13.1: the summary the digest shows on a cold start,
                 try:                                    # on the digest's budget; a miss saves nothing
                     co.summary_in_time(c.found, home=c.home)

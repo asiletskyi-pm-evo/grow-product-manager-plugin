@@ -1,0 +1,76 @@
+{
+ "version": "0.1",
+ "updated": "2026-10-28",
+ "emails": {
+  "pat.moss@zorg.example": "alpha",
+  "ana.lyst@zorg.example": "alpha",
+  "dev.lane@zorg.example": "beta",
+  "ghost@zorg.example": "gamma"
+ },
+ "teams": {
+  "alpha": {
+   "title": "Alpha — reviews and catalog",
+   "department": "product",
+   "umbrella": false,
+   "union_of": [],
+   "files": [
+    "Core/Teams/team-alpha.md",
+    "Core/People/pat-moss.md",
+    "Core/People/ana-lyst.md",
+    "Core/Products/Zorg App/Missions/_index.md",
+    "Core/Products/Zorg App/Missions/Reviews everywhere.md",
+    "Core/People/nobody.md"
+   ],
+   "modules": [
+    "mod-reviews"
+   ],
+   "missions": [
+    "Reviews everywhere"
+   ],
+   "metrics": [
+    "metric-review-rate"
+   ],
+   "dashboards": [
+    "Reviews dashboard"
+   ]
+  },
+  "beta": {
+   "title": "Beta — checkout",
+   "department": "product",
+   "umbrella": false,
+   "union_of": [],
+   "files": [
+    "Core/Teams/team-beta.md",
+    "Core/People/dev-lane.md"
+   ],
+   "modules": [
+    "mod-checkout"
+   ],
+   "missions": [],
+   "metrics": [
+    "metric-checkout-cr"
+   ],
+   "dashboards": []
+  }
+ },
+ "layer_prefixes": {
+  "shared": [],
+  "team": [
+   "Core/People/",
+   "Core/Products/"
+  ]
+ },
+ "shared": [
+  "Core/Dashboard.md",
+  "Core/Teams/_index.md"
+ ],
+ "always": [
+  "Core/Playbook",
+  "Core/_System/context-blocks.md"
+ ],
+ "people_role": {
+  "pat-moss": "Product Manager, Alpha (lead)",
+  "ana-lyst": "Data analyst",
+  "dev-lane": "Engineer"
+ }
+}

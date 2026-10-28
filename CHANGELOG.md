@@ -12,6 +12,70 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.23.0 (2026-10-28)
+
+**«Оверлей і журнал»: your corrections to a core are declared, and you can read what changed.** A correction you keep to a team's shared core is no longer a prose note to remember: it is an operation in `overlays/<repo>.yaml` beside your store — replace, remove, append, ignore or alias, with the reason in your words — and `ctx` lays it again after every refresh and daily sync. When the core fixes what you corrected, the operation no longer finds its text and you get one question, «прибрати поправку?». A value the core changed that you copied into your own sections arrives in the inbox as a proposal. `ctx history` writes a note a month — Keep a Changelog, «Було | Стало» — of the core's releases and your own changes. The core's team and role for your e-mail are put beside yours with the source of each. And a team that wants to share its context copies the example kit «Zorg» and is connected with one command.
+
+MINOR: new store files (`overlays/`, `history/`, `.state/identity.json`), new `ctx` commands (`overlay`, `history`, `identity`, `repo kit-check | add`), two new actions of `/grow-product-manager:context`; nothing incompatible.
+
+### Added
+
+- **The declared overlay** (`scripts/ctx_overlay.py`, `context-protocol.md` §5n, schema `context-overlay/1`) — `target {block, path}` with four path forms (the whole block, `#Subsection`, `field:Label`, `match:"text"`), `expects`, `reason`:
+  - laid into the block's region after every `provider apply`, daily sync and `ctx overlay …`; the base stays the core's text and the block state remembers what the overlay wrote, so a core release over a region you did not edit is `~` with **no question**;
+  - `replace` by `value_ref` writes one pointer line to your own subsection — your text is never copied into a block; `ignore` takes the core's text out of the slot (no «також», no divergence; `ctx explain` says why); `alias` adds names to the core's entity card;
+  - `expects` ≠ what is found → the operation is **held**: one question interactively, ✋ in `ctx health`, a part of the sync report and a line in the morning brief when nobody is at the keyboard;
+  - a region you edited by hand — taking the overlay out too — is yours: never overlaid; a core rule (`policy=rule`) is annotated only (`append`, `alias`); a file that cannot be read, or holds a secret, holds every block that carries an overlay; snapshots keep `overlays/`, `ctx undo` takes a change back.
+- **`ctx overlay show | plan [--file] | apply --code | add | rm | answer`** — a draft (`--file`) is how `context-connect` moves a prose note of corrections (`connect-steps.md` §8: the operations, then what did not become one, then one «так»).
+- **The core's changes into your sections** (§5o) — a field paired by its place in the diff, or a whole line of 12+ characters, that your own text still holds becomes a `REPLACE` proposal from `ctx-provider`; never a line in a region, under your overlay, rejected before, or a single plain word.
+- **The journal with values and `ctx history`** (`scripts/ctx_history.py`, §5p) — every write's journal line carries `changes` (was / became, 300 characters, a secret hidden by kind); a provider pass carries `was`; `history/YYYY-MM.md` is refreshed after every write that added a line.
+- **`ctx identity check | keep | take`** (`scripts/ctx_identity.py`, §5r, `.state/identity.json`) — the bundle builder says where the team and the role came from (`team_from`, `role_from`, `role_enum`); a disagreement is two lines with their sources, your answer is kept until the core says something else; `take role` writes the plugin's value into your profile.
+- **The example provider kit** `examples/provider-kit/zorg-core/` (manifest, role model, blocks with `slot=` and `policy=rule`, cards, playbook, an overlay example, a README); **`ctx repo kit-check`** names every fault; **`ctx repo add <kit> --email E`** shows team, role, registration and blocks with a code and, with `--apply --code`, connects the kit (`jira_write: ask`, `sync: off` — both are `context-connect`'s questions).
+- `testing/overlay-evals.md`; validator check 20 — the example kit stays sound.
+
+### Changed
+
+- **context-connect 0.6.0** — modes «Overlay» and «A kit in one command», identity on a refresh (`connect-steps.md` §1, §8, §9). **focus-advisor 0.9.6** — a held correction in the brief. **context-navigator 0.4.3** — routing to `/context history | overlay`.
+- `/grow-product-manager:context` gains `overlay` and `history`; what each action runs moved to `context-protocol.md` §5q (the command is 2.7 KiB).
+- `ctx read` / `ctx explain` mark a block the overlay wrote «з твоїм оверлеєм»; `references/context-provider-protocol.md` §7, §9, §12.6, §12.11; `data-policy.md`, `host-profiles.md`.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/ctx_overlay.py`, `ctx_history.py`, `ctx_identity.py`, `ctx_kit.py` | new |
+| `scripts/ctx_blocks.py` | the overlay in plan / apply / sync, `reoverlay`, `core_suggestions`, `was` |
+| `scripts/ctx.py` | `overlay`, `history`, `identity`, `repo kit-check | add`, health lines, the changelog after a write |
+| `scripts/ctx_resolve.py`, `ctx_entity.py` | `ignore`, `alias`, the `overlaid` mark |
+| `scripts/ctx_store.py`, `ctx_ops.py`, `ctx_synced.py`, `ctx_show.py`, `ctx_inbox.py`, `provider_bundle.py` | journal `changes`, `overlays/` in snapshots, the report's part, health, `ctx-provider`, `team_from` / `role_from` / `role_enum` |
+| `examples/provider-kit/zorg-core/` | new — the example kit |
+| `references/context-protocol.md`, `context-provider-protocol.md`, `data-policy.md`, `host-profiles.md` | §5n–§5r and rows; §7, §9, §12; the store's new files; the prose path |
+| `skills/context-connect/` | 0.5.0 → 0.6.0 |
+| `skills/focus-advisor/SKILL.md` | 0.9.5 → 0.9.6 |
+| `skills/context-navigator/SKILL.md` | 0.4.2 → 0.4.3 |
+| `commands/context.md` | `overlay`, `history`; detail to §5q |
+| `testing/ctx_overlay_test.py`, `ctx_overlay_merge_test.py`, `ctx_overlay_read_test.py`, `ctx_overlay_cli_test.py`, `ctx_core_suggest_test.py`, `ctx_history_test.py`, `ctx_identity_test.py`, `provider_kit_test.py`, `overlay-evals.md`, fixture `provider-kit-bad/` (new); `validate-consistency.sh` check 20; pins in `ctx_cli_test.py`, `ctx_resolve_test.py`, `ctx_search_test.py`, `provider_bundle_test.py` | |
+
+### Acceptance (a copy of the author's store and core; real data only read)
+
+- **Moving the author's prose note of corrections:** 3 operations (the team's members by the author's own table, a disputed OKR ignored until the core changes it, the team's name as an alias); 5 items of the note did not become operations, each with why. `ctx undo` — records, state and `local-context.md` byte for byte.
+- **A core release v0.4 → v0.5:** 8 blocks updated, **0 questions, 1 confirmation**, no block or overlay lost; the core's fixed OKR made exactly one correction held — ✋, then «прибрати». The same release through the daily sync: 0 questions, the report's part, ✋.
+- **The core's suggestions:** 0 on the author's data (no value copied from the core), 1 on a constructed copy line. **Identity:** team and role agree on the author's data. **Zorg** from an empty store in one command.
+- The real vault, `~/.grow-pm` and the author's local index: 16 862 files, 0 changes. Findings fixed on the way: an overlaid block marked as the author's edit, a noisy changelog, two false identity disagreements.
+
+### Known limits
+
+- A prose note is not parsed by the plugin: `context-connect` drafts the operations, you confirm the report.
+- «Було | Стало» exists for changes from v3.23.0 and for the core's releases whose bases are still kept; an edit made in a record file (Obsidian) and imported has no values; earlier lines say only what changed.
+- Decisions on conflicts are not written to the decision log; «Playbook — адаптації» is not moved into the overlay (it acts on blocks in your records only).
+- Without a shell the overlay is only read by skills in prose; there is no history and no proposal from the core.
+- `alias` acts in the plugin's reading only; the core's cards are not changed. `ctx undo` of `repo add` takes the blocks back and leaves the registration.
+- A proposal of the core waits until answered, even if the core changes the same value again.
+- The repository's own copy of a core served by MCP only — v3.24.0; `ctx audit` — v4.0.0.
+
+### Backwards compatibility
+
+Without an overlay file the plugin behaves as v3.22.0 byte for byte (measured against the v3.22 scripts on a copy). New keys only: journal lines (`changes`, `was`, `overlay`, `overlay_held`, `proposed`), the block state (`overlay_sha`, `overlay_of`), the snapshot manifest (`overlays_known`; a v3.22 snapshot leaves `overlays/` alone). v3.22 code on a v3.23 store loses nothing: an overlaid region reads as your edit. The inbox stays `context-inbox/1`; the index stays `search-index/1`.
+
 ## v3.22.0 (2026-10-28)
 
 **«Конфігуратор-петля»: the configurator reads first and asks at most five questions.** Setting up the plugin no longer starts with an interview of seventeen steps. The configurator reads your connectors read-only and `ctx bootstrap` shows what they say as one table, with the source and the confidence of every field; Basic is at most five decisions, and saving creates the context store with the source of every field. Once a week your records are checked against the connectors, and `consolidate` tidies them — both only as proposals of the inbox. The second release of the programme «Петля контексту».

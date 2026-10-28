@@ -795,7 +795,14 @@ def main():
     in_place = a.in_place or out == core
     skip = [s.strip() for s in a.skip_blocks.split(",") if s.strip()]
     if a.propose_only:
+        people_word = os.path.basename(people_pre.rstrip("/")) or "People"
+        role_from = "--role" if a.role else ("%s/%s.md: «%s» → %s%s" % (people_word, pslug, role_title, infer_role(role_title, m),
+                                                                        (" (немає в моделі ролей — %s)" % role) if role_note else "")
+                                             if pslug and role_title else "типово → %s" % role)
         print(json.dumps(dict(team=team, role=role, role_title=role_title, files=len(files), pages=conf,
+                              email=email, team_title=tb.get("title", team),           # since v3.23.0: where each came from
+                              team_from="--team" if a.team else "access-bundles.json: emails", role_from=role_from,
+                              role_enum=(m.get("role_enum_map") or DEFAULT_ROLE_ENUM).get(role, "other"),
                               modules=tb.get("modules", []), missions=tb.get("missions", []), metrics=tb.get("metrics", []),
                               dashboards=tb.get("dashboards", []), union_of=tb.get("union_of", [])), ensure_ascii=False, indent=1))
         if existing or in_place:

@@ -49,6 +49,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_blocks as cb  # noqa: E402
+import ctx_overlay as ov  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_repos as crp  # noqa: E402
@@ -80,6 +81,7 @@ class _Repos:
             self.by_ns.setdefault(r.get("namespace") or r["id"], r)
         self.records = records
         self._states, self._bases, self._regions = {}, {}, {}
+        self._overlays, self._refs = {}, None
 
     def reg(self, ns):
         return self.by_ns.get(ns)
@@ -132,6 +134,62 @@ class _Repos:
             self._regions[ns] = cb.find_regions(records, ns)[0]
         return self._regions[ns]
 
+    def overlay_ops(self, ns):
+        """The operations of the overlay of the repository of namespace `ns` (since v3.23.0), read once; [] when it has
+        none or it cannot be read (an unreadable overlay ignores nothing: `ctx provider plan` and `ctx health` say why)."""
+        reg = self.reg(ns)
+        if reg is None:
+            return []
+        if ns not in self._overlays:
+            try:
+                doc = ov.load(self.store.root, reg["id"])
+            except ov.Unreadable:
+                doc = None
+            self._overlays[ns] = doc["ops"] if doc else []
+        return self._overlays[ns]
+
+    def ignored_by(self, ns, bid, region, text):
+        """What the applied `ignore` operations of the overlay do to a block candidate: None (nothing), ("drop", why) — the
+        candidate lies inside what an ignore finds, or holds a line a `match:` ignore finds, or the ignore names the whole
+        block — or ("cut", the text without the ignored lines, why) when an ignored subsection or field is only a part of
+        it. Positions, not line texts: the candidate is located in the region's inside, an ignore by its path there; and
+        whether an ignore applies (`expects`) is decided on the core's text, the base, as `ctx overlay show` decides it."""
+        ops = [o for o in ov.for_block(self.overlay_ops(ns), bid) if o["op"] == "ignore"]
+        if not ops or region is None:
+            return None
+        if self._refs is None:
+            self._refs = ov.refs_in(self.records or [])
+        inner = ov._inner(region)[1]
+        cand = (text or "").replace("\r\n", "\n").rstrip("\n").split("\n")
+        n = len(cand)
+        at = next((k for k in range(len(inner) - n + 1) if [x.rstrip() for x in inner[k:k + n]] == [x.rstrip() for x in cand]), None)
+        base = self.base(ns, bid) or region
+        cut, why = set(), None
+        for o in ops:
+            if ov.overlay(base, [o], self._refs)[1][0]["state"] != "applied":
+                continue
+            words = "оверлей: ignore %s%s" % (o["id"], (" — " + o["reason"]) if o.get("reason") else "")
+            kind = ov.parse_path(o["target"].get("path", ""))[0]
+            if kind == "all":
+                return "drop", words
+            if at is None:
+                continue                    # the candidate is not a slice of the region: nothing to say about it
+            for s, e in ov.locate(inner, o["target"].get("path", "")):
+                if kind == "match":
+                    if at <= s < at + n:
+                        return "drop", words
+                elif s <= at and at + n <= e:
+                    return "drop", words
+                elif s < at + n and at < e:
+                    cut.update(range(max(s, at), min(e, at + n)))
+                    why = why or words
+        if not cut:
+            return None
+        rest = [ln for k, ln in enumerate(cand) if at + k not in cut]
+        if not any(ln.strip() for ln in rest):
+            return "drop", why
+        return "cut", "\n".join(rest) + ("\n" if (text or "").endswith("\n") else ""), why
+
     def block(self, slot, rec, ns, bid, v, region, text, how, placed, place, sub=None):
         """A block's candidate: `region` is the whole region text (markers included) when it is sound, else None; `sub` the
         subsection its binding names."""
@@ -143,7 +201,10 @@ class _Repos:
         return {"slot": slot, "source": reg["id"] if reg else ns, "level": "rule" if rule and how != BY_NAME else "repo",
                 "record": rec["id"], "block": bid, "ns": ns, "version": str(version) if version else None,
                 "checked": checked[:10] if isinstance(checked, str) and checked else None,
-                "edited": bool(known and region is not None and cs.sha_text(cb.norm(region)) not in known),
+                "edited": bool(known and region is not None and cs.sha_text(cb.norm(region)) not in known
+                               and cs.sha_text(cb.norm(region)) != entry.get("overlay_sha")),
+                "overlaid": bool(region is not None and entry.get("overlay_sha")
+                                 and cs.sha_text(cb.norm(region)) == entry.get("overlay_sha")),
                 "rule": rule, "how": how, "heading": _heading(text), "text": text, "rank": _rank(reg),
                 "placed": placed, "place": place, "sub": sub}
 
@@ -218,7 +279,7 @@ def _own(slot, rec, names, aliases, place, field):
             if not loose and _answers_any(cores[start], is_field, other) and not _answers_any(cores[start], is_field, mine):
                 continue
             return {"slot": slot, "source": "mine", "level": "mine", "record": rec["id"], "block": None, "ns": None,
-                    "version": None, "checked": sc.verified_of(rec, None), "edited": False, "rule": False, "how": None,
+                    "version": None, "checked": sc.verified_of(rec, None), "edited": False, "overlaid": False, "rule": False, "how": None,
                     "heading": _heading(text), "text": text, "rank": None, "placed": True, "place": place, "sub": None}
     return None
 
@@ -378,6 +439,13 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
                     break
             if hit:
                 out.append(hit)
+    for c in out:                           # since v3.23.0: what your overlay ignores is no candidate (resolve drops it)
+        if c.get("block") and c.get("ns"):
+            got = regs.ignored_by(c["ns"], c["block"], region_of(c["ns"], c["block"], c["record"]), c["text"])
+            if got and got[0] == "drop":
+                c["overlay_ignored"] = got[1]
+            elif got:                       # a part of it is ignored: the candidate keeps the rest
+                c["text"], c["overlay_cut"] = got[1], got[2]
     return out
 
 
@@ -479,7 +547,7 @@ def resolve(slot, cat, cands, mem):
     `repo:<id>` (that repository's candidate — all of them for a list) · a list (every candidate) · yours · the
     repositories: the highest rank; several at it with different text → a divergence, unless a decision of yours has the
     same hash for every one of them (ctx slot decide) — then its winner. Pure: nothing it is given is changed."""
-    cands = list(cands or ())
+    cands = [c for c in cands or () if not c.get("overlay_ignored")]     # your overlay ignores it: no candidate
     unread = [c for c in cands if c.get("placed") and unread_registration(c)]
     out = _resolve_ranked(slot, cat, [c for c in cands if not unread_registration(c)], mem)
     if unread:
@@ -611,6 +679,7 @@ def slot_answers(sctx, slot, field=None, unplaced=None):
 NOTE_LINE = "твоя примітка до правила"
 BY_NAME_MARK = "за назвою, без прив'язки"
 EDITED_MARK = "з твоїми правками"
+OVERLAY_MARK = "з твоїм оверлеєм"                 # since v3.23.0: the region the overlay wrote (context-protocol.md §5n)
 RULE_MARK = "правило ядра"
 ALSO_LINE = "також: %s каже інакше — ctx explain %s"
 DIVERGE_LINE = "⚠ розбіжність між репозиторіями — вирішити: ctx slot decide %s %s"
@@ -649,6 +718,7 @@ def render_slot(res, origin):
             head = ("> [" + " · ".join([MINE_WORD, origin.clip(c["record"])] + extra) + "]") if lined else None
         else:
             marks = ([BY_NAME_MARK] if c.get("how") == BY_NAME else []) + ([EDITED_MARK] if c.get("edited") else []) \
+                + ([OVERLAY_MARK] if c.get("overlaid") else []) \
                 + ([RULE_MARK] if c.get("level") == "rule" else [])
             head = origin.line(c["ns"], c["block"], c.get("version") or "", marks + extra,
                                slots=[] if c.get("how") == BY_NAME else [slot])
@@ -903,6 +973,8 @@ def _row(c, outcome, reason=None, command=None):
         row["checked"] = c["checked"]
     if c.get("level") != "mine":
         row.update(block=c["block"], edited=bool(c.get("edited")), rule=c.get("level") == "rule", how=c.get("how"), rank=c.get("rank"))
+        if c.get("overlaid"):
+            row["overlaid"] = True
         if c.get("sub"):
             row["sub"] = c["sub"]
         if c.get("version"):
@@ -948,6 +1020,8 @@ def _rows(res, cands, unplaced, team):
                 rows.append(_row(c, "won" if lone else "shown"))
         elif c is res["note"]:
             rows.append(_row(c, "shown", NOTE_LINE))
+        elif c.get("overlay_ignored"):
+            rows.append(_row(c, "lost", c["overlay_ignored"]))
         else:
             rows.append(_row(c, "lost", "програв: " + lost(c)))
     for c in unplaced:
@@ -971,6 +1045,7 @@ def _row_line(row):
             bits.append("станом на " + row["checked"])
         bits += [BY_NAME_MARK] if row.get("how") == BY_NAME else [HOW_WORDS[row["how"]]] if row.get("how") in HOW_WORDS else []
         bits += [EDITED_MARK] if row.get("edited") else []
+        bits += [OVERLAY_MARK] if row.get("overlaid") else []
         bits += [RULE_MARK] if row.get("rule") else []
     line = OUTCOME_MARKS[row["outcome"]] + " " + " · ".join(bits)
     if row.get("reason"):

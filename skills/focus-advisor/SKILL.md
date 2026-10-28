@@ -1,6 +1,6 @@
 ---
 name: focus-advisor
-version: 0.9.5
+version: 0.9.6
 description: What to focus on today, this sprint or quarter — scans mail, calendar, Jira, metrics; recommends and chains. Not sprint planning (sprint-planning), not analysis (product-analysis). UA — «на чому сфокусуватись», «ранковий бриф», «розбери мою пошту», «чи все ок з метриками», «де великі можливості». EN — "what should I focus on".
 ---
 
@@ -76,6 +76,8 @@ For each focus: what, why now (signals with links), cost of delay (one sentence)
 **The inbox in the brief (since v3.21.0, `references/context-protocol.md` §5i).** In `now` mode, with a context store and SHELL: run `python3 "<plugin root>/scripts/ctx.py" inbox list`. Not empty → after the focuses a block «Скринька: N (термінових K)» with its numbered lines and **one** question — «прийняти всі / номери / відхилити номери / пізніше» — answered by `ctx inbox accept|reject <…> --code <the list's code>`; exit 4 «скринька змінилась» → list again and ask again. `headless=true`: the lines and the phrase `/grow-product-manager:context inbox` only — nothing is accepted; the run's own deltas are proposed as in any run (the inbox is a local store write, taken back by `ctx inbox reject`), the urgent ones asked about in the next interactive brief. Empty → no block.
 
 **The weekly recheck (since v3.22.0, `references/context-protocol.md` §5l).** In `now` mode, with a context store and SHELL, when `ctx health` says the last «звірка з конекторами» is 7 days old or more (or never): before the inbox block, read the connectors **read-only** by `references/context-observe.md` §4 — the brief already holds most of them — write the observation file in the session's scratchpad and run `python3 "<plugin root>/scripts/ctx.py" validate --recheck --observed <file>`; then `ctx verify <ids>` for the records it printed as they should be, and delete the file. What it proposed shows up in the inbox block below. `headless=true` does the same (a local store write, nothing accepted). A connector that does not answer is just «не перевірено» — never a finding.
+
+**Your corrections to a core (since v3.23.0, `references/context-protocol.md` §5n).** In `now` mode, with a context store and SHELL: a ✋ line of `ctx health` that begins `оверлей` (a held correction — the core may have fixed what you corrected — or an overlay file that cannot be read) goes into the brief as one line with `/grow-product-manager:context overlay`; nothing is asked or answered here. `headless=true`: the same line.
 
 ### Step 6 — PM chooses. Gate (skipped in headless)
 Per focus: **(a) chain** to the executing skill with prepared arguments; (b) create a task/reminder; (c) snooze with a date. Chain map:

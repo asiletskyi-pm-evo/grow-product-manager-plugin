@@ -43,7 +43,7 @@ FILE = "inbox.json"
 WHERE = ".state/" + FILE
 OPS = ("ADD", "UPDATE", "INVALIDATE", "NOOP", "REPLACE")
 # Since v3.22.0: proposers that are ctx itself, not skills — only their own commands propose under these names.
-CTX_OWN = ("ctx-bootstrap", "ctx-recheck", "ctx-consolidate")
+CTX_OWN = ("ctx-bootstrap", "ctx-recheck", "ctx-consolidate", "ctx-provider")   # ctx-provider since v3.23.0
 _KEYS = ("schema", "next", "entries", "rejected")
 _ENTRY_KEYS = ("n", "sig", "delta", "skills", "at", "record_sha", "was", "urgent")
 _DELTA_KEYS = ("op", "record", "field", "value", "text", "under", "reason", "evidence", "source")
@@ -387,7 +387,7 @@ def propose(mem, raws, skill, recs, today):
             body = apply_to(d, rec, today)
         except cs.RegionError:
             out.append({"status": BLOCK, "record": d["record"],
-                        "why": "це блок ядра — пропозиції ядру прийдуть у v3.23.0"})
+                        "why": "це блок ядра — поправку до ядра пише оверлей: ctx overlay add (context-protocol.md §5n)"})
             continue
         except ValueError as e:
             out.append({"status": REFUSED, "record": d["record"], "why": str(e)})

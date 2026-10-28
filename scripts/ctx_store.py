@@ -418,6 +418,7 @@ class Store:
         self.state_dir = os.path.join(root, ".state")
         self.card_path = os.path.join(root, "INDEX.md")
         self.archive_dir = os.path.join(root, "archive")
+        self.overlays_dir = os.path.join(root, "overlays")          # since v3.23.0: overlays/<repo>.yaml (ctx_overlay.py)
 
     def exists(self):
         return os.path.isdir(self.state_dir)
@@ -512,6 +513,18 @@ class Store:
                      json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n")
 
     def journal(self, entry):
+        """Append one line to the journal. Since v3.23.0 a line about a write that changed records (its `ids` and the
+        `snapshot` it took) gets `changes` — what each record said before and says now (`journal_changes`) — unless it
+        has them, or is a provider pass (its blocks are in `taken` / `was`). A change that cannot be read is left out:
+        the line is never lost for it."""
+        if ("changes" not in entry and entry.get("snapshot") and entry.get("ids")
+                and entry.get("op") not in NO_CHANGES):
+            try:
+                ch = journal_changes(entry["snapshot"], self.records_dir, entry["ids"])
+            except Exception:  # noqa: BLE001 — the values are a help to read, the line is the record of the change
+                ch = []
+            if ch:
+                entry = dict(entry, changes=ch)
         os.makedirs(self.state_dir, exist_ok=True)
         with open(check_target(os.path.join(self.state_dir, "journal.jsonl")), "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
@@ -522,6 +535,81 @@ class Store:
             return []
         with open(path, encoding="utf-8") as f:
             return [json.loads(l) for l in f if l.strip()]
+
+
+# --------------------------------------------------------------- the journal's values (since v3.23.0)
+NO_CHANGES = ("provider-apply", "provider-sync", "provider-adopt", "migrate")
+CHANGE_CLIP, CHANGES_MAX = 300, 20
+
+
+def _cut(text):
+    t = (text or "").replace("\r", "")
+    return t if len(t) <= CHANGE_CLIP else t[:CHANGE_CLIP - 1] + "…"
+
+
+def _hidden(text, label=None):
+    """The text, or «[приховано: <вид>]» when it — or `<label>: <text>`, as a field line reads — holds a secret or an
+    identifier (a labelled secret, `API key: …`, is caught only with its label)."""
+    import ctx_never as cn                              # here: ctx_never needs nothing of the store
+    kinds = cn.scan(text) or (cn.scan("%s: %s" % (label, text)) if label and text else [])
+    return "[приховано: %s]" % cn._names(kinds) if kinds else text
+
+
+def _body_of(path):
+    if not os.path.isfile(path):
+        return None
+    return parse_record(read_text(path))["body"]       # within the time budget: an evicted file never hangs a write
+
+
+def _own_headings(body):
+    """{line number: heading text} of the headings outside every managed region."""
+    spans, out, off = cc.managed_spans(body), {}, 0
+    for k, line in enumerate(body.split("\n")):
+        m = re.match(r"^#{1,6}\s+(.*?)\s*$", line.rstrip("\r"))
+        if m and not any(a <= off < b for a, b in spans):
+            out[k] = m.group(1)
+        off += len(line) + 1
+    return out
+
+
+def journal_changes(snapshot, records_dir, ids):
+    """[{id, where, was, became}] — for each record of `ids`, the lines it changed between the snapshot's copy
+    (`<snapshot>/records/<id>.md`, before) and the record now: a field line as its label and its two values, any other
+    run of lines under the heading above it (one outside every managed region; the record's title else). Each value is
+    at most CHANGE_CLIP characters and goes through the never-store filter (a secret is «[приховано: <вид>]»); at most
+    CHANGES_MAX entries in all."""
+    import difflib
+    out = []
+    for rid in ids:
+        if not isinstance(rid, str) or not ID_RE.match(rid):
+            continue
+        before = _body_of(os.path.join(snapshot, "records", rid + ".md"))
+        after = _body_of(os.path.join(records_dir, rid + ".md"))
+        if before == after:
+            continue
+        a, b = (before or "").split("\n"), (after or "").split("\n")
+        heads = _own_headings(after or before or "")
+        for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+            if tag == "equal":
+                continue
+            olds = [x for x in a[i1:i2] if x.strip()]
+            news = [x for x in b[j1:j2] if x.strip()]
+            if not olds and not news:
+                continue
+            fo = [FIELD_RE.match(x.strip()) for x in olds]
+            fn = [FIELD_RE.match(x.strip()) for x in news]
+            if len(olds) <= 1 and len(news) <= 1 and all(fo + fn) and len({m.group("name") for m in fo + fn}) == 1:
+                name = (fo + fn)[0].group("name")
+                was = fo[0].group("value").strip() if fo else ""
+                became = fn[0].group("value").strip() if fn else ""
+            else:
+                at = j1 if after is not None else i1
+                name = next((heads[k] for k in range(min(at, len(b) if after is not None else len(a)), -1, -1) if k in heads), "")
+                was, became = "\n".join(x.rstrip() for x in olds), "\n".join(x.rstrip() for x in news)
+            out.append({"id": rid, "where": name, "was": _cut(_hidden(was, name)), "became": _cut(_hidden(became, name))})
+            if len(out) >= CHANGES_MAX:
+                return out
+    return out
 
 
 # --------------------------------------------------------------- field edits

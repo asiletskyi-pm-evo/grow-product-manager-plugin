@@ -28,7 +28,7 @@ CHECKED = "2026-10-20T10:00:00+03:00"
 CAT = sl.load_catalogue()
 REPOS = [{"id": "zorg-core", "namespace": "zorg-core", "rank": 1000, "products": []},
          {"id": "zorg-growth", "namespace": "zorg-growth", "rank": 500, "products": []}]
-KEYS = {"slot", "source", "level", "record", "block", "ns", "version", "checked", "edited", "rule", "how", "heading",
+KEYS = {"slot", "source", "level", "record", "block", "ns", "version", "checked", "edited", "overlaid", "rule", "how", "heading",
         "text", "rank", "placed", "place", "sub"}
 STATE_LINE = "стан блоків zorg-core не прочитано — атрибути slot= і policy=rule його блоків невідомі"
 fails = 0

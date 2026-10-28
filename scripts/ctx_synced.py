@@ -110,7 +110,7 @@ def decide(plan, theirs):
         if row.get("rejected"):
             out["hold"].append(bid)
             out["rejected"].append(bid)
-        elif behind and sign in CHANGES:
+        elif behind and (sign in CHANGES or row.get("reoverlay")):     # since v3.23.0: nor the overlay laid again
             out["hold"].append(bid)
             out["held_behind"].append(bid)
             if sign == "?" and not cb.is_rule(text):    # held, and still a question for you: the digest counts it
@@ -617,7 +617,9 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None, 
                                                            _cell(verdicts[r["block"]][1]), _code(record) if record else "—"))
             blocks.append(table)
         else:
-            blocks.append(["Тексти не змінились: пройшло лише оновлення бази порівняння."])
+            relaid = [r["block"] for r in plan["rows"] if r.get("reoverlay")]
+            blocks.append(["Тексти ядра не змінились; твій оверлей накладено знову на: %s." % ", ".join(_code(b) for b in relaid)]
+                          if relaid else ["Тексти не змінились: пройшло лише оновлення бази порівняння."])
         for r in rows:
             kind = verdicts[r["block"]][2]
             if r["sign"] in QUESTIONS and kind not in ("rejected", "held", "lagging"):
@@ -639,6 +641,10 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None, 
             blocks.append(["### Відкинуто вами раніше", "", "Ці тексти ядра не застосовуються, доки ядро не змінить блок:"] + [""] +
                           ["- %s" % _code(r["block"]) for r in back])
             blocks.extend([_take(r, result["repo"])] for r in back)
+        held_ov = cb.overlay_lines(plan)
+        if held_ov:                                 # since v3.23.0: your overlay — a held correction, a file not read
+            blocks.append(["### Оверлей чекає рішення", ""] + ["- %s" % _cell(x) for x in held_ov])
+            blocks.append(["Відповісти: /context overlay (або ctx overlay show %s)" % rid])
     elif outcome == "broken":
         blocks.append(["### Джерело ядра не прийнято", "", "Причина: %s" % reason])
         blocks.append(["Репозиторій пропущено: нічого не записано. Перевірку зараховано, наступна — через добу."])

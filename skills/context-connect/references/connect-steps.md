@@ -27,6 +27,7 @@ python3 "<plugin root>/scripts/provider_bundle.py" --core "<core>" --out "<targe
 - An umbrella team (a department lead) means the union of its teams: warn that the bundle is large.
 - The first line ends with `inferred '<role>' is not in the role model, using '<profile>'` — say which profile was used in the same sentence and offer to pick another (`--role`).
 - Exit 3 prints one line naming the file, the line or the key: the core or its manifest is missing or does not parse, a pattern does not compile, the role model does not load, or an explicit `--role` is not in it. Show the line, nothing was written; a defect in the core goes to its owner.
+- **Your words against the core's (since v3.23.0, with a store and a registration).** Save the JSON the dry run prints (from its first `{`) to a file in the session's scratchpad and run `ctx identity check <repo> --bundle <file>` (`references/context-protocol.md` §5r). A row that differs is two lines — the core's value with where it came from, yours with its source — and the two commands; ask once, the recommended answer first (keep yours unless the user says the core is right): `ctx identity keep <repo> <team|role> --bundle <file>` · `ctx identity take <repo> role --bundle <file>`. Taking the core's team is a rebuild with `--team <slug>` (§3), not an identity answer. A row already answered (`лишено твоє …`) is not asked.
 
 ## §2 Jira write scope
 
@@ -153,6 +154,26 @@ A slot is the place in a record where an answer lives (`references/context-proto
    c. **After a yes** write `sync: daily` into the registration — one line: add it, or change `sync: off` — in `{vault}/{plugin_folder}/_System/providers/<id>.yaml` (no vault: `~/.grow-pm/providers/<id>.yaml`) and touch nothing else of the file. Say when the first pass will come: a day after the last check, which this run's apply just made; `ctx provider sync <repo>` (the `ctx.py` command of §4a) runs one now. **After a no** write `sync: off`.
 3. Entry points, a test question through `context-navigator`, lines for the owner, the `people_resolver` check — as in the skill's Step 6.
 4. Project memory, when the host has one: team, role, provider id, target path, core version, date, whether a context existed and what was done with it.
+
+## §8 Overlay — your corrections to a core (since v3.23.0, with a store)
+
+A prose note of corrections to a core («Оверлей … — поправки до ядра», in the user's layer or a `writable` path of the core) becomes declared operations (`references/context-protocol.md` §5n). The note is read, never changed.
+
+1. `ctx provider plan <repo>` must show no `⚠` or `?` for the blocks the note speaks of — settle those first (§4a).
+2. Read the note and the regions the store holds (`ctx explain`, `ctx read`). For each item that names something a **block in the records** says, draft one operation with `reason` in the note's own words: a list the user replaces with their own table → `replace` with `value_ref "<record id>#<their subsection>"`; a value the user disputes while their own text already wins the slot → `ignore` with a `match:"<the core's words>"` path, so the operation is held — one question «ядро виправили — прибрати поправку?» — the day the core's words change; a line the core should not carry → `remove`; a name the core uses for the user's team or product → `alias`. Never a value copied from the note into a block (a `value_ref` points at the user's own text).
+3. Write the draft (`schema: context-overlay/1`, `repo: <id>`) to the session's scratchpad and run `ctx overlay plan --file <draft>`. One message: the plan's lines, then **«не стали операціями»** — every item of the note that is no block in the records (missions, epics, dead links, empty folders of the core), each with why, in one line.
+4. On «так» → `ctx overlay apply <repo> --file <draft> --code <code>`; then `Скасувати: ctx undo` and one line the user may add to the note («перенесено в overlays/<repo>.yaml <date>») — never written by the skill.
+5. A secret in the draft (`увага:` in the plan, exit 4 on apply) → drop that text from the operation and plan again.
+
+**A held correction** (✋ `оверлей … чекають рішення` in `ctx health`, a part of a sync report, `ctx overlay show`): one question per held operation, as §5n words it; answer with `ctx overlay answer <repo> <id> drop|retarget --path …|expects --expects N`.
+
+## §9 A provider kit in one command (since v3.23.0, with a store)
+
+For a folder that is a provider kit (`references/context-provider-protocol.md` §9; the plugin's example: `examples/provider-kit/zorg-core/`) and is not registered yet:
+
+1. `ctx repo kit-check <folder>` — a fault (exit 3) is said as it is and goes to the kit's owner; a warning is one line.
+2. `ctx repo add <folder> --email <e-mail>` — one message from its dry run: team and role with their sources, the registration path, the blocks and where they go. `UNKNOWN`-like exit 3 (the e-mail is not in the role model) → one question with the teams it names, then `--team <key>`.
+3. On «так» → `ctx repo add <folder> --email <e-mail> --apply --code <code>`; then Step 6 item 2 (the daily sync, asked once) and, when the user keeps a prose note of corrections to this core, §8.
 
 ## §7 MCP-only providers
 

@@ -124,6 +124,7 @@ def snapshot(store, copies, home, label, notes=None):
     with cs.read_budget(cs.read_timeout()):
         files = _files(store.records_dir, "records/")
         files.update(_files(store.state_dir, "state/"))
+        files.update(_files(store.overlays_dir, "overlays/"))      # since v3.23.0: your declared overlays
         if os.path.isdir(store.archive_dir):
             for year in sorted(os.listdir(store.archive_dir)):
                 files.update(_files(os.path.join(store.archive_dir, year), "archive/%s/" % year))
@@ -145,6 +146,7 @@ def snapshot(store, copies, home, label, notes=None):
         h.update(rel.encode("utf-8") + b"\0" + files[rel] + b"\0")
     h.update(json.dumps([existed, [(c["path"], c["existed"]) for c in cps]] + ([[k["path"] for k in kept]] if kept else []))
              .encode("utf-8"))
+    h.update(b"overlays-known")                         # since v3.23.0: a snapshot of v3.22 (no overlays in it) is never reused
     digest = h.hexdigest()
     newest = sorted(n for n in os.listdir(root) if SNAP_RE.match(n))
     if newest:
@@ -173,7 +175,7 @@ def snapshot(store, copies, home, label, notes=None):
         with open(p, "wb") as f:
             f.write(data)
     manifest = {"label": label, "created": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
-                "store": store.root, "store_existed": existed, "copies": cps, "hash": digest}
+                "store": store.root, "store_existed": existed, "copies": cps, "hash": digest, "overlays_known": True}
     if kept:
         manifest["notes"] = kept
     os.makedirs(snap, exist_ok=True)
@@ -220,18 +222,28 @@ def restore(snap_dir, store, copies):
     with open(os.path.join(snap_dir, "manifest.json"), encoding="utf-8") as f:
         manifest = json.load(f)
     entries = manifest.get("copies", [])
-    for p in [store.records_dir, store.state_dir, store.archive_dir, store.card_path] + list(copies[:len(entries)]):
+    overlays = manifest.get("overlays_known")          # a snapshot of v3.22 knew no overlay: the folder is left as it is
+    for p in [store.records_dir, store.state_dir, store.archive_dir, store.card_path] + list(copies[:len(entries)]) \
+            + ([store.overlays_dir] if overlays else []):
         cs.check_target(p)
     for folder in (store.records_dir, store.state_dir, store.archive_dir):
         if os.path.isdir(folder):
             shutil.rmtree(folder)
+    if overlays and os.path.isdir(store.overlays_dir):  # a folder you edit by hand: its hidden files (.swp, .DS_Store) stay
+        for name in os.listdir(store.overlays_dir):
+            p = os.path.join(store.overlays_dir, name)
+            if not name.startswith(".") and os.path.isfile(p):
+                os.remove(p)
+        if not os.listdir(store.overlays_dir) and not os.path.isdir(os.path.join(snap_dir, "overlays")):
+            os.rmdir(store.overlays_dir)                # made after the snapshot and empty now: gone, as it was
     if os.path.isfile(store.card_path):
         os.remove(store.card_path)
     if manifest.get("store_existed"):
-        for sub, target in (("records", store.records_dir), ("state", store.state_dir), ("archive", store.archive_dir)):
+        for sub, target in (("records", store.records_dir), ("state", store.state_dir), ("archive", store.archive_dir),
+                            ("overlays", store.overlays_dir)):
             src = os.path.join(snap_dir, sub)
             if os.path.isdir(src):
-                shutil.copytree(src, target)
+                shutil.copytree(src, target, dirs_exist_ok=True)
         if os.path.isfile(os.path.join(snap_dir, "INDEX.md")):
             shutil.copy2(os.path.join(snap_dir, "INDEX.md"), store.card_path)
     skipped = []
