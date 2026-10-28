@@ -1,5 +1,5 @@
 ---
-description: Typed command /grow-product-manager:context only — never for a conversational «що ти про мене знаєш» (that is context-navigator). show — what the plugin knows about you and where from; health — what wants looking after; inbox — what skills learned, waiting for your «так»; recheck — your records against the connectors; consolidate — duplicates and stale dates as proposals.
+description: Typed command /grow-product-manager:context only — never for a conversational «що ти про мене знаєш» (that is context-navigator). show — what the plugin knows and where from; health — what wants looking after; inbox — what waits for your «так»; recheck — records against the connectors; consolidate — tidying as proposals.
 argument-hint: "show [запис] | health | inbox | recheck | consolidate"
 disable-model-invocation: true
 ---
