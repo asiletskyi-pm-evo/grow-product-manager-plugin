@@ -332,6 +332,8 @@ import ctx_consolidate as ccn  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
+import ctx_history as chi  # noqa: E402
+import ctx_identity as cid  # noqa: E402
 import ctx_inbox as ci_  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_never as cn  # noqa: E402
@@ -366,7 +368,7 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
 # (each one checked on its own, so one secret does not cost the others — ctx_inbox.propose).
 NOT_TEXT = {"cmd", "action", "context", "store", "home", "file", "body_file", "delta", "code", "which", "steps", "id",
             "ids", "skill", "type", "parent", "after", "repo", "product", "label", "now", "observed", "take", "skip",
-            "only"}
+            "only", "bundle"}
 
 
 def _free_text(a):
@@ -399,6 +401,8 @@ def writes(a):
         return getattr(a, "recheck", False)
     if a.cmd == "consolidate":                          # since v3.22.0: the inbox only
         return True
+    if a.cmd == "identity":                             # since v3.23.0: check reads only
+        return getattr(a, "action", None) in ("keep", "take")
     if a.cmd == "overlay":                              # since v3.23.0: show and plan read only
         return getattr(a, "action", None) in ("apply", "add", "rm", "answer")
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
@@ -2648,6 +2652,91 @@ def _with_op(text, op):
     return "\n".join(lines) + "\n"
 
 
+def _identity_mine(c, repo):
+    """{team: (value, source), role: (value, source)} — your role in the profile with its source, the team your
+    registration names."""
+    prof = next((r for r in c.store.load() if r["type"] == "profile"), None)
+    role = cs.field_get(prof["body"], "Role") if prof else None
+    src = None
+    if prof and role:
+        try:
+            x = next((x for x in csrc.of(csrc.load(c.store), prof) if x["label"].casefold() == "role"), None)
+        except cs.StoreError:
+            x = None
+        src = csrc.describe(x) if x else None
+    team = repo.get("team") or None
+    reg = repo.get("_file") or repo.get("file") or "%s.yaml" % repo["id"]
+    return {"role": (role or None, src), "team": (team, "реєстрація %s" % os.path.basename(str(reg)) if team else None)}, prof
+
+
+def cmd_identity(a, c):
+    """`identity check|keep|take REPO [FIELD] --bundle F` (context-protocol.md §5r): the core's team and role for your
+    e-mail beside yours, both with their source; `keep` / `take` answer — a writing command (lock, snapshot, one journal
+    line `op: identity`); `take role` also writes the core's role into your profile (source repo:<id>)."""
+    c.need_store()
+    repo = _repository(c, a.repo)
+    try:
+        bundle = cid.read_bundle(a.bundle)
+    except ValueError as e:
+        raise Usage(str(e))
+    if a.action == "check":
+        mem = cid.load(c.store)
+        mine, _ = _identity_mine(c, repo)
+        rows = cid.compare(bundle, mine, mem, repo["id"])
+        print(cid.render(rows, repo["id"]))
+        return 0, {"command": "identity", "action": "check", "repo": repo["id"], "rows": rows,
+                   "questions": sum(1 for r in rows if r["state"] == "ask")}
+    if a.field not in cid.FIELDS:
+        raise Usage("the field is team or role")
+    if a.action == "take" and a.field == "team":
+        raise Usage("команду змінює context-connect: перезбери пакет з --team %s (connect-steps.md §3) — тут лише keep" % bundle["team"])
+    t = now()
+    with co.lock(c.home):
+        c.guard()
+        mem = cid.load(c.store)                         # one that cannot be read stops here, before anything is written
+        c.import_first()
+        mine, prof = _identity_mine(c, repo)
+        mval = mine[a.field][0]
+        snap = co.snapshot(c.store, c.copies, c.home, "identity")
+        ids = []
+        if a.action == "take":
+            if prof is None:
+                raise Usage("no profile record to write the role into")
+            srcs = csrc.load(c.store)
+            csrc.adopt(srcs, prof)
+            csrc.note(srcs, prof["id"], csrc.field_key("Role"), bundle["role"], "repo:%s" % repo["id"], at=t)
+            csrc.save(c.store, srcs)
+            c.store.write(co.touch(dict(prof, body=cs.field_set(prof["body"], "Role", bundle["role"]), source="repo:%s" % repo["id"],
+                                        modified=t), t))
+            ids = [prof["id"]]
+        cid.answer(mem, repo["id"], a.field, "mine" if a.action == "keep" else "core", bundle[a.field], mval, t[:10])
+        cid.save(c.store, mem)
+        c.store.journal({"ts": t, "op": "identity", "action": a.action, "repo": repo["id"], "what": a.field, "ids": ids,
+                         "source": "ctx-identity", "snapshot": snap})
+        if ids:
+            co.compile_store(c.store, c.copies, t, c.home, snap)
+    print("identity %s: %s %s — ядро %s, твоє %s · знімок %s (назад: ctx undo)" % (a.action, repo["id"], a.field, bundle[a.field],
+                                                                                  mval, snap))
+    return 0, {"command": "identity", "action": a.action, "repo": repo["id"], "field": a.field, "snapshot": snap}
+
+
+def cmd_history(a, c):
+    """`history [--month YYYY-MM] [--write] [--json]`: the human changelog of the store (references/context-protocol.md
+    §5p) — printed, or with --write written to `history/YYYY-MM.md` only when its text changed. No lock, no journal line:
+    the note is derived from the journal and the base texts."""
+    c.need_store()
+    month = a.month or now()[:7]
+    if not chi.MONTH.match(month):
+        raise Usage("--month takes YYYY-MM, not %r" % month)
+    text = chi.build(c.store, month)
+    if a.write:
+        path, changed = chi.write(c.store, month)
+        print("%s: %s" % ("записано" if changed else "без змін", path))
+        return 0, {"command": "history", "month": month, "path": path, "changed": changed}
+    print(text)
+    return 0, {"command": "history", "month": month, "text": text if a.json else None}
+
+
 def cmd_provider(a, c):
     if a.action == "adopt":
         return cmd_provider_adopt(a, c)
@@ -3127,6 +3216,13 @@ def build_parser():
     sp.add_argument("--slot", action="append")
     sp.add_argument("--kind"); sp.add_argument("--skill"); sp.add_argument("--json", action="store_true")
     sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
+    ip_ = sub.add_parser("identity").add_subparsers(dest="action", required=True, parser_class=Parser)
+    sp = ip_.add_parser("check", parents=[common]); sp.add_argument("repo"); sp.add_argument("--bundle", required=True)
+    sp.add_argument("--json", action="store_true")
+    for act in ("keep", "take"):
+        sp = ip_.add_parser(act, parents=[common]); sp.add_argument("repo"); sp.add_argument("field"); sp.add_argument("--bundle", required=True)
+    sp = sub.add_parser("history", parents=[common]); sp.add_argument("--month"); sp.add_argument("--write", action="store_true")
+    sp.add_argument("--json", action="store_true")
     op_ = sub.add_parser("overlay").add_subparsers(dest="action", required=True, parser_class=Parser)
     for act in ("show", "plan"):
         sp = op_.add_parser(act, parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--json", action="store_true")
@@ -3164,7 +3260,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "sync": cmd_sync, "get": cmd_get, "list": cmd_list, "set": cmd_set, "append": cmd_append,
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
-            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot, "overlay": cmd_overlay,
+            "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot, "overlay": cmd_overlay, "history": cmd_history, "identity": cmd_identity,
             "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
             "inbox": cmd_inbox, "bootstrap": cmd_bootstrap, "consolidate": cmd_consolidate}
 
@@ -3191,6 +3287,11 @@ def main(argv=None):
         with cs.guard_roots(co.allowed_roots(c.home, c.text)):
             rc, res = COMMANDS[a.cmd](a, c)
             idle = a.cmd == "provider" and a.action == "sync" and not res.get("synced")    # a sync that synced nothing
+            if rc == 0 and writes(a) and c.store.exists():   # since v3.23.0: the month's changelog follows every write
+                try:
+                    chi.write(c.store, now()[:7])
+                except Exception:  # noqa: BLE001 — a derived note never changes the command's result
+                    pass
             if rc == 0 and writes(a) and not idle:      # since v3.13.1: the summary the digest shows on a cold start,
                 try:                                    # on the digest's budget; a miss saves nothing
                     co.summary_in_time(c.found, home=c.home)

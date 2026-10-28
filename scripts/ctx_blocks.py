@@ -1452,6 +1452,9 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
             "to_v": fetched.get("version"), "ids": res["written"], "decisions": decisions, "pending": pending,
             "taken": taken, "snapshot": snap}
     kept = {r["block"] for r in p["rows"] if r["sign"] == "=" and not r.get("reverted")} - set(held)
+    was = {b: (old["blocks"].get(b) or {}).get("base_sha") for b in taken if (old["blocks"].get(b) or {}).get("base_sha")}
+    if was:                                             # since v3.23.0: the base each taken text replaced (ctx history)
+        line["was"] = was
     if proposed:
         line["proposed"] = proposed
     res["proposed"] = proposed
