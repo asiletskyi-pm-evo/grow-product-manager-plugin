@@ -4184,7 +4184,7 @@ need_15 = [
             "a block id that is not an id (`bind` does not check that the block exists", "the publisher's `slot=` in the begin marker of the block's base",
             # §10's roadmap since v3.21.0 (the programme «Петля контексту»): what shipped, what is next
             "Shipped by v3.20.0: search across repositories (§5g)", "entities and cross-links (§5h)",
-            "the declared overlay `overlays/<repo>.yaml`", "the configurator as a loop", "— v3.23.0"]),
+            "the declared overlay `overlays/<repo>.yaml`", "the configurator as a loop", "— v3.24.0"]),
     (pp15, ["**A slot — `slot=`** (since v3.15.0)", "`<!-- <namespace>:begin id=<block> v=<version> slot=<slot> -->`", "`xslot=` is no attribute",
             "A holder's own binding of the block (`ctx slot bind`) wins over the attribute for the whole block",
             "the plugin binds the block itself", "nothing else of the block is bound",
