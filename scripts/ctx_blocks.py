@@ -72,6 +72,7 @@ import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
+import ctx_overlay as ov  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_store as cs  # noqa: E402
@@ -745,6 +746,118 @@ def source_lost(store, copies, repo, fetched, now):
     return _lost(load_state(store, repo["id"]), mine, fetched, set(repo.get("skip_blocks") or ()))
 
 
+# ------------------------------------------------------------------ the overlay (since v3.23.0)
+OVERLAY_NOTE = "оверлей накладається"
+OVERLAY_MINE_NOTE = " · оверлей не накладено: твої правки"
+OVERLAY_BLOCKED_NOTE = " · оверлей не прочитано — блок утримано"
+
+
+def overlay_of(store, repo_id):
+    """(the operations of `overlays/<repo>.yaml` — [] when there is no file —, the reason it cannot be read or None)."""
+    try:
+        doc = ov.load(store.root, repo_id)
+    except ov.Unreadable as e:
+        return [], clip(str(e), NOTE_CLIP)
+    return (doc["ops"] if doc else []), None
+
+
+def _stands_for(store, rid, mine, entry, ops, refs):
+    """The base text your region stands for when it is the overlay's form of a base and you did not edit it — the text
+    the overlay last wrote (`overlay_sha` of `overlay_of`), or the overlay of the present base as the operations give it
+    now — else None (a region with no overlay, or one you changed)."""
+    if mine is None or not entry:
+        return None
+    nm = norm(mine)
+    sha = cs.sha_text(nm)
+    if entry.get("overlay_sha") == sha and entry.get("overlay_of"):
+        base = get_base(store, rid, entry["overlay_of"])
+        if base is not None:
+            return base
+    bops = ov.for_block(ops, block_id(mine))
+    if bops and entry.get("base_sha"):
+        base = get_base(store, rid, entry["base_sha"])
+        if base is not None and norm(base) != nm and norm(ov.overlay(base, bops, refs)[0]) == nm:
+            return base
+    return None
+
+
+def block_id(region_text):
+    return ov.block_of(region_text)
+
+
+def _overlay_row(row, mine, stands, theirs, entry, bops, refs, error):
+    """What the overlay means for one row of the plan (in place): `overlay` — the results of this block's operations on
+    the text that would be written; `reoverlay` (with `overlay_text` and `overlay_of`) — a "=" row whose region is to
+    be rewritten because the overlay's form of its base differs from it (a new or changed operation, a held one, the
+    file gone); `overlay_blocked` — a row of a block that carries the overlay while the file cannot be read: held, so
+    the core's text never replaces your overlaid one unseen. A region you edited is never overlaid (its note says so)."""
+    sign = row["sign"]
+    carries = bool(entry and entry.get("overlay_sha"))
+    if sign == SKIPPED:
+        return
+    if error:
+        if carries:
+            row["overlay_blocked"] = True
+            row["note"] = clip(row["note"] + OVERLAY_BLOCKED_NOTE, NOTE_CLIP)
+        return
+    if sign in ("~", "+"):
+        row["overlay"] = ov.overlay(theirs, bops, refs)[1] if bops else []
+    elif sign == "=" and mine is not None:
+        src = stands if stands is not None else mine
+        desired, results = ov.overlay(src, bops, refs) if bops else (src, [])
+        row["overlay"] = results
+        if norm(desired) != norm(mine):
+            row.update(reoverlay=True, overlay_text=desired, overlay_of=cs.sha_text(norm(src)))
+            row["note"] = clip(OVERLAY_NOTE, NOTE_CLIP)
+    elif bops:
+        row["overlay"] = ov.overlay(theirs, bops, refs)[1] if theirs is not None else []
+        if mine is not None:
+            row["note"] = clip(row["note"] + OVERLAY_MINE_NOTE, NOTE_CLIP)
+
+
+def _overlaid(text, ops, refs):
+    """The overlay's form of a repository's region text (the text itself when no operation of its block applies)."""
+    bops = ov.for_block(ops, block_id(text))
+    return ov.overlay(text, bops, refs)[0] if bops and text is not None else text
+
+
+def _mark_overlay(entry, written, source):
+    """Remember in the block's entry what the overlay wrote: `overlay_sha` (the hash of the region written) and
+    `overlay_of` (the base it was made of) — or forget both when the region is the base itself."""
+    if norm(written) != norm(source):
+        entry["overlay_sha"], entry["overlay_of"] = cs.sha_text(norm(written)), cs.sha_text(norm(source))
+    else:
+        entry.pop("overlay_sha", None)
+        entry.pop("overlay_of", None)
+
+
+def _overlay_journal(p):
+    """({block: [applied ids]}, {block: [held ids]}) of a plan — for the journal line, empty when there is no overlay."""
+    done, held = {}, {}
+    for bid, results in (p.get("overlay") or {}).items():
+        a = [r["id"] for r in results if r["state"] == "applied"]
+        h = [r["id"] for r in results if r["state"] != "applied"]
+        if a:
+            done[bid] = a
+        if h:
+            held[bid] = h
+    return done, held
+
+
+def overlay_lines(p):
+    """The plan's lines about the overlay (since v3.23.0): the file that cannot be read, and each operation that is held
+    or refused — the question `ctx overlay show` and `/context overlay` ask."""
+    out = []
+    if p.get("overlay_error"):
+        out.append("оверлей не прочитано: %s — блоки з оверлеєм утримано" % clip(p["overlay_error"], NOTE_CLIP))
+    for bid, results in (p.get("overlay") or {}).items():
+        for r in results:
+            if r["state"] != "applied":
+                out.append("оверлей чекає рішення: %s (%s) — %s — ctx overlay show" % (
+                    clip(r["id"], HEADER_CLIP), clip(bid, HEADER_CLIP), clip(r["why"], NOTE_CLIP)))
+    return out
+
+
 def plan(store, copies, repo, fetched, now, all_=False):
     """The plan of one repository: what each of its blocks is in your context against what the repository publishes
     now (`fetched`, from `ctx_repos.fetch` with no `error`; with `all_` it should have been fetched with
@@ -787,6 +900,8 @@ def plan(store, copies, repo, fetched, now, all_=False):
     lost = _lost(state, mine, fetched, skip)
     if lost:
         raise SourceLost(lost)
+    ops, ov_error = overlay_of(store, rid)
+    refs = ov.refs_in(records)
     bad = {x["block"] for x in problems if x["block"]}
     ids = [b for b in list(mine) + [b for b in theirs if b not in mine] if b not in bad]
     if team_error and "team" not in ids and "team" not in bad:
@@ -805,9 +920,12 @@ def plan(store, copies, repo, fetched, now, all_=False):
         else:
             if m is None and t is None:
                 continue
-            held = _held(entry, m["text"] if m else None)
-            row["sign"] = classify(m["text"] if m else None, t, held, lagging)
-            lags = row["sign"] in ("=", "✎") and behind(m["text"] if m else None, t, held, lagging)
+            mt = m["text"] if m else None
+            stands = _stands_for(store, rid, mt, entry, ops, refs)
+            mc = stands if stands is not None else mt     # an overlaid region you did not edit is the base it was made of
+            held = _held(entry, mc)
+            row["sign"] = classify(mc, t, held, lagging)
+            lags = row["sign"] in ("=", "✎") and behind(mc, t, held, lagging)
             row["note"] = REMOVED_NOTES[row["sign"]] if t is None and row["sign"] in REMOVED_NOTES else NOTES[row["sign"]]
             if lags:                                     # the copy lags: its text is an older base, or it lacks the block
                 vm, vt = (_marker_version(m["text"]), _marker_version(t)) if t is not None else ("", "")
@@ -831,14 +949,17 @@ def plan(store, copies, repo, fetched, now, all_=False):
             if is_rule(t):
                 row["rule"] = True
                 row["note"] = clip(row["note"] + RULE_NOTE, NOTE_CLIP)
+            _overlay_row(row, mt, stands, t, entry, ov.for_block(ops, bid), refs, ov_error)
         rows.append(row)
     open_rows = [r for r in rows if not r.get("rejected")]   # a rejected text is held by apply: neither asked nor written
     return {"repo": rid, "source": fetched.get("source"), "source_label": _source_label(repo, fetched.get("source")),
             "version": clip(version, HEADER_CLIP) if version else None,
             "base_version": clip(base_version(state) or "—", HEADER_CLIP), "rows": rows,
             "questions": sum(1 for r in open_rows if r["sign"] in QUESTIONS),
-            "changes": len({r["host"] for r in open_rows if r["sign"] in REWRITES and r["host"]}),
-            "errors": [dict(x) for x in problems if all_ or x["block"] not in skip], "lagging": lagging}
+            "changes": len({r["host"] for r in open_rows if (r["sign"] in REWRITES or r.get("reoverlay")) and r["host"]
+                            and not r.get("overlay_blocked")}),
+            "errors": [dict(x) for x in problems if all_ or x["block"] not in skip], "lagging": lagging,
+            "overlay": {r["block"]: r["overlay"] for r in rows if r.get("overlay")}, "overlay_error": ov_error}
 
 
 def unknown_blocks(p, choose, add):
@@ -905,6 +1026,7 @@ def render_plan(p):
         lines.append("блоків цього репозиторію немає")
     for x in p["errors"]:
         lines.append("помилка: %s — %s" % (clip(x["block"] or "?", HEADER_CLIP), clip(x["why"], HEADER_CLIP)))
+    lines.extend(overlay_lines(p))
     lines.append("Питань: %d · зміниться записів: %d" % (p["questions"], p["changes"]))
     return "\n".join(lines)
 
@@ -1067,7 +1189,10 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
     unknown = unknown_blocks(p, choose, set(add) | hold)
     if unknown:
         raise ValueError(no_block(unknown, rid))
+    hold |= {r["block"] for r in p["rows"] if r.get("overlay_blocked")}   # an unreadable overlay: never unseen
     records = store.load()
+    ops = [] if p.get("overlay_error") else overlay_of(store, rid)[0]
+    refs = ov.refs_in(records)
     by_id = {r["id"]: r for r in records}
     mine = find_regions(records, ns)[0]
     theirs = _theirs(fetched)[0]
@@ -1075,6 +1200,7 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
     state = copy.deepcopy(old)
     checked, today = fetched.get("checked") or now, now[:10]
     edits, rebased, adds, taken = {}, {}, [], {}
+    overlaid = {}                                       # block: (the text written, the repository text it was made of)
     applied, decisions, pending, ignored, refused, held = {}, {}, [], {}, [], {}
     broken = {x["block"] for x in p["errors"] if x["block"]} - {r["block"] for r in p["rows"]}
     for bid in sorted(((set(choose) | set(add)) & broken) - hold):
@@ -1123,17 +1249,31 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
             entry["checked"] = checked
         else:
             if sign == "~" or how == "theirs":
-                edits.setdefault(m["host"], {})[bid] = t
+                w = _overlaid(t, ops, refs)
+                edits.setdefault(m["host"], {})[bid] = w
+                overlaid[bid] = (w, t)
             elif how == "both":
                 edits.setdefault(m["host"], {})[bid] = _both(t, m["text"])
             elif sign == "+":
                 adds.append(bid)
+                overlaid[bid] = (_overlaid(t, ops, refs), t)
+            elif row.get("reoverlay"):
+                edits.setdefault(m["host"], {})[bid] = row["overlay_text"]
+                overlaid[bid] = (row["overlay_text"], None)
             entry = state["blocks"].setdefault(bid, {"base_sha": None, "bases": [], "v": "", "host": None, "checked": None,
                                                      "user_removed": None})
             if (sign != "✎" or how == "theirs") and not row.get("behind"):   # a source behind your base never moves the base back
                 _rebase(entry, t)
                 rebased[bid] = t
             entry.update(host=m["host"] if m else None, checked=checked, user_removed=None)
+            if bid in overlaid:
+                w, src = overlaid[bid]
+                if src is None:
+                    entry["overlay_sha"], entry["overlay_of"] = cs.sha_text(norm(w)), row["overlay_of"]
+                    if entry["overlay_sha"] == entry["overlay_of"]:
+                        entry.pop("overlay_sha"); entry.pop("overlay_of")
+                else:
+                    _mark_overlay(entry, w, src)
         applied[bid] = sign
         decisions[bid] = "%s %s" % (sign, how) if how else sign
 
@@ -1151,15 +1291,16 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
     if adds:
         home_id = _home_record(repo, mine, records, title)
         if home_id:
-            bodies[home_id] = _at_end(bodies.get(home_id, by_id[home_id]["body"]), ns, [theirs[b] for b in adds])
+            bodies[home_id] = _at_end(bodies.get(home_id, by_id[home_id]["body"]), ns, [overlaid[b][0] for b in adds])
             for bid in adds:
                 state["blocks"][bid]["host"] = home_id
         else:
-            new_record = {"text": "## %s\n\n%s\n" % (title, "\n\n".join(theirs[b] for b in adds)), "type": cs._h2_type(title),
+            new_record = {"text": "## %s\n\n%s\n" % (title, "\n\n".join(overlaid[b][0] for b in adds)), "type": cs._h2_type(title),
                           "title": title, "after": records[-1]["id"] if records else None}
     state.update(checked=checked, source=fetched.get("source"), version=fetched.get("version"))
     res = {"repo": rid, "plan": p, "applied": applied, "decisions": decisions, "pending": pending, "ignored": ignored,
            "held": held, "errors": [dict(x) for x in p["errors"]] + refused, "written": [], "snapshot": None, "compiled": [],
+           "overlay": p.get("overlay") or {}, "overlay_error": p.get("overlay_error"),
            "changed": bool(bodies or new_record) or _substance(old) != _substance(state)}
     if not res["changed"]:
         save_state(store, rid, state)                  # the time of the check, and nothing else
@@ -1179,9 +1320,15 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
         res["written"].extend(made)
     save_state(store, rid, state)
     prune_bases(store, rid, state)
-    store.journal({"ts": now, "op": op, "source": source, "from_v": old.get("version") or base_version(old),
-                   "to_v": fetched.get("version"), "ids": res["written"], "decisions": decisions, "pending": pending,
-                   "taken": taken, "snapshot": snap})
+    line = {"ts": now, "op": op, "source": source, "from_v": old.get("version") or base_version(old),
+            "to_v": fetched.get("version"), "ids": res["written"], "decisions": decisions, "pending": pending,
+            "taken": taken, "snapshot": snap}
+    done, waiting = _overlay_journal(p)
+    if done:
+        line["overlay"] = done
+    if waiting:
+        line["overlay_held"] = waiting
+    store.journal(line)
     if res["written"]:
         res["compiled"] = co.compile_store(store, copies, now, home, snap)["written"]
     res["snapshot"] = snap

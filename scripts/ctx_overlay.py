@@ -533,6 +533,22 @@ def aliases(region, ops, ref_exists=lambda ref: True):
     return out
 
 
+def refs_in(records):
+    """`ref_exists` for `overlay`: does "<record id>#<Subsection>" name a subsection of your own text — outside every
+    managed region — in `records` (dicts with `id` and `body`)?"""
+    bodies = {r.get("id"): cc.strip_managed_regions(r.get("body") or "").replace("\r\n", "\n").split("\n") for r in records}
+
+    def exists(ref):
+        rec, sub = _ref_name(ref)
+        return rec in bodies and bool(locate(bodies[rec], "#" + sub))
+    return exists
+
+
+def for_block(ops, bid):
+    """The operations of `ops` whose target is block `bid`."""
+    return [o for o in ops or () if o["target"]["block"] == bid]
+
+
 # ------------------------------------------------------------------ on disk
 def path_of(store_root, repo_id):
     if not isinstance(repo_id, str) or not REPO_ID.match(repo_id):

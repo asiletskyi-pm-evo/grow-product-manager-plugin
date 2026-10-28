@@ -418,6 +418,7 @@ class Store:
         self.state_dir = os.path.join(root, ".state")
         self.card_path = os.path.join(root, "INDEX.md")
         self.archive_dir = os.path.join(root, "archive")
+        self.overlays_dir = os.path.join(root, "overlays")          # since v3.23.0: overlays/<repo>.yaml (ctx_overlay.py)
 
     def exists(self):
         return os.path.isdir(self.state_dir)
