@@ -1,0 +1,32 @@
+{
+ "schema": "context-observed/1",
+ "at": "2026-10-27",
+ "connectors": {"atlassian": "ok", "calendar": "ok", "mail": "ok", "fireflies": "error: timeout", "tableau": "ok",
+                "provider:zorg-brain": "ok"},
+ "facts": [
+  {"type": "profile", "field": "Name", "value": "Alex One", "from": "atlassian:user", "ref": "atlassianUserInfo"},
+  {"type": "profile", "field": "Email", "value": "alex.one@zorg.example", "from": "atlassian:user", "ref": "atlassianUserInfo"},
+  {"type": "profile", "field": "Role", "value": "pm", "from": "provider:identity", "ref": "zorg-brain access-bundles"},
+  {"type": "org", "title": "Zorg", "field": "Domain", "value": "zorg.example", "from": "mail:domain",
+   "ref": "Re: quarterly bonus for Bea"},
+  {"type": "org", "title": "Zorg", "field": "Jira", "value": "https://zorg.atlassian.example", "from": "atlassian:site"},
+  {"type": "product", "title": "Zorg App", "field": "Jira Project Key", "value": "PROJ", "from": "jira:active",
+   "count": 14, "ref": "14 задач за 90 днів"},
+  {"type": "product", "title": "Zorg App", "field": "Confluence Space", "value": "ZAPP", "from": "confluence:active",
+   "count": 6},
+  {"type": "product", "title": "Zorg Pay", "field": "Jira Project Key", "value": "PAY", "from": "jira:active", "count": 7},
+  {"type": "product", "title": "Zorg Ads", "field": "Jira Project Key", "value": "ADS", "from": "jira:active", "count": 2},
+  {"type": "product", "title": "Zorg App", "list": "Dashboards", "value": "Zorg funnel — https://tableau.zorg.example/views/funnel",
+   "from": "tableau:owned"},
+  {"type": "team", "title": "Alpha (A)", "from": "provider:identity", "ref": "zorg-brain access-bundles"},
+  {"type": "team", "title": "Alpha (A)", "list": "Members", "value": "Cid Three", "from": "calendar:co-attendee",
+   "count": 6, "evidence": "1-1 Cid: розмова про звільнення"},
+  {"type": "team", "title": "Alpha (A)", "list": "Members", "value": "Dee Four", "from": "calendar:co-attendee",
+   "count": 1}
+ ],
+ "checks": {
+  "jira:visible": {"complete": true, "values": [{"key": "PROJ", "name": "Zorg App"}, {"key": "PAY", "name": "Zorg Pay"}]},
+  "confluence:visible": {"complete": true, "values": ["ZAPP"]},
+  "atlassian:people": {"complete": true, "active": ["Alex One"], "inactive": ["Bea Two"]}
+ }
+}

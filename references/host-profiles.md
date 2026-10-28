@@ -68,6 +68,7 @@ These need FS. On a host without it, the skill says so in one line and stops ins
 - `template-library`, `knowledge-library` → local library and glossary
 - `ctx entity apply` (`context-navigator`, since v3.20.0) → writes bridges into the user's notes with a snapshot and `ctx undo`; it needs FS and SHELL — never written by hand in its place
 - The inbox, `ctx show`, `ctx health`, `ctx snapshot import` (since v3.21.0, `context-protocol.md` §5i–§5j) → need FS and SHELL with a store; without them a skill asks «Знайшов нове: … Зберегти?» as before and edits `local-context.md` on «так» (`local-context-protocol.md` → Context Enrichment), and `/grow-product-manager:context` says in one line that it needs the store
+- The configurator's bootstrap, `ctx validate --recheck`, `ctx consolidate` (since v3.22.0, `context-protocol.md` §5k–§5m) → the connectors are read by the skill on any host with MCP; the table, the recheck and the consolidation need FS and SHELL with a store. Without SHELL the configurator reads the same connectors by `context-observe.md`, applies the same rules in prose (what each source may give, the thresholds, low confidence never written without asking) and shows the same table, then writes Step 16c's `local-context.md` on «так» — no store, so no source per field; recheck and consolidate are offered only where `ctx` runs. Without MCP the five questions are typed answers
 
 Read-only modes of these skills still work when the user pastes the data into the session.
 

@@ -2,6 +2,23 @@
 
 > Part of `plugin-configurator`. Loaded on demand when Onboarding mode starts. The mode map and entry conditions live in SKILL.md.
 
+## Basic — derive first, then at most five questions (since v3.22.0)
+
+The default onboarding. The configurator does not walk Steps 1–16 as an interview: it reads what it can, shows it as one table, and asks only what it could not derive. Extended (Steps 4b–15 one by one) and the test sandbox are still there — on request («налаштуй усе», `upgrade to Extended`, «розширене налаштування», `dry-run onboarding`), which opens Step 2. Semantics: root `references/context-protocol.md` §5k, the call map: root `references/context-observe.md`.
+
+**B-0. One line, then the scan.** «Спершу подивлюся, що вже можна дізнатися з твоїх конекторів, — далі до 5 питань, решта прийде в роботі.» Step 0-host decides the path: FS + SHELL — this section; no SHELL — the same scan and the same table in prose, then Step 16c's file written after the «так» (no store, no sources per field: `host-profiles.md`); no MCP at all — the questions below are typed answers.
+
+**B-1. Scan (Step 3 + the bootstrap).** Ping the connectors as Step 3a does, then read them **read-only** by `context-observe.md` §3 — Atlassian first (`atlassianUserInfo`, your active Jira projects and Confluence spaces, the site), then, each only if connected, the calendar's co-attendees, your mail's domain, Fireflies' participants, Tableau's dashboards you own, your `local-context.md` if there is one, the registered providers (`provider_bundle.py`: mail → team → role). No connector blocks: without Atlassian the questions ask more. Write the observation file in the session's scratchpad, every connector tried in `connectors`. Then `python3 "<plugin root>/scripts/ctx.py" bootstrap --observed <file>`.
+
+**B-2. The questions** — each with its progress (`1/5` … — the real count, as the skipped ones fall away) and one line on which skills use the answer (concept §5.2 G, HAX G16). A question whose every field the table already has at high confidence is not asked. Each answer is added to the observation file as a fact `from: user` (the field it answers), and the table is run again.
+1. **«Це ти?»** — name, e-mail and language in one AskUserQuestion: «так» / «змінити ім'я» / «змінити мову» / Other. The language defaults to the conversation's. Used by every skill (language), task-creator and focus-advisor (your Jira account).
+2. **Role** — **one** call: the three likeliest roles, the derived one first (the provider's, the file's, else `pm`), plus Other with free text matched as Step 4a matches it (`role-profiles.md` §5). Role scope, Level home and the role label follow from `role_defaults` and go into the file as `user` facts — never asked. Used by every skill's home altitude, quick wins and templates.
+3. **Products** — multiSelect of your active Jira projects (≤ 4 options, the busiest first; more → «ці N? / номери»): each chosen one a product, its key and your busiest Confluence space as its fields. A project not chosen is not written: remove its facts from the observation file before the table is run again. Used by write-concept, requirements-creator, task-creator, product-research.
+4. **Team** — the provider's team / «нова: <назва>» / «пізніше» («пізніше» → remove the team's facts from the file; «нова» → a `user` fact with that title). Its members are no question: co-attendees and participants arrive as inbox deltas, or come from `ctx entity` (v3.19) later. Used by sprint-planning, product-reporter, focus-advisor.
+5. **The table** — the rows `ctx bootstrap` prints and one question: «зберегти все / номери / нічого». «зберегти все» → `ctx bootstrap --observed <file> --apply --code <код>`; numbers → `--only <номери>`; a `✋ твоє` or `⚠` row is taken only when named (`--take`). Exit 4 → run the table again and ask again. With FS + SHELL and no store yet, the same answer creates the store: say it in one line — «Контекст збережено записами (<шлях>); скасувати — ctx undo». The organisation is no question: its domain and site are high confidence; several sites are `⚠` rows chosen by number here. With neither Atlassian nor mail there is no site and no domain: question 3 then also asks the organisation's name, written as a `user` fact (`type: org`), or the products have nowhere to go.
+
+**B-3. After.** Exit 3 with «ще не в записах» means a `local-context.md` that is not in records yet: offer the move first (`ctx migrate --apply`, one question), then run the table again — never loop on question 5. Exit 4 «таблиця змінилась» means the table moved: show it again and ask again. Delete the observation file. Show what was saved (`записано: …`) and the inbox's one line when low facts went there (`У скриньці +N — /context inbox`). The sections with nothing found stay in `Deferred steps`; Step 17's quick wins follow. A user who already has a context and asks «онови мій контекст із конекторів» gets B-1 and B-2's question 5 only: the table of differences, `✋ твоє` never taken unasked.
+
 ### Step 1 — Welcome and onboarding map
 
 **1a. Greeting:**
@@ -46,6 +63,8 @@
 > "I'd recommend starting with Basic. Any deferred step can be added later by saying `configure plugin → upgrade to Extended`, or by adding a single section like `add CJM` or `connect Obsidian`."
 
 ### Step 2 — Choose mode
+
+> **Since v3.22.0 only on request** — Basic is the section above and asks no mode. Step 2 opens when the user asks for the full setup or the sandbox.
 
 Ask via AskUserQuestion:
 
@@ -758,6 +777,8 @@ After saving to `~/.grow-pm/`, if Obsidian Vault is configured (Step 14 was comp
 5. Log: "Configuration mirrored to Obsidian Vault at [path]"
 
 This ensures the vault always has an up-to-date copy of all user context, serving as a secondary backup.
+
+**16-bootstrap (since v3.22.0).** In Basic the review, the file and the store are question 5 of the section «Basic — derive first»: `ctx bootstrap --apply` writes this skeleton itself (its headings and deferred keys are held equal to the code by `skill_lint` check 28) and moves it into records. Steps 16a–16e below are the Extended and the no-SHELL path.
 
 **16e-ctx. Context store offer (since v3.11.0, once, not in test mode):** when SHELL is available, ask one question — "Keep your context as records in the vault (one note per section, every change snapshotted and undoable)? local-context.md stays where it is." Yes → `python3 "<plugin root>/scripts/ctx.py" migrate`, show the record list and `round trip: identical`, then `ctx migrate --apply`. No → nothing; the Update item "Move my context to records" offers it later.
 

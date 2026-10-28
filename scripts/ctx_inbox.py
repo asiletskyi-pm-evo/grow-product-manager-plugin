@@ -9,7 +9,8 @@ morning brief or `/context inbox` — and are taken in one batch. Semantics: ref
 - SCHEMA, FILE, WHERE      the inbox file; DELTA_SCHEMA the shape of one delta
 - load / save              read and write the inbox: a key this build does not know is refused, a file that cannot be
                            read stops the run — never reset
-- normalize(raw)           one delta as given → its canonical dict, or ValueError naming what is wrong
+- normalize(raw)           one delta as given → its canonical dict, or ValueError naming what is wrong; since v3.22.0
+                           REPLACE {text: the line as it is, value: the new line, or "" to remove it}
 - sig(delta)               the delta's identity: the same change from two skills is one entry
 - urgent(delta, rec)       asked at once (URGENT): every INVALIDATE, a profile's identity fields, an organisation's
                            domain, a product's keys, any change to a team
@@ -31,6 +32,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_common as cc  # noqa: E402
 import ctx_never as cn  # noqa: E402
 import ctx_schema as sc  # noqa: E402
 import ctx_store as cs  # noqa: E402
@@ -39,7 +41,9 @@ SCHEMA = "context-inbox/1"
 DELTA_SCHEMA = "context-delta/1"
 FILE = "inbox.json"
 WHERE = ".state/" + FILE
-OPS = ("ADD", "UPDATE", "INVALIDATE", "NOOP")
+OPS = ("ADD", "UPDATE", "INVALIDATE", "NOOP", "REPLACE")
+# Since v3.22.0: proposers that are ctx itself, not skills — only their own commands propose under these names.
+CTX_OWN = ("ctx-bootstrap", "ctx-recheck", "ctx-consolidate")
 _KEYS = ("schema", "next", "entries", "rejected")
 _ENTRY_KEYS = ("n", "sig", "delta", "skills", "at", "record_sha", "was", "urgent")
 _DELTA_KEYS = ("op", "record", "field", "value", "text", "under", "reason", "evidence", "source")
@@ -151,7 +155,7 @@ def _text(d, key, need=False, one_line=True):
     v = v.strip()
     if need and not v:
         raise ValueError("%s is empty" % key)
-    if one_line and ("\n" in v or "\r" in v):
+    if one_line and len(v.splitlines()) > 1:            # every break splitlines() knows (U+2028 too), as the records do
         raise ValueError("%s takes one line" % key)
     return v or None
 
@@ -174,6 +178,21 @@ def normalize(raw):
         d["value"] = _text(raw, "value", need=True)
         if _MARKUP.search(d["field"]) or "*" in d["field"] or _MARKUP.search(d["value"]):
             raise ValueError("an UPDATE carries a field and a value, not a heading, a region marker or a rule")
+    elif op == "REPLACE":
+        d["text"] = _text(raw, "text", need=True)
+        under = _text(raw, "under")
+        if under is not None and not under.startswith("#"):
+            raise ValueError("under is a heading line, e.g. «#### Risks»")
+        d["under"] = under
+        v = raw.get("value")
+        if not isinstance(v, str):
+            raise ValueError("a REPLACE takes value: the new line, or \"\" to remove the line")
+        d["value"] = _text({"value": v}, "value") or ""
+        for line in (d["text"], d["value"]):
+            if line and (_MARKUP.search(line) or line.lstrip().startswith("#") or line.strip() in ("---", "...")):
+                raise ValueError("a REPLACE changes one line of a record — not a heading, a region marker or a rule")
+        if d["text"] == d["value"]:
+            raise ValueError("a REPLACE changes the line — the new one is the same")
     elif op == "ADD":
         d["text"] = _text(raw, "text", need=True)
         if _MARKUP.search(d["text"]) or d["text"].lstrip().startswith("#") or d["text"].strip() in ("---", "..."):
@@ -222,10 +241,17 @@ def skill_name(raw):
     return m.group(1)
 
 
+def _field_of(line):
+    m = cs.FIELD_RE.match((line or "").strip())
+    return m.group("name").strip() if m else None
+
+
 def urgent(d, rec):
     if d["op"] == "INVALIDATE" or (rec and rec["type"] == "team" and d["op"] != "NOOP"):
         return True
-    return d["op"] == "UPDATE" and bool(rec) and d["field"] in URGENT.get(rec["type"], ())
+    fields = [d["field"]] if d["op"] == "UPDATE" else \
+        [_field_of(d.get("text")), _field_of(d.get("value"))] if d["op"] == "REPLACE" else []
+    return bool(rec) and any(f in URGENT.get(rec["type"], ()) for f in fields if f)
 
 
 def _kind(rec):
@@ -250,6 +276,77 @@ def apply_to(d, rec, today):
         return cs.append_line(body, d["text"], under=d["under"])
     if d["op"] == "INVALIDATE":
         return body if cs.has_status_region(body) else cs.set_status_region(body, today, d["reason"])
+    if d["op"] == "REPLACE":
+        new_field, old_field = _field_of(d["value"]), _field_of(d["text"])
+        if new_field:                                   # a field's new line: its value checked as UPDATE checks it
+            spec = (sc.load_fields().get(_kind(rec)) or {}).get(new_field)
+            err = sc.check_value(spec, cs.FIELD_RE.match(d["value"].strip()).group("value").strip()) if spec else None
+            if err:
+                raise ValueError("%s: %s" % (new_field, err))
+            if new_field != old_field and cs.field_get(body, new_field) is not None:
+                raise ValueError("поле %s уже є в записі — це UPDATE, не REPLACE" % new_field)
+        if not d["value"] and d["source"].get("ref") == DUPLICATE and \
+                sum(1 for c in _section(body, d.get("under")) if _norm(c) == _norm(d["text"])) < 2:
+            return body                                 # a duplicate no more: the copy left stays
+        return replace_line(body, d["text"], d["value"], under=d.get("under"))
+    return body
+
+
+DUPLICATE = "дубль"                                     # ctx consolidate's ref for a line written twice
+
+
+def _norm(s):
+    return " ".join((s or "").split()).casefold().rstrip(".;,")
+
+
+def _span(lines, under):
+    """(lo, hi) of the lines a REPLACE looks in: the whole body, or from the heading line `under` to the next heading."""
+    if under is None:
+        return 0, len(lines)
+    lo = next((k for k, (_, c, _) in enumerate(lines) if c.strip() == under.strip()), None)
+    if lo is None:
+        return 0, 0
+    hi = next((k for k in range(lo + 1, len(lines)) if cs._heading_text(lines[k][1]) is not None), len(lines))
+    return lo + 1, hi
+
+
+def _section(body, under):
+    lines = cs._lines(body)
+    lo, hi = _span(lines, under)
+    return [c for _, c, _ in lines[lo:hi]]
+
+
+def replace_line(body, old, new, under=None):
+    """The body with the first line of your own text (not in fenced code) that reads `old` (spaces at its ends aside)
+    made `new` — its indentation kept — or removed when `new` is empty; no such line → the body unchanged («уже так»);
+    the line only inside a provider's region → cs.RegionError. With `under` (since v3.22.0) only the lines between that
+    heading and the next one; of two copies there, the later one goes."""
+    spans, fence, in_region = cc.managed_spans(body), False, False
+    lines = cs._lines(body)
+    lo, hi = _span(lines, under)
+    if under is not None and not new:                   # a duplicate's removal: the later copy, as the reason says
+        rng = list(range(hi - 1, lo - 1, -1))
+    else:
+        rng = range(lo, hi)
+    fences = set()
+    for k, (_, core, _) in enumerate(lines):
+        if core.strip().startswith(("```", "~~~")):
+            fence = not fence
+            fences.add(k)
+        elif fence:
+            fences.add(k)
+    for k in rng:
+        off, core, end = lines[k]
+        s = core.strip()
+        if k in fences or s != old.strip():
+            continue
+        if cs._in_region(off, spans):
+            in_region = True
+            continue
+        indent = core[:len(core) - len(core.lstrip())]
+        return body[:off] + ((indent + new.strip() + end) if new else "") + body[off + len(core) + len(end):]
+    if in_region:
+        raise cs.RegionError("the line is inside a provider's block")
     return body
 
 
@@ -350,7 +447,15 @@ def what(d):
         return "%s → %s" % (d["field"], d["value"])
     if d["op"] == "ADD":
         return "+ «%s»%s" % (d["text"], (" під %s" % d["under"]) if d["under"] else "")
+    if d["op"] == "REPLACE":
+        where = (" під %s" % d["under"]) if d.get("under") else ""
+        return (("«%s» → «%s»" % (d["text"], d["value"])) if d["value"] else "− «%s»" % d["text"]) + where
     return "неактуальний: %s" % d["reason"]
+
+
+def who(skills):
+    """The proposers as `inbox list` names them: ctx's own without the prefix (bootstrap, recheck, consolidate)."""
+    return ", ".join(s[4:] if s in CTX_OWN else s for s in skills)
 
 
 def render(mem, recs, today):
@@ -365,7 +470,7 @@ def render(mem, recs, today):
         age = _age(e["at"], today)
         lines.append("%d. %s %s · %s%s · %s · %s · %s%s" % (
             e["n"], d["op"], d["record"], what(d), (" · «%s»" % d["evidence"]) if d["evidence"] else "", src,
-            ", ".join(e["skills"]), "сьогодні" if age <= 0 else "%d дн" % age,
+            who(e["skills"]), "сьогодні" if age <= 0 else "%d дн" % age,
             (" · " + " ".join(marks)) if marks else ""))
     return lines
 

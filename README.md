@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.21.0
+**Version:** 3.22.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v3.22.0** — **«Конфігуратор-петля»: the configurator reads first and asks at most five questions** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). Setting up no longer starts with an interview: the configurator reads your connectors read-only — Atlassian first, then the calendar, your mail's domain, Fireflies and Tableau if they are connected — and `ctx bootstrap` shows one table: what each field says now, what it would say, where that came from and how sure it is. What a connector cannot be sure of goes to the inbox instead; a value you gave yourself is never taken but by number. Basic is at most five decisions — you, your role, your products, your team, the table — and saving it creates your context store at once, with the source of every field (`ctx show <id>`). Once a week the morning brief checks your records against the connectors (`ctx validate --recheck`): a finding becomes an inbox delta only when a second look a week later sees it again, never from a connector that did not answer. `/grow-product-manager:context consolidate` proposes removing a duplicate line, making a relative date absolute and dropping a passed deadline — as proposals, never a write. Measured on the author's real context: 0 false closures, and a new user's setup in under three minutes of questions.
 
 **New in v3.21.0** — **«Скринька»: what skills learn about your context waits for your «так»** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A skill that learns something about your context during a run — a dashboard the product record lacks, a Jira key that moved, a product that closed — no longer writes it in silence or asks «зберегти?» at the end of every run: it proposes a delta (`ctx propose`), and the inbox keeps it. What matters most — who you are, your team, a product's keys, anything closed — is asked at once in one question; the rest is one line `У скриньці +N` and waits for the morning brief or `/grow-product-manager:context inbox`, taken or rejected in one answer, with `ctx undo`. A secret or a state or financial identifier never reaches the store — every writing command and every delta refuses it by its form, naming the kind, never the value. `/grow-product-manager:context show` says what the plugin knows about you and who wrote each record when; `health` says what wants looking after, each line with the command that fixes it; `ctx snapshot import` turns your old `local-context.md` backups into snapshots. The first release of the programme «Петля контексту».
 
@@ -357,7 +359,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.15.3)
+### 10. Plugin Configurator (v2.16.0)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -513,7 +515,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 20. Focus Advisor (v0.9.4) — NEW in v1.31.0, complete in v1.33.0
+### 20. Focus Advisor (v0.9.5) — NEW in v1.31.0, complete in v1.33.0
 
 **Description:** PM attention dispatcher — the 4th height of the suite, above structure/quarter/sprint. Scans the PM's context (sprint cycle position, calendar meetings needing preparation, important unanswered emails, open action items from recent meetings, Jira tails), ranks the signals, and recommends 1–3 focuses with reasons, cost of delay, and a chained next step. Recommends and chains — never executes another skill's work; the PM decides.
 
@@ -624,7 +626,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
-### 33. Context Navigator (v0.4.1) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0, bridges in your notes since v3.20.0
+### 33. Context Navigator (v0.4.2) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0, bridges in your notes since v3.20.0
 
 **Description:** Since v3.17.0 it answers and searches from your whole context — your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct — with or without a shared core: an answer with a source and a date for every statement, or a list of notes, and a «Де шукав» line naming each source; `/grow-product-manager:find` runs the same search. With a shared core it answers from it instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
 
@@ -646,7 +648,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.18.2 | Process meetings and extract action items |
-| Plugin Configurator | v2.15.3 | Configure plugin for your organization |
+| Plugin Configurator | v2.16.0 | Configure plugin for your organization |
 | Knowledge Library | v0.9.2 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
@@ -656,7 +658,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Quarterly Planning | v0.8.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.4.2 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
-| Focus Advisor | v0.9.4 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
+| Focus Advisor | v0.9.5 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.1 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
 | Feedback Triage | v0.7.1 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
@@ -667,7 +669,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Offboarding Guide | v0.2.2 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
 | Context Connect | v0.5.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
-| Context Navigator | v0.4.1 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
+| Context Navigator | v0.4.2 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---
 
@@ -909,7 +911,7 @@ Every protocol keeps a fallback chain (named agent → `general-purpose` with th
 | `/grow-product-manager:glossary-lint` | `[file]` | Gate 3 team-language lint over a file or pasted text, standalone |
 | `/grow-product-manager:setup` | `--show \| --write-gate on\|off` | Host-level toggles (the write gate) and whether the hooks environment is wired in this session |
 | `/grow-product-manager:find` | `<запит> [--list] [--all]` | The search of your context, typed (since v3.17.0): `context-navigator`'s answer with a source and a date for every statement, `--list` for the notes instead, `--all` for the session's live sources too; ends with `Де шукав: …` |
-| `/grow-product-manager:context` | `show [запис] \| health \| inbox` | Your context, typed (since v3.21.0): `show` — what the plugin knows about you, who wrote each record last and when it was verified; `health` — what wants looking after, each line with the command that fixes it; `inbox` — what skills learned, taken or rejected in one answer |
+| `/grow-product-manager:context` | `show [запис] \| health \| inbox \| recheck \| consolidate` | Your context, typed (since v3.21.0): `show` — what the plugin knows about you, who wrote each record last and when it was verified, since v3.22.0 the source of each field; `health` — what wants looking after, each line with the command that fixes it; `inbox` — what skills learned, taken or rejected in one answer; since v3.22.0 `recheck` — your records against the connectors, `consolidate` — duplicates and stale dates as proposals |
 
 **Hooks — `hooks/hooks.json` (3 hooks).** All three run in the session's own environment and **fail open** — a script error can never block a session.
 
@@ -1083,5 +1085,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.21.0  
+**Version:** 3.22.0  
 **Last Updated:** October 2026

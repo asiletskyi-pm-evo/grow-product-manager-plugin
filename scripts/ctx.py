@@ -54,6 +54,17 @@
                                 making (`proposal: ctx slot bind <repo> <block>[#<sub>] <slot>`: an unbound block of a registered
                                 repository whose heading answers a slot's names; never the plugin's `team` block). CTX_RESULT
                                 adds slot_proposals [{repo, block, sub, slot}]
+  bootstrap --observed F [--apply --code C [--take N,…] [--skip N,…] | [--only N,…]] [--json]
+                                since v3.22.0: an observation file (references/context-observe.md) against your context —
+                                one table, read only; --apply writes the rows taken (a snapshot, the records, the sources of
+                                each field, the low facts as ctx-bootstrap inbox deltas); a new user's local-context.md from
+                                the onboarding skeleton, moved into records (context-protocol.md §5k)
+  validate --recheck --observed F
+                                since v3.22.0: the records against the connectors; a finding becomes a ctx-recheck delta
+                                only on a second look 6+ days later — the look's day is the file's `at` (§5l); writes the
+                                inbox and .state/recheck.json
+  consolidate [--now ISO]       since v3.22.0: duplicates, relative dates, passed deadlines → ctx-consolidate REPLACE deltas;
+                                no record written (§5m)
   card                          regenerate INDEX.md only
   repo list [--json]            the repositories (provider registrations) a product draws context blocks
                                 from: kind, products, rank, access and, from the block state, how many blocks you
@@ -314,23 +325,28 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_backups as cbk  # noqa: E402
 import ctx_blocks as cb  # noqa: E402
+import ctx_bootstrap as cbt  # noqa: E402
 import ctx_bridges as cbr  # noqa: E402
 import ctx_common as cc  # noqa: E402
+import ctx_consolidate as ccn  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
 import ctx_inbox as ci_  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_never as cn  # noqa: E402
+import ctx_observe as cob  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
+import ctx_recheck as crk  # noqa: E402
 import ctx_repos as crp  # noqa: E402
 import ctx_resolve as rv  # noqa: E402
 import ctx_search as cs_  # noqa: E402
 import ctx_schema as sc  # noqa: E402
 import ctx_show as csh  # noqa: E402
 import ctx_slots as sl  # noqa: E402
+import ctx_sources as csrc  # noqa: E402
 import ctx_synced as sy  # noqa: E402
 
 HEADINGS = {"product": "### Product: %s", "team": "### Team: %s", "org": "## Organization: %s",
@@ -348,7 +364,8 @@ WRITING = {"compile", "sync", "set", "append", "add", "snapshot", "undo", "card"
 # The arguments of a writing command that are no free text a store keeps: paths, ids, numbers, the propose's deltas
 # (each one checked on its own, so one secret does not cost the others — ctx_inbox.propose).
 NOT_TEXT = {"cmd", "action", "context", "store", "home", "file", "body_file", "delta", "code", "which", "steps", "id",
-            "ids", "skill", "type", "parent", "after", "repo", "product", "label", "now"}
+            "ids", "skill", "type", "parent", "after", "repo", "product", "label", "now", "observed", "take", "skip",
+            "only"}
 
 
 def _free_text(a):
@@ -375,6 +392,12 @@ def writes(a):
         return True
     if a.cmd == "propose" or (a.cmd == "inbox" and getattr(a, "action", None) in ("accept", "reject")):
         return True
+    if a.cmd == "bootstrap":                            # since v3.22.0: the table only with --apply
+        return getattr(a, "apply", False)
+    if a.cmd == "validate":                             # since v3.22.0: --recheck writes the inbox and its memory
+        return getattr(a, "recheck", False)
+    if a.cmd == "consolidate":                          # since v3.22.0: the inbox only
+        return True
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] == "apply":
@@ -399,12 +422,17 @@ class Ctx:
             raise Usage("--store is for read commands only; writing commands use the context's own store")
         self.home = a.home or os.path.expanduser("~")
         found = cc.find_context(a.context, home=self.home)
+        self.fresh = False                       # since v3.22.0: `bootstrap` of a new user — no local-context.md yet
+        if not found and a.cmd == "bootstrap":
+            found = os.path.expanduser(a.context or os.environ.get("GROW_PM_CONTEXT_PATH") or
+                                       os.path.join(self.home, ".grow-pm", "local-context.md"))
+            self.fresh = not os.path.lexists(found)
         if not found:
             raise cs.StoreError("no such file: %s (--context)" % a.context if a.context else
                                 "no local-context.md found (GROW_PM_CONTEXT_PATH, ~/.grow-pm)")
         self.found = found                       # as found, links not followed: the digest's summary is kept beside it
         self.context = os.path.realpath(found)
-        self.text = co._read(self.context)
+        self.text = "" if self.fresh else co._read(self.context)
         self.store = cs.Store(a.store or co.store_root_for(self.text, self.home))
         self.copies = co.copies_for(self.context, self.text, self.home)
 
@@ -705,11 +733,14 @@ def cmd_verify(a, c):
     return 0, {"command": "verify", "ids": done}
 
 
-def _write_one(c, op, rid, mutate, source, reason):
+def _write_one(c, op, rid, mutate, source, reason, note=None):
+    """One record changed by `mutate`; since v3.22.0 `note(sources, rec)` notes where the change came from
+    (`.state/sources.json` — read before the snapshot, so a file that cannot be read stops the write first)."""
     c.need_store()
     with co.lock(c.home):
         c.guard()
         pre = c.import_first()
+        srcs = csrc.load(c.store) if note else None
         rec = _record(c, rid)
         body = mutate(rec["body"])
         if body == rec["body"]:
@@ -717,6 +748,10 @@ def _write_one(c, op, rid, mutate, source, reason):
             return {"command": op, "id": rid, "changed": False, "imported": pre["changed"] + pre["added"]}
         t = now()
         snap = co.snapshot(c.store, c.copies, c.home, op)
+        if note:
+            csrc.adopt(srcs, rec)
+            note(srcs, rec)
+            csrc.save(c.store, srcs)
         c.store.write(co.touch(dict(rec, body=body, source=source, modified=t), t))
         c.store.journal({"ts": t, "op": op, "ids": [rid], "source": source, "reason": reason or "", "snapshot": snap})
         comp = co.compile_store(c.store, c.copies, t, c.home, snap)
@@ -731,7 +766,9 @@ def cmd_set(a, c):
     err = sc.check_value(spec, a.value) if spec else None
     if err:
         raise ValueError("%s: %s" % (a.field, err))
-    return 0, _write_one(c, "set", a.id, lambda b: cs.field_set(b, a.field, a.value), a.source or "ctx-set", a.reason)
+    return 0, _write_one(c, "set", a.id, lambda b: cs.field_set(b, a.field, a.value), a.source or "ctx-set", a.reason,
+                         note=lambda m, rec: csrc.note(m, rec["id"], csrc.field_key(a.field), a.value,
+                                                       a.source or "user", at=now()))
 
 
 def _readers_value(text):
@@ -766,6 +803,7 @@ def cmd_assign(a, c):
         t = now()
         source = a.source or "ctx-assign"
         snap = co.snapshot(c.store, c.copies, c.home, "assign")
+        co.adopt_sources(c.store, rec)
         c.store.write(dict(rec, read_by=value, source=source, modified=t))     # who reads it — not a content check
         c.store.journal({"ts": t, "op": "assign", "ids": [a.id], "source": source, "reason": a.reason or "",
                          "snapshot": snap})
@@ -777,7 +815,8 @@ def cmd_assign(a, c):
 
 def cmd_append(a, c):
     return 0, _write_one(c, "append", a.id, lambda b: cs.append_line(b, a.text, under=a.under),
-                         a.source or "ctx-append", a.reason)
+                         a.source or "ctx-append", a.reason,
+                         note=lambda m, rec: csrc.note_text(m, rec["id"], a.text, a.source or "user", at=now()))
 
 
 def cmd_add(a, c):
@@ -791,6 +830,7 @@ def cmd_add(a, c):
     with co.lock(c.home):
         c.guard()
         c.import_first()
+        srcs = csrc.load(c.store)
         recs = c.store.load()
         ids = [r["id"] for r in recs]
         if a.after:
@@ -812,6 +852,8 @@ def cmd_add(a, c):
         title = heading.lstrip("#").strip()
         new = co._insert(c.store, [{"text": text, "type": a.type, "title": title, "after": after}],
                          a.source or "ctx-add", t)
+        csrc.note_body(srcs, new[0], text, a.source or "user", at=t)
+        csrc.save(c.store, srcs)
         c.store.journal({"ts": t, "op": "add", "ids": new, "source": a.source or "ctx-add", "reason": a.reason or "",
                          "snapshot": snap})
         comp = co.compile_store(c.store, c.copies, t, c.home, snap)
@@ -1034,6 +1076,8 @@ def cmd_undo(a, c):
 
 def cmd_validate(a, c):
     c.need_store()
+    if a.recheck or a.observed:
+        return cmd_recheck(a, c)
     errors, warnings, proposals = _validate(c)
     for e in errors:
         print("error: " + e)
@@ -1041,6 +1085,67 @@ def cmd_validate(a, c):
         print("warning: " + w)
     print("valid" if not errors else "%d error(s)" % len(errors))
     return (3 if errors else 0), {"command": "validate", "errors": errors, "warnings": warnings, "slot_proposals": proposals}
+
+
+CHECK_NAMES = {"jira": "Jira-ключі", "confluence": "простори Confluence", "member": "учасники команд",
+               "role": "роль від провайдера"}
+
+
+def cmd_recheck(a, c):
+    """`validate --recheck --observed F` (since v3.22.0, plan C9; the day of the look is the file's `at`): the records against what the connectors
+    say. A finding seen the first time waits in `.state/recheck.json`; seen again at least 6 days later it becomes a
+    delta of the inbox (ctx-recheck) — urgent ones by the inbox's table. Writes only the inbox, the memory and, when
+    something was proposed, one journal line {op propose, skill ctx-recheck}; the records it found as they should be are
+    printed for `ctx verify`. A connector that did not answer checks nothing."""
+    if not (a.recheck and a.observed):
+        raise Usage("validate --recheck бере --observed F (файл спостережень, references/context-observe.md)")
+    try:
+        obs = cob.load(a.observed)
+    except ValueError as e:
+        raise Usage(str(e))
+    if not obs.get("at"):
+        raise Usage("validate --recheck needs the observation's at (the day the connectors were read)")
+    today = obs["at"]
+    with co.lock(c.home):
+        c.guard()
+        mem_rk = crk.load(c.store)
+        box = ci_.load(c.store)
+        c.import_first()
+        recs = c.store.load()
+        res = crk.run(obs, recs, mem_rk, today)
+        props = ci_.propose(box, res["deltas"], "ctx-recheck", recs, today) if res["deltas"] else []
+        new = [r for r in props if r["status"] == ci_.ADDED]
+        if new:
+            ci_.save(c.store, box, today)
+            c.store.journal({"ts": now(), "op": "propose", "skill": "ctx-recheck",
+                             "ids": sorted({r["record"] for r in new}),
+                             "sigs": [e["sig"] for e in box["entries"] if e["n"] in {r["n"] for r in new}],
+                             "source": "ctx-recheck"})
+        crk.save(c.store, mem_rk)
+        cd = ci_.code(box, recs)
+    print("перевірено: %s" % (", ".join("%s (%d)" % (CHECK_NAMES[k], sum(k in v for v in res["checked"].values()))
+                                         for k in CHECK_NAMES if k not in res["unchecked"]) or "нічого"))
+    if res["unchecked"]:
+        print("не перевірено: %s — конектор не відповів, список неповний чи даних немає"
+              % ", ".join(CHECK_NAMES[k] for k in res["unchecked"]))
+    for f in res["noticed"]:
+        print("помічено: %s · %s %s — перевірю ще раз не раніше ніж через %d дн після %s" % (
+            f["record"], CHECK_NAMES[f["check"]], f["item"], crk.CONFIRM_DAYS, f["first"]))
+    for f in res["unresolved"]:
+        print("перевір сам: %s · %s" % (f["record"], f["why"]))
+    for i, r in enumerate(props, 1):
+        if r["status"] in (ci_.REFUSED, ci_.SECRET, ci_.BLOCK):
+            print("знахідка %d: %s" % (i, r.get("why")))
+    added = [r for r in props if r["status"] == ci_.ADDED]
+    urgent = sorted({r["n"] for r in new if r.get("urgent")})
+    if new:
+        print("у скриньці +%d (усього %d)%s — /context inbox" % (len(added), len(box["entries"]), (
+            " · термінові №%s — запитай зараз, код %s" % (", ".join(map(str, urgent)), cd)) if urgent else ""))
+    if res["fine"]:
+        print("як і було: %s — ctx verify %s" % (", ".join(res["fine"]), " ".join(res["fine"])))
+    return 0, {"command": "validate", "recheck": True, "checked": res["checked"], "unchecked": res["unchecked"],
+               "noticed": res["noticed"], "confirmed": res["confirmed"], "unresolved": res["unresolved"],
+               "results": props, "added": [r["n"] for r in added], "urgent": urgent, "code": cd, "fine": res["fine"]}
 
 
 def _validate(c):
@@ -1132,6 +1237,11 @@ def cmd_show(a, c):
     today = now()[:10]
     rows = csh.records(c.store, today)
     want = set(a.ids or [])
+    try:
+        srcs = csrc.load(c.store)
+    except cs.StoreError as e:
+        srcs = None
+        print("джерела полів не читаються: %s" % e)
     unknown = sorted(want - {r["id"] for r in rows})
     if unknown:
         raise cs.StoreError("no record %s — `ctx list` shows the ids" % ", ".join(unknown))
@@ -1143,7 +1253,12 @@ def cmd_show(a, c):
             r["id"], r["title"], r["source"], r["modified"], r["verified"], (" (TTL %s дн)" % r["ttl"]) if r["ttl"] else "",
             (" · читає: %s" % r["read_by"]) if r["read_by"] else "", (" · " + ", ".join(marks)) if marks else ""))
         if want:
-            print(_record(c, r["id"])["body"].rstrip("\n"))
+            rec = _record(c, r["id"])
+            print(rec["body"].rstrip("\n"))
+            if srcs is not None:                        # since v3.22.0: where each field came from
+                print("джерела:")
+                for x in csrc.of(srcs, rec):
+                    print("  %s %s" % (x["label"], csrc.describe(x)))
             print()
     repo_rows = csh.repos(c.text, c.home, c.store)
     mem = csh.memories(c.store, today)
@@ -1161,8 +1276,14 @@ def cmd_show(a, c):
         print("твої відповіді: слоти %s · same/not-same %s · пошук %s · мости %s · скринька %s" % (
             mem.get("slots"), mem.get("entities"), mem.get("search"), mem.get("bridges"),
             ib if isinstance(ib, str) else "%d (термінових %d)" % (ib["entries"], ib["urgent"])))
+    cov = None
+    if srcs is not None:
+        own, total = csrc.coverage(srcs, c.store.load())
+        cov = {"own": own, "fields": total}
+        if not want:
+            print("полів із власним джерелом: %d з %d (решта — за джерелом запису)" % (own, total))
     return 0, {"command": "show", "records": [r for r in rows if not want or r["id"] in want], "repos": repo_rows,
-               "memories": mem}
+               "memories": mem, "sources": cov}
 
 
 def cmd_health(a, c):
@@ -1183,12 +1304,85 @@ def cmd_health(a, c):
                        sum(co.pending(plan).values()) if not plan.get("unread") else 0, len(plan["conflicts"]),
                        len(plan["missing"]),
                        len(c.store.stray_files()), warnings, errors, csh.index_state(c.home), csh.snapshots(c.home),
-                       csh.backups(c.home, c.context, c.text), today, unread_regs=skipped)
+                       csh.backups(c.home, c.context, c.text), today, unread_regs=skipped,
+                       recheck=_recheck_health(c, today), consolidate=_consolidate_health(c, today))
     for level, text, fix in lines:
         print("%s %s%s" % (csh.MARK[level], text, (" — " + fix) if fix else ""))
     n = {k: sum(1 for l in lines if l[0] == k) for k in (csh.OK, csh.WARN, csh.ACT)}
     return 0, {"command": "health", "lines": [{"level": l, "text": t, "fix": f} for l, t, f in lines],
                "counts": n}
+
+
+def cbt_day(s):
+    try:
+        return datetime.date.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def _consolidate_find(c, recs, today):
+    card = c.store.card_path
+    lines = None
+    if os.path.isfile(card):
+        try:
+            lines = cs.read_text(card).count("\n")
+        except (OSError, cs.StoreError):
+            lines = None
+    return ccn.find(recs, today, card_lines=lines)
+
+
+def cmd_consolidate(a, c):
+    """`consolidate [--now ISO] [--json]` (since v3.22.0, plan C13, R4): a line written twice, a relative date, a passed
+    deadline → REPLACE deltas of the inbox (ctx-consolidate); nothing written to a record. One op propose journal line
+    when something new was proposed. Records no longer current for 90+ days and a card over its budget are named with
+    their commands — archiving is no delta."""
+    c.need_store()
+    today = (a.now or now())[:10]
+    if not re.match(r"\d{4}-\d{2}-\d{2}$", today) or cbt_day(today) is None:
+        raise Usage("--now is a date or an ISO time")
+    with co.lock(c.home):
+        c.guard()
+        box = ci_.load(c.store)
+        c.import_first()
+        recs = c.store.load()
+        res = _consolidate_find(c, recs, today)
+        props = ci_.propose(box, res["deltas"], "ctx-consolidate", recs, today) if res["deltas"] else []
+        added = [r for r in props if r["status"] == ci_.ADDED]
+        if added:
+            ci_.save(c.store, box, today)
+            c.store.journal({"ts": now(), "op": "propose", "skill": "ctx-consolidate",
+                             "ids": sorted({r["record"] for r in added}),
+                             "sigs": [e["sig"] for e in box["entries"] if e["n"] in {r["n"] for r in added}],
+                             "source": "ctx-consolidate"})
+    print("у скриньці +%d (усього %d) — /context inbox" % (len(added), len(box["entries"])) if added else
+          "нічого нового для скриньки")
+    for rid, since in res["archive"]:
+        print("неактуальне з %s: %s — ctx archive %s" % (since, rid, rid))
+    if res["card_over"]:
+        print("картка %d рядків (бюджет %d) — архівуй неактуальне або злий записи" % (res["card_over"], cs.CARD_MAX))
+    return 0, {"command": "consolidate", "results": props, "added": [r["n"] for r in added],
+               "archive": [rid for rid, _ in res["archive"]], "card_over": res["card_over"]}
+
+
+def _consolidate_health(c, today):
+    """How many new deltas consolidate would propose now — counted on a copy of the inbox, nothing written."""
+    import copy
+    try:
+        box = copy.deepcopy(ci_.load(c.store))
+        recs = c.store.load()
+    except cs.StoreError as e:
+        return str(e)
+    res = _consolidate_find(c, recs, today)
+    props = ci_.propose(box, res["deltas"], "ctx-consolidate", recs, today) if res["deltas"] else []
+    return sum(1 for r in props if r["status"] == ci_.ADDED) + len(res["archive"])
+
+
+def _recheck_health(c, today):
+    try:
+        mem = crk.load(c.store)
+    except cs.StoreError as e:
+        return str(e)
+    return {"age": crk.age(mem, today), "noticed": crk.waiting(mem), "old": crk.OLD_DAYS}
 
 
 def cmd_card(a, c):
@@ -2295,6 +2489,8 @@ def cmd_propose(a, c):
         a.skill = ci_.skill_name(a.skill)
     except ValueError as e:
         raise Usage(str(e))
+    if a.skill in ci_.CTX_OWN:                         # since v3.22.0: ctx's own proposers come only from its commands
+        raise Usage("%s — джерело самого ctx (bootstrap, validate --recheck, consolidate), не скіл" % a.skill)
     if a.skill not in (cr.load_manifest().get("skills") or {}):     # a name the plugin does not know is no skill's
         raise Usage("--skill names one of the plugin's skills (references/context-manifest.yaml), not %s"
                     % ("that" if cn.scan(a.skill) else a.skill))
@@ -2340,6 +2536,16 @@ def _inbox_code(c, mem, recs, given):
         raise co.Refused("скринька змінилась — переглянь ще раз: ctx inbox list")
 
 
+def _note_delta(srcs, e):
+    d, s = e["delta"], e["delta"]["source"]
+    at = s.get("at") or now()
+    if d["op"] == "UPDATE":
+        csrc.note(srcs, d["record"], csrc.field_key(d["field"]), d["value"], s["kind"], ref=s.get("ref"), at=at)
+    elif d["op"] in ("ADD", "REPLACE"):                 # the line it adds (a field's line as that field)
+        csrc.note_text(srcs, d["record"], d["text"] if d["op"] == "ADD" else d["value"], s["kind"], ref=s.get("ref"),
+                       at=at)
+
+
 def cmd_inbox(a, c):
     out = {"command": "inbox", "action": a.action}
     if not c.store.exists():
@@ -2358,6 +2564,7 @@ def cmd_inbox(a, c):
     with co.lock(c.home):
         c.guard()
         mem = ci_.load(c.store)
+        srcs = csrc.load(c.store) if a.action == "accept" else None
         recs = c.store.load()
         _inbox_code(c, mem, recs, a.code)        # what was shown, before anything is imported
         try:
@@ -2365,6 +2572,8 @@ def cmd_inbox(a, c):
         except ValueError as e:
             raise Usage(str(e))
         c.import_first()
+        if srcs is not None:                            # the import notes its own fields: read them after it
+            srcs = csrc.load(c.store)
         recs = c.store.load()
         if a.action == "reject":
             snap = co.snapshot(c.store, c.copies, c.home, "inbox-reject")
@@ -2412,6 +2621,11 @@ def cmd_inbox(a, c):
         if done or gone:
             snap = co.snapshot(c.store, c.copies, c.home, "inbox-accept")
             t = now()
+            for rid in plan:                            # since v3.22.0: each field or line, where it came from
+                csrc.adopt(srcs, by_id[rid])
+            for e in done:
+                _note_delta(srcs, e)
+            csrc.save(c.store, srcs)
             for rec in plan.values():
                 c.store.write(co.touch(rec, t))
             c.store.journal({"ts": t, "op": "inbox-accept", "ids": sorted(plan), "sigs": [e["sig"] for e in done],
@@ -2427,6 +2641,211 @@ def cmd_inbox(a, c):
     return 0, dict(out, accepted=[e["n"] for e in done], held=[e["n"] for e, _ in held],
                    gone=[e["n"] for e, _ in gone], ids=sorted(plan), snapshot=snap, written=written,
                    inbox=ci_.counts(mem, today))
+
+
+# ------------------------------------------------------------------ bootstrap (since v3.22.0)
+def _bootstrap_recs(c):
+    """The records the table is compared with: the store's, or — no store — the file's sections, or nothing."""
+    if c.store.exists():
+        return c.store.load()
+    if c.fresh:
+        return []
+    return [dict(r, body=r["text"], source="local-context") for r in cs.assign_ids(cs.split_sections(c.text))]
+
+
+def _bootstrap_result(d, obs, cd):
+    return {"rows": d["rows"], "inbox": len(d["inbox"]), "later": len(d["later"]), "same": d["same"],
+            "dropped": obs["dropped"],
+            "connectors": obs["connectors"], "code": cd, "default": [r["n"] for r in d["rows"] if r["default"]]}
+
+
+def cmd_bootstrap(a, c):
+    """`bootstrap --observed F [--json]` — the table: what the connectors say against your context (plan C5); reads
+    only. `--apply --code C [--take N,…] [--skip N,…] | [--only N,…]` — writes the rows taken (C6). Every check comes
+    first, under the lock, before anything is written: the code against the records as they are (and again after the
+    edits waiting are imported), the rows, the inbox and the sources readable. With a store: a snapshot, the records,
+    `.state/sources.json`, the low facts as inbox deltas (ctx-bootstrap), one journal line {op bootstrap, sigs}, the
+    compile — `ctx undo` takes it all back. Nothing taken and nothing new for the inbox → nothing written; only new
+    proposals → one {op propose} line, as `ctx propose` writes. Without a store and without local-context.md (a new
+    user): the file from the skeleton, moved into records at once. A local-context.md not in records yet, or a store
+    with no local-context.md: the table, never the apply."""
+    try:
+        obs = cob.load(a.observed)
+    except ValueError as e:
+        raise Usage(str(e))
+    today = now()[:10]
+    at = obs["at"] or today
+    srcs = csrc.load(c.store) if c.store.exists() else csrc.empty()
+    recs = _bootstrap_recs(c)
+    d = cbt.diff(obs, recs, srcs)
+    cd = cbt.code(d, recs)
+    out = dict(_bootstrap_result(d, obs, cd), command="bootstrap", applied=False)
+    if not a.apply:
+        for line in cbt.render(d, obs["connectors"], obs["dropped"]):
+            print(line)
+        print("код: %s" % cd if d["rows"] or d["inbox"] or d["later"] else "нічого нового — контекст уже такий")
+        if not c.store.exists() and not c.fresh:
+            print("local-context.md ще не в записах — щоб записати таблицю, спершу ctx migrate --apply")
+        return 0, out
+    if not a.code:
+        raise Usage("--apply бере --code з таблиці (ctx bootstrap --observed F)")
+    try:
+        cbt.chosen(d, a.take, a.skip, a.only)
+    except ValueError as e:
+        raise Usage(str(e))
+    if c.fresh:
+        held = [p for p in (c.store.records_dir, co._last_store_path(c.home)) if os.path.lexists(p)]
+        if held:
+            raise cs.StoreError("local-context.md немає, але сховище контексту є (%s) — це відновлення, не новий "
+                                "користувач: «налаштуй плагін» (RM-1)" % held[0])
+    elif not c.store.exists():
+        raise cs.StoreError("local-context.md ще не в записах — спершу перенеси його (ctx migrate --apply, пункт "
+                            "оновлення «Move my context to records»), тоді таблиця запишеться")
+    t = now()
+    with co.lock(c.home):
+        c.guard()
+        res = _bootstrap_new(c, a, obs, at, t) if c.fresh else _bootstrap_store(c, a, obs, at, t)
+    added = [r for r in res["props"] if r["status"] == ci_.ADDED]
+    print("записано: %s · у скриньці +%d%s" % (", ".join(res["ids"]) or "нічого", len(added),
+                                              " (back: ctx undo)" if res["snapshot"] else ""))
+    for n, why in res["not_written"]:
+        print("№%d не записано: %s" % (n, why))
+    if c.fresh:
+        print("контекст у записах: %s — ctx undo повертає один файл" % c.store.root)
+    return 0, dict(out, applied=True, taken=res["taken"], ids=res["ids"], snapshot=res["snapshot"],
+                   written=res["written"], proposed=[r["n"] for r in added],
+                   not_written=[n for n, _ in res["not_written"]])
+
+
+def _note_row(srcs, rid, field, value, r, at):
+    csrc.note(srcs, rid, csrc.field_key(field) if field else csrc.line_key(value), value, cbt.kind_of(r["from"]),
+              ref=r.get("ref"), at=at, confidence=r["confidence"])
+
+
+def _bootstrap_check(a, obs, recs, srcs, why):
+    d = cbt.diff(obs, recs, srcs)
+    if cbt.code(d, recs) != a.code:
+        raise co.Refused("%s — переглянь ще раз: ctx bootstrap --observed %s" % (why, a.observed))
+    try:
+        return d, cbt.chosen(d, a.take, a.skip, a.only)
+    except ValueError as e:
+        raise Usage(str(e))
+
+
+def _bootstrap_propose(c, box, facts, at, t):
+    recs = c.store.load()
+    props = ci_.propose(box, cbt.deltas(facts, recs, at), "ctx-bootstrap", recs, t[:10]) if facts else []
+    added = {r["n"] for r in props if r["status"] == ci_.ADDED}
+    return props, [e["sig"] for e in box["entries"] if e["n"] in added]
+
+
+def _bootstrap_store(c, a, obs, at, t):
+    box = ci_.load(c.store)                             # everything that must read, before anything is written
+    srcs = csrc.load(c.store)
+    _bootstrap_check(a, obs, c.store.load(), srcs, "таблиця змінилась")
+    pre = c.import_first()
+    recs = c.store.load()
+    if pre["changed"] or pre["added"] or pre.get("removed"):
+        srcs = csrc.load(c.store)
+    d, take = _bootstrap_check(a, obs, recs, srcs, "правки з local-context.md змінили таблицю")
+    res = {"ids": [], "snapshot": None, "written": [], "taken": [], "not_written": [], "props": []}
+    if not take:
+        res["props"], sigs = _bootstrap_propose(c, box, d["inbox"], at, t)
+        if sigs:                                        # proposals only: a line as `ctx propose` writes
+            ci_.save(c.store, box, t[:10])
+            c.store.journal({"ts": t, "op": "propose", "skill": "ctx-bootstrap", "ids": sorted({
+                r["record"] for r in res["props"] if r["status"] == ci_.ADDED}), "sigs": sigs, "source": "ctx-bootstrap"})
+        return res
+    by_id = {r["id"]: r for r in recs}
+    snap = co.snapshot(c.store, c.copies, c.home, "bootstrap")
+    changed = {}
+    for r in take:
+        if r["new"]:
+            continue
+        rec = changed.get(r["record"]) or by_id.get(r["record"])
+        if rec is None:
+            res["not_written"].append((r["n"], "запису %s немає" % (r["record"] or r["type"])))
+            continue
+        if r["record"] not in changed:
+            csrc.adopt(srcs, rec)
+        if r.get("field"):
+            body = cbt.put_field(rec["body"], r["field"], r["value"])
+            _note_row(srcs, rec["id"], r["field"], r["value"], r, at)
+        else:
+            body, line = cbt.add_line(rec["body"], r["list"], r["value"])
+            _note_row(srcs, rec["id"], None, line, r, at)
+        changed[rec["id"]] = dict(rec, body=body, source="ctx-bootstrap", modified=t)
+        res["taken"].append(r["n"])
+    news = sorted([r for r in take if r["new"]], key=lambda r: cbt.TYPE_ORDER[r["type"]])
+    for rec in changed.values():
+        c.store.write(co.touch(rec, t))
+    ids = list(changed)
+    for r in news:
+        cur = c.store.load()
+        if r["type"] == "org":
+            after = cur[-1]["id"] if cur else None
+        else:
+            parent = [x["id"] for x in cur if x["type"] == "org"][0]   # chosen() made sure there is one
+            kids = [x["id"] for x in cur if x["parent"] == parent and x["type"] == r["type"]] or \
+                [x["id"] for x in cur if x["parent"] == parent] or [parent]
+            after = kids[-1]
+        text = cbt.new_body(r)
+        rid = co._insert(c.store, [{"text": text, "type": r["type"], "title": "%s: %s" % (cbt.PREFIX[r["type"]],
+                                                                                         r["title"]), "after": after}],
+                         "ctx-bootstrap", t)[0]
+        for f in r["fields"]:
+            _note_row(srcs, rid, f["field"], f["value"], f, at)
+        for x in r["lists"]:
+            _note_row(srcs, rid, None, "- " + x["value"], x, at)
+        ids.append(rid)
+        res["taken"].append(r["n"])
+    csrc.save(c.store, srcs)
+    res["props"], sigs = _bootstrap_propose(c, box, d["inbox"] + d["later"], at, t)
+    c.store.journal({"ts": t, "op": "bootstrap", "ids": ids, "rows": res["taken"], "source": "ctx-bootstrap",
+                     "reason": "", "sigs": sigs, "snapshot": snap})     # the proposals ride it: undo takes them too
+    if sigs:
+        ci_.save(c.store, box, t[:10])
+    res.update(ids=ids, snapshot=snap, written=co.compile_store(c.store, c.copies, t, c.home, snap)["written"])
+    return res
+
+
+def _bootstrap_new(c, a, obs, at, t):
+    """A new user: the file from the skeleton, then the move into records — `ctx undo` after it is one file again."""
+    d, take = _bootstrap_check(a, obs, [], csrc.empty(), "таблиця змінилась")
+    try:
+        text = cbt.skeleton(take, t[:10], t, cbt.plugin_version())
+    except ValueError as e:
+        raise Usage(str(e))
+    cs.check_target(c.context)
+    os.makedirs(os.path.dirname(c.context), exist_ok=True)
+    cs.atomic_write(c.context, text)
+    rep = co.migrate(c.context, c.store.root, c.copies, c.home, True, t)
+    srcs = csrc.empty()
+    recs = c.store.load()
+    for r in take:
+        if r["new"]:
+            rec = cbt.find(recs, r["type"], r["title"], fallback=False)
+            for f in r["fields"]:
+                _note_row(srcs, rec["id"], f["field"], f["value"], f, at)
+            for x in r["lists"]:
+                _note_row(srcs, rec["id"], None, "- " + x["value"], x, at)
+        elif r["type"] == "profile" and r.get("field"):
+            _note_row(srcs, cbt.find(recs, "profile", None)["id"], r["field"], r["value"], r, at)
+    for rec in recs:                                    # the skeleton's own lines (Judgment defaults, the onboarding
+        for name, value in csrc.fields(rec["body"]):    # status): written by the configurator itself
+            if csrc.field_key(name) not in srcs["records"].get(rec["id"], {}):
+                csrc.note(srcs, rec["id"], csrc.field_key(name), value, "ctx-bootstrap", at=t)
+    csrc.save(c.store, srcs)
+    box = ci_.load(c.store)
+    props, sigs = _bootstrap_propose(c, box, d["inbox"] + d["later"], at, t)
+    c.store.journal({"ts": t, "op": "bootstrap", "ids": [r["id"] for r in recs], "rows": [r["n"] for r in take],
+                     "source": "ctx-bootstrap", "reason": ""})
+    if sigs:
+        ci_.save(c.store, box, t[:10])
+        c.store.journal({"ts": t, "op": "propose", "skill": "ctx-bootstrap", "ids": [], "sigs": sigs,
+                         "source": "ctx-bootstrap"})
+    return {"ids": [r["id"] for r in recs], "snapshot": rep.get("snapshot"), "written": [c.context],
+            "taken": [r["n"] for r in take], "not_written": [], "props": props}
 
 
 # ---------------------------------------------------------------------- main
@@ -2467,6 +2886,10 @@ def build_parser():
     sp.add_argument("--source"); sp.add_argument("--reason")
     sp = sub.add_parser("snapshot", parents=[common]); sp.add_argument("action", nargs="?", choices=["import"])
     sp.add_argument("--label"); sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
+    sp = sub.add_parser("bootstrap", parents=[common]); sp.add_argument("--observed", required=True)
+    sp.add_argument("--apply", action="store_true"); sp.add_argument("--code"); sp.add_argument("--take", action="append")
+    sp.add_argument("--skip", action="append"); sp.add_argument("--only", action="append")
+    sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("propose", parents=[common]); sp.add_argument("--skill", required=True)
     sp.add_argument("--delta", action="append"); sp.add_argument("--file")
     xp = sub.add_parser("inbox").add_subparsers(dest="action", required=True, parser_class=Parser)
@@ -2475,7 +2898,9 @@ def build_parser():
         sp = xp.add_parser(act, parents=[common]); sp.add_argument("which", nargs="+"); sp.add_argument("--code")
         sp.add_argument("--reason")
     sp = sub.add_parser("undo", parents=[common]); sp.add_argument("--steps", type=int, default=1)
-    sub.add_parser("validate", parents=[common])
+    sp = sub.add_parser("validate", parents=[common]); sp.add_argument("--recheck", action="store_true")
+    sp.add_argument("--observed")
+    sp = sub.add_parser("consolidate", parents=[common]); sp.add_argument("--now"); sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("show", parents=[common]); sp.add_argument("ids", nargs="*"); sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("health", parents=[common]); sp.add_argument("--json", action="store_true")
     sub.add_parser("card", parents=[common])
@@ -2522,7 +2947,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot,
             "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
-            "inbox": cmd_inbox}
+            "inbox": cmd_inbox, "bootstrap": cmd_bootstrap, "consolidate": cmd_consolidate}
 
 
 def emit(result, conflict=None):

@@ -12,6 +12,74 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.22.0 (2026-10-28)
+
+**«Конфігуратор-петля»: the configurator reads first and asks at most five questions.** Setting up the plugin no longer starts with an interview of seventeen steps. The configurator reads your connectors read-only and `ctx bootstrap` shows what they say as one table, with the source and the confidence of every field; Basic is at most five decisions, and saving creates the context store with the source of every field. Once a week your records are checked against the connectors, and `consolidate` tidies them — both only as proposals of the inbox. The second release of the programme «Петля контексту».
+
+MINOR: new `ctx` commands (`bootstrap`, `validate --recheck`, `consolidate`), a new delta (`REPLACE`), a new onboarding order, two new actions of `/grow-product-manager:context`.
+
+### Added
+
+- **The observation file** (`scripts/ctx_observe.py`, `references/context-observe.md`, schema `context-observed/1`): what a skill saw in the connectors, read-only — `ctx` itself calls no connector.
+  - **Confidence is decided by `ctx`, not by the skill**, from where a fact came: high — who you are by Atlassian, the site, your mail's domain, your file, your answers; medium — your activity in Jira (≥ 5 issues in 90 days) and Confluence (≥ 3 pages), the role a provider infers; low — co-attendees (≥ 3 meetings in 30 days), Fireflies participants, Tableau.
+  - **Each source gives only its own** (a table held equal to the document by a test), and a value must have its field's shape — a meeting's title or a letter's subject has none. Of a calendar, Fireflies or mail fact only a count is kept.
+- **`ctx bootstrap --observed F`** (`scripts/ctx_bootstrap.py`, `context-protocol.md` §5k) — one table, read-only:
+  - `+` absent, `~` another value, a new organisation, product or team with its fields; what agrees is only counted;
+  - never taken by default: `✋ твоє` (another value against one you gave), `⚠` (two values for one field), `≠ назва` (an organisation named otherwise), `немає організації`;
+  - your answer outranks every connector; a product is known by its Jira key or Confluence space before its name; a field and its older names agree (`Jira` / `Jira instance`, `Email` / `Work Email`).
+- **`ctx bootstrap --apply --code C [--take|--skip|--only]`** — every check under the lock first (the code before and after the edits waiting are imported); one snapshot, the records, the sources, the low facts as `ctx-bootstrap` inbox deltas, one journal line, the compile; `ctx undo` byte for byte. Nothing new → nothing written. **A new user** gets `local-context.md` from the onboarding skeleton, moved into records at once.
+- **The source of every field** (`scripts/ctx_sources.py`, `.state/sources.json`, `context-sources/1`): what wrote it, where, when, how sure, with a hash of the value; every rewrite keeps the fields it did not touch; an import makes the fields it changed the editor's; `ctx show <id>` prints it beside each field.
+- **Basic in ≤ 5 questions** (`onboarding-steps.md` «Basic — derive first»): the scan, then «це ти?», role, products, team, the table — each with its progress and the skills it feeds, skipped when the table already knows; the mode question is gone (the full setup and the sandbox on request).
+- **`ctx validate --recheck --observed F`** (`scripts/ctx_recheck.py`, §5l, `.state/recheck.json`) — a product's key and space, a team's members, the role a provider gives:
+  - a finding becomes a `ctx-recheck` delta only on a second look at least 6 days later (the day of a look is the file's `at`); a connector that did not answer or a list that was cut checks nothing;
+  - a product is closed only when every anchor is gone and no project of its name appears under another key (then it is an UPDATE to that key); a key is compared without case and through a link; a member is removed only when the site shows the account deactivated, never when a lookup finds no one;
+  - weekly in the focus-advisor morning brief, on request through `/context recheck` and the configurator's Validate.
+- **`ctx consolidate`** (`scripts/ctx_consolidate.py`, §5m) — a line written twice in one section, a relative date made absolute (never a standing rule like «data up to yesterday»), a deadline passed after «до» / "by" / "until" — `ctx-consolidate` REPLACE deltas, never a write; `ctx health` says how many it would find.
+- **`REPLACE`** — a delta that changes one line or removes it, within its section when it names one; urgent as an UPDATE of its field would be; ctx's own proposers (`ctx-bootstrap`, `ctx-recheck`, `ctx-consolidate`) are refused to `ctx propose --skill`.
+- `testing/bootstrap-evals.md` — Basic's scenarios; `skill_lint` checks 28 `[bootstrap-template]` (the skeleton equals Step 16c) and 29 `[command-size]` (a command over 4 KiB is not migrated by Codex CLI).
+
+### Changed
+
+- **plugin-configurator 2.16.0** — Basic derives first; Step 2 on request; Validate V-5b rechecks. **focus-advisor 0.9.5** — the weekly recheck in the brief. **context-navigator 0.4.2** — «перевір мій контекст», «прибери дублі в контексті».
+- `ctx append` puts a table row inside its table; `ctx set` / `append` / `add` / `inbox accept` note sources; `ctx health` names the last recheck and what consolidate would find.
+- `references/context-protocol.md` §5k–§5m, the command rows, the store's tree, §10; `data-policy.md` — what the connectors read is kept to a field's need; `host-profiles.md` — the prose path without a shell.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/ctx_observe.py`, `ctx_bootstrap.py`, `ctx_sources.py`, `ctx_recheck.py`, `ctx_consolidate.py` | new |
+| `scripts/ctx.py` | `bootstrap`, `validate --recheck`, `consolidate`, sources in `set` / `append` / `add` / `inbox accept` / `show`, `health` lines |
+| `scripts/ctx_inbox.py` | `REPLACE`, ctx's own proposers, every line break refused |
+| `scripts/ctx_ops.py`, `ctx_store.py`, `ctx_show.py` | sources on import, invalidate, restore; a table row inside its table; health lines |
+| `references/context-observe.md` | new — the read-only call map |
+| `references/context-protocol.md`, `data-policy.md`, `host-profiles.md` | §5k–§5m, rows, §10; the connectors' reach; the prose path |
+| `skills/plugin-configurator/` | 2.15.3 → 2.16.0 — Basic derives first, V-5b |
+| `skills/focus-advisor/SKILL.md` | 0.9.4 → 0.9.5 — the weekly recheck |
+| `skills/context-navigator/SKILL.md` | 0.4.1 → 0.4.2 — recheck and consolidate in words |
+| `commands/context.md` | `recheck`, `consolidate`; under 4 KiB |
+| `testing/ctx_observe_test.py`, `ctx_sources_test.py`, `ctx_bootstrap_test.py`, `ctx_replace_test.py`, `ctx_recheck_test.py`, `ctx_consolidate_test.py`, `bootstrap-evals.md`, fixture `bootstrap/observed-zorg.json` (new); `skill_lint.py`, `ctx_cli_test.py`, `ctx_search_test.py` | the tests and pins |
+
+### Acceptance (a copy of the author's store; the author's real connectors read-only)
+
+- Atlassian read-only (user, site, 90 days of Jira and Confluence activity, every visible project and space, the team's five members). The table on the author's context: 6 facts agree, 1 row (another mail domain) held as `✋ твоє` + `≠ назва`; an apply with nothing taken wrote nothing; `--take 1` then `ctx undo` byte for byte.
+- `validate --recheck`, two looks a week apart: **0 findings, 0 false INVALIDATE, 0 false REPLACE**. `consolidate`: 0 proposals on 19 records.
+- A new user from an empty HOME with the author answering: **4 decisions, 2 min 43 s** from the start to the first artifact (≈ 6 min with the scan); 21 of 21 fields with their own source.
+- The real vault, `~/.grow-pm` and the author's local index: 17 563 files, 0 changes. `host-smoke`: Claude 33 skills + digest, Codex 40 (33 + 7).
+
+### Known limits
+
+- Fireflies gives participants only — no meeting titles or topics are kept (a deviation from the concept).
+- Without a shell the sources of fields are not kept — the table shows them only while setting up.
+- A recheck closes a product only after two weekly looks and only when every anchor is gone; a member is never removed on «not found»; the role check reminds you each week when you chose another role than the provider's.
+- `consolidate` archives nothing itself (it names `ctx archive`); a relative date's proposal follows the record's last change, so a rejected one may come back after the record changes.
+- Several organisations: new products and teams go under the first. The extended setup stays a dialogue, section by section.
+- The core's suggestions into your sections — v3.23.0; `ctx audit` — v4.0.0.
+
+### Backwards compatibility
+
+The index schema stays `search-index/1`; the inbox stays `context-inbox/1` with one more action (`REPLACE` — an older `ctx` refuses an inbox that holds one). Nothing new is written unless you apply a table with its code, a recheck or consolidate proposes, or you accept. A host without a store or a shell keeps the onboarding of v3.21.0, with the same reads shown in prose.
+
 ## v3.21.0 (2026-10-27)
 
 **«Скринька»: what skills learn about your context waits for your «так».** A skill that learned something about your context — a dashboard the product record lacks, a Jira key that moved, a product that closed — wrote it in silence or asked «зберегти?» at the end of a run. Now it proposes a delta, and the inbox keeps it: the urgent ones are asked at once in one question, the rest wait for one answer in the morning brief or `/grow-product-manager:context inbox`. A secret or a state or financial identifier never reaches the store. The first release of the programme «Петля контексту» (the configurator as a loop, the declared overlay, a core's own copy for MCP-only repositories, the vault's audit and graph follow).
