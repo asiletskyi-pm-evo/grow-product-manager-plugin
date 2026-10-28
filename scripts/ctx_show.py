@@ -253,6 +253,9 @@ def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, e
                         "ка" if len(o["held"]) == 1 else "ок", ", ".join(o["held"][:5])), "/context overlay"))
         else:
             out.append((OK, "оверлей %s: поправок діє %d" % (o["repo"], o["applied"]), None))
+        if not o.get("error") and o.get("edited"):
+            out.append((WARN, "оверлей %s не накладено: твої правки в %s" % (o["repo"], ", ".join(o["edited"][:5])),
+                        "ctx provider plan %s" % o["repo"]))
     for name in ("slots", "entities", "search", "bridges", "sources"):
         if isinstance(mem.get(name), str):
             out.append((ACT, "пам'ять %s не читається: %s" % (name, mem[name]), "ctx status"))

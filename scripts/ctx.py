@@ -1038,6 +1038,10 @@ def cmd_undo(a, c):
         for rel, why in notes_kept:
             print("не повернуто: %s — %s" % (rel, why))
         reverted, kept, rejected, rejected_failed = [], [], {}, {}
+        hist = os.path.join(c.store.root, "history")
+        if not existed and os.path.isdir(hist):         # since v3.23.0: the changelog is derived — no store, no notes of it
+            import shutil
+            shutil.rmtree(cs.check_target(hist))
         if existed:
             t = now()
             c.store.journal(dict({"ts": t, "op": "undo", "ids": [], "source": "undo", "reason": target, "snapshot": pre},
@@ -1329,8 +1333,8 @@ def _overlay_health(c):
     except Exception:  # noqa: BLE001 — health never fails over a registration
         return out
     for repo in repos:
-        if not os.path.isfile(ov.path_of(c.store.root, repo["id"])):
-            continue
+        if not ov.REPO_ID.match(str(repo.get("id"))) or not os.path.isfile(ov.path_of(c.store.root, repo["id"])):
+            continue                                    # an id no overlay file can have: none to report
         try:
             doc = ov.load(c.store.root, repo["id"])
             res = cb.reoverlay(c.store, c.copies, c.home, repo, now(), doc["ops"])
@@ -1341,8 +1345,10 @@ def _overlay_health(c):
             out.append({"repo": repo["id"], "error": cb.clip(e, cb.NOTE_CLIP)})
             continue
         results = [x for r in res["rows"] for x in r["results"]]
+        live = [x for r in res["rows"] if r["state"] in ("rewrite", "same") for x in r["results"]]
         out.append({"repo": repo["id"], "held": [x["id"] for x in results if x["state"] != "applied"],
-                    "applied": sum(1 for x in results if x["state"] == "applied")})
+                    "applied": sum(1 for x in live if x["state"] == "applied"),
+                    "edited": sorted({r["block"] for r in res["rows"] if r["state"] in ("edited", "behind")})})
     return out
 
 
@@ -2488,7 +2494,7 @@ def _overlay_repos(c, a):
     repos = crp.load_repos(c.text, c.home, skipped=skipped)
     for path, why in skipped:
         print("unreadable registration: %s (%s)" % (path, why))
-    return [r for r in repos if os.path.isfile(ov.path_of(c.store.root, r["id"]))]
+    return [r for r in repos if ov.REPO_ID.match(str(r.get("id"))) and os.path.isfile(ov.path_of(c.store.root, r["id"]))]
 
 
 def _overlay_doc(c, rid):
@@ -2517,6 +2523,11 @@ def cmd_overlay(a, c):
     lay it over the regions in one run. Every write: the lock, the guard, the edits waiting imported, one snapshot, one
     journal line (`op: overlay`), `ctx undo` takes it back."""
     c.need_store()
+    if a.action == "plan" and a.file and not a.repo:      # a draft names its repository
+        try:
+            a.repo = ov.parse(co._read(a.file))["repo"]
+        except ov.Unreadable as e:
+            raise Usage("чернетка %s: %s" % (a.file, e))
     if a.action in ("show", "plan"):
         repos = _overlay_repos(c, a)
         if not repos:
@@ -2547,6 +2558,9 @@ def cmd_overlay(a, c):
                     continue
             res = cb.reoverlay(c.store, c.copies, c.home, repo, now(), doc["ops"])
             print(cb.render_overlay(res, doc["ops"], show_diff=a.action == "plan"))
+            kinds = cn.scan("\n".join(_overlay_texts(doc)))
+            if kinds:
+                print("увага: %s — apply цього не запише" % cn.message(kinds))
             out.append({"repo": repo["id"], "ops": doc["ops"], "rows": [dict((k2, v) for k2, v in r.items() if k2 not in ("before", "after"))
                                                                        for r in res["rows"]], "code": res["code"]})
         data = {"command": "overlay", "action": a.action, "repos": out}
@@ -2619,6 +2633,7 @@ def cmd_overlay(a, c):
                         return 0, {"command": "overlay", "action": a.action, "repo": rid, "changed": False}
                     ops[at] = dict(ops[at], expects=a.expects)
                 doc = _checked_doc(dict(doc, ops=ops), rid)
+        cn.check(*_overlay_texts(doc))                  # a draft or a hand-edited file: no secret goes into the store
         res = cb.reoverlay(c.store, c.copies, c.home, repo, t, doc["ops"], doc=doc, apply=True, action=a.action, what=what)
     print(cb.render_overlay(res, doc["ops"], show_diff=True))
     if res["changed"]:
@@ -2632,11 +2647,22 @@ def cmd_overlay(a, c):
     return 0, out
 
 
+def _overlay_texts(doc):
+    """Every free text of an overlay document — what the never-store filter reads before it is written."""
+    out = []
+    for o in doc.get("ops") or ():
+        v = o.get("value")
+        out += [o.get("reason") or "", o["target"].get("path") or "", o.get("value_ref") or ""] + \
+               (list(v) if isinstance(v, list) else [v or ""])
+    return out
+
+
 def _with_op(text, op):
     """The canonical text of a document plus one operation in the file's own syntax (its id may be absent: parse makes it)."""
     q = lambda s: json.dumps(str(s), ensure_ascii=False)
     tgt = op["target"]
-    lines = [text.replace("ops: []", "ops:"), "  - target: {block: %s%s}" % (q(tgt["block"]), (", path: %s" % q(tgt["path"])) if tgt.get("path") else ""),
+    head = text[:-len("ops: []")] + "ops:" if text.endswith("ops: []") else text    # only the empty list of an empty file
+    lines = [head, "  - target: {block: %s%s}" % (q(tgt["block"]), (", path: %s" % q(tgt["path"])) if tgt.get("path") else ""),
              "    op: %s" % q(op["op"])]
     if op.get("id"):
         lines.append("    id: %s" % q(op["id"]))

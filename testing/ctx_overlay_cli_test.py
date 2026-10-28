@@ -221,5 +221,48 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = ctx(home, ctxp, "overlay", "show", "nope")
     check("a repository nobody registered: exit 3", rc == 3, out)
 
+# ------------------------------------------------------------------ review v3.23.0 tasks 3–4
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = setup(d)
+    draft = os.path.join(d, "draft.yaml")
+    open(draft, "w", encoding="utf-8").write(DRAFT.replace('reason: "Gamma is ours too"',
+                                                           'reason: "token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij12"'))
+    before = tree(store)
+    rc, out, res = ctx(home, ctxp, "overlay", "plan", "--file", draft)
+    check("plan --file with no REPO takes the draft's repository, and warns about a secret in it",
+          rc == 0 and res.get("repo") == "zorg-core" and any(l.startswith("увага:") and "ghp_" not in l for l in out.splitlines()), out)
+    rc, out, res = ctx(home, ctxp, "overlay", "apply", "zorg-core", "--file", draft, "--code", res.get("code") or "x")
+    check("apply --file of a draft with a secret: refused (exit 4), nothing written", rc == 4 and tree(store) == before, out)
+
+    open(draft, "w", encoding="utf-8").write(DRAFT)
+    code = ctx(home, ctxp, "overlay", "plan", "zorg-core", "--file", draft)[2]["code"]
+    ctx(home, ctxp, "overlay", "apply", "zorg-core", "--file", draft, "--code", code)
+    rec = [r for r in store.load() if "zorg-core:begin id=teams" in r["body"]][0]
+    with cs.guard_roots([d]):
+        store.write(dict(rec, body=rec["body"].replace("- Gamma (mine)", "- Gamma (mine)\n- my own")))
+    ctx(home, ctxp, "sync")
+    rc, out, res = ctx(home, ctxp, "overlay", "show", "zorg-core")
+    check("show: an operation on a region you edited says so, not «діє»", "gamma · teams · append · не накладено: твої правки" in out, out)
+    rc, out, res = ctx(home, ctxp, "health")
+    check("health: ⚠ the edited region, the operations counted only where they apply",
+          "оверлей zorg-core не накладено: твої правки в teams" in out and "поправок діє 1" in out, out)
+    n = len(journal(store))
+    rc, out, res = ctx(home, ctxp, "overlay", "answer", "zorg-core", "gamma", "expects", "--expects", "2")
+    j = journal(store)[-1]
+    check("the journal of an overlay write names no operation on a region it did not write",
+          len(journal(store)) == n + 1 and "teams" not in (j.get("overlay") or {}) and "teams" not in (j.get("overlay_held") or {}), j)
+    rc, out, res = ctx(home, ctxp, "undo")
+    check("undo of an answer puts the file back", rc == 0 and ov.load(store.root, "zorg-core")["ops"][1]["expects"] == 1, out)
+
+with tempfile.TemporaryDirectory() as d:                          # I3: an odd registration id breaks nothing
+    home, ctxp, store = setup(d)
+    reg = os.path.join(home, ".grow-pm", "providers", "zorg-core.yaml")
+    body = open(reg, encoding="utf-8").read()
+    open(reg, "w", encoding="utf-8").write(body.replace("id: zorg-core", "id: Zorg_Odd"))
+    rc, out, res = ctx(home, ctxp, "health")
+    check("health with a registration whose id no overlay file can have: exit 0, its lines", rc == 0 and "записів" in out, out[-400:])
+    rc, out, res = ctx(home, ctxp, "overlay", "show")
+    check("overlay show with it: no overlay, exit 0", rc == 0, out[-400:])
+
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

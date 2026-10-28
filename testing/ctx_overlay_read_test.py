@@ -120,6 +120,24 @@ with tempfile.TemporaryDirectory() as d:
         r = answer(store2, copies2, "product.key_metrics", mem)
         check("your text absent and the only block ignored: nothing is shown", r is None or r["shown"] == [], r)
 
+# --- review v3.23.0 tasks 3–4, I1: positions, not line texts
+TWO = ("#### Growth metrics\n- **North star:** weekly active shoppers\n",
+       "#### Key Metrics\n| a | b |\n|---|---|\n| CR | 3% |\n\n#### OKR\n| a | b |\n|---|---|\n| Revenue | +38% |\n")
+with tempfile.TemporaryDirectory() as d:
+    home, text, copies, store = migrated(d, [MINE_KM, TWO])
+    m1 = sl.empty_memory()
+    sl.add_binding(m1, "zorg-growth", "growth-metrics", "Key Metrics", "product.key_metrics", None)
+    put(home, text, store, "zorg-growth", [{"id": "okr", "target": {"block": "growth-metrics", "path": "#OKR"}, "op": "ignore"}])
+    r = answer(store, copies, "product.key_metrics", m1)
+    check("an ignore of a sibling subsection that shares a table separator leaves this one a candidate",
+          [c["source"] for c in r["also"]] == ["zorg-growth"], r)
+    m2 = sl.empty_memory()
+    sl.add_binding(m2, "zorg-growth", "growth-metrics", None, "product.key_metrics", None)
+    r = answer(store, copies, "product.key_metrics", m2)
+    t = r["also"][0]["text"] if r["also"] else ""
+    check("a candidate bound to the whole block keeps its other parts; the ignored subsection is cut out",
+          "| CR | 3% |" in t and "Revenue" not in t and "#### OKR" not in t, t)
+
 # ------------------------------------------------------------------ alias
 with tempfile.TemporaryDirectory() as d:
     home, text, copies, store = migrated(d, [])

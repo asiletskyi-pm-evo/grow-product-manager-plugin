@@ -149,19 +149,46 @@ class _Repos:
         return self._overlays[ns]
 
     def ignored_by(self, ns, bid, region, text):
-        """The words `ctx explain` gives a block candidate an applied `ignore` of the overlay takes out of every slot —
-        its text holds a line the ignore finds, or the ignore names the whole block — else None."""
+        """What the applied `ignore` operations of the overlay do to a block candidate: None (nothing), ("drop", why) — the
+        candidate lies inside what an ignore finds, or holds a line a `match:` ignore finds, or the ignore names the whole
+        block — or ("cut", the text without the ignored lines, why) when an ignored subsection or field is only a part of
+        it. Positions, not line texts: the candidate is located in the region's inside, an ignore by its path there; and
+        whether an ignore applies (`expects`) is decided on the core's text, the base, as `ctx overlay show` decides it."""
         ops = [o for o in ov.for_block(self.overlay_ops(ns), bid) if o["op"] == "ignore"]
         if not ops or region is None:
             return None
         if self._refs is None:
             self._refs = ov.refs_in(self.records or [])
-        lines = {ln.strip() for ln in (text or "").replace("\r\n", "\n").split("\n") if ln.strip()}
+        inner = ov._inner(region)[1]
+        cand = (text or "").replace("\r\n", "\n").rstrip("\n").split("\n")
+        n = len(cand)
+        at = next((k for k in range(len(inner) - n + 1) if [x.rstrip() for x in inner[k:k + n]] == [x.rstrip() for x in cand]), None)
+        base = self.base(ns, bid) or region
+        cut, why = set(), None
         for o in ops:
-            got = ov.ignored(region, [o], self._refs)
-            if got == ov.ALL or any(g.strip() in lines for g in got):
-                return "оверлей: ignore %s%s" % (o["id"], (" — " + o["reason"]) if o.get("reason") else "")
-        return None
+            if ov.overlay(base, [o], self._refs)[1][0]["state"] != "applied":
+                continue
+            words = "оверлей: ignore %s%s" % (o["id"], (" — " + o["reason"]) if o.get("reason") else "")
+            kind = ov.parse_path(o["target"].get("path", ""))[0]
+            if kind == "all":
+                return "drop", words
+            if at is None:
+                continue                    # the candidate is not a slice of the region: nothing to say about it
+            for s, e in ov.locate(inner, o["target"].get("path", "")):
+                if kind == "match":
+                    if at <= s < at + n:
+                        return "drop", words
+                elif s <= at and at + n <= e:
+                    return "drop", words
+                elif s < at + n and at < e:
+                    cut.update(range(max(s, at), min(e, at + n)))
+                    why = why or words
+        if not cut:
+            return None
+        rest = [ln for k, ln in enumerate(cand) if at + k not in cut]
+        if not any(ln.strip() for ln in rest):
+            return "drop", why
+        return "cut", "\n".join(rest) + ("\n" if (text or "").endswith("\n") else ""), why
 
     def block(self, slot, rec, ns, bid, v, region, text, how, placed, place, sub=None):
         """A block's candidate: `region` is the whole region text (markers included) when it is sound, else None; `sub` the
@@ -411,9 +438,11 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
                 out.append(hit)
     for c in out:                           # since v3.23.0: what your overlay ignores is no candidate (resolve drops it)
         if c.get("block") and c.get("ns"):
-            why = regs.ignored_by(c["ns"], c["block"], region_of(c["ns"], c["block"], c["record"]), c["text"])
-            if why:
-                c["overlay_ignored"] = why
+            got = regs.ignored_by(c["ns"], c["block"], region_of(c["ns"], c["block"], c["record"]), c["text"])
+            if got and got[0] == "drop":
+                c["overlay_ignored"] = got[1]
+            elif got:                       # a part of it is ignored: the candidate keeps the rest
+                c["text"], c["overlay_cut"] = got[1], got[2]
     return out
 
 

@@ -358,6 +358,30 @@ with tempfile.TemporaryDirectory() as d:                          # I2: you take
     j = journal(store)[-1]
     check("the journal names no overlay applied to the block kept as yours", "teams" not in (j.get("overlay") or {}), j)
 
+with tempfile.TemporaryDirectory() as d:                          # M3: rm after a hand revert forgets the overlay
+    home, text, copies, store, ctxp, f = overlaid_store(d)
+    edit_teams(store, copies, home, text, "- Alpha, Beta\n- Gamma (overlay)", "- Alpha, Beta")
+    doc = ov.load(store.root, "zorg-core")
+    doc["ops"] = [o for o in doc["ops"] if o["id"] != "gamma"]
+    with guard(home, text):
+        res = cb.reoverlay(store, copies, home, REPO, NOW, doc["ops"], doc=doc, apply=True, action="rm", what="gamma")
+    check("rm of the operation of a reverted region: the state forgets what the overlay wrote",
+          "overlay_sha" not in cb.load_state(store, "zorg-core")["blocks"]["teams"], cb.load_state(store, "zorg-core")["blocks"]["teams"])
+    T5 = region("teams", "0.5", "### Teams map\n- Alpha, Beta, Delta")
+    check("…and a core release is '~' again, no question", [r["sign"] for r in plan_of(store, copies, published(store, teams=T5))["rows"]
+                                                           if r["block"] == "teams"] == ["~"], "")
+
+with tempfile.TemporaryDirectory() as d:                          # M5: no alias → the records are not loaded
+    home, text, copies, store, ctxp = migrated(d)
+    put_overlay(home, text, store, OPS)
+    real, calls = cs.Store.load, []
+    cs.Store.load = lambda self: calls.append(1) or real(self)
+    try:
+        got = ov.store_aliases(store.root, [{"id": "zorg-core", "namespace": NS}])
+    finally:
+        cs.Store.load = real
+    check("store_aliases with no alias operation does not load the records", got == [] and calls == [], (got, calls))
+
 with tempfile.TemporaryDirectory() as d:                          # a new block of the core gets the overlay; − has no note
     home, text, copies, store, ctxp, f = overlaid_store(d)
     put_overlay(home, text, store, OPS + [op("okr", "okr", "", "append", value=["- mine"])])

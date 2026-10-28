@@ -604,22 +604,25 @@ def _regions_of(body, ns):
 def store_aliases(store_root, repos):
     """[(name, [names])] of every applied `alias` operation of every repository's overlay, on the regions the store's
     records hold. Reads only and never raises: a store, a record or an overlay that cannot be read gives nothing."""
-    repos = [r for r in repos or () if os.path.isfile(os.path.join(store_root, "overlays", "%s.yaml" % r.get("id")))]
-    if not repos:                                       # no overlay: nothing to read, the records are not loaded
+    wanted = []
+    for repo in repos or ():
+        if not REPO_ID.match(str(repo.get("id"))) or not os.path.isfile(os.path.join(store_root, "overlays", "%s.yaml" % repo["id"])):
+            continue
+        try:
+            doc = load(store_root, repo["id"])
+        except Unreadable:
+            continue
+        ops = [o for o in (doc or {}).get("ops") or () if o["op"] == "alias"]
+        if ops:
+            wanted.append((repo, ops))
+    if not wanted:                                      # no alias anywhere: the records are not loaded
         return []
     try:
         records = cs.Store(store_root).load()
     except Exception:  # noqa: BLE001 — a reader of names must not fail over the store
         return []
     refs, out = refs_in(records), []
-    for repo in repos or ():
-        try:
-            doc = load(store_root, repo["id"])
-        except (Unreadable, KeyError):
-            continue
-        ops = [o for o in (doc or {}).get("ops") or () if o["op"] == "alias"]
-        if not ops:
-            continue
+    for repo, ops in wanted:
         for rec in records:
             for region in _regions_of(rec.get("body"), repo.get("namespace") or repo["id"]):
                 out.extend(aliases(region, ops, refs))
