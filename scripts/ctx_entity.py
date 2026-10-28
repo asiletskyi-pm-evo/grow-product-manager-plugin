@@ -39,6 +39,7 @@ import time
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_overlay as ov  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_index as ci  # noqa: E402
 import ctx_search as cs_  # noqa: E402
@@ -676,6 +677,20 @@ def known_prefixes(cards):
     return out
 
 
+def with_overlay_aliases(cards, pairs):
+    """`cards` with the names your overlay's `alias` operations add (since v3.23.0, ctx_overlay.store_aliases): a card
+    whose label, file name, slug or alias answers a pair's name (pb.norm_team) gets its names as aliases. New dicts; the
+    cards given are not changed."""
+    out = []
+    for c in cards:
+        norms = _norms(c)
+        extra = [n for name, names in pairs or () if pb.norm_team(name) in norms for n in names]
+        if extra:
+            c = dict(c, aliases=list(dict.fromkeys(list(c.get("aliases") or []) + extra)))
+        out.append(c)
+    return out
+
+
 def load(sctx, idx, mem, hints=True):
     """(Registry, notes) of a search context and an Index already refreshed: the own index's cards, the cards of the
     local indexes it does not hold, your answers `mem`; `notes` — the lines to show (an index that could not be read, a
@@ -703,7 +718,10 @@ def load(sctx, idx, mem, hints=True):
     vaults = sctx.get("vaults") or []
     prefixes = [ci.rel_path(r["path"], vaults, r) for r in sctx.get("roots") or [] if r.get("source") == "own"]
     resolver = Resolver(metas, prefixes)
-    reg = build([_card(d, "index") for d in own] + local, mem, resolver)
+    cards = [_card(d, "index") for d in own] + local
+    if sctx.get("store_root"):                      # since v3.23.0: the names your overlay adds to a core's card
+        cards = with_overlay_aliases(cards, ov.store_aliases(sctx["store_root"], sctx.get("repos") or []))
+    reg = build(cards, mem, resolver)
     reg.unread = unread
     if hints:
         _hint_pairs(sctx, reg, mem, notes)

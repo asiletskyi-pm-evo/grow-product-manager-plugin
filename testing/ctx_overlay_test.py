@@ -237,6 +237,9 @@ check("aliases: the names an applied alias adds, with the value its path finds",
       ov.aliases(R, [op(op="alias", path="field:Team", value=["Alpha Team (A)"])], has) == [("Alpha (A)", ["Alpha Team (A)"])],
       ov.aliases(R, [op(op="alias", path="field:Team", value=["Alpha Team (A)"])], has))
 
+check("aliases: a held alias (found 2, expects 1) adds nothing",
+      ov.aliases(R, [op(op="alias", path="#Members", value=["X"])], has) == [], "")
+
 # ------------------------------------------------------------------ load / save
 with tempfile.TemporaryDirectory() as d:
     check("load: no file → None", ov.load(d, "zorg-core") is None, "")

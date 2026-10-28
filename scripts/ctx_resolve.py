@@ -49,6 +49,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_blocks as cb  # noqa: E402
+import ctx_overlay as ov  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_repos as crp  # noqa: E402
@@ -80,6 +81,7 @@ class _Repos:
             self.by_ns.setdefault(r.get("namespace") or r["id"], r)
         self.records = records
         self._states, self._bases, self._regions = {}, {}, {}
+        self._overlays, self._refs = {}, None
 
     def reg(self, ns):
         return self.by_ns.get(ns)
@@ -131,6 +133,35 @@ class _Repos:
         if ns not in self._regions:
             self._regions[ns] = cb.find_regions(records, ns)[0]
         return self._regions[ns]
+
+    def overlay_ops(self, ns):
+        """The operations of the overlay of the repository of namespace `ns` (since v3.23.0), read once; [] when it has
+        none or it cannot be read (an unreadable overlay ignores nothing: `ctx provider plan` and `ctx health` say why)."""
+        reg = self.reg(ns)
+        if reg is None:
+            return []
+        if ns not in self._overlays:
+            try:
+                doc = ov.load(self.store.root, reg["id"])
+            except ov.Unreadable:
+                doc = None
+            self._overlays[ns] = doc["ops"] if doc else []
+        return self._overlays[ns]
+
+    def ignored_by(self, ns, bid, region, text):
+        """The words `ctx explain` gives a block candidate an applied `ignore` of the overlay takes out of every slot —
+        its text holds a line the ignore finds, or the ignore names the whole block — else None."""
+        ops = [o for o in ov.for_block(self.overlay_ops(ns), bid) if o["op"] == "ignore"]
+        if not ops or region is None:
+            return None
+        if self._refs is None:
+            self._refs = ov.refs_in(self.records or [])
+        lines = {ln.strip() for ln in (text or "").replace("\r\n", "\n").split("\n") if ln.strip()}
+        for o in ops:
+            got = ov.ignored(region, [o], self._refs)
+            if got == ov.ALL or any(g.strip() in lines for g in got):
+                return "оверлей: ignore %s%s" % (o["id"], (" — " + o["reason"]) if o.get("reason") else "")
+        return None
 
     def block(self, slot, rec, ns, bid, v, region, text, how, placed, place, sub=None):
         """A block's candidate: `region` is the whole region text (markers included) when it is sound, else None; `sub` the
@@ -378,6 +409,11 @@ def candidates(slot, cat, records, prod, teams, repos, mem, store, bindings, fie
                     break
             if hit:
                 out.append(hit)
+    for c in out:                           # since v3.23.0: what your overlay ignores is no candidate (resolve drops it)
+        if c.get("block") and c.get("ns"):
+            why = regs.ignored_by(c["ns"], c["block"], region_of(c["ns"], c["block"], c["record"]), c["text"])
+            if why:
+                c["overlay_ignored"] = why
     return out
 
 
@@ -479,7 +515,7 @@ def resolve(slot, cat, cands, mem):
     `repo:<id>` (that repository's candidate — all of them for a list) · a list (every candidate) · yours · the
     repositories: the highest rank; several at it with different text → a divergence, unless a decision of yours has the
     same hash for every one of them (ctx slot decide) — then its winner. Pure: nothing it is given is changed."""
-    cands = list(cands or ())
+    cands = [c for c in cands or () if not c.get("overlay_ignored")]     # your overlay ignores it: no candidate
     unread = [c for c in cands if c.get("placed") and unread_registration(c)]
     out = _resolve_ranked(slot, cat, [c for c in cands if not unread_registration(c)], mem)
     if unread:
@@ -948,6 +984,8 @@ def _rows(res, cands, unplaced, team):
                 rows.append(_row(c, "won" if lone else "shown"))
         elif c is res["note"]:
             rows.append(_row(c, "shown", NOTE_LINE))
+        elif c.get("overlay_ignored"):
+            rows.append(_row(c, "lost", c["overlay_ignored"]))
         else:
             rows.append(_row(c, "lost", "програв: " + lost(c)))
     for c in unplaced:
