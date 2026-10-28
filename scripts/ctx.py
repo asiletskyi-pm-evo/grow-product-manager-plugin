@@ -2696,7 +2696,7 @@ def cmd_propose(a, c):
     except ValueError as e:
         raise Usage(str(e))
     if a.skill in ci_.CTX_OWN:                         # since v3.22.0: ctx's own proposers come only from its commands
-        raise Usage("%s — джерело самого ctx (bootstrap, validate --recheck, consolidate), не скіл" % a.skill)
+        raise Usage("%s — джерело самого ctx (bootstrap, validate --recheck, consolidate, provider apply), не скіл" % a.skill)
     if a.skill not in (cr.load_manifest().get("skills") or {}):     # a name the plugin does not know is no skill's
         raise Usage("--skill names one of the plugin's skills (references/context-manifest.yaml), not %s"
                     % ("that" if cn.scan(a.skill) else a.skill))

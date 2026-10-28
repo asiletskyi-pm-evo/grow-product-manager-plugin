@@ -848,6 +848,81 @@ def _mark_overlay(entry, written, source):
         entry.pop("overlay_of", None)
 
 
+# ------------------------------------------------------------------ the core's changes into your sections (v3.23.0)
+SUGGEST_SOURCE = "ctx-provider"                 # the inbox's source of these proposals: ctx's own, not a skill
+SUGGEST_MIN_LINE, SUGGEST_MIN_VALUE = 12, 3
+
+
+def _fields(lines):
+    """{label without regard to case: (label, value)} of the field lines `- **Label:** value` (the first of a label)."""
+    out = {}
+    for ln in lines:
+        m = ov.FIELD.match(ln.rstrip("\r"))
+        if m:
+            out.setdefault(" ".join(m.group(2).split()).casefold(), (m.group(2), m.group(3).strip()))
+    return out
+
+
+def _unbullet(line):
+    """A line without its list marker (`- `, `* `, `1. `): the core's prose line and yours as a bullet are the same."""
+    return re.sub(r"^(?:[-*+]|\d+[.)])\s+", "", line.strip())
+
+
+def core_suggestions(old, new, records, ops, rid, from_v, to_v, today):
+    """The REPLACE deltas (context-delta/1, source `repo:<rid>`) that bring your own text in step with what the core
+    changed in a block between `old` (the base you had) and `new` (its text now) — both whole regions. A field the core
+    changed (`- **Label:** a` → `- **Label:** b`) is proposed for every line of yours with that label and value `a`; a
+    whole line the core changed (12+ characters, no field, no heading) for every line of yours that reads it. Your text
+    is each record's body outside every managed region (`records`: dicts with id and body); a line an operation of your
+    overlay (`ops`) finds in `old` is never proposed, nor a value under 3 characters. Pure."""
+    if old is None or new is None:
+        return []
+    bid = block_id(new)
+    a, b = ov._inner(old)[1], ov._inner(new)[1]
+    touched = set()
+    for o in ov.for_block(ops, bid):
+        for x0, x1 in ov.locate(a, o["target"].get("path", "")):
+            touched.update(ln.strip() for ln in a[x0:x1])
+    fa, fb = _fields(a), _fields(b)
+    fields = {k: (fa[k][1], fb[k][1]) for k in fa if k in fb and fa[k][1] != fb[k][1] and len(fa[k][1]) >= SUGGEST_MIN_VALUE
+              and not any(ov.FIELD.match(t) and " ".join(ov.FIELD.match(t).group(2).split()).casefold() == k for t in touched)}
+    lines = []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag != "replace" or i2 - i1 != j2 - j1:
+            continue
+        for x, y in zip(a[i1:i2], b[j1:j2]):
+            xs, ys = x.strip(), y.strip()
+            if (len(xs) >= SUGGEST_MIN_LINE and xs not in touched and not ov.FIELD.match(x) and not ov.HEADING.match(xs)
+                    and "<!--" not in xs and ys):
+                lines.append((_unbullet(xs), _unbullet(ys)))
+    if not fields and not lines:
+        return []
+    out, seen = [], set()
+    ref = "блок %s v%s→v%s" % (bid, from_v or "?", to_v or "?")
+    for rec in records:
+        own = cc.strip_managed_regions(rec.get("body") or "").replace("\r\n", "\n").split("\n")
+        for ln in own:
+            st = ln.strip()
+            m = ov.FIELD.match(ln)
+            hit = None
+            if m:
+                k = " ".join(m.group(2).split()).casefold()
+                if k in fields and m.group(3).strip() == fields[k][0]:
+                    hit = (st, "%s %s" % (m.group(1).strip(), fields[k][1]), "%s: %s → %s" % (m.group(2), fields[k][0], fields[k][1]))
+            if hit is None and st:
+                bullet = st[:len(st) - len(_unbullet(st))]
+                pair = next((y for x, y in lines if x == _unbullet(st)), None)
+                if pair is not None:
+                    hit = (st, bullet + pair, "%s → %s" % (clip(st, HEADER_CLIP), clip(bullet + pair, HEADER_CLIP)))
+            if hit is None or (rec["id"], hit[0]) in seen:
+                continue
+            seen.add((rec["id"], hit[0]))
+            out.append({"op": "REPLACE", "record": rec["id"], "text": hit[0], "value": hit[1],
+                        "reason": clip("ядро %s v%s→v%s змінило: %s (блок %s)" % (rid, from_v or "?", to_v or "?", hit[2], bid), NOTE_CLIP),
+                        "source": {"kind": "repo:%s" % rid, "ref": ref, "at": today}})
+    return out
+
+
 def _overlay_journal(p):
     """({block: [applied ids]}, {block: [held ids]}) of a plan — for the journal line, empty when there is no overlay."""
     done, held = {}, {}
@@ -859,6 +934,35 @@ def _overlay_journal(p):
         if h:
             held[bid] = h
     return done, held
+
+
+def _suggest(store, rid, old, taken, theirs, ops, now, to_v):
+    """The core's changes into your sections (`core_suggestions`) for every block whose new text went into your records
+    and that had a base, as inbox deltas from `ctx-provider` — after the snapshot, so `ctx undo` of the pass takes them
+    back. An inbox that cannot be read gets nothing (the pass is not stopped). Returns the sigs of the new entries."""
+    import ctx_inbox as ci_                             # here: ctx_inbox reads records, it never needs the blocks
+    records, deltas = None, []
+    for bid, sha in taken.items():
+        entry = old["blocks"].get(bid) or {}
+        if sha == REMOVED or not entry.get("base_sha") or theirs.get(bid) is None:
+            continue
+        base = get_base(store, rid, entry["base_sha"])
+        if base is None or norm(base) == norm(theirs[bid]):
+            continue
+        records = store.load() if records is None else records
+        deltas += core_suggestions(base, theirs[bid], records, ops, rid, entry.get("v"), _marker_version(theirs[bid]), now[:10])
+    if not deltas:
+        return []
+    try:
+        box = ci_.load(store)
+    except cs.StoreError:
+        return []
+    results = ci_.propose(box, deltas, SUGGEST_SOURCE, records, now[:10])
+    new = {r["n"] for r in results if r["status"] == ci_.ADDED}
+    if not new:
+        return []
+    ci_.save(store, box, now[:10])
+    return [e["sig"] for e in box["entries"] if e["n"] in new]
 
 
 def overlay_lines(p):
@@ -1342,11 +1446,15 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
             state["blocks"][bid]["host"] = made[0]
         res["written"].extend(made)
     save_state(store, rid, state)
+    proposed = _suggest(store, rid, old, taken, theirs, ops, now, fetched.get("version"))
     prune_bases(store, rid, state)
     line = {"ts": now, "op": op, "source": source, "from_v": old.get("version") or base_version(old),
             "to_v": fetched.get("version"), "ids": res["written"], "decisions": decisions, "pending": pending,
             "taken": taken, "snapshot": snap}
     kept = {r["block"] for r in p["rows"] if r["sign"] == "=" and not r.get("reverted")} - set(held)
+    if proposed:
+        line["proposed"] = proposed
+    res["proposed"] = proposed
     done, waiting = _overlay_journal({"overlay": {b: x for b, x in (p.get("overlay") or {}).items()
                                                   if (b in overlaid or b in kept) and b in applied}})
     if done:

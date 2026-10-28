@@ -43,7 +43,7 @@ FILE = "inbox.json"
 WHERE = ".state/" + FILE
 OPS = ("ADD", "UPDATE", "INVALIDATE", "NOOP", "REPLACE")
 # Since v3.22.0: proposers that are ctx itself, not skills — only their own commands propose under these names.
-CTX_OWN = ("ctx-bootstrap", "ctx-recheck", "ctx-consolidate")
+CTX_OWN = ("ctx-bootstrap", "ctx-recheck", "ctx-consolidate", "ctx-provider")   # ctx-provider since v3.23.0
 _KEYS = ("schema", "next", "entries", "rejected")
 _ENTRY_KEYS = ("n", "sig", "delta", "skills", "at", "record_sha", "was", "urgent")
 _DELTA_KEYS = ("op", "record", "field", "value", "text", "under", "reason", "evidence", "source")
