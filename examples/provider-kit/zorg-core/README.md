@@ -10,7 +10,7 @@ The full contract is `references/context-provider-protocol.md` §9.
 |---|---|
 | `Core/_System/provider-manifest.yaml` | Who the core is: `id`, `namespace` of its blocks, where the role model, the blocks, the team cards and the people cards are, what is the owner's personal layer (`personal_overlay`), which card fields stay private. |
 | `Core/_System/access-bundles.json` | The role model: `emails` (e-mail → team), `teams` (title, files, modules, missions, metrics), `roles` (role → layers), `layer_prefixes`, `shared`, `always`, `people_role` (person card → role title). The plugin resolves a colleague's e-mail → team → role from it. |
-| `Core/_System/context-blocks.md` | The blocks a colleague's context receives, each between `<!-- zorg-core:begin id=… v=… -->` and its end marker. `slot=product.key_metrics` tells the plugin which slot a block answers; `policy=rule` makes a block a rule — annotated by the colleague, never overridden. |
+| `Core/_System/context-blocks.md` | The blocks a colleague's context receives, each between `<!-- zorg-core:begin id=… v=… -->` and its end marker. `slot=product.key_metrics` tells the plugin which slot a block answers; `policy=rule` makes a block a rule — annotated by the colleague (an overlay may `append` to it or `alias` it), never overridden (its `replace`, `remove` and `ignore` are held). |
 | `Core/Teams/team-<key>.md` | One card per team of the role model (`title`, `aliases`, `head`, `jira`). The plugin builds the colleague's team block from it. |
 | `Core/People/<name>.md` | Registry cards: `name`, `email`, `team`, `role`. The file name is the e-mail's part before `@` with `.` → `-` (`pat.moss@…` → `pat-moss.md`). |
 | `Core/Playbook/` | Rules for the agent, read by every colleague. |

@@ -58,6 +58,8 @@ BEGIN = re.compile(r"<!--\s*[^\s:>]+:begin\s+id=([A-Za-z0-9_.-]+)")      # any n
 FENCE = re.compile(r"^\s*(```|~~~)")
 MARKER = re.compile(r"<!--|-->")
 ALL = "ALL"                                             # `ignored`: the whole block
+RULE = re.compile(r":begin\b[^>]*\bpolicy=rule\b")
+RULE_HELD = ("replace", "remove", "ignore")            # what a core rule never takes from an overlay
 
 
 class Unreadable(ValueError):
@@ -462,6 +464,7 @@ def _evaluate(region, ops, ref_exists):
     """(the lines, [(op, spans, result)]) — what each operation of this block finds and whether it may apply."""
     head, lines, tail, crlf = _inner(region)
     bid = block_of(region)
+    rule = bool(RULE.search(head))                      # a core rule is annotated, never overridden (§5f)
     out = []
     for op in ops:
         if op["target"]["block"] != bid:
@@ -469,7 +472,9 @@ def _evaluate(region, ops, ref_exists):
         spans = locate(lines, op["target"].get("path", ""))
         res = {"id": op["id"], "op": op["op"], "block": bid, "found": len(spans), "expects": op["expects"],
                "state": "applied", "why": ""}
-        if len(spans) != op["expects"]:
+        if rule and op["op"] in RULE_HELD:
+            res["state"], res["why"] = "held", "правило ядра — його лише доповнюють (append) чи називають (alias), не змінюють"
+        elif len(spans) != op["expects"]:
             res["state"], res["why"] = "held", "знайдено %d, очікувалось %d" % (len(spans), op["expects"])
         elif op.get("value_ref") and not ref_exists(op["value_ref"]):
             res["state"], res["why"] = "held", "value_ref %s — такої підсекції у твоїх записах немає" % op["value_ref"]
@@ -652,7 +657,21 @@ def load(store_root, repo_id):
         raise Unreadable("%s: %s" % (p, e))
     if doc["repo"] != repo_id:
         raise Unreadable("%s: holds the operations of %s, not of %s" % (p, doc["repo"], repo_id))
+    import ctx_never as cn                              # a file edited by hand: no secret is laid into the records
+    kinds = cn.scan("\n".join(texts_of(doc)))
+    if kinds:
+        raise Unreadable("%s: %s — прибери це з файлу" % (p, cn.message(kinds)))
     return doc
+
+
+def texts_of(doc):
+    """Every free text of a document — what the never-store filter reads."""
+    out = []
+    for o in doc.get("ops") or ():
+        v = o.get("value")
+        out += [o.get("reason") or "", o["target"].get("path") or "", o.get("value_ref") or ""] + \
+               (list(v) if isinstance(v, list) else [v or ""])
+    return out
 
 
 def save(store_root, repo_id, doc, replace_unreadable=False):

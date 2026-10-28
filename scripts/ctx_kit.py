@@ -26,16 +26,19 @@ MODEL_KEYS = ("version", "emails", "teams", "roles")
 CARD_FIELDS = ("name", "email", "team")
 
 
+def _read(path):
+    import ctx_store as cs                              # within the time budget: an evicted file never hangs the check
+    return cs.read_text(path)
+
+
 def _json(path):
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    return json.loads(_read(path))
 
 
 def _front(path):
     try:
-        with open(path, encoding="utf-8") as f:
-            front, _ = pb.split_fm(f.read())
-    except (OSError, UnicodeDecodeError):
+        front, _ = pb.split_fm(_read(path))
+    except (OSError, UnicodeDecodeError, ValueError):
         return None
     return front
 
@@ -97,9 +100,8 @@ def check(folder, warnings=None):
     blocks = os.path.join(folder, m.s("blocks_file")) if m.s("blocks_file") else None
     if blocks:
         try:
-            with open(blocks, encoding="utf-8") as f:
-                text = f.read()
-        except (OSError, UnicodeDecodeError) as e:
+            text = _read(blocks)
+        except (OSError, UnicodeDecodeError, ValueError) as e:
             out.append("%s: не читається (%s)" % (m.s("blocks_file"), e))
             text = None
         if text is not None:
@@ -174,14 +176,17 @@ def registration(folder, m, model, ident, today):
              "namespace: %s" % (m.s("namespace") or m.s("id")), "blocks_file: %s" % _q(m.s("blocks_file")), "products: []"]
     ov = m.get("personal_overlay") or []
     lines += (["writable:"] + ["  - %s" % _q(g) for g in ov]) if ov else ["writable: []"]
-    lines += ["skip_blocks: []", "team: %s" % ident["team"], "role: %s" % ident["role"], "jira_write: own", "sync: off",
+    lines += ["skip_blocks: []", "team: %s" % ident["team"], "role: %s" % ident["role"], "jira_write: ask", "sync: off",
               "status: active", "synced_at: %s" % today, "source_version: %s" % _q("core %s" % (model.get("version") or "?"))]
     return "\n".join(lines) + "\n"
 
 
 def registrations_dir(store_root, context_text, home):
-    """Where `ctx repo add` puts a registration: `{vault}/{plugin_folder}/_System/providers/` — beside the store — when a
-    vault holds the store, else `~/.grow-pm/providers/` (context-provider-protocol.md §3b)."""
-    if cc.vault_entries(context_text):
-        return os.path.join(os.path.dirname(store_root), "providers")
-    return os.path.join(home, ".grow-pm", "providers")
+    """Where `ctx repo add` puts a registration — where `ctx repo list` reads it (context-provider-protocol.md §3b):
+    `{storage_root}/_System/providers/` when the storage root is a vault (its sync mode is not `off`), else
+    `~/.grow-pm/providers/`."""
+    root = cc.storage_root(context_text, home)
+    grow = os.path.join(home, ".grow-pm")
+    if os.path.normpath(root) == os.path.normpath(grow):
+        return os.path.join(grow, "providers")
+    return os.path.join(root, "_System", "providers")

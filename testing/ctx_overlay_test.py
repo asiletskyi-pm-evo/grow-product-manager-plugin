@@ -264,6 +264,14 @@ E = region("team", "A\n\n- **X:** 1\n- **Y:** 2")
 out, res = ov.overlay(E, [op(op="remove", path="field:X", id="x"), op(op="remove", path="field:Y", id="y")], has)
 check("two removals that meet at the end leave no trailing blank line", out == region("team", "A"), repr(out))
 
+# --- final review I4: a core rule is annotated, never overridden
+RR = region("team", TEAM).replace("v=0.4 -->", "v=0.4 policy=rule -->")
+out, res = ov.overlay(RR, [op(op="remove", path="field:Jira", id="r"), op(op="append", value="My note.", id="a"),
+                           op(op="ignore", path='match:"+38%"', id="i")], has)
+check("on a core rule (policy=rule): replace, remove and ignore are held; append (a note) applies",
+      [r["state"] for r in res] == ["held", "applied", "held"] and "- **Jira:** PROJ" in out and "My note." in out
+      and "правило ядра" in res[0]["why"], res)
+
 # ------------------------------------------------------------------ load / save
 with tempfile.TemporaryDirectory() as d:
     check("load: no file → None", ov.load(d, "zorg-core") is None, "")
@@ -289,6 +297,10 @@ with tempfile.TemporaryDirectory() as d:
         why = str(e)
     check("save never rewrites a file that cannot be read", why is not None and open(p, encoding="utf-8").read() == before, why)
     check("path_of refuses a repository id that is not kebab-case", raises(ov.path_of, d, "../x") is not None, "")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(GOOD.replace('reason: "у ядрі заглушки без ролей"', 'reason: "token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij12"'))
+    why = raises(ov.load, d, "zorg-core")
+    check("load: a file with a secret (edited by hand) cannot be read — nothing of it is laid", why is not None and "ghp_" not in why, why)
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

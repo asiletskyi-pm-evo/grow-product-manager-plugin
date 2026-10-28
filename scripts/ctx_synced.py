@@ -617,7 +617,9 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None, 
                                                            _cell(verdicts[r["block"]][1]), _code(record) if record else "—"))
             blocks.append(table)
         else:
-            blocks.append(["Тексти не змінились: пройшло лише оновлення бази порівняння."])
+            relaid = [r["block"] for r in plan["rows"] if r.get("reoverlay")]
+            blocks.append(["Тексти ядра не змінились; твій оверлей накладено знову на: %s." % ", ".join(_code(b) for b in relaid)]
+                          if relaid else ["Тексти не змінились: пройшло лише оновлення бази порівняння."])
         for r in rows:
             kind = verdicts[r["block"]][2]
             if r["sign"] in QUESTIONS and kind not in ("rejected", "held", "lagging"):

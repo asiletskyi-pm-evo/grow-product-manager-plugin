@@ -4,7 +4,7 @@ schema: context-overlay/1
 repo: zorg-core
 ops:
   - id: scope-lite
-    target: {block: scope}
+    target: {block: scope, path: 'match:"Zorg App: the marketplace"'}
     op: append
     value: "Zorg Lite too (my team serves both)."
     expects: 1

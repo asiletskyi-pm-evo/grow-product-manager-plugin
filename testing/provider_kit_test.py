@@ -108,6 +108,7 @@ with tempfile.TemporaryDirectory() as d:
     check("--apply: the registration is written and every block added, one snapshot",
           rc == 0 and os.path.isfile(reg) and sorted(res2.get("blocks") or []) == sorted(res["blocks"]) and res2.get("snapshot"), out)
     regions = cb.find_regions(store.load(), "zorg-core")[0]
+    check("the registration asks about Jira writes (jira_write: ask), it grants nothing", "jira_write: ask" in open(reg, encoding="utf-8").read(), "")
     check("…the blocks are in the records, the team block built for alpha", {"scope", "key-metrics", "metric-rules", "teams", "team"}
           <= set(regions) and "Pat Moss" in regions["team"]["text"], sorted(regions))
     rc, out, res = ctx(home, ctxp, "read", "--skill", "product-analysis")
@@ -137,6 +138,22 @@ with tempfile.TemporaryDirectory() as d:
     check("an e-mail the role model does not know: exit 3, the teams named", rc == 3 and "alpha" in out and "beta" in out, out)
     rc, out, res = ctx(home, ctxp, "repo", "add", BAD, "--email", "pat.moss@zorg.example")
     check("a kit with faults: exit 3, nothing written", rc == 3 and not os.path.exists(os.path.join(home, ".grow-pm", "providers")), out)
+
+for mode in ("auto", "off"):                                    # final review I2: where the registration goes
+    with tempfile.TemporaryDirectory() as d:
+        home = os.path.join(d, "home"); vault = os.path.join(d, "vault")
+        os.makedirs(os.path.join(home, ".grow-pm")); os.makedirs(os.path.join(vault, "Notes", "_System"))
+        text = MINIMAL + "\n## Obsidian Vaults (Optional)\n\n| # | Vault Path | Folder Name | Products | Sync Mode | Last Artifact |\n" \
+            "|---|---|---|---|---|---|\n| 1 | %s | Notes | all | %s | never |\n" % (vault, mode)
+        ctxp = os.path.join(home, ".grow-pm", "local-context.md")
+        open(ctxp, "w", encoding="utf-8").write(text)
+        copies = co.copies_for(ctxp, text, home=home)
+        store = cs.Store(co.store_root_for(text, home=home))
+        co.migrate(ctxp, store.root, copies, home, apply=True, now=NOW)
+        rc, out, res = ctx(home, ctxp, "repo", "add", KIT, "--email", "pat.moss@zorg.example")
+        ctx(home, ctxp, "repo", "add", KIT, "--email", "pat.moss@zorg.example", "--apply", "--code", res.get("code") or "x")
+        rc, out, res = ctx(home, ctxp, "repo", "list")
+        check("a vault with sync %s: the registration lands where repo list reads it" % mode, rc == 0 and "zorg-core" in out, out[-400:])
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

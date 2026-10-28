@@ -1605,6 +1605,7 @@ def _kit_add_plan(c, a):
     lines = ["набір %s · ядро %s · %s" % (rid, model.get("version") or "?", folder),
              "команда: %s (%s) · %s" % (ident["team"], ident["team_title"], ident["team_from"]),
              "роль: %s · %s" % (ident["role"], ident["role_from"]),
+             "Jira: запис — ask (context-connect спитає, чи є в тебе свій проєкт)",
              "реєстрація: %s (sync: off — щоденний синк вмикає context-connect)" % where,
              "блоки: %s → %s" % (", ".join("+ " + b for b in adds) or "жодного нового",
                                  cb._home_record(repo, {}, c.store.load(), m.s("title") or rid) or "новий запис «%s»" % (m.s("title") or rid))]
@@ -1632,9 +1633,9 @@ def cmd_repo_add(a, c):
         facts, text = _kit_add_plan(c, a)
         if facts["code"] != a.code:
             raise co.Refused("набір або сховище змінились — переглянь ще раз: ctx repo add %s --email %s" % (a.folder, a.email))
-        os.makedirs(cs.check_target(os.path.dirname(facts["where"])), exist_ok=True)
-        cs.atomic_write(facts["where"], facts["text"])
         res = cb.apply(c.store, c.copies, c.home, facts["repo"], facts["fetched"], {}, facts["adds"], now())
+        os.makedirs(cs.check_target(os.path.dirname(facts["where"])), exist_ok=True)    # after the blocks: a failed
+        cs.atomic_write(facts["where"], facts["text"])                                  # apply leaves no registration
         card = _refresh_card(c)
     print(text)
     print(cb.render_apply(res))
@@ -2741,12 +2742,7 @@ def cmd_overlay(a, c):
 
 def _overlay_texts(doc):
     """Every free text of an overlay document — what the never-store filter reads before it is written."""
-    out = []
-    for o in doc.get("ops") or ():
-        v = o.get("value")
-        out += [o.get("reason") or "", o["target"].get("path") or "", o.get("value_ref") or ""] + \
-               (list(v) if isinstance(v, list) else [v or ""])
-    return out
+    return ov.texts_of(doc)
 
 
 def _with_op(text, op):
@@ -2801,7 +2797,7 @@ def cmd_identity(a, c):
         mem = cid.load(c.store)
         mine, _ = _identity_mine(c, repo)
         rows = cid.compare(bundle, mine, mem, repo["id"])
-        print(cid.render(rows, repo["id"]))
+        print(cid.render(rows, repo["id"], a.bundle))
         return 0, {"command": "identity", "action": "check", "repo": repo["id"], "rows": rows,
                    "questions": sum(1 for r in rows if r["state"] == "ask")}
     if a.field not in cid.FIELDS:

@@ -66,7 +66,7 @@ def read_bundle(path):
     try:
         with open(path, encoding="utf-8") as f:
             text = f.read()
-        data = json.loads(text[text.index("{"):] if "{" in text else text)
+        data = json.JSONDecoder().raw_decode(text[text.index("{"):] if "{" in text else text)[0]   # lines may follow it
     except (OSError, ValueError) as e:
         raise ValueError("the bundle's JSON is not readable: %s (%s)" % (path, e))
     if not isinstance(data, dict) or not all(isinstance(data.get(k), str) and data.get(k) for k in ("team", "role")):
@@ -139,7 +139,7 @@ def compare(bundle, mine, mem, repo_id):
 WORDS = {"team": "команда", "role": "роль"}
 
 
-def render(rows, repo_id):
+def render(rows, repo_id, bundle="<файл JSON>"):
     lines = []
     for r in rows:
         w = WORDS[r["field"]]
@@ -157,7 +157,10 @@ def render(rows, repo_id):
         else:
             lines += ["%s: ядро — %s · %s" % (w, core, r["core_from"]),
                       "%s: ти — %s · %s" % (w, r["mine"], r["mine_from"]),
-                      "  відповісти: ctx identity keep %s %s · ctx identity take %s %s" % (repo_id, r["field"], repo_id, r["field"])]
+                      ("  відповісти: ctx identity keep %s %s --bundle %s · ctx identity take %s %s --bundle %s"
+                       % (repo_id, r["field"], bundle, repo_id, r["field"], bundle)) if r["field"] == "role" else
+                      ("  відповісти: ctx identity keep %s team --bundle %s · або перезібрати пакет з --team %s (context-connect)"
+                       % (repo_id, bundle, r["core"]))]
     return "\n".join(lines)
 
 
