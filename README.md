@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.24.0
+**Version:** 4.0.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.0.0** — **«Вейлт: аудит і граф»: the links of your vault, seen and tidied** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). The index now knows every file a link may land on — an evicted note and a picture too — and resolves every link once, in its own vault: `ctx graph <note or entity>` shows what is one or two hops around it in milliseconds. `ctx audit` names what breaks the links of your layer — orphans, dead and ambiguous links, broken generated regions, missing `type`/`created`, backups, two cards that disagree on a number — and says which of them a machine can fix; `ctx vault normalize` fixes those with a report, your code, a snapshot and `ctx undo` (a link keeps the text a reader sees, a value is never changed, a file never renamed, People notes never listed), and adds `_System/AGENTS.md` and Obsidian Bases tables. A card's numbers become facts with their period and day, and every answer from a note can show the trust of its source. `ctx serve` gives all of it to a host without a shell as a local MCP server of `vault/v1`. **Breaking:** the write gate now asks before a write that changes a generated region of a note (`/grow-product-manager:setup --write-gate off` turns it off). Measured on a full copy of the author's vault (7.3k notes): the audit in 3 s, 178 files normalised and every one of them back byte for byte after `ctx undo`, 0 orphans and 0 fixable findings after the write, a two-hop graph in 19 ms. The last release of the programme «Петля контексту».
 
 **New in v3.24.0** — **«Власна копія ядра для MCP»: a core that lives only on a server becomes a folder on your machine** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). When a team's core is reachable only as an MCP server, `ctx repo copy <id>` makes the plugin's own copy of it in `~/.grow-pm/cores/<id>/` in one command — every note under the server's root, at its path there. From then on the plugin reads the repository as a folder: the blocks, the team block, the search, who-is-who and the bridges' boundary — and the search and entities answer without the VPN. The daily sync refreshes the copy in the background with a full pass and never deletes anything: a note gone from the server moves into `.removed/` only after two complete listings without it, and an incomplete listing from the server writes nothing and moves nothing. A note you changed in the copy stays yours; when the server changed it too, its version waits in `~/.grow-pm/conflicts/`. For the team block through a server that serves notes only, the core's owner publishes the manifest and the role model as two `.md` wrappers (`ctx repo kit-check` checks them). Measured on the author's real core: 4 865 notes in one command, a rerun with 0 writes, every semantic hash equal to the author's own sync script, and the team block from the copy byte for byte the one from the folder.
 
@@ -1089,5 +1091,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.24.0  
+**Version:** 4.0.0  
 **Last Updated:** October 2026
