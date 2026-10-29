@@ -1849,7 +1849,7 @@ def _get_path(sctx, arg, full=False):
         text = _cap(_fill(secs[i][1], secs[i + 1:]), path, full, secs, hp)
     else:
         text = _cap(whole, path, full, secs)
-    return _header(source, path, hp, date, marks), (said + "\n\n" + text) if said else text
+    return _header(source, path, hp, date, marks + _copy_mark(sctx, source)), (said + "\n\n" + text) if said else text
 
 
 def _thousands(n):
@@ -1948,6 +1948,12 @@ def _cap(text, path, full=False, secs=None, heading=""):
     secs = (secs() if callable(secs) else secs) or []
     start = next((i for i, (h, _) in enumerate(secs) if h == heading), 0) if heading else 0
     return text[:limit] + "\n\n" + long_note(path, limit, len(text), _names_past(text, limit, path, secs, start), full)
+
+
+def _copy_mark(sctx, source):
+    """` · копія від <day>` for a note of the plugin's copy of a core (since v3.24.0, ctx_copy), else ""."""
+    repo = next((r for r in sctx.get("repos") or () if r.get("id") == source), None)
+    return " · копія від %s" % repo.get("copy_at") if repo and repo.get("core_from") == "copy" else ""
 
 
 def _header(source, path, heading, date, marks=""):
@@ -2052,6 +2058,7 @@ def get(sctx, cid, full=False):
         if entry.get("kind") in ("local", "mcp"):
             marks = _marks(meta)
     text = _cap(_fill(text, following), entry["path"], full, secs, heading)
+    marks += _copy_mark(sctx, entry.get("source")) if entry.get("kind") == "own" else ""
     return _header(entry.get("source"), entry["path"], heading, date, marks), (said + "\n\n" + text if said else text)
 
 

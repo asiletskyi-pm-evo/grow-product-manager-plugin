@@ -24,7 +24,13 @@ HTTP status; redirect_to answers every POST with a redirect (redirect_status, 30
 JSON-RPC error object; raw_result answers every tools/call with that object as the whole `result`
 (for a server that sends something the protocol does not allow, such as a number for `content`);
 delays {method: seconds} pauses before answering that method — `initialize` and `notifications/initialized`
-too (since v3.14: a slow but healthy handshake). Stdlib only.
+too (since v3.14: a slow but healthy handshake).
+
+Since v3.24.0 (the copy of a core, ctx_copy.py): a tree value may be {"frontmatter": {...}, "content": "..."} — the
+server then serves the frontmatter apart from the text, as the measured server does (a plain text is served with
+`frontmatter: {}`); `vault_list_by_folder` answers [{path, title}] of every note whose path starts with `folder`, in tree
+order; `list_cap` N lists only the first N; `hidden` {path} is neither listed nor served; `broken` {path} is listed and
+answers `isError`. Stdlib only.
 """
 import json
 import threading
@@ -41,13 +47,16 @@ PROTOCOL_VERSION = "2025-03-26"
 
 
 def note_for(path, text):
-    """The vault_get_note answer for a note the server has."""
+    """The vault_get_note answer for a note the server has: a text, or {"frontmatter", "content"}."""
     title = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-    return {"path": path, "title": title, "frontmatter": {}, "tags": [], "headings": [],
-            "content": text, "outgoing_links": []}
+    fm, content = ({}, text) if not isinstance(text, dict) else (text.get("frontmatter") or {}, text.get("content", ""))
+    return {"path": path, "title": title, "frontmatter": fm, "tags": [], "headings": [],
+            "content": content, "outgoing_links": []}
 
 
 class _Server(ThreadingHTTPServer):
+    request_queue_size = 64                                        # the copy's twelve clients connect at once (since v3.24.0)
+
     def handle_error(self, request, client_address):                # a client that gave up is not news
         pass
 
@@ -136,7 +145,7 @@ class _Handler(BaseHTTPRequestHandler):
 class FakeMcp:
     def __init__(self, mode="json", tree=None, require_headers=None, drop=0, delay=0.0, fail_status=0,
                  redirect_to="", redirect_status=307, rpc_error="", sse_noise=True, sse_after=False, sse_junk=False,
-                 raw_result=None, delays=None):
+                 raw_result=None, delays=None, list_cap=None, hidden=None, broken=None):
         self.mode = mode
         self.tree = dict(DEFAULT_TREE if tree is None else tree)
         self.require_headers = dict(require_headers or {})
@@ -145,7 +154,9 @@ class FakeMcp:
         self.rpc_error, self.sse_noise, self.sse_after, self.sse_junk = rpc_error, sse_noise, sse_after, sse_junk
         self.raw_result = raw_result
         self.delays = dict(delays or {})
-        self.handlers = {"vault_get_note": self._get_note}
+        self.list_cap = list_cap
+        self.hidden, self.broken = set(hidden or ()), set(broken or ())
+        self.handlers = {"vault_get_note": self._get_note, "vault_list_by_folder": self._list}
         self.seen = []
         self._lock = threading.Lock()
         self.httpd = _Server(("127.0.0.1", 0), _Handler)
@@ -155,9 +166,17 @@ class FakeMcp:
         self._thread = threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True)
         self._thread.start()
 
+    def _list(self, args):
+        folder = args.get("folder", "")
+        found = [{"path": p, "title": p.rsplit("/", 1)[-1].rsplit(".", 1)[0]} for p in self.tree
+                 if p.startswith(folder) and p not in self.hidden]
+        return (found if self.list_cap is None else found[:self.list_cap]), False
+
     def _get_note(self, args):
         path = args.get("path", "")
-        if path in self.tree:
+        if path in self.broken:
+            return "Unterminated string in the note", True
+        if path in self.tree and path not in self.hidden:
             return note_for(path, self.tree[path]), False
         return {"error": "Note not found: %s" % path}, False
 

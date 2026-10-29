@@ -319,6 +319,7 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 import time
 
@@ -329,6 +330,7 @@ import ctx_bootstrap as cbt  # noqa: E402
 import ctx_bridges as cbr  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_consolidate as ccn  # noqa: E402
+import ctx_copy as ccp  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
@@ -1485,6 +1487,11 @@ def cmd_repo_list(a, c):
         print(_table(table))
     else:
         print(NO_REPOS)
+    for r in rows:                                      # since v3.24.0: the plugin's copy of a core
+        facts = csh.copy_facts(c.home, r["id"]) if r.get("core_from") == "copy" or not (r.get("paths") or r["core_root"]) else None
+        if facts:
+            r["copy"] = facts
+            print("%s · %s" % (cb.clip(r["id"], cb.HEADER_CLIP), csh.copy_line(facts)))
     for rid, error in bad:
         print("block state unreadable: %s (%s)" % (cb.clip(rid, cb.HEADER_CLIP), error))
     for r in rows:
@@ -1528,6 +1535,9 @@ def cmd_repo_status(a, c):
             rows[-1]["fetch_error"] = cb.clip(fetched["error"], cb.NOTE_CLIP)
         if bad_state:
             rows[-1]["state_error"] = bad_state
+        facts = csh.copy_facts(c.home, r["id"]) if r.get("core_from") == "copy" or not (r.get("paths") or r["core_root"]) else None
+        if facts:
+            rows[-1]["copy"] = facts
     if rows:
         for row in rows:
             where = row["url"] or "—"
@@ -1540,6 +1550,8 @@ def cmd_repo_status(a, c):
                 print("  block state: %s" % row["state_error"])
             if row["namespace_warning"]:
                 print("  warning: %s" % row["namespace_warning"])
+            if row.get("copy"):
+                print("  %s" % csh.copy_line(row["copy"]))
     else:
         print(NO_REPOS)
     for path, why in skipped:
@@ -1557,7 +1569,163 @@ def cmd_repo(a, c):
         return cmd_repo_kit_check(a, c)
     if a.action == "add":
         return cmd_repo_add(a, c)
-    raise Usage("repo takes list, status, kit-check or add")
+    if a.action == "copy":
+        return cmd_repo_copy(a, c)
+    raise Usage("repo takes list, status, kit-check, add or copy")
+
+
+COPY_WORDS = (("new", "нових"), ("updated", "оновлено"), ("same", "без змін"), ("kept", "лишено твоє"),
+              ("conflict", "конфліктів"), ("failed", "не прийшло"), ("removed", "перенесено в .removed"))
+
+
+def copy_summary(rid, res):
+    """The one line a pass of the copy earns (`repo copy`, and the daily sync's report part)."""
+    if res["outcome"] in ("complete", "partial"):
+        line = "копія %s: %s — %s · %s с" % (rid, " · ".join("%s %d" % (w, res["counts"][k]) for k, w in COPY_WORDS),
+                                            res["folder"], res["elapsed_s"])
+        return line + ("" if res["outcome"] == "complete" else " · неповний прохід: %s" % res["reason"])
+    return "копія %s: не оновлено — %s" % (rid, res["reason"])
+
+
+def _copy_repo(c, rid):
+    """(the registration to copy, every registration) — or Usage (exit 3): no such repository, one with its own folder
+    (it needs no copy), one with no endpoint url."""
+    skipped = []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    mine = [r for r in repos if r["id"] == rid]
+    if not mine:
+        raise Usage(_not_registered(rid, skipped))
+    repo = mine[0]
+    if repo.get("paths") or (repo["core_root"] and repo.get("core_from") != "copy"):
+        raise Usage("%s: тека на диску — копія не потрібна (ядро читається з %s)"
+                    % (rid, repo["core_root"] or repo["paths"][0]))
+    if not repo["endpoint"]["url"]:
+        raise Usage("%s: no endpoint url in the registration — nothing to copy from" % rid)
+    return repo, repos
+
+
+REPORT_LOCK_TRIES = 10                                  # the background pass waits this many seconds at most for the store's
+                                                        # lock before it writes its part of the day's report
+
+
+def copy_section(rid, res):
+    """The part «Копія ядра <id>» of the day's report for a pass of the background (since v3.24.0)."""
+    lines = ["## %s · копія ядра" % rid, "", copy_summary(rid, res)]
+    for key, word in (("removed", "Перенесено в .removed/"), ("conflicts", "Конфлікти (твоє лишилось, серверне — у "
+                                                                           "~/.grow-pm/conflicts/%s/)" % rid)):
+        if res.get(key):
+            lines += ["", "%s:" % word] + ["- `%s`" % cb.clip(x, cb.HEADER_CLIP) for x in res[key]]
+    return "\n".join(lines) + "\n"
+
+
+def _copy_reported(prev, res):
+    """Does a background pass earn a part of the day's report? A change (new, updated, a conflict, a move), or a pass that
+    is held or partial — but not the same held, with the same reason, as the attempt before it (safeguard 4)."""
+    counts = res["counts"]
+    if any(counts[k] for k in ("new", "updated", "conflict", "removed")):
+        return True
+    if res["outcome"] in ("held", "partial"):           # the same kind again is no news (its reason carries counts)
+        return not (prev and prev.get("outcome") == res["outcome"])
+    return False
+
+
+def _copy_background(c, repo, repos, at):
+    """`repo copy <id> --background` — the pass the daily sync starts (C7): only for a copy that exists (the background
+    never makes the first one), the copy's lock only, and at the end a part of the day's report when `_copy_reported`
+    says so — written under the store's lock (a short wait; busy for longer → no part, the log says so)."""
+    folder, prev = ccp.copy_info(c.home, repo["id"])
+    if folder is None:
+        raise Usage("%s: no complete copy — the first copy is made by `ctx repo copy %s`, not in the background"
+                    % (repo["id"], repo["id"]))
+    try:
+        res = ccp.run(c.home, repo, at, regs=repos)
+    except ccp.CopyError as e:
+        print("ctx: refused — %s" % e)
+        return 4, {"command": "repo", "action": "copy", "id": repo["id"], "outcome": "busy" if isinstance(e, ccp.Busy)
+                   else "refused", "error": str(e), "background": True}
+    print(copy_summary(repo["id"], res))
+    report = None
+    if _copy_reported(prev, res) and c.store.exists():
+        for _ in range(REPORT_LOCK_TRIES):
+            try:
+                with co.lock(c.home):
+                    report = sy.write_report(c.store, at.date().isoformat(), copy_section(repo["id"], res), repo=repo["id"])
+                break
+            except co.Busy:
+                time.sleep(1)
+            except (cs.StoreError, OSError, ValueError) as e:   # the part is lost, the pass is not: the log says why
+                print("копія %s: частину звіту не дописано — %s" % (repo["id"], cb.clip(str(e), cb.NOTE_CLIP)))
+                break
+        else:
+            print("копія %s: частину звіту не дописано — сховище зайняте" % repo["id"])
+    return (5 if res["outcome"] == "unreachable" else 0), dict(res, command="repo", action="copy", id=repo["id"],
+                                                                background=True, report=report)
+
+
+def start_copies(c, repos, at, home, context):
+    """After the daily sync's block passes (C7): for each repository whose copy is due (`ctx_copy.background_choice`),
+    `ctx repo copy <id> --background` as a process of its own that outlives the sync — started, never waited for
+    (GROW_PM_COPY_FOREGROUND=1: run here, for the tests). → {id: "started" | "busy" | "not-due" | "failed"}; a repository
+    with no copy is not named."""
+    out = {}
+    for repo in repos:
+        choice = ccp.background_choice(home, repo, sy.instant(at))
+        if choice is None:
+            continue
+        if choice != "due":
+            out[repo["id"]] = choice
+            continue
+        args = [sys.executable, os.path.abspath(__file__), "repo", "copy", repo["id"], "--background", "--home", home,
+                "--context", context]
+        if os.environ.get("GROW_PM_COPY_FOREGROUND") == "1":
+            args += ["--now", at]
+        log = os.path.join(ccp.copy_dir(home, repo["id"]), ccp.SERVICE, "log")
+        try:
+            cs.check_target(log)
+            if os.environ.get("GROW_PM_COPY_FOREGROUND") == "1":
+                with open(log, "a", encoding="utf-8") as f:
+                    subprocess.run(args, stdin=subprocess.DEVNULL, stdout=f, stderr=f, timeout=600)
+            else:
+                with open(log, "a", encoding="utf-8") as f:
+                    subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=f, stderr=f, start_new_session=True,
+                                     close_fds=True)
+            out[repo["id"]] = "started"
+        except (OSError, cs.PathRefused, ValueError):
+            out[repo["id"]] = "failed"
+    return out
+
+
+def cmd_repo_copy(a, c):
+    """`repo copy <id> [--restore PATH] [--now ISO]` (since v3.24.0): one pass of the plugin's own copy of an MCP-only
+    repository into ~/.grow-pm/cores/<id>/ (ctx_copy, references/context-provider-protocol.md §12.12), in the foreground,
+    progress on stderr. No store write (the copy is a cache of the server — no confirmation code, no journal line).
+    Exit 0 complete | partial | held; 3 a usage error; 4 a folder that is not the plugin's, or busy; 5 no answer."""
+    at = sy.instant(_sync_now(a.now))
+    repo, repos = _copy_repo(c, a.id)
+    if a.restore:
+        try:
+            src = ccp.restore(c.home, a.id, a.restore, at, repos)
+        except (ccp.Busy, ccp.Refused) as e:
+            print("ctx: refused — %s" % e)
+            return 4, {"command": "repo", "action": "copy", "id": a.id, "outcome": "busy" if isinstance(e, ccp.Busy)
+                       else "refused", "error": str(e)}
+        except ccp.CopyError as e:
+            raise Usage(str(e))
+        print("копія %s: повернуто %s з %s" % (a.id, a.restore, os.path.dirname(src)))
+        return 0, {"command": "repo", "action": "copy", "id": a.id, "restored": a.restore, "from": src}
+    if a.background:
+        return _copy_background(c, repo, repos, at)
+    progress = lambda line: print(line, file=sys.stderr, flush=True)    # noqa: E731
+    try:
+        res = ccp.run(c.home, repo, at, regs=repos, progress=progress)
+    except ccp.Busy as e:
+        print("ctx: refused — %s" % e)
+        return 4, {"command": "repo", "action": "copy", "id": a.id, "outcome": "busy", "error": str(e)}
+    except ccp.CopyError as e:
+        print("ctx: refused — %s" % e)
+        return 4, {"command": "repo", "action": "copy", "id": a.id, "outcome": "refused", "error": str(e)}
+    print(copy_summary(a.id, res))
+    return (5 if res["outcome"] == "unreachable" else 0), dict(res, command="repo", action="copy", id=a.id)
 
 
 def cmd_repo_kit_check(a, c):
@@ -2410,7 +2578,21 @@ def cmd_provider_sync(a, c):
     one sentence per repository whose pass changed a block or decided a conflict. A run that did nothing because of the
     lock or the guard says so in CTX_RESULT: skipped "busy" | "lock: <why>" | "guard: <why>". Exit 0 whatever the repositories did; a
     usage error (an unknown REPO, one without `sync: daily`, a paused one, a bad --now) is exit 3."""
-    deadline = time.monotonic() + sy.BUDGET_S
+    deadline = time.monotonic() + sy.BUDGET_S          # the whole run, the registrations' read included (as in v3.23)
+    loaded = None if a.repo else crp.load_repos(c.text, c.home, deadline=deadline)   # read once: blocks and copies
+    rc, out = _provider_sync_blocks(a, c, loaded, deadline)
+    try:                                                # since v3.24.0: the copies, after the blocks (C7)
+        rows = loaded if loaded is not None else [r for r in crp.load_repos(c.text, c.home) if r["id"] == a.repo]
+        copies = start_copies(c, rows, _sync_now(a.now), c.home, c.found)
+    except Exception:  # noqa: BLE001 — a copy never changes the sync's own result
+        copies = {}
+    if copies:
+        out = dict(out, copy=copies)
+    return rc, out
+
+
+def _provider_sync_blocks(a, c, loaded=None, deadline=None):
+    deadline = time.monotonic() + sy.BUDGET_S if deadline is None else deadline
     at = _sync_now(a.now)
     quiet = {"command": "provider", "action": "sync", "synced": []}
     if a.repo:
@@ -2423,7 +2605,7 @@ def cmd_provider_sync(a, c):
             raise Usage("%s is paused (status: paused) — the daily sync leaves it alone" % rid)
         repos = [repo]
     else:
-        repos = [r for r in crp.load_repos(c.text, c.home)
+        repos = [r for r in (loaded if loaded is not None else crp.load_repos(c.text, c.home))
                  if r["sync"] == crp.SYNC_DAILY and r["status"] != "paused" and not crp.search_only(r)]
     if not c.store.exists():
         if not a.if_due:
@@ -3323,6 +3505,8 @@ def build_parser():
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("kit-check", parents=[common]); sp.add_argument("folder")
+    sp = rp.add_parser("copy", parents=[common]); sp.add_argument("id"); sp.add_argument("--restore"); sp.add_argument("--now")
+    sp.add_argument("--background", action="store_true"); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("add", parents=[common]); sp.add_argument("folder"); sp.add_argument("--email", required=True)
     sp.add_argument("--team"); sp.add_argument("--role"); sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
     ip = sub.add_parser("index").add_subparsers(dest="action", required=True, parser_class=Parser)

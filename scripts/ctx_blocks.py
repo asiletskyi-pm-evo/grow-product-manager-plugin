@@ -668,7 +668,11 @@ def _differences(mine, theirs, base):
 
 
 def _source_label(repo, source):
-    """"MCP (<host of the endpoint>)" or "тека" (the core folder)."""
+    """"MCP (<host of the endpoint>)", "тека" (the core folder) or, since v3.24.0, "копія від <day>" (the plugin's copy of
+    a core that lives only on a server, ctx_copy)."""
+    if source == "folder" and repo.get("core_from") == "copy":
+        label = "копія від %s" % (repo.get("copy_at") or "—")
+        return label if repo.get("sync") == "daily" else label + " (оновити: ctx repo copy %s)" % repo.get("id")
     if source == "mcp":
         try:
             host = urllib.parse.urlsplit(repo["endpoint"]["url"]).hostname

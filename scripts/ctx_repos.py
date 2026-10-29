@@ -23,6 +23,7 @@ import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
+import ctx_copy as ccp  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import provider_bundle as pb  # noqa: E402
@@ -118,8 +119,11 @@ def serves_product(repo, prod):
 def search_only(repo):
     """Is this registration a search index only — no blocks file named and no core folder to take one from (a server
     registered for `vault_search`, references/context-provider-protocol.md §3b, or the user's own index)? It publishes
-    no blocks, so `ctx provider` leaves it out of scope instead of calling it unreachable."""
-    return not repo["blocks_file"] and not repo["core_root"]
+    no blocks, so `ctx provider` leaves it out of scope instead of calling it unreachable. Since v3.24.0 the question is
+    put to the registration: the plugin's copy of the core (`core_from: copy`) is no folder the registration names, so a
+    search-only registration with a copy stays search-only."""
+    own = repo["core_root"] if repo.get("core_from") != "copy" else ""
+    return not repo["blocks_file"] and not own
 
 
 REG_READ_TIMEOUT_S = cc.BOUNDARY_READ_S                 # seconds one registration may take to read (an iCloud download): 3
@@ -132,7 +136,9 @@ def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_RE
     the home is never taken from the environment). An id seen twice keeps the first. Unreadable
     registrations — and, since v3.13.1, one not read within `timeout` seconds, since v3.14 also one not
     reached before REG_READ_DEADLINE_S for all of them has passed — are left out and, when `skipped`
-    is a list, appended to it as (path, reason). `timeout` None reads every file as it comes.
+    is a list, appended to it as (path, reason). Since v3.24.0 a registration with an endpoint and no folder of its own
+    whose copy (`~/.grow-pm/cores/<id>/`, ctx_copy) has completed a pass gets the copy as its `core_root`
+    (`core_from: "copy"`, `copy_at`: the day of that pass) — `ctx_copy.attach`. `timeout` None reads every file as it comes.
     `deadline` (since v3.14.0; a time.monotonic() moment, None for none) is the caller's — the daily sync's: the reads
     end by it too, each within what is left of it, and once it has passed no file is opened (each is skipped as not
     read in time)."""
@@ -142,7 +148,7 @@ def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_RE
         ends = deadline if ends is None else min(ends, deadline)
     regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped, timeout=timeout,
                                  deadline=ends)
-    return [normalise(r) for r in regs]
+    return [ccp.attach(normalise(r), home) for r in regs]
 
 
 # ------------------------------------------------------------------ fetch
@@ -292,6 +298,12 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         return (None, None) if in_file else (None, _unavailable("no core folder in the registration"))
     if not os.path.isdir(core_root):
         return None, _unavailable("core folder not found")
+    if repo.get("core_from") == "copy":                 # since v3.24.0: the manifest and the role model come from wrappers
+        why = _copy_why(core_root, manifest)
+        if why == COPY_ADVICE and in_file:              # no wrappers, and the blocks file carries the team region: as v3.23
+            return None, None
+        if why:
+            return None, _unavailable(why)
     if manifest is None:
         return None, manifest_why or _unavailable("no provider manifest in the core")
     try:
@@ -317,6 +329,23 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         return None, _unavailable(str(e))
     except (Exception, SystemExit) as e:
         return None, _team_why(e)
+
+
+COPY_ADVICE = ("сервер не віддає provider-manifest — власник ядра може опублікувати _System/provider-manifest.md "
+               "і access-bundles.md (context-provider-protocol §9)")
+
+
+def _copy_why(copy_root, manifest):
+    """Why the team block cannot be built from the plugin's copy of a core (since v3.24.0), or "": a wrapper that did
+    not unpack (its reason, ctx_copy.wrapper_problem), else no manifest at all — the advice for the core owner."""
+    try:
+        state = ccp.load_state(copy_root)
+    except ccp.CopyError:
+        state = None
+    problem = ccp.wrapper_problem(state, manifest) if state else ""
+    if problem:
+        return problem
+    return "" if manifest is not None else COPY_ADVICE
 
 
 def _header_hint(ep, hdrs):
