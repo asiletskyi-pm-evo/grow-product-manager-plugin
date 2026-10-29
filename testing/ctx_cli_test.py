@@ -4759,7 +4759,8 @@ with tempfile.TemporaryDirectory() as d:
           and res["text"].startswith("# Team Alpha\n\n"), (rc, res, out[-300:]))
     rc, out, res = run_ok(env, "search", "--get", TEAM5 + "#Members")
     check("U6: …`<шлях>#<заголовок>` prints that section under its heading path", rc == 0
-          and out.startswith("> [zorg-core · %s › Team Alpha › Members · 2026-01-01 · team]\n- Alex One" % TEAM5), (rc, out[:300]))
+          and out.startswith("> [zorg-core · %s › Team Alpha › Members · 2026-01-01 · team]\n> довіра " % TEAM5)
+          and out.split("\n")[2].startswith("- Alex One"), (rc, out[:300]))   # v4.0.0: the trust line under it
     rc, out, res = run_ok(env, "search", "--get", "Delivery slots (900100200)")
     check("U1: a name two notes carry: exit 3, the line naming them", rc == 3 and out.startswith(
         "search: кілька нотаток із назвою «Delivery slots (900100200)»: Notes/Knowledge/Delivery slots (900100200).md · "

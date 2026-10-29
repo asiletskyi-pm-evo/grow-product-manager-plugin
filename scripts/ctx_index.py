@@ -147,12 +147,17 @@ CREATE TABLE IF NOT EXISTS links(note_id INTEGER, field TEXT, target TEXT, tkey 
 CREATE INDEX IF NOT EXISTS links_tkey ON links(tkey);
 CREATE INDEX IF NOT EXISTS links_note ON links(note_id);
 CREATE TABLE IF NOT EXISTS mentions(note_id INTEGER, key TEXT, browse INTEGER);
+CREATE TABLE IF NOT EXISTS facts(note_id INTEGER, hash TEXT, attribute TEXT, value TEXT, period TEXT, observed_at TEXT,
+                                 field TEXT);
+CREATE INDEX IF NOT EXISTS facts_note ON facts(note_id);
 CREATE INDEX IF NOT EXISTS mentions_key ON mentions(key);
 CREATE INDEX IF NOT EXISTS mentions_note ON mentions(note_id);
 """                                 # v3.18.0: one `ents` row per note (kind "" for a note that is no card) with the
                                     # note's hash and path, so a row an older build left behind is known as stale
                                     # (plan C11) — the path too, as SQLite gives a removed note's id to the next one
-ENTITY_TABLES = ("ents", "links", "mentions")
+ENTITY_TABLES = ("ents", "links", "mentions", "facts")        # facts since v4.0.0 (a card's numbers, ctx_facts)
+FACT_FIELDS = ("actual", "target", "value", "baseline", "current")
+FACTS_VERSION = 1                   # meta `facts_version`: an index without it reads its cards once more for their facts
 GRAPH_DDL = """
 CREATE TABLE IF NOT EXISTS names(path TEXT PRIMARY KEY, source TEXT, dataless INTEGER, md INTEGER);
 """                                 # the derived tables (edges, unresolved, graph_src) are ctx_graph.EDGE_DDL: dropped
@@ -883,6 +888,21 @@ def mentions_of(text):
     return [(k, k in browse) for k in sorted(keys)]
 
 
+def facts_of(fm):
+    """[(attribute, value, period, observed_at, field)] of a card's frontmatter (v4.0.0): every FACT_FIELDS field with a
+    value — its period `<field>_period`, else `period`; its day `<field>_updated`, else `snapshot`, else `updated`."""
+    fm = fm if isinstance(fm, dict) else {}
+    out = []
+    for f in FACT_FIELDS:
+        v = fm.get(f)
+        if not _text(v).strip():                     # _text: a list or a map says nothing
+            continue
+        period = _text(fm.get(f + "_period") or fm.get("period")).strip()
+        seen = (_date(fm.get(f + "_updated")) or _date(fm.get("snapshot")) or _date(fm.get("updated")) or "")[:10]
+        out.append((f, _text(v).strip(), period, seen, f))
+    return out
+
+
 def entity_rows(rel, text, title):
     """(identity or None, links, mentions) of a note's text — what the walk writes beside its row (v3.18.0)."""
     fm, body = _frontmatter((text or "").replace("\r\n", "\n"))
@@ -1323,6 +1343,8 @@ class Index:
         file is read again for its metadata (META_VERSION); the version is written once a walk ends with nothing left."""
         walk = _Walk(con, roots, store_rel, blocks_rels, deadline, res, reread=reread)
         queue = walk.run(saved)
+        if not res["pending"]:
+            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('facts_version', ?)", (str(FACTS_VERSION),))
         con.commit()
         import ctx_graph as cg                       # v4.0.0: the links resolved (imported here: it imports this one)
         try:
@@ -1649,6 +1671,7 @@ class _Walk:
         self.writes = 0
         for tb in ENTITY_TABLES:                     # the rows of a note an older build removed (v3.18.0, plan C11)
             con.execute("DELETE FROM %s WHERE note_id NOT IN (SELECT id FROM notes)" % tb)
+        facts_ok = (con.execute("SELECT value FROM meta WHERE key='facts_version'").fetchone() or [None])[0]
         self.stale_ents = {r[0] for r in con.execute(
             "SELECT n.id FROM notes n LEFT JOIN ents e ON e.note_id = n.id "
             "WHERE e.note_id IS NULL OR e.hash IS NOT n.hash OR e.path IS NOT n.path%s"
@@ -1658,6 +1681,8 @@ class _Walk:
                                                      # read again whatever their mtime: no identity row, or one an older
                                                      # build left behind when it changed the note (v3.18.0 wrote no
                                                      # slot fields: such a row is read again too, v3.19.0)
+        if facts_ok != str(FACTS_VERSION):           # v4.0.0: an earlier index's cards, read once more for their facts
+            self.stale_ents |= {r[0] for r in con.execute("SELECT note_id FROM ents WHERE kind != ''")}
 
     def _outside(self, path):
         """Is this index name one of a root outside every vault (`@<its source>/…`)? A vault's own `@Name.md` is not."""
@@ -1913,6 +1938,10 @@ class _Walk:
                               for l in links])
         self.con.executemany("INSERT INTO mentions(note_id, key, browse) VALUES (?, ?, ?)",
                              [(nid, k, int(b)) for k, b in mentions])
+        if ident.get("kind"):                        # v4.0.0: a card's facts (its numbers, with their period and day)
+            fm, _ = _frontmatter((text or "").replace("\r\n", "\n"))
+            self.con.executemany("INSERT INTO facts(note_id, hash, attribute, value, period, observed_at, field) "
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?)", [(nid, digest) + f for f in facts_of(fm)])
         self.stale_ents.discard(nid)
         self.touched.add(nid)
 

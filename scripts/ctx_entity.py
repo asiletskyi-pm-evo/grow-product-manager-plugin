@@ -797,6 +797,8 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None,
                 notes.append(idx.problem)
             one["mentions"] = mentions(idx, e["key"], {c["path"] for c in e["cards"]}, people) if e["key"] else \
                 {"count": 0, "items": []}
+            import ctx_facts as cf               # v4.0.0: the numbers its cards carry, with their trust
+            one["facts"] = cf.of_entity(sctx, idx, e)
             if idx.problem and idx.problem not in notes:
                 notes.append(idx.problem)
         out["entities"].append(one)
@@ -950,6 +952,10 @@ def render(res):
         for m in e["maybe"]:
             lines.append("  можливо той самий: %s%s — ctx entity same|not-same \"%s\" \"%s\""
                          % (m["path"], " (%s)" % (HINT % m["hint"]) if m.get("hint") else "", m["mine"], m["path"]))
+        if e.get("facts"):                             # v4.0.0
+            import ctx_facts as cf
+            lines.append("  факти:")
+            lines.extend(cf.lines(e["facts"]))
         for name, part in (("хто посилається", e.get("backlinks")), ("згадки", e.get("mentions"))):
             if part is None:                            # --slot: no backlinks, no mentions
                 continue

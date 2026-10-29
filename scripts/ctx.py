@@ -335,6 +335,7 @@ import ctx_entity as ce  # noqa: E402
 import ctx_graph as cg  # noqa: E402
 import ctx_audit as ca  # noqa: E402
 import ctx_normalize as cnz  # noqa: E402
+import ctx_trust as ctt  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
 import ctx_history as chi  # noqa: E402
@@ -1957,10 +1958,14 @@ def cmd_search(a, c):
         except cs_.GetError as e:
             print("search: %s" % e)
             return e.code, {"command": "search", "action": "get", "id": a.get, "error": str(e)}
+        trust = ctt.for_header(sctx, header, now()[:10])     # since v4.0.0: shown, never ranked
         if not a.json:
             print(header)
+            if trust:
+                print("> " + ctt.line(trust))
             print(text)
-        return 0, {"command": "search", "action": "get", "id": a.get, "header": header, "text": text if a.json else None}
+        return 0, {"command": "search", "action": "get", "id": a.get, "header": header, "text": text if a.json else None,
+                   "trust": trust}
     if not a.q:
         raise Usage("search takes --q TEXT (once or more) or --get ID|PATH|NAME")
     which = _search_kinds(a.sources)
