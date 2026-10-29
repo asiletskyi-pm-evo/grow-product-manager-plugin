@@ -332,6 +332,7 @@ import ctx_common as cc  # noqa: E402
 import ctx_consolidate as ccn  # noqa: E402
 import ctx_copy as ccp  # noqa: E402
 import ctx_entity as ce  # noqa: E402
+import ctx_graph as cg  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
 import ctx_history as chi  # noqa: E402
@@ -2082,6 +2083,29 @@ def cmd_entity(a, c):
     return 0, res
 
 
+def cmd_graph(a, c):
+    """`graph <request> [--depth 1|2] [--kind K,…]` (since v4.0.0, ctx_graph.run): the notes around a note or an entity,
+    from the edges of the index. Reads the index (refreshed as `entity` does); writes nothing else."""
+    kinds = [k.strip() for k in (a.kind or "").split(",") if k.strip()]
+    for k in kinds:
+        if k not in GRAPH_KINDS and not k.startswith("fm:"):
+            raise Usage("--kind takes %s or fm:<field>" % ", ".join(GRAPH_KINDS))
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    if not sctx["roots"]:
+        print("graph: nothing to walk — no vault in local-context.md, no registered repository with a folder on disk")
+        return 3, {"command": "graph", "error": "nothing to walk"}
+    res = cg.run(sctx, " ".join(a.words).strip(), depth=a.depth, kinds=kinds, store=c.store)
+    if not res["read"]:
+        print(cg.NOT_READ % ("; ".join(res["notes"]) or "індексу немає"))
+        return 5, dict(res, error="not read")
+    if not a.json:
+        sys.stdout.write(cg.render(res))
+    return (3 if res["how"] in ("none", "several") else 0), res
+
+
+GRAPH_KINDS = ("wikilink", "embed", "fm", "same_as", "mention")
+
+
 def _entity_apply(a, c):
     """`entity apply` (v3.20.0, ctx_bridges): the bridges your layer lacks — a report and its code; `--apply --code
     <code>` writes them. No store: exit 3 (`ctx undo` lives in the store); an index that did not answer: exit 5."""
@@ -3523,6 +3547,9 @@ def build_parser():
     sp.add_argument("--slot", action="append")
     sp.add_argument("--kind"); sp.add_argument("--skill"); sp.add_argument("--json", action="store_true")
     sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
+    sp = sub.add_parser("graph", parents=[common]); sp.add_argument("words", nargs="+")
+    sp.add_argument("--depth", type=int, choices=(1, 2), default=1); sp.add_argument("--kind")
+    sp.add_argument("--json", action="store_true")
     ip_ = sub.add_parser("identity").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = ip_.add_parser("check", parents=[common]); sp.add_argument("repo"); sp.add_argument("--bundle", required=True)
     sp.add_argument("--json", action="store_true")
@@ -3568,7 +3595,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot, "overlay": cmd_overlay, "history": cmd_history, "identity": cmd_identity,
-            "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
+            "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "graph": cmd_graph, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
             "inbox": cmd_inbox, "bootstrap": cmd_bootstrap, "consolidate": cmd_consolidate}
 
 
