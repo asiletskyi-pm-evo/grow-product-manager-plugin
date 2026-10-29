@@ -1,6 +1,6 @@
 ---
 name: sprint-planning
-version: 0.6.2
+version: 0.6.3
 description: Sprint pre-planning — focuses from the roadmap, what is READY to pull, dependencies, capacity per member, assignees. Not daily focus (focus-advisor), not a quarter plan (quarterly-planning). UA — «сплануй спринт», «що можна взяти у спринт», «розподіли задачі спринта», «фокуси спринта».
 ---
 
@@ -77,10 +77,10 @@ For unowned tasks — propose assignment, **prioritizing those with no tasks yet
 Show what doesn't fit / is blocked → choice. Live recompute.
 
 ### Step 8 — Artifacts
-Sprint plan (Confluence / assignment into the Jira sprint) — **gate before writing to Jira**. Approved plan → can be rendered as a `sprint-plan` report via product-reporter.
+Sprint plan (Confluence / assignment into the Jira sprint) — **gate before writing to Jira**; a Confluence page only after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier). Approved plan → can be rendered as a `sprint-plan` report via product-reporter.
 
 ### Step 9 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.6.2", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.6.3", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Quality Standards
 - Only Ready candidates go into the fill; Blocked — with an explanation, not silently.

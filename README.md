@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.0.2
+**Version:** 4.1.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.1.0** — **«Поверхні хоста»: a skill knows where the host can put a result, and asks before anything leaves the session** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). Step 0-host marks five more capabilities — a page at a link (ARTIFACT), a live document (DOCS), the host's own visual in the conversation (WIDGET), a recurring run on your machine (SCHEDULE `local`), a research pass with sources (RESEARCH) — described in `references/native-surfaces.md` with what was measured on each host. `focus-advisor` draws its board inline, `product-analysis` its charts, `cjm-research` schedules its health-check, `product-research` takes the host's research first, `product-reporter` offers a live document. Before internal data reaches a hosted surface — a live page or document, Confluence, Notion, a whiteboard, a design file — every skill asks, an update included, naming what goes, where and who can open it; a scheduled run never publishes; before a Jira or Confluence write the skill confirms itself on every host. Lint check 30 keeps host brands out of the skills. On Codex CLI 0.153.2 the plugin's hooks run once you trust them in Codex.
 
 **New in v4.0.2** — **Atlassian MCP v2: a page written on v2 is asked about first, and a page is read whole** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). On the Atlassian MCP v2 server the Confluence writes are `createConfluenceContent` / `updateConfluenceContent`, and the host write gate knew only their v1 names — a page was published on v2 without its question; now both names are gated. `references/integration-strategy.md` 1c maps every Atlassian tool the skills name from v1 to v2 and names the three differences that change a result silently: read a page with `detail: "full"` (the default is an excerpt), update with a fresh `snapshotToken`, ping with `getAccessibleAtlassianResources`. The release also ships the registry copy of the plugin (`.ai-registry/skills/grow-product-manager/`), rebuilt at every release.
 
@@ -1095,5 +1097,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.0.2  
+**Version:** 4.1.0  
 **Last Updated:** October 2026

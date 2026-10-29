@@ -12,6 +12,69 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.1.0 (2026-10-29)
+
+**«Поверхні хоста»: a skill knows where the host can put a result — and asks before anything leaves the session.** Until now the plugin knew only what a host can *do* — read files, run scripts, reach connectors — not where it can *put* a result, so every skill wrote a markdown file or a `.pptx` even where the host has a live document, a page at a link or a chart in the conversation. Step 0-host now marks five more capabilities — **ARTIFACT** (a page at a link), **DOCS** (a live document the user and the agent edit), **WIDGET** (the host's own visual inside the conversation), **SCHEDULE** (a recurring run the agent can create: `local`, `session` or `remote`), **RESEARCH** (a research pass with sources inside the session) — and five skills use them. Before internal data reaches any hosted surface — a live page, a live document, Confluence, Notion, a whiteboard, a design file — the skill asks, every time, an update included, naming what goes, where, and who can open it there. A scheduled run never publishes.
+
+MINOR: a new shared protocol, a new step in five skills, a new lint check; without a surface every skill works as in v4.0.2, with one line saying so (none for an option or a source that is simply not there).
+
+### Added
+
+- **`references/native-surfaces.md`** — the five capabilities (how to observe each; ARTIFACT `typed` | `page`, DOCS `native` | `connector`, SCHEDULE `local` | `session` | `remote`), routing (which result goes where, and the fallback), the question before a publication, «a scheduled run never publishes», the one line when a surface is absent, the brand map with the source of every fact, and what was measured on each host on 2026-10-29: Claude Code desktop, Claude Code CLI 2.1.311, Codex CLI 0.153.2, the ChatGPT desktop app.
+- **`data-policy.md` → Hosted surfaces.** The rule the user chose: always ask before internal data reaches a hosted surface, a new version included; a visual inside the conversation is not a publication; a scheduled run never publishes and runs only on the user's machine; sharing a private page is a separate question; a person's profile never goes there; the host's research is phrased from public information only.
+- **`focus-advisor` 0.10.0** — the Focus Board is drawn inline (WIDGET) with no question, `board.html` alongside; a live page (ARTIFACT) only on request or when one exists, asked before every create and every refresh, without the People-derived manager-rhythms signal; a headless run never refreshes it.
+- **`product-analysis` 0.19.0** — trends, comparisons and funnels inline as charts (WIDGET), the numbers still as tables in the report; the publish question names the internal data and who can open the place; a delegated or headless run publishes nothing.
+- **`cjm-research` 0.14.0** — a recurring health-check as a scheduled run on this machine (`cjm-research mode=health-check headless=true`) that writes its snapshot and never publishes; the next interactive run offers the newest snapshot with the question.
+- **`product-research` 0.16.0** — the host's research (RESEARCH) is a source by default, its query built from public information only; ChatGPT / Gemini stay a second opinion, asked about one by one. Source marker `deep-research-host`, class rules as `deep-research-llm`.
+- **`product-reporter` 0.11.0** — Step 6 offers a live document (DOCS, the host's own or a connector's) — never for `member-review`; the existing «where to?» question names the internal data and who can open each place, so it is the publication question.
+- **`skill_lint.py` check 30 `surface-brand`** — a skill, agent, command, template or shared protocol that names a host surface by brand or tool fails (full MCP tool names and prose forms in any case included); only `host-profiles.md` and `native-surfaces.md` may.
+- **`host-smoke.sh`** — the Codex leg checks that Codex runs the installed copy's hooks (a `GROW_PM_SESSION` digest in that run's session log); `codex exec` gets no stdin and a 180 s watchdog.
+
+### Changed
+
+- **The publication question in every publish step.** `brainstorm-features` 0.15.2, `design-bridge` 0.9.2 (deck, handoff, a Figma frame), `diagram-prototyper` 0.15.2, `meeting-processor` 0.18.3, `project-planning` 0.6.2 (its scheduled replan publishes nothing), `quarterly-planning` 0.8.2 (the live dashboard, `refresh` included), `requirements-creator` 0.17.2 (its publishing and analyze-improve prompts), `roadmap-architect` 0.6.2, `sprint-planning` 0.6.3, `write-concept` 0.16.1, and every artifact of `roadmap-artifacts.md`: what it holds, where, who can open it — asked again before an update or a re-publish.
+- **The host write gate is never read from the digest.** Before a Jira or Confluence write the skill confirms itself on every host, with the three-point checklist, as one message with the publication question; the PreToolUse hook is a second check where it fires (`host-profiles.md` §1, §4; `artifact-style-gate.md`).
+- **Codex CLI facts (measured 2026-10-29, 0.153.2).** A plugin's hooks run once the user has trusted them in Codex (a hash per hook in `~/.codex/config.toml`): the SessionStart digest arrives — the September pilot saw none, most likely for want of trust. A `spawn_agent` tool is listed; spawning without a request is not measured. The ChatGPT desktop app is the Codex app's bundle (`com.openai.codex`) with a different chat tool set. `host-profiles.md` §2/§7, `AGENTS.md` known gaps 2–4, the README host table and install section, `testing/host-matrix.md`.
+- **Surface brands out of the skills.** The `schedule` skill, a host's artifact tool and three `→ schedule` chain arrows were named in 13 lines; each now names the capability: `experiment-tracker` 0.6.2, `feedback-triage` 0.7.2, `knowledge-library` 0.9.3, `offboarding-guide` 0.2.3, `one-on-one` 0.2.3, `plugin-configurator` 2.17.1. `context-connect` 0.8.1 and the shared protocols: «a host without the digest» is now a Codex whose plugin hooks are not trusted.
+- **Health-check notification channels are `local` only** (onboarding 11g, `context-schema.md`, maintenance): a scheduled run publishes and sends nothing; an older `slack` / `email` / `confluence` value reads as `local`.
+
+### Fixed
+
+- **A scheduled `feedback-triage` run published to Confluence** and left the confirmation to the host gate — it now saves locally and publishes nothing.
+- **An automated `cjm-research` health-check took Step 2e's Confluence default** («Publish to configured destination») — it now skips Step 12 and saves the snapshot only.
+- **The live roadmap dashboard** (`roadmap-artifacts.md` §2) refreshed without a question.
+- **The code-search row** of `integration-strategy.md` 1b names no server.
+
+### Files
+
+| File | Change |
+|---|---|
+| `references/native-surfaces.md` | new |
+| `references/data-policy.md` | «Hosted surfaces» |
+| `references/host-profiles.md`, `AGENTS.md`, `README.md`, `testing/host-matrix.md` | five surface capabilities, the write gate, Codex facts |
+| `references/artifact-style-gate.md`, `context-protocol.md`, `context-provider-protocol.md`, `local-context-protocol.md`, `data-integrity-protocol.md`, `roadmap-artifacts.md`, `integration-strategy.md` | the write gate on every host, `deep-research-host`, the digest wording, the question for every roadmap artifact |
+| `skills/*` (22 skills) | the version bumps above |
+| `testing/skill_lint.py` | check 30 |
+| `testing/host-smoke.sh`, `testing/trigger_codex.py` | the Codex hook check, the watchdog, a comment |
+| `testing/test-cases.md` | v4.1.0 cases |
+| `testing/ctx_cli_test.py`, `testing/provider_bundle_test.py` | pinned skill versions |
+
+### Backwards compatibility
+
+Nothing that worked stops working. A host without a surface gives the v4.0.2 result. New is a question before publications that had none (a scheduled run's, a Notion or Google Docs save, a refresh of a live page or dashboard) and a second confirmation before a Jira or Confluence write on Claude Code, where the host gate asks too. An existing `Channels: slack | email | confluence` in `local-context.md` is read as `local`.
+
+### Known limits
+
+- A live document of the host's own, a typed page and the host's research were measured on Claude Code. Codex CLI reaches a live document through the Google Drive connector, a page through Sites, research only when a research skill is installed; the ChatGPT app has inline visuals and nothing else of the five for the agent.
+- In the ChatGPT app a scheduled task is created by the user in the app; the skill says where in one line. Claude Code CLI has no `local` schedule (only `session` and `remote`), so the plugin's recurring runs are not offered there.
+- Rendering of the ChatGPT app's inline visual is not checked — only that the tool is there.
+- On Codex the PreToolUse write gate is not measured; the skill's own confirmation covers it.
+- Because the rule is «always ask», every refresh of a live board or document is a question.
+- Sites (Codex / ChatGPT) is recognised as ARTIFACT `page`; no skill publishes there yet.
+- Decks, dashboards, Atlassian Artifacts and one document per report across runs come with publishing (v4.3.0).
+
+---
+
 ## v4.0.2 (2026-10-29)
 
 **Atlassian MCP v2: a page written on v2 is asked about first, and a page is read whole.** On the Atlassian MCP v2 server (`https://mcp.atlassian.com/v2/mcp`) the Confluence writes are named `createConfluenceContent` and `updateConfluenceContent`. The host write gate knew only their v1 names (`createConfluencePage`, `updateConfluencePage`), so a requirements, concept or research page was published on v2 without the gate's question. Jira keeps its tool names on v2 and was gated already. The release also ships the registry copy of the plugin (PR #84), rebuilt at this release.

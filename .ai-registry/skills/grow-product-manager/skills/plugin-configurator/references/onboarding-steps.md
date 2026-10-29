@@ -428,7 +428,7 @@ Collect dashboard URLs (Tableau, GA, or other). If the user already provided das
 
 | Setting | Default | Ask user |
 |---------|---------|---------|
-| Channels | local (in-session only) | local / slack / email / confluence |
+| Channels | local (the library snapshot) | — not asked since v4.1.0: a scheduled health-check publishes and sends nothing (`references/native-surfaces.md` §4); the next interactive run offers the publication |
 | Frequency | weekly | weekly / custom cron / off |
 
 Writes the `Health-Check Notifications` subsection defined in `references/context-schema.md` → CJM Configuration. Until v2.1.0 the schema defined this subsection and Update mode (U-3) offered to change it, but no onboarding step ever collected it — U-3 edited a subsection that never existed.
@@ -860,7 +860,7 @@ Collected via `AskUserQuestion`/dialog:
 2. **VIP senders** — prefill from existing stakeholders/team in local-context; if none — ask for names+emails. Explain: VIP raises mail-signal ranking, it does not filter others out.
 3. **PM goals** — prefill from local-context (OKRs, mission commitments); if none — ask for 1–3 goals with wording the PM uses. These act as permanent scoring weights (`focus-scoring.md`). Also capture **Goals source** — the URL of the pinned product goals/missions document (used by strategy collectors).
 4. **Cadence overrides** — show the default ritual table (`focus-cadence.md` §2), ask what differs for this PM/team.
-5. **Scheduled briefs** — offer creating headless brief tasks (via the platform's scheduled-tasks/`schedule` skill): daily `now` brief (time, working days only), weekly `tactics` brief (e.g. Monday morning), and a quarterly `strategy` memo (first week of the quarter); `healthcheck: off` by default.
+5. **Scheduled briefs** — offer creating headless brief tasks (a recurring run where the host has SCHEDULE `local`; a scheduled brief never publishes — `references/native-surfaces.md` §4; without it, one line on where to create the run, §5): daily `now` brief (time, working days only), weekly `tactics` brief (e.g. Monday morning), and a quarterly `strategy` memo (first week of the quarter); `healthcheck: off` by default.
 
 Existence check: if the `Focus` section already exists → do not re-ask, only offer review/update via `update config`.
 

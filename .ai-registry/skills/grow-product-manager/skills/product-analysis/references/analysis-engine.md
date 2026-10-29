@@ -196,13 +196,15 @@ In both modes:
 
 ### Step 6 — Report, save, and feedback
 
+**Charts in the conversation (since v0.19.0, `references/native-surfaces.md` §2).** Where the host has WIDGET (marked in Step 0-host), every trend, comparison, funnel and before/after you present — in Q&A answers and in the report's Key Trends and Anomalies — is drawn inline as a chart, from the same numbers the text cites (label the axis, the period, the source). The chart shows; the numbers stay as tables in the report and in the vault copy, so nothing exists only in a widget. A widget is not a publication — no question. Without WIDGET: tables only, and one line at the start (`native-surfaces.md` §5).
+
 **6a. In Interactive Q&A mode:**
 
 At the end of the session (or when the user signals they're done), provide a concise summary:
 - Key findings discussed
 - Hypotheses generated (if any)
 - Recommended next steps
-- Offer to save the summary to Confluence/Notion/Google Docs
+- Offer to save the summary — with the 6c question (what it holds, where, who can open it); nothing is published without its «так»
 
 **6b. In Full Report mode:**
 
@@ -224,7 +226,9 @@ Generate a comprehensive structured report:
 
 **6c. Publishing — ask via AskUserQuestion:**
 
-> "Would you like to save the analysis report? If yes — which tool should I use?"
+> "Would you like to save the analysis report? It holds internal data (metrics from your sources). If yes — where: Confluence, Notion, Google Docs, or only locally? It will be visible to whoever can open that place."
+
+That question is the one `references/native-surfaces.md` §3 asks before a publication: it names what goes, where, and who sees it — ask it again before you update a page published earlier. **A delegated or headless run skips 6c** (a return payload to another skill, a scheduled caller): nothing is published, the caller decides (`native-surfaces.md` §4).
 
 - **Confluence** (default) → ask for space and parent page. Title: `[Analysis] Product/Feature — Date`
 - **Notion** → ask for workspace and location
@@ -256,7 +260,7 @@ After saving (or if the user decided not to save), provide a structured report:
 
 > "Are you satisfied with the analysis results? Would you like to dig deeper into anything or make changes?"
 
-- If the user requests changes — iterate: update the analysis, re-publish, present updated report
+- If the user requests changes — iterate: update the analysis, present the updated report; re-publishing a page published earlier asks the 6c question again
 - If the user confirms — proceed to the next step
 
 **Self-improvement check** (after corrections are applied and confirmed): follow `references/self-improvement.md` — analyze whether the correction is a pattern, and if so propose a SKILL.md improvement (version bump + CHANGELOG).

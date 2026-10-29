@@ -1,6 +1,6 @@
 ---
 name: project-planning
-version: 0.6.1
+version: 0.6.2
 description: Multi-quarter delivery forecast for a project or mission — dependencies, critical path, duration at a team-% share. Not one quarter (quarterly-planning), not structure (roadmap-architect). UA — «скільки займе проєкт/місія», «roadmap проєкту на 3 квартали», «критичний шлях». EN — "project roadmap".
 ---
 
@@ -61,12 +61,12 @@ Ask for the **maximum available team %** for the direction (by platform). `effec
 `duration ≈ critical_path_schedule(volume_by_platform, dependencies, effective_capacity)` (`capacity-model` sec. 10) → completion date + distribution across quarters/sprints.
 
 ### Step 6 — Project roadmap
-Per `roadmap-artifacts.md` sec. 3: multi-quarter Gantt, critical path highlighted, forecast date, what-if by %. Workspace + library storage; save baseline for drift.
+Per `roadmap-artifacts.md` sec. 3: multi-quarter Gantt, critical path highlighted, forecast date, what-if by %. Workspace + library storage; save baseline for drift. A Confluence page or a live dashboard only after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier).
 
 **Role defaults (since v3.6.0, `references/planning-core.md` §7).** When the request names no window, `role_defaults.horizon` sets the default arc window; `role_defaults.planning_view` sets the arc's depth — `rollup`: initiatives → epics first, features on request; `slice`: epics and features as before, plus the tech-debt reserve row of `references/capacity-model.md` §7 in the Step 4 capacity table. Rules in `references/arc-defaults.md`. Forecast, critical path, gates, baseline and the saved arc are the same for every profile; an automated run keeps the pre-v3.6.0 presentation.
 
 ### Replan — rolling-reforecast (mode `replan`)
-Trigger: quarter boundary / on-demand / scheduled.
+Trigger: quarter boundary / on-demand / scheduled — a scheduled replan (SCHEDULE `local`) writes the forecast to the workspace and publishes nothing, ending with the one line of `references/native-surfaces.md` §4.
 - R1. Current state ← `product-reporter` (`initiative-status` + quarter actuals); committed and **carried over** ← `quarterly-planning`.
 - R2. Remainder = volume − done.
 - R3. Backlog = remainder − committed_this_quarter (incl. carried over).
@@ -76,7 +76,7 @@ Trigger: quarter boundary / on-demand / scheduled.
 - R6. Update roadmap + risks; save the new baseline.
 
 ### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "project-planning", skill_version: "0.6.1", tags: [project/mission key, directions], content: project arc + forecast (or replan drift report), related: [[goal artifact]], [[quarterly roadmaps]], extra_frontmatter: { subtype: "project-arc", baseline_date, forecast_date } })` → "Saved to Vault: Roadmaps/{product}/…". The saved baseline is what `replan` mode compares drift against.
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "project-planning", skill_version: "0.6.2", tags: [project/mission key, directions], content: project arc + forecast (or replan drift report), related: [[goal artifact]], [[quarterly roadmaps]], extra_frontmatter: { subtype: "project-arc", baseline_date, forecast_date } })` → "Saved to Vault: Roadmaps/{product}/…". The saved baseline is what `replan` mode compares drift against.
 
 ## Integration
 ↔ `quarterly-planning` (down: arcs + allocation %; up: actuals + carryover → `replan`). ← `product-reporter` `initiative-status` (state / % done). ← `roadmap-architect` (structure). → `diagram-prototyper` (arc presentation). → `decision-log` (re-sequencing and scope calls made during `replan`).

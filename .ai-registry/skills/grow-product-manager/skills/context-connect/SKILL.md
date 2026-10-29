@@ -1,6 +1,6 @@
 ---
 name: context-connect
-version: 0.8.0
+version: 0.8.1
 description: Shared team core — connect, refresh bundle, daily sync, add MCP provider, enrich your context. Not your Obsidian vault or plugin setup (plugin-configurator), not curated sources (knowledge-library). UA — «онови мій пакет з ядра», «підключи мене до спільного контексту», «збагати мій контекст блоками ядра». EN — "refresh my bundle", "connect me to the team vault".
 ---
 

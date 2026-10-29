@@ -338,7 +338,7 @@ The blocks below are the exact `local-context.md` output formats the Plugin Conf
 - Default search modes: [library, internet, confluence, gdrive]
 
 #### Health-Check Notifications
-- Channels: [slack / email / local / confluence]
+- Channels: [local] — since v4.1.0 the only value: a scheduled run publishes and sends nothing (`references/native-surfaces.md` §4); an older `slack` / `email` / `confluence` is read as `local`
 - Frequency: [weekly / custom]
 ```
 

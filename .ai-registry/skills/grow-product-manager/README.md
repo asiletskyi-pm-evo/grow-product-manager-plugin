@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.0.2
+**Version:** 4.1.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.1.0** — **«Поверхні хоста»: a skill knows where the host can put a result, and asks before anything leaves the session** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). Step 0-host marks five more capabilities — a page at a link (ARTIFACT), a live document (DOCS), the host's own visual in the conversation (WIDGET), a recurring run on your machine (SCHEDULE `local`), a research pass with sources (RESEARCH) — described in `references/native-surfaces.md` with what was measured on each host. `focus-advisor` draws its board inline, `product-analysis` its charts, `cjm-research` schedules its health-check, `product-research` takes the host's research first, `product-reporter` offers a live document. Before internal data reaches a hosted surface — a live page or document, Confluence, Notion, a whiteboard, a design file — every skill asks, an update included, naming what goes, where and who can open it; a scheduled run never publishes; before a Jira or Confluence write the skill confirms itself on every host. Lint check 30 keeps host brands out of the skills. On Codex CLI 0.153.2 the plugin's hooks run once you trust them in Codex.
 
 **New in v4.0.2** — **Atlassian MCP v2: a page written on v2 is asked about first, and a page is read whole** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). On the Atlassian MCP v2 server the Confluence writes are `createConfluenceContent` / `updateConfluenceContent`, and the host write gate knew only their v1 names — a page was published on v2 without its question; now both names are gated. `references/integration-strategy.md` 1c maps every Atlassian tool the skills name from v1 to v2 and names the three differences that change a result silently: read a page with `detail: "full"` (the default is an excerpt), update with a fresh `snapshotToken`, ping with `getAccessibleAtlassianResources`. The release also ships the registry copy of the plugin (`.ai-registry/skills/grow-product-manager/`), rebuilt at every release.
 
@@ -201,7 +203,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.13.0)
+### 1. CJM Research (v0.14.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -220,7 +222,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 2. Product Analysis (v0.18.0)
+### 2. Product Analysis (v0.19.0)
 
 **Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
 
@@ -235,7 +237,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 3. Product Research (v0.15.1)
+### 3. Product Research (v0.16.0)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -249,7 +251,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 4. Brainstorm Features (v0.15.1)
+### 4. Brainstorm Features (v0.15.2)
 
 **Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation. Hosts Debate mode — a role-based adversarial discussion over an evidence pack (`references/debate-protocol.md`).
 
@@ -264,7 +266,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 5. Write Concept (v0.16.0)
+### 5. Write Concept (v0.16.1)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -274,7 +276,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 6. Requirements Creator (v0.17.1)
+### 6. Requirements Creator (v0.17.2)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -302,7 +304,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 8. Diagram & Prototype Creator (v0.15.1)
+### 8. Diagram & Prototype Creator (v0.15.2)
 
 **Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
 
@@ -333,7 +335,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 9. Meeting Processor (v0.18.2)
+### 9. Meeting Processor (v0.18.3)
 
 **Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
 
@@ -367,7 +369,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.17.0)
+### 10. Plugin Configurator (v2.17.1)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -385,7 +387,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 11. Knowledge Library (v0.9.2)
+### 11. Knowledge Library (v0.9.3)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
@@ -424,7 +426,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 13. Design Bridge (v0.9.1) — brand-agnostic since v1.11.0
+### 13. Design Bridge (v0.9.2) — brand-agnostic since v1.11.0
 
 **Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into brand-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
 
@@ -449,7 +451,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 14. Product Reporter (v0.10.2) — renamed from Team Ops Reporter in v2.0.0
+### 14. Product Reporter (v0.11.0) — renamed from Team Ops Reporter in v2.0.0
 
 **Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
 
@@ -467,7 +469,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 15. Roadmap Architect (v0.6.1) — Planning Suite
+### 15. Roadmap Architect (v0.6.2) — Planning Suite
 
 **Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree.
 
@@ -477,7 +479,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 16. Project Planning (v0.6.1) — Planning Suite
+### 16. Project Planning (v0.6.2) — Planning Suite
 
 **Description:** Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph with critical path, computes duration under a given team allocation %, and lays out a multi-quarter roadmap with rolling-reforecast.
 
@@ -487,7 +489,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 17. Quarterly Planning (v0.8.1) — Planning Suite
+### 17. Quarterly Planning (v0.8.2) — Planning Suite
 
 **Description:** Builds a quarterly roadmap, reviews the previous quarter's delivery (plan-vs-actual), and stress-tests the plan against team capacity.
 
@@ -497,7 +499,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 18. Sprint Planning (v0.6.2) — Planning Suite
+### 18. Sprint Planning (v0.6.3) — Planning Suite
 
 **Description:** Sprint pre-planning: derives focuses from the quarterly roadmap, highlights what's READY to pull (dependencies cleared), catches work-sequence violations, gathers per-member capacity, analyzes carryover risk, suggests assignees, and fills the sprint to capacity.
 
@@ -523,7 +525,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 20. Focus Advisor (v0.9.7) — NEW in v1.31.0, complete in v1.33.0
+### 20. Focus Advisor (v0.10.0) — NEW in v1.31.0, complete in v1.33.0
 
 **Description:** PM attention dispatcher — the 4th height of the suite, above structure/quarter/sprint. Scans the PM's context (sprint cycle position, calendar meetings needing preparation, important unanswered emails, open action items from recent meetings, Jira tails), ranks the signals, and recommends 1–3 focuses with reasons, cost of delay, and a chained next step. Recommends and chains — never executes another skill's work; the PM decides.
 
@@ -535,7 +537,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 21. Experiment Tracker (v0.6.1) — NEW in v1.36.0
+### 21. Experiment Tracker (v0.6.2) — NEW in v1.36.0
 
 **Description:** Owns the experiment lifecycle the pipeline used to drop after the A/B spec: `proposed → specced → running → awaiting-readout → decided`, with a persistent registry (`~/.grow-pm/experiments/registry.yaml` + vault mirror) and stale-test reminders (overdue runs, pending readouts, idle high-ICE hypotheses).
 
@@ -555,7 +557,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 23. Feedback Triage (v0.7.1) — NEW in v1.36.0
+### 23. Feedback Triage (v0.7.2) — NEW in v1.36.0
 
 **Description:** Turns a raw feedback stream (support tickets, complaints, reviews, Q&A, NPS verbatims) into a ranked pain map: semantic theme clustering, `frequency × severity × trend` scoring, new/growing/declining theme detection against the previous run's baseline, and hypothesis seeds for brainstorm-features. Feedback text never leaves the session; PII is masked in verbatims.
 
@@ -577,7 +579,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "постав ціль", "проведи аудит цілі", "лист цілей", "каскад цілей", "OKR на квартал", "set a goal", "audit this goal"
 
-### 25. One-on-One (v0.2.2) — NEW in v2.0.0
+### 25. One-on-One (v0.2.3) — NEW in v2.0.0
 
 **Description:** Prepares and analyzes 1-1 meetings — *for the person, about the person* (feedback/growth/trust), not tasks/status. Prepare builds the agenda from the profile (6 stages + seven "how" questions + NVC feedback drafts); Analyze turns a Fireflies transcript/notes into signals (motivation, burnout, career) + a manager-written **ARCV** follow-up + a profile update. Headless coverage: who hasn't been "touched" in > N weeks.
 
@@ -597,7 +599,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "відкрити вакансію", "спроєктувати посаду", "профіль вакансії", "вітальні запитання", "оцінити кандидатів", "draft an offer"
 
-### 28. Offboarding Guide (v0.2.2) — NEW in v2.0.0
+### 28. Offboarding Guide (v0.2.3) — NEW in v2.0.0
 
 **Description:** Guides parting ways with an underperformer — respectfully, on evidence. Gates on an **evidence base** (goals + reports; if absent → set them first), diagnoses "can't" vs "doesn't want", and runs the **four-meeting algorithm** (critical issues → measurable probation → results → sustainability), each with an ARCV follow-up, plus the dismissal script and a neutral team message. Strictly local; immediate dismissal only for theft/unlawful/ethics.
 
@@ -628,7 +630,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 **Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
 
 
-### 32. Context Connect (v0.8.0) — NEW in v3.10.0
+### 32. Context Connect (v0.8.1) — NEW in v3.10.0
 
 **Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. With a context store a refresh ends with the slots (since v3.15.0): in one message each, the bindings of the core's blocks to slots for you to confirm, the divergences between repositories to settle, and — at a refresh — the blocks you had switched off that now have a slot, with a yes per block to bring one back (a no is offered again at the next refresh; `references/context-protocol.md` §5f). Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
 
@@ -645,38 +647,38 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.13.0 | Customer Journey Map analysis and hypothesis validation |
-| Product Analysis | v0.18.0 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.15.1 | Competitive analysis, user research, market trends, UX benchmarking |
-| Brainstorm Features | v0.15.1 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
-| Write Concept | v0.16.0 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.17.1 | Create and analyze feature requirements |
+| CJM Research | v0.14.0 | Customer Journey Map analysis and hypothesis validation |
+| Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
+| Product Research | v0.16.0 | Competitive analysis, user research, market trends, UX benchmarking |
+| Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
+| Write Concept | v0.16.1 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.17.2 | Create and analyze feature requirements |
 | Task Creator | v0.15.2 | Create Jira tasks from requirements |
-| Diagram & Prototype Creator | v0.15.1 | Visualize concepts with diagrams, prototypes, infographics |
+| Diagram & Prototype Creator | v0.15.2 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
-| Meeting Processor | v0.18.2 | Process meetings and extract action items |
-| Plugin Configurator | v2.17.0 | Configure plugin for your organization |
-| Knowledge Library | v0.9.2 | Manage curated knowledge sources |
+| Meeting Processor | v0.18.3 | Process meetings and extract action items |
+| Plugin Configurator | v2.17.1 | Configure plugin for your organization |
+| Knowledge Library | v0.9.3 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
-| Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
-| Product Reporter | v0.10.2 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
-| Roadmap Architect | v0.6.1 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
-| Project Planning | v0.6.1 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
-| Quarterly Planning | v0.8.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
-| Sprint Planning | v0.6.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
+| Design Bridge | v0.9.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
+| Product Reporter | v0.11.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
+| Roadmap Architect | v0.6.2 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
+| Project Planning | v0.6.2 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
+| Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
+| Sprint Planning | v0.6.3 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.5.0 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
-| Focus Advisor | v0.9.7 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
-| Experiment Tracker | v0.6.1 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
+| Focus Advisor | v0.10.0 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
+| Experiment Tracker | v0.6.2 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
-| Feedback Triage | v0.7.1 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
+| Feedback Triage | v0.7.2 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
 | Goal Setter | v0.2.2 | Set/audit goals — SMARTCBP (people) / OKR (product), cascade, Tell-and-Sell commitment |
-| One-on-One | v0.2.2 | Prepare & analyze 1-1s — agenda from profile, signals + ARCV follow-up, coverage headless |
+| One-on-One | v0.2.3 | Prepare & analyze 1-1s — agenda from profile, signals + ARCV follow-up, coverage headless |
 | Performance Review | v0.2.2 | Review a person on goals + GTD-index + D-type, into the employer's review template |
 | Hiring Designer | v0.2.2 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
-| Offboarding Guide | v0.2.2 | Evidence-gated four-meeting offboarding, strictly local |
+| Offboarding Guide | v0.2.3 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
-| Context Connect | v0.8.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
+| Context Connect | v0.8.1 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
 | Context Navigator | v0.5.0 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---
@@ -942,7 +944,7 @@ The plugin is defined against Claude Code / Cowork and degrades by **observed ca
 | Connectors | ✅ | ✅ URL-matched; name-matched ones (`gmail`, `google calendar`, `google drive`, `fireflies`) work in the **app**, fail at session start in the **CLI** | ✅ | ? |
 | Filesystem `~/.grow-pm/`, vault | ✅ | ✅ | ❌ on web / mobile → `storage_mode: session`, artifact exported at the end; ✅ in the desktop app with a *Local Project* (attached folder, read/write) → behaves as the Codex column | own sandbox → via connector or the repo |
 | Subagents (checker, debater, extractor) | ✅ automatic | ⚠️ only on explicit request → sequential in-session passes (`.codex/agents/` for manual use) | ❌ | ⚠️ |
-| Hooks (context digest, write gate) | ✅ | ❌ ([openai/codex#17331](https://github.com/openai/codex/issues/17331)) → Step 0a in full, in-skill confirmation before writes | ❌ | ❌ |
+| Hooks (context digest, write gate) | ✅ | ⚠️ the SessionStart digest arrives once you trust the plugin's hooks in Codex (measured 2026-10-29, 0.153.2; the September pilot saw none — [openai/codex#17331](https://github.com/openai/codex/issues/17331)); the write gate is not measured → the skill's own confirmation before writes, as on every host | ❌ | ❌ |
 | Commands | ✅ 7, user-only | ✅ 7, migrated to typed-only skills | ❌ | ⚠️ |
 | Skill descriptions | full while the listing fits 1% of the context window; over it, the least-used skills show names only — descriptions stay within 400 characters (v3.10.1) | shortened to fit one shared ≈15k-character budget (~190 chars each on a host with 80 skills) — descriptions are ordered for that cut | ? | ? |
 | Per-skill result | 33 full | 17 full / 16 degraded | 22 degraded / 11 n/a | 23 degraded / 10 n/a |
@@ -962,6 +964,8 @@ After every release, if Codex stayed open (otherwise the next start does this it
 codex plugin marketplace upgrade grow-product-manager-plugins
 codex plugin add grow-product-manager@grow-product-manager-plugins
 ```
+
+**Hooks in Codex.** Codex runs a plugin's hooks only once they are trusted — it keeps a hash per hook under `[hooks.state…]` in `~/.codex/config.toml` (measured 2026-10-29, 0.153.2). Until they are, the context digest does not arrive and the skills find `local-context.md` themselves (Step 0a in full); nothing else changes, because before a Jira or Confluence write a skill confirms itself on every host.
 
 `marketplace add` on a marketplace that is already configured does not refresh it — use `upgrade`. Run `codex` commands from a folder without a project-local `.codex/config.toml` (for example `cd ~` first): Codex merges that file into its config, and a copy that declares a server by `url` where your global config runs it as a command stops every command with "url is not supported for stdio" (measured, codex-cli 0.153.2).
 
@@ -1019,8 +1023,8 @@ Two validators gate every push and PR (`.github/workflows/validate.yml`), and a 
 
 ```bash
 bash testing/validate-consistency.sh   # 19 checks: versions, frontmatter, paths, components, hooks, cross-host packaging (agent ↔ Codex port), thin core, the context manifest, the MCP allow-list, fixture regions, search types
-python3 testing/skill_lint.py          # 25 named checks
-bash testing/host-smoke.sh             # loads the tree on Claude Code AND its HEAD on Codex CLI — release blocker, run locally after the commit
+python3 testing/skill_lint.py          # 30 named checks
+bash testing/host-smoke.sh             # loads the tree on Claude Code AND its HEAD on Codex CLI (+ checks that Codex runs your installed copy's hooks) — release blocker, run locally after the commit
 ```
 
 Every check exists because the defect class it catches actually shipped, and each is verified by injecting that defect into a repo copy. `testing/trigger-evals.md` is meant to run on **both** hosts before a description-touching release (`codex exec` and `claude -p --plugin-dir`, single-line prompts, scored on the host's real configuration); a host not re-run is named in the CHANGELOG (Codex CLI since v3.1.0); `testing/host-matrix.md` is the skill × host result. When you find a new defect class, **add a check — never a manual step** (see `testing/Testing-process.md`).
@@ -1093,5 +1097,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.0.2  
+**Version:** 4.1.0  
 **Last Updated:** October 2026

@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.18.2
+version: 0.18.3
 description: Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «розбери транскрипт зустрічі», «action items». EN — "summarize meeting".
 ---
 
@@ -285,7 +285,9 @@ Under `pm_first` (after an answer) or `explain`, the "Your tags vs mine" or "How
 
 **M8a. Ask if the user wants to save:**
 
-> "Would you like to publish these meeting notes?"
+> "Would you like to publish these meeting notes? They hold internal data (decisions, action items, who said what). Confluence — everyone who reads the space; Notion — whoever can open the page."
+
+That is the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); updating a page published earlier asks again.
 
 Options via AskUserQuestion:
 - **Confluence** — create or update a page in the configured space
@@ -335,7 +337,7 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.18.2", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.18.3", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
 2. Key decisions from the meeting may additionally be recorded as ADR-style records — offer, don't force: "The meeting produced N decisions. Log them in the decision log so the 'why' survives?" → invoke `decision-log` (log mode) once for the chosen decisions — one record per decision, and decision-log's own confidence question once for the whole batch (since v3.7.0) — passing per decision the decision-log row of `references/chaining.md`: what was decided, the context and options discussed, who decided, a link back to these notes, and the v3.7.0 fields only when said in the meeting, plus `evidence_classes` since v3.8.0. decision-log owns the `decision` artifact; do not hand-write `Decisions/` files here.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 

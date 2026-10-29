@@ -1,6 +1,6 @@
 ---
 name: product-reporter
-version: 0.10.2
+version: 0.11.0
 description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a plan-vs-actual retro (quarterly-planning). UA — «звіт по спринту», «результати кварталу», «звіт по релізах», «які фічі виїхали в реліз», «QBR». EN — "board update".
 ---
 
@@ -120,10 +120,11 @@ Build charts into xlsx and/or as images embedded in Confluence.
 
 ### Step 6 — Output (ask each time)
 
-Ask via AskUserQuestion: **Confluence (the product's space from local-context) / local files (md + xlsx) / both**.
+Ask via AskUserQuestion: **Confluence (the product's space from local-context) / local files (md + xlsx) / both** — and, where the host has DOCS (marked in Step 0-host, since v0.11.0), **a live document** in the user's account as one more option. **Never for `member-review`**: it is one named person's throughput, so it is not put into one more hosted place (`references/data-policy.md` → People data, Hosted surfaces) — that mode keeps Confluence and local files as before, and its Confluence question names the space's readers. The question names the internal data the report holds (issues, SP, people's names from Jira) and who will see each place; that makes it the question `references/native-surfaces.md` §3 asks before a publication — no second one. Ask it again before updating a page or a document published earlier.
 - **Confluence**: `contentFormat: html`; ask space + parent (page **or folder** id both work). Tables use `<th>` headers, no "№" column, panel-info for the header block, epic/board links.
 - **Local**: build `<report>.md` (structured, nested tables) and `<report>.xlsx` (flat filterable sheet + "Огляд" summary sheet). Present files for the user.
 - **Both**: do local first, then publish, then link the page.
+- **Live document** (DOCS): the same structured report as the local `.md` (tables as tables, epic/board links), titled like the Confluence page; the local files are written first, the document is one more place to read it, never the only one. Give its link in the answer and in the run summary. A rerun creates a new document; it never rewrites one the user may have edited or shared (keeping one document per report across runs comes with publishing, a later release). Sharing it is a separate question, after it is created. Without DOCS the option is not offered.
 
 ## Workflow — `goal-report` mode (3T5F)
 
@@ -165,7 +166,7 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.10.2", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.11.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
    - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
 
@@ -201,7 +202,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - **Per-member** distribution — always produce **both** Assignee and Developer breakdowns (QA when relevant); never double-count totals.
 - **Transitions** (member-review) — changelog-backed via `status CHANGED TO "<s>" BY "<accountId>" DURING (...)`, not raw changelog dumps.
 - **Quarter-review** — fetch **per month** and sum (full-quarter JQL times out).
-- **Output format** — ask each run (Confluence / local md+xlsx / both). **Visualizations** — propose, build on accept.
+- **Output format** — ask each run (Confluence / local md+xlsx / both; a live document where the host has DOCS, except `member-review`), naming the internal data and who can open each place (`references/native-surfaces.md` §3). **Visualizations** — propose, build on accept.
 - See `references/jira-data-protocol.md` for the exact field map, JQL, and extraction patterns.
 
 ## Skill Chaining

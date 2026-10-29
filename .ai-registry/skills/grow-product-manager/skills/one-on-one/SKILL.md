@@ -1,6 +1,6 @@
 ---
 name: one-on-one
-version: 0.2.2
+version: 0.2.3
 description: Prepare and analyze 1-1s — a meeting for and about the person — agenda, NVC feedback, burnout signals. Not status meetings (meeting-processor), not a formal review (performance-review). UA — «підготуй мене до 1-1», «розбери 1-1», «з ким давно не було 1-1». EN — "prepare for a 1-1".
 ---
 
@@ -66,7 +66,7 @@ Input: a Fireflies transcript (via `integration-strategy.md`) or notes.
 4. **Chain if warranted:** → `decision-log` (if an important agreement was reached) · → `goal-setter` (revise goals) · → `performance-review` (if a review is due) · → `task-creator` (only genuine action items, and only if the person owns them — a 1-1 is not a task meeting).
 
 ### Mode: coverage / Headless
-Contract (analogous to experiment-tracker stale-check): `mode=coverage headless=true` → no questions → list direct reports **not "touched" in > N weeks** (default: monthly for newer people, quarterly for >1-year trusted; overridable per profile), with a suggested Friday slot, or "everyone covered". Offer to create a weekly schedule via the platform's `schedule` skill.
+Contract (analogous to experiment-tracker stale-check): `mode=coverage headless=true` → no questions → list direct reports **not "touched" in > N weeks** (default: monthly for newer people, quarterly for >1-year trusted; overridable per profile), with a suggested Friday slot, or "everyone covered". Offer to create a weekly schedule — a recurring run where the host has SCHEDULE `local` (person profiles never leave the machine), otherwise one line on where to create it (`references/native-surfaces.md` §4–§5).
 
 ### Step V — Vault Save
 1-1 notes and follow-ups save to `People/1-1/…` **locally/vault only** — never Confluence (data-policy).
@@ -81,7 +81,7 @@ Contract (analogous to experiment-tracker stale-check): `mode=coverage headless=
 - Language — `user.language`.
 
 ## Skill chaining
-← `meeting-processor` (detects a 1-1 → redirects here) · → `decision-log` · → `goal-setter` · → `performance-review` · → `task-creator` (owned action items) · → `schedule` (weekly coverage check).
+← `meeting-processor` (detects a 1-1 → redirects here) · → `decision-log` · → `goal-setter` · → `performance-review` · → `task-creator` (owned action items) · → a scheduled run (SCHEDULE `local`, weekly coverage check).
 
 ## Example dialogues
 - *"Підготуй мене до 1-1 з Олексієм"* → Step P (D2, GTD dipped last sprint, overload signal) → agenda with the seven "how" questions, a burnout-check block, and an NVC draft about two missed deadlines → reminder to book post-meeting processing time.

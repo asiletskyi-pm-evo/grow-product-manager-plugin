@@ -345,7 +345,7 @@ A local index that answers `vault/v1` (built by the user, a provider or a later 
 |---|---|
 | **MCP** | Providers are reached only through their local `paths` (L1 file search); no L2. |
 | **SHELL** | No bundle builder, no digest and no `ctx`: the connect flow is followed by hand from the provider's manifest, Step 0h reads registrations as files, and the blocks are not merged (a blocks file can still be read with the host's `vault_get_note`, §12.8). |
-| **HOOKS** | No host gate: skills apply §7 themselves. |
+| **HOOKS** (or the write gate, `host-profiles.md` §1) | No host gate: skills apply §7 themselves. On a host that runs the hooks but names its file tool otherwise (Codex `apply_patch`) the same holds. |
 | **FS** | No registrations and no bundle: a provider can still be used through MCP for the session only. |
 
 **Search (since v3.16.0, `search-protocol.md` §12).** With SHELL, Step 0.5 is `ctx search` over every source of §5 — the rating is done by the session's model, so no subagent is needed. SHELL without a context store: the same search, without the memory of choices. FS without SHELL: the request's words looked for in the plugin folder and the core folders, file by file. MCP only: `vault_search` of each reachable provider, one call per variant, merged by reciprocal-rank fusion — no section index.
@@ -522,7 +522,7 @@ An unknown version with different text is never taken for an edit: a false `edit
 
 `ctx` needs SHELL; the network is used only as §12.8 says. On a host without SHELL the blocks file can be read with the host's own `vault_get_note` (when MCP is present), but nothing merges it: the user's edits stay in `local-context.md`, and the next `ctx` run on a host with a shell does the comparison.
 
-`ctx provider sync` (§12.11) needs SHELL and the network as well, and runs where Step 0c of `local-context-protocol.md` runs. A host without hooks (Codex CLI) shows no `repos:` line in a digest it does not have, so the skill's closing sentence is what tells the user there; a Cowork sandbox usually has no VPN, so a repository behind one ends `unreachable` and is skipped.
+`ctx provider sync` (§12.11) needs SHELL and the network as well, and runs where Step 0c of `local-context-protocol.md` runs. A host without the digest (a Codex CLI whose plugin hooks are not trusted or not run) shows no `repos:` line in a digest it does not have, so the skill's closing sentence is what tells the user there; a Cowork sandbox usually has no VPN, so a repository behind one ends `unreachable` and is skipped.
 
 ### 12.11 The daily sync (since v3.14.0)
 

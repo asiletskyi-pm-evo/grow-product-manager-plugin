@@ -171,6 +171,7 @@ Every cited number / claim in the Sources section is marked with type:
 - `competitor-website` — Direct from competitor's site
 - `user-research` — User research synthesis (interviews, surveys)
 - `deep-research-llm` — ChatGPT/Gemini Deep Research (cross-checked)
+- `deep-research-host` — the host's built-in research pass, run in the session (RESEARCH, `native-surfaces.md`, since v4.1.0) — each claim cites the source it returned
 - `landscape:<slug>` — a fact from the product-landscape registry record `<slug>`
 
 **Skill-declared markers** (already used by the skills that read these inputs): `walkthrough-local` (a flow-walkthrough evidence pack), `pdf-upload` (a user-uploaded PDF report), `user-text` (numbers or statements the user typed or pasted into the chat).
@@ -193,7 +194,7 @@ Runs after the status is computed (Implementation order step 8), on every cited 
 | `baymard-premium`, `web-search`, `competitor-website` | `external` |
 | `kb-source` | the class the knowledge-library source type (and its `model-generated` tag) maps to (knowledge-library) |
 | `landscape:<slug>` | the class of the record's cited source (a store or web page → `external`); scan and bookmark provenance is never cited as evidence |
-| `deep-research-llm` | the class of the source the claim traces to; untraceable → `simulated` |
+| `deep-research-llm`, `deep-research-host` | the class of the source the claim traces to; untraceable → `simulated` |
 | Persona, synthetic-user or scenario output; model-written "user" answers | `simulated` |
 | A figure a skill read itself without its data gate (no Gate Checks 1–5 in that skill) | `reported (<source> · not gate-checked)` |
 | A Figma or other design file, or a prototype | `reported` (file, frame) — it describes intended UI, never `observed` user behaviour; a claim that users want or validate it on the design alone is `assumed`; real users' reactions in a prototype session are `observed` / `reported` with the session |

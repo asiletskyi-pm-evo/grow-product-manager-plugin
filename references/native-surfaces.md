@@ -97,7 +97,7 @@ Measured 2026-10-29 (the «Поверхні» programme, design workspace). ✅ 
 
 | Capability | Claude Code desktop | Claude Code CLI 2.1.311 | Codex CLI 0.153.2 | ChatGPT desktop app |
 |---|---|---|---|---|
-| ARTIFACT | ✅ `typed` | ✅ `typed` | ⚠️ `page` (Sites through Apps) | ⚠️ `page` (Sites) |
+| ARTIFACT | ✅ `typed` | ✅ `typed` | ⚠️ `page` (Sites through Apps) | ⚠️ `page` in the app's sidebar (Sites), not a tool of the chat |
 | DOCS | ✅ `native` | ✅ `native` | ⚠️ `connector` (Google Drive) | ❌ — Documents / Presentations / Spreadsheets write files |
 | WIDGET | ✅ | ❌ — the terminal renders none | ❌ — the terminal renders none | ✅ tool present; rendering not checked |
 | SCHEDULE | ✅ `local` (+ `session`, `remote`) | ⚠️ `session` and `remote` only — no `local` | ❌ | ❌ for the agent (the user creates it in the app) |
