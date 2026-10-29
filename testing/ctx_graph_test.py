@@ -318,6 +318,10 @@ with tempfile.TemporaryDirectory() as d:
           and "fm" in bea.get("kinds", []) and not any(k.startswith("fm:") for k in bea.get("kinds", []))
           and not any(BEA_CORE in n["via"] for n in res["nodes"] if n["hop"] == 2),
           (bea, [(n["path"], n["via"]) for n in res["nodes"] if n["hop"] == 2]))
+    rc, out, res = env.cli("graph", BEA_CORE, "--json")
+    check("v4.0.0 review I-6 (tasks 4–6): a sensitive start shows who links to it, never what its own text links",
+          rc == 0 and res["nodes"] and all(n["dirs"] == ["←"] for n in res["nodes"]),
+          [(n["path"], n["dirs"]) for n in (res or {}).get("nodes", [])])
     rc, out, res = env.cli("graph", "diagram.png", "--json")
     check("v4.0.0 review M-9: a name alone (a picture) is a start too", rc == 0 and res["how"] == "path"
           and [n["path"] for n in res["nodes"]] == [ROADMAP], res and res.get("nodes"))

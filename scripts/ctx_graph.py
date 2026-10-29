@@ -35,7 +35,7 @@ import ctx_common as cc  # noqa: E402
 import ctx_index as ci  # noqa: E402
 
 N = cc.N
-GRAPH_VERSION = 2                  # the rules of the edges (meta `graph_version`): another value makes the tables anew
+GRAPH_VERSION = 3                  # the rules of the edges (meta `graph_version`): another value makes the tables anew
 EDGE_DDL = """
 CREATE TABLE edges(src_id INTEGER, dst TEXT, kind TEXT, field TEXT, anchor TEXT, ambiguous INTEGER);
 CREATE INDEX edges_src ON edges(src_id);
@@ -161,11 +161,13 @@ def _work(con):
     return {k: sorted(v) for k, v in sorted(work.items())}
 
 
-def build(con, prefixes, changed=None, name_keys=(), full=False):
+def build(con, prefixes, changed=None, name_keys=(), full=False, vault_of=None):
     """The edges and the unresolved links into `con` (the index, read-write). All of them when `full`, when they were
     never built or built by other rules (the tables made anew), or when the work cards changed; else those of the notes
     `changed` (their ids), of the notes whose links name one of `name_keys` (names that came or went), and of every
-    note whose hash is not the one its edges were built from. Returns how many rows were written."""
+    note whose hash is not the one its edges were built from. `vault_of` (an index name → its vault, None outside every
+    vault): a link lands only in its own vault — Obsidian opens nothing in another (since rules 3); a note outside
+    every vault (a copy of a core, `@…`) stays reachable. Returns how many rows were written."""
     tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if stale(con) or not set(EDGE_TABLES) <= tables:
         for t in EDGE_TABLES:
@@ -220,12 +222,26 @@ def build(con, prefixes, changed=None, name_keys=(), full=False):
             mentions += con.execute("SELECT note_id, key FROM mentions WHERE note_id IN (%s)" % marks, part).fetchall()
         done = ids
     edges, dead, seen = [], [], set()
+    def here(dst, src):
+        if vault_of is None:
+            return True
+        a, b = vault_of(src), vault_of(dst)
+        return a is None or b is None or a == b
+
     for nid, field, target, anchor, embed in rows:
         src = paths.get(nid)
         if src is None:
             continue
         kind = kind_of(field or "", embed)
         hit = res.resolve(target)
+        if isinstance(hit, list):
+            near = [h for h in hit if here(h, src)]
+            hit = near[0] if len(near) == 1 else near if near else ("elsewhere", hit)
+        elif isinstance(hit, str) and not here(hit, src):
+            hit = ("elsewhere", [hit])
+        if isinstance(hit, tuple):               # only another vault holds it: dead here, its notes the candidates
+            dead.append((nid, target, field or "", "dead", json.dumps(hit[1], ensure_ascii=False)))
+            continue
         if isinstance(hit, list):
             dead.append((nid, target, field or "", "ambiguous", json.dumps(hit, ensure_ascii=False)))
             for dst in hit:
@@ -277,9 +293,10 @@ def kind_ok(kind, kinds):
     return kind in kinds or (kind.startswith("fm:") and "fm" in kinds)
 
 
-def _hop(con, frontier, seen, kinds):
+def _hop(con, frontier, seen, kinds, closed=()):
     """{path: {dirs, kinds, via, ambiguous, degree}} — the names one hop away from the paths `frontier`, both ways, but
-    for those in `seen`."""
+    for those in `seen`; from a path of `closed` (a sensitive one) only the notes that link to it, never what its own
+    text links (review I-6 of tasks 4–6)."""
     found = {}
 
     def add(path, d, kind, via, amb):
@@ -294,7 +311,7 @@ def _hop(con, frontier, seen, kinds):
         n["degree"] += 1
 
     ids = {}
-    for part in _chunks(frontier):
+    for part in _chunks([p for p in frontier if p not in set(closed)]):
         for nid, p in con.execute("SELECT id, path FROM notes WHERE path IN (%s)" % ",".join("?" * len(part)), part):
             ids[nid] = p
     for part in _chunks(ids):
@@ -350,8 +367,9 @@ def neighbourhood(con, start, depth=1, kinds=None, limit=LIMIT):
     ambiguous, sensitive, dataless}. A sensitive node is shown as _private says and the walk never goes on through it:
     what it links is its text (review I-4). The next hop starts from the nodes shown (review M-3)."""
     seen, frontier, nodes, more = set(start), list(start), [], {}
+    closed = {p for p, a in _about(con, list(start)).items() if a.get("sensitive")}
     for hop in range(1, max(1, int(depth)) + 1):
-        found = _hop(con, frontier, seen, kinds)
+        found = _hop(con, frontier, seen, kinds, closed)
         order = sorted(found, key=lambda p: (-found[p]["degree"], p))
         shown, more[hop] = order[:limit], max(0, len(order) - limit)
         about = _about(con, shown)

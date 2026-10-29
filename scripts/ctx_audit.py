@@ -119,6 +119,29 @@ def _inside(path, roots):
     return None
 
 
+def vault_of(sctx):
+    """A function: the vault an index name lies in (the root with the longest name that holds it), or None — a link
+    is a path from its own vault's root, so a fix never points into another vault (review I-5 of tasks 4–6)."""
+    pairs = sorted(((ci.rel_path(r["path"], sctx.get("vaults") or [], r), r.get("vault") or "")
+                    for r in sctx.get("roots") or []), key=lambda x: -len(x[0]))
+
+    def of(path):
+        if path.startswith("@"):
+            return None
+        for rel, vault in pairs:
+            if not rel or path == rel or path.startswith(rel + "/"):
+                return vault or None
+        return None
+    return of
+
+
+def _filled(v):
+    """Has a frontmatter key a value — a text, a number, a list or a map; never None or blanks."""
+    if isinstance(v, (list, dict)):
+        return bool(v)
+    return bool(ci._text(v).strip())
+
+
 def _sig(f):
     raw = "%s|%s|%s" % (f["kind"], f["path"], json.dumps(f["detail"], ensure_ascii=False, sort_keys=True))
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
@@ -156,6 +179,8 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
     tmap = type_folder_map()
     tax = taxonomy(tmap)
     providers = [r.get("id") for r in sctx.get("repos") or [] if r.get("id")]
+    import ctx_bridges as cbr
+    vault = vault_of(sctx)
     findings, types, no_inbound = [], collections.Counter(), 0
     checked, outside = 0, {}                     # outside: {path: the link targets outside every region and code}
     for nid, path, title, typ, source in rows:
@@ -182,19 +207,28 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
             findings.append({"kind": "region", "path": path, "detail": {"why": p["why"], "ns": p["ns"], "id": p["id"]},
                              "fixable": False})
         fm, _ = ci._frontmatter(text)
+        block = cbr.frontmatter(text) is not None
+        if block and fm is None:                 # a frontmatter the reader does not trust: never written into
+            findings.append({"kind": "schema", "path": path, "detail": {"missing": [], "derived": {},
+                                                                         "unreadable": True}, "fixable": False})
+            continue
         fm = fm or {}
         t = ci._text(fm.get("type")).strip()
         if t and t not in tax:
             types[t] += 1
-        missing = [k for k in ("type", "created") if not ci._text(fm.get(k)).strip()]
+        missing = [k for k in ("type", "created") if not _filled(fm.get(k))]
         if missing:
             derived = {}
             if "type" in missing and type_of(inner, tmap):
                 derived["type"] = type_of(inner, tmap)
             if "created" in missing and created_of(fm, inner):
                 derived["created"] = created_of(fm, inner)
-            findings.append({"kind": "schema", "path": path, "detail": {"missing": missing, "derived": derived},
-                             "fixable": bool(derived)})
+            d = {"missing": missing, "derived": derived}
+            empty = [k for k in missing if k in fm]
+            if empty:
+                d["empty"] = empty               # the key is there with no value: filled in place, never a second key
+            findings.append({"kind": "schema", "path": path, "detail": d,
+                             "fixable": bool(derived) and (block or set(derived) == {"type", "created"})})
     for path, source, target, field, why, cands in dead:
         where = _inside(path, roots) if source == "own" else None
         if not where or where[1].startswith(SKIP):
@@ -208,9 +242,11 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
         d = {"target": target, "field": field or "", "candidates": cands}
         if not free:
             d["where"] = "region"                # only inside a region of a script, or the note is not read: left
+        here = [c for c in cands if vault(c) is not None and vault(c) == vault(path)]
         findings.append({"kind": kind, "path": path, "detail": d,
-                         "fixable": free and (kind == "ambiguous" or len(cands) == 1)})
-    own_names = [(p, dl, md) for p, src, dl, md in names if src == "own" and _inside(p, roots)]
+                         "fixable": free and (bool(here) if kind == "ambiguous" else len(cands) == 1 and len(here) == 1)})
+    own_names = [(p, dl, md) for p, src, dl, md in names if src == "own" and _inside(p, roots)
+                 and not _inside(p, roots)[1].startswith(SKIP)]     # _System/, Templates/: not checked (review M-7)
     for p, dl, md in own_names:
         if not md and _BAK.search(p):
             findings.append({"kind": "backup", "path": p, "detail": {"what": "bak"}, "fixable": False})

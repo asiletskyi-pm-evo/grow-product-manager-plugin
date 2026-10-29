@@ -160,9 +160,9 @@ FACT_FIELDS = ("actual", "target", "value", "baseline", "current")
 FACTS_VERSION = 1                   # meta `facts_version`: an index without it reads its cards once more for their facts
 GRAPH_DDL = """
 CREATE TABLE IF NOT EXISTS names(path TEXT PRIMARY KEY, source TEXT, dataless INTEGER, md INTEGER);
-"""                                 # the derived tables (edges, unresolved, graph_src) are ctx_graph.EDGE_DDL: dropped
-                                    # and made again whenever their rules change (ctx_graph.GRAPH_VERSION)                                 # v4.0.0: every file a link may land on (`names`, evicted ones too) and the links
-                                    # resolved (ctx_graph.build) — added in place to an earlier build's file
+"""                                 # v4.0.0: every file a link may land on (`names`, evicted ones too), added in
+                                    # place to an earlier build's file; the derived tables (edges, unresolved,
+                                    # graph_src) are ctx_graph.EDGE_DDL, made anew whenever their rules change
 ENTITY_COLS = ("kind", "label", "emails_json", "team", "role", "slug", "aliases_json", "key", "bridges_json",
                "prefixes_json", "fields_json")       # fields_json since v3.19.0: an earlier build's table gets it in place
 NOTE_COLS = ("path", "source", "title", "type", "product", "status", "date", "ttl_date", "confluence_id",
@@ -1348,7 +1348,16 @@ class Index:
         con.commit()
         import ctx_graph as cg                       # v4.0.0: the links resolved (imported here: it imports this one)
         try:
-            cg.build(con, [r["rel"] for r in walk.roots if r["source"] == "own"], walk.touched, walk.name_keys)
+            pairs = sorted(((r["rel"], r.get("vault") or "") for r in walk.roots), key=lambda x: -len(x[0]))
+
+            def vault_of(path):                      # the vault an index name lies in, None outside every vault
+                if path.startswith("@"):
+                    return None
+                return next((v or None for rel, v in pairs if not rel or path == rel or path.startswith(rel + "/")),
+                            None)
+
+            cg.build(con, [r["rel"] for r in walk.roots if r["source"] == "own"], walk.touched, walk.name_keys,
+                     vault_of=vault_of)
         except Exception:  # noqa: BLE001 — the graph is a cache of the section index: its fault never costs the index
             con.rollback()                           # (review I-6); the next refresh builds the graph again
             try:

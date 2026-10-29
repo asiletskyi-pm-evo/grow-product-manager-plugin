@@ -61,7 +61,13 @@ SKIP = {"no-fm": "без frontmatter, а виводиться не все — н
         "hub-unread": "хаб не завантажено з iCloud",
         "own-related": "у нотатці вже є «related» твого скрипта",
         "base-yours": ".base без позначки ctx — твій",
-        "refused": "межа запису"}
+        "refused": "межа запису",
+        "fence": "нотатка закінчується незакритим блоком коду — регіон став би кодом",
+        "broken": "регіони нотатки не цілі (ctx audit) — спершу їх",
+        "sensitive": "нотатка контуру People — у хаб не пишу",
+        "unreadable": "frontmatter не читається — не пишу"}
+NO_VAULT_STORE = "сховище в ~/.grow-pm, не у вейлті — нормалізатор пише лише туди, де живе `ctx undo` (сховище у вейлті)"
+_TABLE = re.compile(r"^[ \t]*\|")
 
 
 def _sha(data):
@@ -87,8 +93,9 @@ def _safe_label(s):
 
 def _fix_links(text, fixes):
     """`text` with each link whose target (as written) is a key of `fixes` pointed at fixes[target] — its anchor kept,
-    the text a reader sees kept (`|as written` when it had no label; an embed keeps what follows `|`); never inside a
-    code block, a code span or a region."""
+    the text a reader sees kept (`|as written`, `|Note > Heading` for an anchor, when it had no label; an embed keeps
+    what follows `|`); a label's separator as it was (`\|` in a table — and on a table line the one it adds); never
+    inside a code block, a code span or a region (review B-1 of tasks 4–6)."""
     masked = rg._masked(text)
     regions = rg.parse(text)[0]
     out, last = [], 0
@@ -99,16 +106,48 @@ def _fix_links(text, fixes):
         target, anchor, label = ci._link_parts(inner)
         if target not in fixes:
             continue
+        line_start = text.rfind("\n", 0, m.start()) + 1
+        line_end = text.find("\n", m.start())
+        on_table = bool(_TABLE.match(text[line_start:line_end if line_end >= 0 else len(text)]))
+        sep = "\\|" if "\\|" in inner or on_table else "|"
         new = fixes[target] + (("#" + anchor) if anchor else "")
         if label is not None and label != "":
-            new += "|" + label
+            new += sep + label
         elif not m.group(1):
-            new += "|" + target
+            new += sep + target + ((" > " + anchor) if anchor else "")
         out.append(text[last:m.start(2)])
         out.append(new)
         last = m.end(2)
     out.append(text[last:])
     return "".join(out)
+
+
+def _fill_line(text, key, value):
+    """The note with the frontmatter line `key:` (no value, or "" / '' / ~ / null) given `value` in place."""
+    fm = cbr.frontmatter(text)
+    pat = re.compile(r"^%s[ \t]*:[ \t]*(?:\"\"|''|~|null)?[ \t]*\r?$" % re.escape(key), re.I)
+    pos = fm[0]
+    while pos < fm[1]:
+        nl = text.find("\n", pos)
+        end = fm[1] if nl < 0 or nl >= fm[1] else nl
+        if pat.match(text[pos:end]):
+            cr = "\r" if text[pos:end].endswith("\r") else ""
+            return text[:pos] + "%s: %s" % (key, value) + cr + text[end:]
+        pos = end + 1
+    return cbr.insert_line(text, "%s: %s" % (key, value))
+
+
+def hub_id(t):
+    """The region id of a type's hub: `hub-<type>` in the letters an id takes, else with a short hash (review I-3)."""
+    slug = re.sub(r"[^a-z0-9_.-]+", "-", (t or "note").lower()).strip("-.")
+    if slug == (t or "").lower() and slug:
+        return "hub-" + slug
+    return "hub-%s%s" % ((slug + "-") if slug else "", hashlib.sha1((t or "").encode("utf-8")).hexdigest()[:6])
+
+
+def _file_name(t):
+    """A type as a file name: no folder separators, no leading dots, no characters a file system refuses."""
+    return re.sub(r"[\\/:*?\"<>|\x00-\x1f]+", "-", t or "note").strip(" .-") or "note"
 
 
 def _region_text(rid, body):
@@ -177,9 +216,11 @@ def rewrite(rel, text, rows, today=None):
         if cbr.frontmatter(t):
             for k in ("type", "created"):
                 if k in r["add"]:
-                    t = cbr.insert_line(t, "%s: %s" % (k, r["add"][k]))
+                    t = _fill_line(t, k, r["add"][k]) if k in (r.get("empty") or ()) else \
+                        cbr.insert_line(t, "%s: %s" % (k, r["add"][k]))
         else:
-            t = "---\n" + _fm_text(r["add"]) + "---\n" + t
+            bom = "\ufeff" if t.startswith("\ufeff") else ""          # a BOM stays first (review M-1)
+            t = bom + "---\n" + _fm_text(r["add"]) + "---\n" + t[len(bom):]
     if by["links"]:
         t = _fix_links(t, {r["target"]: r["new"] for r in by["links"]})
     for r in by["related"]:
@@ -188,7 +229,7 @@ def rewrite(rel, text, rows, today=None):
         if text is None and not t:
             t = "---\ntype: moc\ncreated: %s\n---\n# %s — хаб\n\nНотатки без зв'язків, які додав `ctx vault normalize`.\n\n" \
                 % (_day(today), r["type"])
-        t = _set_region(t, "hub-" + r["type"], _list_body("Без зв'язків (додав ctx)", r["links"]))
+        t = _set_region(t, hub_id(r["type"]), _list_body("Без зв'язків (додав ctx)", r["links"]))
     for r in by["agents"]:
         if text is None and not t:
             t = "# AGENTS\n\n"
@@ -256,10 +297,10 @@ def _person(reg, s):
     return hits[0] if len(hits) == 1 else None
 
 
-def _card_link(ent):
-    """(link target, label) of an entity: its id card, else any of its cards inside a vault."""
+def _card_link(ent, ok=lambda c: not c.startswith("@")):
+    """(link target, label) of an entity: its id card, else any of its cards `ok` takes (in the note's own vault)."""
     for c in [next((c for c in ent["cards"] if c["path"] == ent["id"]), None)] + list(ent["cards"]):
-        if c and not c["path"].startswith("@"):
+        if c and ok(c["path"]):
             return _link_target(c["path"]), ent.get("key") or ent.get("label") or c.get("label")
     return None
 
@@ -297,9 +338,22 @@ def plan(sctx, context, store, home, only=None, today=None):
     regs, _ = cc.boundary_registrations(cc.vault_entries(sctx["text"]),
                                         extra_dirs=[os.path.join(home, ".grow-pm", "providers")])
     plan_rows, skipped = [], collections.defaultdict(list)
+    vault = ca.vault_of(sctx)
+    if cc.N(os.path.normpath(cc.storage_root(sctx.get("text") or "", home))).casefold() == \
+            cc.N(os.path.normpath(os.path.join(home, ".grow-pm"))).casefold():
+        out["notes"] = list(out["notes"]) + [NO_VAULT_STORE]          # review M-9: one line, not a refusal a row
+        return out
+    sens = {p for _, p, t_, ty, _ in rows if (ty or "").lower() in ci.PEOPLE_TYPES or ci.one_on_one(p, t_)}
+    sens |= {p for p, in idx._read(lambda con: con.execute("SELECT path FROM notes WHERE sensitive = 1").fetchall(), [])}
+    cache = {}
 
-    def refused(rel):
-        return cbr.write_refusal(sctx, regs, sctx["store_root"], home, rel)
+    def refused(rel):                            # review M-11: once a file
+        if rel not in cache:
+            cache[rel] = cbr.write_refusal(sctx, regs, sctx["store_root"], home, rel)
+        return cache[rel]
+
+    def broken(path):
+        return bool(rg.parse(texts.get(path) or "")[1]) or rg.ends_in_fence(texts.get(path) or "")
 
     def add(row):
         why = refused(row["path"])
@@ -317,14 +371,18 @@ def plan(sctx, context, store, home, only=None, today=None):
             if not cbr.frontmatter(texts[f["path"]]) and set(adds) != {"type", "created"}:
                 skipped[SKIP["no-fm"]].append(f["path"])
                 continue
-            add({"op": "frontmatter", "path": f["path"], "add": adds})
+            row = {"op": "frontmatter", "path": f["path"], "add": adds}
+            if f["detail"].get("empty"):
+                row["empty"] = [k for k in f["detail"]["empty"] if k in adds]
+            add(row)
     if "links" in only:
         for f in findings:
             if f["kind"] not in ("dead", "ambiguous") or not f["fixable"] or f["path"] not in texts:
                 continue
             d = f["detail"]
-            new = _choose(d["candidates"], f["path"], roots) if f["kind"] == "ambiguous" else (
-                d["candidates"][0] if d["candidates"] and not d["candidates"][0].startswith("@") else None)
+            here = [c for c in d["candidates"] if vault(c) is not None and vault(c) == vault(f["path"])]
+            new = _choose(here, f["path"], roots) if f["kind"] == "ambiguous" else (
+                here[0] if len(here) == 1 and len(d["candidates"]) == 1 else None)
             if not new:
                 skipped[SKIP["outside"]].append(f["path"])
                 continue
@@ -338,27 +396,36 @@ def plan(sctx, context, store, home, only=None, today=None):
         by_type = collections.defaultdict(list)
         for f in findings:
             if f["kind"] == "orphan":
+                if f["path"] in sens:                    # review M-6: a People note's title never lands in a hub
+                    skipped[SKIP["sensitive"]].append(f["path"])
+                    continue
                 w = ca._inside(f["path"], roots)
                 t = types.get(f["path"]) or (ca.type_of(w[1], tmap) if w else None) or "note"
-                by_type[t].append(f["path"])
-        for t, orphans in sorted(by_type.items()):
-            root_rel = ca._inside(orphans[0], roots)[0]
+                by_type[(w[0] if w else "", t)].append(f["path"])
+        name_set = {p for p, in names}
+        for (root_rel, t), orphans in sorted(by_type.items()):
+            rid = hub_id(t)
+            mine_root = lambda p: (ca._inside(p, roots) or ("\0",))[0] == root_rel   # the orphans' own plugin folder
             counts = collections.Counter()
             for src, dsts in links_of.items():
-                if types.get(src) == "moc" and ca._inside(src, roots):
+                if types.get(src) == "moc" and mine_root(src):
                     counts[src] = sum(1 for d_ in dsts if types.get(d_) == t)
-            ours = sorted(h for h, tx in texts.items() if _region_body(tx, "hub-" + t) is not None)
+            ours = sorted(h for h, tx in texts.items() if mine_root(h) and _region_body(tx, rid) is not None)
             best = [h for h, n in counts.most_common() if n >= MIN_HUB]
             hub = ours[0] if ours else sorted(best, key=lambda h: (-counts[h], h))[0] if best else None
             new_file = hub is None
             if new_file:
-                base = "%s/_MOC/%s — хаб" % (root_rel, t) if root_rel else "_MOC/%s — хаб" % t
-                taken = {ci.name_key(p) for p, in names}
+                base = "%s/_MOC/%s — хаб" % (root_rel, _file_name(t)) if root_rel else "_MOC/%s — хаб" % _file_name(t)
+                taken = {ci.name_key(p) for p in name_set}
                 hub = base + ".md" if ci.name_key(base) not in taken else base + " (ctx).md"
             elif hub not in texts:
                 skipped[SKIP["hub-unread"]].extend(orphans)
                 continue
-            have = _listed(_region_body(texts.get(hub, ""), "hub-" + t)) if not new_file else []
+            elif broken(hub):
+                skipped[SKIP["broken"]].append(hub)
+                continue
+            have = [x for x in (_listed(_region_body(texts.get(hub, ""), rid)) if not new_file else [])
+                    if x in name_set or x + ".md" in name_set]                     # review M-10: a gone note leaves
             keep = [(x, "") for x in have]
             wanted = [(_link_target(o), o.rsplit("/", 1)[-1][:-3]) for o in sorted(orphans)
                       if _link_target(o) not in have]
@@ -378,8 +445,10 @@ def plan(sctx, context, store, home, only=None, today=None):
                 skipped[SKIP["own-related"]].append(path)
                 continue
             mine = _region_body(text, "related")
-            listed = set(_listed(mine)) if mine is not None else set()
-            own_links = {d_ for d_ in links_of.get(path, set()) if _link_target(d_) not in listed}
+            own_links = set()                    # review M-8: what the note links itself, outside every region
+            for tg in rg.outside_targets(text):
+                hit = reg.resolver.resolve(tg)
+                own_links.update([hit] if isinstance(hit, str) else hit or [])
             links = []
             by_key = collections.defaultdict(set)          # a work's cards by its key: your hub first, else the core's
             for dst in mentions.get(path) or ():
@@ -389,7 +458,7 @@ def plan(sctx, context, store, home, only=None, today=None):
             for key, cards in sorted(by_key.items()):
                 if path in cards or own_links & cards or key == mine_key:
                     continue                                # the note is a card of that key, or links one itself
-                pick = sorted((c for c in cards if not c.startswith("@")),
+                pick = sorted((c for c in cards if vault(c) is not None and vault(c) == vault(path)),
                               key=lambda c: (0 if ca._inside(c, roots) else 1, c))
                 if pick:
                     links.append((_link_target(pick[0]), key))
@@ -404,11 +473,14 @@ def plan(sctx, context, store, home, only=None, today=None):
                     cards = {c["path"] for c in e["cards"]}
                     if path in cards or own_links & cards:
                         continue
-                    lk = _card_link(e)
+                    lk = _card_link(e, lambda c: vault(c) is not None and vault(c) == vault(path))
                     if lk:
                         links.append(lk)
             body = _list_body("Пов'язане", links) if links else None
             if body == mine or (body is None and mine is None):
+                continue
+            if broken(path):
+                skipped[SKIP["fence"] if rg.ends_in_fence(text) else SKIP["broken"]].append(path)
                 continue
             add({"op": "related", "path": path, "links": links})
     if "agents" in only:
@@ -420,6 +492,9 @@ def plan(sctx, context, store, home, only=None, today=None):
             if exists and cur is None:
                 continue                         # there but not readable (evicted): left as it is
             if cur is not None and _region_body(cur, "agents") == body:
+                continue
+            if cur is not None and broken(rel):
+                skipped[SKIP["broken"]].append(rel)
                 continue
             add({"op": "agents", "path": rel, "new_file": not exists, "body": body})
     if "bases" in only:
@@ -437,6 +512,8 @@ def plan(sctx, context, store, home, only=None, today=None):
                 body = base_text(pre, name)
                 disk_path = _disk(sctx, rel)
                 if disk_path and os.path.isfile(disk_path):
+                    if ci.is_dataless(disk_path):          # review M-4: never brought down from iCloud
+                        continue
                     try:
                         cur = open(disk_path, encoding="utf-8").read()
                     except (OSError, UnicodeDecodeError):

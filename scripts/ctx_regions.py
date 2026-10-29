@@ -19,6 +19,7 @@ inside one; its script rewrites it.
                                 block or a code span are text.
 - touches(text, old)            does `old` (an edit's old text) lie, at any of its places, on a region or a marker?
 - outside_targets(text)        the targets of the links outside every region and code block
+- ends_in_fence(text)           does the note end inside a code block it never closes
 - changed(old, new)             do the regions of a new text differ from the old one's (a region's text, a marker, a
                                 region gone or added)?
 - check_registry(root)          the lines where vault-schema.md's table and NAMESPACES differ
@@ -137,15 +138,31 @@ _WIKI = re.compile(r"!?\[\[([^\]\n]+?)\]\]")
 
 
 def outside_targets(text):
-    """The targets (as written, before `#` and `|`) of the wiki links of `text` outside every region and code block —
-    the links a writer that never enters a region may change."""
+    """The targets of the wiki links of `text` outside every region and code block, read as the index reads them
+    (ctx_index._link_parts: `\|` in a table too) — the links a writer that never enters a region may change."""
+    import ctx_index as ci                       # here: ctx_index has no need of this module, but keep it light
     masked = _masked(text or "")
     regions, _ = parse(text or "")
+    spans = _Spans([(r["start"], r["end"]) for r in regions])
     out = set()
     for m in _WIKI.finditer(masked):
-        if not any(r["start"] <= m.start() < r["end"] for r in regions):
-            out.add(m.group(1).split("|", 1)[0].split("#", 1)[0].strip())
+        if not spans.touch(m.start()):
+            out.add(ci._link_parts(text[m.start(1):m.end(1)])[0])
     return out
+
+
+def ends_in_fence(text):
+    """Does the note end inside a code block it never closes? A region added at its end would be text of that block
+    (review I-2 of tasks 4–6: written again at every run)."""
+    fence = None
+    for line in (text or "").split("\n"):
+        m = _FENCE.match(line)
+        if fence:
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
+                fence = None
+        elif m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+            fence = m.group(1)
+    return fence is not None
 
 
 class _Spans:

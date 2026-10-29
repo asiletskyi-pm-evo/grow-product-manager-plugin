@@ -2192,6 +2192,11 @@ def cmd_vault(a, c):
     for k, v in done["skipped"].items():
         merged[k] = list(dict.fromkeys(merged.get(k, []) + v))
     shown = dict(res, rows=done["written"], skipped=merged)
+    if done["written"]:                             # the audit's last result says what is left (review M-3)
+        try:
+            ca.run(sctx, c.context, store=c.store, now=now())
+        except Exception:  # noqa: BLE001 — a cache never changes the write's result
+            pass
     if not a.json:
         sys.stdout.write(cnz.render(shown, written=True))
         if done["written"]:

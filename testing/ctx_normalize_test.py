@@ -74,9 +74,8 @@ with tempfile.TemporaryDirectory() as d:
           lk == {(STANDUP, "bea"): "Notes/People/bea", (STANDUP, "Notes/Old/Roadmap"): "Notes/Roadmap",
                  ("Notes/Region link.md", "bea"): "Notes/People/bea",
                  ("Notes/Region link.md", "plan"): "Notes/Projects/Archive/plan"}, lk)
-    check("…a note with no frontmatter whose type cannot be derived gets none (named among the skipped)",
-          "Notes/Notes 2026-10-07.md" not in fm and "Notes/Notes 2026-10-07.md" in res["skipped"].get(cnz.SKIP["no-fm"], []),
-          res["skipped"])
+    check("…a note with no frontmatter whose type cannot be derived gets none",
+          "Notes/Notes 2026-10-07.md" not in fm, fm)
     hubs = {r["path"]: (r["new_file"], r["add"]) for r in ops.get("hubs", [])}
     check("v4.0.0 hub rows: each orphan in a new hub of its type (no moc links three of them)",
           hubs == {"Notes/_MOC/research — хаб.md": (True, ["Notes/Mention only.md"]),
@@ -132,6 +131,9 @@ with tempfile.TemporaryDirectory() as d:
     base = read(env.note("Notes/Meetings/Meetings.base"))
     check("…Meetings.base: the marker first, the folder's filter", base.startswith(cnz.BASE_MARK)
           and 'file.inFolder("Notes/Meetings")' in base, base[:200])
+    last = __import__("json").loads(read(env.home, ".grow-pm", "audit", "last.json"))
+    check("review M-3: --apply leaves the audit's last result up to date (no orphan there)",
+          last["counts"]["orphan"] == 0, last["counts"])
     rc, out, aud = env.run("audit", "--json")
     amb = [f for f in aud["findings"] if f["kind"] == "ambiguous"]
     check("v4.0.0 after --apply the audit finds no orphan and no ambiguous link a writer may fix in your layer — the one "
@@ -178,6 +180,76 @@ with tempfile.TemporaryDirectory() as d:
           rc == 0 and '"[[bea]]"' in st and "[[Notes/Roadmap|the roadmap]]" in st, st)
     rc, out, _ = env.run("vault", "normalize", "--only", "nonsense")
     check("…an unknown operation is a usage error (exit 3)", rc == 3 and "--only takes" in out, out[-200:])
+
+with tempfile.TemporaryDirectory() as d:                 # the review of tasks 4–6: each defect it reproduced
+    env = VaultEnv(d)
+    env.run("migrate", "--apply")
+    write(env.note("Notes/Table.md"), "---\ntype: research\ncreated: 2026-10-10\n---\n# Table\n\nWith [[bea]].\n\n"
+                                      "| who | link |\n|---|---|\n| a | [[bea]] |\n| b | [[bea\\|Bea Two]] |\n\n"
+                                      "Old: [[Notes/Old/Roadmap#Next]].\n")
+    write(env.note("Notes/Meetings/Empty 2026-10-11.md"), "---\ntype:\n  - meeting\n  - weekly\ncreated:\n---\n"
+                                                         "# Empty\n\nTo [[Roadmap]].\n")
+    write(env.note("Notes/Meetings/Tab 2026-10-12.md"), "---\n\tweird line\n---\n# Tab\n\nTo [[Roadmap]].\n")
+    write(env.note("Notes/Fence.md"), "---\ntype: research\ncreated: 2026-10-13\n---\n# Fence\n\nPROJ-1234 [[Roadmap]]\n"
+                                      "```\nopen code\n")
+    write(env.note("Notes/Lonely ru.md"), "---\ntype: зустріч\ncreated: 2026-10-14\n---\n# Lonely ru\n")
+    write(env.note("Notes/Odd type.md"), "---\ntype: ../Templates/x\ncreated: 2026-10-14\n---\n# Odd\n")
+    write(env.note("Notes/People/review.md"), "---\ntype: performance-review\ncreated: 2026-10-14\n---\n# Review\n")
+    p_ = env.note("Notes/Broken region.md")
+    write(p_, read(p_).replace("Mine. [[Roadmap]]", "Mine. [[Roadmap]] PROJ-1234"))
+    rc, out, res = env.run("vault", "normalize", "--json")
+    rows = (res or {}).get("rows", [])
+    hubs = {r["path"]: r for r in rows if r["op"] == "hubs"}
+    check("review I-3: a Cyrillic type gets a hub whose id the parser reads; a type with a path in it a safe file name",
+          "Notes/_MOC/зустріч — хаб.md" in hubs and "Notes/_MOC/templates-x — хаб.md" in hubs
+          and not any("/Templates/" in h for h in hubs), sorted(hubs))
+    check("review M-6: a People note is never listed in a hub (named among the skipped)",
+          not any("Notes/People/review.md" in r.get("add", []) for r in hubs.values())
+          and "Notes/People/review.md" in res["skipped"].get(cnz.SKIP["sensitive"], []), res["skipped"])
+    check("review I-2/I-4: no «Пов'язане» into a note that ends inside an open code block, or whose own region is broken",
+          not any(r["op"] == "related" and r["path"] in ("Notes/Fence.md", "Notes/Broken region.md") for r in rows)
+          and "Notes/Fence.md" in res["skipped"].get(cnz.SKIP["fence"], [])
+          and "Notes/Broken region.md" in res["skipped"].get(cnz.SKIP["broken"], []), res["skipped"])
+    check("review I-1: a frontmatter the reader does not trust gets no row",
+          not any(r["path"] == "Notes/Meetings/Tab 2026-10-12.md" and r["op"] == "frontmatter" for r in rows))
+    rc, out, done = env.run("vault", "normalize", "--apply", "--code", res["code"], "--json")
+    tb = read(env.note("Notes/Table.md"))
+    check("review B-1: a link in a table keeps the table — `\\|` there, `|` in the text; an anchor's visible text kept",
+          "| a | [[Notes/People/bea\\|bea]] |" in tb and "| b | [[Notes/People/bea\\|Bea Two]] |" in tb
+          and "With [[Notes/People/bea|bea]]." in tb and "[[Notes/Roadmap#Next|Notes/Old/Roadmap > Next]]" in tb, tb)
+    em = read(env.note("Notes/Meetings/Empty 2026-10-11.md"))
+    check("review I-1: an empty `created:` is filled in place (one key), a list `type` left as it is",
+          em.count("created:") == 1 and "created: 2026-10-11\n" in em and "type:\n  - meeting\n  - weekly\n" in em, em)
+    ru = read(env.note("Notes/_MOC/зустріч — хаб.md"))
+    write(env.note("Notes/Lonely ru 2.md"), "---\ntype: зустріч\ncreated: 2026-10-15\n---\n# Lonely ru 2\n")
+    os.remove(env.note("Notes/Lonely ru.md"))
+    rc, out, more = env.run("vault", "normalize", "--only", "hubs", "--json")
+    hr = [r for r in (more or {}).get("rows", []) if r["op"] == "hubs" and "зустріч" in r["path"]]
+    check("review I-3/M-10: the next run finds that hub again (no «(ctx)» twin) and drops the note gone from it",
+          hr and hr[0]["path"] == "Notes/_MOC/зустріч — хаб.md" and [t for t, _ in hr[0]["links"]] == ["Notes/Lonely ru 2"],
+          (hr, ru))
+
+import ctx_regions as rg  # noqa: E402
+ids = [cnz.hub_id(t) for t in ("зустріч", "нарада", "meeting-notes", "Weekly Sync")]
+check("review I-3: two types the id cannot spell get two ids, each read back by the region parser",
+      len(set(ids)) == 4 and ids[2] == "hub-meeting-notes"
+      and all(rg.parse("<!-- ctx:begin id=%s -->\n<!-- ctx:end id=%s -->\n" % (i, i))[0][0]["id"] == i for i in ids), ids)
+
+with tempfile.TemporaryDirectory() as d:                 # review I-5: two vaults — a fix never points into the other
+    env = VaultEnv(d)
+    v2 = os.path.join(d, "vault2")
+    write(os.path.join(v2, "Notes2", "bob.md"), "---\ntype: person\n---\n# Bob\n")
+    env.text = env.text.replace("| 1 | %s | Notes | all | auto | never |" % env.vault,
+                                "| 1 | %s | Notes | all | auto | never |\n| 2 | %s | Notes2 | all | auto | never |"
+                                % (env.vault, v2))
+    write(env.ctx, env.text)
+    env.run("migrate", "--apply")
+    write(env.note("Notes/Bob link.md"), "---\ntype: research\ncreated: 2026-10-16\n---\n# Bob link\n\n[[bob]]\n")
+    rc, out, aud = env.run("audit", "--json")
+    bob = [f for f in (aud or {}).get("findings", []) if f["kind"] in ("dead", "ambiguous") and f["detail"]["target"] == "bob"]
+    rc, out, res = env.run("vault", "normalize", "--only", "links", "--json")
+    check("review I-5: a name only another vault holds is no fix (not fixable, no row)",
+          bob and not bob[0]["fixable"] and not any(r.get("target") == "bob" for r in (res or {}).get("rows", [])), (bob, res))
 
 with tempfile.TemporaryDirectory() as d:                 # a file changed after the report: never overwritten
     import ctx_search as cs_
