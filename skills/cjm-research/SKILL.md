@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.13.0
+version: 0.14.0
 description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами».
 ---
 
@@ -58,7 +58,7 @@ If no template applies → fall back to `cjm-builtin-funnel`; if that's also mis
 | **anomalies** | Find funnel anomalies only | 1–4 | 2–5 min | Short report: anomalies per funnel stage |
 | **hypotheses** | Generate improvement hypotheses | 1–9 | 10–15 min | Hypotheses with ICE + funnel impact |
 | **full** | Comprehensive CJM analysis | 1–12 | 20–30 min | Full report + optional backlog |
-| **health-check** | Scheduled funnel health check | 1–4 (automated) | 2–5 min | Health summary with delta vs previous |
+| **health-check** | Scheduled funnel health check | 1–4 (automated) | 2–5 min | Health summary with delta vs previous — saved as the library snapshot, **never published by the scheduled run** (`references/native-surfaces.md` §4) |
 | **comparison** | Cross-platform comparison | 1–4 per platform | 10–15 min | Side-by-side anomaly comparison |
 
 ---
@@ -135,7 +135,7 @@ Note in the report header: "This analysis is informed by {N} previous artifacts 
 
 ### Step 2 — Clarify scope with user
 
-Ask via AskUserQuestion (skip for automated `health-check` — use defaults):
+Ask via AskUserQuestion (skip for automated `health-check` — use the saved parameters; its output is the library snapshot only, never 2e's destination — `references/native-surfaces.md` §4):
 
 **2a. Mode selection:**
 
@@ -173,7 +173,9 @@ Ask via AskUserQuestion (skip for automated `health-check` — use defaults):
 
 **2e. Output format:**
 
-> "Where should I publish the report?"
+> "Where should I publish the report? It will hold internal data (funnel metrics and anomalies). Confluence — everyone who reads the space; Notion or Google Docs — whoever can open that place; or only a local file."
+
+This is a preference, not the publication itself: the question of `references/native-surfaces.md` §3 is asked at 12a when the report is ready, naming the place chosen here. An automated health-check never uses this step.
 
 - Confluence page (default)
 - Notion page
@@ -183,7 +185,7 @@ Ask via AskUserQuestion (skip for automated `health-check` — use defaults):
 
 **2f. Mode-specific settings:**
 
-- For `health-check`: confirm recurring schedule → chain to `schedule` skill if user wants automation
+- For `health-check`: confirm a recurring schedule if the user wants automation → a recurring run where the host has SCHEDULE `local`, otherwise one line on where to create it; the scheduled run (prompt `cjm-research mode=health-check headless=true` — `headless` marks it automated) writes, never publishes (`references/native-surfaces.md` §4–§5, since v0.14.0)
 - For `comparison`: confirm which platforms to compare side-by-side
 - For `hypotheses` and `full`: confirm enrichment search modes (library / internet / confluence / gdrive / baymard) — pre-filled from CJM config defaults
 
@@ -279,7 +281,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.13.0",
+     skill_version: "0.14.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],

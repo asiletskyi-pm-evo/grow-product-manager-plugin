@@ -49,6 +49,7 @@ CHECKS = """
 27. inbox-step           a SKILL.md without its end-of-run line (context-protocol.md §5i): the inbox, or — People contour — no deltas
 28. bootstrap-template   a heading or a deferred-step key of ctx bootstrap's skeleton (scripts/ctx_bootstrap.py) that onboarding Step 16c does not have
 29. command-size         a commands/*.md over 4096 bytes — Codex CLI silently does not migrate it into a skill
+30. surface-brand        a skill, agent, command, template or shared protocol naming a host surface by its brand or tool instead of its capability (native-surfaces.md §6)
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1562,6 +1563,42 @@ for _c in sorted(glob.glob(os.path.join(root, "commands", "*.md"))):
     if _n > COMMAND_MAX:
         fail("command-size", f"commands/{os.path.basename(_c)}: {_n} bytes > {COMMAND_MAX} — Codex will not migrate it; "
                              "move the details into references/")
+
+# ============================================================ surface brand (30)
+# v4.1.0: a surface is named by its capability — ARTIFACT, DOCS, WIDGET, SCHEDULE, RESEARCH — never by a host's brand
+# or tool (the user's decision, R5). Only the brand map may name them: host-profiles.md and native-surfaces.md §6.
+# The `schedule` skill and a host artifact tool had spread to 13 lines before this check (3 of them chain arrows); plain «canvas» stays free (Miro's canvas tools).
+_B = r"(?<![A-Za-z0-9])"   # \b is no boundary after "_": mcp__visualize__show_widget must still match
+SURFACE_BRANDS = [   # (pattern, flags, what it names)
+    (_B + r"(?:create|update)_artifact\b", 0, "a host's artifact tool"),
+    (r"`Artifact`\s+tool|\bArtifact tool\b|" + _B + r"Artifact(?:Data|Comments)\b", 0, "a host's artifact tool"),
+    (r"\bartifact tool\b|\bcowork artifact\b|\bclaude\.ai artifact\b|\bclaude artifacts?\b", re.I, "a host's artifact tool"),
+    (r"\bclaude docs\b", re.I, "a host's live documents"),
+    (_B + r"show_widget\b|" + _B + r"genui\b", 0, "a host's inline visual"),
+    (r"`?\bvisualize`?\s+skill\b", re.I, "a host's inline visual"),
+    (_B + r"scheduled-tasks\b|`schedule`|" + _B + r"create_scheduled_task\b|" + _B + r"Cron(?:Create|List|Delete)\b|"
+     + _B + r"automation_update\b|" + _B + r"automations\.peek\b|" + _B + r"RemoteTrigger\b|(?<![\w/.])/schedule\b", 0, "a host's scheduler"),
+    (r"\bschedule skill\b", re.I, "a host's scheduler"),
+    (_B + r"deep-research\b(?!-)", 0, "a host's built-in research"),
+    (r"\bchatgpt canvas\b", re.I, "a host's canvas"),
+    (_B + r"sites_(?:create_site|deploy_\w+|update_site_access)\b", 0, "a host's hosted pages"),
+]
+SURFACE_BRAND_ALLOWED = {os.path.join("references", "host-profiles.md"), os.path.join("references", "native-surfaces.md")}
+_sb_files = (glob.glob(os.path.join(root, "skills", "**", "*.md"), recursive=True)
+             + glob.glob(os.path.join(root, "agents", "*.md")) + glob.glob(os.path.join(root, "commands", "*.md"))
+             + glob.glob(os.path.join(root, "references", "*.md"))
+             + glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True)
+             + glob.glob(os.path.join(root, ".codex", "agents", "*.md")))
+for _f in sorted(_sb_files):
+    _rel = os.path.relpath(_f, root)
+    if _rel in SURFACE_BRAND_ALLOWED:
+        continue
+    for _ln, _line in enumerate(open(_f, encoding="utf-8").read().splitlines(), 1):
+        for _rx, _fl, _what in SURFACE_BRANDS:
+            _m = re.search(_rx, _line, _fl)
+            if _m:
+                fail("surface-brand", f"{_rel}:{_ln}: «{_m.group(0)}» names {_what} — name the capability "
+                                      "(ARTIFACT / DOCS / WIDGET / SCHEDULE / RESEARCH, references/native-surfaces.md §1)")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

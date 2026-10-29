@@ -1,6 +1,6 @@
 ---
 name: focus-advisor
-version: 0.9.7
+version: 0.10.0
 description: What to focus on today, this sprint or quarter — scans mail, calendar, Jira, metrics; recommends and chains. Not sprint planning (sprint-planning), not analysis (product-analysis). UA — «на чому сфокусуватись», «ранковий бриф», «розбери мою пошту», «чи все ок з метриками», «де великі можливості». EN — "what should I focus on".
 ---
 
@@ -33,11 +33,11 @@ The 4th height of the suite — **the PM's attention** above structure/quarter/s
 | `auto` | — | **v0.1** — detects horizon from phrasing/cycle |
 | `tactics` | sprint – quarter | **v0.2** — 3–5 tactical candidates: roadmap drift, stale backlog, A/B decisions, capacity, team events |
 | `strategy` | quarter – year | **v0.3 (this release)** — 2–4 strategic bets aligned to product goals/missions, with explicit "what we deliberately do NOT do" |
-| `board` | — | **v0.3** — create/refresh the live "PM Focus Board" artifact (on platforms with live-artifact support; otherwise a static HTML file) |
+| `board` | — | **v0.3** — show the "PM Focus Board": inline in the conversation where the host has WIDGET; a live page (ARTIFACT) only on request, asked before every refresh; otherwise a static HTML file (Step 7b, since v0.10.0) |
 
 ## Headless contract (scheduled runs)
 
-Invocation from a scheduled task prompt: `focus-advisor mode={now|tactics|strategy} headless=true` (e.g. daily morning `now`, Monday `tactics`, first week of the quarter `strategy`). Rules: (1) skip all gates — **no side-effect actions at all** (no Jira/Gmail/Confluence writes, no auto-launching chained skills); (2) metrics health-check chain only if `Focus → Scheduled → healthcheck: on`; (3) output = brief in chat **and always as a file** (Step 7) with journal status `proposed`; chains render as "next steps" with ready-to-paste phrases; (4) collector cache is kept warm for the follow-up interactive session.
+Invocation from a scheduled run (the host's SCHEDULE `local` — it reads the journal and the focus files on this machine; `references/native-surfaces.md` §1, §4): `focus-advisor mode={now|tactics|strategy} headless=true` (e.g. daily morning `now`, Monday `tactics`, first week of the quarter `strategy`). Rules: (1) skip all gates — **no side-effect actions at all** (no Jira/Gmail/Confluence writes, no publication or refresh of a hosted board or page, no auto-launching chained skills); (2) metrics health-check chain only if `Focus → Scheduled → healthcheck: on`; (3) output = brief in chat **and always as a file** (Step 7) with journal status `proposed`; chains render as "next steps" with ready-to-paste phrases; (4) collector cache is kept warm for the follow-up interactive session.
 
 ## Pipeline
 
@@ -120,7 +120,7 @@ The brief modes (`now`/`tactics`/`strategy`) run the Step 0–7 pipeline above. 
 1. **Step 0** (local context), then read `~/.grow-pm/focus/focus-log.md`.
 2. Show every focus **not** in a terminal state, grouped: `chosen` (in progress, with days-since), then `proposed` carryovers, then `snoozed` whose date has passed. Terminal states (`done`, and `snoozed` still in the future) are not shown — this is a working list, not a report.
 3. Per focus, offer via `AskUserQuestion`: **done** (closed — optionally record the outcome in one line) · **snooze** (until a date — the 3+ snooze note from `focus-scoring.md` §2 applies) · **drop** (no longer relevant — recorded as `done` with reason "no longer relevant", not deleted) · **keep** (stays as-is).
-4. **Gate**, then write the transitions to the journal (append, never rewrite history). Refresh the board if one exists (Step 7b).
+4. **Gate**, then write the transitions to the journal (append, never rewrite history). Refresh the board if one exists (Step 7b — a live page only after its question).
 5. Output: a one-line summary of what moved ("2 closed, 1 snoozed to Aug 4, 1 still open since Jul 6") plus, if a focus has been `chosen` for more than 2 cycles, the honest nudge — finish it, delegate it, or close it deliberately.
 
 Nothing is auto-closed. A focus the PM never revisits stays open and keeps appearing — that visibility is the point.
@@ -128,12 +128,14 @@ Nothing is auto-closed. A focus the PM never revisits stays open and keeps appea
 ### Step 7b — Live "PM Focus Board" (mode `board`, or offered after any brief)
 A persistent one-glance panel of the PM's attention. Contract:
 - **Content sections:** current focuses (from the latest brief, with status from journal), due cadence rituals, signal freshness per collector, "також на радарі" backlog, chain shortcuts (ready-to-paste phrases).
-- **Platforms with live artifacts** (e.g. Cowork `create_artifact`/`update_artifact`): dynamic parts re-query connector MCP tools on open (calendar events, Jira per-key statuses); local-only data (journal, briefs) is **baked in at render time** — artifacts cannot read local files, so focus-advisor refreshes the artifact on every run (update, not recreate; keep the artifact id in `~/.grow-pm/focus/board.yaml`).
-- **Fallback:** no artifact tools → render static `~/.grow-pm/focus/board.html` and link it in the brief.
+- **Where it shows (since v0.10.0, `references/native-surfaces.md` §2).** Mark WIDGET and ARTIFACT in Step 0-host.
+  1. **WIDGET → inline, by default.** The board is drawn in the conversation from the journal and the latest brief. Nothing leaves the session, so there is no question. The static `~/.grow-pm/focus/board.html` is written as well — the inline board shows, the file keeps it (and is all a host that showed nothing leaves).
+  2. **ARTIFACT (`typed`) → a live page, only when the PM asks for one** («зроби живий борд») **or one already exists** (its id in `~/.grow-pm/focus/board.yaml`). Its dynamic parts re-query the connectors on open (calendar events, Jira per-key statuses); local-only data (journal, briefs) is **baked in at render time**, because a page cannot read local files. That makes every refresh a publication of internal data: ask the question of `native-surfaces.md` §3 **before every create and every refresh**, naming who can open it — «Оновити живий борд у твоєму акаунті (внутрішні дані: фокуси, журнал, події календаря, статуси Jira)? Бачиш лише ти» — or, once it has been shared — or when you cannot know — «… Бачиш ти і ті, з ким ти вже поділився». On «так» update, never recreate; on «ні» show it inline (or as the file) this run. **The live page never carries the manager-rhythms signal** (Step 2 — it is derived from person profiles, which never go to a hosted surface): those candidates stay in the inline board and the brief. A headless run never refreshes it and ends with the §4 line («Новий бриф від <дата> — оновити живий борд можна в наступному прогоні»).
+  3. **No live page → inline.** When nobody asked for a live page and none exists, the board is shown inline (point 1) — or, without WIDGET, as the static `~/.grow-pm/focus/board.html`, linked in the brief, with the one line of `native-surfaces.md` §5.
 - Board is a **view**, not a store: journal stays the source of truth; no actions execute from the board beyond ready-to-paste phrases.
 
 ## Quality Standards
-- Recommend and chain — never execute another skill's work inline; never launch chained skills without an explicit PM "go". In headless runs — no chained launches at all, with a single exception: the metrics health-check chain when `Focus → Scheduled → healthcheck: on` (see "Invocation from a scheduled task prompt" above).
+- Recommend and chain — never execute another skill's work inline; never launch chained skills without an explicit PM "go". In headless runs — no chained launches at all, with a single exception: the metrics health-check chain when `Focus → Scheduled → healthcheck: on` (see "Headless contract (scheduled runs)" above).
 - Every focus is verifiable: signal links always present; no invented urgency; "insufficient signals" is a legitimate brief.
 - Mail: read-only screening; only live letters from humans become signals; bodies never leave the mailbox or enter the cache (`data-policy.md`); any write (reply draft) — gate.
 - Jira: per-key reads only (`jira-data-protocol.md`).

@@ -69,6 +69,7 @@ Tag every external source by type:
 - `competitor-website` — direct from competitor's site (include URL snapshot date)
 - `user-research` — user research synthesis (include N real users, date, segment)
 - `deep-research-llm` — ChatGPT/Gemini Deep Research (cross-checked with second source)
+- `deep-research-host` — the host's built-in research pass (include the source each claim cites; since v0.16.0)
 
 Inline-annotation convention — since v3.8.0 the class from 1.5.g goes first inside the annotation (`references/pm-mental-model.md` §4):
 - `(external · Baymard Premium, Guideline #N, YYYY research)`
@@ -105,6 +106,7 @@ How this skill's inputs map onto 6a (the full table is there):
 | A figure the user typed or pasted (`user-text`) | `reported (<who>)` — even after 1.5.a–1.5.e |
 | A stakeholder's or the PM's own view | `reported (<who>)` — not a real-user source |
 | `deep-research-llm` | the class of the resolvable, recency-checked source a claim traces to; untraceable → `simulated` (two LLMs agreeing are not a second source) |
+| `deep-research-host` | the same rule: the class of the resolvable, recency-checked source a claim traces to; untraceable → `simulated` (the host's research agreeing with an LLM is not a second source) |
 | Persona or synthetic-user answers, simulated interviews, model-written "user" answers | `simulated` |
 
 - **Synthesis keeps the class** of what it synthesises: a theme drawn from six interviews is `reported`; a design research-synthesis appendix keeps the class of the notes it was given.

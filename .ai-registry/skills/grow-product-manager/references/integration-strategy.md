@@ -37,7 +37,7 @@ The namespace is **host-dependent**: the same declared server gets a different p
 
 Namespaces are what the host showed in real sessions; a differently-named connection (an org's custom Atlassian server, a self-hosted Figma proxy) may expose a different prefix — that is what 1b is for. A declared connector that is **not connected** is the user's decision: say which tab to connect it in, do not search the registry for it (Step 2 is for products the plugin does not declare).
 
-**Not declared on purpose:** Tableau (a local MCP server the user runs; in hosted sessions it appears as `mcp__remote-devices__Tableau__*`), Notion, Slack, Obsidian — detected by pattern only.
+**Not declared on purpose:** Tableau (a local MCP server the user runs; in hosted sessions it appears as `mcp__remote-devices__Tableau__*`), Notion, Slack, Obsidian, and an organisation's own code-search server (a GitLab indexer reachable only over a VPN, bridged locally like Tableau — the user describes it in `local-context.md` under Integrations & Data Sources) — detected by pattern only.
 
 **Shared-context providers (since v3.10.0).** A team's or an organisation's core knowledge served by an MCP server — often reachable only over a VPN and bridged locally — is not declared here either: each provider is described by its own manifest and registered per user (`context-provider-protocol.md` §3). Detect it by the contract, not by a name: a server exposing `vault_search` and `vault_get_note` speaks `vault/v1`. Its local folders are behind the plugin's write boundary (§7 there).
 
@@ -56,6 +56,7 @@ Namespaces are what the host showed in real sessions; a differently-named connec
 | Google Calendar | `mcp__*__list_events`, `mcp__*__list_calendars` | `list_events`, `get_event`, `create_event` |
 | Gmail | `mcp__*__search_threads`, `mcp__*__list_labels` | `search_threads`, `get_thread`, `create_draft` |
 | Fireflies | `mcp__*__fireflies_*`, `mcp__*__get_transcripts` | `fireflies_get_transcripts`, `fireflies_search` |
+| Code search over the organisation's repositories (a GitLab indexer) | `mcp__*__search_code`, `mcp__*__find_definition`, `mcp__*__get_file` | `search_code`, `find_definition`, `get_file` |
 
 **If found** → use the MCP tools directly. Proceed with the skill workflow.
 

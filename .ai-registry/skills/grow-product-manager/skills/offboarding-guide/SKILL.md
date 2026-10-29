@@ -1,6 +1,6 @@
 ---
 name: offboarding-guide
-version: 0.2.2
+version: 0.2.3
 description: Guide a manager through parting with an underperformer — evidence check, "can't" vs "won't", four-meeting algorithm, ARCV follow-ups. Not a routine review (performance-review). UA — «допоможи звільнити», «офбординг», «чи час прощатися». EN — "help me let someone go", "offboarding".
 ---
 
@@ -81,7 +81,7 @@ Per `self-improvement.md`.
 - Language — `user.language`.
 
 ## Skill chaining
-← `performance-review` · → `goal-setter` (evidence gate) · → `product-reporter` (evidence gate) · → `one-on-one` (if "can't" → development) · → `hiring-designer` (replacement + retro) · → `task-creator` (reassign tasks) · → `schedule` (book the sequence).
+← `performance-review` · → `goal-setter` (evidence gate) · → `product-reporter` (evidence gate) · → `one-on-one` (if "can't" → development) · → `hiring-designer` (replacement + retro) · → `task-creator` (reassign tasks) · → the calendar (book the meeting sequence, on the user's «так»).
 
 ## Example dialogues
 - *"Думаю звільнити аналітика, він не тягне"* → Step P shows no formal goals set → **Gate G fails** → "There's no goal/report evidence — let's set goals via goal-setter and stand up 3T5F reporting first, otherwise this is by-feel." → returns after evidence exists.

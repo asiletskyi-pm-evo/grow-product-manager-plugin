@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.16.0
+version: 0.16.1
 description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «опиши фічу», «дизайн-бриф», «стратегічний меморандум», «бізнес-кейс». EN — "design brief", "strategy memo".
 ---
 
@@ -229,7 +229,7 @@ Page title format: `[PRD] Feature Name` — for a design brief, strategy memo, d
 5. **Tables** — use tables wherever structured data needs to be communicated: comparisons of alternatives, metrics, feature matrices, user impact summaries, risk/mitigation pairs
 6. **Sources** section at the bottom with links, marking each source type (Confluence, Google Drive, Web, ChatGPT Deep Research, Gemini Deep Research, uploaded file, Product Research, and since v3.9.0 a build-first prototype — `reported` (file, frame), never validation) and, since v3.8.0, its evidence class (`measured`, `reported`, `external`, …)
 
-Publish via Confluence MCP (`createConfluencePage`). If unavailable — follow integration fallback chain. As a last resort, generate a local document for manual publishing.
+Publish via Confluence MCP (`createConfluencePage`) after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier). If unavailable — follow integration fallback chain. As a last resort, generate a local document for manual publishing.
 
 After publishing, provide a structured report of what was done:
 
@@ -244,7 +244,7 @@ After publishing, provide a structured report of what was done:
 
 > "Are you satisfied with the concept? Would you like to refine, add, or change anything?"
 
-- If the user requests changes — iterate: update the PRD, re-publish, present updated report
+- If the user requests changes — iterate: update the PRD, present the updated report; updating the published page asks the publication question again
 - If the user confirms — proceed to the next step
 
 **Self-improvement check** (after corrections are applied and confirmed): follow `references/self-improvement.md` — analyze whether the correction is a pattern, and if so propose a SKILL.md improvement (version bump + CHANGELOG).
@@ -286,7 +286,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.16.0",
+     skill_version: "0.16.1",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],

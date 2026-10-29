@@ -4,7 +4,9 @@
 
 **6a. Ask if the user wants to save the document:**
 
-> "Would you like to save the requirements document? If yes — which tool should I use?"
+> "Would you like to save the requirements document? It holds internal data (the feature, its metrics and plans). If yes — where: Confluence (everyone who reads the space), Notion or a Google Doc (whoever can open it), or a local file?"
+
+That is the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier).
 
 - If no — end the skill, results stay in the dialogue
 - If yes — ask where:

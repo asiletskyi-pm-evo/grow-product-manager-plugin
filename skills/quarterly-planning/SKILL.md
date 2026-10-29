@@ -1,6 +1,6 @@
 ---
 name: quarterly-planning
-version: 0.8.1
+version: 0.8.2
 description: One-quarter roadmap, capacity stress-test and plan-vs-actual retro. Not multi-quarter (project-planning), not structure/labels (roadmap-architect), not a sprint (sprint-planning). UA — «зібери roadmap на квартал», «plan-vs-actual», «kill criteria для плану кварталу». EN — "quarter retro".
 ---
 
@@ -50,7 +50,7 @@ Per `local-context-protocol.md`. If no Planning section → chain to `plugin-con
 > a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step 1 — Scope
-`AskUserQuestion`: quarter; mode; format (Confluence + dashboard by default). Determine the previous quarter (retro) and the target quarter (plan).
+`AskUserQuestion`: quarter; mode; format (Confluence + dashboard by default — a preference; each is published only after its publication question, `references/native-surfaces.md` §3). Determine the previous quarter (retro) and the target quarter (plan).
 
 ### Step 2 — Actuals collection (retro)
 **Delegate `product-reporter` `quarter-review`** for the previous quarter's plan-vs-actual (closed epics/features, releases, by direction). On top of that:
@@ -75,7 +75,7 @@ Per `capacity-model.md` sec. 2–5: (3a) team + involvement % (from local-contex
 If a platform is over the ceiling — **show the specific directions→epics→features that don't fit** (with estimates) and offer a choice (interactive capacity-gate from `roadmap-artifacts` sec. 5; feature / platform-slice toggles). Recompute after each edit. Repeat until the PM is confident. The PM decides.
 
 ### Step 6 — Artifacts + storage
-Per `roadmap-artifacts.md`: (1) **Confluence roadmap** (focuses + Gantt + tree, features as `code—name`) — publish **after approval**; (2) **live dashboard**; (3) `q{N}` labels on epics (`editJiraIssue`, preserving existing); (4) workspace + library storage (draft/final kept separate).
+Per `roadmap-artifacts.md`: (1) **Confluence roadmap** (focuses + Gantt + tree, features as `code—name`) — publish **after approval**, with the publication question (who reads the space); (2) **live dashboard** — after the same question, and again before every update (`refresh` mode included; `roadmap-artifacts.md` §2); (3) `q{N}` labels on epics (`editJiraIssue`, preserving existing); (4) workspace + library storage (draft/final kept separate).
 
 **Pre-mortem at scope lock (since v3.9.0, P4; `references/judgment-points.md` §7).** Once the PM locks the scope at the end of Step 5 — rendered once per run, at the first scope lock; a later Step 5 edit or re-lock does not re-render it (the PM edits it at approval) — the plan carries `templates/built-in/partial/pre-mortem-v1.md`, inserted per `references/template-protocol.md` T-5 step 3b (its placement; a user or product template only through `{{> pre-mortem}}`); in `plan` mode it goes on the draft roadmap Step 5 delivers. Derived, never asked:
 - `judged_on` = the quarter end. 2–3 causes in the §7 order, from this run's signals only: analogy estimates still "pending TL confirmation" and other `assumed` inputs (`references/planning-core.md` §6), platforms amber or red at the capacity gate, critical-path and cross-team dependencies, carry-over and last quarter's miss reasons.
@@ -87,7 +87,7 @@ Per `roadmap-artifacts.md`: (1) **Confluence roadmap** (focuses + Gantt + tree, 
 **Optional — quarterly board / stakeholder readout (since v3.6.0: one template, one owner).** When the quarter is being reported up (not just planned), offer the readout as a hand-off to **product-reporter**, which renders it as `ops-report/board-update` from this run's retro (Step 2) and approved plan — no new fetch. This skill passes the data with `destination: chat draft` and `visuals: none` (product-reporter then asks nothing and publishes nothing until the user says so) and renders no readout of its own; the board-prep checklist behind the template is `references/session-board.md`.
 
 ### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.8.1", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "quarterly-planning", skill_version: "0.8.2", tags: [quarter, directions], content: published roadmap (or retro), related: [[project arcs]], [[previous quarter roadmap]], extra_frontmatter: { subtype: "quarterly" | "retro", quarter, confluence_url } })` → "Saved to Vault: Roadmaps/{product}/…"
 
 ## Integration with product-reporter
 - Quarter actuals ← `quarter-review` (don't rewrite the fetch).

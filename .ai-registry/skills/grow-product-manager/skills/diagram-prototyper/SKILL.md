@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.15.1
+version: 0.15.2
 description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «зроби прототип». EN — "annotate this screenshot".
 ---
 
@@ -283,7 +283,9 @@ After receiving the result from any external tool (Gemini, ChatGPT, NotebookLM, 
 
 **8a. Ask if the user wants to save/publish** (with `return_to: design-bridge`, Steps 8–10 are skipped — the result goes back to design-bridge):
 
-> "Would you like to publish or save this? You can publish to Confluence, Notion, or Figma, or save as a local file."
+> "Would you like to publish or save this? It holds <what — say so when it carries internal data>. You can publish to Confluence (everyone who reads the space), Notion or Figma (whoever can open that page or file), or save as a local file."
+
+That is the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier).
 
 Present options via AskUserQuestion:
 
@@ -321,7 +323,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.15.1", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.15.2", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Mode: Annotate (standalone screenshot annotation)

@@ -87,6 +87,19 @@ Step 0.5 of every skill searches the user's own base and, when it is not enough,
 - **`ctx vault normalize`** writes only into your own layer, after your code, with a snapshot (local, 0600) and `ctx undo`. A People note is never listed in a hub, so its title never reaches a note outside the People contour; «Пов'язане» names a person's card only by what the registry knows from an e-mail, an alias or a link — the card's path and title, identity alone.
 - **`ctx serve`** answers only a local MCP client the user configured (stdio — no port, no network) and only from the section index and the files of your layer and the core folders it names (a note's text is read from its file when it is downloaded): a note the search marks sensitive — or whose file says so now — is given as its path and title with `sensitive: true`, never its text, frontmatter or the links its text holds; its other answers mark such notes the same way. A person's or a sensitive card's numbers are never facts (`ctx entity` and `ctx audit` alike). It sends nothing anywhere: what a client does with an answer is that client's, under this policy as any session.
 
+## Hosted surfaces (since v4.1.0)
+
+A hosted surface is anything that lives outside the session and opens at a link: a typed page or a site, a live document, Confluence, Notion, a whiteboard, a design file (`native-surfaces.md` §1). The user decided how internal data reaches one: **always ask.**
+
+1. **Before every publication** of internal data to a hosted surface the skill asks — and again before a **new version** of the same artifact (an update, a refresh, a re-publish). One question names what goes, where, and who can open it there (`native-surfaces.md` §3); an existing «where to?» question that names the internal data and who can open each place counts as this one.
+2. **A visual inside the conversation is not a publication** — it stays in the session — and needs no question.
+3. **A scheduled run never publishes** to a hosted surface, whatever destination its prompt or a default names: it writes to the vault or a file and leaves one line for the next interactive run (`native-surfaces.md` §4). The plugin's recurring runs are scheduled only on the user's machine (SCHEDULE `local`), never as a cloud run that would carry their data off it.
+4. **Sharing is a separate question**, asked after a page or document that starts private is published: to whom, by name or group. A place open to a team from the start (a Confluence space) is named with its audience in the question itself.
+5. **A person's profile is never published** to a hosted surface, whatever the answer (`people-context-protocol.md`).
+6. **The host's built-in research** (RESEARCH) runs in the session, but its searches leave it: phrase its queries from public information only, as for Deep Research above (rule 2 of the Practical Guidelines).
+
+When in doubt whether a result holds internal data, it does (Practical Guidelines, rule 5).
+
 ---
 
 ## What the context store never keeps (since v3.21.0)

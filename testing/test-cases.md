@@ -4,6 +4,20 @@
 >
 > **This registry is not exhaustive** — see "Coverage gaps" at the bottom. A defect class belongs in `skill_lint.py` as a check, not here as a case: a hand-run case can report "pass" while the defect is live (that is how `TC-reg-rename-02` missed a stale name). Add cases only for what a static check genuinely cannot see.
 
+## Release v4.1.0 — host surfaces (added 2026-10-29)
+
+Plan `plans/2026-10-29-surfaces-v4.1.0.md`. Each automated check failed before its code; the skill cases run in acceptance on Zorg data only (`Surfaces-Acceptance.md` §1).
+
+- **TC-lint-4100-brand** | `python3 testing/skill_lint.py` | expected: check 30 fails on a host surface named by brand or tool in `skills/**`, `agents/`, `commands/`, `references/`, `templates/` or `.codex/agents/` — full MCP tool names (`mcp__…__show_widget`) and prose forms in any case included (red first on 13 lines; 22 mutations caught after the review) — and stays quiet in `references/host-profiles.md`, `references/native-surfaces.md`, `.ai-registry/`, on Miro's `canvas_*` tools and on `deep-research-host`.
+- **TC-smoke-4100-hooks** | `bash testing/host-smoke.sh` | expected: the Codex leg finds a `GROW_PM_SESSION` digest in the session log of a `codex exec` run (the installed copy's hooks, trusted in Codex); with `-c features.hooks=false` it fails.
+- **TC-skill-4100-board** | `focus-advisor` mode `board` | expected: with WIDGET the board is drawn inline and nothing is asked; «зроби живий борд» asks the `native-surfaces.md` §3 question before the page is created and again before its next refresh; a headless run never refreshes it; without WIDGET and ARTIFACT — `board.html` and one line.
+- **TC-skill-4100-charts** | `product-analysis` Full Report on a Zorg CSV | expected: trends inline as charts with WIDGET, the same numbers as tables in the report; the publish question names the internal data and who sees it; without WIDGET — tables and one line.
+- **TC-skill-4100-schedule** | `cjm-research` health-check «щотижня» | expected: with SCHEDULE the recurring run is created on «так»; the scheduled run writes the snapshot and ends with the «опублікувати в наступному прогоні» line, publishes nothing; without SCHEDULE — one line on where to create it.
+- **TC-skill-4100-research** | `product-research` on a public topic | expected: with RESEARCH it is listed as a source without a question, its query holds public information only, its findings carry `deep-research-host` and their sources' classes; ChatGPT / Gemini are still asked about one by one; without RESEARCH nothing about it is said.
+- **TC-skill-4100-docs** | `product-reporter` sprint-review on Zorg data | expected: with DOCS the Step 6 question offers a live document and names the internal data and who can open each place; on «так» the document is created after the local files; `member-review` never offers it; without DOCS the option is absent, with no line.
+- **TC-host-4100-codex** | the skill cases on Codex CLI (`codex exec`, one-line prompts) | expected: no error; the board and the charts as file and tables with the one «поверхні немає» line; RESEARCH listed only when a research skill is installed, no line about it otherwise (§5, an addition); WIDGET absent in the terminal even when a visual connector is listed; `product-reporter` offers a live document through the Google Drive connector when it is connected; before a Jira or Confluence write the skill confirms itself even though the digest is present.
+- **TC-pub-4100-question** | grep + reading: every publish step of a skill (Confluence, Notion, Google Docs, Figma, a live dashboard) | expected: it names the internal data, the place and who can open it (`native-surfaces.md` §3) and asks again before an update or a re-publish; a scheduled or headless run publishes nothing.
+
 ## Release v3.20.0 — bridges in your notes (added 2026-10-26)
 
 Plan `plans/2026-10-26-context-v3.20.0.md`. Each check failed before its code.
