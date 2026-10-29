@@ -12,6 +12,75 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v3.24.0 (2026-10-29)
+
+**«Власна копія ядра для MCP»: a core that lives only on a server becomes a folder on your machine.** A registration with an endpoint and no folder of its own can now keep the plugin's own copy of the core in `~/.grow-pm/cores/<id>/` — made in one command, refreshed daily in the background, never deleting a note — and from its first complete pass the plugin reads the repository as a folder: blocks, the team block, search, entities and the bridges' boundary, with no VPN for search and entities.
+
+MINOR: a new folder `~/.grow-pm/cores/` (and `~/.grow-pm/conflicts/`), a new command `ctx repo copy`, lines in `repo status`, `repo list`, `health` and the sync report, two `.md` wrappers in the provider kit; nothing incompatible.
+
+### Added
+
+- **The copy of a core** (`scripts/ctx_copy.py`, `context-provider-protocol.md` §12.12, state `context-copy/1`) — the pattern of a team's own daily sync script, generalised:
+  - one `vault_list_by_folder` and every note fetched by twelve clients (a note dropped under them tried once more alone, by the path verbatim as the server listed it); a semantic hash `sha1(canon_json(frontmatter) + "\n␞\n" + NFC(text).rstrip())`, so the YAML the copy writes is never a change; the frontmatter written without PyYAML, one key a line;
+  - per note: same (nothing written) · new · updated (the old file into `.backup/<stamp>/`, 30 days) · kept (yours) · conflict (yours stays, the server's into `~/.grow-pm/conflicts/<id>/<day>/`) · failed;
+  - **the guard against an incomplete index**: a listing empty or under half of the last complete one is `held` — 0 notes written, 0 moved; a pass with more than max(5, 1 %) failed is `partial` — nothing moved;
+  - **never deleted**: a note gone from two complete listings in a row, 20 h apart, moves into `.removed/<day>/`; `--restore` brings it back for good; a case-only rename moves nothing;
+  - the target guard: only `~/.grow-pm/cores/<id>/`, `~/.grow-pm/conflicts/<id>/` and the day's report part — someone else's folder, a symbolic link and a registration's folder are refused (exit 4).
+- **`ctx repo copy <id> [--now ISO] [--restore PATH]`** — the copy in one command, progress on stderr, one summary line; exit 0 complete / partial / held, 3, 4, 5.
+- **The copy as the core folder** — `load_repos` gives an MCP-only registration its complete copy as `core_root` (`core_from: copy`, `copy_at`); `provider plan` says `джерело: копія від <day>`, `ctx search --get` ends its line `· копія від <day>`; the index walks the copy and skips its service folders.
+- **The daily pass in the background** — `provider sync` (and `--if-due`), after its passes over the blocks, starts `ctx repo copy <id> --background` for a due copy and never waits; today's sync reads yesterday's complete copy; a change, a move, a held or a partial pass is a part «копія ядра» of the day's report; `copy` in the result.
+- **`.md` wrappers of the manifest and the role model** (`scripts/ctx_wrappers.py`, `context-provider-protocol.md` §9) — `kind: provider-file`, `file: <name>`, one fenced block; unpacked in the copy only; `ctx repo kit-check` checks that a wrapper and the file beside it agree; the example kit ships both.
+- `ctx health`: ⚠ a copy of a `sync: daily` repository older than 3 days, ⚠ conflicts waiting, ✋ held twice in a row. `testing/copy-evals.md`.
+
+### Changed
+
+- **context-connect 0.7.0** — after registering an MCP-only provider with a blocks file it offers the copy once (a «ні» kept in `.state/copy-offers.json` for 30 days, never in the registration) and gives the request for the core's owner, ready to send (`connect-steps.md` §7). **context-navigator 0.4.4** — an answer from the copy cites «копія від <day>».
+- `ctx_store.atomic_write` gives a file whose name is near the file system's limit a short temp name.
+- `references/context-provider-protocol.md` §3b, §6, §9, §12.2, §12.8, §12.11, §12.12; `context-protocol.md` §1, §3, §5j, §5q; `host-profiles.md`, `data-policy.md`, `persistent-storage.md`.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/ctx_copy.py`, `ctx_wrappers.py` | new |
+| `scripts/ctx.py` | `repo copy`, the background pass after the sync, the copy's lines in `repo status` / `list` |
+| `scripts/ctx_repos.py` | the copy as `core_root`, the team block's reasons for a copy, `search_only` asks the registration |
+| `scripts/ctx_index.py`, `ctx_search.py`, `ctx_blocks.py`, `ctx_show.py`, `ctx_kit.py`, `ctx_store.py` | the copy's service folders, «копія від», health, wrappers in kit-check, a short temp name |
+| `examples/provider-kit/zorg-core/Core/_System/provider-manifest.md`, `access-bundles.md` | new — the wrappers |
+| `references/context-provider-protocol.md`, `context-protocol.md`, `host-profiles.md`, `data-policy.md`, `persistent-storage.md` | §12.12 and the rows |
+| `skills/context-connect/` | 0.6.0 → 0.7.0 |
+| `skills/context-navigator/SKILL.md` | 0.4.3 → 0.4.4 |
+| `testing/ctx_copy_test.py`, `ctx_copy_pass_test.py`, `ctx_copy_wrap_test.py`, `ctx_copy_folder_test.py`, `ctx_copy_sync_test.py`, `provider_kit_test.py`, `mcp_fake.py`, `copy-evals.md`, fixture `copy/` | new and extended |
+
+### Acceptance (the author's real core, read only)
+
+- **One command:** 4 877 notes listed, 4 865 copied in 102 s; the 5 that never arrive are the server's own broken notes (the author's sync script fails on the same).
+- **A rerun:** 0 notes written (mtime and size as they were), nothing in the store, no report.
+- **Against the author's sync script:** 4 863 notes in both, the semantic hashes equal for **100 %**; what the copy lacks is the personal layer, the bundle's files and the broken notes.
+- **The team block:** through the real server `·` with the advice for the core's owner; through a server with the two wrappers, byte for byte the block the folder builds.
+- **Search:** recall@50 of the golden set equal with the copy and with the folder (0.863); with the server unreachable, search and entities answer from the copy.
+- **Safeguards:** a 40 % listing held with 0 writes; 3 vanished notes moved into `.removed/` after two complete passes and one restored; the background pass started from `sync --if-due` in 1.6 s.
+- The real vault, `~/.grow-pm`, the author's sync script's state and folders: 17 609 entries, 0 changes. Found and fixed on the way: a path with an emoji the server keeps in NFD, notes dropped under twelve clients.
+
+### Known limits
+
+- A server with no change dates: every daily pass fetches every note — in the background, 80–120 s for about 4 900 notes on the author's server.
+- The team block through the copy needs the two `.md` wrappers from the core's owner; until then it is `·` with the reason.
+- The copy is not in `ctx undo`: backups for 30 days, `.removed/`, conflicts. What reaches your records from it goes through `provider apply|sync` with `undo` as ever.
+- Obsidian does not see the copy; links from the vault to the core's notes are opened by the plugin.
+- The background pass needs a host whose process outlives the command; a pass that is cut resumes in an hour.
+- `.removed/` is not emptied by itself; to drop a copy, move its folder to the trash by hand.
+- A `~/.grow-pm` that is itself a symbolic link gets no copy (the target guard refuses every write through a link).
+- Without a shell there is no copy. A registration with its own folder keeps it: moving from your own sync script to the plugin's copy is a decision for later.
+- A server key holding `:` is written quoted and makes the plugin's index read that note without metadata.
+- `ctx audit` and the graph over the copy — v4.0.0.
+
+### Backwards compatibility
+
+A registration with its own folder, and one with no copy, behave as v3.23.0 (the whole suite, unchanged, on a frozen copy). New keys only: `copy` in the result of `provider sync` and on a row of `repo list` / `repo status` / `health` with a copy; `core_from` and `copy_at` on a repository that reads its copy.
+
+---
+
 ## v3.23.0 (2026-10-28)
 
 **«Оверлей і журнал»: your corrections to a core are declared, and you can read what changed.** A correction you keep to a team's shared core is no longer a prose note to remember: it is an operation in `overlays/<repo>.yaml` beside your store — replace, remove, append, ignore or alias, with the reason in your words — and `ctx` lays it again after every refresh and daily sync. When the core fixes what you corrected, the operation no longer finds its text and you get one question, «прибрати поправку?». A value the core changed that you copied into your own sections arrives in the inbox as a proposal. `ctx history` writes a note a month — Keep a Changelog, «Було | Стало» — of the core's releases and your own changes. The core's team and role for your e-mail are put beside yours with the source of each. And a team that wants to share its context copies the example kit «Zorg» and is connected with one command.
