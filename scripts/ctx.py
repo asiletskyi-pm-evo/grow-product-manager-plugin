@@ -1958,7 +1958,7 @@ def cmd_search(a, c):
         except cs_.GetError as e:
             print("search: %s" % e)
             return e.code, {"command": "search", "action": "get", "id": a.get, "error": str(e)}
-        trust = ctt.for_header(sctx, header, now()[:10])     # since v4.0.0: shown, never ranked
+        trust = _get_trust(sctx, header)                    # since v4.0.0: shown, never ranked
         if not a.json:
             print(header)
             if trust:
@@ -2114,6 +2114,22 @@ def cmd_graph(a, c):
 
 
 GRAPH_KINDS = ("wikilink", "embed", "fm", "same_as", "mention")
+
+
+def _get_trust(sctx, header):
+    """The trust of what `search --get` gave: from the note's row and frontmatter when the index holds its path (the
+    same as `ctx serve` gives), else from the provenance line (review I8 of tasks 7–9)."""
+    h = (header or "").strip()
+    if h.startswith("> [") and " · " in h:
+        rest = h[3:].split(" · ", 1)[1]
+        path = re.split(r" › | · ", rest, 1)[0]
+        try:
+            t = ctt.for_path(sctx, path, now()[:10])
+        except Exception:  # noqa: BLE001 — a trust that cannot be read is no trust line, never a failed --get
+            t = None
+        if t:
+            return t
+    return ctt.for_header(sctx, header, now()[:10])
 def cmd_serve(a, c):
     """`serve` (since v4.0.0, ctx_serve): the local MCP server of vault/v1 over the plugin's index — stdio, read only; it
     prints nothing but the protocol on stdout (no CTX_RESULT: main leaves it out). `serve --install`: the launcher
@@ -2729,6 +2745,8 @@ def cmd_provider_sync(a, c):
     if copies:
         out = dict(out, copy=copies)
     try:                                                # since v4.0.0: the launcher of `ctx serve` follows the plugin
+        if not a.if_due:                                # (review of tasks 7–9: at the check of every skill alone)
+            raise StopIteration
         import ctx_serve as csv_
         if csv_.relaunch_if_moved(c.home, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
             out = dict(out, launcher="rewritten")

@@ -157,7 +157,8 @@ CREATE INDEX IF NOT EXISTS mentions_note ON mentions(note_id);
                                     # (plan C11) — the path too, as SQLite gives a removed note's id to the next one
 ENTITY_TABLES = ("ents", "links", "mentions", "facts")        # facts since v4.0.0 (a card's numbers, ctx_facts)
 FACT_FIELDS = ("actual", "target", "value", "baseline", "current")
-FACTS_VERSION = 1                   # meta `facts_version`: an index without it reads its cards once more for their facts
+FACTS_VERSION = 2                   # meta `facts_version`: an index of another value reads its cards once more for their
+                                    # facts (2: never a person's card or a sensitive one — review B1 of tasks 7–9)
 GRAPH_DDL = """
 CREATE TABLE IF NOT EXISTS names(path TEXT PRIMARY KEY, source TEXT, dataless INTEGER, md INTEGER);
 """                                 # v4.0.0: every file a link may land on (`names`, evicted ones too), added in
@@ -1861,7 +1862,8 @@ class _Walk:
         if dataless:
             self.res["skipped_dataless"] += 1
             row = self.rows.get(rel)
-            if self.reread and row:                  # read once it comes down, its mtime as it was (v3.17.0)
+            if row and (self.reread or row["id"] in self.stale_ents):   # read once it comes down (v3.17.0; since
+                                                     # v4.0.0 a card to read again for its facts too — review I5)
                 self.con.execute("UPDATE notes SET mtime=-1 WHERE id=?", (row["id"],))
                 row["mtime"] = -1.0
             return
@@ -1947,8 +1949,9 @@ class _Walk:
                               for l in links])
         self.con.executemany("INSERT INTO mentions(note_id, key, browse) VALUES (?, ?, ?)",
                              [(nid, k, int(b)) for k, b in mentions])
-        if ident.get("kind"):                        # v4.0.0: a card's facts (its numbers, with their period and day)
-            fm, _ = _frontmatter((text or "").replace("\r\n", "\n"))
+        fm, _ = _frontmatter((text or "").replace("\r\n", "\n"))
+        if ident.get("kind") and ident.get("kind") != "person" and not sensitive_of(fm or {}) \
+                and not one_on_one(rel, title):      # v4.0.0: a card's facts — never a person's, never a sensitive one
             self.con.executemany("INSERT INTO facts(note_id, hash, attribute, value, period, observed_at, field) "
                                  "VALUES (?, ?, ?, ?, ?, ?, ?)", [(nid, digest) + f for f in facts_of(fm)])
         self.stale_ents.discard(nid)

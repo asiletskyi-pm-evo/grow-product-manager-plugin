@@ -196,7 +196,11 @@ with tempfile.TemporaryDirectory() as d:                 # the review of tasks 4
     write(env.note("Notes/Odd type.md"), "---\ntype: ../Templates/x\ncreated: 2026-10-14\n---\n# Odd\n")
     write(env.note("Notes/People/review.md"), "---\ntype: performance-review\ncreated: 2026-10-14\n---\n# Review\n")
     p_ = env.note("Notes/Broken region.md")
-    write(p_, read(p_).replace("Mine. [[Roadmap]]", "Mine. [[Roadmap]] PROJ-1234"))
+    write(p_, read(p_).replace("Mine. [[Roadmap]]", "Mine. [[Roadmap]] PROJ-1234 [[bea]]"))
+    write(env.note("Notes/People/zed.md"), "# Zed\n")
+    write(env.note("Notes/Gfm.md"), "---\ntype: research\ncreated: 2026-10-17\n---\n# Gfm\n\nwho | link\n--- | ---\n"
+                                    "a | [[plan]]\n")
+    write(env.note("Notes/Meetings/Brackets 2026-10-18.md"), "---\ntype: []\n\"created\": \"\"\n---\n# Brackets\n\n[[Roadmap]]\n")
     rc, out, res = env.run("vault", "normalize", "--json")
     rows = (res or {}).get("rows", [])
     hubs = {r["path"]: r for r in rows if r["op"] == "hubs"}
@@ -210,6 +214,9 @@ with tempfile.TemporaryDirectory() as d:                 # the review of tasks 4
           not any(r["op"] == "related" and r["path"] in ("Notes/Fence.md", "Notes/Broken region.md") for r in rows)
           and "Notes/Fence.md" in res["skipped"].get(cnz.SKIP["fence"], [])
           and "Notes/Broken region.md" in res["skipped"].get(cnz.SKIP["broken"], []), res["skipped"])
+    check("review I6/I7 (tasks 7–9): an untyped note of People/ never lands in a hub; a link in a note with broken "
+          "regions is no row", not any("Notes/People/zed.md" in r.get("add", []) for r in hubs.values())
+          and not any(r["op"] == "links" and r["path"] == "Notes/Broken region.md" for r in rows), sorted(hubs))
     check("review I-1: a frontmatter the reader does not trust gets no row",
           not any(r["path"] == "Notes/Meetings/Tab 2026-10-12.md" and r["op"] == "frontmatter" for r in rows))
     rc, out, done = env.run("vault", "normalize", "--apply", "--code", res["code"], "--json")
@@ -217,6 +224,13 @@ with tempfile.TemporaryDirectory() as d:                 # the review of tasks 4
     check("review B-1: a link in a table keeps the table — `\\|` there, `|` in the text; an anchor's visible text kept",
           "| a | [[Notes/People/bea\\|bea]] |" in tb and "| b | [[Notes/People/bea\\|Bea Two]] |" in tb
           and "With [[Notes/People/bea|bea]]." in tb and "[[Notes/Roadmap#Next|Notes/Old/Roadmap > Next]]" in tb, tb)
+    gf = read(env.note("Notes/Gfm.md"))
+    check("review (tasks 7–9): a GFM table without leading pipes keeps its columns — `\\|`",
+          "a | [[Notes/Projects/Archive/plan\\|plan]]" in gf, gf)
+    br = read(env.note("Notes/Meetings/Brackets 2026-10-18.md"))
+    check("…`type: []` and `\"created\": \"\"` are filled in place — one key each",
+          br.count("type:") == 1 and br.count("created") == 1 and "type: meeting-notes" in br
+          and "created: 2026-10-18" in br, br)
     em = read(env.note("Notes/Meetings/Empty 2026-10-11.md"))
     check("review I-1: an empty `created:` is filled in place (one key), a list `type` left as it is",
           em.count("created:") == 1 and "created: 2026-10-11\n" in em and "type:\n  - meeting\n  - weekly\n" in em, em)

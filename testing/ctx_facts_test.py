@@ -37,9 +37,9 @@ if ct is None:
     sys.exit(1)
 
 T = "2026-10-29"
-check("v4.0.0 trust: the source weights — record 1, own 0.9, core 0.85, local 0.8, mcp 0.75, confluence 0.7",
-      [ct.score(k, T, 30, "", "", T)["score"] for k in ("record", "own", "core", "local", "mcp", "confluence")]
-      == [1.0, 0.9, 0.85, 0.8, 0.75, 0.7])
+check("v4.0.0 trust: the source weights — own 0.9, core 0.85, local 0.8, mcp 0.75, confluence 0.7",
+      [ct.score(k, T, 30, "", "", T)["score"] for k in ("own", "core", "local", "mcp", "confluence")]
+      == [0.9, 0.85, 0.8, 0.75, 0.7])
 check("…freshness: 1 within the TTL, 0.75 half way to three TTLs, 0.5 at three and after, 0.6 without a day",
       [ct.freshness(d, 30, T) for d in ("2026-09-29", "2026-08-30", "2026-07-31", "2025-01-01", None)]
       == [1.0, 0.75, 0.5, 0.5, 0.6], [ct.freshness(d, 30, T) for d in ("2026-09-29", "2026-08-30", "2026-07-31")])
@@ -109,6 +109,48 @@ with tempfile.TemporaryDirectory() as d:
           ct.kind_of(sctx, "zorg-core", "ZorgCore/Pages/Delivery slots (900100200).md") == "confluence"
           and ct.kind_of(sctx, "zorg-core", "ZorgCore/Teams/team-alpha.md") == "core"
           and ct.kind_of(sctx, "zorg-brain", "Partner/x.md") == "local" and ct.kind_of(sctx, "own", "Notes/x.md") == "own")
+
+
+with tempfile.TemporaryDirectory() as d:                 # the review of tasks 7–9
+    env = VaultEnv(d, fixture="graph", evicted=())
+    write(env.note("ZorgCore/People/carl.md"), "---\ntype: person\nname: Carl\nemail: carl@zorg.example\n"
+                                               "current: underperforming\ntarget: exit by Q1\n---\n# Carl\n")
+    rc, out, res = env.run("entity", "carl@zorg.example", "--json")
+    con = sqlite3.connect(os.path.join(env.home, ".grow-pm", "index", "sections.sqlite"))
+    kept = con.execute("SELECT f.value FROM facts f JOIN notes n ON n.id = f.note_id WHERE n.path = ?",
+                       ("ZorgCore/People/carl.md",)).fetchall()
+    con.close()
+    check("review B1: a person's card keeps no facts — not in the index, never shown", rc == 0 and kept == []
+          and not res["entities"][0].get("facts") and "underperforming" not in out, (kept, out[-500:]))
+    write(env.note(CORE), "---\ntype: metric\nname: Conversion\nactual: 3.4%\nactual_period: Q3 2026\n---\n# Conversion\n")
+    write(env.note(OWN), "---\ntype: metric\nsame_as: \"[[ZorgCore/Metrics/conversion|Conversion]]\"\nactual: 3.2%\n"
+                         "actual_period: 2026-Q3\n---\n# conversion\n")
+    rc, out, res = env.run("entity", CORE, "--json")
+    fs = res["entities"][0]["facts"]
+    check("review: «Q3 2026» and «2026-Q3» are one period — the two values disagree (⚠)",
+          len(fs) == 2 and all(f["conflict"] for f in fs), fs)
+    check("…a fact with no day of its own is undated (freshness 0,6), never the file's day",
+          all(f["trust"]["parts"]["freshness"] == 0.6 for f in fs), [f["trust"] for f in fs])
+    db = os.path.join(env.home, ".grow-pm", "index", "sections.sqlite")
+    con = sqlite3.connect(db)
+    con.executescript("DELETE FROM facts; UPDATE meta SET value = '1' WHERE key = 'facts_version';")
+    con.commit()
+    con.close()
+    env.evicted = ("ZorgCore/Metrics/conversion.md",)
+    env.run("index", "status")
+    env.evicted = ()
+    rc, out, res = env.run("entity", CORE, "--json")
+    check("review I5: a card iCloud evicted when the facts were due is read once it comes down — its facts there",
+          any(f["path"] == CORE for f in res["entities"][0]["facts"]), res["entities"][0].get("facts"))
+    write(env.note("Notes/Draft.md"), "---\ntype: research\nstatus: draft\nupdated: 2026-10-01\n"
+                                      "last_verified: 2026-10-20\n---\n# Draft\n\nDraft text.\n")
+    env.run("index", "status")
+    rc, out, got = env.run("search", "--get", "Notes/Draft.md", "--json")
+    import ctx_serve as csv_, ctx_search as cs_
+    srv = csv_.Server(cs_.context_for(env.home, env.text), refresh=False)
+    note = srv.t_vault_get_note({"path": "Notes/Draft.md"})
+    check("review I8: `--get` and `ctx serve` give one trust — the note's status (draft 0,8) and its last_verified",
+          got["trust"] == note["trust"] and got["trust"]["parts"]["state"] == 0.8, (got.get("trust"), note.get("trust")))
 
 
 class _Reg:

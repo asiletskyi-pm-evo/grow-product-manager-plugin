@@ -91,6 +91,27 @@ def _safe_label(s):
     return re.sub(r"[\[\]|\n\r]", " ", s or "").strip()
 
 
+_SEP_ROW = re.compile(r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(\|[ \t]*:?-{3,}:?[ \t]*)+\|?[ \t]*$")
+
+
+def _on_table(text, pos):
+    """Is `pos` on a line of a Markdown table — a line that starts with `|`, or one of a block (no blank line between)
+    that holds a separator row `---|---` (a GFM table without leading pipes)?"""
+    lines = text.split("\n")
+    i = text.count("\n", 0, pos)
+    if _TABLE.match(lines[i]):
+        return True
+    if "|" not in lines[i]:
+        return False
+    a = i
+    while a > 0 and lines[a - 1].strip():
+        a -= 1
+    b = i
+    while b + 1 < len(lines) and lines[b + 1].strip():
+        b += 1
+    return any(_SEP_ROW.match(lines[k]) for k in range(a, b + 1))
+
+
 def _fix_links(text, fixes):
     """`text` with each link whose target (as written) is a key of `fixes` pointed at fixes[target] — its anchor kept,
     the text a reader sees kept (`|as written`, `|Note > Heading` for an anchor, when it had no label; an embed keeps
@@ -106,9 +127,7 @@ def _fix_links(text, fixes):
         target, anchor, label = ci._link_parts(inner)
         if target not in fixes:
             continue
-        line_start = text.rfind("\n", 0, m.start()) + 1
-        line_end = text.find("\n", m.start())
-        on_table = bool(_TABLE.match(text[line_start:line_end if line_end >= 0 else len(text)]))
+        on_table = _on_table(text, m.start())
         sep = "\\|" if "\\|" in inner or on_table else "|"
         new = fixes[target] + (("#" + anchor) if anchor else "")
         if label is not None and label != "":
@@ -125,7 +144,7 @@ def _fix_links(text, fixes):
 def _fill_line(text, key, value):
     """The note with the frontmatter line `key:` (no value, or "" / '' / ~ / null) given `value` in place."""
     fm = cbr.frontmatter(text)
-    pat = re.compile(r"^%s[ \t]*:[ \t]*(?:\"\"|''|~|null)?[ \t]*\r?$" % re.escape(key), re.I)
+    pat = re.compile(r"^[\"']?%s[\"']?[ \t]*:[ \t]*(?:\"\"|''|~|null|\[\s*\])?[ \t]*\r?$" % re.escape(key), re.I)
     pos = fm[0]
     while pos < fm[1]:
         nl = text.find("\n", pos)
@@ -148,6 +167,11 @@ def hub_id(t):
 def _file_name(t):
     """A type as a file name: no folder separators, no leading dots, no characters a file system refuses."""
     return re.sub(r"[\\/:*?\"<>|\x00-\x1f]+", "-", t or "note").strip(" .-") or "note"
+
+
+def cg_people(path):
+    import ctx_graph as cg
+    return cg._people_path(path)
 
 
 def _region_text(rid, body):
@@ -216,8 +240,7 @@ def rewrite(rel, text, rows, today=None):
         if cbr.frontmatter(t):
             for k in ("type", "created"):
                 if k in r["add"]:
-                    t = _fill_line(t, k, r["add"][k]) if k in (r.get("empty") or ()) else \
-                        cbr.insert_line(t, "%s: %s" % (k, r["add"][k]))
+                    t = _fill_line(t, k, r["add"][k])      # an empty `k:` (quoted too) in place, else a new line
         else:
             bom = "\ufeff" if t.startswith("\ufeff") else ""          # a BOM stays first (review M-1)
             t = bom + "---\n" + _fm_text(r["add"]) + "---\n" + t[len(bom):]
@@ -368,6 +391,9 @@ def plan(sctx, context, store, home, only=None, today=None):
             if f["kind"] != "schema" or not f["fixable"] or f["path"] not in texts:
                 continue
             adds = f["detail"]["derived"]
+            if broken(f["path"]):                       # review I7 of tasks 7–9: never a note with broken regions
+                skipped[SKIP["broken"]].append(f["path"])
+                continue
             if not cbr.frontmatter(texts[f["path"]]) and set(adds) != {"type", "created"}:
                 skipped[SKIP["no-fm"]].append(f["path"])
                 continue
@@ -386,6 +412,9 @@ def plan(sctx, context, store, home, only=None, today=None):
             if not new:
                 skipped[SKIP["outside"]].append(f["path"])
                 continue
+            if broken(f["path"]):
+                skipped[SKIP["broken"]].append(f["path"])
+                continue
             fixed = _fix_links(texts[f["path"]], {d["target"]: _link_target(new)})
             if fixed == texts[f["path"]]:
                 skipped[SKIP["in-region"]].append(f["path"])
@@ -396,7 +425,10 @@ def plan(sctx, context, store, home, only=None, today=None):
         by_type = collections.defaultdict(list)
         for f in findings:
             if f["kind"] == "orphan":
-                if f["path"] in sens:                    # review M-6: a People note's title never lands in a hub
+                w0 = ca._inside(f["path"], roots)
+                derived = ca.type_of(w0[1], tmap) if w0 else None
+                if f["path"] in sens or (derived or "").lower() in ci.PEOPLE_TYPES or cg_people(f["path"]):
+                    # review M-6 / I6 of tasks 7–9: a People note's title never lands in a hub (by its folder too)
                     skipped[SKIP["sensitive"]].append(f["path"])
                     continue
                 w = ca._inside(f["path"], roots)

@@ -183,6 +183,7 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
     vault = vault_of(sctx)
     findings, types, no_inbound = [], collections.Counter(), 0
     checked, outside = 0, {}                     # outside: {path: the link targets outside every region and code}
+    broken = set()                               # the notes normalize never writes: regions not sound, an open fence
     for nid, path, title, typ, source in rows:
         where = _inside(path, roots) if source == "own" else None
         if not where or where[1].startswith(SKIP):
@@ -203,6 +204,8 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
             continue
         outside[path] = rg.outside_targets(text)
         _, problems = rg.parse(text, providers=providers)
+        if problems or rg.ends_in_fence(text):
+            broken.add(path)
         for p in problems:
             findings.append({"kind": "region", "path": path, "detail": {"why": p["why"], "ns": p["ns"], "id": p["id"]},
                              "fixable": False})
@@ -228,7 +231,8 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
             if empty:
                 d["empty"] = empty               # the key is there with no value: filled in place, never a second key
             findings.append({"kind": "schema", "path": path, "detail": d,
-                             "fixable": bool(derived) and (block or set(derived) == {"type", "created"})})
+                             "fixable": bool(derived) and (block or set(derived) == {"type", "created"})
+                             and path not in broken})
     for path, source, target, field, why, cands in dead:
         where = _inside(path, roots) if source == "own" else None
         if not where or where[1].startswith(SKIP):
@@ -244,7 +248,8 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
             d["where"] = "region"                # only inside a region of a script, or the note is not read: left
         here = [c for c in cands if vault(c) is not None and vault(c) == vault(path)]
         findings.append({"kind": kind, "path": path, "detail": d,
-                         "fixable": free and (bool(here) if kind == "ambiguous" else len(cands) == 1 and len(here) == 1)})
+                         "fixable": free and path not in broken
+                         and (bool(here) if kind == "ambiguous" else len(cands) == 1 and len(here) == 1)})
     own_names = [(p, dl, md) for p, src, dl, md in names if src == "own" and _inside(p, roots)
                  and not _inside(p, roots)[1].startswith(SKIP)]     # _System/, Templates/: not checked (review M-7)
     for p, dl, md in own_names:

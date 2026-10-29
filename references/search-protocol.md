@@ -252,7 +252,7 @@ The user asks the base itself — «знайди в моєму контекст�
 
 | Part | Values |
 |---|---|
-| source | your record of the store 1.0 · your note 0.9 · a core's block or card (its folder, or the plugin's copy of it) 0.85 · a note of a local index 0.8 · a note a server gave 0.75 · a Confluence page mirrored into a core (`confluence_id`, a page id in its name) 0.7 |
+| source | your note 0.9 · a core's block or card (its folder, or the plugin's copy of it) 0.85 · a note of a local index 0.8 · a note a server gave 0.75 · a Confluence page mirrored into a core (`confluence_id`, a page id in its name) 0.7 |
 | freshness | 1 within the TTL of its class (a core's `ttl_days`, `context-provider-protocol.md` §6; a year when the class names none), then down in a straight line to 0.5 at three TTLs, never below 0.5; 0.6 without a day — counted from the later of the note's day and its `last_verified` / `last_reviewed` |
 | state | `superseded`, `archived`, `outdated` — the search's `застаріле` — 0.3 · `draft` 0.8 · else 1 |
 

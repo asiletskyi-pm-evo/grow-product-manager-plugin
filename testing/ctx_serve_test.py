@@ -51,7 +51,7 @@ def call(i, name, **args):
 
 
 def result(ans, i):
-    a = next(x for x in ans if x.get("id") == i)
+    a = next(x for x in ans if isinstance(x, dict) and x.get("id") == i)
     return a.get("result", {}).get("structuredContent"), a
 
 
@@ -135,6 +135,36 @@ with tempfile.TemporaryDirectory() as d:
           sens and all("snippet" not in r for r in sens), s15)
     check("v4.0.0 the server writes nothing in the vault", env.tree() == before)
 
+    write(env.note("Notes/Roadmap.md"), read(env.note("Notes/Roadmap.md")).replace("type: roadmap", "type: roadmap\nsensitive: true"))
+    for i in range(40):
+        write(env.note("Notes/A/n%02d.md" % i), "# Zebra %d\n\nzebra zebra zebra zebra\n" % i)
+    for i in range(3):
+        write(env.note("Notes/Deep/d%d.md" % i), "# Deep %d\n\n" % i + "long text " * 200 + "zebra\n")
+    env.run("index", "status")
+    write(env.note("Notes/Meetings/Standup 2026-10-08.md"),
+          read(env.note("Notes/Meetings/Standup 2026-10-08.md")).replace("created: 2026-10-08", "created: 2026-10-08\nsensitive: true"))
+    ans, p = talk(env, [call(1, "vault_get_note", path="Notes/Meetings/Standup 2026-10-08.md"),
+                        call(2, "vault_get_links", path="Notes/Roadmap.md", direction="both"),
+                        call(3, "vault_search", query="zebra", folder="Notes/Deep"),
+                        {"jsonrpc": "2.0", "id": 4, "method": "tools/list", "params": "oops"},
+                        [{"jsonrpc": "2.0", "id": 5, "method": "ping"}, {"jsonrpc": "2.0", "method": "notifications/x"},
+                         call(6, "vault_search", query="zebra", tags="nothing")],
+                        call(7, "brain_status")])
+    s1, _ = result(ans, 1)
+    check("review I1: a note that says `sensitive: true` in its file since the last refresh comes without its text",
+          s1 and s1.get("sensitive") is True and "content" not in s1, s1)
+    s2, _ = result(ans, 2)
+    check("review I2: a sensitive note's links — who links to it, never what its own text links",
+          s2 and s2.get("out") is None and s2.get("in") is not None and s2.get("sensitive") is True, s2)
+    s3, _ = result(ans, 3)
+    check("review I4: a folder filter over the whole list, not the top 30 — the three deep notes",
+          s3 and sorted(r["path"] for r in s3["results"]) == ["Notes/Deep/d0.md", "Notes/Deep/d1.md", "Notes/Deep/d2.md"], s3)
+    a4 = next(a for a in ans if isinstance(a, dict) and a.get("id") == 4)
+    batch = next(a for a in ans if isinstance(a, list))
+    check("review I3: params that are no object — an error, and the server goes on; a batch — a list of answers, the "
+          "notification left out; a string `tags` — one tag",
+          a4.get("error", {}).get("code") == -32602 and [b.get("id") for b in batch] == [5, 6]
+          and batch[1]["result"]["structuredContent"] == {"results": []} and result(ans, 7)[0], (a4, batch))
     import shutil
     shutil.rmtree(os.path.join(env.home, ".grow-pm", "index"))   # no index: the start refreshes it, a call waits for it
     ans, _ = talk(env, [call(1, "vault_get_note", path="Notes/Roadmap.md")])
@@ -154,6 +184,11 @@ with tempfile.TemporaryDirectory() as d:
     write(launcher, read(launcher).replace(ROOT, "/old/plugin/3.24.0"))
     check("v4.0.0 a launcher that names another folder of the plugin is written again by the daily sync's check",
           csv_.relaunch_if_moved(env.home, ROOT) and os.path.join(ROOT, "scripts", "ctx.py") in read(launcher))
+    other = os.path.join(d, "plugin-copy", "scripts", "ctx.py")
+    write(other, "# another copy of the plugin\n")
+    write(launcher, csv_.launcher_text(os.path.dirname(os.path.dirname(other))))
+    check("…a launcher that names another copy of the plugin still there is left (no flip between two copies)",
+          not csv_.relaunch_if_moved(env.home, ROOT) and other in read(launcher))
     write(launcher, "#!/bin/sh\nexec my-own-thing\n")
     check("…a launcher that is not ours is never touched", not csv_.relaunch_if_moved(env.home, ROOT)
           and read(launcher) == "#!/bin/sh\nexec my-own-thing\n")

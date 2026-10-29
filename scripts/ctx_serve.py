@@ -136,6 +136,8 @@ class Server:
         mid, method, params = msg.get("id"), msg["method"], msg.get("params") or {}
         if "id" not in msg:                       # a notification: no answer
             return None
+        if not isinstance(params, dict):          # review I3 of tasks 7–9: a malformed message never ends the server
+            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "params must be an object"}}
         if method == "initialize":
             asked = str(params.get("protocolVersion") or "")
             return self._ok(mid, {"protocolVersion": asked if asked in PROTOCOLS else PROTOCOLS[0],
@@ -184,9 +186,11 @@ class Server:
             limit = max(1, min(100, int(args.get("limit") or LIMIT)))
         except (TypeError, ValueError):
             limit = LIMIT
-        res = cs_.run(self.sctx, [q], limit=max(limit, 30), which=("own",), use_hints=False, refresh=False)
         folder = N(str(args.get("folder") or "")).strip("/")
-        tags = {str(t).lower().lstrip("#") for t in args.get("tags") or () if t}
+        raw_tags = args.get("tags") or ()
+        tags = {str(t).lower().lstrip("#") for t in ([raw_tags] if isinstance(raw_tags, str) else raw_tags) if t}
+        wide = 400 if folder or tags else max(limit, 30)       # review I4: filter a wide list, never the top 30 alone
+        res = cs_.run(self.sctx, [q], limit=wide, which=("own",), use_hints=False, refresh=False)
         out = []
         for c in res.get("candidates") or []:
             if folder and not (c["path"] == folder or c["path"].startswith(folder + "/")):
@@ -198,6 +202,9 @@ class Server:
                 continue
             sens = bool(c.get("sensitive")) or "sensitive" in (c.get("flags") or []) or _sensitive(
                 dict(meta, path=c["path"], title=c.get("title") or meta.get("title"), type=c.get("type") or meta.get("type")))
+            if not sens:                          # the file as it is now (review I1): sensitive since the last refresh
+                import ctx_trust as ct
+                sens = ci.sensitive_of(ct.frontmatter_on_disk(self.sctx, c["path"]) or {})
             hit = {"path": c["path"], "title": c.get("title") or "", "score": c.get("score"), "sensitive": sens}
             if not sens:
                 hit.update(snippet=c.get("snippet") or "", tags=ctags, type=c.get("type") or "", date=c.get("date") or "")
@@ -205,15 +212,6 @@ class Server:
             if len(out) >= limit:
                 break
         return {"results": out}
-
-    def _file(self, path):
-        """The note's file on disk (one of the roots holds it), or None."""
-        for r in self.sctx.get("roots") or []:
-            rel = ci.rel_path(r["path"], self.sctx.get("vaults") or [], r)
-            if not rel or path.startswith(rel + "/"):
-                inner = path[len(rel) + 1:] if rel else path
-                return os.path.join(r["path"], *inner.split("/"))
-        return None
 
     def t_vault_get_note(self, args):
         import ctx_trust as ct
@@ -224,10 +222,8 @@ class Server:
         if not got:
             raise ToolError("note not found: %s" % path)
         meta, sections = got
-        if _sensitive(meta):
-            return {"path": path, "title": meta.get("title") or "", "sensitive": True, "note": SENSITIVE_NOTE}
-        fm, text = {}, None
-        disk = self._file(path)
+        fm, text = None, None
+        disk = ct.disk_file(self.sctx, path)
         if disk and os.path.isfile(disk) and not ci.is_dataless(disk):
             try:
                 with open(disk, encoding="utf-8", errors="replace") as f:
@@ -236,20 +232,19 @@ class Server:
                 text = body if fm is not None else raw
             except OSError:
                 text = None
+        if _sensitive(meta) or ci.sensitive_of(fm or {}):        # the file as it is now, not only the index's row
+            return {"path": path, "title": meta.get("title") or "", "sensitive": True, "note": SENSITIVE_NOTE}
         if text is None:                          # an evicted file: the text the index keeps of it
             text = "\n\n".join(((("#" * 2) + " " + h + "\n") if h else "") + t for h, t in sections)
         links = self._read(lambda con: con.execute(
             "SELECT e.dst, e.kind FROM edges e WHERE e.src_id = ? ORDER BY e.dst", (meta["id"],)).fetchall(), [])
         dead = self._read(lambda con: con.execute(
             "SELECT target FROM unresolved WHERE src_id = ? AND why = 'dead'", (meta["id"],)).fetchall(), [])
-        kind = ct.kind_of(self.sctx, meta.get("source"), path, meta.get("confluence_id"))
-        trust = ct.score(kind, meta.get("ttl_date") or meta.get("date"), ct.ttl_of(self.sctx, path), meta.get("status"),
-                         ci._text((fm or {}).get("last_verified") or (fm or {}).get("last_reviewed")))
         return {"path": path, "title": meta.get("title") or "", "frontmatter": _plain(fm or {}),
                 "tags": meta.get("tags") or [], "headings": [h for h, _ in sections if h], "content": text,
                 "outgoing_links": [{"target": d, "resolved_path": d, "kind": k} for d, k in links] +
                                   [{"target": t, "resolved_path": None} for t, in dead],
-                "trust": trust}
+                "trust": ct.for_note(self.sctx, dict(meta, path=path), fm or {})}
 
     def _rows(self, sql, args):
         return self._read(lambda con: con.execute(sql, args).fetchall(), [])
@@ -259,29 +254,50 @@ class Server:
         d = str(args.get("direction") or "both")
         if d not in ("in", "out", "both"):
             raise ToolError("direction takes in, out or both")
+        import ctx_graph as cg
         out = {"path": path}
         notes = {p: (t, ty, s) for p, t, ty, s in self._rows("SELECT path, title, type, sensitive FROM notes", ())}
 
-        def item(p, extra=None):
+        def sens(p):
             t, ty, s = notes.get(p, (p.rsplit("/", 1)[-1], "", 0))
+            return _sensitive({"path": p, "title": t, "type": ty, "sensitive": s}) or (p not in notes and cg._people_path(p))
+
+        def item(p, extra=None):
+            t = notes.get(p, (p.rsplit("/", 1)[-1],))[0]
             r = dict({"path": p, "title": t or ""}, **(extra or {}))
-            if _sensitive({"path": p, "title": t, "type": ty, "sensitive": s}):
+            if sens(p):
                 r["sensitive"] = True
             return r
 
+        def kind(k, *paths):                      # a sensitive end: the field a link stands in is not said (as ctx graph)
+            return "fm" if k.startswith("fm:") and any(sens(x) for x in paths) else k
+
+        if sens(path):                            # review I2: what a sensitive note's own text links is never listed
+            d = "in" if d in ("in", "both") else None
+            out["sensitive"] = True
+            if d is None:
+                out["out"] = []
+                return out
         if d in ("out", "both"):
-            out["out"] = [item(p, {"resolved": True, "kind": k}) for p, k in self._rows(
+            out["out"] = [item(p, {"resolved": True, "kind": kind(k, p, path)}) for p, k in self._rows(
                 "SELECT e.dst, e.kind FROM edges e JOIN notes n ON n.id = e.src_id WHERE n.path = ? ORDER BY e.dst",
                 (path,))]
         if d in ("in", "both"):
-            out["in"] = [item(p, {"kind": k}) for p, k in self._rows(
+            out["in"] = [item(p, {"kind": kind(k, p, path)}) for p, k in self._rows(
                 "SELECT n.path, e.kind FROM edges e JOIN notes n ON n.id = e.src_id WHERE e.dst = ? ORDER BY n.path",
                 (path,))]
         return out
 
     def _registry(self):
         import ctx_entity as ce
-        reg, _ = ce.load(self.sctx, self.idx, ce.empty_memory(), hints=False)
+        mem = ce.empty_memory()
+        try:                                     # your same / not-same answers, as `ctx entity` reads them
+            store = cs.Store(self.sctx.get("store_root") or "")
+            if store.exists():
+                mem = ce.load_memory(store, timeout=2)
+        except Exception:  # noqa: BLE001 — without the answers the registry still answers
+            pass
+        reg, _ = ce.load(self.sctx, self.idx, mem, hints=False)
         return reg
 
     def t_vault_graph_context(self, args):
@@ -378,16 +394,34 @@ class Server:
             raise ToolError("nothing found: %s" % q)
         e = found[0]
         hub = next((c for c in e["cards"] if c["path"] == e["id"]), e["cards"][0])
-        rel = [{"path": c["path"], "title": c.get("label") or "", "kind": c.get("kind") or e["kind"]}
+        def mark(c, d):
+            return dict(d, sensitive=True) if c.get("sensitive") else d
+
+        rel = [mark(c, {"path": c["path"], "title": c.get("label") or "", "kind": c.get("kind") or e["kind"]})
                for c in e["cards"] if c["path"] != hub["path"]] + \
-              [{"path": r["path"], "title": r.get("label") or "", "kind": "related"} for r in e.get("related") or []]
-        return {"hub": {"path": hub["path"], "title": hub.get("label") or "", "kind": e["kind"]}, "related": rel,
-                "several": len(found)}
+              [mark(r, {"path": r["path"], "title": r.get("label") or "", "kind": "related"}) for r in e.get("related") or []]
+        return {"hub": mark(hub, {"path": hub["path"], "title": hub.get("label") or "", "kind": e["kind"]}),
+                "related": rel, "several": len(found)}
 
 
 def _plain(fm):
     """A frontmatter as JSON can hold it (a date as its text)."""
     return json.loads(json.dumps(fm, ensure_ascii=False, default=str))
+
+
+def _answer(srv, msg):
+    """One message or a batch (a list, JSON-RPC 2.0 — answered as a list, notifications left out); a fault of the
+    server is an internal error of that message, never the end of the loop."""
+    if isinstance(msg, list):
+        if not msg:
+            return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "empty batch"}}
+        out = [_answer(srv, m) for m in msg]
+        return [a for a in out if a is not None]
+    try:
+        return srv.handle(msg)
+    except Exception as e:  # noqa: BLE001
+        return {"jsonrpc": "2.0", "id": msg.get("id") if isinstance(msg, dict) else None,
+                "error": {"code": -32603, "message": "%s: %s" % (type(e).__name__, e)}}
 
 
 def serve(sctx, stdin, stdout, version="", refresh=True):
@@ -402,8 +436,8 @@ def serve(sctx, stdin, stdout, version="", refresh=True):
         except ValueError:
             ans = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}
         else:
-            ans = srv.handle(msg)
-        if ans is not None:
+            ans = _answer(srv, msg)
+        if ans is not None and ans != []:
             stdout.write(json.dumps(ans, ensure_ascii=False) + "\n")
             stdout.flush()
     return 0
@@ -418,7 +452,9 @@ def launcher_path(home):
 
 
 def launcher_text(root):
-    return "#!/bin/sh\n%s\nexec python3 \"%s\" serve \"$@\"\n" % (LAUNCHER_MARK, os.path.join(root, "scripts", "ctx.py"))
+    import shlex
+    return "#!/bin/sh\n%s\nexec python3 %s serve \"$@\"\n" % (LAUNCHER_MARK, shlex.quote(os.path.join(root, "scripts",
+                                                                                                         "ctx.py")))
 
 
 def install(home, root):
@@ -451,6 +487,13 @@ def relaunch_if_moved(home, root):
     except OSError:
         return False
     if LAUNCHER_MARK not in have or have == launcher_text(root):
+        return False
+    import shlex
+    try:                                         # the folder it names is still there: another copy of the plugin wrote it
+        named = shlex.split(have.splitlines()[-1])[2]
+    except (IndexError, ValueError):
+        named = ""
+    if named and os.path.isfile(named):
         return False
     return install(home, root)[1]
 

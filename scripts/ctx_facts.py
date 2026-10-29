@@ -39,13 +39,34 @@ def rows(idx, paths):
         for i in range(0, len(paths), 400):
             part = paths[i:i + 400]
             out += con.execute("SELECT n.path, n.source, f.attribute, f.value, f.period, f.observed_at, n.status, "
-                               "n.date, n.confluence_id FROM facts f JOIN notes n ON n.id = f.note_id AND f.hash = n.hash "
-                               "WHERE n.path IN (%s) ORDER BY f.attribute, n.path" % ",".join("?" * len(part)),
+                               "n.date, n.confluence_id, n.type, n.sensitive, n.title FROM facts f JOIN notes n ON n.id = f.note_id "
+                               "AND f.hash = n.hash WHERE n.path IN (%s) ORDER BY f.attribute, n.path"
+                               % ",".join("?" * len(part)),
                                part).fetchall()
         return out
 
-    keys = ("path", "source", "attribute", "value", "period", "observed_at", "status", "date", "confluence_id")
-    return [dict(zip(keys, r)) for r in idx._read(read, [])]
+    import ctx_index as ci
+    keys = ("path", "source", "attribute", "value", "period", "observed_at", "status", "date", "confluence_id", "type",
+            "sensitive", "title")
+    out = []
+    for r in idx._read(read, []):
+        d = dict(zip(keys, r))
+        if d["sensitive"] or (d["type"] or "").lower() in ci.PEOPLE_TYPES or ci.one_on_one(d["path"], d["title"]):
+            continue                             # a person's or a sensitive card's numbers are never shown (review B1)
+        out.append(d)
+    return out
+
+
+_Q = re.compile(r"^(?:(\d{4})\W*[qк]\s*([1-4])|[qк]\s*([1-4])\W*(\d{4}))$", re.I)
+
+
+def period_key(p):
+    """A period as two cards are compared by it: `Q3 2026`, `2026-Q3`, `q3-2026` → `2026-Q3`; else spaces folded."""
+    s = re.sub(r"\s+", " ", str(p or "")).strip()
+    m = _Q.match(s)
+    if m:
+        return "%s-Q%s" % (m.group(1) or m.group(4), m.group(2) or m.group(3))
+    return s.casefold()
 
 
 def _same(v):
@@ -56,7 +77,7 @@ def _conflicts(facts):
     """{(attribute, period)} that two cards give two values of."""
     seen = collections.defaultdict(set)
     for f in facts:
-        seen[(f["attribute"], f["period"])].add(_same(f["value"]))
+        seen[(f["attribute"], period_key(f["period"]))].add(_same(f["value"]))
     return {k for k, v in seen.items() if len(v) > 1}
 
 
@@ -67,10 +88,10 @@ def of_entity(sctx, idx, ent, today=None):
     out = []
     for f in facts:
         kind = ct.kind_of(sctx, f["source"], f["path"], f.get("confluence_id"))
-        t = ct.score(kind, f["observed_at"] or f["date"], ct.ttl_of(sctx, f["path"]), f["status"], "", today)
+        t = ct.score(kind, f["observed_at"] or None, ct.ttl_of(sctx, f["path"]), f["status"], "", today)
         out.append({"attribute": f["attribute"], "value": f["value"], "period": f["period"],
                     "observed_at": f["observed_at"], "path": f["path"], "source": f["source"], "trust": t,
-                    "conflict": (f["attribute"], f["period"]) in bad})
+                    "conflict": (f["attribute"], period_key(f["period"])) in bad})
     return out
 
 
@@ -85,7 +106,7 @@ def audit_findings(idx, reg, roots):
         facts = rows(idx, [c["path"] for c in ent["cards"]])
         for attr, period in sorted(_conflicts(facts)):
             vals = [{"value": f["value"], "path": f["path"]} for f in facts
-                    if f["attribute"] == attr and f["period"] == period]
+                    if f["attribute"] == attr and period_key(f["period"]) == period]
             mine = next((v["path"] for v in vals if ca._inside(v["path"], roots)), vals[0]["path"])
             out.append({"kind": "facts", "path": mine, "detail": {"entity": ent["id"], "attribute": attr,
                                                                   "period": period, "values": vals}, "fixable": False})
