@@ -428,7 +428,7 @@ Collect dashboard URLs (Tableau, GA, or other). If the user already provided das
 
 | Setting | Default | Ask user |
 |---------|---------|---------|
-| Channels | local (in-session only) | local / slack / email / confluence |
+| Channels | local (the library snapshot) | — not asked since v4.1.0: a scheduled health-check publishes and sends nothing (`references/native-surfaces.md` §4); the next interactive run offers the publication |
 | Frequency | weekly | weekly / custom cron / off |
 
 Writes the `Health-Check Notifications` subsection defined in `references/context-schema.md` → CJM Configuration. Until v2.1.0 the schema defined this subsection and Update mode (U-3) offered to change it, but no onboarding step ever collected it — U-3 edited a subsection that never existed.

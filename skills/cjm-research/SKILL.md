@@ -185,7 +185,7 @@ This is a preference, not the publication itself: the question of `references/na
 
 **2f. Mode-specific settings:**
 
-- For `health-check`: confirm a recurring schedule if the user wants automation → a recurring run where the host has SCHEDULE `local`, otherwise one line on where to create it; the scheduled run writes, never publishes (`references/native-surfaces.md` §4–§5, since v0.14.0)
+- For `health-check`: confirm a recurring schedule if the user wants automation → a recurring run where the host has SCHEDULE `local`, otherwise one line on where to create it; the scheduled run (prompt `cjm-research mode=health-check headless=true` — `headless` marks it automated) writes, never publishes (`references/native-surfaces.md` §4–§5, since v0.14.0)
 - For `comparison`: confirm which platforms to compare side-by-side
 - For `hypotheses` and `full`: confirm enrichment search modes (library / internet / confluence / gdrive / baymard) — pre-filled from CJM config defaults
 

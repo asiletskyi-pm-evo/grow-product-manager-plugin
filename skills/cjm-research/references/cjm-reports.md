@@ -109,7 +109,7 @@
 
 > "Report is ready. It holds internal data (funnel metrics, anomalies, hypotheses). Publish it to <the place from 2e, or: Confluence / Notion / Google Docs> — visible to <who can open that place>? Or keep it local only?"
 
-**An automated `health-check` run skips Step 12 entirely**: it saves the snapshot (Automated Health-Check Protocol below) and publishes nothing. **The next interactive run** of this skill on the same product checks `~/.grow-pm/knowledge-library/health-checks/` for a snapshot newer than the last publication and offers it with this question.
+**An automated `health-check` run skips Step 12 entirely**: it saves the snapshot (Automated Health-Check Protocol below) and publishes nothing. **The next interactive run** of this skill on the same product looks at the newest snapshot in `~/.grow-pm/knowledge-library/health-checks/`, names its date, and offers to publish it with this question — the user knows whether it went out already.
 
 - **Confluence** (default) → ask for space and parent page. Title: `[CJM] Product — Mode — Date`
 - **Notion** → ask for workspace and location

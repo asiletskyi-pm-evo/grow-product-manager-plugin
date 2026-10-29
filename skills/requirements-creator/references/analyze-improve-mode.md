@@ -167,7 +167,9 @@ After the user confirms the improved document:
 
 **A8a. Ask if the user wants to save:**
 
-> "Would you like to save the updated requirements? I can update the original document or save a new version."
+> "Would you like to save the updated requirements? They hold internal data. I can update the original document — everyone who can open it sees the change — or save a new version."
+
+That is the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); updating the original is a new version of a published page.
 
 Options:
 - **Update original** — overwrite the existing Confluence/Notion page with the improved version

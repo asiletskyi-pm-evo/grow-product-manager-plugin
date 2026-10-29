@@ -259,7 +259,7 @@ Renders the Deck IR on `product.base_pptx` (blank `Presentation()` when unset) w
 
 - lo-fi → `diagram-prototyper` (Mermaid + ASCII). For the build-first hand-off, when Step 9 will run for it (playbook → Step 3 f; since v3.9.0), the call passes `return_to: design-bridge` with type prototype, the fidelity, a built-in tool (Mermaid or HTML — no external LLM sees the brief), the locale, the platform (from the brief, else `product.platforms`) and the Prototype IR; it asks nothing it was passed, skips its Steps 8–10 (this skill publishes and saves) and returns the result with the IR filled. Any other lo-fi prototype calls it as before, its Steps 8–10 included
 - mid-fi → HTML with inline brand tokens (from `product.brand.*`) + Tailwind-compatible classes
-- hi-fi → **if Step 0.5 routed to an external toolkit** → use its `returns` (Figma URL / branch / files) as the deliverable; **else** → `use_figma(…)` (Full seat only) → creates a Figma frame — after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); the frame is open to whoever can open that file —
+- hi-fi → **if Step 0.5 routed to an external toolkit** → use its `returns` (Figma URL / branch / files) as the deliverable; **else** → `use_figma(…)` (Full seat only) → creates a Figma frame — after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); the frame is open to whoever can open that file
 
 Save to `{vault_root}/Prototypes/{product}/{date}-{slug}/`.
 
@@ -289,7 +289,7 @@ If any check fails → fix + rerun QA; escalate to the user if the blocker is no
 
 ### Step 7 — Publish & link
 
-Depending on the deliverable:
+Depending on the deliverable — each publication below only after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); a link shown in the chat or saved locally needs none:
 
 - **deck** → attach to:
   - upstream Confluence page (if any) as attachment

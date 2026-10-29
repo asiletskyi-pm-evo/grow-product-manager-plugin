@@ -5,7 +5,7 @@ Installs the working tree (tracked files, via `git stash create`, which leaves t
 uniquely named temporary marketplace, disables the user's installed Grow PM copies for these processes
 only (`-c plugins.<id>.enabled=false`; config.toml keeps its entries), checks that the listing shows the
 branch alone, then asks one `codex exec -s read-only` per phrase which skill it would load. Cleans up
-the temporary marketplace, plugin and cache on any exit. Codex has no hooks, so no context digest runs.
+the temporary marketplace, plugin and cache on any exit. The staged copy's hooks are not trusted in Codex, so its context digest does not run.
 
   python3 testing/trigger_codex.py <out.json> [--groups T] [--ids T1,T4] [--repeat N] [--workers N]
           [--also-disable plugin@marketplace,...]

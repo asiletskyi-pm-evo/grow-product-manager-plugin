@@ -1572,11 +1572,12 @@ _B = r"(?<![A-Za-z0-9])"   # \b is no boundary after "_": mcp__visualize__show_w
 SURFACE_BRANDS = [   # (pattern, flags, what it names)
     (_B + r"(?:create|update)_artifact\b", 0, "a host's artifact tool"),
     (r"`Artifact`\s+tool|\bArtifact tool\b|" + _B + r"Artifact(?:Data|Comments)\b", 0, "a host's artifact tool"),
+    (r"\bartifact tool\b|\bcowork artifact\b|\bclaude\.ai artifact\b|\bclaude artifacts?\b", re.I, "a host's artifact tool"),
     (r"\bclaude docs\b", re.I, "a host's live documents"),
     (_B + r"show_widget\b|" + _B + r"genui\b", 0, "a host's inline visual"),
     (r"`?\bvisualize`?\s+skill\b", re.I, "a host's inline visual"),
     (_B + r"scheduled-tasks\b|`schedule`|" + _B + r"create_scheduled_task\b|" + _B + r"Cron(?:Create|List|Delete)\b|"
-     + _B + r"automation_update\b|" + _B + r"automations\.peek\b|(?<![\w/.])/schedule\b", 0, "a host's scheduler"),
+     + _B + r"automation_update\b|" + _B + r"automations\.peek\b|" + _B + r"RemoteTrigger\b|(?<![\w/.])/schedule\b", 0, "a host's scheduler"),
     (r"\bschedule skill\b", re.I, "a host's scheduler"),
     (_B + r"deep-research\b(?!-)", 0, "a host's built-in research"),
     (r"\bchatgpt canvas\b", re.I, "a host's canvas"),

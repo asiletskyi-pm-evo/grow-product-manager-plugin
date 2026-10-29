@@ -222,7 +222,7 @@ Follow the same collection flow as Onboarding for the selected section. Pre-fill
 - Allow changing funnel template (with remapping prompt)
 - Allow adding/removing/editing stages
 - Allow changing thresholds and default settings
-- Allow changing notification channels
+- Notification channels stay `local` (a scheduled health-check publishes and sends nothing, `references/native-surfaces.md` §4)
 
 **For Knowledge Library updates:**
 - Allow changing default search modes

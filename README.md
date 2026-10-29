@@ -249,7 +249,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 4. Brainstorm Features (v0.15.1)
+### 4. Brainstorm Features (v0.15.2)
 
 **Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation. Hosts Debate mode — a role-based adversarial discussion over an evidence pack (`references/debate-protocol.md`).
 
@@ -467,7 +467,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 15. Roadmap Architect (v0.6.1) — Planning Suite
+### 15. Roadmap Architect (v0.6.2) — Planning Suite
 
 **Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree.
 
@@ -477,7 +477,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 16. Project Planning (v0.6.1) — Planning Suite
+### 16. Project Planning (v0.6.2) — Planning Suite
 
 **Description:** Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph with critical path, computes duration under a given team allocation %, and lays out a multi-quarter roadmap with rolling-reforecast.
 
@@ -497,7 +497,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 18. Sprint Planning (v0.6.2) — Planning Suite
+### 18. Sprint Planning (v0.6.3) — Planning Suite
 
 **Description:** Sprint pre-planning: derives focuses from the quarterly roadmap, highlights what's READY to pull (dependencies cleared), catches work-sequence violations, gathers per-member capacity, analyzes carryover risk, suggests assignees, and fills the sprint to capacity.
 
@@ -648,7 +648,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | CJM Research | v0.14.0 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.16.0 | Competitive analysis, user research, market trends, UX benchmarking |
-| Brainstorm Features | v0.15.1 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
+| Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
 | Write Concept | v0.16.1 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.17.2 | Create and analyze feature requirements |
 | Task Creator | v0.15.2 | Create Jira tasks from requirements |
@@ -661,10 +661,10 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Product Reporter | v0.11.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
-| Roadmap Architect | v0.6.1 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
-| Project Planning | v0.6.1 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
+| Roadmap Architect | v0.6.2 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
+| Project Planning | v0.6.2 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
-| Sprint Planning | v0.6.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
+| Sprint Planning | v0.6.3 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.5.0 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 | Focus Advisor | v0.10.0 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.2 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
@@ -962,6 +962,8 @@ After every release, if Codex stayed open (otherwise the next start does this it
 codex plugin marketplace upgrade grow-product-manager-plugins
 codex plugin add grow-product-manager@grow-product-manager-plugins
 ```
+
+**Hooks in Codex.** Codex runs a plugin's hooks only once they are trusted — it keeps a hash per hook under `[hooks.state…]` in `~/.codex/config.toml` (measured 2026-10-29, 0.153.2). Until they are, the context digest does not arrive and the skills find `local-context.md` themselves (Step 0a in full); nothing else changes, because before a Jira or Confluence write a skill confirms itself on every host.
 
 `marketplace add` on a marketplace that is already configured does not refresh it — use `upgrade`. Run `codex` commands from a folder without a project-local `.codex/config.toml` (for example `cd ~` first): Codex merges that file into its config, and a copy that declares a server by `url` where your global config runs it as a command stops every command with "url is not supported for stdio" (measured, codex-cli 0.153.2).
 
