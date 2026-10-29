@@ -103,11 +103,13 @@
 
 ## Publishing
 
-**Before 12a — the PM-first comparison or `explain` (since v3.9.0).** In an interactive `hypotheses` / `full` run where `references/cjm-pipeline.md` Step 7.0 applied: "Your hypotheses vs mine" (`pm_first`, after an answer) or "How I got here" (`explain`) comes in chat once the report is assembled, before 12a — or before publishing to the Step 2e destination. It never enters the report and asks nothing; a change it prompts goes through the 12b feedback loop. The Automated Health-Check Protocol below is unchanged: no question, no block.
+**Before 12a — the PM-first comparison or `explain` (since v3.9.0).** In an interactive `hypotheses` / `full` run where `references/cjm-pipeline.md` Step 7.0 applied: "Your hypotheses vs mine" (`pm_first`, after an answer) or "How I got here" (`explain`) comes in chat once the report is assembled, before 12a. It never enters the report and asks nothing; a change it prompts goes through the 12b feedback loop. The Automated Health-Check Protocol below is unchanged: no question, no block.
 
-**12a. Ask via AskUserQuestion (if not already specified in Step 2e):**
+**12a. Ask via AskUserQuestion — every interactive run, even when Step 2e chose a place (`references/native-surfaces.md` §3):**
 
-> "Report is ready. Where should I publish it?"
+> "Report is ready. It holds internal data (funnel metrics, anomalies, hypotheses). Publish it to <the place from 2e, or: Confluence / Notion / Google Docs> — visible to <who can open that place>? Or keep it local only?"
+
+**An automated `health-check` run skips Step 12 entirely**: it saves the snapshot (Automated Health-Check Protocol below) and publishes nothing. **The next interactive run** of this skill on the same product checks `~/.grow-pm/knowledge-library/health-checks/` for a snapshot newer than the last publication and offers it with this question.
 
 - **Confluence** (default) → ask for space and parent page. Title: `[CJM] Product — Mode — Date`
 - **Notion** → ask for workspace and location
@@ -141,7 +143,7 @@ After publishing, provide a structured summary:
 
 > "Are you satisfied with the CJM analysis? Would you like to dig deeper into any stage, adjust hypotheses, or change the scope?"
 
-- If the user requests changes — iterate: adjust analysis, re-publish, present updated report
+- If the user requests changes — iterate: adjust analysis, present the updated report; re-publishing a page published earlier asks the 12a question again
 - If the user confirms — proceed to skill chaining
 
 **12c. Context enrichment offer:**
@@ -167,8 +169,8 @@ When `health-check` mode is configured for automation:
 1. **Setup:** During Step 2, if user selects health-check mode:
    - Ask about frequency: weekly (recommended), bi-weekly, monthly
    - Say where the results go: the snapshot in the library (below) — a scheduled run never publishes to Confluence or any hosted surface; the next interactive run offers to publish the new snapshot, with the question of `references/native-surfaces.md` §3
-   - Where the host has SCHEDULE: create the recurring run on the user's «так» (what runs, how often, where the result lands); otherwise say in one line where to create it (`native-surfaces.md` §4–§5)
-   - The scheduled run invokes `cjm-research` in `health-check` mode with saved parameters
+   - Where the host has SCHEDULE `local` (a run on this machine — it reads the CJM config and writes the library): create the recurring run on the user's «так» (what runs, how often, where the result lands); otherwise say in one line where to create it (`native-surfaces.md` §1, §4–§5)
+   - The scheduled run's prompt: `cjm-research mode=health-check headless=true` with the saved parameters — `headless` is what tells the run it is automated
 
 2. **Execution (automated):**
    - Skip Step 2 (use saved parameters)

@@ -195,7 +195,7 @@ When the research requires quantitative data — product metrics, dashboard anal
 
 This delegation ensures accurate computation (via pandas/numpy) and consistent analysis methodology across all skills.
 
-**The host's built-in research** (where the host has RESEARCH, Step 1): run it first, on a prompt built from the Step 1 scope with public information only — product and competitor names, market segments, the questions — never internal metrics, findings or documents. Take its findings with the source each one cites; a claim traced to a resolvable, recency-checked source takes that source's class, an untraceable one is `simulated` (1.5.g). Marker `deep-research-host`.
+**The host's built-in research** (where the host has RESEARCH, Step 1): run it first, on a prompt built from the Step 1 scope with public information only — product and competitor names, market segments, the questions. Step 1's scope may include internal documents, metrics, hypotheses and planned functionality: generalize them ("a marketplace of our size" rather than the figure) or leave them out; never internal metrics, findings, internal URLs, hypotheses or unreleased plans — the same rule as `references/deep-research-llm.md` step 4, because its searches leave the session. Take its findings with the source each one cites; a claim traced to a resolvable, recency-checked source takes that source's class, an untraceable one is `simulated` (1.5.g). Marker `deep-research-host`.
 
 **Deep Research via ChatGPT / Gemini** (if confirmed by user in Step 1, after the host's research where it ran — cross-reference the two): open each enabled LLM in the browser, pick the strongest model, run Deep Research on a prompt built from the Step 1 scope, extract the findings and cross-reference them with each other and with the other sources — LLM output enriches the analysis and is never a primary source: a claim traced to a resolvable, recency-checked source takes that source's class, an untraceable claim about users or the market is `simulated` (1.5.g). Prompts carry **public information only** (`references/data-policy.md`).
 
@@ -228,7 +228,7 @@ Apply the appropriate framework(s) based on research type. See `references/frame
 
 ### 4. Confirm Confluence location and publish
 
-**Before creating the page**, if the user has not already specified where to publish, use AskUserQuestion to clarify:
+**Before creating the page — every time, even when the user already named the place** — ask the publication question of `references/native-surfaces.md` §3: the research holds internal data when Step 1's scope or Step 2's sources included any (Confluence, Drive, Tableau, uploaded files, interviews), and the page will be open to everyone who reads the space. If the user has not specified where to publish, use AskUserQuestion to clarify:
 
 - Which Confluence **space** to use?
 - Which **parent page** to nest the research under? (offer to search existing pages to help the user decide)
@@ -277,7 +277,7 @@ After publishing, provide a structured report of what was done:
 
 > "Are you satisfied with the research results? Would you like to refine, add, or change anything?"
 
-- If the user requests changes — iterate: update the research, re-publish, present updated report
+- If the user requests changes — iterate: update the research, present the updated report; updating the published page asks the Step 4 question again
 - If the user confirms — proceed to the next step
 
 **Self-improvement check** (after corrections are applied and confirmed): follow `references/self-improvement.md` — analyze whether the correction is a pattern, and if so propose a SKILL.md improvement (version bump + CHANGELOG).

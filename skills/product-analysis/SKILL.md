@@ -222,7 +222,7 @@ If Blocked metrics > 0:
 
 ### Steps 2–6 — Analysis engine, findings, hypotheses, report
 
-The full engine — Python computation (2a), framework toolkit (2c), findings structure (Step 3), hypothesis generation with ICE (Step 4), interactive discussion (Step 5), report structure, publishing and feedback (Step 6) — lives in `references/analysis-engine.md` (skill-local). Read it when running **Interactive Q&A** or **Full Report** mode. Specialized modes reuse only Step 6 (report/save/feedback) from it. Step 6 draws charts inline where the host has WIDGET and asks before any publication (since v0.19.0, `references/native-surfaces.md`).
+The full engine — Python computation (2a), framework toolkit (2c), findings structure (Step 3), hypothesis generation with ICE (Step 4), interactive discussion (Step 5), report structure, publishing and feedback (Step 6) — lives in `references/analysis-engine.md` (skill-local). Read it when running **Interactive Q&A** or **Full Report** mode. Specialized modes reuse only Step 6 (report/save/feedback) from it. Step 6 draws charts inline where the host has WIDGET — mark it in Step 0-host and, when it is absent, say so once at the start — and asks before any publication (since v0.19.0, `references/native-surfaces.md`).
 
 ### Vault Save (Optional — after output delivery)
 

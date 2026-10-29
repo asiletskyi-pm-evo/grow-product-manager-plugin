@@ -124,7 +124,7 @@ Per `local-context-protocol.md`. Then **Step R** — load/create the registry.
 Registry mirror after every write (see above). No separate artifact — experiments live as registry entries + linked `hypothesis`/`ab-test-results`/`decision` artifacts owned by their source skills.
 
 ## Headless (scheduled stale-check)
-Contract for scheduled runs (analogous to focus-advisor): `mode=stale headless=true` → no questions; output = compact stale list with per-item recommended action, or "all experiments healthy". Offer creating the schedule (weekly, Monday) during `start` mode — a recurring run where the host has SCHEDULE, otherwise one line on where to create it (`references/native-surfaces.md` §4–§5).
+Contract for scheduled runs (analogous to focus-advisor): `mode=stale headless=true` → no questions; output = compact stale list with per-item recommended action, or "all experiments healthy". Offer creating the schedule (weekly, Monday) during `start` mode — a recurring run where the host has SCHEDULE `local`, otherwise one line on where to create it (`references/native-surfaces.md` §4–§5).
 
 ## Quality Standards
 - The tracker never declares winners — verdicts only via product-analysis readout (Gate included).
@@ -134,7 +134,7 @@ Contract for scheduled runs (analogous to focus-advisor): `mode=stale headless=t
 - Language — `user.language`.
 
 ## Skill Chaining
-← `brainstorm-features` (Step 7: top hypotheses → `proposed`) · ← `requirements-creator` (Step 7: A/B spec → `specced`) · ← `focus-advisor` ("A/B test waiting for a decision" routes here, not straight to product-analysis) · → `product-analysis` A/B mode (readout) · → `decision-log` (decide) · → `task-creator` (rollout/cleanup tasks) · → `product-reporter` (flags report cross-check) · → `schedule` (weekly stale-check).
+← `brainstorm-features` (Step 7: top hypotheses → `proposed`) · ← `requirements-creator` (Step 7: A/B spec → `specced`) · ← `focus-advisor` ("A/B test waiting for a decision" routes here, not straight to product-analysis) · → `product-analysis` A/B mode (readout) · → `decision-log` (decide) · → `task-creator` (rollout/cleanup tasks) · → `product-reporter` (flags report cross-check) · → a scheduled run (SCHEDULE `local`, weekly stale-check).
 
 **End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
 

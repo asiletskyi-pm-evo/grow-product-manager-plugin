@@ -56,7 +56,7 @@ Namespaces are what the host showed in real sessions; a differently-named connec
 | Google Calendar | `mcp__*__list_events`, `mcp__*__list_calendars` | `list_events`, `get_event`, `create_event` |
 | Gmail | `mcp__*__search_threads`, `mcp__*__list_labels` | `search_threads`, `get_thread`, `create_draft` |
 | Fireflies | `mcp__*__fireflies_*`, `mcp__*__get_transcripts` | `fireflies_get_transcripts`, `fireflies_search` |
-| Code search over the organisation's repositories (a GitLab indexer such as `gin`) | `mcp__*__search_code`, `mcp__*__find_definition`, `mcp__*__get_file` | `search_code`, `find_definition`, `get_file` |
+| Code search over the organisation's repositories (a GitLab indexer) | `mcp__*__search_code`, `mcp__*__find_definition`, `mcp__*__get_file` | `search_code`, `find_definition`, `get_file` |
 
 **If found** → use the MCP tools directly. Proceed with the skill workflow.
 

@@ -82,14 +82,19 @@ print(n)")
     C=$(ls -d "$CODEX_DIR/plugins/cache/$MKT/grow-product-manager/"*/ 2>/dev/null | head -1)
     [ -n "$C" ] && [ -d "$C/references" ] && ok "Codex cache carries references/ (shared protocols reachable)" || err "Codex cache lacks references/"
     [ -n "$C" ] && [ -f "$C/.codex-plugin/plugin.json" ] && ok "Codex manifest present in cache" || err ".codex-plugin/plugin.json missing in the Codex cache"
-    # Since 0.153.2 Codex runs a plugin's hooks (measured 2026-10-29; host-profiles.md §2, §7). This checks
+    # Codex runs a plugin's hooks once they are trusted (measured 2026-10-29 on 0.153.2; host-profiles.md §2, §7). This checks
     # that host fact, not HEAD's hook: Codex keeps a trust hash per plugin hook ([hooks.state."<plugin>@<mkt>:…"]
     # in config.toml), the staged copy has none, and its SessionStart did not run in `codex exec`. So it looks
     # for the digest of the copy you installed — any version. The session log records the digest verbatim.
-    if grep -q '^\[plugins\."grow-product-manager@' "$CODEX_DIR/config.toml" 2>/dev/null; then
+    # The staged entry (@$MKT) is in config.toml by now — it does not count as a copy of yours. The session log
+    # is the one whose cwd is this run's neutral folder, not another session's that started meanwhile.
+    if grep '^\[plugins\."grow-product-manager@' "$CODEX_DIR/config.toml" 2>/dev/null | grep -qvF "@$MKT\""; then
       MARK="$NEUTRAL/.mark"; : > "$MARK"
-      cx exec --skip-git-repo-check -s read-only "Diagnostic only: reply with the single word ok." >/dev/null 2>&1
-      LOG=$(find "$CODEX_DIR/sessions" -name '*.jsonl' -newer "$MARK" 2>/dev/null | head -1)
+      # no stdin, and a watchdog: a Codex that hangs (an MCP login, a hook trust prompt) is a FAIL, not a stuck release
+      cx exec --skip-git-repo-check -s read-only "Diagnostic only: reply with the single word ok." </dev/null >/dev/null 2>&1 & CXP=$!
+      for _ in $(seq 1 180); do kill -0 "$CXP" 2>/dev/null || break; sleep 1; done
+      kill -0 "$CXP" 2>/dev/null && { pkill -P "$CXP" 2>/dev/null; kill "$CXP" 2>/dev/null; echo "note: codex exec did not finish in 180 s — stopped"; }
+      LOG=$(find "$CODEX_DIR/sessions" -name '*.jsonl' -newer "$MARK" -exec grep -lF "/$(basename "$NEUTRAL")\"" {} + 2>/dev/null | head -1)
       [ -n "$LOG" ] && grep -qF "GROW_PM_SESSION (SessionStart hook, plugin v" "$LOG" && ok "Codex runs plugin hooks (a GROW_PM_SESSION digest in the session log)" || err "no GROW_PM_SESSION digest in the Codex session log — Codex did not run the installed copy's hooks (trusted in Codex? host-profiles.md §7)"
     else
       echo "note: no Grow PM copy installed in Codex — the hook check is skipped"

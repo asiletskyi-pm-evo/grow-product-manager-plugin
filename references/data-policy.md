@@ -89,16 +89,16 @@ Step 0.5 of every skill searches the user's own base and, when it is not enough,
 
 ## Hosted surfaces (since v4.1.0)
 
-A hosted surface is anything that lives outside the session and opens at a link: a typed page or a site, a live document, Confluence, a whiteboard, a design file (`native-surfaces.md` §1). The user decided how internal data reaches one: **always ask.**
+A hosted surface is anything that lives outside the session and opens at a link: a typed page or a site, a live document, Confluence, Notion, a whiteboard, a design file (`native-surfaces.md` §1). The user decided how internal data reaches one: **always ask.**
 
-1. **Before every publication** of internal data to a hosted surface the skill asks — and again before a **new version** of the same artifact. One question names what goes, where, and who sees it (`native-surfaces.md` §3); an existing «where to?» question that names the surface and the internal data counts as this one.
+1. **Before every publication** of internal data to a hosted surface the skill asks — and again before a **new version** of the same artifact (an update, a refresh, a re-publish). One question names what goes, where, and who can open it there (`native-surfaces.md` §3); an existing «where to?» question that names the internal data and who can open each place counts as this one.
 2. **A visual inside the conversation is not a publication** — it stays in the session — and needs no question.
-3. **A scheduled run never publishes** to a hosted surface: it writes to the vault or a file and leaves one line for the next interactive run (`native-surfaces.md` §4).
-4. **Sharing is a separate question**, asked after the publication: to whom, by name or group.
+3. **A scheduled run never publishes** to a hosted surface, whatever destination its prompt or a default names: it writes to the vault or a file and leaves one line for the next interactive run (`native-surfaces.md` §4). The plugin's recurring runs are scheduled only on the user's machine (SCHEDULE `local`), never as a cloud run that would carry their data off it.
+4. **Sharing is a separate question**, asked after a page or document that starts private is published: to whom, by name or group. A place open to a team from the start (a Confluence space) is named with its audience in the question itself.
 5. **A person's profile is never published** to a hosted surface, whatever the answer (`people-context-protocol.md`).
 6. **The host's built-in research** (RESEARCH) runs in the session, but its searches leave it: phrase its queries from public information only, as for Deep Research above (rule 2 of the Practical Guidelines).
 
-When in doubt whether a result holds internal data, it does (rule 5 above).
+When in doubt whether a result holds internal data, it does (Practical Guidelines, rule 5).
 
 ---
 

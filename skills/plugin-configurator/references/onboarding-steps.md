@@ -860,7 +860,7 @@ Collected via `AskUserQuestion`/dialog:
 2. **VIP senders** — prefill from existing stakeholders/team in local-context; if none — ask for names+emails. Explain: VIP raises mail-signal ranking, it does not filter others out.
 3. **PM goals** — prefill from local-context (OKRs, mission commitments); if none — ask for 1–3 goals with wording the PM uses. These act as permanent scoring weights (`focus-scoring.md`). Also capture **Goals source** — the URL of the pinned product goals/missions document (used by strategy collectors).
 4. **Cadence overrides** — show the default ritual table (`focus-cadence.md` §2), ask what differs for this PM/team.
-5. **Scheduled briefs** — offer creating headless brief tasks (a recurring run where the host has SCHEDULE; a scheduled brief never publishes — `references/native-surfaces.md` §4): daily `now` brief (time, working days only), weekly `tactics` brief (e.g. Monday morning), and a quarterly `strategy` memo (first week of the quarter); `healthcheck: off` by default.
+5. **Scheduled briefs** — offer creating headless brief tasks (a recurring run where the host has SCHEDULE `local`; a scheduled brief never publishes — `references/native-surfaces.md` §4; without it, one line on where to create the run, §5): daily `now` brief (time, working days only), weekly `tactics` brief (e.g. Monday morning), and a quarterly `strategy` memo (first week of the quarter); `healthcheck: off` by default.
 
 Existence check: if the `Focus` section already exists → do not re-ask, only offer review/update via `update config`.
 

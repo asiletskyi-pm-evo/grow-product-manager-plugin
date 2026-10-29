@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.17.1
+version: 0.17.2
 description: Write or review a requirements document with numbered functional requirements, incl. A/B test and AI-feature specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію». EN — "check my spec".
 ---
 
@@ -282,7 +282,7 @@ Run `references/artifact-style-gate.md` on the draft. Maker–checker: the `grow
 
 ### Step 6 — Publishing
 
-Ask whether to save the document — if not, the results stay in the dialogue; if yes, ask where (Confluence by default, Notion, Google Doc, other) and under which space / parent page. Title the page `[Feature number] - [A/B Test type if applicable] - [Feature name]` and publish with the destination's native elements (Confluence: `createConfluencePage` with the ToC and Jira work items macros), following the integration fallback chain; a local document is the last resort.
+Ask whether to save the document, naming the internal data it holds and who can open each place (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier) — if not, the results stay in the dialogue; if yes, ask where (Confluence by default, Notion, Google Doc, other) and under which space / parent page. Title the page `[Feature number] - [A/B Test type if applicable] - [Feature name]` and publish with the destination's native elements (Confluence: `createConfluencePage` with the ToC and Jira work items macros), following the integration fallback chain; a local document is the last resort.
 
 The full procedure — 6a–6g: the save prompt, location questions, title rules with examples, and the Confluence / Notion / Google Docs / other-destination adaptations — lives in `references/publishing-destinations.md` (skill-local). Read it when the user has confirmed the draft in Step 5 (or at A8 in Analyze & Improve mode).
 
@@ -318,7 +318,7 @@ The full procedure — the offer wording, the exact `design-bridge` parameters p
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.17.1", tags: [feature area, platforms, subtype (default/ab-test/ai-feature)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.17.2", tags: [feature area, platforms, subtype (default/ab-test/ai-feature)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 

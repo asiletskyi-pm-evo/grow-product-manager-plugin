@@ -106,6 +106,7 @@ How this skill's inputs map onto 6a (the full table is there):
 | A figure the user typed or pasted (`user-text`) | `reported (<who>)` — even after 1.5.a–1.5.e |
 | A stakeholder's or the PM's own view | `reported (<who>)` — not a real-user source |
 | `deep-research-llm` | the class of the resolvable, recency-checked source a claim traces to; untraceable → `simulated` (two LLMs agreeing are not a second source) |
+| `deep-research-host` | the same rule: the class of the resolvable, recency-checked source a claim traces to; untraceable → `simulated` (the host's research agreeing with an LLM is not a second source) |
 | Persona or synthetic-user answers, simulated interviews, model-written "user" answers | `simulated` |
 
 - **Synthesis keeps the class** of what it synthesises: a theme drawn from six interviews is `reported`; a design research-synthesis appendix keeps the class of the notes it was given.

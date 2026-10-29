@@ -522,7 +522,7 @@ An unknown version with different text is never taken for an edit: a false `edit
 
 `ctx` needs SHELL; the network is used only as §12.8 says. On a host without SHELL the blocks file can be read with the host's own `vault_get_note` (when MCP is present), but nothing merges it: the user's edits stay in `local-context.md`, and the next `ctx` run on a host with a shell does the comparison.
 
-`ctx provider sync` (§12.11) needs SHELL and the network as well, and runs where Step 0c of `local-context-protocol.md` runs. A host without the digest (Codex CLI before 0.153.2) shows no `repos:` line in a digest it does not have, so the skill's closing sentence is what tells the user there; a Cowork sandbox usually has no VPN, so a repository behind one ends `unreachable` and is skipped.
+`ctx provider sync` (§12.11) needs SHELL and the network as well, and runs where Step 0c of `local-context-protocol.md` runs. A host without the digest (a Codex CLI whose plugin hooks are not trusted or not run) shows no `repos:` line in a digest it does not have, so the skill's closing sentence is what tells the user there; a Cowork sandbox usually has no VPN, so a repository behind one ends `unreachable` and is skipped.
 
 ### 12.11 The daily sync (since v3.14.0)
 
