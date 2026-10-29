@@ -10,9 +10,9 @@ a picture), and at the end of a refresh that changed something the links are res
                                 kind `wikilink` (the text), `embed`, `fm:<field>` (a frontmatter field), `same_as` (a
                                 bridge, v3.20.0) or `mention` (a Jira key → every work card of that key); a name two
                                 notes or more share — an edge to each, `ambiguous` 1
-- unresolved(src_id, target, field, candidates_json)   a link that lands nowhere — its candidates the notes whose name
-                                is the target's (a path that is not there: the note of that name elsewhere) — or on
-                                several (an ambiguous link: its candidates those notes)
+- unresolved(src_id, target, field, why, candidates_json)   a link that lands nowhere (why `dead`) — its candidates the
+                                notes whose name is the target's (a path that is not there: the note of that name
+                                elsewhere) — or on several (why `ambiguous`: its candidates those notes)
 
 - Resolver                      a link's target as written → the note it means (moved here from ctx_entity, which keeps
                                 the name): the exact path, the plugin folder's path, the end of a path, the name; several
@@ -170,13 +170,13 @@ def build(con, prefixes, changed=None, full=False):
         kind = kind_of(field or "", embed)
         hit = res.resolve(target)
         if isinstance(hit, list):
-            dead.append((nid, target, field or "", json.dumps(hit, ensure_ascii=False)))
+            dead.append((nid, target, field or "", "ambiguous", json.dumps(hit, ensure_ascii=False)))
             for dst in hit:
                 if dst != src and (nid, dst, kind) not in seen:
                     seen.add((nid, dst, kind))
                     edges.append((nid, dst, kind, field or "", anchor or "", 1))
         elif hit is None:
-            dead.append((nid, target, field or "", json.dumps(res.same_name(target), ensure_ascii=False)))
+            dead.append((nid, target, field or "", "dead", json.dumps(res.same_name(target), ensure_ascii=False)))
         elif hit != src and (nid, hit, kind) not in seen:
             seen.add((nid, hit, kind))
             edges.append((nid, hit, kind, field or "", anchor or "", 0))
@@ -187,7 +187,7 @@ def build(con, prefixes, changed=None, full=False):
                 seen.add((nid, dst, "mention"))
                 edges.append((nid, dst, "mention", "", key, 0))
     con.executemany("INSERT INTO edges(src_id, dst, kind, field, anchor, ambiguous) VALUES (?, ?, ?, ?, ?, ?)", edges)
-    con.executemany("INSERT INTO unresolved(src_id, target, field, candidates_json) VALUES (?, ?, ?, ?)", dead)
+    con.executemany("INSERT INTO unresolved(src_id, target, field, why, candidates_json) VALUES (?, ?, ?, ?, ?)", dead)
     con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('graph_version', ?)", (str(GRAPH_VERSION),))
     con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('graph_built', ?)",
                 (datetime.datetime.now().astimezone().isoformat(timespec="seconds"),))

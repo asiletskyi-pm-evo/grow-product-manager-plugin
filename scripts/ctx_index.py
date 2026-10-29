@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS names(path TEXT PRIMARY KEY, source TEXT, dataless IN
 CREATE TABLE IF NOT EXISTS edges(src_id INTEGER, dst TEXT, kind TEXT, field TEXT, anchor TEXT, ambiguous INTEGER);
 CREATE INDEX IF NOT EXISTS edges_src ON edges(src_id);
 CREATE INDEX IF NOT EXISTS edges_dst ON edges(dst);
-CREATE TABLE IF NOT EXISTS unresolved(src_id INTEGER, target TEXT, field TEXT, candidates_json TEXT);
+CREATE TABLE IF NOT EXISTS unresolved(src_id INTEGER, target TEXT, field TEXT, why TEXT, candidates_json TEXT);
 CREATE INDEX IF NOT EXISTS unresolved_src ON unresolved(src_id);
 """                                 # v4.0.0: every file a link may land on (`names`, evicted ones too) and the links
                                     # resolved (ctx_graph.build) — added in place to an earlier build's file

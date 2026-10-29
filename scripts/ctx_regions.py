@@ -18,6 +18,7 @@ inside one; its script rewrites it.
                                 nested, heading-twice (a heading both inside a region and outside it). Markers in a code
                                 block or a code span are text.
 - touches(text, old)            does `old` (an edit's old text) lie, at any of its places, on a region or a marker?
+- outside_targets(text)        the targets of the links outside every region and code block
 - changed(old, new)             do the regions of a new text differ from the old one's (a region's text, a marker, a
                                 region gone or added)?
 - check_registry(root)          the lines where vault-schema.md's table and NAMESPACES differ
@@ -103,6 +104,21 @@ def parse(text, providers=()):
     for key in sorted(inside & outside):
         problems.append({"why": "heading-twice", "ns": "", "id": key, "at": 0})
     return regions, problems
+
+
+_WIKI = re.compile(r"!?\[\[([^\]\n]+?)\]\]")
+
+
+def outside_targets(text):
+    """The targets (as written, before `#` and `|`) of the wiki links of `text` outside every region and code block —
+    the links a writer that never enters a region may change."""
+    masked = _masked(text or "")
+    regions, _ = parse(text or "")
+    out = set()
+    for m in _WIKI.finditer(masked):
+        if not any(r["start"] <= m.start() < r["end"] for r in regions):
+            out.add(m.group(1).split("|", 1)[0].split("#", 1)[0].strip())
+    return out
 
 
 def _spans(text):

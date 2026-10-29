@@ -1,0 +1,4 @@
+---
+type: meeting-notes
+---
+# {{title}}

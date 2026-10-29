@@ -95,6 +95,10 @@ class Env:
         return {(s, t): json.loads(c or "[]") for s, t, c in self.q(
             "SELECT n.path, u.target, u.candidates_json FROM unresolved u JOIN notes n ON n.id = u.src_id")}
 
+    def why(self):
+        return {(s, t): w for s, t, w in self.q(
+            "SELECT n.path, u.target, u.why FROM unresolved u JOIN notes n ON n.id = u.src_id")}
+
     def note(self, rel):
         return os.path.join(self.vault, *rel.split("/"))
 
@@ -152,6 +156,9 @@ with tempfile.TemporaryDirectory() as d:
     check("…a link to a path that is not there has the one note of its name as its candidate (fixable)",
           u.get((STANDUP, "Notes/Old/Roadmap")) == [ROADMAP], u)
     check("…an ambiguous link is unresolved too, with both candidates", u.get((STANDUP, "bea")) == sorted([BEA_CORE, BEA_OWN]), u)
+    w = env.why()
+    check("…each says why: dead or ambiguous", w.get((STANDUP, "bea")) == "ambiguous"
+          and w.get((STANDUP, "Nowhere at all")) == "dead" and w.get((STANDUP, "Notes/Old/Roadmap")) == "dead", w)
     check("…the meta says which rules built the edges", env.q("SELECT value FROM meta WHERE key='graph_version'")
           == [(str(cg.GRAPH_VERSION),)])
 

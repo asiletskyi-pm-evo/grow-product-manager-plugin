@@ -251,7 +251,7 @@ _FROM_PLAN = ("change(s) waiting", "conflict:", "stray file", "is missing on dis
 
 
 def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, errors, idx, snaps, baks, today,
-           unread_regs=(), recheck=None, consolidate=None, overlays=()):
+           unread_regs=(), recheck=None, consolidate=None, overlays=(), audit=()):
     """The lines of `ctx health`: (level, text, fix). What the sync plan already counts (edits waiting, conflicts,
     stray and missing files) is said once, not again among validate's warnings and errors."""
     out = []
@@ -336,6 +336,7 @@ def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, e
         else:
             out.append((OK, "репозиторій %s: перевірено %s" % (r["id"], r["checked"] or "—"), None))
         out.extend(copy_health(r, today))
+    out.extend(audit)                                   # since v4.0.0: the last `ctx audit` (ctx_audit.health)
     if idx is None:
         out.append((WARN, "індексу пошуку немає", "ctx index rebuild"))
     else:

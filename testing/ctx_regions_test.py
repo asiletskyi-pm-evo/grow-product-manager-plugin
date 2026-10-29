@@ -95,6 +95,10 @@ check("v4.0.0 changed: the same regions in a new text — no; a region's text, a
       and rg.changed(GOOD, GOOD.replace("<!-- related:begin -->\n- [[B]]\n<!-- related:end -->\n", ""))
       and not rg.changed("no regions", "still none"))
 
+check("v4.0.0 outside_targets: the links outside every region and code block, as written before # and |",
+      rg.outside_targets("[[A#x|a]] ![[P.png]]\n<!-- ctx:begin id=r -->\n[[B]]\n<!-- ctx:end id=r -->\n```\n[[C]]\n```\n")
+      == {"A", "P.png"})
+
 errs = rg.check_registry(ROOT)
 check("v4.0.0 the registry table of references/vault-schema.md is the constant NAMESPACES", errs == [], errs)
 check("…the registry holds the namespaces of the concept and the plugin's own",
