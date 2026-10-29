@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.15.1
+version: 0.16.0
 description: Competitive, market, user and UX-benchmark research — interview synthesis, research plans, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research plan".
 ---
 
@@ -98,7 +98,8 @@ This step is critical. Do NOT start research until the scope is crystal clear. U
 - Ask the user which sources and tools to use for this specific research
 - Suggest relevant sources based on the research type (web, Confluence, Google Drive, Figma, Tableau, uploaded files)
 - Ask whether there are relevant documents in **Google Drive** (research reports, strategy docs, meeting notes, spreadsheets) — if yes, ask the user to share links or folder names
-- **Deep Research via external LLMs — ask about each LLM separately via AskUserQuestion:**
+- **The host's built-in research first (since v0.16.0, `references/native-surfaces.md` §2).** Where the host has RESEARCH (marked in Step 0-host), it is one of the sources by default — it runs in the session and returns its sources, so it needs no question of its own; say it in the source list you confirm. Its queries leave the session: build them from **public information only**, as for the external LLMs below (`references/data-policy.md`). Without RESEARCH, say nothing about it.
+- **Deep Research via external LLMs — a second opinion, ask about each LLM separately via AskUserQuestion:**
   - "Should we use **ChatGPT** in Deep Research mode for deeper analysis?" (via the user's browser)
   - "Should we use **Google Gemini** in Deep Research mode for deeper analysis?" (via the user's browser)
   - The user can enable one, both, or neither. If both are enabled — run Deep Research in both LLMs and cross-reference their findings
@@ -194,7 +195,9 @@ When the research requires quantitative data — product metrics, dashboard anal
 
 This delegation ensures accurate computation (via pandas/numpy) and consistent analysis methodology across all skills.
 
-**Deep Research via ChatGPT / Gemini** (if confirmed by user in Step 1): open each enabled LLM in the browser, pick the strongest model, run Deep Research on a prompt built from the Step 1 scope, extract the findings and cross-reference them with each other and with the other sources — LLM output enriches the analysis and is never a primary source: a claim traced to a resolvable, recency-checked source takes that source's class, an untraceable claim about users or the market is `simulated` (1.5.g). Prompts carry **public information only** (`references/data-policy.md`).
+**The host's built-in research** (where the host has RESEARCH, Step 1): run it first, on a prompt built from the Step 1 scope with public information only — product and competitor names, market segments, the questions — never internal metrics, findings or documents. Take its findings with the source each one cites; a claim traced to a resolvable, recency-checked source takes that source's class, an untraceable one is `simulated` (1.5.g). Marker `deep-research-host`.
+
+**Deep Research via ChatGPT / Gemini** (if confirmed by user in Step 1, after the host's research where it ran — cross-reference the two): open each enabled LLM in the browser, pick the strongest model, run Deep Research on a prompt built from the Step 1 scope, extract the findings and cross-reference them with each other and with the other sources — LLM output enriches the analysis and is never a primary source: a claim traced to a resolvable, recency-checked source takes that source's class, an untraceable claim about users or the market is `simulated` (1.5.g). Prompts carry **public information only** (`references/data-policy.md`).
 
 The full procedure — the ChatGPT and Gemini steps, cross-referencing when both run, and the guidelines for LLM-sourced data — lives in `references/deep-research-llm.md` (skill-local). Read it when the user enabled either LLM in Step 1.
 
@@ -239,7 +242,7 @@ Once confirmed, create the Confluence page using `createConfluencePage` with:
 - Tables for comparison data
 - A summary/TL;DR section at the top
 - **Glossary section** — at the end of the document (before Sources), add a "Glossary" section that explains all terms, professional jargon, abbreviations, and metrics used in the report. For each term provide a concise, clear definition accessible to a reader who may not be deeply familiar with the domain. Examples: "CAC (Customer Acquisition Cost) — cost of acquiring one customer", "Churn rate — percentage of users who stop using the product over a given period", "TAM (Total Addressable Market) — the total market volume theoretically available to the product". Use the user's preferred language (`user.language`) for the glossary content.
-- Sources section at the bottom with links — clearly marking each source type (Web, Confluence, Google Drive, Knowledge Library, ChatGPT Deep Research, Gemini Deep Research, uploaded file, etc.) and its evidence class (1.5.g)
+- Sources section at the bottom with links — clearly marking each source type (Web, Confluence, Google Drive, Knowledge Library, the host's research, ChatGPT Deep Research, Gemini Deep Research, uploaded file, etc.) and its evidence class (1.5.g)
 
 **Confluence formatting requirements — use standard (non-legacy) elements:**
 
@@ -267,7 +270,7 @@ After publishing, provide a structured report of what was done:
 - **What was done:** brief description of the research conducted (type, scope, depth)
 - **Artifacts created:** links to all created documents (Confluence page, local files, etc.)
 - **Key findings:** 3-5 key takeaways from the research — from real evidence only, never `simulated` input
-- **Sources used:** list of source types used (Web, Confluence, Google Drive, Knowledge Library, Figma, ChatGPT Deep Research, Gemini Deep Research, uploaded files), each with its evidence class
+- **Sources used:** list of source types used (Web, Confluence, Google Drive, Knowledge Library, Figma, the host's research, ChatGPT Deep Research, Gemini Deep Research, uploaded files), each with its evidence class
 - **Recommended next steps:** suggested follow-up actions
 
 **After presenting the report, proactively ask for feedback:**
@@ -335,7 +338,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.15.1", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.16.0", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
    (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added; since v3.6.0 a research plan, discussion guide, insight report or insight memo saves the same way, tagged with its subtype.)
 2. Display: "Saved to Vault: Research/{product}/…"
 
@@ -349,7 +352,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
 - **(v0.8.0+) Inline source annotation MANDATORY** — every cited metric / benchmark / claim from external source carries inline annotation with source name, year, geography per Gate Check 4 of `data-integrity-protocol.md`
 - **(v0.8.0+) Caveat propagation** — Step 1.5 ⚠️ Caveat sources surface their qualifier in the final report (recency caveat, geographic fit caveat, single-source caveat, bias caveat). Do not hide under generic "based on industry research"
 - **(v0.8.0+) Extreme claims disclosure** — any sensational claim (+200%, 10×, #1 in industry) must include "verified across N sources" disclosure
-- **(v0.8.0+) Source type markers** — every cited source in Sources section tagged (`baymard-premium` / `web-search` / `kb-source` / `competitor-website` / `user-research` / `deep-research-llm`); include recency + geography for each, and the evidence class the marker maps to (1.5.g)
+- **(v0.8.0+) Source type markers** — every cited source in Sources section tagged (`baymard-premium` / `web-search` / `kb-source` / `competitor-website` / `user-research` / `deep-research-llm` / `deep-research-host`); include recency + geography for each, and the evidence class the marker maps to (1.5.g)
 
 ## Additional Resources
 

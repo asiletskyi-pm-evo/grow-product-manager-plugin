@@ -220,7 +220,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 2. Product Analysis (v0.18.0)
+### 2. Product Analysis (v0.19.0)
 
 **Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
 
@@ -235,7 +235,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 3. Product Research (v0.15.1)
+### 3. Product Research (v0.16.0)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -449,7 +449,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 14. Product Reporter (v0.10.2) — renamed from Team Ops Reporter in v2.0.0
+### 14. Product Reporter (v0.11.0) — renamed from Team Ops Reporter in v2.0.0
 
 **Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
 
@@ -646,8 +646,8 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Skill | Version | Description |
 |-------|---------|-------------|
 | CJM Research | v0.14.0 | Customer Journey Map analysis and hypothesis validation |
-| Product Analysis | v0.18.0 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.15.1 | Competitive analysis, user research, market trends, UX benchmarking |
+| Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
+| Product Research | v0.16.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.1 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
 | Write Concept | v0.16.0 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.17.1 | Create and analyze feature requirements |
@@ -660,7 +660,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Knowledge Library | v0.9.3 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
-| Product Reporter | v0.10.2 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
+| Product Reporter | v0.11.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
 | Roadmap Architect | v0.6.1 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
 | Project Planning | v0.6.1 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.8.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |

@@ -126,9 +126,9 @@ Exempt:
 | `observed` | `walkthrough-local`, a session recording, a screenshot of the product's own UI |
 | `reported` | `user-text`, a prepared report the user hands over (`pdf-upload`, a dashboard or report screenshot), `confluence-internal`, `jira-internal` ticket content, verbatim user research, a Figma / design file or prototype (a claim about users made on it alone is `assumed`), a figure read without a data gate (`· not gate-checked`) — always with who or what |
 | `external` | `baymard-premium`, `web-search`, `competitor-website`; a named third-party source cited in user text ("via <who>") |
-| `simulated` | persona, synthetic-user or scenario output; an untraceable `deep-research-llm` claim; a knowledge source tagged `model-generated` |
+| `simulated` | persona, synthetic-user or scenario output; an untraceable `deep-research-llm` or `deep-research-host` claim; a knowledge source tagged `model-generated` |
 | `assumed` | no resolvable source; a figure given from memory; the planning marker "pending TL / PM confirmation" (`planning-core.md` §6) reads as this label; a frontier claim in a headless run reads `[assumed — frontier: <human step>]` |
-| *as the source* | `kb-source` → its knowledge-library type; `landscape:<slug>` → the record's cited source; a traced `deep-research-llm` claim → the traced source; a claim from an earlier plugin artifact → the label it carries (unlabelled → its cited source's class, else `reported`) |
+| *as the source* | `kb-source` → its knowledge-library type; `landscape:<slug>` → the record's cited source; a traced `deep-research-llm` or `deep-research-host` claim → the traced source; a claim from an earlier plugin artifact → the label it carries (unlabelled → its cited source's class, else `reported`) |
 
 Label forms: the class first inside the existing annotation — `(measured · …)`, `«…» — P3, 12.09 · reported` — or the bracket form `[class: source]` / `[assumed — note]`, or a group label `Evidence: class — source`.
 

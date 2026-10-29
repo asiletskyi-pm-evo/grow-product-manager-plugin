@@ -69,6 +69,7 @@ Tag every external source by type:
 - `competitor-website` — direct from competitor's site (include URL snapshot date)
 - `user-research` — user research synthesis (include N real users, date, segment)
 - `deep-research-llm` — ChatGPT/Gemini Deep Research (cross-checked with second source)
+- `deep-research-host` — the host's built-in research pass (include the source each claim cites; since v0.16.0)
 
 Inline-annotation convention — since v3.8.0 the class from 1.5.g goes first inside the annotation (`references/pm-mental-model.md` §4):
 - `(external · Baymard Premium, Guideline #N, YYYY research)`

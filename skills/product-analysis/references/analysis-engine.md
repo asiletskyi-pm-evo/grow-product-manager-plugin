@@ -196,6 +196,8 @@ In both modes:
 
 ### Step 6 — Report, save, and feedback
 
+**Charts in the conversation (since v0.19.0, `references/native-surfaces.md` §2).** Where the host has WIDGET (marked in Step 0-host), every trend, comparison, funnel and before/after you present — in Q&A answers and in the report's Key Trends and Anomalies — is drawn inline as a chart, from the same numbers the text cites (label the axis, the period, the source). The chart shows; the numbers stay as tables in the report and in the vault copy, so nothing exists only in a widget. A widget is not a publication — no question. Without WIDGET: tables only, and one line at the start (`native-surfaces.md` §5).
+
 **6a. In Interactive Q&A mode:**
 
 At the end of the session (or when the user signals they're done), provide a concise summary:
@@ -224,7 +226,9 @@ Generate a comprehensive structured report:
 
 **6c. Publishing — ask via AskUserQuestion:**
 
-> "Would you like to save the analysis report? If yes — which tool should I use?"
+> "Would you like to save the analysis report? It holds internal data (metrics from your sources). If yes — where: Confluence, Notion, Google Docs, or only locally? It will be visible to whoever can open that place."
+
+That question is the one `references/native-surfaces.md` §3 asks before a publication: it names what goes, where, and who sees it — ask it again before you update a page published earlier.
 
 - **Confluence** (default) → ask for space and parent page. Title: `[Analysis] Product/Feature — Date`
 - **Notion** → ask for workspace and location
