@@ -1,6 +1,6 @@
 ---
 name: context-navigator
-version: 0.4.3
+version: 0.4.4
 description: Answer and search your context — notes, cores, local indexes. Not decisions (decision-log), dashboards (product-analysis), curated sources (knowledge-library). UA — «знайди в моєму контексті», «що в мене є про…», «хто за що відповідає», «де описане правило»; with source and date, live sources on request.
 ---
 
@@ -52,7 +52,7 @@ Answering from the graph has no judgment points of its own; a question that asks
 | a term | the provider's glossary, then the user's own (knowledge library) |
 | anything else, and the user's own notes | §13 — SHELL: `ctx search` (below) → `ctx search --get` on the sections rated «прямо» for an answer, none for a list; without SHELL: §12 — the files on an FS host, `vault_search` → `vault_get_note` on an MCP host (for a list, neither `--get` nor `vault_get_note`). Then `vault_get_links` / `vault_graph_context` (depth 1–2) when the question is relational |
 
-Every answer carries: the note path; for a number, its period and source; for snapshot content, the snapshot date, and "(as of <date>)" when the note's class is past its `ttl_days`; a caveat for a note marked outdated or older than three years. A reference value on a card ("target", "benchmark") is never presented as the current value. A decision recorded without the core's confirmation mark is reported as unconfirmed.
+Every answer carries: the note path; for a number, its period and source; for snapshot content, the snapshot date, and "(as of <date>)" when the note's class is past its `ttl_days`; for a note of the plugin's own copy of a core (since v3.24.0; `--get` ends its line with `· копія від <day>`), «копія від <day>»; a caveat for a note marked outdated or older than three years. A reference value on a card ("target", "benchmark") is never presented as the current value. A decision recorded without the core's confirmation mark is reported as unconfirmed.
 
 **Searching with SHELL (since v3.16.0; §13 since v3.17.0).** The "anything else" route and every search the user asks for follow `references/search-protocol.md` §13, which is Step 0.5 as the task itself. A card or note one of the routes above reads directly is neither taken by it nor counted as a doubt (§1). There, the question is the request of `references/search-protocol.md`, and Step 0.5 is that one search — not a second one: `python3 "<plugin root>/scripts/ctx.py" search --q "<the question's topic>" --q "<variant>" … --skill context-navigator --json`. It asks the plugin's section index — which holds the core folder of every registered repository on this machine, so the local copy comes first by construction — the user's own local index, and the server only of a repository whose core folder is not on disk; plain words, no FTS5 syntax. Rate the candidates. For an answer, read the «прямо» ones with `ctx search --get <id>` (its first line is the path and the date to cite), take at most five sections and answer from them; for a list, call no `--get` and list the notes as §13 says. When the search was unsure or two notes disagree, end an answer with the block of variants and a list with §13's unnumbered lines, and both last with the line `Де шукав: …`. Exit 5 means the base was not read: say so — never that it holds nothing.
 
@@ -90,6 +90,8 @@ The `description` above is short on purpose: a host with many skills shows only 
 Since v3.21.0 (your context, `ctx show | health | inbox`): UA — «що ти про мене знаєш», «звідки ти це знаєш», «здоров'я контексту», «що в скриньці», «що скіли запропонували запам'ятати»; EN — "what do you know about me", "context health", "what is in the inbox". Typed: `/grow-product-manager:context show | health | inbox`. Since v3.22.0: UA — «перевір мій контекст», «звір контекст із конекторами», «прибери дублі в контексті», «наведи лад у контексті»; EN — "recheck my context", "tidy my context"; typed `/grow-product-manager:context recheck | consolidate`. Since v3.23.0: UA — «що змінилось у контексті», «історія змін контексту», «які в мене поправки до ядра»; EN — "what changed in my context", "show my corrections to the core" — answered by the steps of `/grow-product-manager:context history | overlay` (`references/context-protocol.md` §5q; without SHELL, `overlays/*.yaml` read as text, §5q); «хто я за ядром» and moving or answering a correction are `context-connect` (`connect-steps.md` §1, §8).
 
 Since v3.20.0 (bridges in your notes, `ctx entity apply`): UA — «запиши мости в нотатки», «зв'яжи мої нотатки з ядром», «додай посилання на картки ядра в мої нотатки»; EN — "write the bridges into my notes", "link my notes to the core's cards".
+
+Since v3.24.0 (the plugin's own copy of a core): UA — «що в копії ядра», «відповідай з копії ядра без VPN»; EN — "answer from the core's copy". A repository with a copy is a folder for the search; making or refreshing the copy is context-connect.
 
 Since v3.18.0 (who is who, `ctx entity`): UA — «хто такий X», «що за команда X», «що таке PROJ-1234», «хто посилається на X»; EN — "who is X", "what is PROJ-1234", "what links to X".
 

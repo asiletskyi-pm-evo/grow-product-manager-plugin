@@ -1,0 +1,38 @@
+{
+  "_about": "Frontmatter values in the shapes a notes server serves (measured: text, whole numbers, true/false, lists of text, empty lists) — the fictional Zorg only. ctx_copy_test.py writes each through ctx_copy.dump_frontmatter and reads it back with the three readers of the plugin.",
+  "scalars": {
+    "title": "Zorg App: кошик і оплата",
+    "type": "mission",
+    "status": "active",
+    "owner": "[[Pat Moss]]",
+    "jira": "PROJ-1234",
+    "email": "pm@zorg.example",
+    "summary": "Q&A for the cart — a #2 priority",
+    "quoted": "She said \"ship it\"",
+    "single": "it's fine",
+    "updated": "2026-10-28",
+    "version": "0.2",
+    "count": 12,
+    "negative": -3,
+    "flag": true,
+    "off": false,
+    "word_yes": "yes",
+    "word_null": "null",
+    "number_text": "1234",
+    "percent": "%15 up",
+    "at": "@zorg-team",
+    "trailing_colon": "Notes:",
+    "pipe": "a | b",
+    "brace": "{not a map}",
+    "star": "*bold*",
+    "dash": "- not a list",
+    "kyiv": "Команда Альфа",
+    "url": "https://zorg.example/a?b=c#d",
+    "empty": ""
+  },
+  "lists": {
+    "tags": ["zorg/product", "team/alpha", "Команда"],
+    "aliases": ["Zorg: cart", "PROJ-1234", "[[Pat Moss]]"],
+    "related": []
+  }
+}

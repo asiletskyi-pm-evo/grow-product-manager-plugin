@@ -70,6 +70,9 @@ Both modes use the **same** `Templates/` layout (registry + partials + scopes), 
 ├── focus/                        # focus-advisor journal + board.html
 ├── walkthroughs/                 # flow-walkthrough evidence packs: <date>-<product>-<flow>/ (run.yaml, steps.yaml, steps/NN.png, findings.md)
 ├── landscape/                    # product-landscape registry: registry.yaml, products/<slug>.md, scans/, maps/
+├── cores/<id>/                   # since v3.24.0: the plugin's own copy of a core that lives only on a server (ctx repo copy;
+│                                 #   context-provider-protocol.md §12.12) — a cache of the server, not in ctx undo
+├── conflicts/<id>/<day>/         # …and the server's version of a note you changed in that copy
 └── backups/                      # Auto-backups before migrations
     ├── pre-migration-1.4.0/      # Backup taken before migrating to v1.4.0
     │   ├── local-context.md

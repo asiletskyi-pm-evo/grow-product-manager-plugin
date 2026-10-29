@@ -18,6 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
+import ctx_wrappers as cw  # noqa: E402
 import provider_bundle as pb  # noqa: E402
 
 KIT_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -131,7 +132,43 @@ def check(folder, warnings=None):
         if hits:
             warn.append("особистий шар власника в теці (%s): %s — у пакет колеги не піде, але в спільній теці його видно"
                         % (glob, ", ".join(hits[:3])))
+    out.extend(_wrapper_problems(folder, files, m))
     return m, model, out
+
+
+def _wrapper_problems(folder, files, m):
+    """Since v3.24.0: every `.md` wrapper of the kit (`kind: provider-file`, ctx_wrappers) is sound and its block is the
+    file beside it, byte for byte — a notes server serves the wrapper, a folder the file, and both must say the same."""
+    out = []
+    for rel in files:
+        if not rel.endswith(".md"):
+            continue
+        try:
+            text = _read(os.path.join(folder, rel))
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+        front, body = pb.split_fm(text)
+        if "provider-file" not in front:
+            continue
+        try:
+            fm = cc.read_yaml_subset(front)
+        except ValueError:
+            continue
+        if not cw.is_wrapper(fm):
+            continue
+        name, inner, why = cw.unwrap(fm, body, cw.allowed_names(m))
+        if why:
+            out.append("%s: обгортка не розгортається — %s" % (rel, why))
+            continue
+        beside = os.path.join(os.path.dirname(rel), name)
+        try:
+            real = _read(os.path.join(folder, beside))
+        except (OSError, UnicodeDecodeError, ValueError):
+            out.append("%s: поруч немає %s" % (rel, name))
+            continue
+        if real.rstrip("\n") + "\n" != inner:
+            out.append("%s: обгортка не збігається з %s поруч — онови обгортку" % (rel, beside))
+    return out
 
 
 def identity(folder, m, model, email, team=None, role=None):

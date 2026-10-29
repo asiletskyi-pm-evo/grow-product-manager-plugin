@@ -256,6 +256,9 @@ def rel_path(abs_path, vaults, root=None):
     return _slash(_spellings(abs_path)[0])
 
 
+COPY_SERVICE = (".ctx-copy", ".backup", ".removed")        # ctx_copy: its state, backups and moved notes — outside every vault
+
+
 def _skip_folder(rel, store_rel, fold=False):
     """A folder (or a file in it) the index never enters: the store, `_System/providers/`, `_System/_scratch/` (the
     plugin's scratch files — per-person digests among them), `.obsidian`, `.trash`, a name that starts with
@@ -269,6 +272,8 @@ def _skip_folder(rel, store_rel, fold=False):
     parts = [p.casefold() for p in rel.split("/")]
     for i, part in enumerate(parts):
         if part in (".obsidian", ".trash") or part.startswith("_backup"):
+            return True
+        if part in COPY_SERVICE and parts[0].startswith("@"):     # since v3.24.0: the service folders of a copy of a core
             return True
         if part == "_system" and i + 1 < len(parts) and parts[i + 1] in ("providers", "_scratch"):
             return True

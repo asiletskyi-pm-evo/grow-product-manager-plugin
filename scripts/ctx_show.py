@@ -14,6 +14,7 @@ every `ctx` command reads it. Semantics: references/context-protocol.md §5j. Th
 
 Stdlib only.
 """
+import datetime
 import glob
 import os
 import sys
@@ -86,7 +87,68 @@ def repos(text, home, store, skipped=None):
                 row["outcome"] = res.get("outcome") if isinstance(res, dict) else None
             except cs.StoreError as e:
                 row["error"] = str(e)
+        row["copy"] = copy_facts(home, r["id"])
         out.append(row)
+    return out
+
+
+COPY_OLD_DAYS = 3                       # a copy of a `sync: daily` repository older than this is a warning
+
+
+def copy_facts(home, rid):
+    """{complete_at, notes, outcome, reason, held_in_row, conflicts, local_only} of the plugin's copy of a core (since
+    v3.24.0, ctx_copy), {"error"} for a state that cannot be read, None for no copy. `conflicts`: the files waiting in
+    ~/.grow-pm/conflicts/<id>/."""
+    import ctx_copy as ccp
+    folder = ccp.copy_dir(home, rid)
+    if not ccp.SAFE_ID.match(rid or "") or not os.path.isdir(folder) or os.path.islink(folder):
+        return None
+    try:
+        st = ccp.load_state(folder)
+    except ccp.CopyError as e:
+        return {"error": str(e)}
+    if st is None:
+        return None
+    waiting = 0
+    for _, _, files in os.walk(ccp.conflicts_dir(home, rid)):
+        waiting += sum(1 for f in files if f.endswith(".md"))
+    return {"complete_at": (st.get("complete_at") or "")[:10], "notes": len(st.get("notes") or {}),
+            "outcome": st.get("outcome") or "", "reason": st.get("reason") or "", "held_in_row": st.get("held_in_row") or 0,
+            "conflicts": waiting, "local_only": ccp.local_only(st)}
+
+
+def copy_line(c):
+    """`копія: <day of the last complete pass> · N нотаток · <last attempt>` (and `· лише локально: N`)."""
+    if c.get("error"):
+        return "копія: стан не читається — %s" % c["error"]
+    return "копія: %s · %d нотаток · %s%s" % (c["complete_at"] or "ще не повна", c["notes"], c["outcome"] or "—",
+                                              (" · лише локально: %d" % c["local_only"]) if c["local_only"] else "")
+
+
+def copy_health(r, today):
+    """The health lines of a repository's copy (since v3.24.0): ✋ held twice in a row; ⚠ older than COPY_OLD_DAYS with
+    `sync: daily`; ⚠ conflicts waiting; else ✅."""
+    c, rid = r.get("copy"), r["id"]
+    if not c:
+        return []
+    if c.get("error"):
+        return [(ACT, "копія %s: стан не читається — %s" % (rid, c["error"]), "перенеси теку ~/.grow-pm/cores/%s в кошик і "
+                 "зроби копію знову: ctx repo copy %s" % (rid, rid))]
+    out = []
+    if c["held_in_row"] >= 2:
+        out.append((ACT, "копія %s: сервер %d рази поспіль віддав неповний список — копію не оновлено (%s)"
+                    % (rid, c["held_in_row"], c["reason"]), "ctx repo copy %s (коли сервер віддасть усе)" % rid))
+    try:
+        age = (datetime.date.fromisoformat(today[:10]) - datetime.date.fromisoformat(c["complete_at"])).days
+    except ValueError:
+        age = None
+    if r.get("sync") == "daily" and age is not None and age > COPY_OLD_DAYS:
+        out.append((WARN, "копія %s від %s — старша за %d дні" % (rid, c["complete_at"], COPY_OLD_DAYS), "ctx repo copy %s" % rid))
+    if c["conflicts"]:
+        out.append((WARN, "копія %s: конфліктів %d — твоє лишилось, серверне в ~/.grow-pm/conflicts/%s/" % (
+            rid, c["conflicts"], rid), "порівняй, перенеси потрібне й прибери теку конфліктів"))
+    if not out:
+        out.append((OK, "копія %s: від %s · %d нотаток" % (rid, c["complete_at"] or "—", c["notes"]), None))
     return out
 
 
@@ -271,6 +333,7 @@ def health(recs, mem, repo_rows, pending, conflicts, missing, stray, warnings, e
                         r["checked"] or "—"), "ctx provider plan %s" % r["id"]))
         else:
             out.append((OK, "репозиторій %s: перевірено %s" % (r["id"], r["checked"] or "—"), None))
+        out.extend(copy_health(r, today))
     if idx is None:
         out.append((WARN, "індексу пошуку немає", "ctx index rebuild"))
     else:

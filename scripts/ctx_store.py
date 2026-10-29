@@ -356,7 +356,10 @@ def atomic_write(path, text):
     check_target(path)
     folder = os.path.dirname(path) or "."
     os.makedirs(folder, exist_ok=True)
-    tmp = os.path.join(folder, ".%s.tmp" % os.path.basename(path))
+    name = ".%s.tmp" % os.path.basename(path)
+    if len(name.encode("utf-8")) > 255:                 # since v3.24.0: a name near the file system's limit gets a short one
+        name = ".%s.tmp" % hashlib.sha1(os.path.basename(path).encode("utf-8")).hexdigest()
+    tmp = os.path.join(folder, name)
     try:
         with open(tmp, "w", encoding="utf-8", newline="") as f:
             f.write(text)

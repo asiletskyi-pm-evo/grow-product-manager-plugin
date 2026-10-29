@@ -93,6 +93,31 @@ with tempfile.TemporaryDirectory() as d:
           and "dev-lane.md: немає email" in probs and "немає картки команди beta" in probs, out)
     check("…the owner's personal layer is a warning, not a fault", any("особистий шар" in w for w in res.get("warnings") or []), res)
 
+    # since v3.24.0: the .md wrappers of the manifest and the role model agree with the files beside them
+    sysdir = os.path.join(KIT, "Core", "_System")
+    check("the example ships both wrappers", os.path.isfile(os.path.join(sysdir, "provider-manifest.md"))
+          and os.path.isfile(os.path.join(sysdir, "access-bundles.md")))
+    wk = os.path.join(d, "wrapped")
+    shutil.copytree(KIT, wk)
+    wsys = os.path.join(wk, "Core", "_System")
+    bundles = os.path.join(wsys, "access-bundles.json")
+    was = open(bundles, encoding="utf-8").read()
+    open(bundles, "w", encoding="utf-8").write(was.replace('"0.1"', '"0.9"', 1))
+    rc, out, res = ctx(home, ctxp, "repo", "kit-check", wk)
+    check("kit-check: a wrapper that differs from the file beside it is a fault",
+          rc == 3 and any("access-bundles.md" in p and "не збігається" in p for p in res.get("problems") or []), out)
+    shutil.copy(os.path.join(sysdir, "access-bundles.json"), bundles)
+    man = os.path.join(wsys, "provider-manifest.md")
+    open(man, "a", encoding="utf-8").write("\n```yaml\nid: other\n```\n")
+    rc, out, res = ctx(home, ctxp, "repo", "kit-check", wk)
+    check("kit-check: a broken wrapper is a fault with its reason",
+          rc == 3 and any("provider-manifest.md" in p and "рівно один" in p for p in res.get("problems") or []), out)
+    os.remove(os.path.join(wsys, "access-bundles.json"))
+    shutil.copy(os.path.join(sysdir, "provider-manifest.md"), man)
+    rc, out, res = ctx(home, ctxp, "repo", "kit-check", wk)
+    check("kit-check: a wrapper with no file beside it is a fault", rc == 3
+          and any("access-bundles.md" in p and "поруч немає access-bundles.json" in p for p in res.get("problems") or []), out)
+
     kit_before = tree(KIT)
     store_before = tree(store.root)
     rc, out, res = ctx(home, ctxp, "repo", "add", KIT, "--email", "pat.moss@zorg.example")
