@@ -7,7 +7,7 @@ the core folder would be. Once a pass has completed, `ctx_repos.load_repos` take
 `core_root` (`attach`), and blocks, the team block, the index, search, entities and bridges read it as a folder.
 references/context-provider-protocol.md §12.12.
 
-One pass (`run`) is the prom_sync pattern, generalised:
+One pass (`run`) is the pattern of a team's own daily sync script, generalised:
   * a lock of the copy (`.ctx-copy/lock`; a live one younger than LOCK_STALE_S → "busy"), the handshake (none →
     "unreachable", nothing written), one `vault_list_by_folder(root)`;
   * the guard against an incomplete index: an empty listing, or one below MIN_RATIO of the last complete one →
@@ -51,6 +51,7 @@ LOCK_STALE_S = 15 * 60
 LOCK_TOUCH_S = 60                 # a pass refreshes its lock this often
 BACKUP_DAYS = 30
 REMOVE_AFTER_S = 20 * 3600        # two complete listings without a note, at least this far apart, move it
+STOPPED_AFTER = 50                # notes in a row that did not arrive: the server stopped answering, the pass stops
 FAILED_FLOOR = 5                  # complete: failed ≤ max(FAILED_FLOOR, 1 % of the listing)
 DUE_S = 24 * 3600                 # the daily pass: a complete pass older than this…
 RETRY_S = 3600                    # …and no attempt within this
@@ -164,7 +165,7 @@ def sha1(text):
 
 def server_hash(fm, content):
     """The semantic hash of a note as the server gave it: its frontmatter (canonical JSON) and its text (NFC, no
-    trailing blanks) — prom_sync's, so a change on the server shows whatever YAML the copy wrote."""
+    trailing blanks) — a sync script's usual formula, so a change on the server shows whatever YAML the copy wrote."""
     return sha1(canon_fm(fm) + "\n␞\n" + N(content or "").rstrip())
 
 
@@ -618,18 +619,27 @@ class Pass:
         done = 0
         local = threading.local()
         late = []                                       # did not arrive under the pool: tried once more, one at a time
+        stopped = False
         futures_path = dict(listed)
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as pool:
             futures = {pool.submit(self._fetch, local, path): rel for rel, path in listed}
+            in_row = 0                                  # notes in a row that did not arrive
             for fut in concurrent.futures.as_completed(futures):
                 rel = futures[fut]
+                self._keep_lock()
                 try:
                     fm, content = fut.result()
                 except Exception as e:  # noqa: BLE001 — one note that did not come is a count, never the pass
                     late.append((rel, futures_path[rel]))
+                    in_row += 1
+                    if in_row >= STOPPED_AFTER:         # the server stopped answering (the VPN went down): stop here
+                        stopped = True
+                        for f in futures:
+                            f.cancel()
+                        break
                     continue
+                in_row = 0
                 self._one(notes, rel, fm, content)
-                self._keep_lock()
                 done += 1
                 if done % SAVE_EVERY == 0:
                     save_state(self.folder, state)
@@ -637,6 +647,13 @@ class Pass:
                     if self.progress:
                         self.progress("копія: %d з %d…" % (done, len(listed)))
         alone = threading.local()
+        if stopped:                                     # nothing tried again: the pass is partial, it resumes in an hour
+            for rel, _ in late:
+                self.counts["failed"] += 1
+                self.failed.append(rel)
+            why = "the server stopped answering after %d notes — %d in a row did not arrive" % (done, STOPPED_AFTER)
+            self._unpack(state)
+            return self._result(state, "partial", why, len(listed), started)
         for rel, path in late:                          # a busy server drops some under twelve clients; one more try alone
             try:
                 fm, content = self._fetch(alone, path)
@@ -645,8 +662,8 @@ class Pass:
                 self.failed.append(rel)
                 self.failed_why.setdefault(rel, cc.clip(str(e) or type(e).__name__, 200))
                 continue
-            self._one(notes, rel, fm, content)
             self._keep_lock()
+            self._one(notes, rel, fm, content)
         complete = self.counts["failed"] <= max(FAILED_FLOOR, len(listed) // 100)
         if complete:
             self._missing(notes, {rel for rel, _ in listed})
@@ -738,7 +755,11 @@ class Pass:
             except (OSError, UnicodeDecodeError):
                 current = None
             if current != text:
-                cs.atomic_write(path, text)
+                try:
+                    cs.atomic_write(path, text)
+                except (OSError, cs.PathRefused) as e:  # a file that cannot be written: the wrapper's fault, not the pass's
+                    faults[rel] = {"file": name, "why": "файл не записано (%s)" % type(e).__name__}
+                    continue
             unpacked[target] = rel
             if name == cw.MANIFEST:
                 try:
@@ -754,7 +775,10 @@ class Pass:
                 faults.pop(rel)
 
     def _drop_unpacked(self, unpacked, target):
-        self._move_removed(target)
+        try:
+            self._move_removed(target)
+        except (OSError, cs.PathRefused):               # left where it is; tried again next pass
+            return
         unpacked.pop(target, None)
 
     def _missing(self, notes, present):

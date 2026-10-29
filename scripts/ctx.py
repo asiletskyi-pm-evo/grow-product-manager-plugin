@@ -2578,8 +2578,9 @@ def cmd_provider_sync(a, c):
     one sentence per repository whose pass changed a block or decided a conflict. A run that did nothing because of the
     lock or the guard says so in CTX_RESULT: skipped "busy" | "lock: <why>" | "guard: <why>". Exit 0 whatever the repositories did; a
     usage error (an unknown REPO, one without `sync: daily`, a paused one, a bad --now) is exit 3."""
-    loaded = None if a.repo else crp.load_repos(c.text, c.home)     # read once: the blocks and the copies both use them
-    rc, out = _provider_sync_blocks(a, c, loaded)
+    deadline = time.monotonic() + sy.BUDGET_S          # the whole run, the registrations' read included (as in v3.23)
+    loaded = None if a.repo else crp.load_repos(c.text, c.home, deadline=deadline)   # read once: blocks and copies
+    rc, out = _provider_sync_blocks(a, c, loaded, deadline)
     try:                                                # since v3.24.0: the copies, after the blocks (C7)
         rows = loaded if loaded is not None else [r for r in crp.load_repos(c.text, c.home) if r["id"] == a.repo]
         copies = start_copies(c, rows, _sync_now(a.now), c.home, c.found)
@@ -2590,8 +2591,8 @@ def cmd_provider_sync(a, c):
     return rc, out
 
 
-def _provider_sync_blocks(a, c, loaded=None):
-    deadline = time.monotonic() + sy.BUDGET_S
+def _provider_sync_blocks(a, c, loaded=None, deadline=None):
+    deadline = time.monotonic() + sy.BUDGET_S if deadline is None else deadline
     at = _sync_now(a.now)
     quiet = {"command": "provider", "action": "sync", "synced": []}
     if a.repo:

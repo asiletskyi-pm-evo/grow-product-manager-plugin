@@ -5,7 +5,7 @@ What a pass is made of, without the command: which server paths the copy takes (
 absolute path, no `..`, no control character, no hidden part, not the registration's writable globs; two spellings of
 one name on APFS — `fold`); the frontmatter it writes without PyYAML (`dump_frontmatter` / `render`), read back the same
 by the three readers of the plugin (`ctx_index`, `provider_bundle.fget`, `ctx_common.read_yaml_subset`) from
-testing/fixtures/copy/frontmatter-forms.json; the server hash (prom_sync's formula); the decision for one note — same,
+testing/fixtures/copy/frontmatter-forms.json; the server hash (the sync script's formula); the decision for one note — same,
 new, updated, kept, conflict — and `failed` for one that does not arrive, against the fake server (testing/mcp_fake.py,
 127.0.0.1, the fictional Zorg only); and the target guard: someone else's folder, a symbolic link, a folder inside a
 registration's — CopyError, nothing written. Semantics: references/context-provider-protocol.md §12.12. Stdlib only.
@@ -131,7 +131,7 @@ check("a date, a number and a reserved word in text are quoted (a YAML 1.1 reade
 check("odd keys are quoted", '"a: b": 1' in cp.dump_frontmatter({"a: b": 1}) and "Команда: 1" in cp.dump_frontmatter({"Команда": 1}))
 
 # ------------------------------------------------------------------ 3. hashes
-print("— 3. the server hash is prom_sync's")
+print("— 3. the server hash, a sync script's formula")
 fmh = {"b": 1, "a": "Команда"}
 want = hashlib.sha1((json.dumps(fmh, ensure_ascii=False, sort_keys=True, default=str) + "\n␞\n"
                      + unicodedata.normalize("NFC", "Тіло\n\n").rstrip()).encode("utf-8")).hexdigest()
@@ -259,6 +259,23 @@ try:
         check("a note is asked for by the path verbatim as the server listed it (NFD), kept under NFC",
               "Teams/Йота.md" not in r["failed"] and os.path.isfile(os.path.join(folder, "Teams", unicodedata.normalize("NFC", "Йота.md"))), r)
         del fake.tree[nfd]
+        for i in range(40):
+            fake.tree["Growth/Dead/n%02d.md" % i] = "# dead %d\n" % i
+        real_note = fake.handlers["vault_get_note"]
+        fake.handlers["vault_get_note"] = lambda args: ("connection refused", True)    # the VPN went down
+        touched, real_touch, real_stop, real_every = [], cp.touch_lock, cp.STOPPED_AFTER, cp.LOCK_TOUCH_S
+        cp.touch_lock = lambda path: (touched.append(path), real_touch(path))
+        cp.STOPPED_AFTER, cp.LOCK_TOUCH_S = 10, 0
+        try:
+            r = cp.run(home, dict(repo, id="zorg-dead"), t0)
+        finally:
+            cp.touch_lock, cp.STOPPED_AFTER, cp.LOCK_TOUCH_S = real_touch, real_stop, real_every
+            fake.handlers["vault_get_note"] = real_note
+        check("a server that stops answering: the pass stops, partial, and says why", r["outcome"] == "partial"
+              and "stopped answering" in r["reason"] and r["counts"]["removed"] == 0, r)
+        check("…its lock was refreshed while nothing arrived", len(touched) >= 5, len(touched))
+        for i in range(40):
+            del fake.tree["Growth/Dead/n%02d.md" % i]
         real_get, tries = fake.handlers["vault_get_note"], []
 
         def busy_once(args):                                            # a busy server: one note fails under the pool
