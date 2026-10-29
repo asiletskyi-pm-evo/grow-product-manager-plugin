@@ -300,6 +300,8 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         return None, _unavailable("core folder not found")
     if repo.get("core_from") == "copy":                 # since v3.24.0: the manifest and the role model come from wrappers
         why = _copy_why(core_root, manifest)
+        if why == COPY_ADVICE and in_file:              # no wrappers, and the blocks file carries the team region: as v3.23
+            return None, None
         if why:
             return None, _unavailable(why)
     if manifest is None:
@@ -340,7 +342,7 @@ def _copy_why(copy_root, manifest):
         state = ccp.load_state(copy_root)
     except ccp.CopyError:
         state = None
-    problem = ccp.wrapper_problem(state) if state else ""
+    problem = ccp.wrapper_problem(state, manifest) if state else ""
     if problem:
         return problem
     return "" if manifest is not None else COPY_ADVICE

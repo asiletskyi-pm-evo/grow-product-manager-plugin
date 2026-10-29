@@ -133,12 +133,15 @@ try:
         check("a live lock: busy", res.get("copy") == {"zorg-growth": "busy"}, res)
         os.unlink(lockp)
         env.run("repo", "copy", "zorg-growth", "--now", at(6))
+    with FakeMcp(tree=tree()) as quiet:
+        open(reg, "w", encoding="utf-8").write(REG.format(url=quiet.url, sync="daily", status="active"))
+        t0 = time.monotonic()
+        rc, out, res = env.run("provider", "sync", "--if-due", "--now", at(6, 3))
+        took = time.monotonic() - t0
+        check("--if-due with nothing due: only CTX_RESULT, not-due, not one request to the server, within 2 s",
+              rc == 0 and res.get("copy") == {"zorg-growth": "not-due"} and out.strip().startswith("CTX_RESULT")
+              and quiet.seen == [] and took < 2.5, (took, quiet.methods(), out))
     open(reg, "w", encoding="utf-8").write(REG.format(url="http://127.0.0.1:9/mcp", sync="daily", status="active"))
-    t0 = time.monotonic()
-    rc, out, res = env.run("provider", "sync", "--if-due", "--now", at(6, 3))
-    took = time.monotonic() - t0
-    check("--if-due with nothing due: only CTX_RESULT, not-due, no network, within the budget",
-          rc == 0 and res.get("copy") == {"zorg-growth": "not-due"} and out.strip().startswith("CTX_RESULT") and took < 4, (took, out))
 
     print("— 5. status, list, health")
     rc, out, res = env.run("repo", "status", "zorg-growth")
@@ -176,7 +179,7 @@ try:
         t0 = time.monotonic()
         rc, out, res = env.run("provider", "sync", "--if-due")
         took = time.monotonic() - t0
-        check("the sync starts it and returns", res.get("copy") == {"zorg-growth": "started"}, res)
+        check("the sync starts it and returns, without waiting for it", res.get("copy") == {"zorg-growth": "started"} and took < 5, (took, res))
         done = False
         for _ in range(200):
             time.sleep(0.1)

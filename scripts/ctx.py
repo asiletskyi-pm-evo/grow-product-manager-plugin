@@ -1488,9 +1488,10 @@ def cmd_repo_list(a, c):
     else:
         print(NO_REPOS)
     for r in rows:                                      # since v3.24.0: the plugin's copy of a core
-        r["copy"] = csh.copy_facts(c.home, r["id"])
-        if r["copy"]:
-            print("%s · %s" % (cb.clip(r["id"], cb.HEADER_CLIP), csh.copy_line(r["copy"])))
+        facts = csh.copy_facts(c.home, r["id"]) if r.get("core_from") == "copy" or not (r.get("paths") or r["core_root"]) else None
+        if facts:
+            r["copy"] = facts
+            print("%s · %s" % (cb.clip(r["id"], cb.HEADER_CLIP), csh.copy_line(facts)))
     for rid, error in bad:
         print("block state unreadable: %s (%s)" % (cb.clip(rid, cb.HEADER_CLIP), error))
     for r in rows:
@@ -1534,7 +1535,9 @@ def cmd_repo_status(a, c):
             rows[-1]["fetch_error"] = cb.clip(fetched["error"], cb.NOTE_CLIP)
         if bad_state:
             rows[-1]["state_error"] = bad_state
-        rows[-1]["copy"] = csh.copy_facts(c.home, r["id"])
+        facts = csh.copy_facts(c.home, r["id"]) if r.get("core_from") == "copy" or not (r.get("paths") or r["core_root"]) else None
+        if facts:
+            rows[-1]["copy"] = facts
     if rows:
         for row in rows:
             where = row["url"] or "—"
@@ -1621,8 +1624,8 @@ def _copy_reported(prev, res):
     counts = res["counts"]
     if any(counts[k] for k in ("new", "updated", "conflict", "removed")):
         return True
-    if res["outcome"] in ("held", "partial"):
-        return not (prev and prev.get("outcome") == res["outcome"] and prev.get("reason") == res["reason"])
+    if res["outcome"] in ("held", "partial"):           # the same kind again is no news (its reason carries counts)
+        return not (prev and prev.get("outcome") == res["outcome"])
     return False
 
 
@@ -1650,7 +1653,10 @@ def _copy_background(c, repo, repos, at):
                 break
             except co.Busy:
                 time.sleep(1)
-        if report is None:
+            except (cs.StoreError, OSError, ValueError) as e:   # the part is lost, the pass is not: the log says why
+                print("копія %s: частину звіту не дописано — %s" % (repo["id"], cb.clip(str(e), cb.NOTE_CLIP)))
+                break
+        else:
             print("копія %s: частину звіту не дописано — сховище зайняте" % repo["id"])
     return (5 if res["outcome"] == "unreachable" else 0), dict(res, command="repo", action="copy", id=repo["id"],
                                                                 background=True, report=report)
@@ -2572,9 +2578,10 @@ def cmd_provider_sync(a, c):
     one sentence per repository whose pass changed a block or decided a conflict. A run that did nothing because of the
     lock or the guard says so in CTX_RESULT: skipped "busy" | "lock: <why>" | "guard: <why>". Exit 0 whatever the repositories did; a
     usage error (an unknown REPO, one without `sync: daily`, a paused one, a bad --now) is exit 3."""
-    rc, out = _provider_sync_blocks(a, c)
+    loaded = None if a.repo else crp.load_repos(c.text, c.home)     # read once: the blocks and the copies both use them
+    rc, out = _provider_sync_blocks(a, c, loaded)
     try:                                                # since v3.24.0: the copies, after the blocks (C7)
-        rows = [r for r in crp.load_repos(c.text, c.home) if not a.repo or r["id"] == a.repo]
+        rows = loaded if loaded is not None else [r for r in crp.load_repos(c.text, c.home) if r["id"] == a.repo]
         copies = start_copies(c, rows, _sync_now(a.now), c.home, c.found)
     except Exception:  # noqa: BLE001 — a copy never changes the sync's own result
         copies = {}
@@ -2583,7 +2590,7 @@ def cmd_provider_sync(a, c):
     return rc, out
 
 
-def _provider_sync_blocks(a, c):
+def _provider_sync_blocks(a, c, loaded=None):
     deadline = time.monotonic() + sy.BUDGET_S
     at = _sync_now(a.now)
     quiet = {"command": "provider", "action": "sync", "synced": []}
@@ -2597,7 +2604,7 @@ def _provider_sync_blocks(a, c):
             raise Usage("%s is paused (status: paused) — the daily sync leaves it alone" % rid)
         repos = [repo]
     else:
-        repos = [r for r in crp.load_repos(c.text, c.home)
+        repos = [r for r in (loaded if loaded is not None else crp.load_repos(c.text, c.home))
                  if r["sync"] == crp.SYNC_DAILY and r["status"] != "paused" and not crp.search_only(r)]
     if not c.store.exists():
         if not a.if_due:

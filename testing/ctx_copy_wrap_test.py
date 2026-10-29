@@ -119,6 +119,27 @@ try:
         check("a sound wrapper again: unpacked again, no problem",
               os.path.isfile(os.path.join(sysd, "access-bundles.json")) and cp.wrapper_problem(cp.load_state(folder)) == "")
 
+        print("— a wrapper elsewhere, a wrapper that is no wrapper any more")
+        fake.tree["Zorg/Archive/old-manifest.md"] = {"frontmatter": {"kind": "provider-file", "file": "provider-manifest.yaml"},
+                                                    "content": "no block here\n"}
+        t += datetime.timedelta(hours=1)
+        cp.run(home, repo, t)
+        st = cp.load_state(folder)
+        m, _ = pb.read_manifest(folder)
+        check("a broken wrapper outside the manifest's folder is no reason for the team block",
+              cp.wrapper_problem(st) == "" and cp.wrapper_problem(st, m) == "" and "Archive/old-manifest.md" in st["wrappers"], st["wrappers"])
+        del fake.tree["Zorg/Archive/old-manifest.md"]
+        was = fake.tree["Zorg/" + MODEL]
+        fake.tree["Zorg/" + MODEL] = dict(was, frontmatter=dict(was["frontmatter"], kind="note"))
+        t += datetime.timedelta(hours=1)
+        cp.run(home, repo, t)
+        check("a wrapper whose note is no wrapper any more takes its file with it",
+              not os.path.exists(os.path.join(sysd, "access-bundles.json"))
+              and "Core/_System/access-bundles.json" not in cp.load_state(folder)["unpacked"])
+        fake.tree["Zorg/" + MODEL] = was
+        t += datetime.timedelta(hours=1)
+        cp.run(home, repo, t)
+
         print("— a wrapper gone from the server")
         fake.hidden = {"Zorg/" + MAN}
         t += datetime.timedelta(days=1)

@@ -253,6 +253,24 @@ try:
         cp.release_lock(lockp)
         check("release_lock leaves a lock that is not ours", os.path.isfile(lockp))
         os.unlink(lockp)
+        nfd = unicodedata.normalize("NFD", "Growth/Teams/Йота.md")       # a server that keeps its paths in NFD
+        fake.tree[nfd] = "# Йота\n"
+        r = cp.run(home, repo, t0 + datetime.timedelta(minutes=30))
+        check("a note is asked for by the path verbatim as the server listed it (NFD), kept under NFC",
+              "Teams/Йота.md" not in r["failed"] and os.path.isfile(os.path.join(folder, "Teams", unicodedata.normalize("NFC", "Йота.md"))), r)
+        del fake.tree[nfd]
+        real_get, tries = fake.handlers["vault_get_note"], []
+
+        def busy_once(args):                                            # a busy server: one note fails under the pool
+            if args.get("path") == "Growth/Teams/team-beta.md" and not tries:
+                tries.append(1)
+                return "server busy", True
+            return real_get(args)
+        fake.handlers["vault_get_note"] = busy_once
+        r = cp.run(home, dict(repo, id="zorg-late"), t0)
+        fake.handlers["vault_get_note"] = real_get
+        check("a note dropped under the pool is tried once more alone and arrives", r["counts"]["failed"] == 1
+              and r["failed"] == ["Broken.md"] and "Unterminated" in r["failed_why"].get("Broken.md", ""), r)
         # a dead server
     res5 = cp.run(home, repo, later + datetime.timedelta(hours=5))
     check("a server that does not answer: unreachable, nothing written", res5["outcome"] == "unreachable"

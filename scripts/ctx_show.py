@@ -87,7 +87,9 @@ def repos(text, home, store, skipped=None):
                 row["outcome"] = res.get("outcome") if isinstance(res, dict) else None
             except cs.StoreError as e:
                 row["error"] = str(e)
-        row["copy"] = copy_facts(home, r["id"])
+        facts = copy_facts(home, r["id"]) if r.get("core_from") == "copy" or not (r.get("paths") or r.get("core_root")) else None
+        if facts:                                       # since v3.24.0; a row with no copy is as it was
+            row["copy"] = facts
         out.append(row)
     return out
 

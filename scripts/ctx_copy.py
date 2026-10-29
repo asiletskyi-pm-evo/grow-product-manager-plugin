@@ -48,6 +48,7 @@ MIN_RATIO = 0.5                   # a listing below half of the last complete on
 WORKERS = 12
 SAVE_EVERY = 500                  # the state is written every this many notes, so a pass that was cut resumes
 LOCK_STALE_S = 15 * 60
+LOCK_TOUCH_S = 60                 # a pass refreshes its lock this often
 BACKUP_DAYS = 30
 REMOVE_AFTER_S = 20 * 3600        # two complete listings without a note, at least this far apart, move it
 FAILED_FLOOR = 5                  # complete: failed ≤ max(FAILED_FLOOR, 1 % of the listing)
@@ -483,9 +484,17 @@ class Pass:
         self.counts = dict.fromkeys(("new", "updated", "same", "kept", "conflict", "failed", "removed", "skipped"), 0)
         self.failed, self.conflict_paths, self.removed, self.skipped = [], [], [], []
         self.backup = None
+        self.failed_why = {}                            # rel → why it did not arrive (the last try's error)
         self.wrappers = {}                              # rel → (fm, content) of the wrappers that arrived this pass
+        self.arrived = set()                            # every note that arrived this pass
 
     # -- helpers
+    def _keep_lock(self):
+        """The lock's time moved to now once a minute, so a slow pass is never taken for a hung one (LOCK_STALE_S)."""
+        if time.monotonic() - getattr(self, "_touched", 0.0) >= LOCK_TOUCH_S:
+            self._touched = time.monotonic()
+            touch_lock(self.lock)
+
     def _client(self):
         ep = self.repo["endpoint"]
         hdrs = cm.headers_from_env(ep["headers_env"]) if ep.get("headers_env") else {}
@@ -564,6 +573,7 @@ class Pass:
         save_state(self.folder, state)
         return {"outcome": outcome, "reason": reason, "counts": dict(self.counts), "listed": listed,
                 "last_complete_listed": state.get("complete_listed") or 0, "failed": self.failed[:MAX_LISTED],
+                "failed_why": {k: self.failed_why[k] for k in self.failed[:MAX_LISTED] if k in self.failed_why},
                 "conflicts": self.conflict_paths[:MAX_LISTED], "removed": self.removed[:MAX_LISTED],
                 "folder": self.folder, "backup": self.backup, "elapsed_s": round(time.monotonic() - started, 1),
                 "complete_at": state.get("complete_at") or "", "held_in_row": state.get("held_in_row") or 0}
@@ -594,7 +604,7 @@ class Pass:
                 self.skipped.append(rel)
                 continue
             seen[key] = rel
-            listed.append((rel, N(it["path"])))
+            listed.append((rel, it["path"]))           # asked for verbatim, as the server listed it (§2)
         last = int(state.get("complete_listed") or 0)
         if not listed or (last and len(listed) < MIN_RATIO * last):
             why = ("the server listed no notes under %r" % root if not listed else
@@ -607,6 +617,8 @@ class Pass:
                 notes[rel].pop("missing_since", None)
         done = 0
         local = threading.local()
+        late = []                                       # did not arrive under the pool: tried once more, one at a time
+        futures_path = dict(listed)
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as pool:
             futures = {pool.submit(self._fetch, local, path): rel for rel, path in listed}
             for fut in concurrent.futures.as_completed(futures):
@@ -614,16 +626,27 @@ class Pass:
                 try:
                     fm, content = fut.result()
                 except Exception as e:  # noqa: BLE001 — one note that did not come is a count, never the pass
-                    self.counts["failed"] += 1
-                    self.failed.append(rel)
+                    late.append((rel, futures_path[rel]))
                     continue
                 self._one(notes, rel, fm, content)
+                self._keep_lock()
                 done += 1
                 if done % SAVE_EVERY == 0:
                     save_state(self.folder, state)
                     touch_lock(self.lock)
                     if self.progress:
                         self.progress("копія: %d з %d…" % (done, len(listed)))
+        alone = threading.local()
+        for rel, path in late:                          # a busy server drops some under twelve clients; one more try alone
+            try:
+                fm, content = self._fetch(alone, path)
+            except Exception as e:  # noqa: BLE001
+                self.counts["failed"] += 1
+                self.failed.append(rel)
+                self.failed_why.setdefault(rel, cc.clip(str(e) or type(e).__name__, 200))
+                continue
+            self._one(notes, rel, fm, content)
+            self._keep_lock()
         complete = self.counts["failed"] <= max(FAILED_FLOOR, len(listed) // 100)
         if complete:
             self._missing(notes, {rel for rel, _ in listed})
@@ -634,6 +657,7 @@ class Pass:
         return self._result(state, "complete" if complete else "partial", why, len(listed), started)
 
     def _one(self, notes, rel, fm, content):
+        self.arrived.add(rel)
         if cw.is_wrapper(fm):
             self.wrappers[rel] = (fm, content)
         srv = server_hash(fm, content)
@@ -680,6 +704,16 @@ class Pass:
         unpacked = state.setdefault("unpacked", {})       # target → the wrapper's rel
         faults = state.setdefault("wrappers", {})          # wrapper rel → {"file", "why"}
         manifest = None
+        for t, src in list(unpacked.items()):               # a note that arrived and is no wrapper any more: its file goes
+            if src in self.arrived and src not in self.wrappers:
+                faults.pop(src, None)
+                self._drop_unpacked(unpacked, t)
+        if not any(str(fm.get("file") or "").strip() == cw.MANIFEST for fm, _ in self.wrappers.values()):
+            had = next((t for t in unpacked if t.rsplit("/", 1)[-1] == cw.MANIFEST), None)   # the manifest did not come:
+            try:                                                                          # the one unpacked before names
+                manifest = cc.read_yaml_subset(open(os.path.join(self.folder, had), encoding="utf-8").read()) if had else None
+            except (OSError, ValueError, UnicodeDecodeError):
+                manifest = None
         order = sorted(self.wrappers, key=lambda r: (str(self.wrappers[r][0].get("file") or "").strip() != cw.MANIFEST, r))
         for rel in order:
             fm, content = self.wrappers[rel]
@@ -812,10 +846,30 @@ def restore(home, rid, rel, now, regs=()):
     return src
 
 
-def wrapper_problem(state):
-    """Why a wrapper of the copy did not unpack, in one line ("обгортка <file> не розгорнулась: <why>"), or "" when none
-    failed — the team block's reason (ctx_repos)."""
+def _manifest_dirs(manifest):
+    """The folders (relative to the copy) where the wrappers the team block needs lie: the manifest's own folder and its
+    `bundles_file`'s; with no manifest, every `_System/` or `<folder>/_System/` — where `provider_bundle.read_manifest`
+    looks for one."""
+    if manifest is None:
+        return None
+    dirs = {os.path.dirname(str(manifest.get("_path") or "")).replace(os.sep, "/")}
+    if manifest.get("bundles_file"):
+        dirs.add(os.path.dirname(str(manifest.get("bundles_file"))).replace(os.sep, "/"))
+    return dirs
+
+
+def wrapper_problem(state, manifest=None):
+    """Why a wrapper the team block needs did not unpack, in one line ("обгортка <file> не розгорнулась: <why>"), or ""
+    — the team block's reason (ctx_repos). Only a wrapper in the folder of the manifest the bundle builder reads (or of
+    its `bundles_file`) counts; with no manifest, one in a `_System/` folder where it would be looked for. A broken
+    wrapper elsewhere in the copy is no reason."""
+    dirs = _manifest_dirs(manifest)
     for rel, row in sorted(((state or {}).get("wrappers") or {}).items()):
+        where = os.path.dirname(rel)
+        if dirs is not None and where not in dirs:
+            continue
+        if dirs is None and not re.fullmatch(r"(?:[^/]+/)?_System", where):
+            continue
         if isinstance(row, dict) and row.get("why"):
             return "обгортка %s не розгорнулась: %s" % (row.get("file") or rel, row["why"])
     return ""

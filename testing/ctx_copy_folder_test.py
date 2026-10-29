@@ -122,6 +122,10 @@ try:
         print("— 1. no copy, or one not complete: as v3.23")
         r0 = repo_of(env, "zorg-core")
         check("no copy: no core folder", r0["core_root"] == "" and "core_from" not in r0, r0.get("core_root"))
+        rc, out, res = env.run("repo", "list", "--json")
+        check("no copy: the rows of repo list carry no copy key", all("copy" not in r for r in res["repos"]), res["repos"])
+        rc, out, res = env.run("repo", "status", "zorg-folder", "--json")
+        check("…nor those of repo status", all("copy" not in r for r in res["repos"]) and "копія" not in out, out)
         fake.list_cap = 0
         env.run("repo", "copy", "zorg-core", "--now", "2026-10-29T08:00:00+02:00")
         fake.list_cap = None
@@ -190,6 +194,13 @@ try:
     rs = repo_of(env, "zorg-search")
     check("a search-only registration with a copy stays search-only", rs.get("core_from") == "copy" and crp.search_only(rs), rs.get("blocks_file"))
 
+    open(os.path.join(kit, "Core", ".backup", "Ghost Folderplan.md"), "w").write("# Ghost Folderplan\n") if os.makedirs(
+        os.path.join(kit, "Core", ".backup"), exist_ok=True) is None else None
+    env.run("index", "rebuild")
+    rc, out, res = env.run("search", "--q", "Ghost Folderplan", "--json")
+    check("a `.backup/` folder of a registration's own folder is indexed as before",
+          "@zorg-folder/Core/.backup/Ghost Folderplan.md" in json.dumps(res, ensure_ascii=False), out[-600:])
+
     print("— 5. the team block's reasons")
     with FakeMcp(tree=served(KIT, skip=(MAN, MODEL))) as fake:
         set_url(reg, fake.url)
@@ -199,6 +210,15 @@ try:
         f5 = crp.fetch(r5)
         check("wrappers gone: the team block is unavailable with the advice for the core owner", f5["team"] is None
               and "сервер не віддає provider-manifest" in (f5["team_error"] or ""), f5["team_error"])
+        inline = served(KIT, skip=(MAN, MODEL))
+        blocks_note = inline["Zorg/Core/_System/context-blocks.md"]
+        inline["Zorg/Core/_System/context-blocks.md"] = dict(blocks_note, content=blocks_note["content"]
+                                                             + "\n<!-- zorg-core:begin id=team v=0.1 -->\n### Team\nAlpha, from the file.\n<!-- zorg-core:end id=team -->\n")
+        fake.tree = inline
+        env.run("repo", "copy", "zorg-core", "--now", "2026-10-31T11:00:00+02:00")
+        f7 = crp.fetch(repo_of(env, "zorg-core"))
+        check("no wrappers and a team region in the blocks file: as v3.23 — the file's region, no error",
+              f7["team"] is None and f7["team_error"] is None and "team" in f7["blocks"], (f7["team_error"], list(f7["blocks"])))
         bad = served(KIT)
         bad["Zorg/" + MODEL] = dict(bad["Zorg/" + MODEL], content=bad["Zorg/" + MODEL]["content"] + "\n```json\n{}\n```\n")
         fake.tree = bad

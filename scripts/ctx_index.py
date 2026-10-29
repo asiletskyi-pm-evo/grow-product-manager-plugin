@@ -256,7 +256,15 @@ def rel_path(abs_path, vaults, root=None):
     return _slash(_spellings(abs_path)[0])
 
 
-COPY_SERVICE = (".ctx-copy", ".backup", ".removed")        # ctx_copy: its state, backups and moved notes — outside every vault
+COPY_SERVICE = (".ctx-copy", ".backup", ".removed")        # ctx_copy: its state, backups and moved notes
+
+
+def _copy_service(path):
+    """Is the folder `path` a service folder of the plugin's copy of a core (since v3.24.0, ctx_copy) — one of
+    COPY_SERVICE beside a `.ctx-copy/state.json`? Only a copy has one, so a folder of that name anywhere else is walked
+    as before."""
+    return os.path.basename(path) in COPY_SERVICE and os.path.isfile(
+        os.path.join(os.path.dirname(path), ".ctx-copy", "state.json"))
 
 
 def _skip_folder(rel, store_rel, fold=False):
@@ -272,8 +280,6 @@ def _skip_folder(rel, store_rel, fold=False):
     parts = [p.casefold() for p in rel.split("/")]
     for i, part in enumerate(parts):
         if part in (".obsidian", ".trash") or part.startswith("_backup"):
-            return True
-        if part in COPY_SERVICE and parts[0].startswith("@"):     # since v3.24.0: the service folders of a copy of a core
             return True
         if part == "_system" and i + 1 < len(parts) and parts[i + 1] in ("providers", "_scratch"):
             return True
@@ -945,7 +951,7 @@ def evicted(roots, store_rel, blocks_rels):
                 child = rel + "/" + N(e.name) if rel else N(e.name)
                 try:
                     if e.is_dir(follow_symlinks=False):
-                        if not _skip_folder(child, store) and N(os.path.normpath(e.path)) not in every:
+                        if not _skip_folder(child, store) and not _copy_service(e.path) and N(os.path.normpath(e.path)) not in every:
                             stack.append((e.path, child))
                     elif (e.is_file(follow_symlinks=False) and not excluded(child, store, blocks)
                           and e.stat(follow_symlinks=False).st_size <= MAX_BYTES and is_dataless(e.path)):
@@ -1720,7 +1726,7 @@ class _Walk:
             child = rel + "/" + name if rel else name
             try:
                 if e.is_dir(follow_symlinks=False):
-                    if _skip_folder(child, self.store_rel):
+                    if _skip_folder(child, self.store_rel) or _copy_service(e.path):
                         continue
                     present.add(name)
                     if N(os.path.normpath(e.path)) not in self.root_paths:   # another root walks it itself
