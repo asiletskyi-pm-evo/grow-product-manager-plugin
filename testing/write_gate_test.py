@@ -5,7 +5,8 @@ Since v3.10.0 the gate also guards file writes under a shared-context provider's
 local folders (references/context-provider-protocol.md §7): Write / Edit /
 MultiEdit / NotebookEdit under a registered root and outside its `writable` globs
 → permissionDecision "ask"; anything else → no output (allow). The Jira /
-Confluence branch is unchanged. Each case runs the script as a subprocess with an
+Confluence branch also covers the Confluence writes' Atlassian MCP v2 names
+(createConfluenceContent / updateConfluenceContent). Each case runs the script as a subprocess with an
 isolated HOME, so the user's real configuration is never read.
 
 Stdlib only; run from the repo root.
@@ -56,6 +57,26 @@ with tempfile.TemporaryDirectory() as d:
     check("notebook under provider asks", '"permissionDecision": "ask"' in out, out)
     out = run(env, {"tool_name": "mcp__Atlassian_Rovo__createJiraIssue", "tool_input": {"description": "d" * 300}})
     check("jira op still asks", '"permissionDecision": "ask"' in out and "Jira issue" in out, out)
+    # Atlassian MCP v2: the Confluence writes are createConfluenceContent / updateConfluenceContent
+    v2 = "mcp__claude_ai_Atlassian_MCP__"
+    out = run(env, {"tool_name": v2 + "createConfluenceContent", "tool_input": {
+        "contentType": "page", "title": "T", "body": {"format": "html", "value": "p" * 300}}})
+    check("v2 Confluence create asks", '"permissionDecision": "ask"' in out and "create a Confluence page" in out, out)
+    out = run(env, {"tool_name": v2 + "updateConfluenceContent", "tool_input": {
+        "contentId": "1", "snapshotToken": "v:7", "edits": [{"name": "replaceNode", "localId": "a", "value": "p" * 300}]}})
+    check("v2 Confluence update with content asks", '"permissionDecision": "ask"' in out and "update a Confluence page" in out, out)
+    out = run(env, {"tool_name": v2 + "updateConfluenceContent", "tool_input": {"contentId": "1", "title": "Renamed"}})
+    check("v2 Confluence title-only update passes silently", out == "", out)
+    out = run(env, {"tool_name": v2 + "executeWrite", "tool_input": {
+        "name": "createConfluenceComment", "inputs": {"body": {"format": "markdown", "value": "c" * 300}}}})
+    check("v2 executeWrite is not gated, as v1 comments and links were not", out == "", out)
+    import re
+    hooks = json.load(open(os.path.join(ROOT, "hooks", "hooks.json")))["hooks"]["PreToolUse"]
+    matcher = [h["matcher"] for h in hooks if "Jira" in h["matcher"]][0]
+    for op in ("createJiraIssue", "editJiraIssue", "createConfluencePage", "updateConfluencePage",
+               "createConfluenceContent", "updateConfluenceContent"):
+        check("hooks.json matcher covers " + op, re.search(matcher, v2 + op) is not None, matcher)
+    check("hooks.json matcher skips executeWrite", re.search(matcher, v2 + "executeWrite") is None, matcher)
     open(os.path.join(pdata, "config.json"), "w").write('{"write_gate": "off"}')
     out = run(env, {"tool_name": "Write", "tool_input": {"file_path": os.path.join(core, "Core", "Teams", "x.md")}})
     check("gate off allows", out == "", out)
