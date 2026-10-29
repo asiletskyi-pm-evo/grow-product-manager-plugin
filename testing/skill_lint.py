@@ -49,6 +49,7 @@ CHECKS = """
 27. inbox-step           a SKILL.md without its end-of-run line (context-protocol.md §5i): the inbox, or — People contour — no deltas
 28. bootstrap-template   a heading or a deferred-step key of ctx bootstrap's skeleton (scripts/ctx_bootstrap.py) that onboarding Step 16c does not have
 29. command-size         a commands/*.md over 4096 bytes — Codex CLI silently does not migrate it into a skill
+30. surface-brand        a skill, agent, command or shared protocol naming a host surface by its brand or tool instead of its capability (native-surfaces.md §6)
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1562,6 +1563,35 @@ for _c in sorted(glob.glob(os.path.join(root, "commands", "*.md"))):
     if _n > COMMAND_MAX:
         fail("command-size", f"commands/{os.path.basename(_c)}: {_n} bytes > {COMMAND_MAX} — Codex will not migrate it; "
                              "move the details into references/")
+
+# ============================================================ surface brand (30)
+# v4.1.0: a surface is named by its capability — ARTIFACT, DOCS, WIDGET, SCHEDULE, RESEARCH — never by a host's brand
+# or tool (the user's decision, R5). Only the brand map may name them: host-profiles.md and native-surfaces.md §6.
+# The `schedule` skill and a host artifact tool had spread to 10 lines before this check; plain «canvas» stays free (Miro's canvas tools).
+SURFACE_BRANDS = [
+    (r"\b(?:create|update)_artifact\b", "a host's artifact tool"),
+    (r"\bArtifact tool\b", "a host's artifact tool"),
+    (r"\bClaude Docs\b", "a host's live documents"),
+    (r"\bshow_widget\b|\bgenui\.\w+|`visualize` skill", "a host's inline visual"),
+    (r"\bscheduled-tasks\b|`schedule`\s+skill|\bCronCreate\b|\bautomation_update\b|\bautomations\.peek\b", "a host's scheduler"),
+    (r"\bdeep-research\b(?!-)", "a host's built-in research"),
+    (r"\bChatGPT Canvas\b", "a host's canvas"),
+    (r"\bsites_(?:create_site|deploy_\w+|update_site_access)\b", "a host's hosted pages"),
+]
+SURFACE_BRAND_ALLOWED = {os.path.join("references", "host-profiles.md"), os.path.join("references", "native-surfaces.md")}
+_sb_files = (glob.glob(os.path.join(root, "skills", "**", "*.md"), recursive=True)
+             + glob.glob(os.path.join(root, "agents", "*.md")) + glob.glob(os.path.join(root, "commands", "*.md"))
+             + glob.glob(os.path.join(root, "references", "*.md")))
+for _f in sorted(_sb_files):
+    _rel = os.path.relpath(_f, root)
+    if _rel in SURFACE_BRAND_ALLOWED:
+        continue
+    for _ln, _line in enumerate(open(_f, encoding="utf-8").read().splitlines(), 1):
+        for _rx, _what in SURFACE_BRANDS:
+            _m = re.search(_rx, _line)
+            if _m:
+                fail("surface-brand", f"{_rel}:{_ln}: «{_m.group(0)}» names {_what} — name the capability "
+                                      "(ARTIFACT / DOCS / WIDGET / SCHEDULE / RESEARCH, references/native-surfaces.md §1)")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

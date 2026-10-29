@@ -1,6 +1,6 @@
 ---
 name: knowledge-library
-version: 0.9.2
+version: 0.9.3
 description: Curated source library — «які джерела маємо», «додай у бібліотеку» — trust scores, team glossary, writing style. Not templates (template-library), competitor research (product-research). UA — «збери глосарій», «як ми називаємо…», «перевір термінологію».
 ---
 

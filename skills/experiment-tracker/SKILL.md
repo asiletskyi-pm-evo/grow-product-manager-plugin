@@ -1,6 +1,6 @@
 ---
 name: experiment-tracker
-version: 0.6.1
+version: 0.6.2
 description: Experiment registry — proposed → specced → running → readout → decided, with stale-test reminders. Not analyzing results (product-analysis), not the A/B spec (requirements-creator). UA — «які тести зараз біжать», «зафіксуй запуск тесту», «завислі тести». EN — "what experiments are running".
 ---
 
@@ -124,7 +124,7 @@ Per `local-context-protocol.md`. Then **Step R** — load/create the registry.
 Registry mirror after every write (see above). No separate artifact — experiments live as registry entries + linked `hypothesis`/`ab-test-results`/`decision` artifacts owned by their source skills.
 
 ## Headless (scheduled stale-check)
-Contract for scheduled runs (analogous to focus-advisor): `mode=stale headless=true` → no questions; output = compact stale list with per-item recommended action, or "all experiments healthy". Offer creating the schedule (weekly, Monday) via the platform's `schedule` skill during `start` mode.
+Contract for scheduled runs (analogous to focus-advisor): `mode=stale headless=true` → no questions; output = compact stale list with per-item recommended action, or "all experiments healthy". Offer creating the schedule (weekly, Monday) during `start` mode — a recurring run where the host has SCHEDULE, otherwise one line on where to create it (`references/native-surfaces.md` §4–§5).
 
 ## Quality Standards
 - The tracker never declares winners — verdicts only via product-analysis readout (Gate included).

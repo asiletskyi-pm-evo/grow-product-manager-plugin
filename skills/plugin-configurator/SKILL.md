@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.17.0
+version: 2.17.1
 description: Configure the plugin and your Obsidian vault — organization, products, teams, data sources — validate or view the config. Not the typed /status or /config commands. UA — «налаштуй плагін», «підключи Obsidian-вейлт», «покажи мій конфіг», «статус плагіна», «змінити роль», «налаштуй тестові акаунти», «налаштуй карту конкурентів». EN — "set my role".
 ---
 

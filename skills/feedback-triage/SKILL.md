@@ -1,6 +1,6 @@
 ---
 name: feedback-triage
-version: 0.7.1
+version: 0.7.2
 description: Triage a feedback stream — tickets, complaints, reviews, NPS — into themes with frequency, severity and trend. Not interview synthesis (product-research), not ideation (brainstorm-features). UA — «розбери скарги/відгуки», «кластеризуй тікети», «тренд тем скарг». EN — "triage feedback".
 ---
 
@@ -72,7 +72,7 @@ Publishing: Confluence (default) / local — ask (a scheduled run asks nothing: 
 - → **`task-creator`**: quick-fix themes straight to Jira (the SH-step formulations feed directly in)
 
 ### Step V — Save to Vault
-`vault_save({type: "feedback-triage", product, skill: "feedback-triage", skill_version: "0.7.1", tags: [segment, period, top theme slugs], content: full report, related: [previous triage artifact, spawned hypotheses], extra_frontmatter: {period, segment, sources_count, items_total, items_usable, top_pain_score}})` → Research/feedback/. This artifact is the baseline for the next run's trends.
+`vault_save({type: "feedback-triage", product, skill: "feedback-triage", skill_version: "0.7.2", tags: [segment, period, top theme slugs], content: full report, related: [previous triage artifact, spawned hypotheses], extra_frontmatter: {period, segment, sources_count, items_total, items_usable, top_pain_score}})` → Research/feedback/. This artifact is the baseline for the next run's trends.
 
 ## Quality Standards
 - Theme names in the users' language of pain, verbatims verbatim (PII stripped: names, emails, order numbers masked) — a masked `[name]` / `[order]`, a marked `[…]` or a `(translated)` verbatim stays `reported`; a paraphrase or a ticket summary is never shown in quote marks.
@@ -82,7 +82,7 @@ Publishing: Confluence (default) / local — ask (a scheduled run asks nothing: 
 - Language — `user.language`.
 
 ## Skill Chaining
-← scheduled/manual intake · → brainstorm-features · → research-synthesis (design) · → cjm-research · → decision-log · → task-creator. Monthly scheduled triage — offer via the `schedule` skill after the first successful run.
+← scheduled/manual intake · → brainstorm-features · → research-synthesis (design) · → cjm-research · → decision-log · → task-creator. Monthly scheduled triage — offer after the first successful run, as a recurring run where the host has SCHEDULE (`references/native-surfaces.md` §4–§5).
 
 **End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
 

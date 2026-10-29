@@ -63,7 +63,7 @@ If `trust_override` is set in `trust-scores.yaml`, it replaces the calculated sc
 
 ### Monthly re-evaluation
 
-A scheduled task (via `schedule` skill) triggers Verify mode monthly:
+A scheduled run (the host's SCHEDULE, `references/native-surfaces.md` §4) triggers Verify mode monthly:
 1. Recalculate freshness decay for all sources
 2. Validate URLs
 3. Update citation counts

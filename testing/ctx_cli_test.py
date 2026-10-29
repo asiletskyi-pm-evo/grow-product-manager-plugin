@@ -3225,7 +3225,7 @@ need_cst = ["`sync: daily`", "`sync: off`", "except `sync`", "`--choose <block>=
             "One `--choose` takes several answers", "ctx provider sync <repo>"]
 check("connect-steps asks about `sync: daily` once, settles every `?` before it, carves `sync` out of the kept-keys rule and shows several answers per --choose",
       not lacks(cst3, need_cst) and 0 <= i_first < i_q, (lacks(cst3, need_cst), i_first, i_q))
-need_skl = ["version: 0.8.0", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
+need_skl = ["version: 0.8.1", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
 check("the skill is 0.5.0 (slots, v3.15.0) and asks the daily-sync question only on the user's own yes", not lacks(skl3, need_skl), lacks(skl3, need_skl))
 
 # the registry: one case per area, above v3.13.1
@@ -4203,15 +4203,15 @@ need_15 = [
              "for the second kind keep `ctx slot bind <repo> <block> <slot> --team <team record>` ready",
              "holds for every key except `sync` (and, since v3.15.0, the taking of one id out of `skip_blocks`, below)",
              "**The second exception: one id out of `skip_blocks`** (since v3.15.0)"]),
-    (skl15, ["version: 0.8.0", "## Step 4a — slots after a refresh (with a store, since v3.15.0)", "this skill binds only what the user confirms (`ctx slot bind`)", "the publisher's `slot=` and the plugin's own `team#Members` bind without a yes",
+    (skl15, ["version: 0.8.1", "## Step 4a — slots after a refresh (with a store, since v3.15.0)", "this skill binds only what the user confirms (`ctx slot bind`)", "the publisher's `slot=` and the plugin's own `team#Members` bind without a yes",
              "offered at a refresh, in one message (a no is offered again at the next refresh)", "except a divergence, which recommends no side",
              "and the removal of one id from `skip_blocks` on the user's yes for that block (Step 4a)", "adding an id to `skip_blocks` in Step 4a",
              "(the second exception of `references/context-provider-protocol.md` §3b)", "a no changes nothing",
              "without the user's own yes for that block or slot"]),
     (mm15, ["since v3.15.0 the slots (`references/context-protocol.md` §5f)", "the answer per slot being `ctx slot decide <slot> <repo>`",
             "a yes being `ctx slot bind …` for each confirmed one", "### Context slots (only with a context store)"]),
-    (cfg15, ["version: 2.17.0"]),
-    (readme15, ["### 32. Context Connect (v0.8.0)", "| Context Connect | v0.8.0 |", "### 10. Plugin Configurator (v2.17.0)", "| Plugin Configurator | v2.17.0 |",
+    (cfg15, ["version: 2.17.1"]),
+    (readme15, ["### 32. Context Connect (v0.8.1)", "| Context Connect | v0.8.1 |", "### 10. Plugin Configurator (v2.17.1)", "| Plugin Configurator | v2.17.1 |",
                 "**Slots, the cascade and `ctx explain`** (since v3.15.0)", "and — at a refresh — the blocks you had switched off", "since v3.15.0 `explain` and `slot bind|map|prefer|decide|forget`"]),
     (hp15, ["since v3.15.0 slots and the cascade in `ctx read`, `ctx explain`, `ctx slot …`"]),
 ]

@@ -18,9 +18,9 @@ Sections (validated by a real quarterly run):
 
 HTML via `updateConfluencePage`/`createConfluencePage` (`contentFormat: html`): status — `<span data-type="status" data-color="...">`, panels — `<div data-type="panel-info|success|note">`, `colspan` in tables works.
 
-## 2. Live dashboard (cowork artifact)
+## 2. Live dashboard (an ARTIFACT, `native-surfaces.md`)
 
-Self-contained HTML (light mode, `:root{color-scheme:light}`). Static: capacity bars (target 85% / ceiling 100% markers), Gantt timeline. Live (on open): epic statuses ← `getJiraIssue` per-key; feature inventory ← CQL by quarter label. Registered via `create_artifact` with `mcp_tools`; the refresh button — in the panel header (do not duplicate).
+Self-contained HTML (light mode, `:root{color-scheme:light}`). Static: capacity bars (target 85% / ceiling 100% markers), Gantt timeline. Live (on open): epic statuses ← `getJiraIssue` per-key; feature inventory ← CQL by quarter label. Published as a typed ARTIFACT whose live parts re-query the connectors on open (`native-surfaces.md` §1), after the question of `native-surfaces.md` §3 — and asked again before every refresh; without ARTIFACT a static HTML file. The refresh button — in the panel header (do not duplicate).
 
 ## 3. Project roadmap (arc, project-planning)
 

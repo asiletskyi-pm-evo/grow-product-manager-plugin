@@ -201,7 +201,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.13.0)
+### 1. CJM Research (v0.14.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -367,7 +367,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.17.0)
+### 10. Plugin Configurator (v2.17.1)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -385,7 +385,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 11. Knowledge Library (v0.9.2)
+### 11. Knowledge Library (v0.9.3)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
@@ -523,7 +523,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 20. Focus Advisor (v0.9.7) — NEW in v1.31.0, complete in v1.33.0
+### 20. Focus Advisor (v0.10.0) — NEW in v1.31.0, complete in v1.33.0
 
 **Description:** PM attention dispatcher — the 4th height of the suite, above structure/quarter/sprint. Scans the PM's context (sprint cycle position, calendar meetings needing preparation, important unanswered emails, open action items from recent meetings, Jira tails), ranks the signals, and recommends 1–3 focuses with reasons, cost of delay, and a chained next step. Recommends and chains — never executes another skill's work; the PM decides.
 
@@ -535,7 +535,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 21. Experiment Tracker (v0.6.1) — NEW in v1.36.0
+### 21. Experiment Tracker (v0.6.2) — NEW in v1.36.0
 
 **Description:** Owns the experiment lifecycle the pipeline used to drop after the A/B spec: `proposed → specced → running → awaiting-readout → decided`, with a persistent registry (`~/.grow-pm/experiments/registry.yaml` + vault mirror) and stale-test reminders (overdue runs, pending readouts, idle high-ICE hypotheses).
 
@@ -555,7 +555,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 23. Feedback Triage (v0.7.1) — NEW in v1.36.0
+### 23. Feedback Triage (v0.7.2) — NEW in v1.36.0
 
 **Description:** Turns a raw feedback stream (support tickets, complaints, reviews, Q&A, NPS verbatims) into a ranked pain map: semantic theme clustering, `frequency × severity × trend` scoring, new/growing/declining theme detection against the previous run's baseline, and hypothesis seeds for brainstorm-features. Feedback text never leaves the session; PII is masked in verbatims.
 
@@ -577,7 +577,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 **Trigger phrases:** "постав ціль", "проведи аудит цілі", "лист цілей", "каскад цілей", "OKR на квартал", "set a goal", "audit this goal"
 
-### 25. One-on-One (v0.2.2) — NEW in v2.0.0
+### 25. One-on-One (v0.2.3) — NEW in v2.0.0
 
 **Description:** Prepares and analyzes 1-1 meetings — *for the person, about the person* (feedback/growth/trust), not tasks/status. Prepare builds the agenda from the profile (6 stages + seven "how" questions + NVC feedback drafts); Analyze turns a Fireflies transcript/notes into signals (motivation, burnout, career) + a manager-written **ARCV** follow-up + a profile update. Headless coverage: who hasn't been "touched" in > N weeks.
 
@@ -628,7 +628,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 **Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
 
 
-### 32. Context Connect (v0.8.0) — NEW in v3.10.0
+### 32. Context Connect (v0.8.1) — NEW in v3.10.0
 
 **Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. With a context store a refresh ends with the slots (since v3.15.0): in one message each, the bindings of the core's blocks to slots for you to confirm, the divergences between repositories to settle, and — at a refresh — the blocks you had switched off that now have a slot, with a yes per block to bring one back (a no is offered again at the next refresh; `references/context-protocol.md` §5f). Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
 
@@ -645,7 +645,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.13.0 | Customer Journey Map analysis and hypothesis validation |
+| CJM Research | v0.14.0 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.18.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.15.1 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.1 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
@@ -656,8 +656,8 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.18.2 | Process meetings and extract action items |
-| Plugin Configurator | v2.17.0 | Configure plugin for your organization |
-| Knowledge Library | v0.9.2 | Manage curated knowledge sources |
+| Plugin Configurator | v2.17.1 | Configure plugin for your organization |
+| Knowledge Library | v0.9.3 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Product Reporter | v0.10.2 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
@@ -666,17 +666,17 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Quarterly Planning | v0.8.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.5.0 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
-| Focus Advisor | v0.9.7 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
-| Experiment Tracker | v0.6.1 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
+| Focus Advisor | v0.10.0 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
+| Experiment Tracker | v0.6.2 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
-| Feedback Triage | v0.7.1 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
+| Feedback Triage | v0.7.2 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
 | Goal Setter | v0.2.2 | Set/audit goals — SMARTCBP (people) / OKR (product), cascade, Tell-and-Sell commitment |
-| One-on-One | v0.2.2 | Prepare & analyze 1-1s — agenda from profile, signals + ARCV follow-up, coverage headless |
+| One-on-One | v0.2.3 | Prepare & analyze 1-1s — agenda from profile, signals + ARCV follow-up, coverage headless |
 | Performance Review | v0.2.2 | Review a person on goals + GTD-index + D-type, into the employer's review template |
 | Hiring Designer | v0.2.2 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
 | Offboarding Guide | v0.2.2 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
-| Context Connect | v0.8.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
+| Context Connect | v0.8.1 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
 | Context Navigator | v0.5.0 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---

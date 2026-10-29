@@ -166,9 +166,9 @@ When `health-check` mode is configured for automation:
 
 1. **Setup:** During Step 2, if user selects health-check mode:
    - Ask about frequency: weekly (recommended), bi-weekly, monthly
-   - Ask about notification: where to publish results (Confluence page / local file)
-   - Chain to `schedule` skill to create recurring task
-   - Schedule task invokes `cjm-research` in `health-check` mode with saved parameters
+   - Say where the results go: the snapshot in the library (below) — a scheduled run never publishes to Confluence or any hosted surface; the next interactive run offers to publish the new snapshot, with the question of `references/native-surfaces.md` §3
+   - Where the host has SCHEDULE: create the recurring run on the user's «так» (what runs, how often, where the result lands); otherwise say in one line where to create it (`native-surfaces.md` §4–§5)
+   - The scheduled run invokes `cjm-research` in `health-check` mode with saved parameters
 
 2. **Execution (automated):**
    - Skip Step 2 (use saved parameters)
@@ -176,7 +176,7 @@ When `health-check` mode is configured for automation:
    - Load previous health-check for delta comparison
    - Assemble Health-Check Summary (labels only — no question, no hand-back line)
    - Save snapshot to `~/.grow-pm/knowledge-library/health-checks/[date].md`
-   - Publish to configured destination
+   - End with one line for the next interactive run: «Новий health-check від <дата> — опублікувати можна в наступному прогоні.» (no publication from the scheduled run)
 
 3. **Escalation:**
    - If any **Critical** anomaly detected → highlight in report, suggest full mode
