@@ -18,8 +18,8 @@ plugin's copies of cores), never a local index of another tool and never a core'
   vault_list_by_tag(tag), vault_list_by_folder(folder)   [{path, title[, sensitive]}]
   brain_status                {last_index, age_hours, notes, edges, vault_root, schema}
   brain_find_entity(query)    {hub, related} — ctx entity
-- serve(sctx, stdin, stdout)  the loop; the index is refreshed in a thread at the start and when a call finds it an
-                              hour old (REFRESH_EVERY_S) — a call never waits for it
+- serve(sctx, stdin, stdout)  the loop; the index is refreshed in a thread when it is an hour old (REFRESH_EVERY_S) —
+                              at the start or at a call; a call that comes while it runs waits for it WAIT_S at most
 - install(home, root)         `~/.grow-pm/bin/ctx-serve`, the launcher a client's config names (the plugin's folder
                               carries its version, so the config would break at the next update; `provider sync
                               --if-due` rewrites the launcher when the folder moved — relaunch_if_moved)
@@ -42,6 +42,7 @@ N = cc.N
 NAME = "grow-pm-vault"
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 REFRESH_EVERY_S = 3600
+WAIT_S = 10.0                      # a call waits this long for a refresh that runs (it holds the index while it writes)
 LIMIT = 20
 INSTRUCTIONS = ("Read-only search, graph and registry over your vault layer and the core folders on disk (contract "
                 "vault/v1 of the Grow PM plugin). Typical chain: vault_search → vault_get_note on the hits that matter → "
@@ -90,8 +91,20 @@ class Server:
         self.refreshed_at = 0.0
         self.thread = None
         self.auto = refresh
-        if refresh:
+        if refresh and self._age() > REFRESH_EVERY_S:
             self.kick()
+        else:
+            self.refreshed_at = time.time() - self._age()
+
+    def _age(self):
+        """Seconds since the index was last brought up to date (index.json); a missing one is very old."""
+        import datetime
+        try:
+            with open(self.idx.state_path, encoding="utf-8") as f:
+                t = datetime.datetime.fromisoformat(json.load(f).get("updated"))
+            return max(0.0, (datetime.datetime.now(t.tzinfo) - t).total_seconds())
+        except (OSError, ValueError, TypeError, AttributeError):
+            return float("inf")
 
     # -------------------------------------------------- the index
     def kick(self):
@@ -139,6 +152,8 @@ class Server:
                 return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "unknown tool: %s" % name}}
             if self.auto and time.time() - self.refreshed_at > REFRESH_EVERY_S:
                 self.kick()
+            if self.thread is not None and self.thread.is_alive():
+                self.thread.join(WAIT_S)          # it holds the index while it writes: a read now would find it busy
             try:
                 out = fn(args if isinstance(args, dict) else {})
             except ToolError as e:

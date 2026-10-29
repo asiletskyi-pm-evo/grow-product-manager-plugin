@@ -135,6 +135,11 @@ with tempfile.TemporaryDirectory() as d:
           sens and all("snippet" not in r for r in sens), s15)
     check("v4.0.0 the server writes nothing in the vault", env.tree() == before)
 
+    import shutil
+    shutil.rmtree(os.path.join(env.home, ".grow-pm", "index"))   # no index: the start refreshes it, a call waits for it
+    ans, _ = talk(env, [call(1, "vault_get_note", path="Notes/Roadmap.md")])
+    check("v4.0.0 a call while the start's refresh runs waits for it — the note, not «busy»",
+          ans and ans[0]["result"]["isError"] is False, ans)
     ans, _ = talk(env, [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}}])
     check("…a protocol version it does not speak: its newest", ans[0]["result"]["protocolVersion"] == csv_.PROTOCOLS[0], ans)
 
