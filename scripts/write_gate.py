@@ -182,12 +182,16 @@ def region_hit(tool, tool_input, cwd=None, text=None):
         return None, path
     edits = tool_input.get("edits") if tool == "MultiEdit" else [tool_input]
     cur = old
-    for e in edits or []:                        # each edit against the text the ones before it left (review M-7)
+    for e in edits or []:                        # the edits in sequence (review M-7), on a copy of the note
         snippet, repl = str((e or {}).get("old_string") or ""), str((e or {}).get("new_string") or "")
-        if rg.touches(cur, snippet):
-            return (name(snippet) if snippet in old else "a region"), path
         if snippet:
             cur = cur.replace(snippet, repl) if (e or {}).get("replace_all") else cur.replace(snippet, repl, 1)
+    if rg.changed(old, cur):                     # only a write that changes a region asks (final review I2: an append
+        for e in edits or []:                    # after the end marker leaves every region as it was)
+            snippet = str((e or {}).get("old_string") or "")
+            if snippet and rg.touches(old, snippet):
+                return name(snippet), path
+        return "a region", path
     return None, path
 
 

@@ -153,6 +153,35 @@ with tempfile.TemporaryDirectory() as d:                 # the review of tasks 7
           got["trust"] == note["trust"] and got["trust"]["parts"]["state"] == 0.8, (got.get("trust"), note.get("trust")))
 
 
+with tempfile.TemporaryDirectory() as d:                 # final review I1: an older build sharing the index
+    env = VaultEnv(d, fixture="graph", evicted=())
+    write(env.note(CORE), "---\ntype: metric\nname: Conversion\nactual: 3.4%\nactual_period: Q3 2026\n---\n# Conversion\n")
+    env.run("index", "status")
+    import time as _t
+    write(env.note(CORE), read(env.note(CORE)).replace("3.4%", "3.9%"))
+    os.utime(env.note(CORE), (_t.time() + 5, _t.time() + 5))
+    real = ci._Walk._entities
+
+    def older(self, nid, rel, text, title, digest):         # what v3.24 does: ents, links, mentions — no facts
+        kept = self.con.execute("SELECT note_id, hash, attribute, value, period, observed_at, field FROM facts "
+                                "WHERE note_id = ?", (nid,)).fetchall()
+        src = self.con.execute("SELECT note_id, hash FROM facts_src WHERE note_id = ?", (nid,)).fetchall()
+        real(self, nid, rel, text, title, digest)
+        self.con.execute("DELETE FROM facts WHERE note_id = ?", (nid,))
+        self.con.execute("DELETE FROM facts_src WHERE note_id = ?", (nid,))
+        self.con.executemany("INSERT INTO facts VALUES (?, ?, ?, ?, ?, ?, ?)", kept)
+        self.con.executemany("INSERT INTO facts_src VALUES (?, ?)", src)
+
+    ci._Walk._entities = older
+    try:
+        env.run("index", "status")
+    finally:
+        ci._Walk._entities = real
+    rc, out, res = env.run("entity", CORE, "--json")
+    check("v4.0.0 final review I1: a card an older build read again has its facts read again (facts_src) — the new value",
+          [f["value"] for f in res["entities"][0]["facts"]] == ["3.9%"], res["entities"][0].get("facts"))
+
+
 class _Reg:
     entities = [{"id": "ZorgCore/M/c.md", "cards": [{"path": "ZorgCore/M/c.md"}, {"path": "Notes/M/c.md"}]}]
 

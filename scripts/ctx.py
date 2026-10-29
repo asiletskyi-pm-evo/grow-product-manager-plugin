@@ -1048,6 +1048,11 @@ def cmd_undo(a, c):
                     print("бекап не повернуто: %s — %s" % (path, why))
         for rel, why in notes_kept:
             print("не повернуто: %s — %s" % (rel, why))
+        if any(m.get("op") == "vault-normalize" for m in marks[-a.steps:]):    # since v4.0.0: ctx health tells the truth
+            try:
+                ca.run(sctx or cs_.context_for(c.home, c.text, store_root=c.store.root), c.context, store=c.store, now=now())
+            except Exception:  # noqa: BLE001 — a cache never changes the undo's result
+                pass
         reverted, kept, rejected, rejected_failed = [], [], {}, {}
         hist = os.path.join(c.store.root, "history")
         if not existed and os.path.isdir(hist):         # since v3.23.0: the changelog is derived — no store, no notes of it

@@ -360,14 +360,14 @@ def _private(node):
     return node
 
 
-def neighbourhood(con, start, depth=1, kinds=None, limit=LIMIT):
+def neighbourhood(con, start, depth=1, kinds=None, limit=LIMIT, closed=()):
     """The nodes 1..depth hops from the names `start` (hop 0), each hop at most `limit` of them — those most joined to
     the hop before first, then by path —, and {hop: how many more}. A node: {path, title, source, type, hop, dirs
     (→ the start links to it, ← it links to the start), kinds, via (the nodes of the hop before it is joined to),
     ambiguous, sensitive, dataless}. A sensitive node is shown as _private says and the walk never goes on through it:
     what it links is its text (review I-4). The next hop starts from the nodes shown (review M-3)."""
     seen, frontier, nodes, more = set(start), list(start), [], {}
-    closed = {p for p, a in _about(con, list(start)).items() if a.get("sensitive")}
+    closed = set(closed) | {p for p, a in _about(con, list(start)).items() if a.get("sensitive")}
     for hop in range(1, max(1, int(depth)) + 1):
         found = _hop(con, frontier, seen, kinds, closed)
         order = sorted(found, key=lambda p: (-found[p]["degree"], p))
@@ -391,6 +391,12 @@ def neighbourhood(con, start, depth=1, kinds=None, limit=LIMIT):
 def _start(reg, query, names=()):
     """(paths, how): the names a request starts from — a path, a [[link]] or a name as `--get` takes it (one note), else
     an entity (ctx_entity: an e-mail, a Jira key, a name — all its cards); several → (list of choices, "several")."""
+    if ci.ISSUE_KEY.fullmatch(N(query or "").strip().upper()):   # a Jira key: its work, not a file of that name
+        found, _ = reg.find(query)
+        if len(found) == 1:
+            return [c["path"] for c in found[0]["cards"]], "entity"
+        if found:
+            return [e["id"] for e in found], "several"
     hit = reg.resolver.resolve(query)
     if isinstance(hit, str):
         return [hit], "path"

@@ -272,7 +272,9 @@ class Server:
         def kind(k, *paths):                      # a sensitive end: the field a link stands in is not said (as ctx graph)
             return "fm" if k.startswith("fm:") and any(sens(x) for x in paths) else k
 
-        if sens(path):                            # review I2: what a sensitive note's own text links is never listed
+        import ctx_trust as ct
+        if sens(path) or ci.sensitive_of(ct.frontmatter_on_disk(self.sctx, path) or {}):
+            # review I2: what a sensitive note's own text links is never listed (its file as it is now too)
             d = "in" if d in ("in", "both") else None
             out["sensitive"] = True
             if d is None:
@@ -315,10 +317,19 @@ class Server:
         if how == "several":
             raise ToolError("several: %s — ask by path" % " · ".join(paths[:10]))
 
+        import ctx_trust as ct
+        if any(ci.sensitive_of(ct.frontmatter_on_disk(self.sctx, p) or {}) for p in paths):
+            closed_now = True                    # a start that says `sensitive` in its file now: who links to it alone
+        else:
+            closed_now = False
+
         def walk(con):
             about = cg._about(con, paths)
+            if closed_now:
+                for p in paths:
+                    about.setdefault(p, {"title": p, "sensitive": True})["sensitive"] = True
             start = [cg._private(dict(about.get(p) or {"title": p, "sensitive": False}, path=p, hop=0)) for p in paths]
-            return start, cg.neighbourhood(con, paths, depth)
+            return start, cg.neighbourhood(con, paths, depth, closed=paths if closed_now else ())
 
         start, (nodes, more) = self._read(walk, ([], ([], {})))
         edges = []

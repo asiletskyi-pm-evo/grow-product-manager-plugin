@@ -322,6 +322,9 @@ with tempfile.TemporaryDirectory() as d:
     check("v4.0.0 review I-6 (tasks 4–6): a sensitive start shows who links to it, never what its own text links",
           rc == 0 and res["nodes"] and all(n["dirs"] == ["←"] for n in res["nodes"]),
           [(n["path"], n["dirs"]) for n in (res or {}).get("nodes", [])])
+    rc, out, res = env.cli("graph", "PROJ-1234")
+    check("v4.0.0 final review: a Jira key starts from its work — two cards of it: exit 3 naming both, never the file "
+          "that happens to be named after it", rc == 3 and EPIC in out and WORK_CORE in out, out[-400:])
     rc, out, res = env.cli("graph", "diagram.png", "--json")
     check("v4.0.0 review M-9: a name alone (a picture) is a start too", rc == 0 and res["how"] == "path"
           and [n["path"] for n in res["nodes"]] == [ROADMAP], res and res.get("nodes"))

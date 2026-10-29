@@ -154,6 +154,9 @@ with tempfile.TemporaryDirectory() as d:
     os.remove(env.note("Notes/Lonely.md"))
     after = env.tree()
     rc, out, _ = env.run("undo")
+    last_undo = __import__("json").loads(read(env.home, ".grow-pm", "audit", "last.json"))
+    check("final review: `ctx undo` of a normalisation leaves the audit's last result true again (fixable > 0)",
+          last_undo["counts"]["fixable"] > 0, last_undo["counts"])
     now_ = env.tree()
     check("v4.0.0 `ctx undo`: every file back byte for byte, the new ones gone",
           rc == 0 and {k: v for k, v in now_.items() if not _derived(k)}

@@ -142,6 +142,11 @@ with tempfile.TemporaryDirectory() as d:
     out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": outside, "old_string": "- [[Standup]]",
                                                         "new_string": "x"}})
     check("…a file outside every vault is not the gate's", out == "", out)
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": note,
+                    "old_string": "<!-- ctx:end id=hub-meeting-notes -->\n",
+                    "new_string": "<!-- ctx:end id=hub-meeting-notes -->\nMore of mine.\n"}})
+    check("v4.0.0 final review I2: an Edit that appends after a region's end marker (the note's last line) — every "
+          "region as it was — passes silently", out == "", out)
     upper = note.replace(os.sep + "Vault" + os.sep, os.sep + "VAULT" + os.sep)
     out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": upper, "old_string": "- [[Standup]]",
                                                         "new_string": "x"}})

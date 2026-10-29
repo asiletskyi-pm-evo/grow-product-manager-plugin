@@ -149,15 +149,16 @@ CREATE INDEX IF NOT EXISTS links_note ON links(note_id);
 CREATE TABLE IF NOT EXISTS mentions(note_id INTEGER, key TEXT, browse INTEGER);
 CREATE TABLE IF NOT EXISTS facts(note_id INTEGER, hash TEXT, attribute TEXT, value TEXT, period TEXT, observed_at TEXT,
                                  field TEXT);
+CREATE TABLE IF NOT EXISTS facts_src(note_id INTEGER PRIMARY KEY, hash TEXT);
 CREATE INDEX IF NOT EXISTS facts_note ON facts(note_id);
 CREATE INDEX IF NOT EXISTS mentions_key ON mentions(key);
 CREATE INDEX IF NOT EXISTS mentions_note ON mentions(note_id);
 """                                 # v3.18.0: one `ents` row per note (kind "" for a note that is no card) with the
                                     # note's hash and path, so a row an older build left behind is known as stale
                                     # (plan C11) — the path too, as SQLite gives a removed note's id to the next one
-ENTITY_TABLES = ("ents", "links", "mentions", "facts")        # facts since v4.0.0 (a card's numbers, ctx_facts)
+ENTITY_TABLES = ("ents", "links", "mentions", "facts", "facts_src")        # facts since v4.0.0 (a card's numbers, ctx_facts)
 FACT_FIELDS = ("actual", "target", "value", "baseline", "current")
-FACTS_VERSION = 2                   # meta `facts_version`: an index of another value reads its cards once more for their
+FACTS_VERSION = 3                   # meta `facts_version`: an index of another value reads its cards once more for their
                                     # facts (2: never a person's card or a sensitive one — review B1 of tasks 7–9)
 GRAPH_DDL = """
 CREATE TABLE IF NOT EXISTS names(path TEXT PRIMARY KEY, source TEXT, dataless INTEGER, md INTEGER);
@@ -1363,6 +1364,8 @@ class Index:
             con.rollback()                           # (review I-6); the next refresh builds the graph again
             try:
                 con.execute("DELETE FROM meta WHERE key = 'graph_version'")
+                con.executescript(cg.EDGE_DDL.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ")
+                                  .replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS "))   # read as empty meanwhile
                 con.commit()
             except sqlite3.DatabaseError:
                 pass
@@ -1693,6 +1696,10 @@ class _Walk:
                                                      # slot fields: such a row is read again too, v3.19.0)
         if facts_ok != str(FACTS_VERSION):           # v4.0.0: an earlier index's cards, read once more for their facts
             self.stale_ents |= {r[0] for r in con.execute("SELECT note_id FROM ents WHERE kind != ''")}
+        else:                                        # a card an older build read again: its facts are of another hash
+            self.stale_ents |= {r[0] for r in con.execute(   # (facts_src; final review I1)
+                "SELECT e.note_id FROM ents e JOIN notes n ON n.id = e.note_id LEFT JOIN facts_src f ON f.note_id = n.id "
+                "WHERE e.kind != '' AND f.hash IS NOT n.hash")}
 
     def _outside(self, path):
         """Is this index name one of a root outside every vault (`@<its source>/…`)? A vault's own `@Name.md` is not."""
@@ -1950,6 +1957,8 @@ class _Walk:
         self.con.executemany("INSERT INTO mentions(note_id, key, browse) VALUES (?, ?, ?)",
                              [(nid, k, int(b)) for k, b in mentions])
         fm, _ = _frontmatter((text or "").replace("\r\n", "\n"))
+        if ident.get("kind"):                        # the hash a card's facts were taken from, none or some
+            self.con.execute("INSERT OR REPLACE INTO facts_src(note_id, hash) VALUES (?, ?)", (nid, digest))
         if ident.get("kind") and ident.get("kind") != "person" and not sensitive_of(fm or {}) \
                 and not one_on_one(rel, title):      # v4.0.0: a card's facts — never a person's, never a sensitive one
             self.con.executemany("INSERT INTO facts(note_id, hash, attribute, value, period, observed_at, field) "

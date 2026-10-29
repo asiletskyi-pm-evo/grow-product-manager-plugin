@@ -139,6 +139,21 @@ with tempfile.TemporaryDirectory() as d:                 # a note indexed, then 
           and not any(f["path"] == "Notes/Two related.md" for f in res["findings"] if f["kind"] == "region")
           and any(p.endswith("Broken region.md") for p in opened), [p for p in opened if p.endswith(".md")][:8])
 
+with tempfile.TemporaryDirectory() as d:                 # final review B1: a sensitive note's links never said
+    env = VaultEnv(d)
+    write(env.note("Notes/Meetings/1-1 Bea 2026-10-20.md"), "---\ntype: meeting-notes\ncreated: 2026-10-20\n"
+                                                            "concern_owner: \"[[Severance terms]]\"\n---\n# 1-1 Bea\n\n"
+                                                            "See [[Layoff plan Q4]] and [[bea]].\n")
+    rc, out, res = env.run("audit", "--json")
+    mine = [f for f in res["findings"] if f["path"] == "Notes/Meetings/1-1 Bea 2026-10-20.md"]
+    text = env.run("audit")[1]
+    check("v4.0.0 final review B1: a 1-1 note's dead and ambiguous links are counted, never named — no target, no "
+          "field, no candidates, not fixable; the lines say «· sensitive»",
+          mine and all(f["detail"].get("sensitive") and not f["detail"]["target"] and not f["detail"]["field"]
+                       and not f["fixable"] for f in mine if f["kind"] in ("dead", "ambiguous"))
+          and "Severance" not in out + text and "Layoff" not in out + text and "concern_owner" not in out + text
+          and "Notes/Meetings/1-1 Bea 2026-10-20.md · sensitive" in text, (mine, text[-600:]))
+
 with tempfile.TemporaryDirectory() as d:                 # the line in `ctx health`
     env = VaultEnv(d)
     rc, out, _ = env.run("migrate", "--apply")

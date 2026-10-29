@@ -155,7 +155,9 @@ def _graph(con, roots):
     dead = con.execute("SELECT n.path, n.source, u.target, u.field, u.why, u.candidates_json FROM unresolved u "
                        "JOIN notes n ON n.id = u.src_id ORDER BY n.path, u.target").fetchall()
     names = con.execute("SELECT path, source, dataless, md FROM names").fetchall()
-    return rows, out_ids, in_paths, dead, names
+    sens = {p for p, t, ty, s in con.execute("SELECT path, title, type, sensitive FROM notes")
+            if s or (ty or "").lower() in ci.PEOPLE_TYPES or ci.one_on_one(p, t)}
+    return rows, out_ids, in_paths, dead, names, sens
 
 
 def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True):
@@ -175,7 +177,7 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
             res["notes"].append(idx.problem)
         res["read"] = False
         return res
-    rows, out_ids, in_paths, dead, names = got
+    rows, out_ids, in_paths, dead, names, sens = got
     tmap = type_folder_map()
     tax = taxonomy(tmap)
     providers = [r.get("id") for r in sctx.get("repos") or [] if r.get("id")]
@@ -194,7 +196,8 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
         if not linked_in:
             no_inbound += 1
         if not linked_out and not linked_in:
-            findings.append({"kind": "orphan", "path": path, "detail": {"type": typ or ""}, "fixable": True})
+            findings.append({"kind": "orphan", "path": path, "detail": {"type": "" if path in sens else typ or ""},
+                             "fixable": True})
         try:
             if ci.is_dataless(disk) or os.path.getsize(disk) > ci.MAX_BYTES:
                 continue
@@ -206,8 +209,9 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
         _, problems = rg.parse(text, providers=providers)
         if problems or rg.ends_in_fence(text):
             broken.add(path)
-        for p in problems:
-            findings.append({"kind": "region", "path": path, "detail": {"why": p["why"], "ns": p["ns"], "id": p["id"]},
+        for p in problems:                       # a sensitive note's heading never shown (final review B1)
+            findings.append({"kind": "region", "path": path, "detail": {"why": p["why"], "ns": p["ns"],
+                                                                        "id": None if path in sens else p["id"]},
                              "fixable": False})
         fm, _ = ci._frontmatter(text)
         block = cbr.frontmatter(text) is not None
@@ -246,6 +250,9 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
         d = {"target": target, "field": field or "", "candidates": cands}
         if not free:
             d["where"] = "region"                # only inside a region of a script, or the note is not read: left
+        if path in sens:                         # what a sensitive note links is never said (final review B1)
+            d = {"target": "", "field": "", "candidates": [], "sensitive": True}
+            free = False
         here = [c for c in cands if vault(c) is not None and vault(c) == vault(path)]
         findings.append({"kind": kind, "path": path, "detail": d,
                          "fixable": free and path not in broken
@@ -361,6 +368,8 @@ def health(home, has_vault, today):
 # ------------------------------------------------------------------ the lines
 def _example(f):
     d = f["detail"]
+    if d.get("sensitive"):
+        return "%s · sensitive" % f["path"]
     if f["kind"] in ("dead", "ambiguous"):
         return "%s → «%s»%s" % (f["path"], d["target"], (" (є: %s)" % ", ".join(d["candidates"][:3])) if d["candidates"] else "")
     if f["kind"] == "region":
