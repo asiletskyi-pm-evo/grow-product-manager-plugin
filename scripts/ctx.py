@@ -2114,6 +2114,31 @@ def cmd_graph(a, c):
 
 
 GRAPH_KINDS = ("wikilink", "embed", "fm", "same_as", "mention")
+def cmd_serve(a, c):
+    """`serve` (since v4.0.0, ctx_serve): the local MCP server of vault/v1 over the plugin's index — stdio, read only; it
+    prints nothing but the protocol on stdout (no CTX_RESULT: main leaves it out). `serve --install`: the launcher
+    ~/.grow-pm/bin/ctx-serve and the lines a client's config takes."""
+    import ctx_serve as csv_
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if a.install:
+        path, written = csv_.install(c.home, root)
+        print("ctx serve: %s %s" % ("записано" if written else "уже є", path))
+        print("Claude Desktop — claude_desktop_config.json → mcpServers:")
+        print("  " + csv_.config_lines(path)[0])
+        print("Codex CLI:")
+        print("  " + csv_.config_lines(path)[1])
+        return 0, {"command": "serve", "action": "install", "launcher": path, "written": written,
+                   "config": csv_.config_lines(path)}
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    version = ""
+    try:
+        with open(os.path.join(root, ".claude-plugin", "plugin.json"), encoding="utf-8") as f:
+            version = json.load(f).get("version") or ""
+    except (OSError, ValueError):
+        pass
+    return csv_.serve(sctx, sys.stdin, sys.stdout, version=version), {"command": "serve"}
+
+
 NO_STORE_NORMALIZE = "немає сховища — нормалізатор не пише: `ctx undo` живе у сховищі (ctx migrate --apply)"
 
 
@@ -2698,6 +2723,12 @@ def cmd_provider_sync(a, c):
         copies = {}
     if copies:
         out = dict(out, copy=copies)
+    try:                                                # since v4.0.0: the launcher of `ctx serve` follows the plugin
+        import ctx_serve as csv_
+        if csv_.relaunch_if_moved(c.home, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
+            out = dict(out, launcher="rewritten")
+    except Exception:  # noqa: BLE001 — a launcher never changes the sync's own result
+        pass
     return rc, out
 
 
@@ -3636,6 +3667,7 @@ def build_parser():
     vp = sub.add_parser("vault").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = vp.add_parser("normalize", parents=[common]); sp.add_argument("--only"); sp.add_argument("--skip")
     sp.add_argument("--apply", action="store_true"); sp.add_argument("--code"); sp.add_argument("--json", action="store_true")
+    sp = sub.add_parser("serve", parents=[common]); sp.add_argument("--install", action="store_true")
     sp = sub.add_parser("audit", parents=[common]); sp.add_argument("--all", dest="all_", action="store_true")
     sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("graph", parents=[common]); sp.add_argument("words", nargs="+")
@@ -3686,7 +3718,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot, "overlay": cmd_overlay, "history": cmd_history, "identity": cmd_identity,
-            "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "graph": cmd_graph, "audit": cmd_audit, "vault": cmd_vault, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
+            "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "graph": cmd_graph, "audit": cmd_audit, "vault": cmd_vault, "serve": cmd_serve, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
             "inbox": cmd_inbox, "bootstrap": cmd_bootstrap, "consolidate": cmd_consolidate}
 
 
@@ -3731,6 +3763,8 @@ def main(argv=None):
                     co.summary_in_time(c.found, home=c.home)
                 except Exception:  # noqa: BLE001 — a cache never changes the command's result
                     pass
+        if a.cmd == "serve" and not a.install:          # stdout is the protocol's: nothing after it ends
+            return rc
         emit(dict({k: v for k, v in res.items() if not str(k).startswith("_")}, ok=rc == 0))
         return rc
     except co.Conflict as e:
