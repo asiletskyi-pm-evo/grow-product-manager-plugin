@@ -12,6 +12,29 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.0.1 (2026-10-29)
+
+**Локальний індекс у WAL: a vault index of your own is read, not called an unknown schema.** A registered local index in WAL mode with no `-wal` beside it — a copy of the database file alone, or one whose writer's SQLite removed its `-wal` and `-shm` on close — could not be opened read only (SQLite would have to make the `-shm`), and every reader of it said `індекс <id> має незнайому схему — без нього`: `ctx search`, `ctx entity`, the cards and hints of the registry and the index date of the SessionStart digest went without it. Its tables were never the problem — the shape seen in the wild (`notes_fts` with `path`, `notes` by path, meta `k/v`) is read since v3.16.0.
+
+PATCH: a fix of how a local index is opened; no command, no skill, no schema changed.
+
+### Fixed
+
+- **A WAL file alone is read as `immutable`** (`ctx_search.open_local`, used by `ctx search` and `--get`, `ctx entity` cards and hints; the same in `session_start.py`): `mode=ro` first; only when SQLite cannot open the file so and there is no `-wal` beside it — then the file alone is the whole index — again with `immutable=1`. Either way nothing is written to the index and no file is made beside it. While its tool holds it open (`-wal` and `-shm` there), it is read as before, a note still only in the `-wal` included.
+- **An index that cannot be opened now** is `<id> не відповів — без нього`, never `незнайому схему`.
+- Protocol: `context-provider-protocol.md` §10.
+- Tests: `ctx_entity_test.py` — the user's own vault index as its tool builds it (its tables, FTS5 `unicode61 remove_diacritics 2`, WAL mode, meta `vault` and `last_index`; fictional Zorg notes), read by `ctx search` and `ctx entity` with the file alone and while a writer holds it, its bytes unchanged; `session_start_test.py` — the index date of a WAL file alone. Each failed before the fix with the line seen in the acceptance.
+
+### Acceptance
+
+On a scratch copy of the author's own vault index (6 951 notes, WAL mode; the real file only copied): the database file alone — v4.0.0 `індекс … має незнайому схему`, v4.0.1 the same 32 result lines as a copy with its `-shm` and `-wal`, and `ctx entity` cards from it; the copy's bytes unchanged, nothing made beside it.
+
+### Backwards compatibility
+
+- An index that opened before opens the same way; nothing else changed.
+
+---
+
 ## v4.0.0 (2026-10-29)
 
 **«Вейлт: аудит і граф»: the links of your vault, seen and tidied.** The index now knows every file a link may land on and resolves every link once: `ctx graph` shows what is around a note or an entity, `ctx audit` names what breaks the links of your layer, and `ctx vault normalize` fixes what a machine can — with a report, your code, a snapshot and `ctx undo`. A card's numbers become facts with their period and day, every answer from a note can show the trust of its source, and `ctx serve` gives all of it to a host without a shell as a local MCP server. The last release of the programme «Петля контексту».
