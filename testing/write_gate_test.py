@@ -142,6 +142,16 @@ with tempfile.TemporaryDirectory() as d:
     out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": outside, "old_string": "- [[Standup]]",
                                                         "new_string": "x"}})
     check("…a file outside every vault is not the gate's", out == "", out)
+    upper = note.replace(os.sep + "Vault" + os.sep, os.sep + "VAULT" + os.sep)
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": upper, "old_string": "- [[Standup]]",
+                                                        "new_string": "x"}})
+    check("v4.0.0 review M-6: the same note named in another case (APFS) is still the gate's",
+          not os.path.exists(upper) or '"permissionDecision": "ask"' in out, out)
+    out = run(env, {"tool_name": "MultiEdit", "tool_input": {"file_path": note, "edits": [
+        {"old_string": "Mine.", "new_string": "Mine. <!-- ctx:begin id=z -->"},
+        {"old_string": "id=z -->", "new_string": "id=y -->"}]}})
+    check("v4.0.0 review M-7: a MultiEdit whose later edit touches what an earlier one made a marker asks",
+          '"permissionDecision": "ask"' in out, out)
     open(os.path.join(pdata, "config.json"), "w").write('{"write_gate": "off"}')
     out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": note, "old_string": "- [[Standup]]", "new_string": "x"}})
     check("…write_gate off: no question", out == "", out)

@@ -99,6 +99,20 @@ check("v4.0.0 outside_targets: the links outside every region and code block, as
       rg.outside_targets("[[A#x|a]] ![[P.png]]\n<!-- ctx:begin id=r -->\n[[B]]\n<!-- ctx:end id=r -->\n```\n[[C]]\n```\n")
       == {"A", "P.png"})
 
+import time
+t0 = time.time()
+rg.parse("`a " * 300000)
+many = "".join("## H%d\n<!-- ctx:begin id=r%d -->\nx\n<!-- ctx:end id=r%d -->\n" % (i, i, i) for i in range(5000))
+hit = rg.touches(many, "x")
+took = time.time() - t0
+check("v4.0.0 review M-4/M-5: a long line of backticks and 5 000 regions with a one-letter edit — under 3 s in all "
+      "(%.2f s)" % took, took < 3 and hit)
+nested = "a\n<!-- ctx:begin id=o -->\n<!-- generated:begin id=i -->\n<!-- generated:end id=i -->\ninner\n<!-- ctx:end id=o -->\nz\n"
+check("…a text inside an outer region after an inner one has ended is on a region; text after both is not",
+      rg.touches(nested, "inner") and not rg.touches(nested, "z\n"))
+check("…code spans: one run closed by the next run of its length, an unclosed run is text",
+      rg._mask_spans("a `x` b ``y`z`` c `d") == "a " + " " * 3 + " b " + " " * 7 + " c `d")
+
 errs = rg.check_registry(ROOT)
 check("v4.0.0 the registry table of references/vault-schema.md is the constant NAMESPACES", errs == [], errs)
 check("…the registry holds the namespaces of the concept and the plugin's own",

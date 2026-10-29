@@ -81,7 +81,17 @@ def content_size(obj):
     return best
 
 
+_CONTEXT = {}
+
+
 def context_text(cwd=None):
+    """Read once per run (review M-8) — see _context_text."""
+    if cwd not in _CONTEXT:
+        _CONTEXT[cwd] = _context_text(cwd)
+    return _CONTEXT[cwd]
+
+
+def _context_text(cwd=None):
     """The user's local-context.md: the digest's path, the canonical store, then every place the
     SessionStart digest searches (connected folders in hosted sessions, the working directory)."""
     cands = [os.environ.get("GROW_PM_CONTEXT_PATH"), os.path.join(os.path.expanduser("~"), ".grow-pm", "local-context.md")]
@@ -131,12 +141,13 @@ def region_hit(tool, tool_input, cwd=None, text=None):
     real = os.path.realpath(os.path.expanduser(path))
     text = context_text(cwd) if text is None else text
     inside = False
+    fold = lambda p_: cc.N(p_).casefold()        # APFS: one file under NFC and NFD, any case (review M-6)
     for vault, _folder in cc.vault_entries(text):
-        root = os.path.realpath(vault)
-        if real == root or real.startswith(root + os.sep):
+        root = os.path.realpath(os.path.expanduser(vault))
+        if fold(real) == fold(root) or fold(real).startswith(fold(root) + os.sep):
             inside = True
-            rel = os.path.relpath(real, root).replace(os.sep, "/")
-            if "/_System/context/" in "/" + rel:
+            rel = fold(real)[len(fold(root)):].replace(os.sep, "/")
+            if "/_system/context/" in rel:
                 return None, path
     if not inside or not os.path.isfile(real):
         return None, path
@@ -170,10 +181,13 @@ def region_hit(tool, tool_input, cwd=None, text=None):
                     gone[0]["ns"] if gone else "a region marker"), path
         return None, path
     edits = tool_input.get("edits") if tool == "MultiEdit" else [tool_input]
-    for e in edits or []:
-        snippet = str((e or {}).get("old_string") or "")
-        if rg.touches(old, snippet):
-            return name(snippet), path
+    cur = old
+    for e in edits or []:                        # each edit against the text the ones before it left (review M-7)
+        snippet, repl = str((e or {}).get("old_string") or ""), str((e or {}).get("new_string") or "")
+        if rg.touches(cur, snippet):
+            return (name(snippet) if snippet in old else "a region"), path
+        if snippet:
+            cur = cur.replace(snippet, repl) if (e or {}).get("replace_all") else cur.replace(snippet, repl, 1)
     return None, path
 
 

@@ -35,7 +35,18 @@ import ctx_common as cc  # noqa: E402
 import ctx_index as ci  # noqa: E402
 
 N = cc.N
-GRAPH_VERSION = 1                  # the rules of the edges (meta `graph_version`): another value builds them all again
+GRAPH_VERSION = 2                  # the rules of the edges (meta `graph_version`): another value makes the tables anew
+EDGE_DDL = """
+CREATE TABLE edges(src_id INTEGER, dst TEXT, kind TEXT, field TEXT, anchor TEXT, ambiguous INTEGER);
+CREATE INDEX edges_src ON edges(src_id);
+CREATE INDEX edges_dst ON edges(dst);
+CREATE TABLE unresolved(src_id INTEGER, target TEXT, field TEXT, why TEXT, candidates_json TEXT);
+CREATE INDEX unresolved_src ON unresolved(src_id);
+CREATE TABLE graph_src(note_id INTEGER PRIMARY KEY, hash TEXT);
+"""                                # graph_src: the hash of the note each one's edges were built from (review I-2: an
+                                   # older build that shares the index re-reads a note and leaves its edges as they were)
+EDGE_TABLES = ("edges", "unresolved", "graph_src")
+CHUNK_SQL = 400                    # the variables of one `IN (…)` (SQLite before 3.32 allows 999)
 
 
 def _stem(path):
@@ -53,14 +64,17 @@ class Resolver:
         for p, v in (notes or {}).items():
             self.meta[N(p)] = dict(v) if isinstance(v, dict) else {"title": v}
         self.prefixes = [N(p).strip("/") for p in plugin_prefixes or () if p]
-        self.exact, self.tails, self.names, self.local = {}, {}, {}, set()
+        self.exact, self.tails, self.names, self.local, self.files = {}, {}, {}, set(), {}
         for p in self.meta:
             cf = p.casefold()
             self.exact.setdefault(cf, []).append(p)
             parts = cf.split("/")
             for i in range(1, len(parts)):
                 self.tails.setdefault("/".join(parts[i:]), []).append(p)
-            self.names.setdefault(ci.name_key(p), []).append(p)
+            if p.lower().endswith(".md"):
+                self.names.setdefault(ci.name_key(p), []).append(p)
+            else:                               # since v4.0.0: a file that is not .md answers its whole name alone
+                self.files.setdefault(p.rsplit("/", 1)[-1].casefold(), []).append(p)
             if self.meta[p].get("origin") == "local":
                 self.local.add(p)
 
@@ -92,7 +106,7 @@ class Resolver:
         if t.casefold() in self.exact:          # since v4.0.0: a file that is not .md, named with its extension
             return self._one(self.exact[t.casefold()])
         if "/" not in base:                     # a name: the own index's notes first, as --get looks (`_by_name`)
-            hits = self.names.get(ci.name_key(base)) or []
+            hits = self.names.get(ci.name_key(base)) or self.files.get(t.casefold()) or []
             return self._one([p for p in hits if p not in self.local] or hits)
         for pre in self.prefixes:               # a path: the plugin folder's, then the end of a path (`_by_tail`)
             for key in ((pre + "/" + base + ".md").casefold(), (pre + "/" + t).casefold()):
@@ -103,7 +117,8 @@ class Resolver:
 
     def same_name(self, target):
         """The notes whose name is the target's — a dead link's candidates (a path that is not there)."""
-        return sorted(set(self.names.get(ci.name_key(self.clean(target))) or []))
+        t = self.clean(target)
+        return sorted(set(self.names.get(ci.name_key(t)) or self.files.get(t.rsplit("/", 1)[-1].casefold()) or []))
 
     def title(self, path):
         return (self.meta.get(path) or {}).get("title") or _stem(path)
@@ -128,40 +143,82 @@ def stale(con):
     return _meta(con, "graph_version") != str(GRAPH_VERSION)
 
 
-def build(con, prefixes, changed=None, full=False):
-    """The edges and the unresolved links into `con` (the index, read-write): all of them when `full` (or never built,
-    or other rules), else those of the notes `changed` (their ids) alone. Returns how many rows were written."""
-    con.executescript(ci.GRAPH_DDL)
-    full = full or stale(con)
-    ids = None if full else sorted({int(i) for i in changed or ()})
-    if ids is not None and not ids:
-        return 0
-    if ids and con.execute("SELECT 1 FROM ents WHERE kind = 'work' AND note_id IN (%s) LIMIT 1"
-                           % ",".join("?" * len(ids)), ids).fetchone():
-        full, ids = True, None                  # a work card changed: the mentions of its key elsewhere may change too
+def _ids_in(con, sql, values):
+    out = set()
+    values = list(values)
+    for i in range(0, len(values), CHUNK_SQL):
+        part = values[i:i + CHUNK_SQL]
+        out.update(r[0] for r in con.execute(sql % ",".join("?" * len(part)), part))
+    return out
+
+
+def _work(con):
+    """{key: [paths]} of the work cards — when it changes, every mention is resolved again (review I-1)."""
+    work = {}
+    for path, key in con.execute("SELECT n.path, e.key FROM ents e JOIN notes n ON n.id = e.note_id "
+                                 "AND e.hash = n.hash AND e.path = n.path WHERE e.kind = 'work' AND e.key != ''"):
+        work.setdefault(key, set()).add(N(path))
+    return {k: sorted(v) for k, v in sorted(work.items())}
+
+
+def build(con, prefixes, changed=None, name_keys=(), full=False):
+    """The edges and the unresolved links into `con` (the index, read-write). All of them when `full`, when they were
+    never built or built by other rules (the tables made anew), or when the work cards changed; else those of the notes
+    `changed` (their ids), of the notes whose links name one of `name_keys` (names that came or went), and of every
+    note whose hash is not the one its edges were built from. Returns how many rows were written."""
+    tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if stale(con) or not set(EDGE_TABLES) <= tables:
+        for t in EDGE_TABLES:
+            con.execute("DROP TABLE IF EXISTS %s" % t)
+        con.executescript(EDGE_DDL)
+        full = True
+    work = _work(con)
+    fp = json.dumps(work, ensure_ascii=False, sort_keys=True)
+    if _meta(con, "graph_work") != fp:
+        full = True
+    paths = {nid: N(p) for nid, p in con.execute("SELECT id, path FROM notes")}
+    if full:
+        ids = None
+    else:
+        ids = {int(i) for i in changed or ()}
+        ids |= {r[0] for r in con.execute("SELECT n.id FROM notes n LEFT JOIN graph_src g ON g.note_id = n.id "
+                                          "WHERE g.hash IS NOT n.hash")}
+        if name_keys:
+            ids |= _ids_in(con, "SELECT DISTINCT note_id FROM links WHERE tkey IN (%s)", sorted(name_keys))
+        gone = [r[0] for r in con.execute("SELECT note_id FROM graph_src WHERE note_id NOT IN (SELECT id FROM notes)")]
+        for t, col in (("edges", "src_id"), ("unresolved", "src_id"), ("graph_src", "note_id")):
+            for i in range(0, len(gone), CHUNK_SQL):
+                part = gone[i:i + CHUNK_SQL]
+                con.execute("DELETE FROM %s WHERE %s IN (%s)" % (t, col, ",".join("?" * len(part))), part)
+        ids &= set(paths)
+        if not ids:
+            if gone:
+                con.commit()
+            return 0
     metas = {}
     for path, title, source in con.execute("SELECT path, title, source FROM notes"):
         metas[N(path)] = {"title": title, "source": source}
     for path, source in con.execute("SELECT path, source FROM names"):
         metas.setdefault(N(path), {"title": _stem(N(path)), "source": source})
     res = Resolver(metas, prefixes)
-    work = {}
-    for path, key in con.execute("SELECT n.path, e.key FROM ents e JOIN notes n ON n.id = e.note_id "
-                                 "AND e.hash = n.hash AND e.path = n.path WHERE e.kind = 'work' AND e.key != ''"):
-        work.setdefault(key, set()).add(N(path))
-    paths = {nid: N(p) for nid, p in con.execute("SELECT id, path FROM notes")}
-    if full:
-        con.execute("DELETE FROM edges")
-        con.execute("DELETE FROM unresolved")
+    by_key = {k: set(v) for k, v in work.items()}
+    if ids is None:
+        for t in EDGE_TABLES:
+            con.execute("DELETE FROM %s" % t)
         rows = con.execute("SELECT note_id, field, target, anchor, embed FROM links").fetchall()
         mentions = con.execute("SELECT note_id, key FROM mentions").fetchall()
+        done = set(paths)
     else:
-        marks = ",".join("?" * len(ids))
-        con.execute("DELETE FROM edges WHERE src_id IN (%s)" % marks, ids)
-        con.execute("DELETE FROM unresolved WHERE src_id IN (%s)" % marks, ids)
-        rows = con.execute("SELECT note_id, field, target, anchor, embed FROM links WHERE note_id IN (%s)" % marks,
-                           ids).fetchall()
-        mentions = con.execute("SELECT note_id, key FROM mentions WHERE note_id IN (%s)" % marks, ids).fetchall()
+        rows, mentions, order = [], [], sorted(ids)
+        for i in range(0, len(order), CHUNK_SQL):
+            part = order[i:i + CHUNK_SQL]
+            marks = ",".join("?" * len(part))
+            for t, col in (("edges", "src_id"), ("unresolved", "src_id"), ("graph_src", "note_id")):
+                con.execute("DELETE FROM %s WHERE %s IN (%s)" % (t, col, marks), part)
+            rows += con.execute("SELECT note_id, field, target, anchor, embed FROM links WHERE note_id IN (%s)" % marks,
+                                part).fetchall()
+            mentions += con.execute("SELECT note_id, key FROM mentions WHERE note_id IN (%s)" % marks, part).fetchall()
+        done = ids
     edges, dead, seen = [], [], set()
     for nid, field, target, anchor, embed in rows:
         src = paths.get(nid)
@@ -182,13 +239,17 @@ def build(con, prefixes, changed=None, full=False):
             edges.append((nid, hit, kind, field or "", anchor or "", 0))
     for nid, key in mentions:
         src = paths.get(nid)
-        for dst in sorted(work.get(key) or ()):
+        for dst in sorted(by_key.get(key) or ()):
             if src is not None and dst != src and (nid, dst, "mention") not in seen:
                 seen.add((nid, dst, "mention"))
                 edges.append((nid, dst, "mention", "", key, 0))
     con.executemany("INSERT INTO edges(src_id, dst, kind, field, anchor, ambiguous) VALUES (?, ?, ?, ?, ?, ?)", edges)
     con.executemany("INSERT INTO unresolved(src_id, target, field, why, candidates_json) VALUES (?, ?, ?, ?, ?)", dead)
+    hashes = dict(con.execute("SELECT id, hash FROM notes").fetchall())
+    con.executemany("INSERT OR REPLACE INTO graph_src(note_id, hash) VALUES (?, ?)",
+                    [(i, hashes.get(i)) for i in sorted(done)])
     con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('graph_version', ?)", (str(GRAPH_VERSION),))
+    con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('graph_work', ?)", (fp,))
     con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('graph_built', ?)",
                 (datetime.datetime.now().astimezone().isoformat(timespec="seconds"),))
     con.commit()
@@ -260,37 +321,56 @@ def _about(con, paths):
                       "sensitive": bool(sens) or (typ or "").lower() in ci.PEOPLE_TYPES or ci.one_on_one(p, title),
                       "dataless": False}
         for p, source, dl in con.execute("SELECT path, source, dataless FROM names WHERE path IN (%s)" % marks, part):
-            if p not in out:
-                out[p] = {"title": _stem(p), "source": source, "type": "", "sensitive": False, "dataless": bool(dl)}
+            if p not in out:                     # a name alone (evicted, a picture): sensitive by its folder (review M-2)
+                out[p] = {"title": _stem(p), "source": source, "type": "", "dataless": bool(dl),
+                          "sensitive": _people_path(p) or ci.one_on_one(p, _stem(p))}
             elif dl:
                 out[p]["dataless"] = True
     return out
+
+
+def _people_path(path):
+    """Is a path under a people folder (`People/` at any depth) — sensitive before it is read (search-protocol §6)?"""
+    return "people" in [x.casefold() for x in path.split("/")[:-1]]
+
+
+def _private(node):
+    """A sensitive node as `ctx graph` may show it (data-policy, review I-4): its title and path, no type, and the kinds
+    of its edges without the field a link stood in (`fm`, never `fm:<field>`)."""
+    if node.get("sensitive"):
+        node["type"] = ""
+        node["kinds"] = sorted({("fm" if k.startswith("fm:") else k) for k in node.get("kinds") or ()})
+    return node
 
 
 def neighbourhood(con, start, depth=1, kinds=None, limit=LIMIT):
     """The nodes 1..depth hops from the names `start` (hop 0), each hop at most `limit` of them — those most joined to
     the hop before first, then by path —, and {hop: how many more}. A node: {path, title, source, type, hop, dirs
     (→ the start links to it, ← it links to the start), kinds, via (the nodes of the hop before it is joined to),
-    ambiguous, sensitive, dataless}."""
+    ambiguous, sensitive, dataless}. A sensitive node is shown as _private says and the walk never goes on through it:
+    what it links is its text (review I-4). The next hop starts from the nodes shown (review M-3)."""
     seen, frontier, nodes, more = set(start), list(start), [], {}
     for hop in range(1, max(1, int(depth)) + 1):
         found = _hop(con, frontier, seen, kinds)
         order = sorted(found, key=lambda p: (-found[p]["degree"], p))
         shown, more[hop] = order[:limit], max(0, len(order) - limit)
         about = _about(con, shown)
+        nxt = []
         for p in shown:
             f, a = found[p], about.get(p) or {"title": _stem(p), "source": "", "type": "", "sensitive": False,
                                               "dataless": False}
-            nodes.append(dict(a, path=p, hop=hop, dirs=sorted(f["dirs"]), kinds=sorted(f["kinds"]), via=f["via"][:3],
-                              ambiguous=f["ambiguous"]))
+            nodes.append(_private(dict(a, path=p, hop=hop, dirs=sorted(f["dirs"]), kinds=sorted(f["kinds"]),
+                                       via=f["via"][:3], ambiguous=f["ambiguous"])))
+            if not a.get("sensitive"):
+                nxt.append(p)
         seen.update(order)
-        frontier = order
+        frontier = nxt
         if not frontier:
             break
     return nodes, more
 
 
-def _start(reg, query):
+def _start(reg, query, names=()):
     """(paths, how): the names a request starts from — a path, a [[link]] or a name as `--get` takes it (one note), else
     an entity (ctx_entity: an e-mail, a Jira key, a name — all its cards); several → (list of choices, "several")."""
     hit = reg.resolver.resolve(query)
@@ -303,6 +383,12 @@ def _start(reg, query):
         return [c["path"] for c in found[0]["cards"]], "entity"
     if found:
         return [e["id"] for e in found], "several"
+    if names:                                   # a name alone — a picture, an evicted note (review M-9)
+        hit = Resolver({p: _stem(p) for p in names}, reg.resolver.prefixes).resolve(query)
+        if isinstance(hit, str):
+            return [hit], "path"
+        if isinstance(hit, list):
+            return hit, "several"
     return [], "none"
 
 
@@ -315,7 +401,8 @@ def run(sctx, query, depth=1, kinds=None, store=None, budget=None):
     idx, reg, notes, read, pending = ce._prepare(sctx, store, budget)
     out = {"command": "graph", "query": query, "how": "none", "start": [], "depth": int(depth), "nodes": [],
            "more": {}, "elapsed_ms": None, "notes": list(notes), "read": read, "pending": pending}
-    paths, how = _start(reg, query)
+    names = idx._read(lambda con: [r[0] for r in con.execute("SELECT path FROM names")], [])
+    paths, how = _start(reg, query, names)
     out["how"] = how
     if how in ("none", "several"):
         out["choices"] = paths
@@ -324,8 +411,8 @@ def run(sctx, query, depth=1, kinds=None, store=None, budget=None):
 
     def walk(con):
         about = _about(con, paths)
-        start = [dict(about.get(p) or {"title": _stem(p), "source": "", "type": "", "sensitive": False, "dataless": False},
-                      path=p, hop=0) for p in paths]
+        start = [_private(dict(about.get(p) or {"title": _stem(p), "source": "", "type": "", "sensitive": False,
+                                                "dataless": False}, path=p, hop=0)) for p in paths]
         nodes, more = neighbourhood(con, paths, depth, kinds)
         return start, nodes, more
 

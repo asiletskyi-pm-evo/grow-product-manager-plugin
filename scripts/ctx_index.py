@@ -155,12 +155,8 @@ CREATE INDEX IF NOT EXISTS mentions_note ON mentions(note_id);
 ENTITY_TABLES = ("ents", "links", "mentions")
 GRAPH_DDL = """
 CREATE TABLE IF NOT EXISTS names(path TEXT PRIMARY KEY, source TEXT, dataless INTEGER, md INTEGER);
-CREATE TABLE IF NOT EXISTS edges(src_id INTEGER, dst TEXT, kind TEXT, field TEXT, anchor TEXT, ambiguous INTEGER);
-CREATE INDEX IF NOT EXISTS edges_src ON edges(src_id);
-CREATE INDEX IF NOT EXISTS edges_dst ON edges(dst);
-CREATE TABLE IF NOT EXISTS unresolved(src_id INTEGER, target TEXT, field TEXT, why TEXT, candidates_json TEXT);
-CREATE INDEX IF NOT EXISTS unresolved_src ON unresolved(src_id);
-"""                                 # v4.0.0: every file a link may land on (`names`, evicted ones too) and the links
+"""                                 # the derived tables (edges, unresolved, graph_src) are ctx_graph.EDGE_DDL: dropped
+                                    # and made again whenever their rules change (ctx_graph.GRAPH_VERSION)                                 # v4.0.0: every file a link may land on (`names`, evicted ones too) and the links
                                     # resolved (ctx_graph.build) — added in place to an earlier build's file
 ENTITY_COLS = ("kind", "label", "emails_json", "team", "role", "slug", "aliases_json", "key", "bridges_json",
                "prefixes_json", "fields_json")       # fields_json since v3.19.0: an earlier build's table gets it in place
@@ -1327,9 +1323,17 @@ class Index:
         file is read again for its metadata (META_VERSION); the version is written once a walk ends with nothing left."""
         walk = _Walk(con, roots, store_rel, blocks_rels, deadline, res, reread=reread)
         queue = walk.run(saved)
+        con.commit()
         import ctx_graph as cg                       # v4.0.0: the links resolved (imported here: it imports this one)
-        cg.build(con, [r["rel"] for r in walk.roots if r["source"] == "own"], walk.touched,
-                 full=walk.names_changed or bool(res["removed"]))
+        try:
+            cg.build(con, [r["rel"] for r in walk.roots if r["source"] == "own"], walk.touched, walk.name_keys)
+        except Exception:  # noqa: BLE001 — the graph is a cache of the section index: its fault never costs the index
+            con.rollback()                           # (review I-6); the next refresh builds the graph again
+            try:
+                con.execute("DELETE FROM meta WHERE key = 'graph_version'")
+                con.commit()
+            except sqlite3.DatabaseError:
+                pass
         if reread and not res["pending"]:
             con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('meta_version', ?)", (str(META_VERSION),))
         when = _now()
@@ -1599,6 +1603,11 @@ class Index:
         return out
 
 
+def _dotted(rel):
+    """Does an index name lie under a dot-folder or name a dot-file (`.git/…`, `.DS_Store`)? Never a name (review I-3)."""
+    return any(part.startswith(".") for part in rel.split("/"))
+
+
 def _alive(pid):
     try:
         os.kill(int(pid), 0)
@@ -1631,7 +1640,8 @@ class _Walk:
         self.names = {}                              # v4.0.0: every file a link may land on, evicted ones too
         for path, source, dataless, md in con.execute("SELECT path, source, dataless, md FROM names"):
             self.names[path] = {"source": source, "dataless": dataless, "md": md}
-        self.names_changed = False                   # a name came or went: every link is resolved again (ctx_graph)
+        self.name_keys = set()                       # the name keys of the names that came or went: the links that
+        self.names_changed = False                   # name them are resolved again (ctx_graph)
         self.touched = set()                         # the notes read again: their links are resolved again
         self.children = collections.defaultdict(set)
         for path in list(self.rows) + list(self.names):
@@ -1767,25 +1777,25 @@ class _Walk:
 
     def _file(self, ri, path, rel):
         try:
-            self._note(ri, path, rel)
-        finally:
-            if not _skip_folder(rel, self.store_rel):
-                self._name(ri, path, rel)
-
-    def _name(self, ri, path, rel):
-        """The file's row in `names` (v4.0.0): a regular file — a note, evicted or not, or any other file — is a name a
-        link may land on; it is written only when it is new or its flags changed. A file gone, or no longer a regular
-        one, is forgotten."""
-        try:
-            info = os.stat(path, follow_symlinks=False)
+            info = os.stat(path, follow_symlinks=False)    # once for the note and its name (v4.0.0, review I-5)
         except OSError:
             info = None
-        if info is None or not stat.S_ISREG(info.st_mode):
-            if rel in self.names:
-                self._forget(rel)
-            return
+        regular = info is not None and stat.S_ISREG(info.st_mode)
         md = rel.lower().endswith(".md")
-        want = {"source": self.roots[ri]["source"], "dataless": int(bool(md and is_dataless(path))), "md": int(md)}
+        dataless = bool(regular and md and is_dataless(path))
+        try:
+            self._note(ri, path, rel, info, dataless)
+        finally:
+            if regular and not _skip_folder(rel, self.store_rel) and not _dotted(rel):
+                self._name(ri, rel, dataless, md)
+            elif rel in self.names:
+                self._forget(rel)
+
+    def _name(self, ri, rel, dataless, md):
+        """The file's row in `names` (v4.0.0): a regular file — a note, evicted or not, or any other file but one under
+        a dot-folder or a dot-file (`.git/…`) — is a name a link may land on; written only when it is new or its flags
+        changed."""
+        want = {"source": self.roots[ri]["source"], "dataless": int(dataless), "md": int(md)}
         have = self.names.get(rel)
         if have == want:
             return
@@ -1794,27 +1804,27 @@ class _Walk:
         self.names[rel] = want
         if have is None:
             self.names_changed = True
+            self.name_keys.add(name_key(rel))
             self._know(rel)
 
     def _forget(self, rel):
         self.names.pop(rel, None)
         self.con.execute("DELETE FROM names WHERE path=?", (rel,))
         self.names_changed = True
+        self.name_keys.add(name_key(rel))
 
-    def _note(self, ri, path, rel):
+    def _note(self, ri, path, rel, info, dataless):
         if excluded(rel, self.store_rel, self.blocks):
             if rel in self.rows:
                 self._remove(rel)
             return
-        try:
-            info = os.stat(path, follow_symlinks=False)    # a link to a file is not followed, a queued one neither
-        except OSError:
+        if info is None:                                     # a link to a file is not followed, a queued one neither
             return
         if not stat.S_ISREG(info.st_mode):
             if rel in self.rows:                             # a queued link to a file: its earlier row goes
                 self._remove(rel)
             return
-        if is_dataless(path):
+        if dataless:
             self.res["skipped_dataless"] += 1
             row = self.rows.get(rel)
             if self.reread and row:                  # read once it comes down, its mtime as it was (v3.17.0)

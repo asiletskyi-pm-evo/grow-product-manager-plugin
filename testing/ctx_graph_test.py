@@ -194,9 +194,10 @@ with tempfile.TemporaryDirectory() as d:
 
     os.remove(env.note(ORPHAN))
     env.refresh()
-    check("v4.0.0 a name gone: the links to it are unresolved now (all links resolved again)",
+    check("v4.0.0 a name gone: the links that name it are resolved again — unresolved now —, the other notes' rows "
+          "untouched (review I-5: no build of everything)",
           (STANDUP2, ORPHAN, "wikilink", False) not in env.edges() and (STANDUP2, "Orphan") in env.unresolved()
-          and ORPHAN not in {p for p, in env.q("SELECT path FROM names")} and not marked(), env.unresolved())
+          and ORPHAN not in {p for p, in env.q("SELECT path FROM names")} and marked(), env.unresolved())
 
     os.remove(env.note(PICTURE))
     env.refresh()
@@ -208,14 +209,73 @@ with tempfile.TemporaryDirectory() as d:
     env = Env(d)
     env.refresh()
     con = sqlite3.connect(env.db)                    # an index of v3.24.0: no names, edges or unresolved, no graph meta
-    con.executescript("DROP TABLE names; DROP TABLE edges; DROP TABLE unresolved; "
-                      "DELETE FROM meta WHERE key IN ('graph_version', 'graph_built');")
+    con.executescript("DROP TABLE names; DROP TABLE edges; DROP TABLE unresolved; DROP TABLE graph_src; "
+                      "DELETE FROM meta WHERE key IN ('graph_version', 'graph_built', 'graph_work');")
     con.commit()
     con.close()
     res = env.refresh()
     check("v4.0.0 an index of v3.24.0 gets the tables in place, filled — no file read again, nothing rebuilt",
           res["changed"] == 0 and res["added"] == 0 and not res["rebuilt"]
           and (STANDUP, ALPHA, "wikilink", False) in env.edges() and env.q("SELECT count(*) FROM names")[0][0] > 10, res)
+
+with tempfile.TemporaryDirectory() as d:               # review of tasks 1–3: the hazards it reproduced
+    env = Env(d)
+    env.refresh()
+    con = sqlite3.connect(env.db)                    # the graph of an earlier rule set: a table of another shape
+    con.executescript("DROP TABLE unresolved; CREATE TABLE unresolved(src_id INTEGER, target TEXT, field TEXT, "
+                      "candidates_json TEXT); UPDATE meta SET value = '1' WHERE key = 'graph_version';")
+    con.commit()
+    con.close()
+    res = env.refresh()
+    check("v4.0.0 review: graph tables of other rules are made anew — the section index is never set aside for them",
+          not res["rebuilt"] and not os.path.exists(env.db + ".broken") and (STANDUP, "bea") in env.unresolved(), res)
+    real_build = cg.build
+
+    def broken(*a, **k):
+        raise sqlite3.OperationalError("too many SQL variables")
+
+    cg.build = broken
+    try:
+        write(env.note(STANDUP2), read(env.note(STANDUP2)) + "\nSee [[Roadmap]].\n")
+        os.utime(env.note(STANDUP2), (time.time() + 9, time.time() + 9))
+        res = env.refresh()
+    finally:
+        cg.build = real_build
+    check("…a fault of the graph build costs the graph alone: the index is kept, the rules' version dropped",
+          not res["rebuilt"] and res["changed"] == 1 and not env.q("SELECT 1 FROM meta WHERE key = 'graph_version'"), res)
+    env.refresh()
+    check("…and the next refresh builds the graph again, the new link in it",
+          (STANDUP2, ROADMAP, "wikilink", False) in env.edges(), sorted(env.edges()))
+    cg.build = lambda *a, **k: 0                     # an older build sharing the index: it reads a note, no edges
+    try:
+        write(env.note(STANDUP2), read(env.note(STANDUP2)) + "\nAnd [[Epic — PROJ-1234]].\n")
+        os.utime(env.note(STANDUP2), (time.time() + 19, time.time() + 19))
+        env.refresh()
+    finally:
+        cg.build = real_build
+    env.refresh()
+    check("v4.0.0 review I-2: a note an older build read again (its hash not the one its edges came from) is resolved "
+          "again", (STANDUP2, EPIC, "wikilink", False) in env.edges(), sorted(e for e in env.edges() if e[0] == STANDUP2))
+    p = env.note("ZorgCore/Work/PROJ-1234.md")
+    write(p, read(p).replace("type: epic\njira: PROJ-1234\n", "type: page\n"))
+    os.utime(p, (time.time() + 29, time.time() + 29))
+    env.refresh()
+    check("v4.0.0 review I-1: a work card that is one no more takes its mention edges with it",
+          not any(d_ == WORK_CORE and k == "mention" for _, d_, k, _ in env.edges()) and (STANDUP, EPIC, "mention", False)
+          in env.edges(), sorted(e for e in env.edges() if e[2] == "mention"))
+    write(os.path.join(env.vault, "Notes", ".git", "index"), "git")
+    write(os.path.join(env.vault, "Notes", ".git", "refs", "heads", "main"), "abc")
+    write(env.note("Notes/LICENSE"), "MIT")
+    write(env.note("Notes/License.md"), "# License\n")
+    write(env.note("Notes/Index.md"), "# Index\n\n[[License]] · [[main]] · [[LICENSE]]\n")
+    env.refresh()
+    names = {p_ for p_, in env.q("SELECT path FROM names")}
+    e = env.edges()
+    check("v4.0.0 review I-3: a dot-folder is no name; a file without .md answers only its whole name",
+          not any("/.git/" in p_ for p_ in names) and "Notes/LICENSE" in names
+          and ("Notes/Index.md", "Notes/License.md", "wikilink", False) in e
+          and ("Notes/Index.md", "main") in env.unresolved(), (sorted(x for x in e if x[0] == "Notes/Index.md"),
+                                                              env.unresolved()))
 
 check("v4.0.0 the link resolver is one class: ctx_entity.Resolver is ctx_graph.Resolver", ce.Resolver is cg.Resolver)
 r = cg.Resolver({"Notes/a.md": "a", "Notes/Assets/p.png": "p.png", "Notes/v1.2.md": "v1.2"}, ["Notes"])
@@ -251,6 +311,16 @@ with tempfile.TemporaryDirectory() as d:
           [(n["path"], n["kinds"]) for n in res["nodes"]])
     rc, out, res = env.cli("graph", "--kind", "links", "Roadmap")
     check("…an unknown kind is a usage error (exit 3)", rc == 3 and "--kind takes" in out, out[-300:])
+    rc, out, res = env.cli("graph", "ZorgCore/Teams/team-alpha.md", "--depth", "2", "--json")
+    bea = {n["path"]: n for n in res["nodes"]}.get(BEA_CORE, {})
+    check("v4.0.0 review I-4: a sensitive node — no type, its edge kind without the field (fm, never fm:team) — and the "
+          "walk never goes on through it", rc == 0 and bea.get("sensitive") and bea.get("type") == ""
+          and "fm" in bea.get("kinds", []) and not any(k.startswith("fm:") for k in bea.get("kinds", []))
+          and not any(BEA_CORE in n["via"] for n in res["nodes"] if n["hop"] == 2),
+          (bea, [(n["path"], n["via"]) for n in res["nodes"] if n["hop"] == 2]))
+    rc, out, res = env.cli("graph", "diagram.png", "--json")
+    check("v4.0.0 review M-9: a name alone (a picture) is a start too", rc == 0 and res["how"] == "path"
+          and [n["path"] for n in res["nodes"]] == [ROADMAP], res and res.get("nodes"))
     rc, out, res = env.cli("graph", "bea@zorg.example", "--json")
     check("v4.0.0 an entity request (an e-mail) starts from all its cards", rc == 0 and res["how"] == "entity"
           and {s_["path"] for s_ in res["start"]} == {BEA_OWN, BEA_CORE}, res and res.get("start"))
@@ -272,7 +342,7 @@ with tempfile.TemporaryDirectory() as d:
 with tempfile.TemporaryDirectory() as d:
     db = os.path.join(d, "big.sqlite")
     con = sqlite3.connect(db)
-    con.executescript(ci.DDL + ci.ENTITY_DDL + ci.GRAPH_DDL)
+    con.executescript(ci.DDL + ci.ENTITY_DDL + ci.GRAPH_DDL + cg.EDGE_DDL)
     n_notes = 6500
     con.executemany("INSERT INTO notes(id, path, source, title, type, sensitive) VALUES (?, ?, 'own', ?, 'note', 0)",
                     [(i, "Notes/n%05d.md" % i, "n%05d" % i) for i in range(1, n_notes + 1)])

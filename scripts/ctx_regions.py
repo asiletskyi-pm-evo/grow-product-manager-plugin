@@ -25,6 +25,7 @@ inside one; its script rewrites it.
 
 Reads nothing but what it is given (check_registry: vault-schema.md). Stdlib only.
 """
+import bisect
 import os
 import re
 
@@ -40,8 +41,33 @@ NAMESPACES = {
 _MARK = re.compile(r"<!--\s*([a-z][a-z0-9-]*)(:section)?:(begin|end)\b([^>]*?)-->")
 _ID = re.compile(r"\bid=([A-Za-z0-9_.-]+)")
 _FENCE = re.compile(r"^[ \t]{0,3}(?:>[ \t]?)*(`{3,}|~{3,})(.*)$")
-_SPAN = re.compile(r"(?<!`)(`+)(?!`)[^\n]*?(?<!`)\1(?!`)")
+_TICKS = re.compile(r"`+")
 _HEADING = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t#]*$", re.M)
+
+
+def _mask_spans(line):
+    """A line with its code spans turned into spaces — a run of backticks closed by the next run of the same length;
+    linear in the line (review M-4: a regex that backtracks took minutes on a long line of backticks)."""
+    runs = [(m.start(), m.end()) for m in _TICKS.finditer(line)]
+    if len(runs) < 2:
+        return line
+    nxt, last = [None] * len(runs), {}
+    for i in range(len(runs) - 1, -1, -1):
+        n = runs[i][1] - runs[i][0]
+        nxt[i] = last.get(n)
+        last[n] = i
+    out, pos, i = [], 0, 0
+    while i < len(runs):
+        j = nxt[i]
+        if j is None:
+            i += 1
+            continue
+        s_, e_ = runs[i][0], runs[j][1]
+        out.append(line[pos:s_])
+        out.append(" " * (e_ - s_))
+        pos, i = e_, j + 1
+    out.append(line[pos:])
+    return "".join(out)
 
 
 def _masked(text):
@@ -58,8 +84,8 @@ def _masked(text):
             fence = m.group(1)
             out.append(" " * len(line))
             continue
-        out.append(line)
-    return _SPAN.sub(lambda m: " " * len(m.group(0)), "\n".join(out))
+        out.append(_mask_spans(line))
+    return "\n".join(out)
 
 
 def parse(text, providers=()):
@@ -98,9 +124,10 @@ def parse(text, providers=()):
         seen.add((r["ns"], r["id"]))
     inside, outside = set(), set()
     masked = _masked(text)
+    spans = _Spans([(r["start"], r["end"]) for r in regions])
     for m in _HEADING.finditer(masked):
         key = re.sub(r"\s+", " ", m.group(1)).strip().casefold()
-        (inside if any(r["start"] <= m.start() < r["end"] for r in regions) else outside).add(key)
+        (inside if spans.touch(m.start()) else outside).add(key)
     for key in sorted(inside & outside):
         problems.append({"why": "heading-twice", "ns": "", "id": key, "at": 0})
     return regions, problems
@@ -121,14 +148,32 @@ def outside_targets(text):
     return out
 
 
+class _Spans:
+    """Spans [start, end) sorted by start, asked «does [pos, end) touch one of you?» in O(log n): every span whose start
+    is before `end` is a candidate, and the furthest end among them (a prefix maximum) says whether one reaches `pos`."""
+
+    def __init__(self, spans):
+        self.spans = sorted(spans)
+        self.starts = [x for x, _ in self.spans]
+        self.reach, far = [], -1
+        for _, e in self.spans:
+            far = max(far, e)
+            self.reach.append(far)
+
+    def touch(self, pos, end=None):
+        k = bisect.bisect_left(self.starts, pos + 1 if end is None else end) - 1
+        return k >= 0 and self.reach[k] > pos
+
+
 def _spans(text):
     """[start, end) of every region and of every marker of a broken one — what an edit must not touch."""
     regions, _ = parse(text, providers=())
+    inside = _Spans([(r["start"], r["end"]) for r in regions])
     out = [(r["start"], r["end"]) for r in regions]
     for m in _MARK.finditer(_masked(text or "")):
-        if not any(s <= m.start() < e for s, e in out):
+        if not inside.touch(m.start()):
             out.append((m.start(), m.end()))
-    return out
+    return _Spans(out)
 
 
 def touches(text, old):
@@ -138,8 +183,7 @@ def touches(text, old):
     spans = _spans(text)
     i = text.find(old)
     while i >= 0:
-        j = i + len(old)
-        if any(i < e and j > s for s, e in spans):
+        if spans.touch(i, i + len(old)):
             return True
         i = text.find(old, i + 1)
     return False
