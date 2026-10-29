@@ -485,6 +485,19 @@ else
   ok "provider kit example: examples/provider-kit/zorg-core passes ctx_kit.check"
 fi
 
+# --- 21. The registry of region namespaces = ctx_regions.NAMESPACES (v4.0.0) ---
+# `ctx audit` and the write gate read a note's generated regions by scripts/ctx_regions.py; the Registry table of
+# references/vault-schema.md is what a person reads. A namespace added to one and not the other would have the audit
+# call a sound region unknown, or let an unknown one pass.
+REG_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import ctx_regions; print('\n'.join(ctx_regions.check_registry('.')))" 2>&1)
+if [ -n "$REG_ERRS" ]; then
+  while IFS= read -r line; do err "region registry: $line"; done <<EOF
+$REG_ERRS
+EOF
+else
+  ok "region registry: vault-schema.md's table = ctx_regions.NAMESPACES"
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.

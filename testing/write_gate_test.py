@@ -105,5 +105,47 @@ with tempfile.TemporaryDirectory() as d:
     out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": os.path.join(vault, "Notes", "Meetings", "m.md")}})
     check("…and once it is read again, an own path passes silently", out == "", out)
 
+    # since v4.0.0: a generated region of a note in a vault — the gate asks before a Write or an Edit that changes it
+    note = os.path.join(vault, "Notes", "Meetings", "hub.md")
+    os.makedirs(os.path.dirname(note), exist_ok=True)
+    body = ("# Hub\n\nMine.\n\n<!-- ctx:begin id=hub-meeting-notes -->\n- [[Standup]]\n"
+            "<!-- ctx:end id=hub-meeting-notes -->\n")
+    open(note, "w").write(body)
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": note, "old_string": "- [[Standup]]",
+                                                        "new_string": "- [[Other]]"}})
+    check("v4.0.0 an Edit inside a generated region asks, naming the region and the way out",
+          '"permissionDecision": "ask"' in out and "ctx id=hub-meeting-notes" in out and "re-run" in out, out)
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": note, "old_string": "Mine.", "new_string": "Ours."}})
+    check("…an Edit outside every region passes silently", out == "", out)
+    out = run(env, {"tool_name": "MultiEdit", "tool_input": {"file_path": note, "edits": [
+        {"old_string": "Mine.", "new_string": "Ours."}, {"old_string": "<!-- ctx:end id=hub-meeting-notes -->",
+                                                          "new_string": ""}]}})
+    check("…a MultiEdit with one edit on a marker asks", '"permissionDecision": "ask"' in out, out)
+    out = run(env, {"tool_name": "Write", "tool_input": {"file_path": note, "content": body.replace("Mine.", "Ours.")}})
+    check("…a Write that keeps every region as it is passes silently", out == "", out)
+    out = run(env, {"tool_name": "Write", "tool_input": {"file_path": note, "content": "# Hub\n\nOurs.\n"}})
+    check("…a Write that drops a region asks", '"permissionDecision": "ask"' in out, out)
+    out = run(env, {"tool_name": "Write", "tool_input": {"file_path": os.path.join(vault, "Notes", "new.md"),
+                                                         "content": body}})
+    check("…a new note passes silently", out == "", out)
+    store_rec = os.path.join(vault, "Notes", "_System", "context", "records", "team.alpha.md")
+    os.makedirs(os.path.dirname(store_rec), exist_ok=True)
+    open(store_rec, "w").write("<!-- zorg-core:begin id=team v=0.1 -->\nA\n<!-- zorg-core:end id=team -->\n")
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": store_rec, "old_string": "A", "new_string": "B"}})
+    check("…a record of the store is not the gate's: a human edit in a provider block is legal there (§12)", out == "", out)
+    lc = os.path.join(vault, "Notes", "_System", "local-context.md")
+    open(lc, "w").write("<!-- zorg-core:begin id=org v=0.1 -->\nA\n<!-- zorg-core:end id=org -->\n")
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": lc, "old_string": "A", "new_string": "B"}})
+    check("…nor local-context.md", out == "", out)
+    outside = os.path.join(d, "elsewhere.md")
+    open(outside, "w").write(body)
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": outside, "old_string": "- [[Standup]]",
+                                                        "new_string": "x"}})
+    check("…a file outside every vault is not the gate's", out == "", out)
+    open(os.path.join(pdata, "config.json"), "w").write('{"write_gate": "off"}')
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": note, "old_string": "- [[Standup]]", "new_string": "x"}})
+    check("…write_gate off: no question", out == "", out)
+    os.unlink(os.path.join(pdata, "config.json"))
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
