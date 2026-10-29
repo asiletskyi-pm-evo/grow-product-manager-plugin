@@ -4,7 +4,7 @@
 >
 > **Rule of the file:** never branch on a brand name. Branch on an **observed capability**. A host that grows a capability tomorrow then works without a plugin change.
 
-## 1. The six capabilities that matter
+## 1. The capabilities that matter
 
 | Capability | How to observe it | If absent |
 |---|---|---|
@@ -13,7 +13,10 @@
 | **SUBAGENT** — spawning an independent agent with a fresh context | an agent/task tool is present **and** the host spawns without asking the user each time | `subagent-delegation.md` → inline passes; `artifact-style-gate.md` → sequential lens passes |
 | **MCP** — connector tools in the session | tools matching `mcp__<id>__<tool>` are listed | `integration-strategy.md` Step 2 → Step 3 |
 | **HOOKS** — deterministic host-side gates | the SessionStart digest `GROW_PM_SESSION` is present in context | `local-context-protocol.md` Step 0a runs in full; write gate becomes an in-skill confirmation |
+| ↳ **the write gate** (since v4.1.0 a separate mark) | HOOKS is present **and** the session's write tools carry the names the PreToolUse matchers of `hooks/hooks.json` list — `mcp__<server>__createJiraIssue`, `…__updateConfluencePage` and the rest in that exact form, `Write` / `Edit` for files | the skill confirms in-skill before the write step (`artifact-style-gate.md` → Host write gate). The digest alone never proves the gate: Codex 0.153.2 runs SessionStart, but names its tools `apply_patch` and `mcp__codex_apps__<app>_<tool>` in lower case, which no matcher catches; on a host where the gate is not measured, treat it as absent — a second confirmation costs one answer, a missing one writes without the user |
 | **APP-DRIVE** — a tool that can observe a running product and act on it | browser tools, app-scoped screenshot/click tools, full-screen control tools, or `adb`/`simctl` through SHELL — levels in `app-drive-protocol.md` §1 | `app-drive-protocol.md` §6 → user-driven variant (the user walks and pastes screenshots) |
+
+**Five more say where a result can go (since v4.1.0).** **ARTIFACT** (a page at a link), **DOCS** (a live document the user and the agent edit), **WIDGET** (a visual inside the conversation), **SCHEDULE** (a recurring run the agent can create), **RESEARCH** (a built-in research pass with sources). How to observe each, what goes there, the question before anything is published and what to do without them: `native-surfaces.md` §1–§5. Without them every skill writes a file, as before v4.1.0.
 
 **Do not ask the user which host they are on.** Every row above is observable from the session itself.
 
@@ -24,7 +27,7 @@ Profiles are shorthand for a capability set. They are documentation, not a switc
 | Profile | FS | SHELL | SUBAGENT | MCP | HOOKS | APP-DRIVE | Notes |
 |---|---|---|---|---|---|---|---|
 | `claude-cowork` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ web / desktop-background / foreground (measured 2026-09-10) | Reference host. Everything in the plugin is defined against it. |
-| `codex-cli` | ✅ | ✅ | ⚠️ | ✅ | ❌ | ⚠️ assumed | Codex spawns a subagent only on an explicit user request → treat SUBAGENT as absent unless the user asked for it. Plugin agents (`agents/*.md`) are not loaded; hooks are not loaded. The Codex **desktop app** is the same profile, except that it matches `.mcp.json` connectors by name like Claude does (the CLI does not — §7). |
+| `codex-cli` | ✅ | ✅ | ⚠️ | ✅ | ⚠️ SessionStart only (measured 0.153.2, 2026-10-29) | ⚠️ assumed | Codex spawns a subagent only on an explicit user request → treat SUBAGENT as absent unless the user asked for it (0.153.2 lists a `spawn_agent` tool; spawning without a request is not measured). Plugin agents (`agents/*.md`) are not loaded. Since 0.153.2 a plugin's hooks run once the user trusts them in Codex (§7): the SessionStart digest arrives. The write gate is not measured — its PreToolUse matchers name Claude's tools, and Codex names them differently (`apply_patch`, `mcp__codex_apps__atlassian_createjiraissue`) — so the write step keeps the in-skill confirmation (§1, §4). The Codex **desktop app** is the same profile, except that it matches `.mcp.json` connectors by name like Claude does (the CLI does not — §7). |
 | `chatgpt` | ❌ | ❌ | ❌ | ✅ | ❌ | ⚠️ web only, assumed | ChatGPT on **web / mobile**: skills and connectors only; the storage, vault and script contours are unavailable. The ChatGPT **desktop app with a Local Project** attaches local folders read/write (vendor doc) — observe FS as present and apply the `codex-cli` row. Not yet run with the plugin: derived, not measured. |
 | `codex-cloud` | ⚠️ | ✅ | ⚠️ | ? | ❌ | ❌ | Its own sandbox filesystem — **not** the user's `~/.grow-pm/`. Treat FS as present but empty: never assume prior state, always write results back through a connector or the repo. |
 
@@ -35,7 +38,7 @@ The **measured / assumed** marks in this file (and **vendor**, §7) say how a ho
 Any skill that touches storage, subagents or scripts runs this before its first real step. It is three lines of reasoning, not a tool call:
 
 1. Look at the tool list actually available in this session.
-2. Mark the six capabilities from §1 as present / absent.
+2. Mark the six capabilities from §1 as present / absent — and the surface capabilities your output step uses (`native-surfaces.md` §1).
 3. Carry that mark for the whole run — do not re-derive it per step.
 
 Then, and only then, resolve the contours that depend on it (storage mode, delegation mode, gate mode).
@@ -108,7 +111,7 @@ Measured on Claude Code (2.1.292, v3.10.1):
 Measured on Codex CLI:
 
 - **Codex shares one ~15,000-character budget across every listed skill's `description`** (measured: 80 skills → ~190 characters each; this plugin alone → ~530). The warning is literal: *"Skill descriptions were shortened to fit the skills context budget"*. Hence the description order enforced since v3.0.0: essence with the discriminating nouns and the guard against the nearest neighbour inside the first 190 characters, then Ukrainian keywords, then EN triggers, then chains. Migrated commands count against the same budget.
-- **Codex does not load `agents/*.md` or `hooks/hooks.json`** from a plugin (hooks: openai/codex#17331).
+- **Codex does not load `agents/*.md`** from a plugin (v3.0.0 pilot). **Its hooks do run since 0.153.2** (measured 2026-10-29: the SessionStart digest `GROW_PM_SESSION` is in the session's log; until then openai/codex#17331) — **once the user trusts them**: Codex keeps a hash per plugin hook (`[hooks.state."<plugin>@<marketplace>:hooks/hooks.json:<event>:…"] trusted_hash` in `~/.codex/config.toml`), and a freshly installed copy without one did not run its SessionStart in `codex exec`. Whether a changed `hooks.json` has to be trusted again is not measured. The PreToolUse write gate is not measured: its matchers name Claude's tool names, which Codex does not use (`apply_patch` for files; `mcp__codex_apps__<app>_<tool>` in lower case for connectors), so it is treated as absent.
 - **Codex skips a command whose body contains `$1` or `$ARGUMENTS`** when migrating `commands/` into skills.
 - **A marketplace entry needs a string `source` with a `./` prefix** (`"./"` for a plugin at the repository root, `"./subdir"` otherwise); Codex silently ignores the object form, and Claude Code rejects a bare `"."` (`plugins.0.source: Invalid input`).
 - **Codex resolves a bare `references/<file>.md` against the skill's own folder**, not the plugin root — the shared protocols are copied into the plugin cache but are not found from a skill without the resolution rule in `local-context-protocol.md`.

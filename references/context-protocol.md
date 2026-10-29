@@ -156,7 +156,7 @@ Each compiled copy is cut with the same rules and compared, section by section, 
 
 `local-context.md` stays the surface for edits; no skill has to learn record files.
 
-- **Context Enrichment** (`local-context-protocol.md`), the **configurator** and **context-connect**: after saving `local-context.md`, when the session digest shows a `context: records …` line — on a host without the digest (Codex CLI): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source <writer> --reason "<what was saved>"`; exit 2 → show the two versions, ask, re-run with `--resolve`; no store or no shell → nothing more.
+- **Context Enrichment** (`local-context-protocol.md`), the **configurator** and **context-connect**: after saving `local-context.md`, when the session digest shows a `context: records …` line — on a host without the digest (Codex CLI before 0.153.2): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source <writer> --reason "<what was saved>"`; exit 2 → show the two versions, ask, re-run with `--resolve`; no store or no shell → nothing more.
 - **Other plugins** that write their own section — unchanged; the next `ctx` run imports their edits.
 - **Hosts without SHELL** edit `local-context.md` as before; the next `ctx` run on a host with a shell imports the edits.
 - **Moving in** is offered by the configurator — the Update item "Move my context to records" and one question at the end of onboarding — with one confirmation; `ctx undo` right after it moves back.

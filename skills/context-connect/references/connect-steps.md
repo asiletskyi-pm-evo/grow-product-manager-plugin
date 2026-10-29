@@ -60,7 +60,7 @@ What the builder does:
 
 1. One question per discrepancy from the report (keep mine · take the core's · same thing → alias). Typical: e-mail (another account?), product (the user works on another one → add the provider's as one more), Jira key (fix the card through the owner, or the user's context), team (alias, or another card with `--team`).
 2. Five lines of what changes. Nothing of the user's text disappears.
-3. After "yes", by path. A context store exists when the session digest shows a `context: records …` line — on a host without the digest (Codex CLI): when `{storage_root}/_System/context/.state/` exists — and SHELL is available. With a store the provider's blocks go in through `ctx` (§4a) and the builder's `local-context.proposed.md` is **not** copied over the context; without a store, or without a shell, the proposal path (§4b) stays as it was.
+3. After "yes", by path. A context store exists when the session digest shows a `context: records …` line — on a host without the digest (Codex CLI before 0.153.2): when `{storage_root}/_System/context/.state/` exists — and SHELL is available. With a store the provider's blocks go in through `ctx` (§4a) and the builder's `local-context.proposed.md` is **not** copied over the context; without a store, or without a shell, the proposal path (§4b) stays as it was.
 4. Jira accountId shown as "look up by e-mail" → with the user's consent, look it up through the Atlassian connector (read-only) and write it into the profile.
 
 ### §4a With a context store (since v3.13.0)

@@ -82,6 +82,18 @@ print(n)")
     C=$(ls -d "$CODEX_DIR/plugins/cache/$MKT/grow-product-manager/"*/ 2>/dev/null | head -1)
     [ -n "$C" ] && [ -d "$C/references" ] && ok "Codex cache carries references/ (shared protocols reachable)" || err "Codex cache lacks references/"
     [ -n "$C" ] && [ -f "$C/.codex-plugin/plugin.json" ] && ok "Codex manifest present in cache" || err ".codex-plugin/plugin.json missing in the Codex cache"
+    # Since 0.153.2 Codex runs a plugin's hooks (measured 2026-10-29; host-profiles.md §2, §7). This checks
+    # that host fact, not HEAD's hook: Codex keeps a trust hash per plugin hook ([hooks.state."<plugin>@<mkt>:…"]
+    # in config.toml), the staged copy has none, and its SessionStart did not run in `codex exec`. So it looks
+    # for the digest of the copy you installed — any version. The session log records the digest verbatim.
+    if grep -q '^\[plugins\."grow-product-manager@' "$CODEX_DIR/config.toml" 2>/dev/null; then
+      MARK="$NEUTRAL/.mark"; : > "$MARK"
+      cx exec --skip-git-repo-check -s read-only "Diagnostic only: reply with the single word ok." >/dev/null 2>&1
+      LOG=$(find "$CODEX_DIR/sessions" -name '*.jsonl' -newer "$MARK" 2>/dev/null | head -1)
+      [ -n "$LOG" ] && grep -qF "GROW_PM_SESSION (SessionStart hook, plugin v" "$LOG" && ok "Codex runs plugin hooks (a GROW_PM_SESSION digest in the session log)" || err "no GROW_PM_SESSION digest in the Codex session log — Codex did not run the installed copy's hooks (trusted in Codex? host-profiles.md §7)"
+    else
+      echo "note: no Grow PM copy installed in Codex — the hook check is skipped"
+    fi
     cx plugin remove "grow-product-manager@$MKT" >/dev/null 2>&1; cx plugin marketplace remove "$MKT" >/dev/null 2>&1; rm -rf "$CODEX_DIR/plugins/cache/$MKT" "$STAGE" "$NEUTRAL"
   else
     err "codex is not installed here (SKIP_CODEX=1 to skip)"
