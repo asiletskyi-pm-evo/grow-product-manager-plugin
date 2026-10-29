@@ -1,0 +1,580 @@
+#!/usr/bin/env python3
+"""Grow PM — the slots of the context store (since v3.15.0).
+
+A slot is the place in a record where an answer to a question lives: `team.members` is "who is on the team",
+whatever heading the text carries and wherever it sits. references/context-slots.yaml is the catalogue — per
+slot its kind (value, text or list), the kind of record it is looked for in, the names it answers to (English and
+Ukrainian) and one line of what it holds. The manifest (references/context-manifest.yaml) names what a skill
+reads; each of its names has a slot here, and validator check 16 keeps the two in step. Semantics:
+references/context-protocol.md.
+
+- CATALOGUE_PATH, KINDS, RECORDS    where the catalogue is, and the values `kind` and `record` may take
+- load_catalogue                    the catalogue as a tree; a file that cannot be read is a ValueError
+- check_catalogue                   the errors in a catalogue (none: it is clean)
+- slot_for                          the slot a record kind answers to a name with
+- slot_info                         a slot's own entry (kind, record, names, about), or None — a slot the records answer;
+                                    a slot answered on cards alone (`answered_on: cards`, v3.19.0) is None here
+- record_slots                      {id: entry} of the slots the records answer
+
+The slots of an entity's cards (since v3.19.0; scripts/ctx_eslots.py answers them):
+
+- CARD_KINDS, ANSWERED_ON           the kinds of card a slot is looked for on, and the values of `answered_on`
+- card_slot_info, card_slots        a card slot's entry, and the slots a kind of card answers, in the catalogue's order
+- card_slot_for, card_norm          the slot a card answers by a field or heading name (case, spaces, `_`, `-` aside)
+- card_names_by_kind                {kind: {name: slot}} — the names the index keeps a card's slot fields by
+- card_names_version, card_names_digest   the catalogue's `card_names_version` (the index reads the cards once more
+                                    when it grows), and what it stands for (a test pins the two together)
+
+What you decided about slots is kept in the store, in `<store>/.state/slots.json` (schema context-slots-memory/1) —
+not in a record and not in a registration. A key this version does not know is refused, never dropped: a new key needs
+a new schema, context-slots-memory/2 (`_clean_memory` says what v3.15.0 then does). `ctx slot bind|map|prefer|decide|
+forget` write it (a snapshot first, a journal line; `ctx undo` puts it back), the resolver reads it. Its shape:
+  {"schema", "bindings": [{"repo", "block", "sub": str|None, "slot", "team": str|None}],
+   "aliases": [{"record": a record id, "heading", "slot"}], "prefer": {slot: "mine"|"repo:<id>"|"all"},
+   "decisions": {slot: {"winner": repo id, "hashes": {repo id: sha}, "at": "YYYY-MM-DD" (optional: the day it was taken)}}}
+
+- MEMORY_SCHEMA, MEMORY_FILE        the schema, and the file name inside `.state/`
+- load_memory, save_memory          read it (no file: an empty memory; a file that cannot be read, is not JSON, is of
+                                    another schema or not of this shape: a cs.StoreError that names `.state/slots.json`);
+                                    write it (sorted, indented, atomic; a memory of the wrong shape is not written)
+- add_binding, add_alias,           change a loaded memory in place: True when something changed, False when it already
+  set_prefer, drop_slot             said so (a repeated bind or map adds nothing)
+- in_memory                         is the slot anywhere in the memory
+
+Which block answers which slot (spec §4.2) — read only, for the resolver (scripts/ctx_resolve.py):
+
+- bindings_of                       {(namespace, block): [{slot, sub, team, how}]} from your memory, the `slot=` attribute
+                                    of each block's base and the plugin's own binding of the `team` block — the first
+                                    found per block — and the lines on block states that could not be read
+- marker_slots                      the slots a begin marker names in `slot=a,b` (a whole word, as `policy=rule`)
+- proposals                         the bindings `ctx validate` proposes: for each block of a registered repository that nothing
+                                    binds, the heading of the block (or of one of its subsections) that answers a slot's names
+
+Stdlib only.
+"""
+import json
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_common as cc  # noqa: E402
+import ctx_store as cs  # noqa: E402
+
+PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CATALOGUE_PATH = os.path.join(PLUGIN_ROOT, "references", "context-slots.yaml")
+SCHEMA = "context-slots/1"
+KINDS = ("value", "text", "list")
+RECORDS = ("product", "team", "profile", "org")
+CARD_KINDS = ("person", "team", "mission", "module", "metric")   # the kinds of card a slot is looked for on (v3.19.0)
+ANSWERED_ON = ("records", "cards", "both")                    # who answers a slot: `answered_on` (records by default)
+_DAY = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
+_SLOT_ID = re.compile(r"(?P<record>[a-z]+)\.(?P<name>[a-z0-9_]+)\Z")
+
+
+def load_catalogue(path=None):
+    """The catalogue (`path`, else the plugin's own) as the tree cc.read_yaml_tree makes of it. A file that cannot
+    be read, or is not YAML that reader takes, is a ValueError."""
+    path = path or CATALOGUE_PATH
+    try:
+        with open(path, encoding="utf-8") as f:
+            return cc.read_yaml_tree(f.read())
+    except OSError as e:
+        raise ValueError("cannot read %s: %s" % (path, e.strerror or e))
+
+
+def _norm(name):
+    """A name as slots compare them: without regard to case, to the space around it or between its words."""
+    return " ".join(str(name).split()).casefold()
+
+
+def _all_slots(cat):
+    s = cat.get("slots") if isinstance(cat, dict) else None
+    return s if isinstance(s, dict) else {}
+
+
+def _answered_on(slot):
+    return (slot.get("answered_on") or "records") if isinstance(slot, dict) else "records"
+
+
+def _slots(cat):
+    """The slots the records answer (`answered_on` records or both): what the record side — `ctx read`, `ctx explain`,
+    `ctx validate`, `ctx slot …` — knows. A card-only slot (v3.19.0) is none of theirs."""
+    return {k: v for k, v in _all_slots(cat).items() if _answered_on(v) in ("records", "both")}
+
+
+def record_slots(cat):
+    """{id: entry} of the slots the records answer, in the catalogue's order."""
+    return dict(_slots(cat))
+
+
+def _names(slot):
+    n = slot.get("names") if isinstance(slot, dict) else None
+    return [x for x in n if isinstance(x, str) and x.strip()] if isinstance(n, list) else []
+
+
+def _card_names(slot):
+    """A card slot's names: its `names`, then its `card_names`."""
+    n = slot.get("card_names") if isinstance(slot, dict) else None
+    return _names(slot) + ([x for x in n if isinstance(x, str) and x.strip()] if isinstance(n, list) else [])
+
+
+def card_norm(name):
+    """A name as a card compares it — a frontmatter field or a heading: without regard to case, and without spaces, `_`,
+    `-` or any other sign, so `jira_projects`, `Jira projects` and `E-mail`/`email` are one name each."""
+    return re.sub(r"[\W_]+", "", cc.N(str(name)).casefold())
+
+
+def check_catalogue(cat):
+    """Errors, one string each: a slot whose `kind` or `record` is none of the allowed values, whose id is not
+    `<record>.<name>` of its own record, with no `names` or no `about`; a name (without regard to case) two slots of
+    one record both answer to, which would leave `slot_for` to guess; a `schema` other than context-slots/1."""
+    errs = []
+    if isinstance(cat, dict) and "schema" in cat and cat["schema"] != SCHEMA:
+        errs.append("schema is %r, not %r" % (cat["schema"], SCHEMA))
+    if isinstance(cat, dict) and "card_names_version" in cat and (isinstance(cat["card_names_version"], bool) or str(
+            cat["card_names_version"]).strip() != str(card_names_version(cat))):
+        errs.append("card_names_version is %r, not a whole number from 1" % (cat["card_names_version"],))
+    slots = _all_slots(cat)
+    if not slots:
+        return errs + ["the catalogue has no slots"]
+    owner = {}                                     # (record, normalised name) → the first slot that answers to it
+    card_owner = {}                                # (kind of card, card_norm name) → the first card slot (v3.19.0)
+    for sid, slot in slots.items():
+        if not isinstance(slot, dict):
+            errs.append("slot %s: not a mapping of kind, record, names and about" % sid)
+            continue
+        m = _SLOT_ID.match(sid)
+        record = slot.get("record")
+        on = slot.get("answered_on", "records")
+        records = CARD_KINDS if on == "cards" else RECORDS
+        if slot.get("kind") not in KINDS:
+            errs.append("slot %s: kind %r is none of %s" % (sid, slot.get("kind"), ", ".join(KINDS)))
+        if on not in ANSWERED_ON:
+            errs.append("slot %s: answered_on %r is none of %s" % (sid, on, ", ".join(ANSWERED_ON)))
+        cn = slot.get("card_names")
+        if cn is not None and (not isinstance(cn, list) or not all(isinstance(x, str) and x.strip() for x in cn)):
+            errs.append("slot %s: card_names is not a list of names" % sid)
+        if record not in records:
+            errs.append("slot %s: record %r is none of %s" % (sid, record, ", ".join(records)))
+        elif not m:
+            errs.append("slot %r: the id is not <record>.<name> (lower case, digits and _)" % sid)
+        elif m.group("record") != record:
+            errs.append("slot %s: the id starts with %r but the record is %r" % (sid, m.group("record"), record))
+        raw = slot.get("names")
+        if not isinstance(raw, list) or not raw:
+            errs.append("slot %s: names is not a list with a name in it" % sid)
+        elif len(_names(slot)) != len(raw):
+            errs.append("slot %s: names has a name that is blank or not text" % sid)
+        about = slot.get("about")
+        if not isinstance(about, str) or not about.strip():
+            errs.append("slot %s: about is empty — one line on what the slot holds" % sid)
+        elif "\n" in about:
+            errs.append("slot %s: about is more than one line" % sid)
+        for n in (_names(slot) if record in RECORDS and on in ("records", "both") else ()):
+            first = owner.setdefault((record, _norm(n)), sid)
+            if first != sid:
+                errs.append("name %r is answered to by both %s and %s — slot_for could not tell them apart" % (n, first, sid))
+        for n in (_card_names(slot) if record in CARD_KINDS and on in ("cards", "both") else ()):
+            first = card_owner.setdefault((record, card_norm(n)), sid)
+            if first != sid:
+                errs.append("name %r is answered to on a card by both %s and %s — card_slot_for could not tell them apart"
+                            % (n, first, sid))
+    return errs
+
+
+def slot_for(cat, record, name):
+    """The id of the slot of `record` (product, team, profile or org) that answers to `name`, without regard to
+    case — or None. Names are the catalogue's `names`, so `Team Members` and `Members` find the same slot. In a
+    catalogue check_catalogue would fault for a shared name, the first slot in file order wins."""
+    want = _norm(name or "")
+    if not want:
+        return None
+    for sid, slot in _slots(cat).items():
+        if isinstance(slot, dict) and slot.get("record") == record and want in [_norm(n) for n in _names(slot)]:
+            return sid
+    return None
+
+
+def slot_info(cat, slot_id):
+    """The catalogue's entry for `slot_id` (a mapping of kind, record, names and about) when the records answer it, else
+    None — for a slot answered on cards alone too (v3.19.0: card_slot_info gives that one)."""
+    s = _slots(cat).get(slot_id)
+    return s if isinstance(s, dict) else None
+
+
+# ------------------------------------------------------------------ the slots of an entity's cards (since v3.19.0)
+def _card_slot_items(cat):
+    return [(k, v) for k, v in _all_slots(cat).items()
+            if isinstance(v, dict) and _answered_on(v) in ("cards", "both") and v.get("record") in CARD_KINDS]
+
+
+def card_slot_info(cat, slot_id):
+    """The entry of a slot the cards answer (`answered_on` cards or both), or None."""
+    return next((v for k, v in _card_slot_items(cat) if k == slot_id), None)
+
+
+def card_slots(cat, kind):
+    """The ids of the slots a card of `kind` answers, in the catalogue's order ([] for a kind with none: work)."""
+    return [k for k, v in _card_slot_items(cat) if v.get("record") == kind]
+
+
+def card_slot_for(cat, kind, name):
+    """The slot a card of `kind` answers by a frontmatter field or a heading called `name` (card_norm: case, spaces,
+    `_` and `-` do not count) — its names, then its card_names — or None."""
+    want = card_norm(name or "")
+    if not want:
+        return None
+    for k, v in _card_slot_items(cat):
+        if v.get("record") == kind and want in {card_norm(n) for n in _card_names(v)}:
+            return k
+    return None
+
+
+def card_names_version(cat):
+    """The catalogue's `card_names_version` (since v3.19.0): a whole number ≥ 1 that grows whenever the names or the kind
+    of a slot answered on cards change; 1 when it is not there or not such a number."""
+    v = cat.get("card_names_version") if isinstance(cat, dict) else None
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return 1
+    return v if v >= 1 else 1
+
+
+def card_names_digest(cat):
+    """sha1 of what card_names_version stands for — every card slot's id, record, kind and names in order: a test pins
+    it to the version, so names changed without raising the version fail it."""
+    import hashlib
+    rows = [[k, v.get("record"), v.get("kind"), [card_norm(n) for n in _card_names(v)]] for k, v in _card_slot_items(cat)]
+    return hashlib.sha1(json.dumps(rows, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def card_names_by_kind(cat):
+    """{kind: {card_norm name: slot id}} — every name a card of each kind answers a slot by (the index keeps the
+    frontmatter fields of these names: ctx_index.identity_of)."""
+    out = {}
+    for k, v in _card_slot_items(cat):
+        names = out.setdefault(v.get("record"), {})
+        for n in _card_names(v):
+            names.setdefault(card_norm(n), k)
+    return out
+
+
+# ------------------------------------------------------------------ the memory of your decisions
+MEMORY_SCHEMA = "context-slots-memory/1"
+MEMORY_FILE = "slots.json"
+MEMORY_WHERE = ".state/" + MEMORY_FILE
+_MEMORY_KEYS = ("schema", "bindings", "aliases", "prefer", "decisions")
+
+
+def empty_memory():
+    return {"schema": MEMORY_SCHEMA, "bindings": [], "aliases": [], "prefer": {}, "decisions": {}}
+
+
+def _text(v):
+    return isinstance(v, str) and bool(v.strip())
+
+
+def valid_preference(who):
+    """`mine`, `all` or `repo:<id>` (an id with something in it)."""
+    return who in ("mine", "all") or (isinstance(who, str) and who.startswith("repo:") and _text(who[5:]))
+
+
+def _clean_memory(data):
+    """`data` as the canonical memory: every part there (a part the file lacks is empty), bindings and names in a fixed
+    order with none twice. A binding is one per (repo, block, sub, slot) — one team per binding, as `add_binding` keeps
+    it: of two with the same four, the first is kept and the later dropped, whatever team it names. Anything else — a
+    schema that is not MEMORY_SCHEMA, a part of the wrong shape, a key nobody knows — is a ValueError that says which.
+
+    The rule for whoever changes the memory: a top-level key this loader does not know is refused, never dropped (a save
+    would lose what a newer version wrote). So a new key — or a new meaning of one — needs a new schema,
+    `context-slots-memory/2`, and a loader that reads both; never a /1 file with one more key. What v3.15.0 does with a /2
+    file: `ctx read` and `ctx explain` go on without the memory and say so in one line (UNREAD_MEMORY of ctx_resolve, "slots
+    memory not valid: … schema is 'context-slots-memory/2' …"), every `ctx slot …` stops with exit 3, and `ctx validate`
+    reports it as an error — the file is never rewritten."""
+    if not isinstance(data, dict):
+        raise ValueError("not an object")
+    if data.get("schema") != MEMORY_SCHEMA:
+        raise ValueError("schema is %r, not %r" % (data.get("schema"), MEMORY_SCHEMA))
+    extra = sorted(str(k) for k in data if k not in _MEMORY_KEYS)
+    if extra:
+        raise ValueError("unknown key: %s" % ", ".join(extra))
+    out = empty_memory()
+    bindings = data.get("bindings", [])
+    if not isinstance(bindings, list):
+        raise ValueError("bindings is not a list")
+    seen = set()
+    for i, b in enumerate(bindings):
+        if not isinstance(b, dict):
+            raise ValueError("binding %d is not an object" % (i + 1))
+        for key in ("repo", "block", "slot"):
+            if not _text(b.get(key)):
+                raise ValueError("binding %d has no %s" % (i + 1, key))
+        for key in ("sub", "team"):
+            if b.get(key) is not None and not _text(b.get(key)):
+                raise ValueError("binding %d: %s is neither text nor null" % (i + 1, key))
+        one = {"repo": b["repo"], "block": b["block"], "sub": b.get("sub"), "slot": b["slot"], "team": b.get("team")}
+        key = (one["repo"], one["block"], one["sub"], one["slot"])          # the binding's identity: no team in it
+        if key not in seen:
+            seen.add(key)
+            out["bindings"].append(one)
+    out["bindings"].sort(key=lambda b: (b["repo"], b["block"], b["sub"] or "", b["slot"], b["team"] or ""))
+    aliases = data.get("aliases", [])
+    if not isinstance(aliases, list):
+        raise ValueError("aliases is not a list")
+    seen = set()
+    for i, a in enumerate(aliases):
+        if not isinstance(a, dict):
+            raise ValueError("alias %d is not an object" % (i + 1))
+        for key in ("record", "heading", "slot"):
+            if not _text(a.get(key)):
+                raise ValueError("alias %d has no %s" % (i + 1, key))
+        key = (a["record"], _norm(a["heading"]), a["slot"])
+        if key not in seen:
+            seen.add(key)
+            out["aliases"].append({"record": a["record"], "heading": a["heading"], "slot": a["slot"]})
+    out["aliases"].sort(key=lambda a: (a["record"], _norm(a["heading"]), a["slot"]))
+    prefer = data.get("prefer", {})
+    if not isinstance(prefer, dict):
+        raise ValueError("prefer is not an object")
+    for slot, who in prefer.items():
+        if not valid_preference(who):
+            raise ValueError("prefer for %s is %r, not mine, all or repo:<id>" % (slot, who))
+        out["prefer"][slot] = who
+    decisions = data.get("decisions", {})
+    if not isinstance(decisions, dict):
+        raise ValueError("decisions is not an object")
+    for slot, d in decisions.items():
+        if not isinstance(d, dict) or sorted(k for k in d if k != "at") != ["hashes", "winner"]:
+            raise ValueError("the decision for %s is not {winner, hashes[, at]}" % slot)
+        if not _text(d["winner"]):
+            raise ValueError("the decision for %s has no winner" % slot)
+        h = d["hashes"]
+        if not isinstance(h, dict) or not all(_text(k) and isinstance(v, str) for k, v in h.items()):
+            raise ValueError("the hashes of the decision for %s are not {repository: hash}" % slot)
+        one = {"winner": d["winner"], "hashes": dict(h)}
+        if "at" in d:
+            if not isinstance(d["at"], str) or not _DAY.match(d["at"]):
+                raise ValueError("the day of the decision for %s is not YYYY-MM-DD" % slot)
+            one["at"] = d["at"]
+        out["decisions"][slot] = one
+    return out
+
+
+def _memory_error(kind, why):
+    return cs.StoreError("slots memory %s: %s (%s)" % (kind, MEMORY_WHERE, " ".join(str(why).split())[:300]))
+
+
+def load_memory(store):
+    """What you decided about slots, from `<store>/.state/slots.json`, in canonical form. No file is an empty memory. A
+    file that cannot be read (or does not arrive in time) → cs.StoreError "slots memory not readable: .state/slots.json
+    (<why>)"; one that is not JSON, is of another schema or not of the shape above → "slots memory not valid: …". It is
+    never reset silently."""
+    path = os.path.join(store.state_dir, MEMORY_FILE)
+    if not os.path.lexists(path):
+        return empty_memory()
+    try:
+        raw = cs.read_text(path)
+    except FileNotFoundError:
+        return empty_memory()
+    except (OSError, UnicodeDecodeError, cs.StoreError) as e:
+        raise _memory_error("not readable", getattr(e, "strerror", None) or e)
+    try:
+        return _clean_memory(json.loads(raw))
+    except ValueError as e:
+        raise _memory_error("not valid", e)
+
+
+def save_memory(store, mem):
+    """Write the memory (canonical, sorted, indented, atomic) and return what was written. A memory of the wrong shape →
+    cs.StoreError "slots memory not valid: …", nothing written."""
+    try:
+        clean = _clean_memory(mem)
+    except ValueError as e:
+        raise _memory_error("not valid", e)
+    cs.atomic_write(os.path.join(store.state_dir, MEMORY_FILE),
+                    json.dumps(clean, ensure_ascii=False, indent=1, sort_keys=True) + "\n")
+    cs.remove_stale_tmp(store.state_dir)
+    return clean
+
+
+def add_binding(mem, repo, block, sub, slot, team):
+    """Bind the block (or its subsection `sub`) of a repository to `slot`, in `mem`, in place. A binding is one per
+    (repo, block, sub, slot) — one team per binding (`_clean_memory` keeps the same identity). The same bind again changes
+    nothing; so does one without a team when the binding has one. A bind that names another team sets the team of the
+    binding it repeats. True when `mem` changed."""
+    for b in mem["bindings"]:
+        if (b["repo"], b["block"], b["sub"], b["slot"]) == (repo, block, sub, slot):
+            if team is None or b["team"] == team:
+                return False
+            b["team"] = team
+            return True
+    mem["bindings"].append({"repo": repo, "block": block, "sub": sub, "slot": slot, "team": team})
+    return True
+
+
+def add_alias(mem, record, heading, slot):
+    """Let the heading `heading` in the record `record` (an id) answer for `slot`, in `mem`, in place; the same name again —
+    whatever its case or spacing — changes nothing. True when `mem` changed."""
+    for a in mem["aliases"]:
+        if (a["record"], _norm(a["heading"]), a["slot"]) == (record, _norm(heading), slot):
+            return False
+    mem["aliases"].append({"record": record, "heading": heading, "slot": slot})
+    return True
+
+
+def set_prefer(mem, slot, who):
+    """Whose answer a slot gives first: `mine`, `repo:<id>` or `all`. True when `mem` changed."""
+    if mem["prefer"].get(slot) == who:
+        return False
+    mem["prefer"][slot] = who
+    return True
+
+
+def in_memory(mem, slot):
+    """Is anything about `slot` in the memory?"""
+    return (any(b["slot"] == slot for b in mem["bindings"]) or any(a["slot"] == slot for a in mem["aliases"])
+            or slot in mem["prefer"] or slot in mem["decisions"])
+
+
+def drop_slot(mem, slot):
+    """Take everything about `slot` out of `mem`, in place: bindings, names, preference, decision. True when anything went."""
+    found = in_memory(mem, slot)
+    mem["bindings"] = [b for b in mem["bindings"] if b["slot"] != slot]
+    mem["aliases"] = [a for a in mem["aliases"] if a["slot"] != slot]
+    mem["prefer"].pop(slot, None)
+    mem["decisions"].pop(slot, None)
+    return found
+
+
+# ------------------------------------------------------------------ bindings: which block answers which slot
+PLUGIN_BINDINGS = (("team.members", "Members"),)   # the plugin builds the `team` block (provider_templates/team-block.md)
+PLUGIN_BLOCK = "team"
+STATE_UNREAD = "стан блоків %s не прочитано — атрибути slot= і policy=rule його блоків невідомі"
+SLOT_WORD = re.compile(r"(?:^|\s)slot=(\S+)(?=\s|$)")
+
+
+def marker_slots(region_text):
+    """The slot ids the begin marker a region text starts with names in a whole-word attribute `slot=a,b` (after its id,
+    before or after `v=`) — the same reading as `policy=rule` (ctx_blocks.is_rule): `xslot=` is no attribute, text inside
+    the region never counts, an item that is not `<record>.<name>` is left out, each slot once in the order given. None,
+    "" and a text that does not start with a well-formed begin marker name no slot."""
+    import ctx_blocks as cb                     # here: ctx_blocks imports ctx_read, which imports this module
+    found = cb.LEADING_BEGIN.match(region_text or "")
+    attrs = cb.BEGIN_ATTRS.match(found.group(1)) if found else None
+    out = []
+    for value in SLOT_WORD.findall(attrs.group(2)) if attrs else ():
+        for item in value.split(","):
+            item = item.strip()
+            if _SLOT_ID.match(item) and item not in out:
+                out.append(item)
+    return out
+
+
+def bindings_of(store, repos, mem, reads=None, cat=None, dropped=None):
+    """(bindings, problems): which block of which repository answers which slot, and what could not be read.
+
+    `bindings` is {(namespace, block id): [{"slot", "sub", "team", "how"}]}. Per block the first source found binds it,
+    and the others do not apply to it (spec §4.2) — a source counts only with a slot of the catalogue `cat` (None: the
+    plugin's, load_catalogue): a binding to a slot the catalogue lacks is no binding (a publisher ahead of the plugin, a
+    slot your memory names that this catalogue has not), so the next source binds the block; `dropped`, when a list, gets
+    each such binding as {"ns", "block", "slot", "sub", "team", "how"} — what `ctx validate` names as unknown:
+      "memory"  your bindings in `mem` (load_memory); a binding names the repository, and the block is keyed by that
+                registration's namespace (else by the repository id itself, as an unregistered namespace is named)
+      "marker"  the `slot=` attribute (marker_slots) of the block's base — the repository's text the store keeps
+                (`.state/blocks/<repo>/<sha>.md`), never your region; one binding per slot, with no sub and no team
+      "plugin"  the `team` block of every registered repository: `Members` → team.members and nothing else — not its
+                `jira_project_key` line (its label differs from the product's own `Jira Project Key`, and its value can
+                carry the team's other projects too — `PROJ (others: LEGACY)`, which provider_bundle writes when the team
+                has more than one key — so it can differ from the product's key: bound, the block would add a «також» line
+                to every skill that reads the key) and not `jira_team_field` (a team's name, not an id)
+    A plugin binding is listed for every registration, whether or not its team block is in the records; a binding to a
+    block the records lack simply has no candidate. `problems` holds one line per repository whose block state (or a
+    base of it) cannot be read — STATE_UNREAD, its `slot=` attributes are then unknown and the rest still binds. `reads` —
+    what reads the block states and the bases for it, with `load_state(repo_id)` and `get_base(repo_id, sha)` as
+    ctx_blocks has them (the resolver's _Repos, so that a read reads each once); None — ctx_blocks itself. Reads only: no
+    lock, no network, nothing written."""
+    import ctx_blocks as cb                     # here: ctx_blocks imports ctx_read, which imports this module
+    load_state = reads.load_state if reads is not None else (lambda repo_id: cb.load_state(store, repo_id))
+    get_base = reads.get_base if reads is not None else (lambda repo_id, sha: cb.get_base(store, repo_id, sha))
+    cat = load_catalogue() if cat is None else cat
+    aside = dropped if isinstance(dropped, list) else []
+    ns_of = {}
+    for r in repos or ():
+        ns_of.setdefault(r["id"], r.get("namespace") or r["id"])
+    out, problems = {}, []
+    for b in (mem or {}).get("bindings") or ():
+        key = (ns_of.get(b["repo"], b["repo"]), b["block"])
+        one = {"slot": b["slot"], "sub": b.get("sub"), "team": b.get("team"), "how": "memory"}
+        if slot_info(cat, b["slot"]) is None:
+            aside.append(dict(ns=key[0], block=key[1], **one))
+        else:
+            out.setdefault(key, []).append(one)
+    for r in repos or ():
+        ns, marked, unknown = ns_of[r["id"]], {}, []
+        try:
+            state = load_state(r["id"])
+            for bid in sorted(state["blocks"]):
+                if (ns, bid) in out:
+                    continue
+                for s in marker_slots(get_base(r["id"], state["blocks"][bid].get("base_sha"))):
+                    one = {"slot": s, "sub": None, "team": None, "how": "marker"}
+                    if slot_info(cat, s) is None:
+                        unknown.append(dict(ns=ns, block=bid, **one))
+                    else:
+                        marked.setdefault((ns, bid), []).append(one)
+        except (cs.StoreError, OSError):
+            line = STATE_UNREAD % r["id"]
+            if line not in problems:
+                problems.append(line)
+            marked, unknown = {}, []
+        for key, found in marked.items():
+            out.setdefault(key, found)
+        aside += unknown
+        key = (ns, PLUGIN_BLOCK)
+        if key not in out:
+            out[key] = [{"slot": s, "sub": sub, "team": None, "how": "plugin"} for s, sub in PLUGIN_BINDINGS]
+    return out, problems
+
+
+def proposals(records, repos, bindings, cat):
+    """[{"repo", "block", "sub", "slot"}]: the bindings worth proposing (spec §4.2), in the order of the records, then of the
+    headings, then of the catalogue — what `ctx validate` prints as `ctx slot bind <repo> <block>[#<sub>] <slot>`.
+
+    For each block of a registered repository (the namespace of a registration in `repos`; `repo` is that registration's id)
+    that nothing binds — no key (namespace, block id) in `bindings`, the first item of bindings_of — and that is one sound
+    region (ctx_blocks.find_regions: a repeated, nested or broken block would take no binding), a heading inside it that
+    answers a slot's names (cs.heading_matches: the name, or the name followed by a qualifier — `Key Metrics (focus)`) is a
+    proposal. The block's first heading proposes the whole block (`sub` None); a later heading proposes its own subsection
+    (`sub` the heading's text, which `ctx slot bind <block>#<sub>` finds again). A heading counts once per slot. The `team`
+    block is never proposed: the plugin binds it itself (PLUGIN_BINDINGS), whatever `bindings` holds. The headings only: the
+    `about` of the catalogue is not read, and a field line is not a heading. Reads only."""
+    import ctx_blocks as cb                     # here: ctx_blocks imports ctx_read, which imports this module
+    import ctx_read as cr
+    ns_of = {}
+    for r in repos or ():
+        ns_of.setdefault(r.get("namespace") or r["id"], r["id"])
+    slots = [(sid, _names(slot)) for sid, slot in _slots(cat).items() if isinstance(slot, dict)]   # the records' alone
+    tied, sound, out = bindings or {}, {}, []
+    for rec in records or ():
+        for ns, bid, _, _, _ in cr._blocks(rec.get("body") or ""):
+            repo = ns_of.get(ns)
+            if repo is None or not bid or bid == PLUGIN_BLOCK or (ns, bid) in tied:
+                continue
+            if ns not in sound:
+                sound[ns] = cb.find_regions(records, ns)[0]
+            region = sound[ns].get(bid)
+            if not region or region["host"] != rec["id"]:
+                continue
+            lines = cb._detach(region["text"]).splitlines()
+            first = next((k for k, line in enumerate(lines) if line.strip()), None)
+            for k, core in enumerate(lines):
+                if not cs._level(core):
+                    continue
+                for sid, names in slots:
+                    if any(cs.heading_matches(core, n) for n in names):
+                        item = {"repo": repo, "block": bid, "sub": None if k == first else cs._heading_text(core), "slot": sid}
+                        if item not in out:
+                            out.append(item)
+    return out

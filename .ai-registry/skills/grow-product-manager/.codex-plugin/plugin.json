@@ -1,0 +1,35 @@
+{
+  "name": "grow-product-manager",
+  "version": "4.0.1",
+  "description": "AI assistant for product managers: research, concepts, requirements, Jira tasks, planning, reports, meetings, people and team context — across Jira, Confluence, Figma and your notes.",
+  "author": {
+    "name": "Andrii Siletskyi"
+  },
+  "homepage": "https://github.com/asiletskyi-pm-evo/grow-product-manager-plugin",
+  "repository": "https://github.com/asiletskyi-pm-evo/grow-product-manager-plugin",
+  "keywords": [
+    "product management",
+    "PM",
+    "Jira",
+    "Confluence",
+    "requirements",
+    "PRD",
+    "CJM",
+    "roadmap",
+    "sprint",
+    "research",
+    "people"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Grow Product Manager",
+    "shortDescription": "AI assistant for product managers: research, concepts, requirements, Jira tasks, planning, reports, meetings, people and team context — across Jira, Confluence, Figma and your notes.",
+    "longDescription": "Skills across six contours — Product, Delivery, Knowledge, People, Design, Context — integrated with Jira, Confluence, Figma and Tableau. Bring your own organization context: the plugin ships no hardcoded brand or organization data.",
+    "developerName": "Andrii Siletskyi",
+    "category": "Productivity",
+    "websiteURL": "https://github.com/asiletskyi-pm-evo/grow-product-manager-plugin",
+    "brandColor": "#7B04DF",
+    "logo": "./assets/logo.png",
+    "composerIcon": "./assets/composer-icon.png"
+  }
+}

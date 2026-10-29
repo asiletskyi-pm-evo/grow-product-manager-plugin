@@ -1,0 +1,76 @@
+# Typed fields of the context store (since v3.12.0) — references/context-protocol.md.
+# The source of truth stays the text line `- **Field:** value` in local-context.md (a `list` field may
+# also be the bullets under `#### Field`); this schema declares the type of the fields the context card
+# and the skills read. A field not listed here is plain text. Read by scripts/ctx_schema.py.
+schema: context-fields/1
+types:
+  profile:
+    Name:
+      type: text
+    Role:
+      type: enum
+      values:
+        - pm
+        - head_of_product
+        - cpo
+        - product_designer
+        - product_analyst
+        - ux_researcher
+        - eng_lead
+        - business_owner
+        - other
+    Role scope:
+      type: enum
+      values:
+        - product
+        - area
+        - org
+    Level home:
+      type: enum
+      values:
+        - L1
+        - L2
+        - L3
+        - L4
+    Language:
+      type: text
+    Email:
+      type: email
+  product:
+    Jira Project Key:
+      type: key
+    Confluence Space:
+      type: text
+    Platforms:
+      type: list
+    Locales:
+      type: list
+    URL:
+      type: url
+  onboarding:
+    Mode:
+      type: enum
+      values:
+        - basic
+        - extended
+    Deferred steps:
+      type: list
+  judgment:
+    Hypothesis first:
+      type: enum
+      values:
+        - "on"
+        - "off"
+    Build first:
+      type: enum
+      values:
+        - "on"
+        - "off"
+    Learning mode:
+      type: enum
+      values:
+        - "off"
+        - pm_first
+        - explain
+    Hats allowed:
+      type: hats

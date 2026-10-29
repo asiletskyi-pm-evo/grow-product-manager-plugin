@@ -1,0 +1,103 @@
+# Data Confidentiality Policy
+
+This policy applies to ALL skills in the Grow Product Manager plugin without exception.
+
+---
+
+## Protected Data Categories
+
+The following data types are considered confidential and are subject to this policy:
+
+- Data obtained from **Tableau** and other analytics platforms (dashboards, reports, metrics, funnels, cohorts)
+- **Business analytics** and internal KPI data
+- **Research materials** containing internal findings, user interviews, survey results
+- **Strategy documents**, roadmaps, OKRs, and business plans
+- Any data that constitutes a **trade secret** or is marked as confidential/secret within the organization
+- **User data** and personally identifiable information (PII)
+- **People data (highest-sensitivity tier)** — performance assessments, 1-1 notes, person profiles (situational-leadership type, GTD-index, career/motivation signals), offboarding cases, and any manager evaluation of a specific team member. See the dedicated tier rules below.
+
+---
+
+## People data — highest-sensitivity tier
+
+The People-contour skills (`goal-setter`, `one-on-one`, `performance-review`, `hiring-designer`, `offboarding-guide`, `delegation-coach`) and the person profiles they maintain (`references/people-context-protocol.md`) handle the **most sensitive** data in the plugin. Beyond the general restrictions below, these hard rules apply:
+
+1. **Local / vault only.** Person profiles, 1-1 notes, performance reviews, and offboarding materials are stored **only** in the vault (`People/…`) or `~/.grow-pm/people/…`. They are **never** published to Confluence, Jira, or any shared workspace.
+2. **Never to external LLMs / third parties.** Do not send a person's name-linked performance data, review, 1-1 content, or offboarding case to any external LLM (ChatGPT/Gemini/etc.) or third-party service — not for "deep research", not for phrasing help. Draft such text with the in-session model only.
+3. **Minimal in chat.** Surface only the minimum necessary in the chat transcript; prefer references to the stored artifact over pasting full evaluations.
+4. **Factual, not characterizing.** Record working performance in factual, NVC terms (`references/communication-frameworks.md`), not personal judgments — the record describes the work, not the person's worth.
+5. **Offboarding especially.** Termination/PIP materials are strictly local, gated before every write, and never leave the machine.
+
+---
+
+## Restrictions
+
+### Prohibition on LLM training use
+
+Confidential data obtained during a session **must NOT** be submitted to any external LLM (ChatGPT, Gemini, or other) as training data or in a way that could result in it being stored or used to train models.
+
+**Allowed**: Using external LLMs (ChatGPT, Gemini) for general research, market analysis, and publicly available information via Deep Research mode.
+
+**Not allowed**: Pasting internal metrics, analytics reports, research findings, or any confidential data into external LLM interfaces.
+
+### Prohibition on third-party sharing
+
+Confidential data **must NOT** be transmitted to third parties in any form — including via integrations, API calls to external services, or browser interactions with external platforms.
+
+### Scope of use
+
+Confidential data may be used **exclusively**:
+- By the current user within their own account
+- For the tasks set by that user within the current session
+- For generating documents that remain within the organization's internal tools (Confluence, Jira, internal systems)
+
+---
+
+## Practical Guidelines for Skills
+
+When working with potentially confidential data, every skill must follow these rules:
+
+1. **Tableau and analytics data** — use only within the session for analysis and document generation. Do not pass raw metrics or dashboard data to external LLMs or services.
+
+2. **Deep Research via ChatGPT / Gemini** — formulate prompts using only **publicly available** information (product names, market trends, general feature descriptions). Never include internal metrics, research findings, or confidential business data in prompts sent to external LLMs.
+
+3. **Confluence and Jira data** — internal documents read from Confluence or Jira remain internal. Do not export or transmit this data to external services beyond what is needed to complete the current task.
+
+4. **Uploaded files** — treat all user-uploaded files as potentially confidential. Do not forward their content to external services without explicit user confirmation.
+
+5. **When in doubt** — treat the data as confidential. Ask the user if you are unsure whether specific data can be shared externally.
+
+---
+
+## Search (Step 0.5, since v3.16.0)
+
+Step 0.5 of every skill searches the user's own base and, when it is not enough, the live sources of the session (`references/search-protocol.md`). Three rules keep it inside this policy:
+
+1. **Sensitive notes stay with the People contour.** A note marked `sensitive: true`, a note of a people type (`people`, `person`, `one-on-one-notes`, `one-on-one`, `performance-review`, `offboarding-plan`, `delegation-audit`, `followup-arcv`), a 1-1 note — its title or a folder of its path names a 1-1 (`1-1 …`, `1:1 …`, `1on1 …`, `1-1-Logs/`, one-on-one), whatever its type — and, since v3.17.0, a note that carries a person profile's judgement field (`d_type`, `d_history`, `recommended_style`, `signals`, `one_on_one`, `gtd_index`, `forecast_qa`, `delegation`, `active_goal_letter`) — whatever its type and whatever `sensitive` says — are taken into a skill's work only by the People-contour skills. The search marks all of these `sensitive` itself — a judgement field one map down too (`reporting: forecast_qa`) — so a skill reads the mark, not the type. The one exception is a person's identity — name, e-mail, team and role as a registry card's frontmatter states them, and the card's path — which `context-navigator` may name to answer who someone is (`search-protocol.md` §13) and, since v3.19.0, any skill may use as `ctx entity` and `ctx read`'s `team.members` give it (`people-context-protocol.md` → Find a person, `context-protocol.md` §5h) — never the card's body or a judgement field; a sensitive team's, mission's, module's or metric's card gives its members' names and its path only, never its text; a server's note it has not read yet carries the mark only by the type the server gives (`search-protocol.md` §6 says what to do until then). Beyond that identity, any other skill never takes one, never reads its section, and never repeats its content (a cross-contour reader of `people-context-protocol.md` takes its listed profile fields, read-mostly) — in its block of variants it may name such a note by its title only. `ctx entity` (since v3.18.0) follows the same rule: a card's identity alone (name, e-mail, team, role, path — never a judgement field, which its registry does not even hold), and a sensitive note that links to the entity or carries its key as its title, path and day with ` · sensitive` — the field it links from only for a People-contour `--skill`, its text never.
+2. **Live sources are read in the session, with a question where the data is sensitive.** Level 2 reads Confluence, Jira, meeting transcripts, Drive or mail only through the user's own connectors, and asks the user first before it reads person profiles, private channels or mail. What it reads stays in the session, like any data under this policy.
+3. **Nothing from a live source is indexed or stored.** The search's own index (`~/.grow-pm/index/`, outside every vault) holds only the user's vault folders and the cores registered on this machine; what level 2 finds goes into no index, no record and no store, and the user's choices keep the request and the paths chosen, never a note's content. A remote repository's server is asked only for a repository whose folder is not on disk, and only with the words of the request. Since v3.24.0 the plugin's own copy of such a repository (`~/.grow-pm/cores/<id>/`, made by `ctx repo copy` on the user's word, `references/context-provider-protocol.md` §12.12) is the core's internal data kept on the user's machine as the server serves it — outside iCloud and every vault, never sent anywhere; its people cards are the core's registry and the index marks them sensitive as ever.
+
+## Bridges in your notes (since v3.20.0)
+
+`ctx entity apply` writes one frontmatter line into a note of the user's own plugin folder — a link to another card of the same entity and that card's title, identity alone, never a field, a value or a line of a profile — only after the user's «так» to the report, never into a core's folder; `ctx undo` takes it back (`references/context-protocol.md` §5h). The snapshot taken before keeps a copy of each note written — local, in `~/.grow-pm/snapshots/`, readable by the user alone (0600), rotated with the snapshots.
+
+## The vault's audit, normaliser and local MCP (since v4.0.0)
+
+- **`ctx graph`, `ctx audit`** read the index and the downloaded notes of your layer on your machine; a sensitive note is its title and path in their answers — no type, no field it links from, no text, and the graph never walks on through it. The audit's last result (`~/.grow-pm/audit/last.json`) keeps counts and short signatures of findings, never a note's text.
+- **`ctx vault normalize`** writes only into your own layer, after your code, with a snapshot (local, 0600) and `ctx undo`. A People note is never listed in a hub, so its title never reaches a note outside the People contour; «Пов'язане» names a person's card only by what the registry knows from an e-mail, an alias or a link — the card's path and title, identity alone.
+- **`ctx serve`** answers only a local MCP client the user configured (stdio — no port, no network) and only from the section index and the files of your layer and the core folders it names (a note's text is read from its file when it is downloaded): a note the search marks sensitive — or whose file says so now — is given as its path and title with `sensitive: true`, never its text, frontmatter or the links its text holds; its other answers mark such notes the same way. A person's or a sensitive card's numbers are never facts (`ctx entity` and `ctx audit` alike). It sends nothing anywhere: what a client does with an answer is that client's, under this policy as any session.
+
+---
+
+## What the context store never keeps (since v3.21.0)
+
+1. **Never stored, by code.** A secret (a key, a token, a password, a private key, a `Bearer` token, a password in a URL) and a state or financial identifier (a card number, an IBAN, a РНОКПП, a passport number) are refused by `ctx` before they reach a record, the inbox, the journal or a snapshot — every writing command and every delta, by form (`scripts/ctx_never.py`). The refusal names the kind, never the value. Your own edit of `local-context.md` is imported as it is; `ctx validate` and `ctx health` then name the record and the kind so you can take it out. A record holds an environment variable's **name**, never its value.
+2. **Never proposed, by rule.** A skill never forms a delta about anyone's health, religion or beliefs, political views, union membership, ethnicity, sexual life, criminal record or family matters, and never one from a People-contour note (a profile, a 1-1, a review, an offboarding case). The People-contour skills propose nothing at all (`context-protocol.md` §5i).
+3. **«Не запам'ятовуй у цій сесії».** After those words a skill proposes nothing until the session ends.
+4. **The connectors read for your context (since v3.22.0, `context-observe.md`).** The configurator's bootstrap and the recheck read only, and keep only what a field needs: from a calendar or Fireflies who took part and how often — never a meeting's title, description or transcript; from mail only the domain of your address — never a subject or a body. The observation file lives in the session's scratchpad and is deleted after the run; `ctx` drops anything else a calendar, Fireflies or mail fact carries and refuses a value without its field's shape.
+5. **Your corrections, the changelog and the identity answers (since v3.23.0, `context-protocol.md` §5n–§5r).** `overlays/<repo>.yaml`, `history/YYYY-MM.md` and `.state/identity.json` live in the store, on your machine, with the records' reach. An overlay operation points at your own text (`value_ref`), never copies it into a block; every text of it passes the never-store filter before it is written, a draft too. The journal's `changes` and the changelog hold the lines your records already hold, each at most 300 characters, a secret or an identifier hidden by kind. A person's profile is never an overlay, a proposal or a changelog line.
+6. **The inbox is the user's.** A delta's evidence is a short quote or a path (≤ 200 characters), never a note's text; the inbox lives in the store's `.state/`, with the same reach as the records.
+
+## Reference
+
+This policy applies in addition to (not instead of) the integration strategy described in `integration-strategy.md`. Both documents must be read and followed before any skill begins data gathering.

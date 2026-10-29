@@ -1,0 +1,61 @@
+# AGENTS.md
+
+Standing instructions for an agent working in this repository, or running the plugin installed from it, on a host that reads `AGENTS.md` (Codex CLI and others). Claude Code reads the plugin manifests directly and does not need this file.
+
+This is not a second README. `README.md` explains the product to a person; this file tells an agent how to behave.
+
+## What this repository is
+
+The **Grow Product Manager** plugin — a set of skills for a product manager's daily work, grouped in six contours: Product (research, concepts, requirements, tasks, CJM, analysis, experiments), Delivery (roadmap, quarter, sprint, reports, releases), Knowledge (library, decisions, feedback, meetings, templates), People (goals, 1-1s, reviews, hiring, delegation), Design (diagrams, prototypes, handoff) and Context (a team's shared core, answers from it, and the context store with its `ctx` engine). There is no application code to build or run: the plugin is markdown protocols plus a few deterministic Python scripts.
+
+## Where things live
+
+| Path | What |
+|---|---|
+| `skills/<name>/SKILL.md` | one skill; the frontmatter `description` is what routes to it |
+| `skills/<name>/references/` | protocols used by that skill alone |
+| `references/*.md` | **shared protocols**, used across skills — the substance of the plugin |
+| `agents/*.md` | tool-restricted subagents (checker, debater, extractor) |
+| `commands/*.md` | user-invoked service commands |
+| `hooks/`, `scripts/` | host hooks and the deterministic scripts they call |
+| `references/app-drive-protocol.md`, `scripts/walkthrough_preflight.sh` | driving the real product (capability APP-DRIVE) and the per-surface readiness table behind `flow-walkthrough` setup |
+| `skills/product-landscape`, `scripts/landscape_scan.sh` | the registry of competitor / adjacent / benchmark products (`~/.grow-pm/landscape/`) and the machine scan behind it |
+| `scripts/ctx.py`, `references/context-protocol.md` | the context store: records of the user's context, `local-context.md` compiled from them, `ctx sync` after any write to it |
+| `testing/` | `validate-consistency.sh`, `skill_lint.py` and the eval sets |
+| `.ai-registry/skills/<name>/`, `testing/registry_copy.py` | a generated copy of the plugin for a registry that syncs a subfolder, never the root; rebuilt at release from the index, never edited by hand |
+
+A bare `references/<file>.md` in a skill means the **shared** folder at the plugin root, not the skill's own. When a relative read of it fails, resolve the plugin root through `${PLUGIN_ROOT}` → `${CLAUDE_PLUGIN_ROOT}` → the directory that contains `skills/` (`references/host-profiles.md` §6) and read it from there. Do not silently continue without a protocol the skill named.
+
+## Step 0-host — do this before the first real step of any skill
+
+Hosts differ in what they can do. Branch on an **observed capability**, never on a brand name:
+
+1. Look at the tool list actually available in this session.
+2. Mark six capabilities present or absent: **FS** (a filesystem the user's data survives in), **SHELL** (running commands), **SUBAGENT** (spawning an independent agent), **MCP** (connector tools), **HOOKS** (host-side gates), **APP-DRIVE** (a tool that can observe and act on a running product).
+3. Carry that mark for the whole run; do not re-derive it per step.
+
+Then resolve the contours that depend on it — storage mode, delegation level, quality-gate mode. The full protocol, the degradation matrix and the contours that have no meaningful degraded mode are in **`references/host-profiles.md`**. Read it before deciding anything about storage, subagents or scripts.
+
+When a capability the user's request needs is absent, say so in one line at the start and continue. Never fail silently, and never repeat the caveat at every step.
+
+## Before gathering any data
+
+Read and follow **`references/data-policy.md`**. It is not optional and it is not skill-specific. Internal data — analytics, dashboards, research material, ticket contents, person profiles — stays inside the session and inside the user's own connected tools. Do not pass it to an external model or a third-party service, whichever integration path you took to obtain it.
+
+Person profiles are stricter still: `references/people-context-protocol.md` keeps them local by design.
+
+## Known gaps on Codex CLI
+
+Measured, not assumed. Work with them rather than around them:
+
+1. **Skill descriptions are shortened to fit one shared ~15k-character budget** — ~190 characters each on a host with 80 skills, ~50 with 120. Anything a skill needs *for routing* comes first; since v3.10.1 every description stays within 400 characters and the full list of triggers and boundaries is in the `## Routing` section at the end of each `SKILL.md`. If a skill looks wrong for the request, read that section before rejecting it.
+2. **`agents/*.md` are not loaded.** Codex spawns a subagent only when the user explicitly asks for one, so treat SUBAGENT as absent by default: the quality gate runs as sequential in-session lens passes with a role reset between them, and fan-out reads run as sequential batches. See `references/artifact-style-gate.md` and `references/subagent-delegation.md`. Manual equivalents of the three agents are in `.codex/agents/`.
+3. **`hooks/hooks.json` is not loaded** ([openai/codex#17331](https://github.com/openai/codex/issues/17331)). Two consequences: the SessionStart context digest is absent, so run `references/local-context-protocol.md` Step 0a in full; and there is no host write gate, so ask the user for confirmation yourself immediately before writing to Jira or Confluence, showing the three-point checklist from `references/artifact-style-gate.md`.
+4. **`${CLAUDE_PLUGIN_ROOT}` is not defined here.** A literal `${...}` left in text means the host did not expand it — that is signal, not an error to hide. Use the resolution order above.
+5. **In Codex CLI, connectors declared with an empty `url` in `.mcp.json` do not work** (`gmail`, `google calendar`, `google drive`, `fireflies`) — the CLI opens them as HTTP transports and they fail at session start; the Codex desktop app matches them by name and they work there. They are declared that way on purpose for Claude, whose Connectors tab matches first-party connectors by name; if Codex adopts the convention they will start working here without a plugin change. Until then find an equivalent by pattern detection (`references/integration-strategy.md` 1b) or say the connector is unavailable.
+
+## Working in this repository
+
+- `bash testing/validate-consistency.sh` and `python3 testing/skill_lint.py` must both stay green. Run them before proposing a change as finished. Before a release, `bash testing/host-smoke.sh` must also pass — it loads the tree on Claude Code and Codex CLI and is the only check that catches a host-level regression.
+- Version numbers live in five files at once (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md`) and are bumped by the `release-manager` skill, never by hand. The registry copy under `.ai-registry/` follows them at release (`release-manager` Step 3); between releases it lags `main` on purpose.
+- Protocol content belongs in `references/`; a skill that starts explaining a protocol inline is drifting.

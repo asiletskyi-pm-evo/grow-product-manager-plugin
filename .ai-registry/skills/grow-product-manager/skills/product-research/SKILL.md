@@ -1,0 +1,374 @@
+---
+name: product-research
+version: 0.15.1
+description: Competitive, market, user and UX-benchmark research — interview synthesis, research plans, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research plan".
+---
+
+# Product Research
+
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
+Conduct structured product research and deliver results as a Confluence page.
+
+## Integration prerequisite
+
+Before gathering data, read and follow the integration fallback chain in `references/integration-strategy.md`. For this skill, the typical external products needed are:
+
+- **Confluence** — for reading internal knowledge and publishing results
+- **Google Drive** — for reading internal documents, research materials, reports, and any files stored in the team's Drive
+- **Figma** — for pulling design context if researching UI/UX topics
+- **Product Analysis skill** — for analyzing product metrics, dashboards, and data (invoked when research needs quantitative data analysis)
+- **Knowledge Library** — for searching curated sources (articles, benchmarks, best practices) that enrich research with pre-vetted knowledge
+- **Web** — always available via WebSearch
+
+For each product: check for MCP connector → search MCP registry → fall back to browser.
+
+Before gathering any data, also read and comply with `references/data-policy.md`. Confidential data (Tableau metrics, internal analytics, research materials) must NOT be passed to external LLMs or third parties.
+
+## Local context prerequisite
+
+**Before starting, follow `references/local-context-protocol.md` (Step 0).** Read `local-context.md`, select the active product, and load all product-specific context. If the file doesn't exist — redirect to Plugin Configurator for initial setup.
+
+Key context used by this skill:
+- `product.name`, `product.description`, `product.url` — for product context in research
+- `product.competitors` — pre-fill competitor list for competitive analysis, always include user's product in comparisons. Since v3.3.0: when the landscape registry exists (`{storage_root}/landscape/registry.yaml`), the list comes from its links for the active product (roles `direct-competitor`, `benchmark`) and `product.competitors` is only the seed; competitors discovered during research are registered through **Product Landscape** (`product-landscape` `add`, `status: auto`, source `websearch` / `appstore-api`).
+- `product.confluence_space` — default publishing destination
+- `organization.domain` — for understanding company context
+- `user.language` — for output language
+
+**Knowledge Library context** (if initialized):
+- `knowledge_library.status` — whether Knowledge Library is initialized (`~/.grow-pm/knowledge-library/`)
+- `knowledge_library.sources_count` — number of curated sources available
+- `knowledge_library.default_search_modes` — which search modes to use (`library` / `confluence` / `gdrive` / `baymard` / `internet` — the set `knowledge-library` implements)
+- `knowledge_library.baymard_access` — access to Baymard UX benchmarks (if configured)
+- `knowledge_library.confluence_spaces` — integrated Confluence spaces for knowledge enrichment
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
+
+## Step T — Template Resolution
+
+Before producing the research report, resolve which template to use.
+
+Follow `references/template-protocol.md`.
+
+Declare:
+- `artifact_type: research`
+- `subtype`: inferred from the research type — `competitive` | `user-research` | `market` | `ux-benchmark`; since v3.6.0 also from the artifact asked for — "research plan" / «план дослідження» → `research-plan`, "discussion guide" or "interview guide" / «гайд для інтерв'ю» → `discussion-guide`, "insight report" / «звіт з інсайтами» → `insight-report`, "insight memo" / «інсайт-мемо» → `insight-memo`; none inferred → `null` as before (the role default does not apply here: this skill runs the research itself, so a plan, guide, report or memo is rendered only when the user asks for it)
+- `product_id: {from local-context.md active product}`
+- `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
+
+Run Steps T-1 → T-5 via the `template-library` helper routines. Render the result and append `<!-- template: {template_id} version: {version} -->` at the end.
+
+If the user says "do not use a template" → skip Step T and use the skill's internal structure.
+
+If no template applies → the built-in ladder resolves `builtin://research/{subtype}-v1.md` — `research-builtin-competitive` (for competitive), `research-builtin-user-research` (for user research) and, since v3.6.0, the four artifact subtypes above; other subtypes use the skill's internal structure.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
+
+**Role extra sections (since v3.6.0).** T-5 step 3b inserts each `role_defaults.extra_sections.research` partial (e.g. `repository-entry`) above the judgment footer when the report — template or internal structure alike — has no section with that heading; derived, never asked.
+
+## Workflow
+
+### 1. Deep discovery — gather maximum context before research
+
+This step is critical. Do NOT start research until the scope is crystal clear. Use AskUserQuestion to clarify all of the following:
+
+**Product and feature context — clarify via AskUserQuestion if not clear from context:**
+
+- **Which product or part of the product ecosystem** is this research for? (if not explicitly stated — ask before proceeding)
+- **New or existing functionality?** — Is this research for completely new functionality we are planning to build, or for existing functionality we are developing/modifying? (if not clear — ask explicitly)
+
+**Research scope:**
+- Research type: competitive analysis, user research, market research, UX benchmark research, or a combination
+- Subject: specific product, feature area, market segment, or user persona
+- Depth: quick overview (1-2 pages) or deep dive (5+ pages)
+- Goal: what decision will this research inform? (e.g., launch/no-launch, feature prioritization, market entry)
+- Audience: who will read the result? (team, leadership, investors)
+
+**Context gathering — ask proactively:**
+- What does the user already know about the topic? Any hypotheses or assumptions to validate?
+- Are there existing internal documents (Confluence pages, previous research, strategy docs) to build upon?
+- Are there specific competitors, markets, or user segments to focus on or exclude?
+- What time frame is relevant? (last quarter, last year, all-time)
+- Any specific metrics, KPIs, or data points the user wants included?
+
+**Sources and tools — confirm where to look:**
+- Ask the user which sources and tools to use for this specific research
+- Suggest relevant sources based on the research type (web, Confluence, Google Drive, Figma, Tableau, uploaded files)
+- Ask whether there are relevant documents in **Google Drive** (research reports, strategy docs, meeting notes, spreadsheets) — if yes, ask the user to share links or folder names
+- **Deep Research via external LLMs — ask about each LLM separately via AskUserQuestion:**
+  - "Should we use **ChatGPT** in Deep Research mode for deeper analysis?" (via the user's browser)
+  - "Should we use **Google Gemini** in Deep Research mode for deeper analysis?" (via the user's browser)
+  - The user can enable one, both, or neither. If both are enabled — run Deep Research in both LLMs and cross-reference their findings
+- If the user has preferences for specific tools or databases, capture them now
+
+**Knowledge Library check:**
+
+Follow `references/local-context-protocol.md` — Step 0g:
+- Check if Knowledge Library is initialized (`~/.grow-pm/knowledge-library/`)
+- If available and contains sources relevant to the research topic (≥3 matching sources), inform the user:
+  > "Knowledge Library has [N] sources relevant to [topic]. Would you like to include them in the research?"
+- If user confirms → library sources will be included in Step 2
+- If not available → skip, no impact on workflow
+
+**Figma designs check — if researching existing product or existing functionality:** if the product or feature area already exists (not built from scratch), run `references/figma-designs-check.md` with:
+- *use as context for:* the research (e.g., when analyzing competitor UX, reference the current state);
+- *when designs are confirmed:* use them as primary context for understanding the current state and reference design frames in the final research output.
+
+**Inbound from a build-first prototype (since v3.9.0)** — ← `design-bridge` Step 9, or ← `write-concept` Step 1 through design-bridge (`references/judgment-points.md` §8): a prototype and the assumption it tests, to show to 3–5 real users. The payload answers the scope questions above; what is still asked, the subtype and the return to the concept: `references/frameworks.md` → Prototype sessions.
+
+Summarize the full research brief back to the user and get confirmation before proceeding.
+
+### 1.5 — Source Validation Gate (MANDATORY, v0.8.0+)
+
+**Internal logic (product-research).** Executes before Step 2 (Gather data). Every external source pulled in Step 2 will be validated against Gate Checks 1–5 of `references/data-integrity-protocol.md`, and since v3.8.0 every cited source — internal and uploaded ones included — gets Gate Check 6 (1.5.g). Apply these checks **as sources are gathered**, before citing in the final report.
+
+**Why this exists:** historic incidents where stale benchmarks, geographically mismatched data (US benchmark cited for UA market), or sensational claims from a single source produced misleading research conclusions. See `data-integrity-protocol.md` for the full incident catalog.
+
+**Sub-checks 1.5.a–1.5.e**, applied to every external source as it is gathered: **1.5.a** recency against per-data-type thresholds; **1.5.b** geographic/cultural fit to `product.primary_market`; **1.5.c** multi-source cross-validation (≥ 2 independent sources, ≥ 3 for sensational claims); **1.5.d** bias screening; **1.5.e** source-type marker + inline annotation. **1.5.f** (since v3.6.0) adds the extra checks of the `triangulation`, `human-validated`, `market-recency` and `source-type` tokens in `role_defaults.gate_emphasis` — caveat lines and flags only: never a question, never a changed source status, never a blocked run.
+
+**1.5.g** (since v3.8.0) — evidence class and frontier, Gate Check 6 of `references/data-integrity-protocol.md`, run after the status: every source, finding and quote gets its class from its marker; persona answers, simulated interviews and model-written "user" answers are `simulated` — never counted in n, never a finding or a quote, kept to Hypotheses or the one `Simulated input — hypotheses only` line (the user-research template's `simulated_input`, derived, never asked); a finding about why users act or what they need with no real-user source (or another 6c frontier claim) keeps only its supportable part plus one hand-back line, whose human step Research Limitations / Next Steps also list. Never a question, never a changed status, never a blocked run; automated and return-payload runs follow 6d.
+
+The full procedure — the recency table, the geography tiers with the worked example, the cross-validation and bias rules, the source-type markers, the inline-annotation convention, the 1.5.f gate-emphasis checks and the 1.5.g class map — lives in `references/source-validation-gate.md` (skill-local). Read it at the start of Step 2 — before spawning any fan-out subagents (their prompts need the thresholds) and before validating the first source.
+
+### Output of Step 1.5
+
+Every external source receives: ✅ Verified / ⚠️ Caveat / ❌ Blocked. The evidence class from 1.5.g travels with the status and never changes it.
+
+If Blocked sources > 0 for critical findings:
+- Return to Step 2 to gather additional sources OR
+- Inform user that research cannot proceed with insufficient evidence on key claims
+
+### 2. Gather data from all available sources
+
+> **Subagent delegation (large fan-out).** For many competitors / web sources / knowledge-library sources, delegate per `references/subagent-delegation.md`: split into batches (by competitor / source group), spawn subagents in parallel, each returns a compact structured result (per source: key finding, source type, trust/recency marker + source link; a quote as its exact text with who and where), and the main agent aggregates (dedupe, rank) and runs Step 1.5 validation — classes (1.5.g) included; a subagent never assigns a class. Falls back to inline if subagents are unavailable.
+
+
+**Pre-condition (v0.8.0+):** Step 1.5 (Source Validation Gate) applies to each source as it is gathered. Skip ❌ Blocked sources. For ⚠️ Caveat sources — inherit the caveat into the final report (do not silently drop the qualifier).
+
+Pull information from every source agreed upon in Step 1. For each external product, follow the integration fallback chain from `references/integration-strategy.md`.
+
+**Web search** — use WebSearch to find:
+- Competitor websites, pricing pages, feature lists
+- Industry reports, analyst coverage, market sizing
+- Product reviews, G2/Capterra ratings, user feedback
+- News, funding announcements, partnership deals
+
+**Uploaded files** — if the user provides files (interview transcripts, survey results, reports), read them with the Read tool and extract key data points. An upload of unclear origin is never asked about: it is `simulated` only on an explicit marker (Gate Check 6a), and an interactive run prints one notice line only when it classifies one as `simulated` (1.5.g).
+
+**Knowledge Library** (if user confirmed in Step 1):
+- Call `knowledge-library` in Search mode with research topic keywords
+- Include sources with trust_score >= 0.5
+- For each matching source: include URL, key insights, trust score, source type
+- Mark library sources in the final output's Sources section as "Source: Knowledge Library"
+- If sources contain benchmark data → use in competitive analysis matrices
+- Library sources complement (not replace) web search — they provide pre-vetted, curated knowledge
+
+**Confluence** — search existing Confluence pages for internal knowledge:
+- Previous research, decision logs, meeting notes
+- Product specs, OKRs, strategy docs
+- Use `searchConfluenceUsingCql` or `getConfluencePage` to find relevant pages
+- If Confluence MCP is unavailable, follow integration-strategy.md fallback chain
+
+**Google Drive** — search and read internal documents stored in Google Drive:
+- Research reports, strategy presentations, user interview notes, competitive analyses
+- Product briefs, roadmap spreadsheets, analytics exports
+- Follow the integration fallback chain: Google Drive MCP → search MCP registry → open via browser (`https://drive.google.com`)
+- When accessing via browser: navigate to the shared link or search within Drive, open the document, read its content using `get_page_text`
+- Treat all Drive documents as potentially confidential — follow `references/data-policy.md`
+
+**Figma** (when researching UI/UX or competitor design):
+- Pull screenshots and design context via Figma MCP
+- If unavailable, use browser to access Figma files shared by the user
+
+**Product Analysis skill** (when research needs product metrics or data analysis):
+
+When the research requires quantitative data — product metrics, dashboard analysis, funnel data, cohort analysis, or any numerical analysis — delegate to the **Product Analysis** skill:
+
+1. Invoke Product Analysis with context: which product, what metrics are needed, what time period, what comparison baseline
+2. Product Analysis will handle all data acquisition (Tableau, Google Sheets, CSV, screenshots) and computation
+3. Receive structured results: key metrics, trends, anomalies, relevant hypotheses
+4. Incorporate the returned data into the research output, citing "Source: Product Analysis" for data-driven findings and keeping each number's annotation and class (`measured` from its data gate; never upgraded)
+
+This delegation ensures accurate computation (via pandas/numpy) and consistent analysis methodology across all skills.
+
+**Deep Research via ChatGPT / Gemini** (if confirmed by user in Step 1): open each enabled LLM in the browser, pick the strongest model, run Deep Research on a prompt built from the Step 1 scope, extract the findings and cross-reference them with each other and with the other sources — LLM output enriches the analysis and is never a primary source: a claim traced to a resolvable, recency-checked source takes that source's class, an untraceable claim about users or the market is `simulated` (1.5.g). Prompts carry **public information only** (`references/data-policy.md`).
+
+The full procedure — the ChatGPT and Gemini steps, cross-referencing when both run, and the guidelines for LLM-sourced data — lives in `references/deep-research-llm.md` (skill-local). Read it when the user enabled either LLM in Step 1.
+
+**PM-first pass (since v3.9.0)** (`references/judgment-points.md` §9): for interview synthesis — `user-research`, `insight-report` or `insight-memo` on real interview or session material — in an interactive run, after 1.5.g has classed the material: under `judgment.learning_mode` `pm_first`, one free-text question shows 10 excerpts for the PM to tag before Step 3; under `explain`, nothing is asked. Not asked when the caller passes `pm_first`, or when the PM already stated their themes for this material (in the request or at Step 1 — used as their tags). Step 3 synthesises from the material alone; the "Your tags vs mine" or "How I got here" chat block comes before Step 4 publishes. Sampling rule and both blocks: `references/frameworks.md` → PM-first pass.
+
+### 3. Analyze and structure findings
+
+Apply the appropriate framework(s) based on research type. See `references/frameworks.md` for detailed templates.
+
+**Competitive analysis** → Feature comparison matrix, SWOT, positioning map, pricing comparison, key takeaways
+
+**Important: always include the user's product in competitive comparisons.** When building a feature comparison matrix, benchmark table, positioning map, or any other comparative analysis — always include the user's own product as one of the compared entities alongside competitors. This allows the user to immediately see where their product stands relative to the competition. Clearly mark the user's product in the table (e.g., bold name, highlight row) so it's visually distinct.
+
+**User research** → Themes & patterns, user segments, pain points ranked by frequency/severity (n = real users only), quotes (verbatim · `reported`, with participant id), insights → recommendations — `simulated` input stays out of all of them (1.5.g)
+
+**Market research** → Market sizing (TAM/SAM/SOM), trends, PESTEL factors, opportunities & threats, growth drivers
+
+**UX Benchmark Research** → Feature/practice comparison against industry benchmarks, UX best practices matrix, gap analysis between current state and industry standards, recommendations ranked by impact
+
+**Important for UX Benchmark Research type:**
+- Primary source: Knowledge Library (if initialized with UX sources)
+- Secondary source: web search for fresh benchmarks
+- Output format: benchmark matrix (practice, industry standard, our current state, gap, priority)
+- This type is commonly used by `cjm-research` during enrichment steps
+- **Hands-on benchmark:** chain to **Flow Walkthrough** (`flow-walkthrough`, `compare` mode — own product vs `product.competitors`, same scenario, same surface) and fold its `compare.yaml` into the benchmark matrix as the "our current state" and "competitor state" columns (`observed`). Competitor runs are read-only (`references/app-drive-protocol.md` §5).
+
+> **Debate hook.** If the user asks for a debate / role discussion / red-team («проведи дебати», "have agents argue from different roles"), or a researched decision is contested and touches ≥ 2 interest groups — run `references/debate-protocol.md` on the structured findings: evidence pack E1…En = findings that passed the Source Validation Gate (Step 1.5), each with its class (1.5.g), roles chosen with the user (Skeptic mandatory), parallel rounds → facilitator synthesis. The «Debates» section embeds in the published report (Step 4), and the verdict corrects ICE Confidence of any hypotheses derived from this research.
+
+### 4. Confirm Confluence location and publish
+
+**Before creating the page**, if the user has not already specified where to publish, use AskUserQuestion to clarify:
+
+- Which Confluence **space** to use?
+- Which **parent page** to nest the research under? (offer to search existing pages to help the user decide)
+- Suggest a logical location based on the research type (e.g., "Research" or "Competitive Analysis" section)
+- Show the proposed page title for confirmation: `[Research Type] — [Subject] — [Date]`
+
+Once confirmed, create the Confluence page using `createConfluencePage` with:
+
+- The confirmed title and location
+- Structured sections matching the framework used
+- Tables for comparison data
+- A summary/TL;DR section at the top
+- **Glossary section** — at the end of the document (before Sources), add a "Glossary" section that explains all terms, professional jargon, abbreviations, and metrics used in the report. For each term provide a concise, clear definition accessible to a reader who may not be deeply familiar with the domain. Examples: "CAC (Customer Acquisition Cost) — cost of acquiring one customer", "Churn rate — percentage of users who stop using the product over a given period", "TAM (Total Addressable Market) — the total market volume theoretically available to the product". Use the user's preferred language (`user.language`) for the glossary content.
+- Sources section at the bottom with links — clearly marking each source type (Web, Confluence, Google Drive, Knowledge Library, ChatGPT Deep Research, Gemini Deep Research, uploaded file, etc.) and its evidence class (1.5.g)
+
+**Confluence formatting requirements — use standard (non-legacy) elements:**
+
+Use only current, non-deprecated Confluence elements. Do NOT use elements marked as "Legacy" in the Confluence editor.
+
+1. **Table of Contents** — use the current Table of Contents macro (not the legacy TOC macro). Heading levels 1-6
+2. **Headings** — H1/H2/H3 hierarchy for all sections and subsections
+3. **Dividers** — horizontal rule between all major sections (use the current divider, not the legacy horizontal rule)
+4. **Tables** — use the standard Confluence table element for all structured data: comparison matrices, feature lists, metric tables, SWOT grids
+5. **Bold text** — highlight key theses, important conclusions, critical data points
+6. **Expand/Collapse sections** — use the current Expand macro (not legacy) for long detailed sections that may clutter the page (e.g., full competitor profiles, detailed data tables)
+7. **Info/Note/Warning panels** — use the current panel macros for callouts (key insights, warnings, caveats)
+8. **Links** — use standard Confluence page links and external URL links
+9. **Status lozenges** — use for quick visual indicators where appropriate (e.g., feature availability: ✅ Available / ❌ Missing / 🔶 Partial)
+
+**Avoid legacy elements**: If an element is marked "Legacy" in the Confluence editor, do not use it. Always prefer the current/modern equivalent.
+
+If Confluence MCP is unavailable, follow the integration fallback chain. As a last resort, generate the content as a local document and let the user publish manually.
+
+### 5. Summary report and feedback
+
+After publishing, provide a structured report of what was done:
+
+**Report format:**
+- **What was done:** brief description of the research conducted (type, scope, depth)
+- **Artifacts created:** links to all created documents (Confluence page, local files, etc.)
+- **Key findings:** 3-5 key takeaways from the research — from real evidence only, never `simulated` input
+- **Sources used:** list of source types used (Web, Confluence, Google Drive, Knowledge Library, Figma, ChatGPT Deep Research, Gemini Deep Research, uploaded files), each with its evidence class
+- **Recommended next steps:** suggested follow-up actions
+
+**After presenting the report, proactively ask for feedback:**
+
+> "Are you satisfied with the research results? Would you like to refine, add, or change anything?"
+
+- If the user requests changes — iterate: update the research, re-publish, present updated report
+- If the user confirms — proceed to the next step
+
+**Self-improvement check** (after corrections are applied and confirmed): follow `references/self-improvement.md` — analyze whether the correction is a pattern, and if so propose a SKILL.md improvement (version bump + CHANGELOG).
+
+### 6. Propose next step — Write Concept / PRD / CJM Research
+
+After sharing the research summary, **always** propose transitioning to the next step:
+
+> "Research is complete. Would you like to create a concept (PRD) for a feature based on these results? I can pass the full research context to the Write Concept / PRD skill and we can start drafting the document right away."
+
+If UX Benchmark Research was conducted, also offer:
+> "Run **CJM Research** to analyze your funnel using these benchmarks as evidence"
+
+After a competitive study, also offer:
+> "Run **Product Landscape** to map this category and pick products for a hands-on comparison"
+> "Run **Flow Walkthrough** to compare this flow with [competitor] on [surface] hands-on"
+
+If the user agrees to Write Concept:
+- Pass the full research context to the Write Concept / PRD skill: Confluence page link, key findings with their evidence labels, identified opportunities, data sources used
+- The Write Concept skill will use these research results as primary input (Step 2 of its workflow); after prototype sessions (build-first, since v3.9.0) this return is offered first, and `write-concept` resumes from the brief it printed (`references/frameworks.md` → Prototype sessions)
+- No need to re-gather the same data — the research is already done
+
+If the user agrees to CJM Research:
+- Invoke CJM Research skill with the benchmark data and gap analysis
+- Pass the benchmark matrix and current state analysis, labels kept
+- CJM Research will use these findings to enrich the journey analysis with evidence-backed insights
+
+If the user declines — end the workflow gracefully.
+
+### Step D — Design Bridge handoff (Optional)
+
+> Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
+
+Research synthesis naturally converts into a research-highlights deck for distribution among the team and stakeholders. Via `AskUserQuestion`:
+
+> "Research published. Create a design-side deliverable?"
+> 1. **Research highlights deck** — 10-slide summary with key themes, quotes, and numbers (their classes travel in the source captions; `simulated` input is never a slide finding) — recommended for user research or UX benchmark results
+> 2. **Research-enrichment through design:research-synthesis** — pass raw interview notes through Claude Design's research-synthesis for deeper thematic analysis (if user research included raw transcripts)
+> 3. **Skip**
+
+IF user selects 1 → invoke `design-bridge` with:
+- `intent: deck`
+- `subtype: research-highlights`
+- `source: confluence_research_page_url`
+- `audience: team` (default; upgrade to `c-level` upon request)
+- `length: 10`
+
+IF user selects 2 → invoke `design-bridge` with:
+- `intent: research-enrichment`
+- `source: raw interviews / survey responses`
+- design-bridge will return structured themes — add as appendix to research page (the themes keep the class of the notes they synthesise, 1.5.g)
+
+Fallback: if `design-bridge` is not installed — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Do not block the workflow.
+
+### 7. Save to Vault (Optional)
+
+> Requires: `references/vault-protocol.md` → Vault Save
+
+IF vault_level > L0 AND vault sync_mode != "off":
+
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.15.1", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+   (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added; since v3.6.0 a research plan, discussion guide, insight report or insight memo saves the same way, tagged with its subtype.)
+2. Display: "Saved to Vault: Research/{product}/…"
+
+## Quality standards
+
+- Always cite sources with links
+- Every cited number, quote, benchmark and "users want X" carries its evidence class (`references/pm-mental-model.md` §4; 1.5.g): a stakeholder's opinion is `reported (<who>)` and never a real-user source, an unsourced interpretation is `[assumed — …]` or a hypothesis
+- Flag data that is older than 12 months
+- If data is insufficient, explicitly state gaps and suggest how to fill them — the human step of each 1.5.g hand-back line is listed there
+- Use Ukrainian or English based on user's language preference
+- **(v0.8.0+) Inline source annotation MANDATORY** — every cited metric / benchmark / claim from external source carries inline annotation with source name, year, geography per Gate Check 4 of `data-integrity-protocol.md`
+- **(v0.8.0+) Caveat propagation** — Step 1.5 ⚠️ Caveat sources surface their qualifier in the final report (recency caveat, geographic fit caveat, single-source caveat, bias caveat). Do not hide under generic "based on industry research"
+- **(v0.8.0+) Extreme claims disclosure** — any sensational claim (+200%, 10×, #1 in industry) must include "verified across N sources" disclosure
+- **(v0.8.0+) Source type markers** — every cited source in Sources section tagged (`baymard-premium` / `web-search` / `kb-source` / `competitor-website` / `user-research` / `deep-research-llm`); include recency + geography for each, and the evidence class the marker maps to (1.5.g)
+
+## Additional Resources
+
+- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.8.0+)** — Gate Checks 1–6 for every cited source (Step 1.5; Gate Check 6 is 1.5.g, since v3.8.0)
+- **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
+- **`references/frameworks.md`** — detailed templates for each research framework
+- **`references/source-validation-gate.md`** — Step 1.5 sub-checks 1.5.a–1.5.g: recency thresholds, geography tiers, cross-validation, bias screening, source-type markers and inline annotation, role gate emphasis, evidence classes and the frontier (skill-local)
+- **`references/examples/research-plan-example-v1.md`** — golden exemplar for the `research-plan` subtype (since v3.6.0; load on demand when rendering it)
+- **`references/examples/user-research-synthesis-example-v1.md`** — golden exemplar for an interview synthesis on the default `user-research` subtype (since v3.8.0; load on demand when rendering one)
+- **`references/deep-research-llm.md`** — Step 2 Deep Research via ChatGPT / Gemini: per-LLM steps, cross-referencing, guidelines for LLM-sourced data (skill-local)
+- **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
+- **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
+- **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
+- **`references/cjm-protocol.md`** — CJM anomaly severity, funnel impact formulas, holiday windows, anomaly verification checklist (relevant when research supports CJM analysis)
+
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Competitive, market, user and UX-benchmark research — interview synthesis, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research competitors", "analyze the market", "do competitive analysis", "synthesize user interviews" (also "let me tag the first interviews myself, then synthesize"), "find market trends", "compare against industry benchmarks". Also UA — «проаналізуй ринок», «конкурентний аналіз», «ринкові тренди». Calls knowledge-library for enrichment during research.

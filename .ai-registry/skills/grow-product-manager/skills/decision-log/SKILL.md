@@ -1,0 +1,105 @@
+---
+name: decision-log
+version: 0.5.2
+description: Log and retrieve product decisions as ADR records — context, options, rationale, consequences. Not meeting notes (meeting-processor), not experiment state (experiment-tracker). UA — «зафіксуй рішення», «чому ми вирішили…», «перегляньмо це рішення». EN — "log this decision", "revisit a decision".
+---
+
+# Decision Log
+
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
+Product decisions evaporate from chats and meetings; three months later nobody remembers why the flag was rolled back or why SaaS-template won over custom. This skill gives every significant decision a permanent ADR-style record with links to the evidence — and answers "чому ми вирішили X?" from the accumulated log.
+
+## Prerequisites
+- `references/local-context-protocol.md` — Step 0.
+- `references/vault-protocol.md` + `references/vault-schema.md` — the `decision` artifact type (Decisions/) already exists in the taxonomy.
+- `references/persistent-storage.md` — fallback storage when no vault is configured.
+- `references/roi-frameworks.md` — optional cost-of-decision (ROAIP) field.
+- `references/goal-frameworks.md` — optional Tell-and-Sell commitment status.
+- `references/judgment-points.md` — since v3.7.0: the owner's confidence question (§1–§2), the confidence line (§3), the decision-hygiene fields (§4) and the resulting check (§5).
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
+
+## Storage
+- **Vault configured (L1/L2):** `Decisions/{product}/decision-{topic}-{date}.md` via `vault_save({type: "decision", …})`.
+- **No vault (L0):** `~/.grow-pm/decisions/` with the same file format; on later vault connection these migrate via the standard mirror protocol.
+
+## Record format (ADR-style)
+
+```markdown
+# Decision: {title}
+- **Date / Owner:** {date} / {owner — the one accountable person; a link to their card when `ctx entity "<e-mail or name>" --kind person --skill decision-log` finds exactly one (`references/people-context-protocol.md` → Find a person), else the name}
+- **Decided by:** {everyone who took the decision, when more than the owner}
+- **Status:** active | superseded (→ [[link]])
+
+## Context
+What was being decided and why now (1-3 sentences, links to trigger: meeting, experiment, analysis).
+
+## Options considered
+1. {option} — pros / cons
+2. {option} — pros / cons   (minimum 2; "do nothing" counts; each option not chosen ends with "— rejected: {one-line reason}")
+
+## Decision
+The chosen option, stated plainly.
+Confidence: {known | likely | uncertain | unknown} · most sensitive to: {…} · would change if: {revisit trigger}
+
+## Rationale
+Why this one — evidence links (readout, research, metrics with inline periods), each with its class first in its annotation since v3.8.0 (`measured · …`, `reported · …`); an input with no source reads `[assumed — …]`. **Base rate / outside view:** {how often this kind of decision worked, with source} or "none found".
+
+## Minority report (when a debate or a named dissenter disagreed)
+{2–3 sentences: the strongest dissent and who held it}
+
+## Consequences & risks
+What this commits us to; what we monitor; revisit by {date} (optional) or when {revisit trigger}.
+
+## Cost & commitment (optional)
+- **Cost of decision (ROAIP):** what this decision/investment costs and its expected ROI / annual return (`references/roi-frameworks.md`) — fill when the decision has a quantifiable economic weight.
+- **Commitment (Tell and Sell):** who committed to the decision and how (`references/goal-frameworks.md` → Tell and Sell) — "just told" vs "sold and committed", and by whom. Distinguishes a directive from a shared commitment.
+
+## Links
+[[related artifacts]] — MoM, experiment, requirements, roadmap items, Jira epics.
+```
+
+Frontmatter per `vault-schema.md`: `type: decision`, `product`, `tags` (topic, area), `related`, plus `supersedes` / `superseded_by` when applicable, and optional `decision_cost` / `decision_roi` / `commitment` fields; since v3.7.0 also `owner`, `rejected_alternatives`, `base_rate`, `revisit_trigger` and `minority_report`, and since v3.8.0 `evidence_classes` (derived at the step-2 gate, never asked, left out when nothing states a class) — meanings and the "not recorded" rule in `references/judgment-points.md` §4. A record stays valid without the keys and labels its version predates (the v3.7.0 fields, the v3.8.0 `evidence_classes` and Rationale labels). **When the record names a revisit-by date, write it to the `revisit_by` frontmatter field as well** — that field is what `focus-advisor` filters to surface overdue revisits; a date left only in the body is invisible to it.
+
+## Modes
+
+### Mode: log (default)
+1. Collect the record fields — from the invoking skill's context when chained (meeting decision block, experiment decide payload, planning outcome, debate verdict), or via short dialogue when standalone. Do not interrogate: infer what's already in context, ask only for gaps (especially **options considered** — the field people skip and later regret). The v3.7.0 fields (owner, rejected reasons, base rate, revisit trigger, minority report) and, since v3.8.0, `evidence_classes` are never asked here: they come from the context or the step-1a answer, else stay `not recorded` / `none found` in the body (an unstated `evidence_classes` key is left out).
+1a. **Owner's confidence first (P2, since v3.7.0).** Ask the P2 question of `references/judgment-points.md` §1–§2 — how sure the owner is and what would make them revisit — one question for a batch of decisions; all its §2 rules apply (switch, known estimate, automated run, skip). The answer fills the record's `Confidence:` line and `revisit_trigger`; a skip or a switched-off question leaves them as the owner stated them in the context (a debate's facilitator confidence is not the owner's), else `unknown (not stated)` / `not recorded` — never a separate question. When the linked evidence or base rate points to a different level, show that as the "Your estimate vs mine" comparison; the owner's level is what the record keeps. When the Debate hook below runs, ask 1a after the verdict, so the level and trigger belong to the option finally chosen.
+2. Show the draft record — its confidence line checked first against Gate 4c (`references/judgment-points.md` §6): a clause that names nothing observable is shown as `not recorded`, never replaced by an invented one. **Gate: confirm/correct before saving.**
+2a. **Evidence labels (since v3.8.0)** — the same gate is this record's Gate 4b step (`references/artifact-style-gate.md`; no Step T here): each Rationale input carries its class (the linked evidence's labels, the classes the invoking skill's payload states; an unsourced one `[assumed — …]`, accepted by confirming the record), fixed only toward a weaker class; `evidence_classes` lists the classes of the Rationale's inputs and of the invoking payload (`references/judgment-points.md` §4); a senior opinion the decision leans on reads `[assumed — senior opinion: <who>]`, and a `simulated` A# the decision rests on stays on one `Simulated input — hypotheses only` line placed after the Rationale section (outside it) and still counts in the key. These checks never edit the owner's level or clauses: a v3.8.0 cap, or an `assumed` / `simulated` input the owner's `most sensitive to` does not name, appears only in a "Your estimate vs mine" comparison when one is shown (§6).
+3. Save (vault or fallback), display the link. If the decision implies work → offer `task-creator`.
+
+> **Debate hook.** For a contested decision (real trade-offs, ≥ 2 interest groups) — before the gate in step 2, offer a debate per `references/debate-protocol.md`, using the evidence already linked to the record as the pack. The verdict feeds the Decision and Rationale sections (since v3.8.0 the pack's classes come with it: E# keep theirs, A# keep their label — `assumed` or `simulated`), the minority report goes into the Minority report section and the `minority_report` field (since v3.7.0; before that it sat in Consequences & risks), and the debate artifact links via `related`.
+
+### Mode: search ("чому ми вирішили X")
+1. Search Decisions/ by topic/tags/product (vault search per `vault-protocol.md`; L0 → grep the fallback folder).
+2. Present matches: title, date, status, one-line decision. Open the full record on request — the Rationale section IS the answer to "why".
+3. Nothing found → say so honestly and offer to log the decision now if the user knows it.
+
+### Mode: revisit
+1. Locate the existing record; display it.
+1b. **Resulting check (since v3.7.0).** Before collecting the new decision, show the three lines of `references/judgment-points.md` §5 — decision quality judged on what was known then, the outcome, and the resulting line (luck or variance when quality and outcome disagree, else that they agree). They go into the new record's Context; no new question — the owner corrects them at the gate in step 3.
+2. Collect the new decision (same format, Context = what changed since, plus the step-1b lines); its Confidence line and `revisit_trigger` come from the P2 question of log step 1a, asked here for the new decision under the same rules.
+3. Save the new record with `supersedes: [[old]]`; update the old one: `status: superseded`, `superseded_by: [[new]]`. **Both writes gated.**
+
+## Quality Standards
+- Never invent options, rationale, owner, base rate, revisit trigger or evidence classes — only what the user/invoking skill actually provides; gaps stay visibly empty ("options not recorded", "not recorded", "none found").
+- One decision = one record; bundles get split.
+- Superseding never edits history — old records are marked, not rewritten.
+- Every record carries at least one evidence link when evidence exists.
+- Language — `user.language`.
+
+## Skill Chaining
+← `meeting-processor` (M10: key decisions from MoM) · ← `experiment-tracker` (decide mode) · ← `quarterly-planning` retro / `project-planning` replan (scope decisions) · ← `feedback-triage`, `goal-setter`, `one-on-one` (decision outcomes) · ← any skill with a decision outcome · → `task-creator` (when the decision spawns work) · → `focus-advisor` (overdue `revisit_by` dates surface as tactical signals — `focus-signals.md` §6).
+
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Log and retrieve product decisions as ADR records — context, options, rationale, consequences. Not meeting notes (meeting-processor), not experiment state (experiment-tracker). UA — «зафіксуй рішення», «чому ми вирішили…», «покажи рішення по…», «журнал рішень». EN — "log this decision", "why did we decide X", "show decisions about Y", "supersede that decision", "decision log". Also UA — «перегляньмо це рішення», «зафіксуй рішення після дебатів». Also invoked by meeting-processor, experiment-tracker and planning skills when their outcome contains a decision worth recording.

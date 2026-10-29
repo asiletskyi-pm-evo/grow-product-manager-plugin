@@ -1,0 +1,922 @@
+# Onboarding Mode — full step-by-step workflow (Steps 1–17 + Planning/Focus setup)
+
+> Part of `plugin-configurator`. Loaded on demand when Onboarding mode starts. The mode map and entry conditions live in SKILL.md.
+
+## Basic — derive first, then at most five questions (since v3.22.0)
+
+The default onboarding. The configurator does not walk Steps 1–16 as an interview: it reads what it can, shows it as one table, and asks only what it could not derive. Extended (Steps 4b–15 one by one) and the test sandbox are still there — on request («налаштуй усе», `upgrade to Extended`, «розширене налаштування», `dry-run onboarding`), which opens Step 2. Semantics: root `references/context-protocol.md` §5k, the call map: root `references/context-observe.md`.
+
+**B-0. One line, then the scan.** «Спершу подивлюся, що вже можна дізнатися з твоїх конекторів, — далі до 5 питань, решта прийде в роботі.» Step 0-host decides the path: FS + SHELL — this section; no SHELL — the same scan and the same table in prose, then Step 16c's file written after the «так» (no store, no sources per field: `host-profiles.md`); no MCP at all — the questions below are typed answers.
+
+**B-1. Scan (Step 3 + the bootstrap).** Ping the connectors as Step 3a does, then read them **read-only** by `context-observe.md` §3 — Atlassian first (`atlassianUserInfo`, your active Jira projects and Confluence spaces, the site), then, each only if connected, the calendar's co-attendees, your mail's domain, Fireflies' participants, Tableau's dashboards you own, your `local-context.md` if there is one, the registered providers (`provider_bundle.py`: mail → team → role). No connector blocks: without Atlassian the questions ask more. Write the observation file in the session's scratchpad, every connector tried in `connectors`. Then `python3 "<plugin root>/scripts/ctx.py" bootstrap --observed <file>`.
+
+**B-2. The questions** — each with its progress (`1/5` … — the real count, as the skipped ones fall away) and one line on which skills use the answer (concept §5.2 G, HAX G16). A question whose every field the table already has at high confidence is not asked. Each answer is added to the observation file as a fact `from: user` (the field it answers), and the table is run again.
+1. **«Це ти?»** — name, e-mail and language in one AskUserQuestion: «так» / «змінити ім'я» / «змінити мову» / Other. The language defaults to the conversation's. Used by every skill (language), task-creator and focus-advisor (your Jira account).
+2. **Role** — **one** call: the three likeliest roles, the derived one first (the provider's, the file's, else `pm`), plus Other with free text matched as Step 4a matches it (`role-profiles.md` §5). Role scope, Level home and the role label follow from `role_defaults` and go into the file as `user` facts — never asked. Used by every skill's home altitude, quick wins and templates.
+3. **Products** — multiSelect of your active Jira projects (≤ 4 options, the busiest first; more → «ці N? / номери»): each chosen one a product, its key and your busiest Confluence space as its fields. A project not chosen is not written: remove its facts from the observation file before the table is run again. Used by write-concept, requirements-creator, task-creator, product-research.
+4. **Team** — the provider's team / «нова: <назва>» / «пізніше» («пізніше» → remove the team's facts from the file; «нова» → a `user` fact with that title). Its members are no question: co-attendees and participants arrive as inbox deltas, or come from `ctx entity` (v3.19) later. Used by sprint-planning, product-reporter, focus-advisor.
+5. **The table** — the rows `ctx bootstrap` prints and one question: «зберегти все / номери / нічого». «зберегти все» → `ctx bootstrap --observed <file> --apply --code <код>`; numbers → `--only <номери>`; a `✋ твоє` or `⚠` row is taken only when named (`--take`). Exit 4 → run the table again and ask again. With FS + SHELL and no store yet, the same answer creates the store: say it in one line — «Контекст збережено записами (<шлях>); скасувати — ctx undo». The organisation is no question: its domain and site are high confidence; several sites are `⚠` rows chosen by number here. With neither Atlassian nor mail there is no site and no domain: question 3 then also asks the organisation's name, written as a `user` fact (`type: org`), or the products have nowhere to go.
+
+**B-3. After.** Exit 3 with «ще не в записах» means a `local-context.md` that is not in records yet: offer the move first (`ctx migrate --apply`, one question), then run the table again — never loop on question 5. Exit 4 «таблиця змінилась» means the table moved: show it again and ask again. Delete the observation file. Show what was saved (`записано: …`) and the inbox's one line when low facts went there (`У скриньці +N — /context inbox`). The sections with nothing found stay in `Deferred steps`; Step 17's quick wins follow. A user who already has a context and asks «онови мій контекст із конекторів» gets B-1 and B-2's question 5 only: the table of differences, `✋ твоє` never taken unasked.
+
+### Step 1 — Welcome and onboarding map
+
+**1a. Greeting:**
+
+> "Welcome! This configurator gets the plugin ready to work for your organization, products, and tools. Here's what we'll go through:"
+
+**1b. Print the full onboarding map:**
+
+| # | Step | Type | Basic | Extended | Approx. time |
+|---|------|------|-------|----------|--------------|
+| 1 | Welcome + map | info | — | — | 30 sec |
+| 2 | Basic vs Extended | choice | ✅ | ✅ | 30 sec |
+| 3 | Connector pre-check | auto | ✅ | ✅ | 30 sec |
+| 4, 4a | User Profile + Role and scope | required | ✅ | ✅ | 1-2 min |
+| 4b | Judgment settings | hybrid | defaults, ⏭️ later | ✅ (`hats_allowed`, `hypothesis_first` — one message; `learning_mode`, `build_first` shown, not asked) | 30 sec |
+| 5 | Organization | required | ✅ | ✅ | 1 min |
+| 6 | Product (core fields) | required | ✅ | ✅ | 1-2 min |
+| 6+ | Product (extended fields) | optional | — | ✅ | +2-3 min |
+| 7 | Analytics & Data Sources | hybrid | base URL | full | 1-3 min |
+| 8 | Key Metrics & OKRs | optional | — | ✅ | 1-2 min |
+| 9 | Teams | optional | ⏭️ later | ✅ | 1-3 min |
+| 10 | Repositories | optional | ⏭️ later | ✅ | 1 min |
+| 11 | CJM | optional | ⏭️ later | ✅ | 3-5 min |
+| 12 | Knowledge Library | optional | ⏭️ later | ✅ | 1-2 min |
+| 13 | Templates | optional | ⏭️ later (built-in only) | ✅ | 1-2 min |
+| 14 | Obsidian Vault | optional | ⏭️ later | ✅ | 3-5 min |
+| 15 | Custom Sections | optional | ⏭️ skip | ✅ | free-form |
+| 16 | Review + Save | required | ✅ | ✅ | 30 sec |
+| 17 | Quick Wins | info | ✅ | ✅ | 30 sec |
+
+**Legend:**
+- ✅ — will be asked
+- ⏭️ later — skipped in Basic, can be added later via `configure plugin → add [section]`
+- ⏭️ skip — not asked at all in Basic
+- — — no user input
+
+> "Basic mode takes ~3-5 minutes; the plugin is immediately usable for `write-concept`, `requirements-creator`, `brainstorm-features`, and `product-research`.
+> Extended mode takes ~15-25 minutes and configures every feature including CJM, Vault, and full Tableau analytics."
+
+**1c. Tip:**
+
+> "I'd recommend starting with Basic. Any deferred step can be added later by saying `configure plugin → upgrade to Extended`, or by adding a single section like `add CJM` or `connect Obsidian`."
+
+### Step 2 — Choose mode
+
+> **Since v3.22.0 only on request** — Basic is the section above and asks no mode. Step 2 opens when the user asks for the full setup or the sandbox.
+
+Ask via AskUserQuestion:
+
+- **Basic (Recommended)** — required steps only. Everything else is deferred and can be added later.
+- **Extended** — full setup of every feature.
+- **Test mode (sandbox)** — walk through onboarding without touching real data. All writes are redirected to `~/.grow-pm-sandbox/`. See root `references/test-mode.md`.
+- **Quit and read docs** — show README and exit.
+
+**Save the choice in session memory** as `selected_mode`. Each subsequent step reads this and decides whether to execute or defer.
+
+If `selected_mode == test` — switch all storage paths from `~/.grow-pm/` to `~/.grow-pm-sandbox/` for the rest of this session. Real data is never touched. See the Test Mode workflow for details.
+
+### Step 3 — Connector pre-check
+
+**3a. Scan available MCP connectors** in the session.
+
+Start from the plugin's **declared connectors** (`.mcp.json` → table in `references/integration-strategy.md` → *Declared connectors*): for each declared server, the host already knows whether it is connected — check for its tool namespace in the session and, if present, run the ping from that table. A declared connector that is absent is reported as "not connected — enable it in the plugin's Connectors tab"; do not search the registry for it.
+
+Then, for the connectors the plugin does not declare (Tableau, Notion, Slack, Obsidian) — detect by pattern and ping:
+
+
+| Connector | Ping call | What it confirms |
+|-----------|-----------|------------------|
+| Jira | `getVisibleJiraProjects` | Auth + access |
+| Confluence | `getConfluenceSpaces` | Auth + access |
+| Figma | `whoami` | Auth |
+| Notion | `notion-get-teams` | Auth + workspace access |
+| Tableau | `search-content` (no terms, limit 1) | Auth + server reachable |
+| Fireflies | `fireflies_get_user` | Auth |
+| Google Calendar | `list_calendars` | Auth |
+| Gmail | `list_labels` | Auth |
+| Google Drive | `list_recent_files` | Auth |
+| Slack | (any read tool) | Auth |
+
+**3b. Score connectors against required-for-mode:**
+
+Build the readiness table:
+
+| Connector | Status | Required for Basic | Required for Extended | Used by skills |
+|-----------|--------|--------------------|-----------------------|----------------|
+| Jira | ✅/❌ | ⭐ Strongly recommended | ✅ Mandatory | `task-creator`, `requirements-creator` |
+| Confluence | ✅/❌ | ⭐ Strongly recommended | ✅ Mandatory | publishing skills |
+| Tableau | ✅/❌ | — | ⭐ Strongly recommended for CJM/AB | `product-analysis`, `cjm-research` |
+| Figma | ✅/❌ | — | optional | `product-research`, `design-bridge` |
+| Notion | ✅/❌ | optional | optional | publishing alternative |
+| Fireflies | ✅/❌ | — | optional | `meeting-processor` |
+| Google Drive | ✅/❌ | optional | optional | `product-research` |
+| Slack | ✅/❌ | — | optional | notifications |
+
+**3c. Action proposals:**
+
+If a `Mandatory` connector is missing for the chosen mode → propose `search_mcp_registry` + `suggest_connectors` BEFORE proceeding. Offer:
+- **Connect now** — Configurator pauses, the user makes the connection, then says "continue" → Configurator re-runs the ping for that connector and continues.
+- **Continue without** — Configurator records `deferred_connectors: [...]` in session memory; surface the gap in Step 17 Quick Wins.
+- **Quit and finish later** — exit; next launch enters Reinstall mode and re-asks.
+
+If only `Strongly recommended` connectors are missing → mention them as warnings, do not block.
+
+**3d. Persist findings:**
+
+Save in session memory: `connector_inventory: { connected: [...], missing: [...], blocking: [...] }`. Used by Step 7 (Analytics) and Step 17 (Quick Wins).
+
+### Step 4 — User Profile
+
+Ask via AskUserQuestion:
+
+- **Name** — user's display name (pre-fill from session context if available)
+- **Email** — for Jira account lookup
+- **Preferred language** — uk (Ukrainian) or en (English) for skill output
+
+The role is asked separately in 4a — after the language, so its questions are already in the user's language.
+
+**Auto-discover Jira account:**
+If Jira MCP is available, use `lookupJiraAccountId` with the provided email to find and store the user's Jira accountId.
+
+#### 4a. Role and scope (Basic and Extended)
+
+Semantics — root `references/role-profiles.md` (§2 roles, §2b session defaults, §5 resolution). One sentence to the user before the question: the role sets where a run starts (the home altitude, the quick wins, the templates ranked first, the extra checks and the planning view); it hides no skill and relaxes no check.
+
+`AskUserQuestion` takes 2–4 options per question and up to 4 questions per call, so the eight roles are picked in **two calls**:
+
+**Call 1 — role group** (one question, four options; the host adds "Other" with free text by itself — never add it as a fifth option):
+
+| Option | Roles inside |
+|---|---|
+| Product | PM · Head of Product · CPO |
+| Design & research | Product Designer · UX Researcher |
+| Data & engineering | Product Analyst · Engineering Lead |
+| Business | Business Owner / head of a business line |
+
+**Call 2 — role inside the group + scope** (two questions in one call):
+
+1. **Role** — the 2–3 roles of the chosen group as options, mapped to the enum: PM → `pm`, Head of Product → `head_of_product`, CPO → `cpo`, Product Designer → `product_designer`, UX Researcher → `ux_researcher`, Product Analyst → `product_analyst`, Engineering Lead → `eng_lead`, Business Owner → `business_owner`. A group with a single role skips this question; call 2 then carries scope only.
+2. **Scope** — `product` (one product) · `area` (a direction or a group of products) · `org` (the whole product organisation).
+
+The host's own "Other" on call 2: a typed role is mapped with `role-profiles.md` §5 and confirmed once; a typed scope is mapped to the nearest of product / area / org and confirmed — free text is never written into `Role scope`.
+
+**"Other" in call 1** — map the free text with the keyword table in `references/role-profiles.md` §5 (the single source; never restate it here). Call 2 then asks, as its role question, to confirm the proposed enum: the proposed role (Recommended) · `other` (keep my wording, `pm` defaults). The typed text is kept as `Role label` either way.
+
+**Host without structured questions** (`references/host-profiles.md` §4): one numbered list of the eight roles plus `9. other — describe in your words`, then the three scopes as a second short list; parse the reply as a number or as text (free text → §5 keyword table → confirm once in plain text).
+
+**Record** in session memory for Step 16c (nothing is written before the file exists):
+
+- `- **Role:** <enum>`
+- `- **Role label:** <text>` — the user's own wording when typed ("Other"), otherwise the role's display name from the call-2 mapping (e.g. `Business Owner` for a single-role group)
+- `- **Role scope:** <product | area | org>`
+- `- **Level home:** <Lx>` — `level_home` from `role-profiles.md` §2b for the chosen role (`other` → the `pm` row); derived, never asked
+
+A Role holding an enum value counts as confirmed — no skill asks again (Step 0i). **Standalone:** `set role` / `change my role` / «змінити роль» runs this step alone on an existing `local-context.md`: an explicit request re-asks even when Role already holds an enum value, recomputes `Level home`, sets `Role label` to the new role's display name when the role changes (the user's own wording when typed) and keeps it when the role stays the same, writes the four lines in place and shows the changelog (`User Profile → Role | was | became`).
+
+#### 4b. Judgment settings
+
+Writes the `## Judgment` section (format and key semantics — `references/context-schema.md` → Judgment).
+
+- **Basic:** ask nothing. Record the defaults silently — `hypothesis_first: on`, `learning_mode: off`, `hats_allowed: all`, `build_first: on` — and append `judgment` to `onboarding.deferred_steps`.
+- **Extended:** ask two switches in one message. **`hats_allowed`**: which one-run role overrides ("look at this as a CPO", `role-profiles.md` §4) the plugin may apply. Options: `all` (Recommended) · `none`; a list of roles is typed through the host's "Other" (each name matched first against the exact enum values, `pm` included, then against `role-profiles.md` §5 without its fall-through row — an unmatched name is listed as "not recognised" in the confirmation, never mapped to `pm`; the list confirmed once). **`hypothesis_first`** (since v3.7.0): whether skills ask for your own estimate before showing theirs at scoring, readout, verdict, prioritisation and decision points — including focus-advisor's prior and decision-log's confidence question (`references/judgment-points.md` §1). Options: `on` (Recommended) · `off`. Then show the other two in one line, not as a question, with their current values (the defaults on a new file): "Also set, changeable later with `update config → Judgment`: learning mode `<current, else off>`, build first `<current, else on>`." `learning_mode` (the PM-first pass or the "How I got here" block at four synthesis steps) and `build_first` (the one-line build-first offer in write-concept and design-bridge) act since v3.9.0 and add no onboarding question. Record only the two answers; the other two keep their current values (the defaults on a new file).
+
+### Step 5 — Organizations
+
+**5a. Multi-org support — ask via AskUserQuestion:**
+
+> "How many organizations/companies do you work with? The plugin supports working with multiple simultaneously."
+
+- Single organization (most common) → proceed with one
+- Multiple organizations → collect info for each, repeating Steps 3-5
+
+**5b. For each organization, collect:**
+
+| Field | How to collect | Auto-discovery |
+|-------|---------------|----------------|
+| Organization name | AskUserQuestion | — |
+| Domain | AskUserQuestion | — |
+| Jira instance URL | Auto from MCP, confirm with user | ✅ Extract from Jira MCP base URL |
+| Confluence instance URL | Auto from MCP, confirm with user | ✅ Extract from Confluence MCP base URL |
+
+### Step 6 — Products (per organization)
+
+> **Mode gate:** **Basic** mode collects only core product fields (name, description, platforms, Jira project key, Confluence space). Extended fields are deferred. **Extended** mode collects every field.
+>
+> Subsections below marked **(Extended)** are skipped entirely in Basic — do not ask them, regardless of what the body text lists. Applies to: Locales/countries, OKRs, metric_targets, Competitors, custom dashboards, A/B test dashboards.
+
+
+**6a. Product discovery — combine auto + manual:**
+
+If Jira projects were discovered in Step 3:
+> "I found these projects in Jira: [list]. Which of them are your products? Some projects may belong to the same product."
+
+Help the user map Jira projects → Products (may be 1:1 or many:1).
+
+**6b. For each product, collect via AskUserQuestion (section by section):**
+
+**Basic info:**
+- Product name
+- Brief description (1-2 sentences)
+- Product URL (if web product)
+- Jira project key(s) — pre-filled from discovery
+
+**Platforms:**
+> "Which platforms does this product run on?"
+
+Present common options + allow custom:
+- App Android
+- App iOS
+- Web Portal (buyer/user-facing)
+- Web CMS (seller/admin-facing)
+- Admin panel
+- API
+- Other (specify)
+
+**Locales/countries:**
+> "In which countries/locales does this product operate?"
+
+- All locales (single market)
+- Specific locales (list them)
+
+**Confluence configuration:**
+If Confluence spaces were discovered:
+> "Which Confluence space is used for this product? Found spaces: [list]"
+
+- Default Confluence space
+- Requirements template URL (optional) — "Is there a Confluence template for feature requirements?"
+- Requirements template name (optional)
+
+**Competitors:**
+> "Who are the main competitors of this product? (used for comparative analysis in research)"
+
+Collect: name, URL for each competitor. Minimum 2-3 recommended.
+
+### Step 7 — Analytics & Data Sources (per organization)
+
+> **Mode gate:** **Basic** mode collects only the Tableau base URL (and analytics tool names if mentioned by the user). All extended fields — datasource URLs, Pulse metric IDs, A/B test dashboards per platform, Google Sheets, Amplitude/Mixpanel/Custom BI — are deferred (`onboarding.deferred_steps += ['tableau-full', 'analytics-extended']`). **Extended** mode collects every field below.
+
+
+**7a. Analytics tools:**
+
+> "Which analytics tools does your organization use?"
+
+For each tool mentioned, collect the base URL and any product-specific dashboard URLs:
+
+| Tool | What to collect |
+|------|----------------|
+| **Tableau** | Base URL, Site Name (if non-default), A/B test dashboard URLs (per platform), main product dashboards, Datasource URLs (for `query-datasource`), Pulse metric IDs (for `list-pulse-metrics-*`) |
+| **Google Analytics** | Property IDs or dashboard URLs |
+| **Amplitude** | Workspace URL |
+| **Mixpanel** | Project URL |
+| **Custom BI** | Dashboard URLs |
+| **Google Sheets** | Key shared spreadsheets with metrics |
+
+**7a-Tableau. Tableau full setup (Extended mode only):**
+
+If the user added Tableau in Step 7a, collect the additional fields below. **Skip in Basic mode** — they go to `onboarding.deferred_steps` as `tableau-full`.
+
+If Tableau MCP is available:
+1. Try `search-content` with no terms (limit 1) — verify the connector responds.
+2. Confirm the resolved Server URL and Site Name with the user (auto-fill `tableau_base_url`, `tableau_site_name`).
+
+For all users (regardless of MCP availability):
+
+| Field | What to ask | local-context.md key |
+|-------|-------------|----------------------|
+| Site Name (optional) | "Is your Tableau site the default site, or do you use a named site?" | `organization.tableau_site_name` |
+| Datasource URLs (optional) | "Do you have key published datasources with product metrics? Paste the URL for 1-3 of them with a friendly name." | `organization.tableau_datasource_urls` (map: name → URL) |
+| Pulse Metric IDs (optional) | "If your Tableau Pulse is enabled — would you like to wire 2-3 key metrics for fast health checks? I can list available metrics and you pick." | `organization.tableau_pulse_metric_ids` (map: name → metric ID) |
+
+For Pulse Metric IDs — if Tableau MCP is available and the admin has enabled Pulse, call `list-all-pulse-metric-definitions` and present the user with a multi-select to pick the most relevant metrics; save selected definition IDs.
+
+If Tableau MCP is NOT available — skip Datasource URLs and Pulse Metric IDs (they require MCP to be useful) and note this in `onboarding.deferred_steps` as `tableau-mcp-required`.
+
+**7b. A/B test dashboards (critical for Product Analysis):**
+
+If Tableau or another A/B testing tool is used:
+> "Are there separate dashboards for A/B test analysis? If yes, please provide the URL for each platform."
+
+Collect per platform (e.g., Dashboard 1 for Web, Dashboard 2 for Mobile).
+
+**7c. Other data sources:**
+
+- Google Drive folders with research/strategy docs
+- Figma workspace/team URL
+- Notion workspace (if used alongside Confluence)
+
+### Step 8 — Key Metrics & OKRs (per product)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `key-metrics` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
+
+> "What are the key metrics you track for this product?"
+
+**8a. Key metrics:**
+Collect a list of primary metrics with brief descriptions:
+- Metric name (e.g., "Conversion Rate", "DAU", "Revenue per User")
+- What it measures
+- Current approximate value (if known)
+
+**8b. Current OKRs (optional):**
+> "Are there current OKRs (quarterly objectives) for this product?"
+
+If yes — collect objectives and key results. These help skills align hypotheses and analysis with strategic goals.
+
+**8c. Metric targets (optional):**
+> "Are there target values for the key metrics?"
+
+Collect target values for metrics that have them (e.g., "Conversion Rate → +2% this quarter").
+
+### Step 9 — Teams (per organization)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `teams` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
+
+> "Would you like to configure team information? This will help when creating tasks in Jira."
+
+If yes:
+
+**9a. For each team, collect:**
+- Team name
+- Jira team ID (auto-discover from existing tasks if possible)
+- Members: name, role (FE, BE, Android, iOS, Design, Analytics, QA, PM), Jira accountId (auto-discover via `lookupJiraAccountId`)
+
+**9a′. Members from the team's card (since v3.19.0).** With SHELL, once the team is named, ask the context first: `python3 "<plugin root>/scripts/ctx.py" entity "<team name>" --kind team --skill plugin-configurator --slot team.members` (`references/people-context-protocol.md` → Find a person). One team → propose its members, one line per person and where each comes from (a core's card, a person's own `team:`), with their role and e-mail — for a person the list gives by name only, `ctx entity --q "<a>" --q "<b>" --kind person --skill plugin-configurator --slot person.role --slot person.email`; `схоже на «…» — не точний збіг` is no match: ask which team; the user confirms, removes or adds, and only the confirmed list is written to the team record — nothing is written without that confirmation. Several teams or none → say so and collect the members as below.
+
+**9b. Auto-discovery from Jira:**
+If Jira MCP is available and a product's Jira project is known:
+- Search for recent tasks to discover team field values
+- Extract common assignees and their roles
+- Present to user for confirmation
+
+### Step 10 — Repositories & CI/CD (per product, optional)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `repos` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
+
+> "Would you like to add repository and CI/CD information? (for future skills)"
+
+If yes:
+- Repository URLs (GitHub/GitLab)
+- CI/CD pipeline URLs
+- Environment URLs (staging, production)
+
+### Step 11 — CJM Configuration (per product, optional)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `cjm` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
+
+> "Do you use Customer Journey Map (CJM) analysis in your product work? This enables funnel analysis, anomaly detection, and improvement hypothesis generation."
+
+If no → skip to Step 12.
+
+If yes:
+
+**11a. Select funnel template:**
+
+> "Which funnel template fits your product? Available templates:"
+>
+> - **E-commerce** — Start/Listing → Product Page → Cart/Checkout → Payment/Post-Purchase
+> - **SaaS** — Awareness → Signup/Trial → Activation → Engagement → Conversion → Retention
+> - **Marketplace** — Search/Browse → Listing Page → Contact/Booking → Transaction → Review
+> - **Custom** — define your own stages
+
+See `references/funnel-templates.md` for full template definitions.
+
+**Communicate the selection:**
+> "Using the **[template name]** template with stages: [list]. You can change this at any time."
+
+**11b. If Custom template selected:**
+1. Ask: "How many stages does your funnel have?"
+2. For each stage: collect name, key metrics (at least 1)
+3. Confirm the complete funnel
+
+**11c. Map dashboards to stages:**
+
+For each funnel stage:
+> "Which dashboard shows data for **[Stage name]**?"
+
+Collect dashboard URLs (Tableau, GA, or other). If the user already provided dashboard URLs in Step 7 — suggest mapping those first.
+
+**11d. Set baseline conversions:**
+
+> "Do you know the current conversion rates for each stage? (used as baseline for anomaly detection)"
+
+- If yes → collect per-stage conversion rates
+- If no → "We can read baselines from dashboards during the first CJM analysis."
+
+**11e. Configure anomaly thresholds:**
+
+> "Anomaly detection thresholds (you can use defaults or customize):"
+
+| Level | Default | Your value |
+|-------|---------|-----------|
+| Warning | 10% deviation | [ask] |
+| Critical | 25% deviation | [ask] |
+
+**11f. Default analysis settings:**
+
+| Setting | Default | Ask user |
+|---------|---------|---------|
+| Comparison baseline | Previous period | Previous period / Previous year / Target / Custom |
+| Default platforms | All configured | All / Specific |
+| Default search modes | Library + Internet | User selects from available modes |
+
+**11g. Health-check notifications:**
+
+| Setting | Default | Ask user |
+|---------|---------|---------|
+| Channels | local (in-session only) | local / slack / email / confluence |
+| Frequency | weekly | weekly / custom cron / off |
+
+Writes the `Health-Check Notifications` subsection defined in `references/context-schema.md` → CJM Configuration. Until v2.1.0 the schema defined this subsection and Update mode (U-3) offered to change it, but no onboarding step ever collected it — U-3 edited a subsection that never existed.
+
+### Step 12 — Knowledge Library Setup (optional)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `knowledge-library` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
+
+> "Would you like to set up a Knowledge Library? It stores curated sources (articles, benchmarks, UX best practices) that enrich CJM analysis and research."
+
+If no → continue to **Step 13** (Templates). Declining the Knowledge Library must not skip the Template Library: they are unrelated, and O-T.2's template preferences are "always asked, even when using built-in only". (This line said "skip to Step 14" until v2.1.0, so a user who declined KL never reached Step 13 — leaving `templates_setup_completed` unset and Step 16g's nudge firing at someone who was never asked.)
+
+If yes → delegate to `knowledge-library` skill onboarding workflow (KL-1 through KL-6). The Knowledge Library skill handles:
+1. Directory structure initialization
+2. Source import (if user provides URLs or files)
+3. Baymard Premium configuration
+4. Default search modes
+5. Confluence and Google Drive search validation
+
+After Knowledge Library setup completes, continue with Step 13.
+
+### Step 13 — Template Library Setup (optional)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `templates` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
+
+> Requires: `references/template-protocol.md` (full resolution protocol) and `skills/template-library/SKILL.md` (CRUD actions)
+
+The Template Library stores reusable templates for artifacts the plugin generates (concepts, requirements, research, CJM, epics, tasks, presentations). Templates can be **built-in** (ship with the plugin, read-only), **user-global** (apply to all products), or **product-specific** (scoped to one product).
+
+**O-T.1. Introduce and ask:**
+
+> "Would you like to configure the Template Library now? It stores reusable templates for concepts, requirements, research, CJM reports, epics, tasks, and presentations. You can always set it up later."
+
+Present options via `AskUserQuestion`:
+- **Use built-in templates only** (recommended default) — built-in templates ship with the plugin; nothing else to set up now.
+- **Import templates from a folder** — I'll scan a folder of Markdown templates and register them.
+- **Import from Confluence** — I'll pull your existing requirement/concept templates from Confluence (delegates to `template-library` import mode with Confluence scan).
+- **Create one template now** — wizard: pick artifact type, base, languages, fields.
+- **Skip for now** — built-in templates remain available; you can configure any time via "manage templates".
+
+**O-T.2. Collect template preferences (always asked, even when using built-in only):**
+
+Via `AskUserQuestion`, collect:
+
+| Setting | Options | Default |
+|---------|---------|---------|
+| `templates.preference` | `auto`, `always_ask`, `smart` | `smart` |
+| `templates.default_language` | `user.language`, else a `product.locales` entry | `user.language` |
+
+Explain `preference` briefly:
+- **auto** — always use the top-ranked template silently
+- **always_ask** — always ask which template to use, even if only one matches
+- **smart** (default) — ask only when multiple strong candidates exist (gap < 3 points)
+
+**O-T.3. Storage initialization:**
+
+Follow `references/persistent-storage.md` → "`storage_root` resolution" (the single definition — do not restate the rule here):
+- Vault configured → `{vault}/{plugin_folder}/Templates/`
+- Otherwise → `~/.grow-pm/Templates/`
+
+Create (if missing):
+
+```
+{storage_root}/Templates/
+├── _registry.json              # empty registry, schema_version: 1.0.0
+├── _partials/                  # reusable body fragments
+├── _System/
+│   └── usage.log               # rendering usage log
+├── _archive/                   # automatic archive of edits/deletes
+├── user-global/
+│   ├── concept/
+│   ├── requirements/
+│   ├── research/
+│   ├── cjm/
+│   ├── epic/
+│   ├── task/
+│   └── presentation/
+└── products/
+    └── <product_id>/           # one subfolder per configured product
+        └── ...
+```
+
+**O-T.4. Run rebuild-registry:**
+
+Invoke `template-library: rebuild-registry` to walk `Templates/` (including the plugin's `templates/built-in/`) and generate `_registry.json`. This registers every built-in template that ships with the plugin — count and types come from the walk, never from a number written here (it said "the 9 built-in templates … v1.9.0" until v2.1.0; 24 ship in v2.x).
+
+**O-T.5. Execute chosen action:**
+
+- **Use built-in only** → no further action; registry already populated.
+- **Import from folder** → delegate to `template-library` Import wizard.
+- **Import from Confluence** → delegate to `template-library` Import wizard with `source=Confluence` pre-selected.
+- **Create one template** → delegate to `template-library` Add wizard.
+
+**O-T.6. Mark onboarding flag:**
+
+In `local-context.md`, set `onboarding.templates_setup_completed: true`. If the user picked "Skip for now", set `onboarding.templates_setup_completed: false` so a later run of Plugin Configurator can re-offer this step.
+
+**O-T.7. Write Templates section to local-context.md:**
+
+```markdown
+## Templates
+
+templates:
+  preference: smart            # auto | always_ask | smart
+  default_language: uk
+  favorite_templates: []       # template_id values that rise to the top
+  storage_root: "~/.grow-pm"   # or {vault}/{plugin_folder} — resolved per persistent-storage.md
+  setup_completed: true
+```
+
+> Key set per `references/context-schema.md` → "Templates section format" (the canonical definition). `auto_save_to_vault` was written here until v2.1.1 and read by nothing — vault saving follows `vault.sync_mode`.
+
+**O-T.8. Confirm and continue:**
+
+> "Template Library initialized at {storage_root}/Templates/. Registry: {N} built-in + {K} user templates. Preference: {smart|auto|always_ask}."
+
+Then proceed to Step 14.
+
+### Step 14 — Obsidian Vault (Optional)
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `obsidian-vault` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
+
+> Requires: `references/obsidian-setup-guide.md`, `references/vault-protocol.md`, `references/vault-schema.md`
+
+This step is fully delegated to the **Obsidian Setup Guide** (`references/obsidian-setup-guide.md`), which provides step-by-step instructions with explicit ✅/⚠️/❌ validation at every substep:
+
+1. **P-1**: Pre-flight — does the user have Obsidian installed?
+2. **P-2**: Create vault (if needed)
+3. **P-3**: Pre-flight summary
+4. **S-1**: Vault path with validation (directory exists, `.obsidian/` exists)
+5. **S-2**: Plugin folder name (regex validation)
+6. **S-3**: Write/read permission test (creates `.write-test`, reads back, deletes)
+7. **S-4**: Products binding (single product auto-binds; multi-product asks)
+8. **S-5**: Sync mode (auto / manual / read-only)
+9. **S-6**: Optional search provider detection — a server speaking `vault/v1` (L1 vs L2)
+10. **S-7**: Folder initialization (per `vault-protocol.md`)
+11. **S-8**: Smoke test (read-back validation)
+12. **S-9**: Save `## Obsidian Vaults` section to `local-context.md` and run Vault Mirror Protocol
+
+The guide also includes a Common errors and recovery table for each likely failure mode (path missing, no `.obsidian/`, permission denied, MCP ping failed, partial init, smoke test fails).
+
+**Multi-vault support**: after S-9 completes, ask via `AskUserQuestion`: "Add another vault?" — if yes, repeat the full P-1..S-9 cycle for the next vault.
+
+**On completion**, show the user a single summary card listing all configured vaults, paths, sync modes, and vault levels. Then proceed to Step 15.
+
+### Step 15 — Custom Sections
+
+> **Mode gate:** This step runs in **Extended** mode only. In **Basic** mode, skip this step and append `custom-sections` to `onboarding.deferred_steps`. Step 17 (Quick Wins) will surface a nudge to add it later.
+
+
+> "Is there any additional information you'd like to save in the plugin context? For example: strategy documents, internal guidelines, specific processes."
+
+Allow free-form markdown sections with custom titles.
+
+### Step 16 — Review, confirm, and save local-context.md
+
+**16a. Compile summary for review:**
+
+Before generating the file, present ALL collected information to the user in a structured summary for confirmation:
+
+> "Here is the collected information. Please review and confirm everything is correct:"
+
+**Summary format:**
+
+```
+## Collected information
+
+### User profile
+- Name: [name]
+- Role: [enum]
+- Role label: [text]
+- Role scope: [product / area / org]
+- Level home: [L1-L4, derived from the role]
+- Email: [email]
+- Jira Account ID: [id or "will be auto-discovered"]
+- Language: [language]
+
+### Judgment
+- Hats allowed: [all / none / list of roles]
+- Hypothesis first: [on / off]
+- Learning mode: [off / pm_first / explain]
+- Build first: [on / off]
+
+### Organization: [name]
+- Domain: [domain]
+- Jira: [instance URL]
+- Confluence: [instance URL]
+
+### Product: [name]
+- Description: [description]
+- URL: [url]
+- Jira project: [key]
+- Platforms: [list]
+- Locales: [list]
+- Confluence space: [space]
+- Key metrics: [list]
+- OKRs: [list or "not specified"]
+- Competitors: [list]
+- Analytics: [dashboards list]
+- CJM: [template name, stages count, thresholds or "not configured"]
+
+### Team: [name]
+- Members: [list with roles]
+
+### Knowledge Library
+- Status: [initialized / not configured]
+- Sources: [count or "empty"]
+- Search modes: [list or "N/A"]
+- Baymard: [yes/no]
+
+### Template Library
+- Status: [initialized / using built-in only / skipped]
+- Preference: [smart / auto / always_ask]
+- Default language: [locale]
+- User templates: [count or "none"]
+- Auto-save to vault: [yes/no]
+
+### Obsidian Vaults
+- Status: [configured / not connected]
+- Vaults: [list with paths or "none"]
+- Products bound: [all / specific list or "N/A"]
+- Sync mode: [auto / manual / read-only or "N/A"]
+
+### Custom sections
+- [if any]
+```
+
+**16b. Collect corrections:**
+
+> "Is everything correct? If anything needs to be fixed — tell me what, and I'll make the changes."
+
+- If the user requests corrections — apply them immediately and show the updated section
+- Iterate until the user confirms: "OK" / "Confirmed"
+- Only proceed to file generation after explicit confirmation
+
+**16c. Generate the file:**
+
+Compile all confirmed information into a structured `local-context.md` following the schema in `references/context-schema.md`.
+
+Format:
+```markdown
+# Local Context — Grow Product Manager
+
+> Generated: [date]. Updated: [date].
+> Configurator version: [current plugin version from plugin.json]
+
+## User Profile
+- **Name:** ...
+- **Role:** [enum]
+- **Role label:** [text]
+- **Role scope:** [product | area | org]
+- **Level home:** [L1-L4]
+...
+
+## Judgment
+- **Hypothesis first:** [on | off]
+- **Learning mode:** [off | pm_first | explain]
+- **Hats allowed:** [all | none | list of role enum values]
+- **Build first:** [on | off]
+
+## Onboarding Status
+
+<!-- This section is auto-managed by Plugin Configurator. Do not edit manually. -->
+
+- **Mode:** [basic | extended]
+- **Basic completed at:** [timestamp]
+- **Extended completed at:** [timestamp or "not yet"]
+- **Last test run at:** [timestamp or "never"]
+- **Deferred steps:** [list of step keys deferred — e.g., obsidian-vault, cjm, templates]
+- **Skip nudges:** [true | false]
+
+## Organization: [Name]
+...
+
+### Product: [Name]
+...
+
+### CJM Configuration
+...
+
+### Team: [Name]
+...
+
+### Knowledge Library
+...
+
+### Obsidian Vaults (Optional)
+...
+
+### Templates
+...
+
+## Planning (planning-suite)
+...
+
+### Focus (focus-advisor)
+...
+
+### Design Toolkits (Optional)
+...
+
+### People (Optional)
+...
+
+## Custom Sections
+...
+```
+
+> The skeleton must contain a placeholder for **every** section any onboarding step writes — the later steps append into this file, and a section with no home here is a section written into an undefined place. Templates (O-T.7), Planning, Focus, Design Toolkits and People were all missing until v2.1.0.
+>
+> **Ordering note:** O-T.6/O-T.7 (Step 13) write the `Templates` section, but this skeleton is created here in Step 16c — later in the flow. Steps 4a–4b and 13–15 therefore **buffer their sections in session memory** and Step 16c writes them into the skeleton in one pass. Nothing writes to `local-context.md` before it exists.
+
+**Section formats** — all defined in `references/context-schema.md`, never restated here: User Profile (role lines) · Judgment · CJM Configuration · Knowledge Library Configuration · Obsidian Vaults · Templates · Planning · Focus · Design Toolkits · People.
+
+**Obsidian Vaults Configuration section format:** See `references/context-schema.md` → Obsidian Vaults Configuration section format.
+
+**16d. Save to persistent storage:**
+
+1. Determine storage root:
+   - **Test mode** (`selected_mode == test`) → `~/.grow-pm-sandbox/` (real `~/.grow-pm/` is NEVER touched)
+   - **All other modes** → `~/.grow-pm/`
+2. Create the storage root directory if it doesn't exist (with permissions 700 on Unix)
+3. Save `local-context.md` to `{storage_root}/local-context.md`
+4. Create `{storage_root}/.schema-version` with the current plugin version
+5. **Stamp the Onboarding Status section** in `local-context.md`:
+   - `mode: basic` or `mode: extended` (from `selected_mode`)
+   - `basic_completed_at: {now}` if mode is basic
+   - `extended_completed_at: {now}` if mode is extended (and `basic_completed_at` if not already set)
+   - `last_test_run_at: {now}` if mode is test
+   - `deferred_steps: [...]` from session memory
+   - `skip_nudges: false` (default)
+6. Confirm to the user:
+   - Production: "Configuration saved to `~/.grow-pm/`. This data will persist across plugin reinstalls and updates."
+   - Test mode: "TEST RUN — configuration saved to `~/.grow-pm-sandbox/`. Your real configuration was not touched. Continue to Test Mode finale for diff and Discard / Promote / Keep options."
+
+**16e. Vault Mirror Sync:**
+
+After saving to `~/.grow-pm/`, if Obsidian Vault is configured (Step 14 was completed):
+1. Execute Vault Mirror Protocol (VM-1 through VM-3 from `references/persistent-storage.md`)
+2. Copy `local-context.md` → `{vault}/{plugin_folder}/_System/local-context.md`
+3. Copy `.schema-version` → `{vault}/{plugin_folder}/_System/.schema-version`
+4. If Knowledge Library was initialized → copy library files to `{vault}/{plugin_folder}/Knowledge/`
+5. Log: "Configuration mirrored to Obsidian Vault at [path]"
+
+This ensures the vault always has an up-to-date copy of all user context, serving as a secondary backup.
+
+**16-bootstrap (since v3.22.0).** In Basic the review, the file and the store are question 5 of the section «Basic — derive first»: `ctx bootstrap --apply` writes this skeleton itself (its headings and deferred keys are held equal to the code by `skill_lint` check 28) and moves it into records. Steps 16a–16e below are the Extended and the no-SHELL path.
+
+**16e-ctx. Context store offer (since v3.11.0, once, not in test mode):** when SHELL is available, ask one question — "Keep your context as records in the vault (one note per section, every change snapshotted and undoable)? local-context.md stays where it is." Yes → `python3 "<plugin root>/scripts/ctx.py" migrate`, show the record list and `round trip: identical`, then `ctx migrate --apply`. No → nothing; the Update item "Move my context to records" offers it later.
+
+**16f. Automatic validation:**
+
+After saving, automatically run a quick validation (see Validate Mode) to confirm everything works. Present the readiness report.
+
+**16g. Template Library final invitation (only if user skipped Step 13 earlier):**
+
+If `onboarding.templates_setup_completed` is `false` (user chose "Skip for now" during Step 13), offer one more nudge after validation:
+
+> "Plugin configured and ready! The built-in templates are available out of the box. If you want to set up custom templates now, you can: import from a folder, import from Confluence, or create a new one. Otherwise just say 'manage templates' any time later."
+
+If the user confirms → delegate to `template-library` with the chosen action.
+
+If Step 13 was already completed (user set up Template Library in Step 13), skip this step and go directly to the final summary.
+
+**After template setup completes**, return confirmation:
+> "Setup complete. Here's a summary of what's configured:"
+> - Plugin context: ✅ local-context.md saved
+> - Integrations: [validation results summary]
+> - CJM: [configured / not configured]
+> - Knowledge Library: [initialized with N sources / not configured]
+> - Obsidian Vaults: [N vaults connected / not configured]
+> - Templates: [number] templates saved / library initialized / skipped
+> "You're ready to start — here are your first steps."
+
+---
+
+### Step 17 — Quick Wins
+
+After successful save and validation, present 2-4 concrete next-step recommendations the user can act on immediately.
+
+**Role quick wins first:** resolve `role_defaults` from the Role recorded in Step 4a (`references/role-profiles.md` §2b; an `other` role reads the `pm` row) and take the first two entries of **`role_defaults.quick_wins`** in list order; an entry whose section is in `onboarding.deferred_steps` (product-landscape → `landscape` ~2 min; focus-advisor, quarterly-planning, project-planning, sprint-planning → `planning` ~5 min; cjm-research → `cjm` ~3–5 min; one-on-one, goal-setter, performance-review, delegation-coach → `people` ~5 min) is replaced by the pair "add <section> (~time), then <request>"; offer each, each as a runnable request on the active product (e.g. "`brainstorm features for [product]`"); name any remaining entries in one line. Never pick recommendations by the role name — only by the field. Then fill the remaining slots from the connector-based list below.
+
+**Generate from session context:**
+
+- If `connector_inventory.missing` includes `Tableau` → "Connect the Tableau MCP connector — it unlocks `product-analysis` and `cjm-research` with native data access."
+- If at least one product has a Jira project key → "Try: `create requirements for [feature]` — I'll generate a Confluence-ready spec."
+- If `onboarding.mode == basic` → "When you want full setup later, say: `configure plugin → upgrade to Extended`. Or add one section: `add CJM`, `connect Obsidian`, `set up templates`."
+- If `onboarding.mode == basic` and `cjm` is in `deferred_steps` → "Want to run CJM analysis without setting it up first? Just say `analyze CJM funnel for [product]` — I'll ask for the basics and offer to save them as your CJM config at the end."
+- If `vault_level == L0` (Obsidian Vault not configured) → "When you have 5 minutes, connect an Obsidian Vault — your concepts, requirements, research, and CJM reports will mirror into your knowledge base automatically."
+- If `connector_inventory.missing` includes `Confluence` → "Connect Confluence MCP — it unlocks publishing of requirements and concepts."
+
+Present each recommendation as an option in `AskUserQuestion` (at most 4 options per question) so the user can immediately invoke the suggested action without typing the command.
+
+**End of Onboarding workflow.**
+
+---
+
+## Step — Planning setup (Extended)
+
+Configures the planning suite (`quarterly-planning`, `project-planning`, `sprint-planning`, `roadmap-architect`). Writes the `planning` section into local-context (schema — `references/context-schema.md` → Planning). Mode-gate: Extended; in Basic — append `planning` to `onboarding.deferred_steps`.
+
+Collected via `AskUserQuestion`/dialog:
+
+1. **Team and capacity** — composition by platforms/roles; **who counts** toward the ceiling (TL as a dev or not); baseline SP/sprint (default 10); tech-debt reserve (default 15%); load target (default 85%). Match members against Jira profiles.
+2. **Sprints** — cadence (default 2 weeks), anchor (name+date of the nearest one, e.g. `Sprint 42 = 2026-01-05`), Jira board id.
+3. **Goal map** — epic → Goal (PROJ-XX), since Atlas Goals are not queryable via MCP.
+4. **Gate thresholds** — warning/critical (default 85/100%); t-shirt→SP rubric.
+5. **Development Flow (survey about the development flow)** — if the section does not yet exist:
+   - typical work-type sequence (default `Requirements → Design → {BE, Analytics} → Client → QA → Release`; can be reordered/added/removed);
+   - what runs in parallel;
+   - prerequisite dependencies (DAG edges) + platform nuances;
+   - readiness threshold (from which status a prerequisite is considered passed; default on review/in test/done);
+   - team logic specifics/exceptions (free input).
+
+Offer to save everything into local-context (`planning` section). All planning skills read this; `update config` updates it.
+
+Existence check: if `planning.development_flow` already exists → do not re-ask, only offer review/update.
+
+## Step — Focus setup (Extended)
+
+Configures `focus-advisor`. Writes the `Focus` section into local-context (format — `references/context-schema.md` → Focus; semantics — `references/focus-signals.md` §8). Mode-gate: Extended; in Basic — append `focus` to `onboarding.deferred_steps`. Requires the Planning section (sprint anchor/cadence) — if missing, run Planning setup first.
+
+Collected via `AskUserQuestion`/dialog:
+
+1. **Sources** — which collectors are on (mail / calendar / Jira; release flags off by default); mail window (default 7 days) and no-reply thresholds (default 24h VIP / 48h others).
+2. **VIP senders** — prefill from existing stakeholders/team in local-context; if none — ask for names+emails. Explain: VIP raises mail-signal ranking, it does not filter others out.
+3. **PM goals** — prefill from local-context (OKRs, mission commitments); if none — ask for 1–3 goals with wording the PM uses. These act as permanent scoring weights (`focus-scoring.md`). Also capture **Goals source** — the URL of the pinned product goals/missions document (used by strategy collectors).
+4. **Cadence overrides** — show the default ritual table (`focus-cadence.md` §2), ask what differs for this PM/team.
+5. **Scheduled briefs** — offer creating headless brief tasks (via the platform's scheduled-tasks/`schedule` skill): daily `now` brief (time, working days only), weekly `tactics` brief (e.g. Monday morning), and a quarterly `strategy` memo (first week of the quarter); `healthcheck: off` by default.
+
+Existence check: if the `Focus` section already exists → do not re-ask, only offer review/update via `update config`.
+
+## Step — Design Toolkit setup (Extended)
+
+Registers one or more **external design toolkits** that `design-bridge` delegates hi-fi / screen-generation work to. Writes the `design_toolkits` section into local-context (format — `references/context-schema.md` → Design Toolkits section format; semantics — root `references/design-toolkit-protocol.md`). Mode-gate: Extended; in Basic — add `design-toolkits` to `onboarding.deferred_steps`. Standalone triggers: "register design toolkit", "add design toolkit", "зареєструвати дизайн-тулкіт".
+
+> **Universality:** never hardcode a specific toolkit into the plugin. Everything collected here goes into the user's `local-context.md` only.
+
+Collected via `AskUserQuestion`/dialog, per toolkit:
+
+1. **Identity** — `id` (slug) and `label`.
+2. **Entry** — `type` (`skill` / `mcp_tool` / `command` / `browser`) and `ref` (the invocation reference: skill name, `mcp__…` tool, shell command, or URL).
+3. **Capabilities** — pick from the core enum (`hi-fi-prototype`, `screen-generation`, `ds-tokens`, `figma-write`, `code-first-research`, `design-review`); allow custom tags (opaque — won't auto-route).
+4. **Input contract & returns** — confirm what the toolkit consumes (`feature_name` / `platform` / `requirements_doc` / `jira_key`) and hands back (`figma_url` / `branch` / `files`).
+5. **Data locality** — `local` (co-installed skill, in-session) or `external` (third party; `data-policy.md` applies). Default `external`.
+6. **Setup hint & contract version** — optional: how to (re)configure it, and the protocol semver it targets.
+
+Pre-check the entry when cheap (skill installed? MCP tool present?) and note availability. Existence check: if a `design_toolkits` entry with the same `id` already exists → offer review/update, do not duplicate.
+
+## Step — People setup (Extended)
+
+Configures the **People-contour** skills (`goal-setter`, `one-on-one`, `performance-review`, `hiring-designer`, `offboarding-guide`, `delegation-coach`). Writes the `people` section into local-context (format — `references/context-schema.md` → People Configuration) and seeds the person-profile roster (`references/people-context-protocol.md`). Mode-gate: Extended; in Basic — add `people` to `onboarding.deferred_steps`. Standalone triggers: "set up People", "add team roster", "People-сетап", "налаштувати команду".
+
+> **Data sensitivity:** person profiles are the highest-sensitivity tier (`references/data-policy.md`). They live in the vault `People/` area or `~/.grow-pm/people/` — **never** in Confluence/Jira. Collect only what the PM wants stored.
+
+Collected via `AskUserQuestion`/dialog:
+
+1. **Vault People area** — where profiles live: the `People/` area of a configured vault (preferred) or the `~/.grow-pm/people/` fallback if no vault. Store the resolved path.
+2. **Team roster** — for each direct report: name, role, join date (since v3.19.0 the candidates come from the team's members, `ctx entity "<team>" --slot team.members`, and each person is found by `references/people-context-protocol.md` → Find a person, so a core's card seeds the profile with the identity — confirmed by the user before anything is written); optionally their current situational-leadership type (D1–D4). For each, create a minimal profile file (`People/<slug>.md`) and a roster line in `People/_roster.md`. Only `name`/`role`/`updated` are required — the rest fills in over time.
+3. **Default cadences** — default 1-1 cadence (weekly / biweekly / monthly; default: monthly for newer people, quarterly for >1-year) and default goal-report cadence (weekly / monthly).
+4. **Performance-review template** — register the employer's review template as a `performance-review` scope template (via `template-library: add`/`import`), or use the built-in `performance-review` structure. Store the chosen `template_id`.
+5. **HR-form field map (hiring)** — the employer's vacancy-form fields and their controlled values (e.g. selects for Budget / Team / Position / Employment type / Probation length). Store under `people.hr_form` so `hiring-designer` can map the universal vacancy profile onto the employer's form field-by-field. Values are employer-specific — nothing is hardcoded in the plugin.
+
+Existence check: if a `people` section already exists → offer review/update, do not duplicate. Never fabricate profile fields (D-type, GTD, signals) — leave unknowns empty.
+
+## Step — Test accounts setup (Extended, since v3.2.0)
+
+Configures the per-product **Test Accounts** table used by `flow-walkthrough` for multi-role legs and sandbox walks (format — `references/context-schema.md` → Test Accounts). Mode-gate: Extended; in Basic — add `test-accounts` to `onboarding.deferred_steps`. Standalone triggers: "add Test accounts", "set up test accounts", "додай тестові акаунти", "налаштуй тестові акаунти".
+
+> **Never a secret.** Collect labels, roles, surfaces and *where* access is obtained. If the user pastes a password or a one-time code, do not write it anywhere; say so and continue.
+
+Collected via `AskUserQuestion`/dialog, per product:
+
+1. **Does this product have test accounts on production?** (roles: buyer / seller / admin / support / courier …) — "no" → mark the step done, nothing written.
+2. **For each account** — label (unique), role, surfaces it can be used on, access description (a link to the team's test-accounts page is ideal), sandbox `yes|no` (is every action of this account confined to a test contour — test shop ↔ test buyer?).
+3. **Write** the `#### Test Accounts` table under the product; **existence check**: a table already there → offer review/update, never duplicate labels.
+4. **Say** the rule out loud once: "before each leg you log in as the named account yourself; under `sandbox-confirm` I ask before every irreversible action; real money and actions reaching real users always stop".
+
+## Step — Landscape setup (Extended, since v3.3.0)
+
+Configures `product-landscape` (format — `references/context-schema.md` → Landscape section). Mode-gate: Extended; in Basic — add `landscape` to `onboarding.deferred_steps`. Standalone triggers: "add Landscape", "set up the competitor map", "налаштуй карту конкурентів".
+
+Collected via `AskUserQuestion`/dialog:
+
+1. **Bookmarks consent** — may `scan` ask to read Chrome/Safari bookmarks each time (`ask`), or never (`never`)? Browser history is never read either way.
+2. **Category per product** — the store genre or a free tag (e.g. Shopping / marketplace) used to rank candidates.
+3. **Import competitors** — offer to register every entry of `product.competitors` in the landscape registry as a `direct-competitor` candidate (calls `product-landscape` `add` per entry; the user confirms the batch there). `product.competitors` stays as the seed.
+4. **Write** the `## Landscape` section; existence check → offer review/update.

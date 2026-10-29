@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Grow PM — «e-mail → team → role» from a core against your own words (since v3.23.0; context-protocol.md §5r).
+
+The bundle builder resolves your e-mail to a team and a role (`provider_bundle.py --propose-only`, its JSON with
+`team_from` and `role_from`). `compare` puts each beside yours — the role in your profile, the team your registration
+names — with the source of both sides; `.state/identity.json` (schema context-identity/1) keeps what you answered:
+
+    {"schema": "context-identity/1",
+     "answers": {"<repo>": {"role": {"chosen": "mine" | "core", "core": "<value>", "mine": "<value>", "at": "YYYY-MM-DD"}}}}
+
+An answer holds while the core says the same; a new value of the core asks again. A file that cannot be read, holds a
+key nobody knows or another schema is never rewritten (StoreError). Stdlib only.
+"""
+import json
+import os
+import re
+
+import ctx_store as cs
+import provider_bundle as pb
+
+SCHEMA = "context-identity/1"
+FIELDS = ("team", "role")
+CHOSEN = ("mine", "core")
+_ANSWER_KEYS = ("chosen", "core", "mine", "at")
+
+
+def empty():
+    return {"schema": SCHEMA, "answers": {}}
+
+
+def _path(store):
+    return os.path.join(store.state_dir, "identity.json")
+
+
+def _clean(raw):
+    if not isinstance(raw, dict) or raw.get("schema") != SCHEMA or set(raw) - {"schema", "answers"}:
+        raise ValueError("not %s" % SCHEMA)
+    answers = raw.get("answers") or {}
+    if not isinstance(answers, dict):
+        raise ValueError("answers is not an object")
+    for repo, per in answers.items():
+        if not isinstance(per, dict) or set(per) - set(FIELDS):
+            raise ValueError("answers of %s: a field that is none of %s" % (repo, ", ".join(FIELDS)))
+        for f, a in per.items():
+            if not isinstance(a, dict) or set(a) - set(_ANSWER_KEYS) or a.get("chosen") not in CHOSEN:
+                raise ValueError("the answer %s/%s is not {chosen, core, mine, at}" % (repo, f))
+    return {"schema": SCHEMA, "answers": answers}
+
+
+def load(store):
+    path = _path(store)
+    if not os.path.lexists(path):
+        return empty()
+    try:
+        return _clean(json.loads(cs.read_text(path)))
+    except (OSError, UnicodeDecodeError, cs.StoreError, ValueError) as e:
+        raise cs.StoreError("identity memory not readable: .state/identity.json (%s) — left as it is" % e)
+
+
+def save(store, mem):
+    cs.atomic_write(_path(store), json.dumps(_clean(mem), ensure_ascii=False, indent=1, sort_keys=True) + "\n")
+
+
+def read_bundle(path):
+    """The builder's JSON: {team, team_title?, team_from, role, role_from, email?}; ValueError for anything else."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        data = json.JSONDecoder().raw_decode(text[text.index("{"):] if "{" in text else text)[0]   # lines may follow it
+    except (OSError, ValueError) as e:
+        raise ValueError("the bundle's JSON is not readable: %s (%s)" % (path, e))
+    if not isinstance(data, dict) or not all(isinstance(data.get(k), str) and data.get(k) for k in ("team", "role")):
+        raise ValueError("the bundle's JSON has no team and role: %s" % path)
+    return data
+
+
+def _same(a, b):
+    return " ".join(str(a or "").split()).casefold() == " ".join(str(b or "").split()).casefold()
+
+
+def _team_key(v):
+    """A team's key as the role model writes it: `team-alpha` and `alpha` are one team (as ctx_repos reads it)."""
+    v = " ".join(str(v or "").split()).casefold()
+    return v[len("team-"):] if v.startswith("team-") else v
+
+
+def _role_profile(v):
+    """A role as a profile of the role model: the word itself, else the profile its title answers (`Product Manager`
+    → pm) — only when a hint matches; a word no hint knows («legacy») stays itself."""
+    v = " ".join(str(v or "").split())
+    for prof, rx in pb.DEFAULT_ROLE_HINTS.items():
+        if v.casefold() == prof.casefold():
+            return prof
+    for prof, rx in list(pb.DEFAULT_ROLE_HINTS.items()) + [("pm", PM_HINT)]:
+        if re.search(rx, v, re.I):
+            return prof
+    return v.casefold()
+
+
+PM_HINT = r"product manager|product owner|\bpm\b|продакт|менеджер продукту"   # the builder's fallback, said by name
+
+
+def _agree(field, mine, core, enum=None):
+    """Do your value and the core's say the same? A team by its key; a role by the role model's id (`analyst`), by the
+    plugin's value the builder maps it to (`product_analyst`, `role_enum`) or by the profile a title answers."""
+    if field == "team":
+        return _team_key(mine) == _team_key(core)
+    return _same(mine, core) or (enum is not None and _same(mine, enum)) or _role_profile(mine) == _role_profile(core)
+
+
+def compare(bundle, mine, mem, repo_id):
+    """[{field, core, core_from, mine, mine_from, state: same | ask | kept | taken}] — `mine` is {field: (value, source)}
+    (a value None: you said nothing — no question). `kept` / `taken`: your answer still holds (the core says what it said
+    then); a new value of the core is `ask` again."""
+    out = []
+    answers = (mem.get("answers") or {}).get(repo_id) or {}
+    for f in FIELDS:
+        core = bundle.get(f)
+        title = bundle.get("team_title") if f == "team" else None
+        val, src = mine.get(f, (None, None))
+        if f == "role" and bundle.get("role_enum") and bundle["role_enum"] != core:
+            title = bundle["role_enum"]                     # what the profile would say: the plugin's value
+        row = {"field": f, "core": core, "core_title": title, "core_from": bundle.get("%s_from" % f) or "—", "mine": val,
+               "mine_from": src or "—"}
+        said = str(row["core_from"])
+        if said.startswith(("--team", "--role", "типово")):     # you named it, or nothing in the core says it: no question
+            row["state"] = "unsaid"
+        elif val is None or _agree(f, val, core, bundle.get("role_enum") if f == "role" else None):
+            row["state"] = "same" if val is not None else "none"
+        else:
+            ans = answers.get(f)
+            row["state"] = ("kept" if ans["chosen"] == "mine" else "taken") if ans and _same(ans.get("core"), core) else "ask"
+            if ans:
+                row["answer"] = ans
+        out.append(row)
+    return out
+
+
+WORDS = {"team": "команда", "role": "роль"}
+
+
+def render(rows, repo_id, bundle="<файл JSON>"):
+    lines = []
+    for r in rows:
+        w = WORDS[r["field"]]
+        core = r["core"] + (" (%s)" % r["core_title"] if r.get("core_title") and r["core_title"] != r["core"] else "")
+        if r["state"] == "same":
+            lines.append("%s: збігається (%s)" % (w, r["mine"]))
+        elif r["state"] == "unsaid":
+            lines.append("%s: ядро цього не каже (%s · %s)" % (w, core, r["core_from"]))
+        elif r["state"] == "none":
+            lines.append("%s: ядро — %s · %s (у тебе не вказано)" % (w, core, r["core_from"]))
+        elif r["state"] == "kept":
+            lines.append("%s: лишено твоє (%s); ядро каже %s — відкладено %s" % (w, r["mine"], r["core"], r["answer"].get("at") or ""))
+        elif r["state"] == "taken":
+            lines.append("%s: взято з ядра (%s)" % (w, r["core"]))
+        else:
+            lines += ["%s: ядро — %s · %s" % (w, core, r["core_from"]),
+                      "%s: ти — %s · %s" % (w, r["mine"], r["mine_from"]),
+                      ("  відповісти: ctx identity keep %s %s --bundle %s · ctx identity take %s %s --bundle %s"
+                       % (repo_id, r["field"], bundle, repo_id, r["field"], bundle)) if r["field"] == "role" else
+                      ("  відповісти: ctx identity keep %s team --bundle %s · або перезібрати пакет з --team %s (context-connect)"
+                       % (repo_id, bundle, r["core"]))]
+    return "\n".join(lines)
+
+
+def answer(mem, repo_id, field, chosen, core, mine, day):
+    mem.setdefault("answers", {}).setdefault(repo_id, {})[field] = {"chosen": chosen, "core": core, "mine": mine, "at": day}

@@ -1,0 +1,372 @@
+---
+name: write-concept
+version: 0.16.0
+description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «опиши фічу», «дизайн-бриф», «стратегічний меморандум», «бізнес-кейс». EN — "design brief", "strategy memo".
+---
+
+# Write Concept (PRD)
+
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
+Turn a feature idea or problem statement into a structured product concept document and publish it as a Confluence page.
+
+## Integration prerequisite
+
+Before gathering data, read and follow the integration fallback chain in `references/integration-strategy.md`. For this skill, the typical external products needed are:
+
+- **Confluence** — for reading internal knowledge, existing research, and publishing the final PRD
+- **Google Drive** — for reading internal documents, research materials, briefs, and specs stored in the team's Drive
+- **Figma** — for pulling design context when the concept involves UI/UX
+- **Product Analysis skill** — for analyzing product metrics and data relevant to the concept (invoked when concept needs quantitative data)
+- **Web** — always available via WebSearch
+- **ChatGPT / Gemini** — for Deep Research via browser when deeper analysis is needed
+
+For each product: check for MCP connector → search MCP registry → fall back to browser.
+
+Before gathering any data, also read and comply with `references/data-policy.md`. Confidential data (Tableau metrics, internal analytics, research materials) must NOT be passed to external LLMs or third parties.
+
+## Local context prerequisite
+
+**Before starting, follow `references/local-context-protocol.md` (Step 0).** Read `local-context.md`, select the active product, and load all product-specific context. If the file doesn't exist — redirect to Plugin Configurator for initial setup.
+
+Key context used by this skill:
+- `product.name`, `product.description` — for product context in PRD
+- `product.confluence_space` — default publishing destination
+- `product.key_metrics`, `product.current_okrs` — for Success Metrics and Goals sections
+- `user.language` — for output language
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
+
+### Step 0.5: Vault Context Search (Optional)
+
+> Requires: `references/search-protocol.md` (since v3.16.0 — the search, the rating, what is taken silently, the block of variants; it asks nothing in the middle of the run)
+
+Follow `references/search-protocol.md` with `--skill write-concept`. This skill's types — a weight, not a filter: `competitive-analysis`, `market-research`, `ux-benchmark`, `hypothesis`, `decision`, `requirements`; and since v3.9.0, only while `judgment.build_first` is `on`, `walkthrough`, `ab-test-results`, `prototype` — they can suppress the Step 1 build-first line (`references/judgment-blocks.md` §2) and on their own never raise the block of variants (search-protocol §11).
+
+What is taken feeds the concept:
+- research findings → Problem Statement and Proposed Solution;
+- prior hypotheses → the basis of the concept;
+- decisions → respected, referenced in the rationale;
+- existing requirements → no duplication, referenced as related work.
+
+The taken notes go into an "Informed by" section of the concept metadata.
+
+## Step T — Template Resolution
+
+Before writing the concept, resolve which template to use.
+
+Follow `references/template-protocol.md`.
+
+Declare:
+- `artifact_type: concept`
+- `subtype`: inferred from the request — "design brief" / «дизайн-бриф» → `design-brief`, "strategy memo" / «стратегічне мемо» → `strategy-memo`, "decision memo" / «мемо рішення» → `decision-memo`, "business case" / «бізнес-кейс» → `business-case` (these four since v3.6.0), or a user subtype such as `lightweight`, `technical-spec`; none inferred → `role_defaults.template_defaults.concept` (T-0, since v3.6.0; a hat overlays it; its value `default` keeps the subtype `null`), else `null`
+  - Boundary (since v3.6.0): this strategy memo is the concept-level memo of bets; the quarterly attention memo is `focus-advisor` `strategy` mode; a decision memo asks for a decision — the record once it is taken is `decision-log`.
+- `product_id: {from local-context.md active product}`
+- `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
+
+Run Steps T-1 → T-5 via the `template-library` helper routines:
+- T-1 Load registry from `{storage_root}/Templates/_registry.json`
+- T-2 Score candidates (product > user-global > built-in; subtype match; language match)
+- T-3 Decide based on `templates.preference` (`auto` / `always_ask` / `smart`)
+- T-4 Collect variables via `AskUserQuestion`
+- T-5 Render and append `<!-- template: {template_id} version: {version} -->` to the output
+
+If the user explicitly says "do not use a template" → skip Step T and use the skill's internal structure (the workflow below).
+
+If no template applies → the protocol's built-in ladder: `builtin://concept/{subtype}-v1.md` for a declared subtype, else the built-in `concept-builtin-default` template; if that's also missing, use the skill's internal structure.
+
+The resolved template may reshape the sections and questions of the workflow below. Variables from the template take precedence over the generic discovery questions for overlapping fields.
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
+
+**Pre-mortem and kill criteria (since v3.9.0, P4; `references/judgment-points.md` §7).** While block 15 of the Step 1 list stays selected (it is pre-selected), Step 4 inserts `templates/built-in/partial/pre-mortem-v1.md` after the Risks section through T-5 step 3b — derived, never asked; a missing threshold is `⚠️ TBD`. Not on a design brief or a release-notes draft; a user or product template gets it only with `{{> pre-mortem}}`; subtypes that already have Kill criteria or a Revisit trigger get a pointer, not a second table (detail: `references/judgment-blocks.md` §4).
+
+## Workflow
+
+### 1. Deep discovery — gather maximum context
+
+This step is critical. Do NOT start writing until the scope is crystal clear. Use AskUserQuestion to clarify all of the following:
+
+**Product and feature context — clarify via AskUserQuestion if not clear from context:**
+
+- **Which product or part of the product ecosystem** is this concept for? (if not explicitly stated — ask before proceeding)
+- **New or existing functionality?** — Are we creating a concept for completely new functionality within the product/ecosystem, or are we developing/modifying existing functionality? (if not clear — ask explicitly)
+
+**About the concept:**
+- What is the feature/idea? What problem does it solve and for whom?
+- For which product/project is this being created?
+- Who is the audience for this document — team, leadership, stakeholders?
+- What type of feature is this — frontend, backend, infrastructure, product, design change? (this determines which sections to expand or minimize)
+
+**Adapting the PRD structure:**
+
+Present the full standard block list and ask the user to confirm which blocks are needed for this specific concept:
+
+1. Summary (TL;DR)
+2. Problem Statement
+3. Goals & Non-Goals
+4. User Stories / Use Cases
+5. Proposed Solution
+6. What Changes for Users
+7. Alternative Solutions *(ask if needed)*
+8. Scope & Phasing
+9. Design & UX *(adaptive)*
+10. Technical Considerations *(adaptive)*
+11. Success Metrics
+12. Risks & Mitigations
+13. Timeline & Milestones *(adaptive)*
+14. Open Questions
+15. Pre-mortem & kill criteria *(pre-selected; since v3.9.0 — not listed for a design brief or a release-notes draft)*
+
+Ask the user:
+- Which of these blocks are needed for this concept?
+- Are there any **additional specific blocks** not in the standard list? If yes — clarify what exactly should be in each custom block
+- Are **alternative solutions** needed in this PRD?
+
+**Context sources:**
+- Are there existing materials — Confluence pages, Google Drive documents, research, notes, uploaded files?
+- Are there relevant documents in **Google Drive** (briefs, specs, research reports, OKR files, strategy decks)? If yes — ask the user to share links or folder names
+- Where to gather context: conversation, Confluence, Google Drive, web, uploaded files, Deep Research via LLM?
+- The user chooses the sources or provides data directly
+
+**Figma designs check — if working with existing product or existing functionality:** if the product or feature already exists (not built from scratch), run `references/figma-designs-check.md` with:
+- *use as context for:* drafting the concept — especially the "What Changes for Users", "Proposed Solution" and "Design & UX" blocks;
+- *when designs are confirmed:* reference the current UX state in the Problem Statement, describe what changes vs. the current design in "What Changes for Users", and include links to relevant frames in the Sources section.
+
+Summarize the full brief back to the user and get confirmation before proceeding.
+
+**Build-first line (since v3.9.0, P6; `references/judgment-points.md` §8, detail in `references/judgment-blocks.md` §1–§3).** When `judgment.build_first` is `on` (default), the run is interactive and the concept proposes a product change, the summary ends with one line — not a question — naming the concept's riskiest assumption (derived, never asked) and the cheapest path that would settle it: a lo-fi prototype shown to 3–5 real users, a walk of the as-is flow, or an eval set for an AI behaviour; «спершу прототип» / "build first" takes it. The line is left out when evidence already covers the assumption (a Step 0.5 hit of type `walkthrough`, `ab-test-results` or a research type, or a non-`simulated` source the user named, that addresses it), when its path was already taken (a `prototype` hit, or a `requirements` hit of subtype `ai-feature` with an eval set — never evidence; the assumption stays open in the pre-mortem), when it has no cheap build path (demand, pricing, legal; `references/judgment-blocks.md` §1–§2), and in scheduled, headless or return-payload runs. Its first appearance in a session adds how to switch it off («вимкни» / "turn off" writes `- **Build first:** off`). Confirming the brief continues to Step 2 exactly as before; taking the path hands the brief and the assumption to `design-bridge`, `flow-walkthrough` or `requirements-creator` (then `product-research` for real-user sessions on a prototype) and ends this run with the brief printed for resuming.
+
+### 2. Gather data from sources
+
+**First — check for existing Product Research results:**
+
+Search Confluence for pages that match the concept topic (previous research, competitive analysis, market research created by the Product Research skill or manually).
+
+- If Product Research results are found — inform the user and ask: is the existing research sufficient, or should additional research be conducted via the Product Research skill?
+  - If sufficient — use the found materials as primary context and proceed to Step 3
+  - If additional research is needed — trigger the Product Research skill, wait for results, then add them to the context
+- If no Product Research results exist — gather data from all sources agreed upon in Step 1
+
+**Data gathering from agreed sources:**
+
+- **Conversation** — extract requirements and context from the dialogue with the user
+- **Confluence** — search existing pages: strategy docs, OKRs, previous specs, decision logs. Use `searchConfluenceUsingCql` or `getConfluencePage`. If Confluence MCP is unavailable — follow integration fallback chain
+- **Google Drive** — read internal documents shared by the user or accessible via Drive: research reports, product briefs, strategy presentations, analytics exports, OKR files. Follow the integration fallback chain: Google Drive MCP → search MCP registry → open via browser (`https://drive.google.com`). When accessing via browser: navigate to the shared link or search within Drive, open the document, read content using `get_page_text`. Treat all Drive content as potentially confidential per `references/data-policy.md`
+- **Uploaded files** — read with the Read tool, extract key data points
+- **Web search** — use WebSearch for external context: best practices, competitor approaches, industry standards
+- **Figma** — pull design context via Figma MCP when the concept involves UI/UX. If unavailable — use browser
+- **Product Analysis skill** — when the concept needs product metrics, data analysis, or quantitative evidence, invoke the **Product Analysis** skill. Pass context: which product, what metrics are relevant to the concept, what time period. Receive structured results (key metrics, trends, anomalies) and incorporate into the PRD — especially in Success Metrics, Problem Statement, and Goals sections. Cite as "Source: Product Analysis" and keep the evidence class each figure arrives with (`measured`, since v3.8.0)
+- **Deep Research via ChatGPT / Gemini** — when confirmed by the user, open the LLM web interface via browser, select the strongest available model, activate Deep Research mode, submit a detailed prompt based on the concept scope, extract findings and use as additional context — since v3.8.0 a finding keeps the class of the source it traces to (usually `external`); an untraceable one is `simulated`: at most an open question, never evidence (`references/artifact-style-gate.md` Gate 4b)
+
+For each tool: MCP → registry → browser (per `references/integration-strategy.md`).
+
+### 3. Clarify "What Changes for Users" block
+
+If the context does not make it clear which users are affected — ask separately using AskUserQuestion:
+
+- Which user types does this concept affect? (e.g., buyers only / sellers only / buyers and sellers / admins / all users)
+- For each identified user segment, define:
+  - What exactly changes in their experience
+  - What they gain from this feature
+  - What they lose or what changes in their existing flow
+
+If the concept changes **existing UI**, offer an annotated screenshot of the current state per `references/visual-annotation-protocol.md` (numbered markers = numbered changes, legend table under the image, preview cycle with the user). It lands in the "What Changes for Users" block and later feeds requirements-creator Step 4.2. Prefer `steps/NN.png` from a `flow-walkthrough` evidence pack when a run exists for this flow. Skip gracefully if declined.
+
+### 4. Draft the PRD
+
+Before writing, load the team style preamble — `references/artifact-style-gate.md` Gate 3a; skip silently if no profile is configured. Build the concept document following the confirmed structure from Step 1:
+
+> For a worked, high-quality reference of the target shape and depth, load `references/examples/prd-example-v1.md` on demand. It is a generic exemplar (few-shot), not a rigid template — match its rigor (measurable Success Metrics, a Verification/decision-rule block, a pre-mortem with dated kill criteria, explicit `[assumed — …]` labels and evidence classes on cited figures), not its exact wording.
+
+**Adaptive sections** — adjust depth based on feature type:
+- **Frontend/product feature** → expand Design & UX, minimize Technical Considerations
+- **Backend/infrastructure** → expand Technical Considerations, minimize or skip Design & UX
+- **Cross-team feature** → expand Timeline & Milestones with dependencies
+- **Autonomous small feature** → minimize Timeline & Milestones
+
+**Content guidelines:**
+- **Technical Considerations carries only confirmed constraints and dependencies** — statements that pass the source test ("can I point to where this came from — the user, a document, a ticket?"). AI technical assumptions (technology choices, API/schema design, architecture, effort estimates) are prohibited by default; on explicit user request they go into a separate "Технічні рекомендації (AI)" block at the end with the mandatory AI callout (`references/artifact-style-gate.md`, Gate 1)
+- Any sequence — phases, changes, risks, criteria — is a list or a table, never paragraph prose (Gate 2)
+- Include only the blocks confirmed in Step 1
+- **Gate emphasis (since v3.6.0):** for each of `base-rates`, `hippo-check` and `market-recency` in `role_defaults.gate_emphasis` — and `money-bridge` when it is in `gate_emphasis` and the subtype is `business-case` — run that extra check (`references/data-integrity-protocol.md` → Gate emphasis) on the draft; a failed one adds a ⚠️ caveat line under the bet, estimate, decision or metric claim it concerns — never a question, never a blocked draft
+- Add Alternative Solutions block if confirmed
+- Include any custom blocks the user requested
+- Cross-reference data from multiple sources
+- Mark data sources throughout the document — since v3.8.0 each cited number, quote or benchmark with its evidence class (`references/pm-mental-model.md` §4, checked by Gate 4b): a figure the user typed is `reported (<who>)`; targets and forecasts carry none; `simulated` never stands as evidence and `assumed` is always labelled
+
+### 4.5. Artifact quality gate
+
+Run `references/artifact-style-gate.md` on the draft PRD. Maker–checker: the `grow-product-manager:artifact-checker` agent (one call per lens; fallback chain per the reference) gets the draft with `artifact_type: concept` and `mode: create` + the source list (each source with its Gate Check 5 marker where known, e.g. `user-text`, `confluence-internal`) + the lens — never this conversation's reasoning. A PRD headed for Confluence is a critical artifact → two checker lenses (form / groundedness; since v3.8.0 the groundedness lens also checks Gate 4b evidence labels). Apply fixes, keep disputed findings visible, include the one-line gate report (with `докази: E` when above 0) when presenting the draft in Step 5.
+
+### 5. Review with the user
+
+Present the full draft to the user before publishing. Iterate until confirmed:
+- Walk through each section
+- Collect feedback and make edits
+- May require multiple iterations
+
+> **Debate hook (red-team).** Before publishing a contested concept (real trade-offs, ≥ 2 affected interest groups) — offer a red-team debate per `references/debate-protocol.md`: evidence pack from the concept's own research base and analysis, roles chosen with the user (Skeptic mandatory), rounds → facilitator synthesis. Unresolved objections become the pre-mortem's first causes (since v3.9.0, `references/judgment-blocks.md` §4) — in Risks / Open Questions when the concept has no pre-mortem — and the verdict + minority report embed as a «Debates» section in the PRD before it ships.
+
+### 6. Confirm Confluence location and publish
+
+If the user has not already specified where to publish — use AskUserQuestion:
+
+- Which Confluence **space** to use?
+- Which **parent page** to nest the PRD under? (offer to search existing pages to help decide)
+- Suggest a logical location based on the project structure
+
+Page title format: `[PRD] Feature Name` — for a design brief, strategy memo, decision memo or business case, that name replaces `PRD` (since v3.6.0)
+
+**Confluence formatting requirements — mandatory for every PRD page:**
+
+1. **Table of Contents** at the very top of the document — use the Confluence Table of Contents macro with heading levels 1 through 6 (standard)
+2. **Dividers** between all key blocks — use the Confluence horizontal rule/divider element to visually separate sections
+3. **Headings** — use proper H1/H2/H3 hierarchy for all sections and subsections
+4. **Bold text** — highlight key theses, important conclusions, and critical data points in bold
+5. **Tables** — use tables wherever structured data needs to be communicated: comparisons of alternatives, metrics, feature matrices, user impact summaries, risk/mitigation pairs
+6. **Sources** section at the bottom with links, marking each source type (Confluence, Google Drive, Web, ChatGPT Deep Research, Gemini Deep Research, uploaded file, Product Research, and since v3.9.0 a build-first prototype — `reported` (file, frame), never validation) and, since v3.8.0, its evidence class (`measured`, `reported`, `external`, …)
+
+Publish via Confluence MCP (`createConfluencePage`). If unavailable — follow integration fallback chain. As a last resort, generate a local document for manual publishing.
+
+After publishing, provide a structured report of what was done:
+
+**Report format:**
+- **What was done:** brief description of the concept created (feature name, type, scope)
+- **Artifacts created:** links to all created documents (Confluence page, local files, etc.)
+- **Key concept points:** 3-5 key points summarizing the PRD
+- **Document structure:** list of blocks included in the PRD
+- **Sources used:** list of source types used (Confluence, Google Drive, Product Research, Web, Figma, uploaded files)
+
+**After presenting the report, proactively ask for feedback:**
+
+> "Are you satisfied with the concept? Would you like to refine, add, or change anything?"
+
+- If the user requests changes — iterate: update the PRD, re-publish, present updated report
+- If the user confirms — proceed to the next step
+
+**Self-improvement check** (after corrections are applied and confirmed): follow `references/self-improvement.md` — analyze whether the correction is a pattern, and if so propose a SKILL.md improvement (version bump + CHANGELOG).
+
+### 7. Propose next step — Brainstorm Features or Task Creator
+
+After sharing the concept summary, **always** propose transitioning to the next skill in the workflow:
+
+> "Concept is ready. What's next? I can pass the context and transition to one of the following steps:
+> 1. **Brainstorm Features and Hypotheses** — generate hypotheses and feature ideas based on this concept, evaluate them with ICE scoring and suggest validation methods
+> 2. **Requirements Creator** — turn the concept into a numbered requirements document (the normal next step before development)
+> 3. **Task Creator** — go straight to Jira tasks, skipping the requirements document"
+
+If the user chooses **Brainstorm Features and Hypotheses**:
+- Pass the full concept context: Confluence page link, problem statement, goals, proposed solution, user stories, success metrics
+- The Brainstorm skill will use this concept as the starting point (Situation B of its workflow — concept/PRD exists)
+
+If the user chooses **Requirements Creator**:
+- Pass the full concept context: Confluence page link, scope, phasing, technical considerations
+- `requirements-creator` uses the concept as its source and produces the numbered feature spec (its Step 3d), which `task-creator` then consumes
+
+If the user chooses **Task Creator**:
+- Pass the same context, and say plainly what is being skipped: a PRD carries no feature numbering (that is created in `requirements-creator` Step 3d), so tasks will be derived directly from the concept's scope and phasing
+- Prefer option 2 when the work will be estimated or split across platforms
+
+> Option 2 used to be labelled "Requirements Creator", described as "immediately create Jira tasks", and executed as `task-creator` — three different promises in one option, which quietly skipped the documented concept → requirements → tasks chain.
+
+If the user declines — end the workflow gracefully.
+
+### 7.5: Save to Vault (Optional)
+
+> Requires: `references/vault-protocol.md` → Vault Save
+
+IF vault_level > L0 AND vault sync_mode != "off":
+
+1. Build artifact:
+   ```
+   vault_save({
+     type: "concept",
+     product: active_product,
+     skill: "write-concept",
+     skill_version: "0.16.0",
+     tags: [feature area keywords, affected platforms, goal keywords],
+     content: full_prd_markdown,
+     related: [source research from Step 0.5, source hypotheses, related decisions],
+     extra_frontmatter: {
+       scope: "mvp" or "full" (based on phasing decision),
+       phase_count: number_of_phases,
+       estimated_effort: effort_estimate_if_discussed,
+       published_to: confluence_or_notion_url (if published),
+       confluence_page_id: page_id (if published to Confluence)
+     }
+   })
+   ```
+
+2. IF concept was informed by hypotheses from Vault (Step 0.5):
+   - Update those hypotheses: add this concept as `children` link
+
+3. Display: "Saved to Vault: Concepts/{product}/..."
+
+### Step 8 — Design Bridge handoff (Optional)
+
+> Requires: `design-bridge` skill (Grow PM v1.10.0+). If not installed — skip gracefully.
+
+After successful publishing, automatically propose design-bridge for design-related deliverables. Via `AskUserQuestion`:
+
+> "Concept published. Create a design-side deliverable from it?"
+> 1. **Presentation deck** — pitch for direction review (10 slides) — recommended for concepts going to stakeholder-level review
+> 2. **UI prototype** — lo-fi Mermaid flow or mid-fi HTML mockup to visualize the proposed solution
+> 3. **Skip** — not needed right now
+
+Since v3.9.0, when a build-first prototype exists for this concept, option 2 offers to iterate that prototype — its link is already in PRD §9 — instead of building a second one (`references/judgment-blocks.md` §5); otherwise the options are unchanged.
+
+IF user selects 1 → invoke `design-bridge` with:
+- `intent: deck`
+- `subtype: feature`
+- `source: confluence_page_url` (published in Step 6)
+- `audience: inferred from user's next-step context` (default `direction_review`)
+- `language: active user.language`
+
+IF user selects 2 → invoke `design-bridge` with:
+- `intent: prototype`
+- `source: confluence_page_url`
+- `fidelity: lo-fi` (default; upgrade to mid-fi upon request)
+- `prototype_ref: <the build-first prototype>` — only when one exists (since v3.9.0), so design-bridge iterates it
+
+If the concept already has a Figma link (Step 1: "Figma designs check"), pass it to `design-bridge` for embedding.
+
+Fallback: if `design-bridge` is not installed — display: "Install `grow-product-manager` v1.10.0+ to enable design-bridge handoffs." Do not block the workflow.
+
+## Additional Resources
+
+- **`references/local-context-protocol.md`** — Step 0: how to read and use local-context.md (mandatory before any skill execution)
+- **`references/vault-protocol.md`** — vault context search and save protocols
+- **`references/search-protocol.md`** — Step 0.5: the search, what is taken silently, the block of variants (since v3.16.0)
+- **`references/vault-schema.md`** — vault artifact schema and metadata structure
+- **`references/prd-structure.md`** — detailed templates for each PRD block
+- **`references/judgment-blocks.md`** — skill-local (since v3.9.0): the riskiest assumption, the Step 1 build-first line and its paths, the Step 4 pre-mortem and kill criteria, Step 8 with a build-first prototype
+- **`references/artifact-style-gate.md`** — artifact quality gate: Gate 1 (ungrounded technical content), Gate 2 (lists over prose), Gate 4 (altitude line, evidence labels), maker–checker execution (Step 4.5)
+- **`references/examples/prd-example-v1.md`** — worked golden PRD exemplar (few-shot; load on demand in Step 4)
+- **`references/examples/design-brief-example-v1.md`**, **`strategy-memo-example-v1.md`** — golden exemplars for the `design-brief` and `strategy-memo` subtypes (since v3.6.0; load on demand when rendering that subtype)
+- **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain (shared across all skills)
+- **`references/data-policy.md`** — data confidentiality policy: what data can and cannot be shared externally (mandatory reading before any data gathering)
+- **`references/self-improvement.md`** — self-improvement protocol: how to learn from user corrections and improve skill algorithms
+
+## PRD Block Reference
+
+Detailed templates for each standard block are in `references/prd-structure.md`.
+
+## Quality standards
+
+- Always cite data sources
+- Distinguish facts from assumptions — label each assumption `[assumed — …]` (Gate 4b, since v3.8.0)
+- Flag data older than 12 months
+- If information is insufficient for a block, state gaps and suggest how to fill them
+- Use Ukrainian or English based on user's language preference
+- Maintain consistent formatting: headings, bold highlights, tables, dividers
+
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «оформи ідею в концепт», «опиши фічу», «створи PRD». EN — "write a concept", "create a PRD", "describe a feature", "write a spec" (high-level), or turning a vague idea into a structured product document. Also UA — «написати специфікацію» (high-level), «оформити ідею в документ», «дизайн-бриф», «стратегічний меморандум», «мемо рішення», «бізнес-кейс»; EN — "design brief", "strategy memo", "decision memo", "business case". A concept is the input to requirements-creator.

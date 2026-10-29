@@ -22,6 +22,7 @@ The **Grow Product Manager** plugin — a set of skills for a product manager's 
 | `skills/product-landscape`, `scripts/landscape_scan.sh` | the registry of competitor / adjacent / benchmark products (`~/.grow-pm/landscape/`) and the machine scan behind it |
 | `scripts/ctx.py`, `references/context-protocol.md` | the context store: records of the user's context, `local-context.md` compiled from them, `ctx sync` after any write to it |
 | `testing/` | `validate-consistency.sh`, `skill_lint.py` and the eval sets |
+| `.ai-registry/skills/<name>/`, `testing/registry_copy.py` | a generated copy of the plugin for a registry that syncs a subfolder, never the root; rebuilt at release from the index, never edited by hand |
 
 A bare `references/<file>.md` in a skill means the **shared** folder at the plugin root, not the skill's own. When a relative read of it fails, resolve the plugin root through `${PLUGIN_ROOT}` → `${CLAUDE_PLUGIN_ROOT}` → the directory that contains `skills/` (`references/host-profiles.md` §6) and read it from there. Do not silently continue without a protocol the skill named.
 
@@ -56,5 +57,5 @@ Measured, not assumed. Work with them rather than around them:
 ## Working in this repository
 
 - `bash testing/validate-consistency.sh` and `python3 testing/skill_lint.py` must both stay green. Run them before proposing a change as finished. Before a release, `bash testing/host-smoke.sh` must also pass — it loads the tree on Claude Code and Codex CLI and is the only check that catches a host-level regression.
-- Version numbers live in five files at once (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md`) and are bumped by the `release-manager` skill, never by hand.
+- Version numbers live in five files at once (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md`) and are bumped by the `release-manager` skill, never by hand. The registry copy under `.ai-registry/` follows them at release (`release-manager` Step 3); between releases it lags `main` on purpose.
 - Protocol content belongs in `references/`; a skill that starts explaining a protocol inline is drifting.
