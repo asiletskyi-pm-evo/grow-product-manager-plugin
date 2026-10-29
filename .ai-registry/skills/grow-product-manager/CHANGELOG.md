@@ -12,6 +12,52 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.0.2 (2026-10-29)
+
+**Atlassian MCP v2: a page written on v2 is asked about first, and a page is read whole.** On the Atlassian MCP v2 server (`https://mcp.atlassian.com/v2/mcp`) the Confluence writes are named `createConfluenceContent` and `updateConfluenceContent`. The host write gate knew only their v1 names (`createConfluencePage`, `updateConfluencePage`), so a requirements, concept or research page was published on v2 without the gate's question. Jira keeps its tool names on v2 and was gated already. The release also ships the registry copy of the plugin (PR #84), rebuilt at this release.
+
+PATCH: a bug fix in the write gate and a protocol subsection that maps tool names; no skill's steps, no command and no schema changed.
+
+### Fixed
+
+- **The write gate covers the v2 Confluence tools** (`hooks/hooks.json` matcher, `scripts/write_gate.py` `GATED_OPS` / `UPDATE_OPS`): `createConfluenceContent` asks as `createConfluencePage` does, `updateConfluenceContent` as `updateConfluencePage`. An update that changes only the title still passes silently — `content_size` already reads v2's `body: {format, value}` and `edits[]`. `executeWrite` / `executeDestructive` stay ungated: pages and issues are not created through them, and the comments and links they run were never gated on v1 either.
+- Tests: `write_gate_test.py` — a v2 create, a v2 update with `edits`, a title-only v2 update, `executeWrite`, and a check that the matcher in `hooks.json` covers every gated name. Four of them fail on v4.0.1.
+
+### Added
+
+- **`integration-strategy.md` 1c — Atlassian MCP v1 and v2.** How to tell the servers apart by an observed tool (`getConfluencePage` → v1; `getConfluenceContent`, `discover` or `executeRead` → v2), the v1 → v2 table of every Atlassian tool the skills name, and three differences that change a result silently: read a page with `detail: "full"` (the default `summary` is an excerpt of a few hundred characters), update with a fresh `snapshotToken`, ping with `getAccessibleAtlassianResources` (`getVisibleJiraProjects` and `getConfluenceSpaces` are reached on v2 only through `executeRead`, as `listJiraProjects` and `listConfluenceSpaces`). Table 1a pings Atlassian with `getAccessibleAtlassianResources`; the 1b Confluence row lists the v2 tools.
+- **The registry copy** (PR #84). A registry that syncs `.ai-registry/skills/<name>/` of a repository, never its root, was serving a release three majors old. `testing/registry_copy.py` builds that folder from the git index — unstaged work never reaches it — leaves the maintainer's folders out and derives the Cursor manifest from `plugin.json`; `--check` compares it with a rebuild. `release-manager` 0.5.0 rebuilds it in Step 3.6 and checks it after the release commit; validator check 22 fails while its version lags `plugin.json`. The branch leak scan skips the copy — each of its lines is scanned at its own path.
+
+### Files
+
+| File | Change |
+|---|---|
+| `hooks/hooks.json` | the matcher: + `createConfluenceContent`, `updateConfluenceContent` |
+| `scripts/write_gate.py` | `GATED_OPS`, `UPDATE_OPS` |
+| `references/integration-strategy.md` | 1a ping, 1b Confluence row, new 1c |
+| `references/artifact-style-gate.md`, `README.md` | the gated tools with their v2 names |
+| `testing/write_gate_test.py` | the v2 cases, the matcher's coverage |
+| `testing/registry_copy.py`, `registry_copy_test.py` | new (PR #84) |
+| `testing/validate-consistency.sh`, `branch_leak_scan.py`, `branch_leak_scan_test.py`, `.gitattributes`, `AGENTS.md` | check 22, the copy skipped by the scan (PR #84) |
+| `skills/release-manager/SKILL.md` | 0.4.2 → 0.5.0 (Step 3.6, `--check` after the release commit) |
+| `.ai-registry/skills/grow-product-manager/` | new — the registry copy, at v4.0.2 |
+
+### Acceptance
+
+Measured on 2026-10-29 against the claude.ai Atlassian MCP connector (v2), read only: `discover` showed that pages are created and updated by the two primary tools, not through `executeWrite`; a Confluence page of 3 136 words came back from `getConfluenceContent` without `detail` as an excerpt of about 300 characters. The v4.0.1 matcher and `write_gate.py` were run on the v2 names: the two Confluence writes passed ungated, `createJiraIssue` / `editJiraIssue` were gated.
+
+### Known limits
+
+- No write was made on v2 in this release: the gate is tested on the tool names and their inputs.
+- `.mcp.json` still declares the v1 URL (`https://mcp.atlassian.com/v1/mcp`). A user moved to v2 sees the plugin's Atlassian connector as not connected, while the v2 tools are in the session and 1b finds them. Which URL to declare is a product decision; 1c covers both servers until it is taken.
+
+### Backwards compatibility
+
+- On v1 nothing changes: the v1 names are gated as before, and 1c applies only when v2 tools are present.
+- The registry copy is a generated folder; nothing in the plugin reads it.
+
+---
+
 ## v4.0.1 (2026-10-29)
 
 **Локальний індекс у WAL: a vault index of your own is read, not called an unknown schema.** A registered local index in WAL mode with no `-wal` beside it — a copy of the database file alone, or one whose writer's SQLite removed its `-wal` and `-shm` on close — could not be opened read only (SQLite would have to make the `-shm`), and every reader of it said `індекс <id> має незнайому схему — без нього`: `ctx search`, `ctx entity`, the cards and hints of the registry and the index date of the SessionStart digest went without it. Its tables were never the problem — the shape seen in the wild (`notes_fts` with `path`, `notes` by path, meta `k/v`) is read since v3.16.0.

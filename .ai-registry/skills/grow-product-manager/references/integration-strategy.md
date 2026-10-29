@@ -22,7 +22,7 @@ The namespace is **host-dependent**: the same declared server gets a different p
 
 | `.mcp.json` key | Connector (host directory name) | Namespace — Claude / Cowork | Namespace — Codex CLI | Ping (auth + access) |
 |---|---|---|---|---|
-| `atlassian` | Atlassian Rovo | `mcp__Atlassian_Rovo__*` | TBD — verify in stage 3 | `getVisibleJiraProjects`, `getConfluenceSpaces` |
+| `atlassian` | Atlassian Rovo | `mcp__Atlassian_Rovo__*` | TBD — verify in stage 3 | `getAccessibleAtlassianResources` (v1 and v2 — 1c) |
 | `figma` | Figma | `mcp__Figma__*` | TBD — verify in stage 3 | `whoami` |
 | `gmail` | Gmail | `mcp__Gmail__*` | CLI: not usable, empty `url` fails at session start; app: connected by name (pilot, v3.0.0) | `list_labels` |
 | `google calendar` | Google Calendar | `mcp__Google_Calendar__*` | CLI: not usable, empty `url` fails at session start; app: connected by name (pilot, v3.0.0) | `list_calendars` |
@@ -48,7 +48,7 @@ Namespaces are what the host showed in real sessions; a differently-named connec
 | Product | Tool pattern to look for | Example tools |
 |---------|-------------------------|---------------|
 | Jira | `mcp__*__*Jira*` | `searchJiraIssuesUsingJql`, `createJiraIssue` |
-| Confluence | `mcp__*__*Confluence*` | `getConfluencePage`, `createConfluencePage` |
+| Confluence | `mcp__*__*Confluence*` | `getConfluencePage`, `createConfluencePage` (v1); `getConfluenceContent`, `createConfluenceContent` (v2 — 1c) |
 | Google Drive | `mcp__*__*drive*`, `mcp__*__*gdrive*` | `list_files`, `read_file`, `search_files` |
 | Figma | `mcp__*__get_screenshot`, `mcp__*__get_design_context` | `get_screenshot`, `get_metadata` |
 | Notion | `mcp__*__notion-*` | `notion-search`, `notion-create-pages` |
@@ -60,6 +60,30 @@ Namespaces are what the host showed in real sessions; a differently-named connec
 **If found** → use the MCP tools directly. Proceed with the skill workflow.
 
 > **Provenance:** when a datapoint could have come from either a declared connector or a pattern-detected one, name the actual server in the artifact's source marker (e.g. `Atlassian_Rovo`), not the product — the user can then audit which connection answered.
+
+**1c. Atlassian MCP v1 and v2.** Two Atlassian servers are in use: v1 (`https://mcp.atlassian.com/v1/mcp`, «Atlassian Rovo», the URL `.mcp.json` declares) and v2 (`https://mcp.atlassian.com/v2/mcp`), which another plugin's setup script may register under the same name `atlassian`, replacing the user's v1 registration. Tell them apart by an observed tool, not by the server's name: `getConfluencePage` → v1; `getConfluenceContent`, `discover` or `executeRead` → v2. Both can be connected at once; either works. Skills name the v1 tools; on v2 use the table below. On v2 a tool that is not primary runs through `executeRead` / `executeWrite` with `name` and a flat `inputs` object, and `discover` returns its inputs. Three differences change the outcome without an error, so they are mandatory:
+
+1. **Read a page with `detail: "full"`.** `getConfluenceContent` defaults to `detail: "summary"` — an excerpt of a few hundred characters (measured 2026-10-29: a 3136-word page came back as a ~300-character excerpt). A skill that reads requirements, a concept or a library page without it works on the excerpt.
+2. **Update with a fresh `snapshotToken`.** `updateConfluenceContent` takes the token from `getConfluenceContent(draft: true, detail: "full")`; a stale token means re-read and re-apply the change, never resend the same payload.
+3. **Ping with `getAccessibleAtlassianResources`.** `getVisibleJiraProjects` and `getConfluenceSpaces` are not primary tools on v2; their absence is not a missing connector.
+
+| v1 | v2 | v2 call | What changes |
+|---|---|---|---|
+| `getConfluencePage` | `getConfluenceContent` | primary | `detail: "full"` for the body; returns `snapshotToken` |
+| `createConfluencePage` | `createConfluenceContent` | primary | `contentType: "page"`; `parent: {spaceId}` takes the numeric id — resolve a key with `listConfluenceSpaces` (`keys`); `body: {format, value}`; read the space instructions with `getConfluenceSpace` (`executeRead`) before writing |
+| `updateConfluencePage` | `updateConfluenceContent` | primary | `snapshotToken` required; `edits[]` for a granular change instead of a full `body` |
+| `searchConfluenceUsingCql` | `searchConfluence` | primary | same CQL; `cursor` for the next page |
+| `getConfluenceSpaces` | `listConfluenceSpaces` / `getConfluenceSpace` | `executeRead` | |
+| `createJiraIssue` | `createJiraIssue` | primary | `issueType` (not `issueTypeName`), `assignee` (not `assignee_account_id`), `priority` and `labels` are top-level; `contentFormat` is `markdown` or `html` |
+| `editJiraIssue` | `editJiraIssue` | primary | multi-value fields (labels, components) are replaced, not appended — send the whole list |
+| `getJiraIssue`, `searchJiraIssuesUsingJql` | same names | primary | the default `compact` view has no custom fields — `view: "evidence"` or `fields: ["customfield_…"]` (the Team field) |
+| `lookupJiraAccountId`, `getJiraIssueTypeMetaWithFields` | same names | `executeRead` | an assignee: `listJiraIssueAssignableUsers` |
+| `getVisibleJiraProjects` | `listJiraProjects` | `executeRead` | |
+| `getJiraProjectIssueTypesMetadata` | `listJiraProjectIssueTypesMetadata` | `executeRead` | |
+| `createIssueLink`, `getIssueLinkTypes` | `createJiraIssueLink`, `listJiraIssueLinkTypes` | `executeWrite` / `executeRead` | |
+| `getAccessibleAtlassianResources`, `atlassianUserInfo` | same names | primary | pass the `cloudId` explicitly on every call |
+
+The write gate covers `createConfluenceContent` and `updateConfluenceContent` as it covers their v1 names (`hooks/hooks.json`, `artifact-style-gate.md` → Host write gate); `executeWrite` is not gated on either version, as v1 comments and links were not.
 
 ### Step 2: Search for an MCP server
 

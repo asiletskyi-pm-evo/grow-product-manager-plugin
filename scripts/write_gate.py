@@ -2,7 +2,10 @@
 """Grow PM — PreToolUse write gate (since v2.6.0).
 
 Runs before createJiraIssue / editJiraIssue / createConfluencePage /
-updateConfluencePage on any connector. It does NOT judge the artifact — a hook
+updateConfluencePage on any connector, and before createConfluenceContent /
+updateConfluenceContent — the Confluence writes' names on Atlassian MCP v2
+(references/integration-strategy.md 1c; Jira keeps its names there). It does NOT
+judge the artifact — a hook
 sees only the tool call, never the conversation (hooks reference: prompt/command
 hooks receive the hook input JSON). What it can do deterministically is put a
 human in the loop before an irreversible write, with the checklist the artifact
@@ -40,6 +43,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 CONTENT_KEYS = ("description", "body", "content", "bodyContent", "value", "text")
 FILE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 MIN_CONTENT = 200  # characters — below this an edit is metadata, not an artifact
+GATED_OPS = ("createJiraIssue", "editJiraIssue", "createConfluencePage", "updateConfluencePage",
+             "createConfluenceContent", "updateConfluenceContent")  # v1 names, then the v2 Confluence names
+UPDATE_OPS = ("editJiraIssue", "updateConfluencePage", "updateConfluenceContent")
 
 
 def config_paths():
@@ -234,9 +240,9 @@ def main():
                     % (region, path))
         return
     op = tool.rsplit("__", 1)[-1]
-    if op not in ("createJiraIssue", "editJiraIssue", "createConfluencePage", "updateConfluencePage"):
+    if op not in GATED_OPS:
         return  # not a gated operation (defensive: the matcher should already exclude it)
-    if op in ("editJiraIssue", "updateConfluencePage") and content_size(tool_input) < MIN_CONTENT:
+    if op in UPDATE_OPS and content_size(tool_input) < MIN_CONTENT:
         return  # metadata-only edit — no prompt
     target = "Jira issue" if "Jira" in op else "Confluence page"
     verb = "create" if op.startswith("create") else "update"
