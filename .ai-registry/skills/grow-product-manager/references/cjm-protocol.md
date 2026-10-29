@@ -1,0 +1,280 @@
+# CJM Protocol
+
+This document defines shared standards for all CJM-related skills and modes. Referenced by `cjm-research`, `product-analysis` (CJM mode), and `brainstorm-features` (CJM mode).
+
+> **Dependencies**: Also read `data-policy.md` (confidentiality) and `integration-strategy.md` (MCP fallback chain) before any CJM operation.
+
+---
+
+## Anomaly Severity Levels
+
+Every anomaly detected during CJM analysis MUST be classified by severity:
+
+| Severity | Deviation from baseline | Color | Action required |
+|----------|------------------------|-------|-----------------|
+| **Critical** | > 25% negative deviation | Red | Immediate investigation recommended |
+| **Warning** | 10–25% negative deviation | Yellow | Monitor and investigate in next cycle |
+| **Info** | < 10% deviation (positive or negative) | Gray | Note for context, no immediate action |
+| **Positive** | > 10% positive deviation | Green | Investigate what caused improvement |
+
+**Deviation formula:**
+```
+deviation_% = ((actual - baseline) / baseline) × 100
+```
+
+**Baseline selection** (user configures during CJM setup, defaults below):
+- `previous_period` — same metric from the previous time period (default)
+- `previous_year` — same metric from the same period last year (seasonality-adjusted)
+- `target` — metric target from local-context.md (if set)
+- `custom` — user-specified baseline value
+
+---
+
+## Funnel Impact Calculation
+
+### Per-stage impact
+
+For each hypothesis that targets a specific funnel stage:
+
+```
+new_stage_conversion = current_stage_conversion × (1 + expected_lift_%)
+stage_impact_absolute = new_stage_conversion - current_stage_conversion
+```
+
+### End-to-end funnel impact
+
+The overall conversion is the product of all stage conversions:
+
+```
+current_overall = stage_1_conv × stage_2_conv × ... × stage_N_conv
+new_overall = stage_1_conv × ... × improved_stage_conv × ... × stage_N_conv
+overall_impact = new_overall - current_overall
+overall_impact_% = ((new_overall - current_overall) / current_overall) × 100
+```
+
+### Impact weighting by funnel position
+
+Earlier stages affect more users, so their impact is naturally amplified through the funnel. The ICE Impact score should reflect this:
+
+| Stage position | Impact multiplier (for ICE) |
+|---------------|---------------------------|
+| Stage 1 (entry) | ×1.5 — affects all users |
+| Stage 2 | ×1.3 — affects most users |
+| Stage 3 | ×1.1 — affects engaged users |
+| Stage 4+ (end) | ×1.0 — affects converting users |
+
+These multipliers are applied to the ICE Impact score, not to the funnel impact calculation itself.
+
+---
+
+## Health Score Formula
+
+The Funnel Health Score (0–100) provides a single number for quick health assessment.
+
+### Per-stage health
+
+```
+stage_health = 100 - (severity_penalty × weight)
+```
+
+Severity penalties per anomaly:
+- Critical: -30 points
+- Warning: -15 points
+- Info: -3 points
+- Positive: +5 points (capped at +10 per stage)
+
+If a stage has multiple anomalies, penalties are summed (minimum 0, maximum 100 per stage).
+
+### Overall health score
+
+```
+overall_health = weighted_average(stage_health_1, stage_health_2, ..., stage_health_N)
+```
+
+Stage weights (configurable). The defaults are defined as **shares of the funnel**, not fixed per-stage numbers, so they sum to 100% for a funnel of any length:
+
+| Stage position | Share of total |
+|---------------|---------------|
+| First stage (entry) | 15% |
+| **All** middle stages together | 50% — split evenly among them |
+| Last stage (conversion) | 35% |
+
+Last stage weighs most because it directly reflects revenue/goal completion.
+
+Worked examples across the shipped templates (`funnel-templates.md`):
+
+| Template | Stages | Per-stage weights |
+|---|---|---|
+| E-commerce | 4 | 15 · **25 · 25** · 35 |
+| Marketplace | 5 | 15 · **16.7 · 16.7 · 16.7** · 35 |
+| SaaS | 6 | 15 · **12.5 · 12.5 · 12.5 · 12.5** · 35 |
+
+**Two-stage funnel** (no middle): 30% / 70% — the 50% middle share is redistributed proportionally.
+
+> Until v2.1.0 this table read "Middle stages | 25% **each**", which sums to 100% only for the 4-stage E-commerce default — the 5-stage Marketplace funnel scored out of 125 and the 6-stage SaaS funnel out of 150, silently deflating every health score computed on them.
+
+### Health score interpretation
+
+| Score | Status | Meaning |
+|-------|--------|---------|
+| 90–100 | Healthy | No significant anomalies, funnel performing well |
+| 70–89 | Attention | Some warnings, monitor closely |
+| 50–69 | Concern | Multiple warnings or critical anomaly, investigation recommended |
+| 0–49 | Critical | Multiple critical anomalies, immediate action required |
+
+---
+
+## Cross-Platform Comparison Methodology
+
+When comparing CJM across platforms (e.g., Web vs App):
+
+### Step 1 — Normalize metrics
+
+Platforms may have different absolute conversion rates. Compare:
+- Relative change (% delta from each platform's own baseline)
+- Trend direction (improving vs declining)
+- Anomaly severity distribution
+
+Do NOT directly compare absolute conversion rates across platforms unless the user explicitly asks.
+
+### Step 2 — Classify anomalies
+
+| Category | Definition |
+|----------|-----------|
+| **Shared anomaly** | Same metric anomaly detected on both platforms (same direction, similar severity) |
+| **Platform-specific** | Anomaly detected on one platform only |
+| **Divergent** | Same metric, opposite trend across platforms (e.g., improving on Web, declining on App) |
+
+### Step 3 — Prioritize
+
+1. **Divergent anomalies** — highest priority, investigate root cause of difference
+2. **Shared critical anomalies** — systemic issue, likely backend or business logic
+3. **Platform-specific critical** — platform UX or technical issue
+4. **Shared warnings** — monitor, lower urgency
+5. **Platform-specific warnings** — lowest priority
+
+---
+
+## Hypothesis Verification Checklist
+
+Used by the verification subagent in Step 10 of `cjm-research`:
+
+For each hypothesis, the verifier must check:
+
+| Check | Question | If fails |
+|-------|----------|----------|
+| **Data validity** | Does the anomaly hold after segmenting by platform, locale, user type? | → `needs-more-data` |
+| **Internal evidence** | Do internal sources (experiments, feedback, NPS) support or contradict? | → `contradicted` if strong counter-evidence |
+| **Prior experiments** | Has something similar been tested before? What was the result? | → `contradicted` if prior test failed |
+| **Confidence calibration** | Is the expected lift realistic given industry benchmarks? | → adjust expected lift, note in report |
+| **Dependency check** | Does this hypothesis depend on or conflict with another hypothesis? | → flag dependency |
+| **Data freshness** | Is the underlying data recent enough to be actionable? | → `needs-more-data` if data is stale |
+
+Verification statuses:
+- `confirmed` — all checks passed, high confidence
+- `needs-more-data` — hypothesis plausible but insufficient evidence
+- `contradicted` — counter-evidence found, reconsider or deprioritize
+
+---
+
+## Data Source Priority
+
+When gathering CJM data, prefer sources in this order:
+
+1. **Tableau/GA dashboards** — primary quantitative source (funnel metrics, conversion rates)
+2. **Internal experiments** — A/B test results with statistical significance
+3. **User feedback** — support tickets, reviews, NPS verbatims (qualitative)
+4. **Knowledge Library** — curated external benchmarks and best practices
+5. **Web search** — fresh industry data, competitor analysis
+6. **External LLMs** — Deep Research for broad patterns (public data only per `data-policy.md`)
+
+Always cite the source type in the final report.
+
+---
+
+## Report Sections — Standard Structure
+
+All CJM reports (regardless of mode) should include these sections where applicable:
+
+| Section | Required in modes | Content |
+|---------|------------------|---------|
+| Summary | all | 3-5 sentence executive summary |
+| Funnel Overview | all | Visual representation of current funnel state |
+| Anomalies | all | Table: stage, metric, baseline, actual, deviation, severity |
+| Enrichment | hypotheses, full | What was found from external and internal sources |
+| Hypotheses | hypotheses, full | Table: trigger, solution, ICE, funnel impact, category |
+| Verification | full | Status per hypothesis with rationale |
+| Risk Assessment | full | Technical, business, UX risks per hypothesis |
+| Impact Model | hypotheses, full | Per-stage and end-to-end impact calculation |
+| Prioritized Backlog | full | Categorized: low-hanging fruit / structural / business logic |
+| Roadmap | full | Phased implementation recommendation |
+| Sources | all | All sources with type labels |
+| Glossary | full | Terms and abbreviations used in the report |
+
+---
+
+## Data Integrity Gate (v1.13.0+)
+
+All CJM-related skills MUST execute the Data Integrity Gate before reporting any metric. See `references/data-integrity-protocol.md` for the full protocol.
+
+**Quick reference — 6 mandatory checks:**
+
+1. **Period/Context Completeness** — detect incomplete-period extracts; normalize or exclude
+2. **Seasonal/Cultural Screening** — flag anomaly windows that overlap with holiday periods (Ukraine: Week 1 Jan, Mar 7-8, Easter, May 1-3, BF, Dec 22-31); verify geographic relevance of external benchmarks
+3. **Multi-Source Cross-Validation** — ≥ 2 independent sources for critical metrics; ≥ 3 sources for extreme values (drop > 25% / lift > 50% / sensational claims)
+4. **Period Definition Lock + Inline Annotation** — every cited metric carries inline period annotation (12mo rolling, YoY, snapshot, normalized, etc.)
+5. **Source Type Marker** — mark every source with type (`tableau-mcp`, `tableau-web`, `internal-live`, `ga-snapshot`, `baymard-premium`, `web-search`, `kb-source`, `competitor-website`, `user-research`)
+6. **Evidence Class & Frontier** (since v3.8.0) — a class on every cited metric and claim (funnel data the skill read `measured`, walkthrough packs `observed`, feedback `reported`, benchmarks `external`); `simulated` / `assumed` visible on the item and never a finding; a root cause the data cannot support (a causal claim without an experiment, holdout or flag-off control, or a "why users…" claim without a real-user source) gets one hand-back line naming the human step instead of a finding — labels only in the automated health-check
+
+**Output statuses:** ✅ Verified / ⚠️ Caveat / ❌ Blocked — set by checks 1–5; check 6 never changes a status, never blocks and never asks.
+
+**Blocked metrics** must not appear in final reports without resolution.
+
+---
+
+## Holiday Screening Windows
+
+For products whose primary market is Ukraine (local-context → `product.primary_market` = UA):
+
+| Window | Effect | Action |
+|--------|--------|--------|
+| Week 1 (Jan 1-7) | Heavy holiday effect, low purchase | **Never cite as YoY trend** — search sustained pattern in non-holiday weeks |
+| Mar 7-8 | Gift-purchase spike | Cite with context |
+| Easter ± 1 week (variable) | Seasonal shift | Cite with context |
+| May 1-3 | Holiday effect | Cite with context |
+| BF week (4th Thursday of November) | Promotional spike | Cite with context |
+| Dec 22-31 | Pre-New Year spike, then drop | Cite with context |
+
+For global products, also screen: Chinese New Year, Diwali, Ramadan, US Thanksgiving / BF / Cyber Monday, Boxing Day.
+
+---
+
+## Anomaly Verification Checklist (drop > 25% / lift > 50%)
+
+**MANDATORY before reporting any extreme deviation:**
+
+- [ ] Period completeness checked (Gate Check 1)
+- [ ] Holiday window screening (Gate Check 2)
+- [ ] ≥ 3 independent sources (Gate Check 3 — extreme-value rule)
+- [ ] Methodology change check (data-platform / attribution-change tickets in the period — the tracker project your org uses for them)
+- [ ] Reference period analysis (full YoY table, not single cell)
+- [ ] Inline-period annotation (Gate Check 4)
+- [ ] Evidence class on the deviation; a cause the data cannot show is handed back, not reported as a finding (Gate Check 6)
+
+If any check fails → mark as ⚠️ Caveat or ❌ Blocked, do not report as fact.
+
+---
+
+## Recommended reference sources catalog
+
+Each product/organization should build a metric → sources mapping in `local-context.md` under `data_sources_catalog`. Example structure:
+
+| Metric | Primary source | Cross-validation source | Methodology doc |
+|--------|----------------|------------------------|-----------------|
+| (e.g.) `<GMV YoY>` | Tableau workbook X (YtoY view) | Tableau workbook Y / GA / internal live-metrics tool | Attribution-change ticket |
+| (e.g.) `<Conversion rate>` | `<funnel workbook>` | `<CJM master workbook>` | — |
+| (e.g.) `<Funnel stages>` | `<CJM master workbook>` | `<per-stage workbooks>` | — |
+
+This catalog enables Gate Check 3 (Multi-Source Cross-Validation) to operate automatically — the skill knows which secondary source to query for each metric.
+
+Qualitative stage evidence has its own marker: `walkthrough-local` — a `flow-walkthrough` evidence pack (`steps.yaml`, `findings.md`) for the stage's scenario, step-numbered, local only (`app-drive-protocol.md`). It never substitutes for a metric source; it explains one. Its steps are `observed` (Gate Check 6, since v3.8.0).

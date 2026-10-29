@@ -1,0 +1,1097 @@
+<p align="center"><img src="assets/logo.png" alt="Grow Product Manager" width="128"></p>
+
+# Grow Product Manager
+
+**Version:** 4.0.1
+
+AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
+
+---
+
+## Overview
+
+**New in v4.0.1** — **Локальний індекс у WAL: a vault index of your own is read, not called an unknown schema** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A registered local index in WAL mode with no `-wal` beside it — a copy of the database file alone, or one whose writer removed `-wal` and `-shm` on close — is now read as `immutable` instead of being left out as «незнайома схема»: `ctx search`, `ctx entity`, the registry's cards and hints and the SessionStart index date take notes from it again; nothing is written to it or made beside it, and an index that cannot be opened now says «не відповів». Checked on a scratch copy of the author's own index (6 951 notes): the same results as a copy with its `-shm`.
+
+**New in v4.0.0** — **«Вейлт: аудит і граф»: the links of your vault, seen and tidied** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). The index now knows every file a link may land on — an evicted note and a picture too — and resolves every link once, in its own vault: `ctx graph <note or entity>` shows what is one or two hops around it in milliseconds. `ctx audit` names what breaks the links of your layer — orphans, dead and ambiguous links, broken generated regions, missing `type`/`created`, backups, two cards that disagree on a number — and says which of them a machine can fix; `ctx vault normalize` fixes those with a report, your code, a snapshot and `ctx undo` (a link keeps the text a reader sees, a value is never changed, a file never renamed, People notes never listed), and adds `_System/AGENTS.md` and Obsidian Bases tables. A card's numbers become facts with their period and day, and every answer from a note can show the trust of its source. `ctx serve` gives all of it to a host without a shell as a local MCP server of `vault/v1`. **Breaking:** the write gate now asks before a write that changes a generated region of a note (`/grow-product-manager:setup --write-gate off` turns it off). Measured on a full copy of the author's vault (7.3k notes): the audit in 3 s, 178 files normalised and every one of them back byte for byte after `ctx undo`, 0 orphans and 0 fixable findings after the write, a two-hop graph in 19 ms. The last release of the programme «Петля контексту».
+
+**New in v3.24.0** — **«Власна копія ядра для MCP»: a core that lives only on a server becomes a folder on your machine** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). When a team's core is reachable only as an MCP server, `ctx repo copy <id>` makes the plugin's own copy of it in `~/.grow-pm/cores/<id>/` in one command — every note under the server's root, at its path there. From then on the plugin reads the repository as a folder: the blocks, the team block, the search, who-is-who and the bridges' boundary — and the search and entities answer without the VPN. The daily sync refreshes the copy in the background with a full pass and never deletes anything: a note gone from the server moves into `.removed/` only after two complete listings without it, and an incomplete listing from the server writes nothing and moves nothing. A note you changed in the copy stays yours; when the server changed it too, its version waits in `~/.grow-pm/conflicts/`. For the team block through a server that serves notes only, the core's owner publishes the manifest and the role model as two `.md` wrappers (`ctx repo kit-check` checks them). Measured on the author's real core: 4 865 notes in one command, a rerun with 0 writes, every semantic hash equal to the author's own sync script, and the team block from the copy byte for byte the one from the folder.
+
+**New in v3.23.0** — **«Оверлей і журнал»: your corrections to a core are declared, and you can read what changed** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A correction you keep to a team's shared core is an operation in `overlays/<repo>.yaml` — replace, remove, append, ignore or alias, with your reason — laid again after every refresh and daily sync, so a core release over a block you did not edit asks nothing. When the core fixes what you corrected, you get one question, «прибрати поправку?»; a prose note of corrections moves into the overlay through `context-connect` with one «так». A value the core changed that you copied into your own sections arrives in the inbox. `ctx history` writes a note a month with «Було | Стало» of the core's releases and your own changes; `ctx identity` puts the core's team and role for your e-mail beside yours with both sources. A team that wants to share its context copies `examples/provider-kit/zorg-core/` and colleagues connect it with one command (`ctx repo add`). Measured on the author's real context: a core release in one confirmation with 0 questions, and the correction the core fixed asked about exactly once.
+
+**New in v3.22.0** — **«Конфігуратор-петля»: the configurator reads first and asks at most five questions** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). Setting up no longer starts with an interview: the configurator reads your connectors read-only — Atlassian first, then the calendar, your mail's domain, Fireflies and Tableau if they are connected — and `ctx bootstrap` shows one table: what each field says now, what it would say, where that came from and how sure it is. What a connector cannot be sure of goes to the inbox instead; a value you gave yourself is never taken but by number. Basic is at most five decisions — you, your role, your products, your team, the table — and saving it creates your context store at once, with the source of every field (`ctx show <id>`). Once a week the morning brief checks your records against the connectors (`ctx validate --recheck`): a finding becomes an inbox delta only when a second look a week later sees it again, never from a connector that did not answer. `/grow-product-manager:context consolidate` proposes removing a duplicate line, making a relative date absolute and dropping a passed deadline — as proposals, never a write. Measured on the author's real context: 0 false closures, and a new user's setup in under three minutes of questions.
+
+**New in v3.21.0** — **«Скринька»: what skills learn about your context waits for your «так»** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A skill that learns something about your context during a run — a dashboard the product record lacks, a Jira key that moved, a product that closed — no longer writes it in silence or asks «зберегти?» at the end of every run: it proposes a delta (`ctx propose`), and the inbox keeps it. What matters most — who you are, your team, a product's keys, anything closed — is asked at once in one question; the rest is one line `У скриньці +N` and waits for the morning brief or `/grow-product-manager:context inbox`, taken or rejected in one answer, with `ctx undo`. A secret or a state or financial identifier never reaches the store — every writing command and every delta refuses it by its form, naming the kind, never the value. `/grow-product-manager:context show` says what the plugin knows about you and who wrote each record when; `health` says what wants looking after, each line with the command that fixes it; `ctx snapshot import` turns your old `local-context.md` backups into snapshots. The first release of the programme «Петля контексту».
+
+**New in v3.20.0** — **«Мости в нотатках»: the bridges your notes lack, written on your «так»** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). When an e-mail or your own `same` answer makes your person note and a core's card one person, nothing in your note said so — Obsidian, your scripts and other tools did not see it. Ask context-navigator «запиши мости в нотатки»: `ctx entity apply` reports which notes would get one frontmatter line `same_as: "[[<card>|<title>]]"`, what it skips and why, and a report code; only on your «так» does `--apply --code` write that report alone — into your plugin folder, never a core, one line per note with every other byte, the file's mode and its tags kept, after a snapshot. `ctx undo` takes it back: a note you have not touched byte for byte, one you edited loses our line alone. A `same_as` your own scripts keep is someone else's field: the plugin then writes nothing and says so. The plugin's card in Claude now shows one sentence instead of 5 000 characters of history; and a row «Ім'я, Ім'я — роль» of a core's team card joins both people.
+
+**New in v3.19.0** — **«Слоти з однієї сутності»: a person's role, a team's members — one answer from every card** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). A person's role, team and e-mail and a team's members, missions and parent are put together from all the cards of one entity — your note, a core's card, another team's card, and every person whose own `team:` names the team — by the cascade (yours first, then the cores, then a local index, then what other cards say), each piece with where it comes from. `ctx read`'s team members are one line per person, nothing of the section lost, and `ctx entity` shows the slots (`--slot`, several requests with one `--q` each). The 14 skills that work with people find a person through `ctx entity` — by e-mail first, several → you choose — never by a file name.
+
+**New in v3.18.0** — **«Хто є хто»: one person, team or epic across your notes and the cores** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). Ask «хто такий X», «що за команда X», «що таке PROJ-1234» or «хто посилається на X»: `ctx entity` joins your person note, a core's registry card and another team's card in your local index into one entity — by the e-mail, a field of one link recognised by its shape, or your own `ctx entity same|not-same` answer, never by a name alone — and says who it is, where its cards are, who links to it and, for a Jira key with no card, where it is mentioned. Outside the People contour you see identity only, and a sensitive note as its title and path with ` · sensitive`. Nothing is written into your notes; `ctx entity pairs` lists the cards that may be the same. The search index gets the identity, link and mention rows in place — no rebuild.
+
+**New in v3.17.0** — **«Пошук по контексту»: ask your context directly** (33 skills, 3 agents, 6 commands, 12 connectors, 3 hooks). Ask in your own words — «знайди в моєму контексті…», «що в мене є про…» — or type `/grow-product-manager:find <запит> [--list] [--all]`. `context-navigator` searches every connected context: your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct. It answers with a source and a date for every statement, or lists the notes, and ends with «Де шукав: …». It works with or without a shared core. People notes — `person` cards, profiles, 1-1s — are marked `sensitive` by the engine itself and stay with the People contour; elsewhere a person is named by identity only.
+
+**New in v3.16.2** — **«Пошук», другий патч: nothing swaps in another note silently** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Two cards that differ only by a list of owners no longer fold into one; your remembered pick of a note folded as a twin weighs its survivor, and a «не те» crosses only a fold of the same text; the excluded folders are the same in the index, the search and `--get`; every name a search lists reads back from the source that holds it — a server's note outside its root is `@<repo>/:/…`, a core gone from disk is read through its server; the «нотатка довга» line names exactly the sections `--get` takes back. `ctx search eval` finds a golden note folded as a twin at its survivor's place.
+
+**New in v3.16.1** — **«Пошук», патч: your whole plugin folder reaches the search, and `--get` gives a long note in measured parts** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx index rebuild --download` brings down the notes iCloud offloaded from your plugin folder — only those the index reads, never a core or the rest of the vault, nothing else ever downloads — and indexes them: on a real vault 1 820 of 1 821 came down and the right note among the first 50 rose to 100 %. Every `ctx search --get` gives at most 20 000 characters with a line naming the headings past the cut (`--full` — 60 000, for a note the model rated «прямо»), and reads a link as a hub writes it: embeds, nested headings, block references, a folder in the link — never another note with the same tail silently.
+
+**New in v3.16.0** — **«Пошук»: Step 0.5 finds what your base already holds about the request** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Until now Step 0.5 matched every word of the request («AND»), in one language, and asked «Use as context?» in the middle of the run — on a real vault the right note was among the first five for 44 % of the requests and for 2 of 24 real ones. Now the model writes 3–4 variants of the request (Ukrainian, Russian, English, a synonym) and `ctx search` asks every source at once — its own section index of your plugin folder and the core folders (`~/.grow-pm/index/`, refreshed within 30 s, iCloud-evicted files never read), a local index of yours read only, and a repository's server only when it has no folder on disk; light Ukrainian/Russian stemming, OR semantics, the team glossary's other names, rank fusion, folding of the same page found twice and of near copies, a mark for an outdated, older or `sensitive` note and «станом на <день>» for a card older than its class. The skill reads 30 candidates, takes silently at most three that are directly about the request with their source and date, puts a doubt or a conflict into a block of variants after the work, and remembers what you pick (`ctx search remember`). `ctx search --get` reads a section, a note by its path or by its name. Measured on a copy of a real vault: the right note among the first 50 for 98.9 % of 95 requests (`ctx search eval`), and at the model level 95.8 % of what was taken silently was right, nothing taken on 10 of 10 requests the base has nothing on.
+
+**New in v3.15.2** — **A binding to a slot the catalogue lacks sets no other binding aside** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Per block the first binding counts — yours, the publisher's `slot=`, the plugin's `team#Members` — and a binding to a slot this plugin does not know still took that place: a core ahead of the plugin could set the plugin's `team#Members` aside and drop the core's half of a team's members. Such a binding now does nothing — the next source binds the block — and `ctx validate` still names it as `unknown`.
+
+**New in v3.15.1** — **A binding to a slot the catalogue lacks no longer hides a block** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). A block that you or its publisher bound only to a slot `references/context-slots.yaml` does not have (a `slot=` naming an unknown slot, or a binding to a slot a later catalogue removed) was kept out of every by-name answer; such a binding does nothing, so the block answers by its heading again, and `ctx validate` still names the binding as `unknown`. No real core publishes `slot=` yet: nothing changed for anyone today.
+
+**New in v3.15.0** — **A skill gets its slot, says what it lacks, and `ctx explain` says where each piece came from** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx read` now answers every name a skill asks for through a **slot** of a catalogue (`references/context-slots.yaml`, 22 slots — `team.members`, `product.key_metrics`, `org.key_metrics` …), whatever the heading is called and whichever record holds it. A repository's block fills a slot only when it is bound — by you (`ctx slot bind`), by its publisher (`slot=` in the marker) or, for the team block, by the plugin — and the cascade decides: a core rule, then your text, then the repositories by rank. A list shows both halves with their sources, the rest is one `також` line, nothing is repeated, and the missing line says where it looked. `ctx explain` shows the winner and why for every slot; `ctx validate` names broken bindings and divergences and proposes bindings, which `context-connect` offers in one message. Without any binding every skill reads what it read in v3.14.1 (a golden test of 99 views).
+
+**New in v3.14.1** — **A skill sees the subsections it lacks; `Team Members` answers `Members`** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx read` used to list a missing field but never a missing subsection, so a skill that asked for a team's `Members` under a heading named `Team Members` got no members and said nothing. A subsection nobody has now goes to the `Відсутнє` line (named with the team when several are read), `Members` is also found under `Team Members` — your own text before any block — and the card counts members under either heading.
+
+**New in v3.14.0** — **The core reaches your context by itself, once a day** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Turn it on per repository (`sync: daily`, asked once by context-connect) and the first skill of the day runs `ctx provider sync --if-due`: blocks you did not edit are updated, a block you and the core both changed keeps your text unless the core marks it `policy=rule`, new blocks are added, more than one removal at once is held, a text you undid is never applied again and a copy of the core that lags behind takes nothing — within 20 seconds, never waiting on a lock. Every decision is explained in a report in `_System/context/sync/` with both texts of a conflict and the way back, and the session digest shows a `repos:` line.
+
+**New in v3.13.1** — **`repo list` tells the truth; the digest keeps its context line on a cold start** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). `ctx repo list` shows the blocks you hold, the version of your bases and the last check from the block state. On a cold session start (iCloud, an antivirus scan) the digest shows the store's summary saved last, marked `· cached`, instead of dropping the `context:` line — so skills still read through `ctx read`. `ctx provider apply` takes several answers per `--choose`/`--add`, refuses a repository given as an answer before anything is written, and `ctx undo` names what it could not put back.
+
+**New in v3.13.0** — **Repositories and block merge** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). A product can take context blocks from any number of repositories — a team's or an organisation's shared core reached through its MCP server or its folder — and a refresh is one pass: `ctx provider plan` shows a table (`=` unchanged · `~` updated by the repository · `✎` your edit kept · `⚠` both changed · `+` new · `−` removed · `?` no base yet), `ctx provider apply` writes it, asking only where both sides changed a block. Your edits inside a block are kept; an empty, cut or lagging source never removes or downgrades anything; `ctx undo` takes an apply back with its bases. `ctx read` marks where each block came from and when it was checked.
+
+**New in v3.12.1** — **Your own sections reach the skills again; `ctx undo` after an import is whole** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Since v3.12.0 a skill reads only what `references/context-manifest.yaml` names, and the manifest cannot name your own `##` sections — so they stopped reaching any skill. A custom or setting record now says who reads it (`read_by`, set with `ctx assign <id> all|<skills>` or the configurator's "Who reads custom sections"); unassigned ones are named in `ctx read` and counted in the digest. `ctx undo` after an imported edit or removal now undoes it in `local-context.md` too.
+
+**New in v3.12.0** — **Lean reading, record lifecycle, freshness and typed fields** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). With a context store, a skill no longer reads the whole `local-context.md` at Step 0: `ctx read --skill <name>` gives it the context card plus only the fields and subsections its entry in `references/context-manifest.yaml` names — on a real 926-line context about 25,600 tokens became 900–3,000 per skill (measured on the release machine, all 33 skills). Records can be marked no longer current, archived, and come back from a 30-day trash with `ctx restore`; each knows when it was last verified, and a skill states a stale fact "as of" its date. `ctx` writes only under `~/.grow-pm` and the storage root. Without a store nothing changes. See [Context store](#context-store-since-v3110).
+
+**New in v3.11.0** — **The context store: your context as records, `local-context.md` as their compiled view** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Your context can now live as records — one note per section of `local-context.md` — in your vault, next to a context card (`INDEX.md`). `local-context.md` becomes the compiled view: every skill reads it exactly as before, and whatever a skill, another plugin or you in Obsidian write into it directly is imported back into the records. A deterministic engine, `ctx`, moves a single-file context in losslessly — it proves the compile gives your file back byte for byte before it writes anything — snapshots before every change, keeps a journal and undoes; a record that is missing or still downloading stops a run before anything is written. The sixth contour, **Context**, groups `context-connect`, `context-navigator` and the store. The configurator offers the move once; without it nothing changes. See [Context store](#context-store-since-v3110).
+
+**New in v3.10.1** — **Routing that survives a crowded host** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). Claude Code caps the skill listing at 1% of the context window and, past the cap, lists the least-used skills by name alone; on a machine with about 150 skills, 16 of this plugin's 33 showed no description and the model routed on names — the cause of most trigger misses left open in v3.10.0. Every description now keeps its lead and nearest-neighbour guard within 400 characters (9,787 for all 33, were 21,217), the full trigger list of each skill lives in its `## Routing` section, and validator check 12 keeps the budget. Trigger evals run twice — as the host lists skills and with every description visible — through two runners now in `testing/`; on the test machine the misses went from 9 to 0 by majority of three. `context-connect` opens with "Shared team core — connect, refresh bundle, add MCP provider" for hosts that show about 53 characters of a description. Fixes from the phase-1 review: the bundle builder keeps your own note on the `Updated:` line, quotes registration paths, stops on an unclosed marker and takes `--propose-only` (`--dry-run` still works); the session digest reads an index date from a `meta` table spelled `k`/`v`, escapes the index path and names a registration it cannot read; the branch scan exits 2 when its base is missing.
+
+**New in v3.10.0** — **Shared-context providers: connect your context to a team's core** (33 skills, 3 agents, 5 commands, 12 connectors, 3 hooks). A team or an organisation can now share its core knowledge — team cards, people registry, missions, metrics, rules — with every colleague's plugin, and the plugin treats it as a *provider*: one contract, `vault/v1` (`vault_search`, `vault_get_note`, `vault_get_links`, `vault_graph_context`, `vault_list_by_tag`, `vault_list_by_folder`, plus optional `brain_*` status and entity tools), declared by a provider manifest and registered per user (`references/context-provider-protocol.md`). New skill **`context-connect`** resolves your team and role from your e-mail, copies the bundle relevant to you, proposes the core's context blocks for your `local-context.md` — never overwriting it, every discrepancy a question, a backup before and a changelog after — and registers the provider; the bundle builder `scripts/provider_bundle.py` reads every folder name, label and note template from the manifest. New skill **`context-navigator`** answers from the shared core — who owns what, where a rule lives, which missions a team has, who someone is — through the provider's own rules and graph, always with the note path and the snapshot date. The vault level L2 now means "a provider answers `vault/v1`" (it named tool calls no server had); Step 0.5 searches every reachable provider, merges results and says once when a provider is stale or unreachable. A third hook asks before a file write inside a provider's read-only folder. The session digest no longer double-counts teams or products that a provider block or the Landscape section repeats, recognises a vault declared as a table, and lists providers and your bundle. One storage story replaces the old pointer-file description; backups keep the last 5 everywhere. Lint check 26 `provider-contract` and a branch scan for organisation identifiers (release pre-flight) guard the new surface.
+
+**New in v3.9.0** — **Build first, a built-in opponent, learning modes — the Judgment Core + Role Layer programme is complete** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks).
+
+- **Build before you argue.** write-concept names a concept's riskiest assumption. When nothing proves it yet, one line in the brief summary offers the cheapest way to settle it: a lo-fi prototype shown to 3–5 real users, a walk of the current flow, or an eval set. `build_first: on`; it is a line, never a question.
+  - design-bridge offers a build-first prototype, or a standalone mid-fi or hi-fi one, as the spec for requirements-creator. A prototype never counts as validation.
+- **A built-in opponent.** Concepts, A/B and AI-feature specs, the quarter plan and new missions and initiatives carry a pre-mortem and kill criteria: 2–3 likely failure causes, each with an early signal, plus pre-committed conditions to stop.
+  - Unknown thresholds read `⚠️ TBD` and are never asked for.
+  - Retros and replans read earlier kill criteria back as fired, not fired or not measurable.
+- **AI features.** A new `requirements/ai-feature` template covers the behaviour spec, eval set, acceptable error rate, kill criteria and tracking plan. It is reached by explicit AI words, never by a bare "model".
+  - task-creator reports `Spec readiness: n/6` and proposes an eval-set QA task.
+- **Learning modes (opt-in).** `learning_mode: pm_first` asks you to tag a few real items first in feedback triage, interview minutes, interview synthesis and CJM hypotheses. You then see "Your tags vs mine"; your tags never change the artifact. `explain` shows how the skill got there.
+- **Self-improvement guard.** Removing a counter-argument, a confidence line or an evidence label applies to that artifact only. It is never learned as a rule.
+
+Templates 41 → 43. Lint check 25. host-smoke runs Codex from a neutral directory.
+
+**New in v3.8.0** — **Evidence classes: every number and quote says how it is known** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks).
+
+Every claim in a product artifact now carries one of six classes: `observed`, `measured`, `reported`, `external`, `simulated` or `assumed`. A claim here is a number stated as fact, a quote, a benchmark or a "users want X".
+- **Format.** The class goes first inside the annotation the claim already has, for example `CR 0.99% (measured · 12mo rolling, …, workbook-1)` or `«…» — P3, 12.09 · reported`. A table or section whose claims share one class and source carries a single label.
+- **`measured` is earned.** Only data the skill fetched or counted itself is `measured`. Figures you paste, and reports or screenshots you hand over, are `reported (you)`.
+- **Synthetic users are rehearsal, for every role.** Persona answers, simulated interviews and untraceable LLM claims are `simulated`. They never become a finding, a count or a quote.
+- **Frontier hand-back (new Gate Check 6).** When the data cannot support a claim, the plugin keeps the supportable part and adds one line naming the human step: a holdout, interviews, or a question for the owner. Examples: a causal claim with no control, a "why users…" with no real-user source, a claim that needs tacit context. A randomised A/B readout is exempt.
+- **Gate 4b.** The checker's groundedness lens now catches fabricated or paraphrased quotes, upgraded classes and synthetic findings, counted as `докази: E`.
+- **Vault.** Notes gain optional `evidence_classes` and `altitude` keys, and their Summary keeps `simulated` / `assumed` labels.
+- **Decision records** fill `evidence_classes` from their evidence.
+
+It adds no question, switch or role-dependent behaviour. Automated runs get the labels and keep synthetic input out of findings, but add no hand-back line. Lint check 24 guards the vocabulary.
+
+**New in v3.7.0** — **Judgment points: your estimate first, a falsifier on the verdict** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks). At six judgment points the plugin asks for **your** estimate before it shows its own, and then compares the two: your top-3 before any ICE / PRO score in brainstorm-features, your prediction before an experiment readout, your call before the A/B verdict, your priorities before ICE / RICE in quarterly planning, your prior in the focus-advisor gate, and your confidence and revisit trigger when logging a decision. It is one question per point: «пропусти» skips it and «вимкни» switches it off (`Hypothesis first` in `## Judgment`, on by default). It is never asked in scheduled or headless runs, or when a skill is called only for its data. At those points the lead recommendation or verdict — the A/B report, the brainstorm result, a prioritised quarterly plan, the focus brief, a decision record — now ends with a **confidence line** (`Confidence: likely · most sensitive to: … · would change if: …`, Gate 4c) above the altitude line. Decision records gain the owner, rejected alternatives, base rate, revisit trigger and minority report; a revisit judges the decision's quality apart from its outcome (the "resulting" check). Stakeholder reports without a decision get a "status theater" note. New shared reference `references/judgment-points.md` and lint check 23. Evidence-class labels arrive in v3.8.0.
+
+**New in v3.6.0** — **Role defaults and templates** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks). The role now shapes where a run starts: Step T ranks the role's template first — **design brief** for designers, **strategy memo** for CPOs, **business case** and **QBR** for business owners, **research plan** for researchers — through 14 new built-ins (41 in total) that are candidates only for their own subtype, so a request without it resolves exactly as before. Role **extra sections** (NFR for engineering leads, tracking plan for analysts, repository entry for researchers) are added only when the artifact lacks them; **gate emphasis** adds role-specific evidence checks as caveat lines (SRM / exposure / peeking and confidence intervals for analysts, comparability and trend-vs-objective for leaders), never relaxing one; the planning suite gets **Now / Next / Later views** (roll-up for leaders, delivery slice with a tech-debt row for delivery roles); a **money bridge** links key metrics to revenue drivers in QBRs, board updates and business cases. A user without a role, and every automated run, sees exactly v3.5.0.
+
+**New in v3.5.0** — **Role layer: eight roles that change defaults, never capabilities** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks). The plugin now asks **once** who you are — PM, Head of Product, CPO, Product Designer, Product Analyst, UX Researcher, Engineering Lead or Business Owner — and keeps the core the same for everyone: same skills, gates, routing and principles. New shared reference `references/role-profiles.md` (altitude model L1–L4, eight profiles, hats) and **Step 0i — Role resolution** in every skill. What you see in v3.5.0: the role question in onboarding (a two-level picker; `set role` / «змінити роль» any time), one question for an existing `local-context.md` with a free-text role (mapped by keyword, confirmed once; never asked in headless or chained runs), **hats** for one run («подивись як CPO», "as an analyst" → `Hat: cpo (profile: pm)`), an **altitude line** closing every Product-contour artifact (`Altitude: L2 · ↑ serves: … · ↓ next: …`, Gate 4a of the quality gate), role-first quick wins, and the role in the session digest. Role-specific templates, gate emphasis and planning defaults arrive in v3.6.0. Lint checks 19–22 keep the layer honest: no branching on role names, no persona prompts, a footer in every Product-contour skill, one role enum.
+
+**New in v3.4.0** — **Judgment contract and a thinner core** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks). New shared reference `references/pm-mental-model.md` — the plugin's model of its user as a Product Manager in the AI era and a ten-principle behaviour contract (see **Principles** below): the plugin creates freely and decides carefully. Every skill now carries a three-line **Step 0j — Judgment contract** block (`references/local-context-protocol.md`): note the run's judgment points internally, with no output; a principle acts only through a step that implements it, so until that step exists every question, gate and output stays exactly as it is. This version publishes the contract and changes no question and no output — the mechanisms behind principles 2–10 arrive in v3.5.0–v3.9.0. **Thin core:** long procedures moved verbatim into skill-local references in meeting-processor, diagram-prototyper, product-research, task-creator, design-bridge and requirements-creator; cjm-research compressed its gate sub-checks into a pointer table; the Figma designs check shared by four skills now lives in `references/figma-designs-check.md`. Every `SKILL.md` is ≤ 400 lines, and validator check 15 keeps it that way.
+
+**New in v3.3.0** — **Product landscape: a registry of competitors, adjacent players and benchmarks, and six optional research connectors** (31 skills, 3 agents, 5 commands, 12 connectors, 2 hooks). New skill **`product-landscape`** keeps one shared registry (`~/.grow-pm/landscape/`: `registry.yaml`, `products/<slug>.md`, `scans/`, `maps/`) with what every product is — kind, category, markets, platforms, **walkable surfaces** (web URL, App Store id and Mac availability, Android package), size signals, characterization — and a **role per user product** (`direct-competitor` / `adjacent` / `benchmark` / `inspiration`); `product.competitors` becomes the seed the registry imports. Modes: `scan` (`scripts/landscape_scan.sh` lists Mac apps, iPhone apps installed from the Mac App Store and adb packages; App Store lookup fills genre, rating and seller; Chrome/Safari bookmarks only after a per-scan "yes", never history), `discover` (App Store search by genre and market, Play pages, web search, and Similarweb / Semrush / Lazyweb / Mobbin / Apify when connected), `add` / `update` / `characterize`, `map` (the `research/landscape` artifact), and `research` — a ranked candidate list with **no cap**, the user picks any subset or names other products, then the same flow runs across them through `flow-walkthrough` compare (competitors read-only), `product-research` and `brainstorm-features` with `landscape:<slug>` evidence. Any product the plugin touches is registered as `status: auto`. Six **optional** connectors are declared in `.mcp.json` — `lazyweb`, `similarweb`, `mobbin`, `semrush`, `tavily`, `apify` — each the user's own account, none required. plugin-configurator gains **Landscape setup** (bookmarks consent, product category, competitors import).
+
+**New in v3.2.0** — **Test accounts by role and multi-role walkthrough legs** (30 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). A product's production **test accounts** are declared once in `local-context.md` (`#### Test Accounts`: label, role, surfaces, where access is obtained, sandbox flag — never a password or a one-time code) through a new plugin-configurator add-on (`add Test accounts`). A `flow-walkthrough` scenario can now be several **legs** played by different roles in sequence — the test buyer places an order, the test seller confirms and ships it, the buyer reviews — with **hand-off** values (order id, tracking) captured from screenshots and passed to the next leg; the user logs in before each leg. The **write boundary follows the account**: `stop-before-irreversible` on the user's own account, `sandbox-confirm` on a sandbox test account (irreversible actions inside the test contour are allowed, each confirmed in one line before the tap; "confirm all in this leg" switches to `sandbox-auto`), `read-only` on competitors — and two hard stops nothing lifts: real money and actions visible to real users. The pack gains `legs[]` in `run.yaml`, `leg`/`role` on every step, `steps/L<leg>-<NN>.png`; the report gets a leg summary table. Reference example: `examples/marketplace-order-to-review-flow.md` (three legs, four confirmations).
+
+**New in v3.1.0** — **Walk the flow in the real product** (30 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). New skill **`flow-walkthrough`** drives the product the way a customer does — a web app in a browser, a desktop app, an iPhone app installed from the **Mac App Store** on Apple Silicon, an Android phone or emulator over adb — one step at a time with a screenshot per step, friction graded per step (severity + Nielsen heuristic or CJM stage), a local evidence pack (`~/.grow-pm/walkthroughs/<run>/`: `run.yaml`, `steps.yaml`, `steps/NN.png`, `findings.md`) and a `research/walkthrough` report with a **flow strip** (marker = step number, via `visual-annotation-protocol.md`). Four modes: `setup` (agent-guided readiness table from `scripts/walkthrough_preflight.sh`, installs confirmed one by one, user-only actions marked, smoke test), `walk`, `compare` (one scenario across surfaces or against competitors — competitors are read-only), `audit`. New shared `references/app-drive-protocol.md` adds the sixth observed capability **APP-DRIVE** (levels `web` / `desktop-background` / `foreground` / `device`, **measured vs assumed per host**), a driver table, preflight (overlay utilities quit, machine-busy warning, write boundary restated, first screenshot read back), the step cycle (act → wait → screenshot → **verify** → log) and safety (credentials and one-time codes are user-only; stop before any irreversible production action by default; screenshots stay local). Measured on Claude Cowork: background window capture fails for iPhone apps on a Mac (foreground only), transparent overlay windows block clicks, App Store builds never run in the iOS Simulator. Consumers wired: `cjm-research` (source `walkthrough-local`), `product-research` (hands-on UX benchmark via compare), `requirements-creator` / `task-creator` / `write-concept` (walkthrough pack as screenshot source 0), `diagram-prototyper` (`steps.yaml` → flowchart). Next: iOS Simulator builds, iPhone Mirroring, Android emulator install, Codex/ChatGPT drive levels measured.
+
+**New in v3.0.0** — **One plugin, three hosts: Claude Code / Cowork, Codex CLI and app, ChatGPT** (29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). Nothing was forked: Codex reads the same `.claude-plugin/` manifests, loads all 29 skills under the same `grow-product-manager:` namespace and registers the same connectors. What changed is how the skills *behave* where a host lacks something. `references/host-profiles.md` defines five observable capabilities — filesystem, shell, subagents, connectors, hooks — and every skill runs **Step 0-host** once, marks them present or absent from the session's own tool list (never from a brand name), and picks the matching mode: `storage_mode: local | connector | session`, sequential in-session checker passes instead of subagents, an in-skill confirmation instead of the write-gate hook. Measured on Codex, not assumed: Codex resolves a bare `references/<file>.md` against the skill's own folder, so every skill and command now opens with a **Path rule**; Codex shares one ≈15k-character budget across every listed skill's description (~190 characters each on a machine with 80 skills), so all 29 descriptions were rewritten with the essence and the neighbour guard inside the first 190 characters — trigger-evals 102/102 on both hosts; migrated commands are routable skills there, so each is guarded as *typed-only*. Packaging: `marketplace.json` `"source": "./"` (Codex ignores the object form; Claude rejects a bare `"."`), `AGENTS.md`, `.codex/agents/*.toml`, portable `${PLUGIN_ROOT}`. Validator checks 12–14 and `testing/host-matrix.md` keep all of it mechanical. Known Codex gaps are documented, not hidden: no plugin agents or hooks, empty-`url` connectors fail in the CLI (the app matches them by name), and Codex picks up a new version only when it starts (restart the app, or run two commands) — see **Hosts** below.
+
+**New in v2.6.0** — **Host hooks: a context digest at session start and a human in the loop before writes** (29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). `hooks/hooks.json` registers two hooks. **SessionStart** (also after `/clear` and compaction) runs `scripts/session_start.py`: it finds `local-context.md` wherever this session can see it — including connected folders under `$HOME/mnt/*/` in hosted sessions, where the shell's home is a sandbox — and injects a `GROW_PM_SESSION` digest (path, versions, `user.language`, products, onboarding state, vault/CJM/team-language flags), so Step 0a of `local-context-protocol.md` becomes a lookup instead of a four-location search; `GROW_PM_CONTEXT_PATH` is exported for Bash. **PreToolUse** on `createJiraIssue` / `editJiraIssue` / `createConfluencePage` / `updateConfluencePage` runs `scripts/write_gate.py`, which answers `ask` for content-bearing writes — the host shows a three-point checklist (gate report in chat, explicit go-ahead, not a sandbox) and waits; metadata-only edits pass. A hook sees only the tool call, never the conversation, so this is deliberately a confirmation, not a judge; `/grow-product-manager:setup --write-gate off` turns it off. Both hooks fail open. Validator check 11 verifies the wiring (events, timeouts, scripts exist and are executable, scripts compile); component counts now include hooks. No skill changed.
+
+**New in v2.5.0** — **Plugin components: connectors, agents, commands** (29 skills, 3 agents, 5 commands, 6 connectors, 2 hooks). Until now everything the plugin needed from the host was described in prose — "look for a tool matching `mcp__*__*Jira*`", "spawn a subagent that must not browse". v2.5.0 moves three of those contracts into the manifest, where the host enforces them. **Connectors:** `.mcp.json` declares the six connectors the skills rely on (`atlassian`, `figma`, `gmail`, `google calendar`, `google drive`, `fireflies`); they appear in the plugin's Connectors tab with a connected state, and `references/integration-strategy.md` gains a *Declared connectors* table (key → connector → observed tool namespace) that replaces the stale `gcal_*`/`gmail_*` patterns. Tableau is deliberately not declared (a local server the user runs). **Agents:** three named subagents whose `tools:` line is the guarantee the protocols only asked for — `artifact-checker` (`tools: Read`; the maker–checker half in `requirements-creator`, `write-concept`, `task-creator`), `debater` (`tools: []`; one per role in Debate Mode), `extractor` (read-only fan-out worker per `subagent-delegation.md`). Each protocol keeps its fallback chain: named agent → `general-purpose` with the same prompt (reported) → inline with the marker. **Commands** (user-only, never auto-routed): `/grow-product-manager:status` (one-screen health: version, context path, vault level, connectors present vs declared), `config validate|view`, `release patch|minor|major`, `glossary-lint`. Validator: four new consistency checks (agents/commands frontmatter, `.mcp.json` ↔ table drift, component counts in the three public descriptions); the org-leak linter and the seeded test now cover `agents/` and `commands/`. Touched: `requirements-creator` v0.13.1, `write-concept` v0.11.1, `task-creator` v0.12.1, `brainstorm-features` v0.10.1, `plugin-configurator` v2.9.2, `release-manager` v0.2.0.
+
+**New in v2.4.1** — **The "no org data" promise, enforced.** An audit found nine shipped lines that named the maintainer's own team as the authority behind a rule (`per <Team> convention`), signed reference examples with a team and a quarter, wrote a schema example in one team's language, or hardcoded an output language where `user.language` exists — all green under every existing check, because a leak that is an ordinary word has no lexical signature, only a position. Those lines are fixed, and three positional checks now catch the class: **`org-signature`**, **`example-locale`** (fenced blocks only — bilingual triggers in prose are the routing surface by design), **`example-keys`**. New **`testing/seeded_leak_test.py`**: ten known-bad lines injected one at a time, the linter must go RED on each — **10/10**, wired into both CI workflows. `testing/Testing-process.md` gains the written rule ("Every example in the plugin is universal") and two DoD items. Touched: `product-reporter` v0.5.2, `knowledge-library` v0.7.1, `plugin-configurator` v2.9.1.
+
+**New in v2.4.0** — **Visual requirements and team language** (stage 2 of the stakeholder-feedback release). New shared `references/visual-annotation-protocol.md`: annotated screenshots where **marker № = requirement №** (a visual index with a legend table, not an illustration) — sourced from user upload / Figma / live browser, rendered locally with Pillow, user-previewed, stored in the project repo, and attached via **Atlassian REST API** (the Rovo MCP ships no attachment tools; token env NAME in config, value never) with browser/manual fallbacks; `diagram-prototyper` v0.10.0 gains a standalone Annotate mode. `knowledge-library` v0.7.0 grows the **team-language contour**: Glossary Build/Manage/Lint + Style Build (terms with variants/avoid + officialese→living `phrases` + a style profile with few-shot fragments), wired into every artifact by **Gate 3 "Team language"** in the artifact quality gate — style preamble before generation, terminology lint after. Consumers: `requirements-creator` v0.13.0 (Step 4.2 visualization), `task-creator` v0.12.0 (Step 8.5 attachments), `write-concept` v0.11.0, `plugin-configurator` v2.9.0 (Terminology & Style + Attachments setup). Trigger-evals: new Group K 100%, B/E/J regression 100%.
+
+**New in v2.3.0** — **Clean artifacts: a quality gate with maker–checker verification**. Stakeholder feedback surfaced two recurring defects in generated artifacts: AI-invented technical content inside business/functional requirements and tasks, and requirements written as paragraph prose instead of lists. New shared `references/artifact-style-gate.md` blocks both: **Gate 1** applies a source test to every technical statement (process parameters stay; AI technical assumptions are prohibited by default and, on explicit request, go into a separate callout-guarded "Технічні рекомендації (AI)" block), **Gate 2** enforces lists-over-prose. The gate is executed by an **independent checker subagent** — the agent that produced the artifact never checks its own work; the checker sees only the draft + sources + checklists, reports findings without rewriting, and critical artifacts (Confluence publish / Jira creation) get two checkers with distinct lenses (form / groundedness). Consumers: `requirements-creator` v0.12.0 (+ thin-core refactor: Analyze & Improve moved to skill-local `analyze-improve-mode.md`), `task-creator` v0.11.0 (batch gate before creation; Step 12 verification switches to maker–checker), `write-concept` v0.10.0, `meeting-processor` v0.13.4 (opt-in). Skill triggers unchanged.
+
+**New in v2.2.0** — **Debate Mode: a role-based adversarial discussion engine**. One agent brainstorming alone approves its own ideas — trade-offs between interest groups go unnoticed and ICE Confidence inflates. Now any evidence-holding skill can convene 3–5 conflicting roles (10-preset card library + custom; the **Skeptic / Risk-officer is always in**) over a numbered evidence pack and debate one contested question in parallel subagent rounds: opening positions → cross-examination → facilitator synthesis (consensus points, live disagreements, position shifts, verdict + confidence, **mandatory minority report**) with ICE Confidence corrections (consensus +1…+2, unresolved skeptic objection −1…−2). New shared `references/debate-protocol.md` carries the engine and guardrails (no facts beyond the pack, no web for debaters, cost cap 4×2 = 8 / hard 12 calls, inline-simulation fallback with an explicit marker); `brainstorm-features` Step 3D is the primary entry; thin Debate hooks land in `product-research`, `cjm-research`, `write-concept`, `decision-log`; the vault gains artifact type #34 `debate` (`Debates/{product}/`); trigger-evals gain Groups I and J. The `brainstorm-features` core stays ≤ 400 lines — Step 3C's CJM workflow moved verbatim to skill-local `cjm-hypotheses-mode.md`.
+
+**New in v2.1.0** — **Audit remediation (v2.0.1 → v2.1.0)**. A full audit of v2.0.0 found 5 critical + 14 major defects that both validators passed green. All are now fixed, and — more importantly — each defect *class* is a blocking linter check, verified by injecting the defect into a repo copy. Highlights: real organization data removed from the shipped example (and the whole repo); two protocol documents that contained themselves twice, halved; `vault-schema.md` declared the single source of truth for vault layout, with `vault-protocol.md` and the Obsidian setup guide conformed to it (they had described three incompatible layouts, and the setup smoke tests could not have passed); 28 of 29 skill frontmatters made valid YAML for external tooling; `experiment-tracker` made reachable by chaining at all; a `design-bridge` handoff can no longer skip its accessibility audit; and CJM health scores now sum to 100% for funnels of any length, not just the 4-stage default. `testing/skill_lint.py` grew from 4 checks to **13**. See the CHANGELOG for the full list.
+
+**New in v2.0.0** — **Wave 3: the People-contour (29 skills)**. The plugin grows a whole new contour — **manager → people → goals → communication → development** — alongside the existing product/data/delivery contour. Six new skills: **`goal-setter`** (SMARTCBP for people / OKR for product, audit + cascade + commitment), **`one-on-one`** (prepare from the profile + analyze into signals & an ARCV follow-up, 1-1 coverage headless), **`performance-review`** (goals + GTD-index + situational-leadership diagnosis into the employer's review template), **`hiring-designer`** (role design — goal letter before the vacancy — + a universal vacancy profile mapped to the employer's HR form), **`offboarding-guide`** (evidence-gated four-meeting algorithm, strictly local), and **`delegation-coach`** (7-levels-of-Appelo audit + S1→S4 hand-off plan). A new **People Context Protocol (Step P)** gives every person a persistent, vault-local profile (D-type, delegation levels, goals, reporting cadence, 1-1 history, GTD-index, signals). Six methodology references distil the frameworks (SMARTCBP, 3T5F, Hersey-Blanchard, 7-levels-of-Appelo, GTD-index, ARCV, CBI, NVC, ROAIP/PRO). **Breaking:** `team-ops-reporter` is **renamed to `product-reporter`** and gains a **goal-report (3T5F)** mode. Existing skills learn the frameworks too — meeting-processor (ARCV follow-ups + 1-1 detection), task-creator (why/what/how + DoD + D-level depth), brainstorm-features (ROI/PRO **and** ICE by default), requirements-creator (ROI/ICE gate), sprint-planning (GTD-index + delegation-aware assignees), focus-advisor (manager-rhythms + "choose one"), quarterly-planning (session/board prep), feedback-triage (SH step), experiment-tracker & decision-log (cost + commitment). People data is the **highest-sensitivity tier** — vault/local only, never Confluence/Jira/external LLMs.
+
+**New in v1.40.0** — **External design toolkit provider**. `design-bridge` becomes the single **routing host** for design/prototype work and can delegate hi-fi screen generation to an **external design toolkit** the user declares in `local-context.md` — keeping the plugin core universal for any company (zero regression when none is configured). New `references/design-toolkit-protocol.md` defines the contract: a `design_toolkits[]` config schema, capability-based routing (core enum `hi-fi-prototype` / `screen-generation` / `ds-tokens` / `figma-write` / `code-first-research` / `design-review` + custom tags), a tier-0 fallback (provider → Figma MCP → Registry → Browser), four entry types (`skill` / `mcp_tool` / `command` / `browser`), a bidirectional delegation contract, and a QA-ownership rule (no double review). `design-bridge` → v0.3.0 adds **Step 0.5** (toolkit routing); `plugin-configurator` gains a **Design Toolkit** registration step; `diagram-prototyper` documents the scope boundary (hi-fi, DS-native generation routes to design-bridge). Every toolkit is user-declared — the repository ships no concrete toolkit.
+
+**New in v1.39.0** — **Harness engineering, wave 3: output evals** (point 1). The plugin could already check *which* skill fired (trigger-evals = trajectory); now it can check *how good the artifact is*. New `testing/output-evals.md` defines rubrics (weighted 0/1/2, pass ≥ threshold, LM-judge against the golden exemplar) for the artifact-producing skills, with runnable `testing/fixtures/` input briefs for `write-concept`, `requirements-creator`, and `cjm-research`. `Testing-process.md` splits stage 3 into **3a (trajectory)** and **3b (output eval)** — a blocker for any changed artifact skill — so quality is gated the way triggering already is. *"Set the bar at the eval, not the demo."*
+
+**New in v1.38.0** — **Harness engineering, wave 2: artifacts carry their verification** (point 4). Specs and PRDs now bake verification in, not bolt it on. `requirements-creator` gains an **Acceptance Criteria** section (testable Given/When/Then, the contract QA and analytics verify against) and, for A/B tests, an explicit **Decision Rule** (ship / iterate / kill, stated before launch so the readout is a lookup, not a debate). `write-concept` PRDs upgrade acceptance criteria to Given/When/Then and add a **Verification & decision rule** block to Success Metrics (how each metric is verified + Definition of Done). Verification moves to the middle of the lifecycle, as the whitepaper prescribes.
+
+**New in v1.37.0** — **Harness engineering, wave 1** (from Google/Kaggle "The New SDLC With Vibe Coding"). Self-improvement now runs a **harness-first diagnosis** — before proposing a fix, the failure is classified by harness layer (instructions / tools / context / guardrails / orchestration / observability) and the fix is routed to the right place, because most agent failures are configuration failures, not model failures. A new `references/harness-map.md` documents the plugin's own harness anatomy and a six-context-type coverage map (thin spot identified: **Examples**). To fill that spot, the three heaviest artifact skills gain on-demand **golden exemplars** (few-shot): `write-concept` (worked PRD), `requirements-creator` (feature-spec with A/B + acceptance criteria), `cjm-research` (period-annotated anomaly report) — each doubling as a future output-eval fixture.
+
+**New in v1.36.0** — **Wave 3 kickoff: three lifecycle skills (23 total)**. `experiment-tracker` closes the loop after the A/B spec — a persistent experiment registry with lifecycle states, stale-test reminders, readouts via product-analysis, and decisions recorded via the new `decision-log` (ADR-style records in vault Decisions/ that finally answer "чому ми вирішили X?"). `feedback-triage` turns raw support-ticket/review streams into a ranked pain map (semantic clustering, frequency × severity × trend vs the previous run's baseline) chaining straight into brainstorm-features. Vault taxonomy grows to 22 types (`feedback-triage`); trigger-evals gain Group H (14 phrases, lifecycle trio vs neighbors).
+
+**New in v1.35.0** — **Monolith refactor complete (2–4/4)**: the three remaining oversized skills slimmed to on-demand cores — `product-analysis` 968 → ~365 lines (analysis engine and the three specialized modes moved to `analysis-engine.md` / `specialized-modes.md`; the Data Integrity Gate stays in the core), `cjm-research` 788 → ~395 (research pipeline Steps 4–11 → `cjm-pipeline.md`; per-mode report formats, publishing, and the automated health-check → `cjm-reports.md`), `knowledge-library` 751 → ~250 (eight mode workflows → `library-workflows.md`; trust scoring, categories, and KL onboarding → `trust-and-categories.md`). All content preserved verbatim; every skill now loads its core plus exactly one reference per mode.
+
+**New in v1.34.0** — **Monolith refactor 1/4: plugin-configurator** slimmed from 1345 to ~180 lines following the planning-suite pattern: the core keeps the mode map, entry conditions, and cross-skill protocols; detailed workflows moved to skill-local references (`onboarding-steps.md` — Steps 1–17 + Planning/Focus setup; `maintenance-modes.md` — RM/Update/Validate/View + Versioning Protocol) loaded on demand. All content preserved verbatim; Planning/Focus setup steps integrated into the onboarding flow (previously dangled after the resources section); a leftover editorial artifact removed. Trigger-evals baseline recorded (A–F 100%, G 95→100 after one label fix).
+
+**New in v1.33.0** — **Focus Advisor complete: `strategy` mode + live "PM Focus Board"**: focus-advisor 0.3.0 ships the third horizon (quarter–year) — 2–4 strategic bets from product goals/missions (pinned source), NPS and funnel trends, research signals, leadership mandates and zone white-spaces, with a mandatory "what we deliberately do NOT do" section in the strategy memo. New `board` mode renders a persistent PM Focus Board (live artifact where supported, static HTML fallback). All three horizons of the original design are now live.
+
+**New in v1.32.0** — **Focus Advisor `tactics` mode**: focus-advisor 0.2.0 adds the sprint-to-quarter horizon — 3–5 tactical focus candidates from roadmap plan-vs-actual pace and drift, backlog staleness (ICE age), features missing prerequisites ahead of next sprints, A/B tests awaiting decisions, capacity/availability and team-event signals. Tactical scoring = ICE + capacity realism + goal alignment; new chains to project-planning `replan` and test readouts; weekly headless tactical brief supported (`mode=tactics headless=true`).
+
+**New in v1.31.0** — **Focus Advisor (20th skill)**: PM attention dispatcher above structure/quarter/sprint — collects context signals (sprint cycle position, calendar meetings needing prep, important unanswered "live" emails, open action items, Jira tails), ranks them, recommends 1–3 daily focuses, and chains execution to the right skill. Headless contract for scheduled morning briefs; mandatory persistence to `~/.grow-pm/focus/` + Vault (`focus-brief`, 21st artifact type). Plugin-configurator 2.4.0 ships a Focus setup onboarding step; trigger-evals gets Group G (attention vs execution).
+
+**New in v1.30.0** — **Roadmap-trio disambiguation + trigger evals**: the three planning skills now carry explicit scope hints in their descriptions (roadmap-architect = structure only, no dates; project-planning = beyond one quarter; quarterly-planning = exactly one quarter), and `testing/trigger-evals.md` ships a 36-phrase routing test set across 6 collision groups with a run protocol and results log. Release-manager 0.1.1: "merging ≠ releasing" guard in Step 6.
+
+**New in v1.29.0** — **Vault coverage complete**: a standard "Save to Vault" step added to the 11 skills that previously never wrote to the Obsidian knowledge graph (requirements-creator, meeting-processor, brainstorm-features, product-research, diagram-prototyper, task-creator, product-reporter, and the 4 Planning Suite skills). Meeting MoMs, requirements, hypotheses, research, diagrams, task breakdowns, ops reports, and roadmaps now accumulate in the vault with wikilinks. Vault schema extended with 4 new artifact types: `diagram`, `task-breakdown`, `ops-report`, `roadmap` (20 types total). Vault stays optional — L0 setups are unaffected.
+
+**New in v1.28.0** — **Release Manager** skill: one guided pipeline to release the plugin itself — version bump across all 4 mandatory places, CHANGELOG entry, README sync, local validation, gated commit/PR/merge, GitHub Release with tag, mirror sync, and post-release verification. Ships with `skills/release-manager/references/release-pitfalls.md` — nine real failure modes (iCloud-evicted git objects, stale locks, token scopes, VPN-only mirrors, protected-branch divergence, CDN cache…) with guards and recovery recipes.
+
+**New in v1.27.0** — **CI validation + trigger disambiguation**: every push/PR to main now runs `testing/validate-consistency.sh` via GitHub Actions (version consistency across manifests/README/CHANGELOG, SKILL.md frontmatter, broken reference paths). Skill descriptions of the CJM trio (cjm-research / product-analysis / brainstorm-features) and the prototype pair (diagram-prototyper / design-bridge) now carry explicit "Do NOT use" routing hints.
+
+**New in v1.26.0** — **Subagent delegation** extended to all specialized modes of `product-analysis` (Post-Release, A/B Test, CJM Funnel): heavy data-acquisition fan-out runs off the main context, with data-policy guardrails and the Data Integrity Gate preserved. See CHANGELOG v1.24.0–v1.26.0 for the full subagent-delegation rollout.
+
+**New in v1.15.0** — **Planning Suite**: four skills on top of product-reporter — `roadmap-architect` (structure: goal → initiative → epic → feature), `project-planning` (multi-quarter forecast, dependencies, critical path), `quarterly-planning` (quarter roadmap with capacity gate and retro), `sprint-planning` (sprint pre-planning: readiness, risks, assignees). Shared references: `planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`.
+
+**New in v1.14.0** — **Product Reporter** skill (5 modes): sprint plan, sprint review, quarter review, initiative status, and team-member review — built directly on Jira (custom-field map, status-history throughput, per-Assignee/Developer breakdowns, charts). Output goes to Confluence and/or local md+xlsx (asked each run). Five built-in templates under `templates/built-in/ops-report/`. See `skills/product-reporter/SKILL.md` and CHANGELOG v1.14.0.
+
+**New in v1.13.0** — **Data Integrity Gate** across `cjm-research`, `product-analysis`, and `product-research`. New universal verification gate that catches incomplete-period extrapolation, holiday windows cited as YoY trends, single-source cascading claims, and missing inline period annotation. See [`references/data-integrity-protocol.md`](references/data-integrity-protocol.md) and CHANGELOG v1.13.0.
+
+**New in v1.12.0** — Onboarding has two modes: **Basic** (3-5 min, mandatory fields only — usable immediately for concept/requirements/research/brainstorm/spec) and **Extended** (15-25 min, full setup of CJM, Vault, Templates, Knowledge Library, Teams, full Tableau analytics). A third **Test mode (sandbox)** lets you walk through onboarding without modifying real data — say `dry-run onboarding` any time. See `skills/plugin-configurator/SKILL.md` for the full Step 1 onboarding map.
+
+The Grow Product Manager plugin is a comprehensive AI-powered toolkit designed to accelerate product management workflows. It provides skills for research, analysis, brainstorming, documentation, task creation, and visualization across your entire product lifecycle.
+
+---
+
+## Principles (since v3.4.0)
+
+The plugin amplifies the Product Manager's judgment instead of replacing it: drafting, searching, clustering and prototyping run without friction, and the plugin slows down only where a judgment is made. The contract is [`references/pm-mental-model.md`](references/pm-mental-model.md); every skill reads it at Step 0j. v3.4.0 published the contract and v3.5.0–v3.9.0 shipped the mechanisms: principles 2, 3 and 9 act since v3.7.0 through [`references/judgment-points.md`](references/judgment-points.md); principles 1, 7 and 10 since v3.8.0 through the evidence classes and Gate Check 6 of [`references/data-integrity-protocol.md`](references/data-integrity-protocol.md); principles 4, 6 and 8 and the rest of 5 since v3.9.0 through the pre-mortem, the build-first offer and the learning modes of `judgment-points.md` §7–§9 and the guard of `references/self-improvement.md`. Three switches in `## Judgment` of `local-context.md` steer these steps: `hypothesis_first` (on), `build_first` (on), `learning_mode` (off).
+
+1. **Provenance by default** — every number, quote or "users want X" carries an evidence class and a source; unsourced means *assumed*.
+2. **Human hypothesis first** — at a scoring, ranking or verdict point the plugin asks for your estimate before showing its own.
+3. **Calibrated confidence with a falsifier** — a recommendation states its confidence, the assumption it is most sensitive to, and what would change it.
+4. **Built-in opponent** — consequential outputs get the strongest case against them: a Skeptic, a pre-mortem, kill criteria, a minority report.
+5. **No sycophancy** — opposing evidence gets equal weight, and the plugin never learns to "agree more".
+6. **Build before you argue** — when a prototype, an eval or an experiment can settle a question, that path comes before a longer document.
+7. **Real users are evidence, synthetic users are rehearsal** — simulated personas are always labelled *simulated* and never presented as findings.
+8. **Learning-preserving modes** — for demanding synthesis you can switch on a PM-first pass (`learning_mode: pm_first`) or the skill's reasoning (`explain`); with the default `off` the plugin synthesises as before.
+9. **Decision ownership and hygiene** — a decision names its owner, the rejected alternatives, the evidence behind it and a revisit trigger; its quality is judged apart from its outcome.
+10. **Hand back at the frontier** — when a task needs tacit context, a customer conversation or a causal claim the data cannot support, the plugin says so and proposes the human step.
+
+---
+
+## Roles (since v3.5.0)
+
+The plugin is used by more than IC Product Managers. A **role changes defaults, never capabilities**: every role gets the same 31 skills, the same gates and the same ten principles; the role sets where a run *starts* — its altitude, and since v3.6.0 its template, evidence emphasis and planning view. No role relaxes a gate, and no role becomes a persona prompt. The contract is [`references/role-profiles.md`](references/role-profiles.md); every skill resolves it at Step 0i.
+
+| Role | Home altitude | Starts with (quick wins) |
+|------|---------------|--------------------------|
+| `pm` — Product Manager (the core) | L2 initiative | brainstorm-features, requirements-creator, product-analysis |
+| `head_of_product` | L3 product strategy | quarterly-planning, goal-setter, one-on-one, performance-review |
+| `cpo` | L4 portfolio | product-landscape, focus-advisor (strategic), decision-log, goal-setter |
+| `product_designer` | L1 delivery | design-bridge, flow-walkthrough, product-research, diagram-prototyper |
+| `product_analyst` | L2 evidence layer | product-analysis, experiment-tracker, cjm-research |
+| `ux_researcher` | L2 initiative | product-research, feedback-triage, meeting-processor |
+| `eng_lead` | L1 delivery | task-creator, sprint-planning, delegation-coach, one-on-one |
+| `business_owner` | L3 product strategy | product-reporter, focus-advisor (strategic), decision-log, quarterly-planning |
+
+- **Change it any time:** `set role` / «змінити роль».
+- **Wear another role for one run:** «подивись як CPO», "as an analyst, check this readout" — the output header says `Hat: cpo (profile: pm)`; your profile is not rewritten.
+- **Altitude line:** every Product-contour artifact ends with `Altitude: L2 · ↑ serves: <goal> · ↓ next: <step>`, so a CPO and an IC PM read the same document at the right height.
+
+---
+
+## Skills
+
+### 1. CJM Research (v0.13.0)
+
+**Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
+
+**Modes:**
+- **Anomalies** — Detect unexpected patterns in customer funnel behavior
+- **Hypotheses** — Generate and validate CJM-based growth hypotheses
+- **Full** — Complete CJM analysis with all data points and insights
+- **Health-Check** — Assess overall funnel health and drop-off zones
+- **Comparison** — Compare customer journeys across platforms or segments
+
+**Delegates to:** Product Analysis, Knowledge Library, Product Research, Brainstorm Features
+
+**Outputs:** Funnel impact models, hypothesis validation, risk assessments
+
+**Trigger phrases:** "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses"
+
+---
+
+### 2. Product Analysis (v0.18.0)
+
+**Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
+
+**Modes:**
+- **Interactive Q&A** — Ask questions about your metrics
+- **Full Report** — Comprehensive analysis of all available data
+- **Post-Release** — Analyze metrics before and after a feature release
+- **A/B Test Results** — Evaluate test outcomes and statistical significance
+- **CJM Funnel Analysis** — Analyze customer behavior across funnel stages
+
+**Trigger phrases:** "analyze metrics", "review a dashboard", "find anomalies", "post-release analysis", "analyze A/B test results", "CJM funnel analysis"
+
+---
+
+### 3. Product Research (v0.15.1)
+
+**Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
+
+**Research Types:**
+- Competitive analysis and feature comparison
+- User research synthesis and insights
+- Market trends and opportunity identification
+- UX benchmark research against industry standards
+
+**Trigger phrases:** "research competitors", "analyze the market", "competitive analysis", "find market trends", "UX benchmark research"
+
+---
+
+### 4. Brainstorm Features (v0.15.1)
+
+**Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation. Hosts Debate mode — a role-based adversarial discussion over an evidence pack (`references/debate-protocol.md`).
+
+**Features:**
+- Feature ideation and scoring (Impact, Confidence, Ease)
+- CJM Hypotheses mode with funnel impact calculation
+- Growth opportunity identification
+- Prioritization framework
+- Debate mode (Step 3D): 3–5 conflicting roles, parallel rounds, verdict with a mandatory minority report, ICE Confidence correction
+
+**Trigger phrases:** "brainstorm features", "generate hypotheses", "find growth opportunities", "CJM hypotheses", "run a debate", "red team this idea", "проведи дебати"
+
+---
+
+### 5. Write Concept (v0.16.0)
+
+**Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
+
+**Outputs:** Full PRD with objectives, user stories, success metrics, and implementation notes
+
+**Trigger phrases:** "write a concept", "create a PRD"
+
+---
+
+### 6. Requirements Creator (v0.17.1)
+
+**Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
+
+**Capabilities:**
+- Generate detailed requirements from concepts
+- Analyze and improve existing specs
+- User story generation
+- Acceptance criteria definition
+
+**Trigger phrases:** "write requirements", "create feature spec", "review requirements"
+
+---
+
+### 7. Task Creator (v0.15.2)
+
+**Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
+
+**Capabilities:**
+- Parse requirements and decompose into tasks
+- Create Jira issues with proper fields and links
+- Estimate complexity and effort
+- Set up dependencies and sprint planning
+
+**Trigger phrases:** "create tasks for a feature", "create Jira issues"
+
+---
+
+### 8. Diagram & Prototype Creator (v0.15.1)
+
+**Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
+
+**Supported Tools:**
+- **Mermaid (built-in)** — Fast local generation of flowcharts and diagrams
+- **HTML/CSS (built-in)** — Self-contained infographics with inline CSS and SVG charts
+- **Google Gemini** — Image generation via browser (Nano Banana mode)
+- **ChatGPT** — Image generation via browser (GPT-4o or newer)
+- **NotebookLM** — Presentations and mind maps via browser
+- **Figma** — Prototypes and design mockups via MCP or browser
+- **Draw.io** — XML generation locally or via browser fallback
+
+**Infographic Styles:**
+- Data-driven (metrics, KPIs)
+- Process/timeline (flows, roadmaps)
+- Comparison (feature evaluation, competitive analysis)
+- Informational/educational (product overviews)
+- Statistical/report (quarterly data, surveys)
+
+**Features:**
+- Quality check loop with auto-correction (up to 3 iterations)
+- Confidential data generated locally (no external data transmission)
+- Skill chaining from other skills
+- Publishing to Confluence, Notion, Figma, or local files
+- Export as PNG or PDF
+
+**Trigger phrases:** "create a diagram", "draw a flowchart", "BPMN diagram", "make a prototype", "create an infographic", "wireframe", "mockup", "visualize this process", "mind map"
+
+---
+
+### 9. Meeting Processor (v0.18.2)
+
+**Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
+
+**Meeting Sources:**
+- Fireflies.ai recordings
+- Other meeting tool recordings
+- Uploaded audio/video files
+- Transcripts (text or SRT files)
+- Pasted meeting notes
+
+**Modes:**
+- **Process Mode** — Work with a single meeting:
+  - Auto-classify meeting type (grooming, discovery, demo/retro, status, brainstorm)
+  - Extract structured notes with type-specific blocks
+  - Generate Structured Minutes of Meeting (MoM) or short summary
+  
+- **Search Mode** — Query across multiple meetings:
+  - Chronological synthesis of related discussions
+  - Extract decisions and action items across meetings
+  - Example: "What did we discuss about feature X last month?"
+
+**Calendar Integration:**
+- Google Calendar / Microsoft Calendar context
+- Participant list with emails and roles
+- Agenda and attached documents
+- Presentation materials
+
+**Chaining:** Connects to Task Creator (action items → Jira), Product Research (interview insights), Requirements Creator, Brainstorm Features, and Diagram Prototyper
+
+**Trigger phrases:** "summarize meeting", "meeting notes", "action items"
+
+---
+
+### 10. Plugin Configurator (v2.17.0)
+
+**Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
+
+**Configuration Areas:**
+- Storage location selection (Obsidian Vault or custom folder)
+- Organization and product settings
+- Team structure and roles
+- Data source connections (Jira, Confluence, Figma, etc.)
+- Knowledge library settings
+- CJM funnel configuration
+- Obsidian Vault integration
+- Output preferences and defaults
+
+**Trigger phrases:** "configure plugin", "set up plugin"
+
+---
+
+### 11. Knowledge Library (v0.9.2)
+
+**Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
+
+**Features:**
+- User-controlled storage location (Obsidian Vault or custom folder)
+- Per-product library support
+- Trust scoring and source evaluation
+- Multi-mode search capability
+- Categorization by topic and type
+- Service skill for CJM enrichment
+
+**Search Modes:**
+- Local library search
+- Confluence integration
+- Google Drive integration
+- Baymard (UX benchmarking database)
+- Internet search
+
+**Trigger phrases:** "add source", "search knowledge", "import sources", "show library", "what sources do we have on [topic]"
+
+---
+
+### 12. Template Library (v0.3.4)
+
+**Description:** Manage a multilingual library of artifact templates (concepts, requirements, research, CJM, epics, tasks, meeting notes, presentations). Templates are stored in your Obsidian vault or custom folder, scoped per-product, and consumed automatically by other skills through the Step T — Template Resolution protocol.
+
+**Features:**
+- Three-tier scope: built-in → user-global → product-specific (with inheritance)
+- Single-file multilingual storage (`<!-- lang:uk --> ... <!-- /lang:uk -->` blocks)
+- Registry-backed resolution with scoring (scope, subtype, language, usage_count)
+- 11 actions: list, show, add, clone, update, delete, restore, import, export, validate, rebuild-registry
+- Three-tier backup: per-template archive, pack backups, manual backup/restore
+- Ships with 43 built-in templates in Ukrainian + English (9 original + 3 presentation templates (v1.10.0) + 5 ops-report templates (v1.14.0) + 7 People templates (v2.0.0) + 2 research templates (v3.1.0, v3.3.0) + the judgment-footer partial (v3.5.0) + 14 role-default templates and partials (v3.6.0) + the AI-feature template and the pre-mortem partial (v3.9.0))
+
+**Trigger phrases:** "manage templates", "add template", "list templates", "template library", "clone template", "import templates", "restore template"
+
+---
+
+### 13. Design Bridge (v0.9.1) — brand-agnostic since v1.11.0
+
+**Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into brand-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
+
+**Intents:**
+- **deck** — render a Google Slides-compatible `.pptx` (10×5.625") from the base template you configure in `local-context.md` (`product.base_pptx`). 4 subtypes: feature (10 slides), research-highlights (10 slides), ab-test-readout (6 slides), release-readout (7 slides)
+- **prototype** — lo-fi / mid-fi / hi-fi prototype brief for Figma
+- **handoff** — developer-ready handoff spec (tokens, components, states, responsive breakpoints) with WCAG 2.1 AA a11y audit as blocker
+- **research-enrichment** — pull UI screenshots, competitor visuals, or DS references to augment research
+
+**Design plugin integration:** hooks 6 design skills (research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff) via optional delegation, plus Figma MCP for DS sync. Your Figma DS `fileKey` lives in `local-context.md` → `product.figma.ds_file_key`.
+
+**Brand configuration (from `local-context.md`):**
+- `product.brand.primary`, `product.brand.dark`, `product.brand.font_primary`, `product.brand.font_display`
+- `product.design_system_spec` — path to your DS token yaml
+- `product.pptx_theme` — path to your pptx theme yaml
+- `product.base_pptx` — path to your base pptx template
+- Canvas defaults to 10×5.625" (Google Slides 16:9)
+
+**A11y gates (WCAG 2.1 AA):** contrast 4.5:1 normal / 3.0:1 large, 44×44 touch targets, keyboard nav, screen-reader labels, motion controls. Handoff intent has a11y as blocker; deck intent has contrast as blocker + warnings for the rest.
+
+**Trigger phrases:** "create deck", "design handoff", "build prototype", "research enrichment", "apply brand to deck", "run a11y audit"
+
+---
+
+### 14. Product Reporter (v0.10.2) — renamed from Team Ops Reporter in v2.0.0
+
+**Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
+
+**Modes:**
+- **sprint-plan** — directions → features → tasks, summary (total / carried / new / SP), per-Assignee and per-Developer distribution, key-focus table
+- **sprint-review** — closed tasks (Done incl. `Ready`), releases by stream (your `product.release_streams` — typically app / web UI / backend / services), flags ON/OFF, task list, closed-per-member
+- **quarter-review** — plan vs actual by direction, epics/features fully closed, releases (fetched per month — full-quarter JQL times out)
+- **initiative-status** — mission/epic/feature % done, status breakdown, per sub-feature, blockers (Flagged / On hold / blocked-by)
+- **member-review** — role-aware: closed / SP / passed-to-test (`status CHANGED TO "Ready for test" BY <member>`) / passed-to-review / tested, plus dynamics across days/weeks/sprints/months/quarters/years
+- **goal-report** — 3T5F goal report for a person or direction (build or audit); People-data — vault/local only, never auto-published
+
+**Output:** asked each run — Confluence (your space) and/or local `md` + `xlsx`. Visualizations are proposed (burndown, SP dynamics, status donut, load distribution) and built on accept. Built-in templates live in `templates/built-in/ops-report/`; custom ones via Template Library (`artifact_type: ops-report`).
+
+**Trigger phrases:** "sprint plan/review report", "quarter results", "epic/feature/mission status", "how much did <person> close this period", "team ops report", "report on releases / flags / story points"
+
+---
+
+### 15. Roadmap Architect (v0.6.1) — Planning Suite
+
+**Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree.
+
+**Modes:** audit / map / tree / onboard
+
+**Trigger phrases:** "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal"
+
+---
+
+### 16. Project Planning (v0.6.1) — Planning Suite
+
+**Description:** Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph with critical path, computes duration under a given team allocation %, and lays out a multi-quarter roadmap with rolling-reforecast.
+
+**Modes:** forecast / sequence / roadmap / whatif / replan
+
+**Trigger phrases:** "how long will the project take", "project roadmap", "epic sequence", "feature dependencies", "critical path", "replan the project"
+
+---
+
+### 17. Quarterly Planning (v0.8.1) — Planning Suite
+
+**Description:** Builds a quarterly roadmap, reviews the previous quarter's delivery (plan-vs-actual), and stress-tests the plan against team capacity.
+
+**Modes:** retro / plan / full / refresh
+
+**Trigger phrases:** "build a quarterly roadmap", "quarterly planning", "plan-vs-actual for the quarter", "quarter retro", "is the quarterly plan realistic"
+
+---
+
+### 18. Sprint Planning (v0.6.2) — Planning Suite
+
+**Description:** Sprint pre-planning: derives focuses from the quarterly roadmap, highlights what's READY to pull (dependencies cleared), catches work-sequence violations, gathers per-member capacity, analyzes carryover risk, suggests assignees, and fills the sprint to capacity.
+
+**Modes:** groom / plan / review / forecast
+
+**Trigger phrases:** "plan the sprint", "sprint pre-planning", "what can we pull into sprint N", "what's ready from the backlog", "who takes the tasks"
+
+**Planning Suite shared references:** `planning-core.md`, `capacity-model.md`, `dependency-model.md`, `roadmap-artifacts.md`, plus the shared Jira plumbing in `references/jira-data-protocol.md` (reused from product-reporter — complements reporting, does not duplicate it).
+
+---
+
+### 19. Release Manager (v0.5.0) — NEW in v1.28.0
+
+**Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
+
+**Pipeline:** pre-flight guards (iCloud materialization, stale locks, clean tree) → scope & semver decision → bump in the 4 mandatory places (plugin.json, marketplace.json, README, CHANGELOG) → the registry copy rebuilt from the index, when the repo publishes one for a registry that syncs a subfolder → local `validate-consistency.sh` run → gated commit/push → PR → merge → GitHub Release with tag → mirror sync → post-release verification, optional Confluence changelog update, and vault release record.
+
+**Built-in pitfall guide:** `skills/release-manager/references/release-pitfalls.md` — nine real failure modes with guards and recovery recipes (P1 iCloud-evicted git objects, P4 token without workflow scope, P6 diverged protected mirror, P7 stale raw CDN, and more).
+
+**Generic by design:** works for any Claude plugin repo; org specifics (mirrors, VPN hosts, Confluence page) come from `local-context.md` → `plugin_release`.
+
+**Trigger phrases:** "release the plugin", "prepare a release", "bump plugin version", "ship vX.Y.Z", "cut a release"
+
+---
+
+### 20. Focus Advisor (v0.9.7) — NEW in v1.31.0, complete in v1.33.0
+
+**Description:** PM attention dispatcher — the 4th height of the suite, above structure/quarter/sprint. Scans the PM's context (sprint cycle position, calendar meetings needing preparation, important unanswered emails, open action items from recent meetings, Jira tails), ranks the signals, and recommends 1–3 focuses with reasons, cost of delay, and a chained next step. Recommends and chains — never executes another skill's work; the PM decides.
+
+**Full scope (v0.3):** all three horizons — `now` (daily focus), `tactics` (sprint-to-quarter: roadmap drift, stale backlog, A/B decisions, capacity and team events), `strategy` (quarter-to-year: 2–4 bets aligned to product goals/missions with a mandatory exclusions section) — plus `journal`, `auto` routing, `board` (live PM Focus Board with static fallback), and a headless contract for scheduled briefs (daily `now`, weekly `tactics`, quarterly `strategy`).
+
+**Key mechanics:** deterministic ritual calendar (`focus-cadence.md`: "2nd Monday of the sprint → pre-planning"), signal registry with compact packets and TTL cache (`focus-signals.md`), two-stage "live letters" mail filter (automation never becomes a signal), meeting-prep detector with analytical-slice/deck chains, optional metrics health-check chain to product-analysis / cjm-research. All briefs persist to `~/.grow-pm/focus/` + Vault mirror (mandatory Step 7).
+
+**Trigger phrases:** "на чому сфокусуватись", "що мені робити зараз", "фокус дня", "розбери мою пошту і календар", "daily focus", "morning brief"
+
+---
+
+### 21. Experiment Tracker (v0.6.1) — NEW in v1.36.0
+
+**Description:** Owns the experiment lifecycle the pipeline used to drop after the A/B spec: `proposed → specced → running → awaiting-readout → decided`, with a persistent registry (`~/.grow-pm/experiments/registry.yaml` + vault mirror) and stale-test reminders (overdue runs, pending readouts, idle high-ICE hypotheses).
+
+**Modes:** status (board by lifecycle state) / register / start (flag, platforms, split, dates) / readout (chains product-analysis A/B mode — verdicts only come from there) / decide (chains decision-log) / stale (also the weekly headless payload).
+
+**Trigger phrases:** "які тести зараз біжать", "зафіксуй запуск тесту", "які тести чекають рішення", "нагадай про завислі тести", "experiment status"
+
+---
+
+### 22. Decision Log (v0.5.2) — NEW in v1.36.0
+
+**Description:** ADR-style records of key product decisions in the vault `Decisions/` area — context, options considered, decision, rationale, consequences, evidence links. Answers "чому ми вирішили X?" from the accumulated log; supersede-flow preserves history.
+
+**Modes:** log (default; also invoked by meeting-processor, experiment-tracker, planning skills) / search / revisit. Since v3.7.0 a record names its owner, rejected alternatives, base rate, revisit trigger and minority report, carries the owner's confidence line, and a revisit judges decision quality apart from the outcome.
+
+**Trigger phrases:** "зафіксуй рішення", "чому ми вирішили…", "покажи рішення по…", "журнал рішень", "log this decision"
+
+---
+
+### 23. Feedback Triage (v0.7.1) — NEW in v1.36.0
+
+**Description:** Turns a raw feedback stream (support tickets, complaints, reviews, Q&A, NPS verbatims) into a ranked pain map: semantic theme clustering, `frequency × severity × trend` scoring, new/growing/declining theme detection against the previous run's baseline, and hypothesis seeds for brainstorm-features. Feedback text never leaves the session; PII is masked in verbatims.
+
+**Pipeline:** intake (files / GDrive / Confluence / pasted, subagent fan-out) → Python normalize + coverage gate → cluster → score → report (Step T template) → chains → vault save (`feedback-triage` type, 22nd — the baseline for next run's trends).
+
+**Trigger phrases:** "розбери відгуки/скарги", "тріаж фідбеку", "що болить покупцям/продавцям", "кластеризуй support-тікети", "топ проблем за місяць"
+
+---
+
+## People-контур (People Contour) — NEW in v2.0.0
+
+The second contour of the plugin: **manager → people → goals → communication → development**. These six skills share the **People Context Protocol (Step P)** — a persistent, **vault-local** profile per team member (situational-leadership D-type, 7-levels delegation, active goals, reporting cadence, 1-1 history, GTD-index trend, motivation/career signals). Person data is the **highest-sensitivity tier**: it lives in the vault `People/` area (or `~/.grow-pm/people/`) and is **never** published to Confluence/Jira or sent to external LLMs. Methodology lives in `references/goal-frameworks.md`, `people-frameworks.md`, `reporting-3t5f.md`, `communication-frameworks.md`, `roi-frameworks.md`, and `people-context-protocol.md`.
+
+### 24. Goal Setter (v0.2.2) — NEW in v2.0.0
+
+**Description:** Formulates and audits goals — the foundation of the People-contour. Picks the methodology (**SMARTCBP** for personal goals, **OKR** for product/direction), drafts 2–3 variants or audits a draft against the 8 SMARTCBP checks, cascades Mission→direction→team→person, drives goals to **commitment** (Tell and Sell), and records them on the person's profile. Pulls the Comparable baseline via product-reporter/Tableau.
+
+**Modes:** formulate (default) / audit (8-check before→after table) / cascade / goal-letter.
+
+**Trigger phrases:** "постав ціль", "проведи аудит цілі", "лист цілей", "каскад цілей", "OKR на квартал", "set a goal", "audit this goal"
+
+### 25. One-on-One (v0.2.2) — NEW in v2.0.0
+
+**Description:** Prepares and analyzes 1-1 meetings — *for the person, about the person* (feedback/growth/trust), not tasks/status. Prepare builds the agenda from the profile (6 stages + seven "how" questions + NVC feedback drafts); Analyze turns a Fireflies transcript/notes into signals (motivation, burnout, career) + a manager-written **ARCV** follow-up + a profile update. Headless coverage: who hasn't been "touched" in > N weeks.
+
+**Modes:** prepare (default) / analyze / coverage (headless). meeting-processor detects a 1-1 and redirects here.
+
+**Trigger phrases:** "підготуватись до 1-1", "розбери 1-1", "з ким давно не було 1-1", "нотатки 1-1", "prepare for a 1-1"
+
+### 26. Performance Review (v0.2.2) — NEW in v2.0.0
+
+**Description:** Reviews a team member on the People-contour's coordinates — goal achievement (3T5F Forecast QA), GTD-index, Hersey-Blanchard diagnosis (D-type → style + delegation level), and 1-1 signals — rendered into the employer's standard review template (past-period feedback + a 6–12-month SMARTCBP plan). Ends with one recommendation: development / style change / yellow card / promotion. Strictly local.
+
+**Trigger phrases:** "провести перформанс-ревʼю", "оцінити співробітника", "піврічне ревʼю", "план розвитку для…", "is it time to promote"
+
+### 27. Hiring Designer (v0.2.2) — NEW in v2.0.0
+
+**Description:** Designs the role before the vacancy — the **goal letter** (SMARTCBP on 3/6/12 months) comes first, the offer = goals + conditions. Produces a **universal vacancy profile** (Request / Role goals / Description / Conditions / Selection process) mapped onto the employer's HR-form fields, plus killer questions (past-experience, numeric + If/Then), a candidate-documents checklist, and a **goal × experience** evaluation table. On hire, creates the new person's profile (curator, S1, probation = offer goals).
+
+**Trigger phrases:** "відкрити вакансію", "спроєктувати посаду", "профіль вакансії", "вітальні запитання", "оцінити кандидатів", "draft an offer"
+
+### 28. Offboarding Guide (v0.2.2) — NEW in v2.0.0
+
+**Description:** Guides parting ways with an underperformer — respectfully, on evidence. Gates on an **evidence base** (goals + reports; if absent → set them first), diagnoses "can't" vs "doesn't want", and runs the **four-meeting algorithm** (critical issues → measurable probation → results → sustainability), each with an ARCV follow-up, plus the dismissal script and a neutral team message. Strictly local; immediate dismissal only for theft/unlawful/ethics.
+
+**Trigger phrases:** "допоможи звільнити", "офбординг", "випробувальний термін через недосягнення", "розмова про звільнення", "PIP"
+
+### 29. Delegation Coach (v0.2.2) — NEW in v2.0.0
+
+**Description:** Audits the PM's operational load against the **7 levels of Appelo** (real delegation starts at level 5), builds the audit table (activity / current level / candidate / target / blocker), picks delegates from profiles (D-type, GTD-index — levels 5–7 only for consistently high GTD), and lays out the **S1→S4** transfer plan with dates. Computes hiring/delegation ROI when "no one to delegate to". Chains from focus-advisor when it sees PM overload.
+
+**Trigger phrases:** "аудит делегування", "що можна делегувати", "я перевантажений операційкою", "рівні делегування", "план передачі"
+
+---
+
+### 30. Flow Walkthrough (v0.6.2) — NEW in v3.1.0
+
+**Description:** Walks a customer flow in the **real product** — web, desktop, an iPhone app on an Apple Silicon Mac (installed from the Mac App Store), Android via adb — step by step with a screenshot per step, friction graded per step, a local evidence pack and a `research/walkthrough` report with a flow strip. Modes: `setup` (readiness table + guided install + smoke test), `walk`, `compare` (surfaces or competitors, read-only there), `audit`. Everything about *how* to drive lives in `references/app-drive-protocol.md` (capability APP-DRIVE, driver table, preflight, step cycle, safety, degradation to a user-driven variant). Chains to brainstorm-features, requirements-creator, cjm-research, diagram-prototyper; called by cjm-research, product-research and requirements-creator.
+
+**Legs (v3.2.0):** a scenario may run as several legs on declared test accounts (buyer → seller → buyer) with hand-off values between them and a write boundary resolved per account (`stop-before-irreversible` / `sandbox-confirm` / `sandbox-auto` / `read-only`); real money and actions visible to real users always stop.
+
+**Trigger phrases:** "пройди флоу", "пройди шлях покупця в застосунку", "перевір зручність … у застосунку", "порівняй флоу на iOS і web", "налаштуй емулятор/adb для проходу", "walk the flow", "compare the flow across platforms"
+
+---
+
+### 31. Product Landscape (v0.5.1) — NEW in v3.3.0
+
+**Description:** Registry and map of the products around yours — competitors, adjacent players, benchmarks, inspiration. `scan` lists what is installed on the Mac (including iPhone apps from the Mac App Store) and on an adb device and fills genre, rating and seller from the App Store; `discover` finds more by category and market through stores, web search and the optional connectors; `characterize` describes a product with sources; `map` renders the category map (`research/landscape`); `research` proposes a ranked list of products (no cap — you pick or name others) and starts the same flow on them through flow-walkthrough compare, product-research and brainstorm-features. Roles are per product of yours; bookmarks are read only with a per-scan yes; competitors stay read-only.
+
+**Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
+
+
+### 32. Context Connect (v0.8.0) — NEW in v3.10.0
+
+**Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. With a context store a refresh ends with the slots (since v3.15.0): in one message each, the bindings of the core's blocks to slots for you to confirm, the divergences between repositories to settle, and — at a refresh — the blocks you had switched off that now have a slot, with a yes per block to bring one back (a no is offered again at the next refresh; `references/context-protocol.md` §5f). Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
+
+**Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
+
+### 33. Context Navigator (v0.5.0) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0, bridges in your notes since v3.20.0
+
+**Description:** Since v3.17.0 it answers and searches from your whole context — your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct — with or without a shared core: an answer with a source and a date for every statement, or a list of notes, and a «Де шукав» line naming each source; `/grow-product-manager:find` runs the same search. With a shared core it answers from it instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
+
+**Trigger phrases:** «знайди в моєму контексті…», «що в мене є про…», "search my notes for…", "who owns this", "what does team X do", "where is the rule for", "which missions does the team have", «хто за що відповідає», «що робить команда X», «де описане правило», «які місії у команди»
+---
+
+## Skills Summary
+
+| Skill | Version | Description |
+|-------|---------|-------------|
+| CJM Research | v0.13.0 | Customer Journey Map analysis and hypothesis validation |
+| Product Analysis | v0.18.0 | Analyze metrics, dashboards, and A/B test results |
+| Product Research | v0.15.1 | Competitive analysis, user research, market trends, UX benchmarking |
+| Brainstorm Features | v0.15.1 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
+| Write Concept | v0.16.0 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.17.1 | Create and analyze feature requirements |
+| Task Creator | v0.15.2 | Create Jira tasks from requirements |
+| Diagram & Prototype Creator | v0.15.1 | Visualize concepts with diagrams, prototypes, infographics |
+| Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
+| Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
+| Meeting Processor | v0.18.2 | Process meetings and extract action items |
+| Plugin Configurator | v2.17.0 | Configure plugin for your organization |
+| Knowledge Library | v0.9.2 | Manage curated knowledge sources |
+| Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
+| Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
+| Product Reporter | v0.10.2 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
+| Roadmap Architect | v0.6.1 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
+| Project Planning | v0.6.1 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
+| Quarterly Planning | v0.8.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
+| Sprint Planning | v0.6.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
+| Release Manager | v0.5.0 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
+| Focus Advisor | v0.9.7 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
+| Experiment Tracker | v0.6.1 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
+| Decision Log | v0.5.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
+| Feedback Triage | v0.7.1 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
+| Goal Setter | v0.2.2 | Set/audit goals — SMARTCBP (people) / OKR (product), cascade, Tell-and-Sell commitment |
+| One-on-One | v0.2.2 | Prepare & analyze 1-1s — agenda from profile, signals + ARCV follow-up, coverage headless |
+| Performance Review | v0.2.2 | Review a person on goals + GTD-index + D-type, into the employer's review template |
+| Hiring Designer | v0.2.2 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
+| Offboarding Guide | v0.2.2 | Evidence-gated four-meeting offboarding, strictly local |
+| Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
+| Context Connect | v0.8.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
+| Context Navigator | v0.5.0 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
+
+---
+
+## Obsidian Vault Integration (Optional)
+
+The plugin can optionally integrate with [Obsidian](https://obsidian.md/) to create a persistent knowledge graph that accumulates artifacts over time and improves skill results.
+
+### What it does
+- Saves results of every skill (research, concepts, requirements, analyses, meetings, decisions) as structured .md files in your Obsidian Vault
+- Links related artifacts with wikilinks (research → concept → requirements → A/B results)
+- Searches your accumulated knowledge before starting new tasks to provide historical context — since v3.16.0 by the words of your request, in several languages at once, taking silently only what is directly about it, with its source and date (see [Context store](#context-store-since-v3110) → Search)
+- Tracks hypothesis lifecycle: proposed → testing → validated/rejected
+- Auto-generates Maps of Content (Dashboard, Product MOC, Timeline) for navigation
+
+### Three-level operation
+| Level | Condition | Capabilities |
+|-------|-----------|-------------|
+| L0 | No vault configured | Plugin works as before, no vault features |
+| L1 | Vault path configured | Read/write artifacts, file-based search |
+| L2 | Vault + a search provider speaking `vault/v1` (a local index or a shared-context provider, since v3.10.0) | L1 + full-text search, graph traversal, backlinks |
+
+### Multi-vault support
+Configure one default vault for all products or separate vaults per product.
+
+### Setup
+Run Plugin Configurator → Obsidian Vault step, or say "connect Obsidian Vault".
+
+---
+
+## Persistent Data Storage
+
+Your data lives outside the plugin, so it survives uninstalls, reinstalls and updates.
+
+- **`~/.grow-pm/`** — `local-context.md` (your configuration), service data (experiment registry, focus journal, landscape registry, walkthrough evidence packs, shared-context provider registrations when no vault is set) and `backups/` (the last 5 of each kind are kept).
+- **Your Obsidian vault (optional, recommended)** — when connected it is the plugin's `storage_root`: templates and every artifact are saved there, and `local-context.md` and the knowledge library are mirrored into the plugin folder after every change (`_System/`, `Knowledge/`), so the vault can restore `~/.grow-pm/` if it is lost.
+- **Without a vault** — everything stays under `~/.grow-pm/` (`Templates/`, `knowledge-library/`, `people/`, `decisions/`, …).
+
+**Storage structure (`~/.grow-pm/`, abridged):**
+
+```
+~/.grow-pm/
+├── local-context.md           # Plugin configuration
+├── .schema-version            # Schema version marker
+├── knowledge-library/         # Curated sources, trust scores, glossary, style profile
+├── Templates/                 # Only without a vault — otherwise in the vault
+├── experiments/  focus/  landscape/  walkthroughs/
+├── providers/                 # Shared-context provider registrations (no vault)
+├── snapshots/                 # Context store: one before every change, ctx undo restores (since v3.11.0)
+└── backups/                   # Before migrations and updates — last 5 kept
+```
+
+**Key features:** automatic backups before migrations and updates, schema versioning (`.schema-version` for `~/.grow-pm/`, `.vault-schema-version` for the vault), and recovery from the vault mirror; the paths above are the real ones. Full protocol: `references/persistent-storage.md`.
+
+## Context store (since v3.11.0)
+
+The sixth contour, **Context**, groups `context-connect`, `context-navigator` and the context store. Your context can live as **records** — one note per section of `local-context.md` — in your vault (`{storage_root}/_System/context/`), next to a **context card** (`INDEX.md`, at most 200 lines: who you are, products, teams, vaults, providers, one line per record). `local-context.md` becomes the compiled view of the records: every skill reads it exactly as before, and anything written into it directly — by a skill, another plugin or you in Obsidian — is imported back into the records. Only a real conflict (the same section changed in the file and in its record) is a question.
+
+- **Moving in** — the configurator offers it once at the end of onboarding and as the Update item "Move my context to records": `ctx migrate` shows the records and proves the compile gives your file back byte for byte, `--apply` moves it. `ctx undo` right after it moves back.
+- **Safety** — a snapshot before every change (`~/.grow-pm/snapshots/`), a journal of every change, atomic writes, one writer at a time, never a write into a provider's folder or block; a record that is missing on disk or still downloading (iCloud) stops a run before anything is written.
+- **The digest** shows `context: records N · card M lines · in sync` (or the edits waiting) at every session start.
+- **Lean reading** (since v3.12.0) — with a store, a skill's Step 0 runs `ctx read --skill <name>`: the card plus only the fields and subsections its entry in `references/context-manifest.yaml` names, instead of the whole file.
+- **Lifecycle and freshness** (since v3.12.0) — `ctx invalidate` marks a record no longer current, `ctx archive` moves it out of the file, removed records wait 30 days in a trash, `ctx restore` brings any of them back; every record knows when it was last verified, the digest counts stale ones and skills state their facts "as of" that date; `ctx verify` or the configurator's "Review stale records" confirms them.
+- **Repositories and block merge** (since v3.13.0) — registrations v2 (`products`, `rank`, `core_root`, `endpoint`, `namespace`, `blocks_file`) list the repositories a product draws blocks from; `ctx repo list|status`; `ctx provider adopt` records what each block was when the repository last gave it, `plan` compares the three versions, `apply` writes one pass with a snapshot and a journal line; a stdlib MCP client calls only read tools. `references/context-provider-protocol.md` §12.
+- **Slots, the cascade and `ctx explain`** (since v3.15.0) — a skill asks for a *slot* (`team.members`, `product.key_metrics`; the catalogue is `references/context-slots.yaml`), not for a heading, so your `Team Members` answers a request for `Members`, two different things under one name are two slots, and what a skill cannot find is named with where it looked. The resolver in `ctx read` takes every text that may answer a slot — yours, and the core's blocks bound to it wherever they sit — decides by the cascade (a core rule, then yours, then repositories by rank) and says whose each text is on a provenance line; a block no slot takes keeps answering by its heading, as before. `ctx explain` shows where each slot came from and why it won; `ctx slot bind|map|prefer|decide|forget` keeps what you decided in `.state/slots.json` (a snapshot, a journal line, `ctx undo`); `ctx validate` names bindings that do nothing, divergences between repositories and bindings worth making. `references/context-protocol.md` §5f.
+- **Search** (since v3.16.0) — Step 0.5 of every skill looks for what your base already holds about the request: the model writes 3–4 variants of it (Ukrainian, Russian, English, a synonym), and `ctx search` asks every source at once — its own section index of your plugin folders and the cores on this machine (`~/.grow-pm/index/`, outside the vault), a local index you registered, and the server of a repository that is not on disk — then merges, weighs and folds the duplicates (the same page twice, your hub and the core page, older versions). The model rates the candidates and takes silently at most three sections that are *directly* about the request, saying so in one line with source and date; something partial, outdated, a hub, a sensitive note outside the People contour, or two sources that disagree is never taken silently. When the search was unsure, the skill may look into live sources (Confluence, Jira…) and ends its answer with a short block of variants — your choice is remembered (`ctx search remember`, `ctx undo` takes it back) and makes the next search better. `ctx search eval` measures it on your golden set. The old "Use as context?" question is gone. Protocol: `references/search-protocol.md`.
+- **Your own sections** (since v3.12.1) — a custom or setting record names the skills that read it (`read_by`: `all` or skill names; `ctx assign`, or the Obsidian property); `ctx read` gives it to them whole and names the unassigned ones; the digest counts them (`· N custom unassigned`).
+- **`ctx`** (`scripts/ctx.py`): `status`, `migrate`, `compile`, `sync`, `get`, `list`, `set`, `append`, `add`, `snapshot`, `undo`, `validate`, `card`, since v3.12.0 `read`, `invalidate`, `archive`, `restore`, `verify`, since v3.12.1 `assign`, since v3.13.0 `repo list|status`, `provider adopt|plan|apply`, since v3.14.0 `provider sync`, since v3.15.0 `explain` and `slot bind|map|prefer|decide|forget`, since v3.16.0 `search` (with `--get`, `remember`, `forget`, `eval`) and `index status|rebuild`, and since v3.16.1 `index rebuild --download` and `search --get … --full` — the protocol is `references/context-protocol.md`. Without the move nothing changes.
+
+## Multilingual Artifact Templates
+
+The plugin ships with a built-in template library that every skill uses to produce structured, consistent artifacts — concepts, requirements, research reports, CJM analyses, epics, tasks, meeting notes, presentation outlines, and operational team reports (sprint/quarter/initiative/member). Templates are multilingual (all languages live in a single `.md` file), scoped per product, and resolved automatically with user opt-in.
+
+### How templates are used
+
+When you invoke a skill that produces a deliverable (e.g., `write-concept`, `requirements-creator`, `product-research`, `cjm-research`, `task-creator`, `product-analysis` in report mode, `diagram-prototyper` for decks, `meeting-processor` for MoMs, `brainstorm-features` when saving, `product-reporter` for ops reports), the skill runs **Step T — Template Resolution** before starting the workflow. Step T:
+
+1. Reads your `templates.preference` (`auto`, `always_ask`, or `smart` — default `smart`).
+2. Queries the template registry for candidates matching the artifact type, subtype, current product, and your language.
+3. Scores candidates by scope (+5 product-specific, +3 user-global, +1 built-in), subtype match, language match, and usage count.
+4. Either auto-picks the top candidate, asks you to choose, or silently uses it — based on your preference.
+5. Uses the template as the artifact skeleton, filling in variables as the workflow progresses.
+6. Tags the saved artifact with `<!-- template: {template_id}@{version} -->` for traceability.
+
+### Three-tier scope
+
+| Scope | Location | Applies to |
+|-------|----------|-----------|
+| **built-in** | `Templates/built-in/` | All products (shipped with plugin, read-only) |
+| **user-global** | `Templates/user/` | All products in your library (overrides built-in) |
+| **product-specific** | `Templates/product/<product_id>/` | One product only (overrides user-global + built-in) |
+
+### Multilingual single-file format
+
+Every template is a single `.md` file with one YAML frontmatter block and one or more language blocks delimited by HTML comments (Obsidian-compatible):
+
+```markdown
+---
+id: concept-builtin-default
+version: 1.0.0
+artifact_type: concept
+subtype: default
+scope: built-in
+languages: [en]
+variables: [feature_name, problem_statement, ...]
+---
+
+<!-- lang:en -->
+# Concept: {{feature_name}}
+## Problem
+{{problem_statement}}
+...
+<!-- /lang:en -->
+
+<!-- Add additional languages as needed, e.g. <!-- lang:es --> ... <!-- /lang:es --> -->
+```
+
+### Built-in templates (shipped in v1.9.0–v3.9.0)
+
+43 seed templates; localize via additional `<!-- lang:xx -->` blocks:
+
+- `concept/default-v1` — PRD skeleton
+- `requirements/default-v1` — general feature requirements
+- `requirements/ab-test-v1` — A/B test spec
+- `requirements/ai-feature-v1` — AI-driven feature: behaviour spec, eval set, acceptable error rate, kill criteria, tracking plan (**new in v3.9.0**)
+- `research/competitive-v1` — competitive analysis + SWOT
+- `research/user-research-v1` — user research synthesis
+- `research/walkthrough-v1` — flow walkthrough report: step table, flow strip, friction, comparison (**new in v3.1.0**)
+- `research/landscape-v1` — product landscape map: product table, us vs them, gaps, candidates for research (**new in v3.3.0**)
+- `cjm/funnel-v1` — CJM funnel analysis with ICE table
+- `epic/default-v1` — Jira epic description
+- `task/default-v1` — Jira task with DoD and AC
+- `presentation/feature-v1` — 10-slide feature deck outline
+- `presentation/research-highlights-v1` — 10-slide research-highlights deck (**new in v1.10.0**)
+- `presentation/ab-test-readout-v1` — 6-slide A/B-test readout deck (**new in v1.10.0**)
+- `presentation/release-readout-v1` — 7-slide release / sprint readout deck (**new in v1.10.0**)
+- `ops-report/sprint-plan-v1` — sprint plan report (**new in v1.14.0**)
+- `ops-report/sprint-review-v1` — sprint review report (**new in v1.14.0**)
+- `ops-report/quarter-review-v1` — quarter plan-vs-actual report (**new in v1.14.0**)
+- `ops-report/initiative-status-v1` — mission/epic/feature status report (**new in v1.14.0**)
+- `ops-report/member-review-v1` — team-member review report (**new in v1.14.0**)
+- `goal-letter/default-v1` — SMARTCBP goal letter for a person (**new in v2.0.0**)
+- `report-3t5f/default-v1` — 3T5F goal report (**new in v2.0.0**)
+- `one-on-one-notes/default-v1` — 1-1 notes with signals (**new in v2.0.0**)
+- `followup-arcv/default-v1` — ARCV follow-up after a meeting or 1-1 (**new in v2.0.0**)
+- `vacancy-profile/default-v1` — universal vacancy profile (**new in v2.0.0**)
+- `performance-review/default-v1` — structured performance review (**new in v2.0.0**)
+- `offboarding-plan/default-v1` — four-meeting offboarding plan (**new in v2.0.0**)
+- `partial/judgment-footer-v1` — the altitude line that closes every Product-contour artifact (**new in v3.5.0**), with the confidence-and-falsifier line above it where `judgment-points.md` §1 names one (**v3.7.0**)
+- `partial/pre-mortem-v1` — pre-mortem and kill criteria, inserted by T-5 step 3b at the steps `judgment-points.md` §7 lists (**new in v3.9.0**)
+- `concept/design-brief-v1` — problem-space brief for designers: JTBD, segments, constraints, success metric, out of scope (**new in v3.6.0**)
+- `concept/strategy-memo-v1` — bets, proxy metrics, what we stop, kill criteria, base rates (**new in v3.6.0**)
+- `concept/decision-memo-v1` — options with rejected alternatives, evidence, the ask, owner, revisit trigger (**new in v3.6.0**)
+- `concept/business-case-v1` — market, traction, unit economics, projections, money bridge, kill criteria (**new in v3.6.0**)
+- `research/research-plan-v1` — research question, decision informed, method, participants, confidence (**new in v3.6.0**)
+- `research/discussion-guide-v1` — interview guide: warm-up, context, JTBD probes, wrap-up (**new in v3.6.0**)
+- `research/insight-report-v1` — insights with evidence count, n, method, confidence, human-validated flag (**new in v3.6.0**)
+- `research/insight-memo-v1` — analyst memo: decision, question, answer with confidence interval, caveats (**new in v3.6.0**)
+- `ops-report/qbr-v1` — quarterly business review: financials vs plan, money bridge, decisions, commitments (**new in v3.6.0**)
+- `ops-report/board-update-v1` — the quarterly board-prep checklist as a report (**new in v3.6.0**)
+- `partial/tracking-plan-v1` — tracking plan section, inserted by Step T for the analyst profile (**new in v3.6.0**)
+- `partial/nfr-v1` — non-functional requirements section, inserted by Step T for the engineering-lead profile (**new in v3.6.0**)
+- `partial/repository-entry-v1` — research repository entry, inserted by Step T for the researcher profile (**new in v3.6.0**)
+- `partial/money-bridge-v1` — metric → revenue driver table, included by QBR, board update and business case (**new in v3.6.0**)
+
+### Managing your library
+
+The **Template Library** skill provides 11 actions: `list`, `show`, `add`, `clone`, `update`, `delete`, `restore`, `import`, `export`, `validate`, `rebuild-registry`. Trigger with phrases like "add template", "list templates", "clone template", "restore template", etc.
+
+### Backup protection
+
+Three-tier backup system to prevent data loss:
+
+1. **Per-template archive** — every template edit saves the previous version (last 10 versions kept per template)
+2. **Pack backup** — before bulk operations (import, bulk delete, migration), the whole library is snapshotted (last 5 kept)
+3. **Manual backup/restore** — trigger at any time via the Template Library skill
+
+---
+
+## Design Bridge — Brand Integration (v1.11.0)
+
+The plugin ships with a first-class integration with Claude's Design plugin, fronted by the `design-bridge` skill. Four upstream skills gain an optional **Step D** hook that offers to hand off results to design-bridge:
+
+| Upstream skill | Design Bridge offers |
+|----------------|----------------------|
+| `write-concept` | deck (feature) or prototype (lo-fi / mid-fi) |
+| `requirements-creator` | handoff (a11y audit blocker) or prototype (hi-fi) or deck |
+| `brainstorm-features` | lo-fi prototype for top-1 hypothesis, or brainstorm readout deck |
+| `product-research` | research-highlights deck or research-enrichment (screenshots, DS refs) |
+
+### Bring-your-own brand
+
+All brand specifics live **outside this repo** in your own `local-context.md`. The plugin reads:
+
+- `product.figma.ds_file_key` — Figma `fileKey` of your brand's Design System file
+- `product.design_system_spec` — path to your DS tokens yaml (colors, typography, components, contrast pairs)
+- `product.pptx_theme` — path to your pptx theme yaml (logical layouts → real layouts, scales, palette)
+- `product.base_pptx` — path to your base pptx template (Google Slides–compatible 10×5.625" recommended)
+- `product.brand.primary`, `product.brand.dark`, `product.brand.font_primary`, `product.brand.font_display` — fallback tokens when the DS yaml is unavailable or partial
+
+See `local-context.example.md` → **Design System** section for the full schema. If no brand config is set, design-bridge falls back to a neutral default (dark text on white, 4.5:1 contrast).
+
+### A11y gates
+
+All design deliverables pass WCAG 2.1 AA QA before publish (see `skills/design-bridge/references/a11y-checklist.md`). Blocker rules by intent:
+
+| Intent | A11y scope |
+|--------|------------|
+| deck | contrast on primary text + CTA is blocker; rest = warnings |
+| prototype (lo-fi) | contrast + touch targets = warnings only |
+| prototype (mid-fi / hi-fi) | full WCAG 2.1 AA blocker |
+| handoff | full WCAG 2.1 AA + AAA stretches = blocker |
+| research-enrichment | not audited |
+
+---
+
+## Plugin Components (since v2.5.0; hooks since v2.6.0)
+
+Besides skills, the plugin ships four kinds of host-level components. They are declared in files the host parses, not described in prose — which is the point: the host enforces them.
+
+**Connectors — `.mcp.json` (12).** The connectors the skills rely on: `atlassian`, `figma` (matched to your existing connection by URL), `gmail`, `google calendar`, `google drive`, `fireflies` (matched by name). Open the plugin → **Connectors** to see which are connected; a skill never searches the registry for a declared connector, it tells you which tab to connect it in. **Tableau is not declared** — it is a local MCP server you run yourself (see the Setup Guide); the skills detect it by pattern. The mapping key → connector → tool namespace lives in `references/integration-strategy.md` → *Declared connectors*. Since v3.3.0 six **optional** research connectors are declared as well — `lazyweb`, `similarweb`, `mobbin`, `semrush`, `tavily`, `apify` — used by `product-landscape` and `flow-walkthrough` when present, never required; each is your own account.
+
+**Agents — `agents/` (3).** Named subagents with an enforced tool set:
+
+| Agent | Tools | Used by | Why it is an agent and not a prompt |
+|---|---|---|---|
+| `artifact-checker` | `Read` only | `requirements-creator`, `write-concept`, `task-creator`, `meeting-processor` (opt-in) | The checker must not see the maker's context and must not browse or write — `tools:` makes that a host rule |
+| `debater` | none (`tools: []`) | `brainstorm-features` Step 3D and every skill that chains to Debate Mode | "No web, no vault, no files" is the protocol's core guardrail |
+| `extractor` | `Read, Glob, Grep` | fan-out steps in 8 skills (`references/subagent-delegation.md`) | Read-only by definition — safe under `data-policy.md` |
+
+Every protocol keeps a fallback chain (named agent → `general-purpose` with the same prompt, reported → sequential in-session passes with a role reset, reported → inline with the reduced-independence marker), so nothing breaks in a host without plugin agents. Codex does not load `agents/*.md`; `.codex/agents/*.toml` ports the three for manual use there, generated from these files (check 14 keeps them paired, and since v3.8.0 keeps their instructions identical apart from the host note).
+
+**Commands — `commands/` (7 commands).** Service entry points that are **user-only** (`disable-model-invocation: true`) — the model never routes a conversation into them, which also keeps them out of trigger collisions. On Codex, which migrates commands into routable skills, the same guarantee comes from each description opening with *"Typed command … only"* (validator check 13, trigger-evals L):
+
+| Command | Arguments | Does |
+|---|---|---|
+| `/grow-product-manager:status` | `[--verbose]` | One-screen health: plugin version, where `local-context.md` was found and its schema version, vault level, declared connectors vs tools present in this session, deferred onboarding steps |
+| `/grow-product-manager:config` | `validate \| view` | Straight into `plugin-configurator`'s Validate / View mode |
+| `/grow-product-manager:release` | `patch \| minor \| major` | `release-manager` with the bump class pre-answered — for the plugin repo only |
+| `/grow-product-manager:glossary-lint` | `[file]` | Gate 3 team-language lint over a file or pasted text, standalone |
+| `/grow-product-manager:setup` | `--show \| --write-gate on\|off` | Host-level toggles (the write gate) and whether the hooks environment is wired in this session |
+| `/grow-product-manager:find` | `<запит> [--list] [--all]` | The search of your context, typed (since v3.17.0): `context-navigator`'s answer with a source and a date for every statement, `--list` for the notes instead, `--all` for the session's live sources too; ends with `Де шукав: …` |
+| `/grow-product-manager:context` | `show [запис] \| health \| inbox \| recheck \| consolidate \| overlay \| history` | Your context, typed (since v3.21.0): `show` — what the plugin knows about you, who wrote each record last and when it was verified, since v3.22.0 the source of each field; `health` — what wants looking after, each line with the command that fixes it; `inbox` — what skills learned, taken or rejected in one answer; since v3.22.0 `recheck` — your records against the connectors, `consolidate` — duplicates and stale dates as proposals; since v3.23.0 `overlay` — your corrections to a core, `history` — what changed, a note a month |
+
+**Hooks — `hooks/hooks.json` (3 hooks).** All three run in the session's own environment and **fail open** — a script error can never block a session.
+
+| Hook | Event | Does |
+|---|---|---|
+| Context digest | `SessionStart` (startup, resume, clear, compact) | `scripts/session_start.py` looks for `local-context.md` where this session can see it (`~/.grow-pm/`, connected folders under `$HOME/mnt/*/`, the working directory) and hands the model a short `GROW_PM_SESSION` digest: path, configurator version, `user.language`, product names, onboarding mode and deferred steps, whether vault / CJM / team language are configured. Step 0a of every skill becomes a lookup. Re-runs after context compaction, so the location survives long sessions. In a hosted session where the shell cannot see your files it says so — skills then read the file through device tools as before. |
+| Write gate | `PreToolUse` on `createJiraIssue`, `editJiraIssue`, `createConfluencePage`, `updateConfluencePage` | `scripts/write_gate.py` asks you to confirm before a content-bearing write, with the checklist the artifact quality gate expects to be done by then (gate report in chat, your go-ahead, not a sandbox). Metadata-only edits pass silently. A hook sees only the tool call, never the conversation — so this is a human-in-the-loop step, not an automatic judge. Opt-out: `/grow-product-manager:setup --write-gate off`. |
+| Provider boundary (since v3.10.0) | `PreToolUse` on `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | The same `scripts/write_gate.py` asks you to confirm before a file is written inside a shared-context provider's local folder — a team core you registered as read-only (`references/context-provider-protocol.md` §7). Paths the provider leaves to you (your focus note, your overlay folder) and every folder outside the provider's are never asked about. Same opt-out as the write gate. |
+
+
+---
+
+## Hosts (since v3.0.0)
+
+The plugin is defined against Claude Code / Cowork and degrades by **observed capability**, never by host name — `references/host-profiles.md` is the contract, `testing/host-matrix.md` the per-skill result (derived from what each skill invokes; validator check 14 keeps it complete).
+
+| | Claude Code / Cowork | Codex CLI · Codex app | ChatGPT | Codex Cloud |
+|---|---|---|---|---|
+| Skills (33) | ✅ | ✅ same namespace | ✅ (expected) | ✅ (expected) |
+| Connectors | ✅ | ✅ URL-matched; name-matched ones (`gmail`, `google calendar`, `google drive`, `fireflies`) work in the **app**, fail at session start in the **CLI** | ✅ | ? |
+| Filesystem `~/.grow-pm/`, vault | ✅ | ✅ | ❌ on web / mobile → `storage_mode: session`, artifact exported at the end; ✅ in the desktop app with a *Local Project* (attached folder, read/write) → behaves as the Codex column | own sandbox → via connector or the repo |
+| Subagents (checker, debater, extractor) | ✅ automatic | ⚠️ only on explicit request → sequential in-session passes (`.codex/agents/` for manual use) | ❌ | ⚠️ |
+| Hooks (context digest, write gate) | ✅ | ❌ ([openai/codex#17331](https://github.com/openai/codex/issues/17331)) → Step 0a in full, in-skill confirmation before writes | ❌ | ❌ |
+| Commands | ✅ 7, user-only | ✅ 7, migrated to typed-only skills | ❌ | ⚠️ |
+| Skill descriptions | full while the listing fits 1% of the context window; over it, the least-used skills show names only — descriptions stay within 400 characters (v3.10.1) | shortened to fit one shared ≈15k-character budget (~190 chars each on a host with 80 skills) — descriptions are ordered for that cut | ? | ? |
+| Per-skill result | 33 full | 17 full / 16 degraded | 22 degraded / 11 n/a | 23 degraded / 10 n/a |
+
+**Codex card.** `.codex-plugin/plugin.json` carries the `interface` block Codex and ChatGPT render — display name, category, brand color and the logo in `assets/` (`logo.png` 512, `composer-icon.png` 128). Claude Code has no logo field, so it reads `.claude-plugin/` only; validator check 1 keeps the two manifests' version and description identical.
+
+**Codex — install and update.** Codex refreshes configured Git marketplaces **when it starts** (plugin startup and `codex plugin list`) and then refreshes the installed plugin cache — [openai/codex#17425](https://github.com/openai/codex/pull/17425); it does **not** check periodically while the app stays open — [openai/codex#38401](https://github.com/openai/codex/issues/38401). So a release reaches a running Codex only after a restart, or after the update commands further below. First install:
+
+```
+codex plugin marketplace add asiletskyi-pm-evo/grow-product-manager-plugin
+codex plugin add grow-product-manager@grow-product-manager-plugins
+```
+
+After every release, if Codex stayed open (otherwise the next start does this itself):
+
+```
+codex plugin marketplace upgrade grow-product-manager-plugins
+codex plugin add grow-product-manager@grow-product-manager-plugins
+```
+
+`marketplace add` on a marketplace that is already configured does not refresh it — use `upgrade`. Run `codex` commands from a folder without a project-local `.codex/config.toml` (for example `cd ~` first): Codex merges that file into its config, and a copy that declares a server by `url` where your global config runs it as a command stops every command with "url is not supported for stdio" (measured, codex-cli 0.153.2).
+
+**ChatGPT on web / mobile** gets roughly half of the plugin — the artifact and research skills on connectors, with the artifact delivered in the chat and exported at the end; the storage-bound contours (Focus Board, experiment registry, the whole People contour, template and knowledge libraries) say so in one line and stop. **The ChatGPT desktop app with a *Local Project*** attaches local folders read/write ([Projects docs](https://www.codex-docs.com/en/docs/projects)) — Step 0-host then observes FS as present and the Codex column applies. Neither ChatGPT surface has been run with the plugin yet; the column is derived, not measured. **Codex Cloud** runs in its own sandbox: never assume prior state, always write results back through a connector or the repository.
+
+---
+
+## Shared References
+
+The plugin includes reference materials for product management best practices and frameworks:
+
+**Key reference files in `references/` (43 total — see the folder for the full list):**
+- `search-protocol.md` — Step 0.5 of every skill (since v3.16.0): the request and its variants, `ctx search`, the rating, what is taken silently and what never is, doubt and conflict, live sources, the block of variants and the memory of your choices
+- `context-provider-protocol.md` — shared-context providers (since v3.10.0): the `vault/v1` contract, provider manifest and registration, routing across providers, freshness, the write boundary, the provider kit and the index schema
+- `judgment-points.md` — the judgment points (since v3.7.0): where the "your estimate first" question is asked and how it is switched off, the confidence-and-falsifier line and its scale, the decision-record fields, the resulting check
+- `vocabulary-sets.md` — read-only role vocabulary sets for headings and option labels, lowest precedence below the team glossary (since v3.6.0)
+- `role-profiles.md` — the role layer (since v3.5.0): altitude L1–L4, eight role profiles as defaults, hats, Step 0i resolution
+- `pm-mental-model.md` — the judgment contract (since v3.4.0): the model of the user as a Product Manager in the AI era, ten principles, evidence classes; read by every skill at Step 0j
+- `host-profiles.md` — Step 0-host: six observable capabilities, four host profiles, the degradation matrix per contour, `${PLUGIN_ROOT}` resolution, measured host gaps
+- `local-context-protocol.md` — Step 0: how every skill finds and loads `local-context.md`, and Step 0j (judgment contract); where a bare `references/…` lives on every host
+- `figma-designs-check.md` — the Figma designs check shared by write-concept, requirements-creator, brainstorm-features and product-research (since v3.4.0)
+- `integration-strategy.md` — MCP → Registry → Browser fallback chain for external tools
+- `data-policy.md` — data confidentiality rules (internal data never leaves the session)
+- `data-integrity-protocol.md` — verification gate against extrapolation and single-source claims; six gate checks, the sixth (since v3.8.0) assigning evidence classes and handing back claims the data cannot support
+- `subagent-delegation.md` — when and how skills delegate fan-out work to subagents
+- `debate-protocol.md` — role-based adversarial debate engine (roles, rounds, synthesis, ICE correction, guardrails)
+- `artifact-style-gate.md` — artifact quality gate: source test for technical content, lists-over-prose, team-language Gate 3, Gate 4 judgment footer and evidence labels (4b since v3.8.0), maker–checker execution (an independent checker subagent verifies every artifact)
+- `visual-annotation-protocol.md` — annotated screenshots: marker № = requirement №, local Pillow rendering, preview cycle, REST attachment chain
+- `self-improvement.md` — learning from user corrections (versioning, changelog)
+- `test-mode.md` — sandbox mode for dry-run onboarding and skill testing
+- `persistent-storage.md` — where user data lives (`~/.grow-pm/`, the vault as `storage_root`), backups (last 5), migrations, recovery from the vault mirror
+- `vault-protocol.md` — Obsidian Vault integration protocol (detection, search, save, MOC updates)
+- `vault-schema.md` — Vault artifact schema (frontmatter, types, tags, folder structure, templates; optional `evidence_classes` / `altitude` keys since v3.8.0)
+- `cjm-protocol.md` — CJM shared standards (anomaly severity, funnel impact, health score)
+- `funnel-templates.md` — Standard funnel stage templates by product type
+- `template-protocol.md` — Multilingual template resolution protocol (Step T-0 → T-5, scoring, fallbacks, backup invariants)
+- `planning-core.md` — shared planning definitions for the Planning Suite
+- `capacity-model.md` — team capacity math (allocation %, velocity, focus factor)
+- `dependency-model.md` — dependency graph and critical-path rules
+- `roadmap-artifacts.md` — roadmap artifact formats (tree, timeline, forecast)
+- `jira-data-protocol.md` — Jira plumbing: custom-field map, JQL patterns, pagination, transitions parsing (shared by product-reporter and the Planning Suite)
+
+**Design Bridge references:**
+- `skills/design-bridge/references/deck-subtypes.yaml` — slide-by-slide outlines for all 4 deck subtypes
+- `skills/design-bridge/references/figma-playbook.md` — Figma MCP auth, rate limits, common patterns
+- `skills/design-bridge/references/a11y-checklist.md` — WCAG 2.1 AA checklist + contrast pair schema
+
+See the plugin's `references/` folder for the complete list of available materials.
+
+---
+
+## Testing & Contributing
+
+Two validators gate every push and PR (`.github/workflows/validate.yml`), and a third — the two-host smoke test — gates every release (it needs a logged-in Claude and an installed Codex, so it runs on the release machine, not in CI):
+
+```bash
+bash testing/validate-consistency.sh   # 19 checks: versions, frontmatter, paths, components, hooks, cross-host packaging (agent ↔ Codex port), thin core, the context manifest, the MCP allow-list, fixture regions, search types
+python3 testing/skill_lint.py          # 25 named checks
+bash testing/host-smoke.sh             # loads the tree on Claude Code AND its HEAD on Codex CLI — release blocker, run locally after the commit
+```
+
+Every check exists because the defect class it catches actually shipped, and each is verified by injecting that defect into a repo copy. `testing/trigger-evals.md` is meant to run on **both** hosts before a description-touching release (`codex exec` and `claude -p --plugin-dir`, single-line prompts, scored on the host's real configuration); a host not re-run is named in the CHANGELOG (Codex CLI since v3.1.0); `testing/host-matrix.md` is the skill × host result. When you find a new defect class, **add a check — never a manual step** (see `testing/Testing-process.md`).
+
+### One-time local setup: `testing/org-tokens.local`
+
+The `org-data` check keeps your organization's identifiers out of a public repo. Its generic layer (real Atlassian hosts, real-looking email domains, literal UUIDs, registry ids, internal hostnames) always runs. But a linter cannot know that a surname, a project key, or an internal tool name is yours — those go in a local denylist:
+
+```bash
+printf 'yourcorp.example\nPROJKEY\nSurname\n' > testing/org-tokens.local
+python3 testing/skill_lint.py
+```
+
+The file is **gitignored on purpose** — a denylist that ships would carry the very strings it forbids. The trade-off is that it protects nothing until you create it, so create it before your first contribution, and add any identifier you purge from the tree to it in the same commit.
+
+---
+
+## Version History
+
+For detailed version history, release notes, and changelog information, see [CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## Getting Started
+
+1. **Add the marketplace and install the plugin** — in a Claude Code session:
+
+   ```
+   /plugin marketplace add asiletskyi-pm-evo/grow-product-manager-plugin
+   /plugin install grow-product-manager@grow-product-manager-plugins
+   ```
+
+   In **Codex CLI** or the Codex app:
+
+   ```
+   codex plugin marketplace add asiletskyi-pm-evo/grow-product-manager-plugin
+   codex plugin add grow-product-manager@grow-product-manager-plugins
+   ```
+
+   (Updates are manual on Codex — see **Hosts** above.)
+
+2. **Configure the plugin** — say "налаштувати плагін" / "configure plugin" to run the Plugin Configurator. Basic setup takes ~3–5 minutes; Extended (~15–25 min) configures CJM, Vault, Templates, Planning, Focus and People. You can start Basic and add the rest later.
+3. **Choose your storage location** — Obsidian Vault (recommended: templates and artifacts live together) or `~/.grow-pm/` standalone.
+4. **Connect your data sources** (Jira, Confluence, Figma, Tableau, calendar, meeting tools) — the Configurator pre-checks what's available and works with whatever is connected.
+5. **Start using skills** by typing trigger phrases in your Claude Code session. Not sure where to start? Say "на чому сфокусуватись" — `focus-advisor` reads your context and recommends.
+
+> Your configuration lives in `local-context.md`, which is gitignored and never leaves your machine. Copy `local-context.example.md` if you prefer to fill it in by hand.
+
+---
+
+## Integration Points
+
+The Grow Product Manager plugin integrates with:
+
+- **Jira** — Task and issue management
+- **Confluence** — Document collaboration and publishing
+- **Figma** — Design and prototyping (configure your brand's DS `fileKey` in `local-context.md` → `product.figma.ds_file_key`)
+- **Tableau / Looker** — Data visualization and metrics
+- **Google Calendar / Microsoft Calendar** — Meeting context and scheduling
+- **Fireflies.ai** — Meeting recording and transcription
+- **Google Drive** — Document storage and collaboration
+- **Obsidian** — Persistent knowledge graph (optional)
+- **Claude Design plugin** — 6 design skills (research-synthesis, ux-copy, accessibility-review, design-system, design-critique, design-handoff) hooked via `design-bridge` (new in v1.10.0; `design:user-research` was dropped in v2.1.0 — Grow PM's own `product-research` owns primary research)
+- **ChatGPT / Google Gemini** — Image and content generation (optional)
+
+---
+
+## Support & Documentation
+
+For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
+
+**Plugin Author:** Andrii Siletskyi  
+**Version:** 4.0.1  
+**Last Updated:** October 2026

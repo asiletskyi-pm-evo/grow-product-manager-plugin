@@ -1,0 +1,1176 @@
+# Vault Schema
+
+**Overview:** This document defines the schema for artifacts stored in the Obsidian Vault — frontmatter fields, artifact types, tag taxonomy, folder structure, and templates. Referenced by `vault-protocol.md`.
+
+---
+
+## Frontmatter Standard
+
+All artifacts stored in the Obsidian Vault follow a consistent frontmatter schema to enable consistent parsing, filtering, and automation across the Grow Product Manager Plugin.
+
+### Base Frontmatter (All Artifact Types)
+
+Every artifact, regardless of type, includes these base frontmatter fields:
+
+#### Required Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Artifact type from Type Taxonomy (see Type Taxonomy section) |
+| `product` | string | Product name from local-context, or "general" if cross-product |
+| `created` | date | Creation date (YYYY-MM-DD) |
+| `skill` | string | Skill name that created this artifact |
+| `skill_version` | string | Version of skill that created this artifact (e.g., "1.2.3") |
+
+#### Classification Fields (Optional but Recommended)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tags` | string[] | Hierarchical tags from Tag Taxonomy (e.g., ["funnel/checkout", "platform/web"]) |
+| `category` | string | Content category for organizational purposes |
+| `platform` | string[] | Platforms affected or relevant to this artifact (android, ios, web, admin, cms) |
+
+#### Relation Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `related` | string[] | Wikilinks to related artifacts (format: "[[path/to/artifact]]") |
+| `parent` | string | Wikilink to parent artifact |
+| `children` | string[] | Wikilinks to child artifacts |
+
+#### Lifecycle Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | Lifecycle status: active \| archived \| superseded \| draft |
+| `superseded_by` | string | Wikilink to superseding artifact (if status = superseded) |
+| `confidence` | float | Confidence score (0.0-1.0) for findings or recommendations; evidence classes neither set nor cap it |
+| `last_reviewed` | date | Last review date (YYYY-MM-DD) |
+
+#### Context Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `source_session` | string | Session ID where artifact was created |
+| `published_to` | string | URL where artifact is published (e.g., Confluence page) |
+| `confluence_page_id` | string | Confluence page ID if synced |
+| `jira_epic` | string | Associated Jira epic key |
+
+#### Judgment Fields (optional, since v3.8.0)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `evidence_classes` | string[] | The evidence classes (`pm-mental-model.md` §4) the body's labels use, deduplicated, in the order observed, measured, reported, external, simulated, assumed; left out when the body carries none — never `[]` |
+| `altitude` | string | `L1`–`L4`: the value the judgment footer shows (`template-protocol.md` T-5 step 3a); left out where step 3a places no footer — never filled from `level_home` |
+
+Both are derived by `vault-protocol.md` Vault Save step 5 — never asked, never a required field, never backfilled into older notes. People-contour notes, knowledge sources, prototypes and handoffs carry neither; `decision` and `debate` notes carry no `altitude`. `altitude` is the artifact's altitude L1–L4, never the vault level L0–L2. A user's own property of another name (for example a free-text `evidence:`) is preserved and not read.
+
+#### Identity and freshness fields (optional, since v3.10.0)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Stable identifier that survives a rename (`<type>.<slug>`); when present, dedup and links to the note use it before the path |
+| `aliases` | string[] | Other names of the same note (Obsidian resolves links through them); prefer an alias over a second note for a new spelling |
+| `modified` | date-time | Last content change by a skill or a script (ISO 8601) |
+| `last_verified` | date | Last time a person or a connector confirmed the content still holds |
+| `archived_at` | date | Set together with `status: archived` |
+
+All five are optional, never asked and never backfilled; a note without them stays valid. One property name keeps one type across the whole vault (Obsidian Properties coerce mixed types).
+
+### Extended Frontmatter by Type
+
+Each artifact type includes additional type-specific fields beyond the base schema.
+
+#### hypothesis
+
+Artifact type for feature hypotheses with ICE scoring.
+
+```yaml
+ice_score: float (0-100)
+ice_impact: float (1-10, 10 = massive impact)
+ice_confidence: float (0-1.0)
+ice_ease: float (1-10, 10 = easiest to implement)
+funnel_stage: string (awareness|consideration|checkout|retention|referral)
+hypothesis_status: string (proposed|testing|validated|rejected)
+test_result: string (description of test outcome, if status = tested)
+validated_by: string (email or name of person who validated)
+```
+
+#### ab-test-results
+
+Artifact type for A/B test results and learnings.
+
+```yaml
+test_name: string (name of the test)
+test_duration_days: int (number of days test ran)
+sample_size: int (total sample size across variants)
+primary_metric: string (metric being measured)
+primary_metric_change: float (percentage change, e.g., 5.2)
+statistical_significance: float (p-value or confidence level, 0-1.0)
+result: string (winner|loser|inconclusive)
+tested_hypothesis: string (wikilink to hypothesis tested)
+```
+
+#### decision
+
+Artifact type for key product, technical, or process decisions.
+
+```yaml
+decision_type: string (product|technical|process)
+decided_by: string[] (email addresses or names of decision makers)
+alternatives_considered: int (number of alternatives evaluated)
+reversibility: string (easy|medium|hard - how easy to reverse)
+deadline: date (decision deadline, YYYY-MM-DD)
+revisit_by: date (when this decision should be re-examined, YYYY-MM-DD; optional)
+# Decision hygiene (since v3.7.0 — references/judgment-points.md §4; each optional — a key nothing states is left out, and the body says "not recorded" / "none found")
+owner: string (the one person accountable; decided_by stays the list of people who took the decision)
+rejected_alternatives: string[] (each option considered and not chosen, with a one-line reason; alternatives_considered stays the count)
+base_rate: string (outside view with its source — e.g. the experiment registry's win rate)
+revisit_trigger: string (the observable event that reopens the decision; revisit_by stays the date)
+minority_report: string (2-3 sentence strongest dissent, with who held it — from a debate or a named dissenter; omitted when there was none)
+evidence_classes: string[] (evidence classes of the inputs — observed|measured|reported|external|simulated|assumed; since v3.8.0 derived per judgment-points.md §4, never asked; the same key as the base Judgment Field)
+```
+
+> The owner's confidence is a body line under the record's Decision section (`Confidence: known|likely|uncertain|unknown · most sensitive to: … · would change if: <revisit trigger>`), not a frontmatter key — the lifecycle `confidence` float keeps its meaning (`judgment-points.md` §3). A record written before v3.7.0 stays valid without the new keys.
+
+> `revisit_by` is a frontmatter field, not prose: `focus-advisor` surfaces overdue revisits as a tactical signal (`focus-signals.md`), and it can only do that by filtering the field. It lived only in the decision body's "Consequences" section until v2.1.1, so that signal was a permanent false negative. `deadline` is when the decision had to be *made*; `revisit_by` is when it should be *re-examined*.
+
+#### debate
+
+Artifact type for role-based adversarial debate sessions (`references/debate-protocol.md`).
+
+```yaml
+debate_question: string (the single binary or limited-choice question debated)
+roles: string[] (participating role names, incl. the mandatory Skeptic / Risk-officer)
+verdict: string (facilitator's recommendation)
+confidence: string (high|medium|low - facilitator's confidence in the verdict)
+minority_report: string (2-3 sentence dissent of the disagreeing role)
+rounds: int (debate rounds run, 2-3)
+inline_simulation: bool (true when run without the Agent tool - role independence reduced)
+```
+
+#### cjm-health-check
+
+Artifact type for regular Customer Journey Map health assessments.
+
+```yaml
+health_score: int (0-100, overall funnel health)
+anomalies_found: int (number of anomalies detected)
+critical_anomalies: int (number of critical-severity anomalies)
+comparison_baseline: string (wikilink to baseline CJM for comparison)
+previous_health_check: string (wikilink to previous health check)
+```
+
+#### meeting-notes
+
+Artifact type for meeting notes and summaries.
+
+```yaml
+meeting_type: string (sprint-planning|grooming|stakeholder|1on1|other)
+attendees: string[] (email addresses or names)
+action_items_count: int (number of action items generated)
+decisions_count: int (number of decisions made)
+duration_minutes: int (meeting duration)
+fireflies_id: string (Fireflies.ai transcript ID, if recorded)
+```
+
+#### metrics-review
+
+Artifact type for periodic metrics analysis and insights.
+
+```yaml
+review_period: string (e.g., "2026-03" for March 2026)
+key_metrics_analyzed: string[] (list of metrics reviewed)
+anomalies_detected: int (number of anomalies identified)
+trend_direction: string (up|down|stable - overall trend)
+```
+
+#### concept
+
+Artifact type for product concepts and PRDs.
+
+```yaml
+scope: string (mvp|full - scope of concept)
+phase_count: int (number of implementation phases)
+estimated_effort: string (T-shirt size: xs|s|m|l|xl, or story points)
+```
+
+#### requirements
+
+Artifact type for feature requirements documents.
+
+```yaml
+approach: string (feature-flag|ab-test|direct - how feature will be shipped)
+platforms_covered: string[] (platforms included in requirements: android|ios|web|admin|cms)
+requirements_count: int (number of functional/acceptance requirements)
+```
+
+#### competitive-analysis
+
+Artifact type for competitive intelligence.
+
+```yaml
+competitors_analyzed: string[] (competitor company names)
+analysis_type: string (feature|pricing|ux|market-position)
+```
+
+#### market-research
+
+Artifact type for market research and sizing.
+
+```yaml
+methodology: string (survey|interview|desk-research|mixed)
+market_size: string (e.g., "$500M TAM")
+growth_rate: float (annual growth rate as percentage, e.g., 15.5)
+```
+
+#### ux-benchmark
+
+Artifact type for UX benchmarking studies.
+
+```yaml
+benchmark_source: string (e.g., "Nielsen Norman Group")
+areas_covered: string[] (UX areas benchmarked: usability|performance|accessibility|design-quality)
+```
+
+#### post-release
+
+Artifact type for post-release analysis and impact measurement.
+
+```yaml
+feature_name: string (name of released feature)
+release_date: date (launch date, YYYY-MM-DD)
+metrics_impacted: string[] (list of metrics affected)
+overall_impact: string (positive|negative|neutral)
+```
+
+#### knowledge-source
+
+Artifact type for curated external knowledge sources.
+
+```yaml
+source_url: string (full URL to source)
+source_type: string (article|research-report|case-study|benchmark|tool|video)
+trust_score: float (0-1.0, internal trust assessment)
+publication_date: date (publication date, YYYY-MM-DD)
+```
+
+#### funnel-anomaly
+
+Artifact type for detected funnel anomalies and investigations.
+
+```yaml
+severity: string (critical|warning|info)
+affected_stage: string (awareness|consideration|checkout|retention|referral)
+deviation_percent: float (percentage deviation from baseline, e.g., -15.3)
+affected_platforms: string[] (platforms affected)
+```
+
+#### focus-brief
+
+Artifact type for PM focus briefs produced by `focus-advisor`.
+
+```yaml
+subtype: string (daily-brief|tactical-brief|strategy-memo)
+mode: string (now|tactics|strategy)
+headless: boolean (true if produced by a scheduled run)
+focuses_proposed: int
+focuses_chosen: int (0 until the PM reacts; updated from journal)
+signals_sources: string[] (mail, calendar, meetings, jira, cadence, metrics)
+```
+
+
+#### feedback-triage
+
+Artifact type for clustered feedback triage runs produced by `feedback-triage`.
+
+```yaml
+period: string (e.g., "2026-06" or "2026-06-01 to 2026-06-30")
+segment: string (buyers|sellers|both)
+sources_count: int (number of intake sources)
+items_total: int (feedback items received)
+items_usable: int (after dedupe/cleaning)
+top_pain_score: float (pain score of the #1 theme)
+baseline_ref: string (wikilink to the previous triage of the same segment, if any)
+```
+
+#### project-overview
+
+Artifact type for project descriptions and tracking.
+
+```yaml
+project_status: string (active|paused|completed)
+team_size: int (number of people on team)
+start_date: date (project start date, YYYY-MM-DD)
+target_date: date (project completion target, YYYY-MM-DD)
+```
+
+---
+
+## Type Taxonomy
+
+The Grow Product Manager Plugin defines 37 artifact types, each with a specific purpose, source skill, and folder location.
+
+> **This table is the single source of truth for vault layout.** `vault-protocol.md` (save/init) and `obsidian-setup-guide.md` (setup smoke tests) conform to it, not the other way round. A type that is not listed here cannot be saved — `vault_save` resolves its folder from TYPE_FOLDER_MAP below, so an unlisted type has no destination. When a skill starts producing a new artifact type, add the row **and** the map entry in the same change; `testing/skill_lint.py` → `vault-types` enforces this.
+
+**Path composition (one rule):** `{vault}/{TYPE_FOLDER_MAP[type]}/{key_slug}/{filename}` — the map gives the area path, and the **key** is always the last folder level.
+
+The key is whichever entity you retrieve the artifact *by*:
+
+| Contour | Key | Example |
+|---------|-----|---------|
+| Product artifacts (Research, CJM, Concepts, Requirements, …) | `{product_slug}` | `Research/mobile-app/competitive-analysis-checkout-2026-04-14.md` |
+| **People artifacts** (goals, reports, 1-1, reviews, …) | `{person_slug}` | `People/goals/firstname-lastname/goal-letter-2026H1.md` |
+
+People artifacts key by person because that is the access pattern the contour is built on: Step P loads everything known about **a person**, and a person is not scoped to a product — one analyst has one goal letter per period, not one per product. Product-keying them would scatter a single person's history across every product folder and make Step P a cross-folder search. The person profile itself stays `People/<slug>.md` (addressed by name, not by date), with the roster index at `People/_roster.md`.
+
+| Type | Skill Source | Folder | Description |
+|------|--------------|--------|-------------|
+| competitive-analysis | product-research | Research/ | Competitive feature/pricing/UX analysis |
+| market-research | product-research | Research/ | Market sizing, TAM, and research |
+| ux-benchmark | product-research | Research/ | UX benchmark study or comparison |
+| cjm-analysis | cjm-research | CJM/full-reports/ | Full Customer Journey Map analysis |
+| cjm-health-check | cjm-research | CJM/health-checks/ | Regular funnel health assessment |
+| funnel-anomaly | cjm-research | CJM/anomalies/ | Detected funnel anomaly and investigation |
+| concept | write-concept | Concepts/ | Product concept or PRD |
+| requirements | requirements-creator | Requirements/ | Feature requirements document |
+| ab-test-results | product-analysis | Analysis/ab-tests/ | A/B test results and learnings |
+| metrics-review | product-analysis | Analysis/metrics/ | Periodic metrics review and analysis |
+| post-release | product-analysis | Analysis/post-release/ | Post-release feature analysis |
+| hypothesis | brainstorm-features | Hypotheses/ | Feature hypothesis with ICE score |
+| meeting-notes | meeting-processor | Meetings/ | Meeting notes and summaries |
+| decision | (any skill) | Decisions/ | Key decision with rationale |
+| knowledge-source | knowledge-library | Knowledge/sources/ | Curated external knowledge source |
+| project-overview | (manual/configurator) | Projects/ | Project description and status |
+| diagram | diagram-prototyper | Diagrams/ | Diagram, prototype, or infographic (source + export link) |
+| task-breakdown | task-creator | Projects/task-breakdowns/ | Feature → Jira tasks decomposition record with links |
+| ops-report | product-reporter | Reports/ops/ | Sprint/quarter/initiative/member operational report |
+| roadmap | planning suite (sprint-/quarterly-/project-planning, roadmap-architect) | Roadmaps/ | Sprint plan, quarterly roadmap, project arc, or structure tree (subtype in frontmatter) |
+| focus-brief | focus-advisor | Focus/ | PM focus brief (daily/tactical/strategy — subtype in frontmatter) with chosen focuses and chains |
+| feedback-triage | feedback-triage | Research/feedback/ | Clustered feedback themes with pain scores and trends (baseline for next run) |
+| presentation | design-bridge | Presentations/ | Rendered deck (.pptx) — subtype in frontmatter |
+| prototype | design-bridge | Prototypes/ | Lo-fi/mid-fi/hi-fi prototype (own or toolkit-delegated) |
+| handoff | design-bridge | Handoffs/ | Design → dev handoff package |
+| vacancy-profile | hiring-designer | Hiring/ | Role design + vacancy profile + offer draft |
+| debate | brainstorm-features Step 3D + Debate hooks (product-research, cjm-research, write-concept, decision-log) | Debates/ | Role-based adversarial debate: question, evidence pack, verdict, minority report |
+| walkthrough | flow-walkthrough | Research/walkthroughs/ | Flow walkthrough report (steps, friction, comparison) — the evidence pack stays local in `~/.grow-pm/walkthroughs/` |
+| landscape | product-landscape | Research/landscape/ | Category map of competitors and adjacent products (the registry stays local in `~/.grow-pm/landscape/`) |
+| moc | (vault initialization, MOC updates) | _MOC/ | Map of content — Dashboard, product MOC, timeline; generated, never an artifact of a skill run |
+
+#### People-contour types (highest-sensitivity tier)
+
+Everything about a person lives under `People/` — one folder, one sensitivity boundary. These artifacts are **vault/local only**: never Confluence, never Jira, never external LLMs (`data-policy.md` → People data). `vacancy-profile` sits outside `People/` on purpose — a vacancy is a role, not yet a person.
+
+| Type | Skill Source | Folder | Description |
+|------|--------------|--------|-------------|
+| people | People contour (Step P) | People/ | Person profile — D-type, delegation levels, goals, cadence, GTD-index, signals (`people-context-protocol.md`) |
+| goal-letter | goal-setter | People/goals/ | SMARTCBP goal letter for a person |
+| report-3t5f | product-reporter | People/reports/ | 3T5F goal report for a person or direction |
+| one-on-one-notes | one-on-one | People/1-1/ | 1-1 notes, signals, ARCV follow-up |
+| performance-review | performance-review | People/reviews/ | Structured review against goals + GTD + D-type |
+| offboarding-plan | offboarding-guide | People/offboarding/ | Four-meeting offboarding plan and follow-ups |
+| delegation-audit | delegation-coach | People/delegation/ | 7-levels audit + S1→S4 hand-off plan |
+
+#### Design delivery marker (design-bridge)
+
+When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.5, per `design-toolkit-protocol.md`), the returned artifact is saved under the `prototype` / `handoff` types above. It carries these `extra_frontmatter` keys so delegated deliverables are distinguishable:
+
+- `design_delivery: true`
+- `toolkit_id: <id>` — which declared toolkit produced it
+- `toolkit_returns: [figma_url?, branch?, files?]` — what came back
+
+### TYPE_FOLDER_MAP Reference
+
+```json
+{
+  "competitive-analysis": "Research/",
+  "market-research": "Research/",
+  "ux-benchmark": "Research/",
+  "walkthrough": "Research/walkthroughs/",
+  "landscape": "Research/landscape/",
+  "moc": "_MOC/",
+  "cjm-analysis": "CJM/full-reports/",
+  "cjm-health-check": "CJM/health-checks/",
+  "funnel-anomaly": "CJM/anomalies/",
+  "concept": "Concepts/",
+  "requirements": "Requirements/",
+  "ab-test-results": "Analysis/ab-tests/",
+  "metrics-review": "Analysis/metrics/",
+  "post-release": "Analysis/post-release/",
+  "hypothesis": "Hypotheses/",
+  "meeting-notes": "Meetings/",
+  "decision": "Decisions/",
+  "knowledge-source": "Knowledge/sources/",
+  "project-overview": "Projects/",
+  "diagram": "Diagrams/",
+  "task-breakdown": "Projects/task-breakdowns/",
+  "ops-report": "Reports/ops/",
+  "roadmap": "Roadmaps/",
+  "focus-brief": "Focus/",
+  "feedback-triage": "Research/feedback/",
+  "presentation": "Presentations/",
+  "prototype": "Prototypes/",
+  "handoff": "Handoffs/",
+  "vacancy-profile": "Hiring/",
+  "debate": "Debates/",
+
+  "people": "People/",
+  "goal-letter": "People/goals/",
+  "report-3t5f": "People/reports/",
+  "one-on-one-notes": "People/1-1/",
+  "performance-review": "People/reviews/",
+  "offboarding-plan": "People/offboarding/",
+  "delegation-audit": "People/delegation/"
+}
+```
+
+> The `people` profile itself is the one artifact addressed by name rather than by date: `People/<slug>.md` (plus the roster index `People/_roster.md`), because Step P looks it up per person. Every other People type follows `{folder}/{person_slug}/{filename}` — see "Path composition" above for why the People key is the person, not the product.
+
+---
+
+## Generated regions and layers (since v3.10.0)
+
+**Regions.** Text a script or generator writes sits between two markers, and a skill or the agent never writes inside one:
+
+```
+<!-- <namespace>:begin id=<id> [v=<version>] [mode=reference|derived] -->
+…generated content…
+<!-- <namespace>:end id=<id> -->
+```
+
+- `namespace` is lowercase kebab-case: `generated`, `related`, `audit`, or the id of a shared-context provider whose blocks are merged into the user's `local-context.md` (`context-provider-protocol.md`). A section wrapper may use `<namespace>:section:begin` / `:section:end` without an id.
+- Every region has a unique `id` within its file, and a region is found by its id, never by a heading inside it. A heading that appears both inside and outside a region is a defect to resolve, not a reason to insert again.
+- Readers that count headings (the session digest, the bundle builder) ignore region contents.
+- A skill that needs to change generated content changes its source and re-runs the generator; the user's own notes about it go outside the markers.
+- **Who owns the text inside.** Generated sections, maps of content and the other regions of a note belong to their script: the next run rewrites them, a hand edit included. A shared-context provider's block in the user's context is the exception when a context store exists: a human's edit inside it — in `local-context.md` or in a record file — is kept by `ctx provider apply`, which asks only when the provider changed the same block (`context-provider-protocol.md` §12, `context-protocol.md` §5e). Without a store the connect flow's proposal rewrites the provider's blocks as before.
+
+**Registry.** The namespaces a region may carry (since v4.0.0; `scripts/ctx_regions.py` `NAMESPACES` is the same set, and `testing/validate-consistency.sh` keeps the two equal). The id of every registered shared-context provider is a namespace too.
+
+| Namespace | Written by | `id` |
+|---|---|---|
+| `generated` | any generator of the vault — a script's own section | required, unless it is the only `generated` region of the note |
+| `related` | a «Пов'язане» block a script writes at a note's end — your own scripts write it without an id | as `generated` |
+| `person-context` | the person-context block of a meeting or a card | as `generated` |
+| `person-profile` | the profile block of a person card | as `generated` |
+| `ff-summary` | a summary a script keeps at a note's top | as `generated` |
+| `audit` | an audit's findings kept in a note | as `generated` |
+| `ctx` | the plugin itself: hubs (`hub-<type>`), «Пов'язане» (`related`), `_System/AGENTS.md` (`agents`), a record's status (`status`) | required |
+
+`ctx audit` reads every region of your layer by this table (`context-protocol.md` → `ctx audit`): a begin with no end, an end with no begin, an id twice, two regions of one namespace without an id, a namespace outside the table, a region inside another, a heading both inside a region and outside it. Since v4.0.0 the write gate asks before a Write or an Edit that changes a region of a note in a vault (`hooks/hooks.json`, `scripts/write_gate.py`).
+
+**What the plugin keeps in your layer (since v4.0.0, `ctx vault normalize` — `context-protocol.md` §5s).** Only with your code, a snapshot and `ctx undo`:
+- **Hubs.** A note with no link either way is listed in the region `ctx:hub-<type>` (the type in the letters an id takes, else with a short hash) of the hub of its type: the `type: moc` note that already links most notes of that type, else a new `_MOC/<type> — хаб.md` (`type: moc`; the type in the letters a file name takes — no folder separators or leading dots — and ` (ctx)` added when the name is taken). The hub keeps what it listed; a note gone leaves it; a People note is never listed.
+- **«Пов'язане».** The region `ctx:related` at a note's end: `**Пов'язане**` and a list of links — the work card of a Jira key the note mentions, a participant's person card the registry knows by an e-mail, an alias or a link. A note with a `related` region of your own scripts gets none.
+- **`_System/AGENTS.md`** of the plugin folder — the rules for an agent that writes in this vault, in the region `ctx:agents` (the regions and their registry, the core folders not to write into, unique names, the required fields, TYPE_FOLDER_MAP); the text outside the region is yours. The AGENTS.md at the vault's root is never touched.
+- **Bases.** `<folder>/<name>.base` for a TYPE_FOLDER_MAP folder with 5 notes or more — never a People folder: an Obsidian Bases table (Obsidian 1.9+) of the folder — `file.name`, `type`, `created`, `status`, sorted by `created`. Its first line `# ctx:generated — …` says the plugin rewrites it; a `.base` without that line is yours and stays.
+- **Links and fields.** A link Obsidian could open two ways becomes `[[<path>|<as written>]]` (`\|` on a table line); a missing `type` or `created` is added when the folder or a date says it. A value already there is never changed and a key never removed; a file is never renamed.
+
+**Layers.** TYPE_FOLDER_MAP folders are the user's layer — the only place skills write. A folder registered as a shared-context provider's local copy is read-only except for the paths the provider declares as the user's overlay (`context-provider-protocol.md` §7).
+
+---
+
+## Tag Taxonomy (Hierarchical)
+
+Tags use hierarchical naming (parent/child) to enable filtering and organization. All tags are lowercase with hyphens for multi-word tags.
+
+### funnel/ — Customer Journey Map Stages
+
+Tags for CJM stage classification:
+- `funnel/awareness` — Awareness stage
+- `funnel/consideration` — Consideration stage
+- `funnel/checkout` — Checkout / conversion stage
+- `funnel/retention` — Retention and engagement
+- `funnel/referral` — Referral and advocacy
+
+### platform/ — Platform Identification
+
+Tags for platform-specific content:
+- `platform/android` — Android app
+- `platform/ios` — iOS app
+- `platform/web` — Web platform
+- `platform/admin` — Admin dashboard
+- `platform/cms` — CMS or content management
+
+### metric/ — Metric Categories
+
+Tags for metric type classification:
+- `metric/conversion` — Conversion rate metrics
+- `metric/retention` — Retention and churn metrics
+- `metric/revenue` — Revenue and monetization metrics
+- `metric/engagement` — User engagement metrics
+- `metric/acquisition` — User acquisition metrics
+
+### status/ — Hypothesis Statuses
+
+Tags for hypothesis lifecycle:
+- `status/proposed` — Newly proposed hypothesis
+- `status/testing` — Currently being tested
+- `status/validated` — Validated through testing
+- `status/rejected` — Rejected or disproven
+
+### impact/ — Impact Levels
+
+Tags for severity or impact classification:
+- `impact/high` — High impact
+- `impact/medium` — Medium impact
+- `impact/low` — Low impact
+
+### research/ — Research Types
+
+Tags for research methodology:
+- `research/competitive` — Competitive analysis
+- `research/market` — Market research
+- `research/ux` — UX research or usability testing
+- `research/user` — User interviews or feedback
+
+### phase/ — Project Phases
+
+Tags for project lifecycle:
+- `phase/discovery` — Discovery and research phase
+- `phase/design` — Design and ideation phase
+- `phase/development` — Development and implementation
+- `phase/testing` — Testing and QA phase
+- `phase/launched` — Launched to production
+
+---
+
+## Folder Structure
+
+Complete folder structure for `{Vault}/{PluginFolder}/`:
+
+```
+{Vault}/
+├── _MOC/                              # Maps of Content (auto-generated indexes)
+│   ├── Dashboard.md
+│   ├── Products/
+│   │   ├── {ProductName}.md
+│   │   └── {ProductName}.md
+│   ├── Timeline.md
+│   └── Tags.md
+│
+├── Research/                          # Competitive, market, and UX research
+│   ├── {product}/
+│   │   ├── competitive-analysis-*.md
+│   │   ├── market-research-*.md
+│   │   └── ux-benchmark-*.md
+│   └── general/
+│       ├── competitive-analysis-*.md
+│       ├── market-research-*.md
+│       └── ux-benchmark-*.md
+│
+├── CJM/                               # Customer Journey Map research
+│   ├── health-checks/
+│   │   └── {product}/
+│   │       └── cjm-health-check-*.md
+│   ├── anomalies/
+│   │   └── {product}/
+│   │       └── funnel-anomaly-*.md
+│   └── full-reports/
+│       └── {product}/
+│           └── cjm-analysis-*.md
+│
+├── Concepts/                          # Product concepts and PRDs
+│   └── {product}/
+│       └── concept-*.md              (draft status stays in frontmatter, not a folder)
+│
+├── Requirements/                      # Feature requirements
+│   └── {product}/
+│       └── requirements-*.md
+│
+├── Analysis/                          # Product analysis and metrics
+│   ├── metrics/
+│   │   └── {product}/
+│   │       └── metrics-review-*.md
+│   ├── ab-tests/
+│   │   └── {product}/
+│   │       └── ab-test-results-*.md
+│   └── post-release/
+│       └── {product}/
+│           └── post-release-*.md
+│
+├── Hypotheses/                        # Feature hypotheses and ideas
+│   ├── {product}/
+│   │   └── hypothesis-*.md           (archived status stays in frontmatter)
+│   └── backlog.md
+│       (Prioritized hypothesis backlog with links to hypothesis artifacts)
+│
+├── Meetings/                          # Meeting notes and summaries
+│   └── {product}/
+│       └── meeting-notes-*.md
+│
+├── Decisions/                         # Product and technical decisions
+│   ├── {product}/
+│   │   └── decision-*.md
+│   └── ADR/
+│       └── decision-*.md (Architecture Decision Records)
+│
+├── Debates/                           # Role-based debate sessions
+│   └── {product}/
+│       └── debate-*.md
+│
+├── Knowledge/                         # Knowledge library and sources
+│   ├── sources/
+│   │   └── {product}/
+│   │       └── knowledge-source-*.md
+│   ├── library.md
+│   │   (Index of all knowledge sources — created by knowledge-library)
+│   └── categories.md
+│       (Knowledge source categories and trust scores)
+│
+├── Projects/                          # Project overviews and tracking
+│   ├── {product}/
+│   │   └── project-overview-*.md
+│   └── task-breakdowns/
+│       └── {product}/
+│           └── task-breakdown-*.md
+│
+├── Reports/                           # Operational reports
+│   └── ops/
+│       └── {product}/
+│           └── ops-report-*.md
+│
+├── Roadmaps/                          # Planning suite output (subtype in frontmatter)
+│   └── {product}/
+│       └── roadmap-*.md
+│
+├── Focus/                             # focus-advisor briefs
+│   └── {product}/
+│       └── focus-brief-*.md
+│
+├── Diagrams/                          # diagram-prototyper output
+│   └── {product}/
+│       └── diagram-*.md
+│
+├── Presentations/                     # design-bridge decks
+│   └── {product}/
+│       └── presentation-*.md
+│
+├── Prototypes/                        # design-bridge prototypes
+│   └── {product}/
+│       └── prototype-*.md
+│
+├── Handoffs/                          # design-bridge dev handoffs
+│   └── {product}/
+│       └── handoff-*.md
+│
+├── Hiring/                            # hiring-designer vacancy profiles
+│   └── {product}/
+│       └── vacancy-profile-*.md
+│
+├── People/                            # HIGHEST-SENSITIVITY — local/vault only, never published
+│   ├── _roster.md                     (one line per person → [[People/<slug>]])
+│   ├── <slug>.md                      (person profile — type: people, Step P)
+│   ├── goals/                         # keyed by PERSON, not product — see Path composition
+│   │   └── {person}/
+│   │       └── goal-letter-*.md
+│   ├── reports/
+│   │   └── {person}/
+│   │       └── report-3t5f-*.md
+│   ├── 1-1/
+│   │   └── {person}/
+│   │       └── one-on-one-notes-*.md
+│   ├── reviews/
+│   │   └── {person}/
+│   │       └── performance-review-*.md
+│   ├── offboarding/
+│   │   └── {person}/
+│   │       └── offboarding-plan-*.md
+│   └── delegation/
+│       └── {person}/
+│           └── delegation-audit-*.md
+│
+└── Templates/                         # template-library storage (see template-protocol.md)
+    ├── _registry.json                 (template registry — the resolution index)
+    ├── _partials/
+    ├── _System/
+    ├── _archive/
+    ├── user-global/
+    │   └── {artifact_type}/
+    └── {product}/
+        └── {artifact_type}/
+```
+
+> **Folder order mirrors TYPE_FOLDER_MAP.** Where the map carries a subfolder (`CJM/full-reports/`, `Analysis/ab-tests/`, `Reports/ops/`), the product is the level **below** it — never above. Lifecycle status (`draft`, `archived`, `superseded`) lives in frontmatter and is filtered by search; it is not a folder.
+
+---
+
+## Naming Convention
+
+All artifact files follow a consistent naming pattern to support automated organization and deduplication.
+
+### File Naming Format
+
+```
+{type}-{topic-slug}-{YYYY-MM-DD}.md
+```
+
+- **type**: Artifact type from Type Taxonomy (e.g., hypothesis, ab-test-results)
+- **topic-slug**: Lowercase, hyphens for spaces, max 50 characters (e.g., checkout-flow, mobile-retention)
+- **YYYY-MM-DD**: Creation date (e.g., 2026-04-14)
+- **Duplicate handling**: If filename exists, append -2, -3, etc. (e.g., `hypothesis-checkout-flow-2026-04-14-2.md`)
+
+### Naming Examples by Type
+
+| Type | Example | Description |
+|------|---------|-------------|
+| hypothesis | `hypothesis-guest-checkout-flow-2026-04-14.md` | Feature hypothesis with descriptive topic |
+| ab-test-results | `ab-test-results-checkout-mobile-upsell-2026-04-14.md` | Test results with variant names |
+| decision | `decision-postgres-vs-mongodb-2026-04-14.md` | Decision with clear topic/choice |
+| debate | `debate-express-delivery-badge-2026-07-16.md` | Debate question topic |
+| cjm-health-check | `cjm-health-check-q1-2026-summary-2026-04-14.md` | Health check with period |
+| meeting-notes | `meeting-notes-sprint-planning-2026-04-14.md` | Meeting type and date |
+| metrics-review | `metrics-review-march-2026-mobile-app-2026-04-14.md` | Period and platform/product |
+| concept | `concept-one-click-checkout-2026-04-14.md` | Feature or area being conceptualized |
+| requirements | `requirements-one-click-checkout-phase-2-2026-04-14.md` | Feature and phase |
+| competitive-analysis | `competitive-analysis-stripe-checkout-ux-2026-04-14.md` | Competitor and area analyzed |
+| market-research | `market-research-buy-now-pay-later-market-2026-04-14.md` | Market segment or topic |
+| ux-benchmark | `ux-benchmark-mobile-payment-flows-2026-04-14.md` | Area benchmarked |
+| walkthrough | `walkthrough-write-review-iphone-on-mac-2026-09-10.md` | Scenario and surface walked |
+| landscape | `landscape-shopping-apps-xx-2026-09-11.md` | Category and market mapped |
+| post-release | `post-release-guest-checkout-impact-2026-04-14.md` | Feature and impact focus |
+| knowledge-source | `knowledge-source-stripe-api-docs-2026-04-14.md` | Source name or topic |
+| funnel-anomaly | `funnel-anomaly-checkout-mobile-drop-2026-04-14.md` | Stage and anomaly description |
+| project-overview | `project-overview-checkout-modernization-2026-04-14.md` | Project name/goal |
+| cjm-analysis | `cjm-analysis-full-funnel-q1-2026-2026-04-14.md` | Scope and period |
+
+---
+
+## Frontmatter Parsing Rules
+
+The Grow Product Manager Plugin must handle frontmatter parsing robustly to support user customization and evolution of the schema.
+
+### Parsing Strategy
+
+1. **Tolerant Parsing**: Missing fields → use defaults, don't error
+   - If a required field is missing, use a sensible default value
+   - Missing optional fields are simply left empty
+   - Plugin should not fail due to schema drift
+
+2. **Unknown Fields**: Ignore (user may add custom fields)
+   - Any fields not in the standard schema are preserved but ignored by automation
+   - Users can add custom metadata without breaking the plugin
+   - Custom fields may be useful for future extensions
+
+3. **Date Formats**: Accept both YYYY-MM-DD and YYYY-MM-DDTHH:MM:SS
+   - ISO 8601 date format preferred: YYYY-MM-DD
+   - ISO 8601 datetime format also accepted: YYYY-MM-DDTHH:MM:SS
+   - Both UTC and with timezone offset accepted
+
+4. **Wikilinks in Frontmatter**: Always quoted "[[path]]"
+   - Wikilinks in YAML must be quoted to avoid YAML parsing errors
+   - Format: `related: ["[[path/to/artifact1]]", "[[path/to/artifact2]]"]`
+   - Format: `parent: "[[path/to/parent]]"`
+
+5. **Tags**: Always YAML list [tag1, tag2, ...]
+   - Tags must be a YAML array, never a single string
+   - Format: `tags: [funnel/checkout, platform/web, impact/high]`
+
+6. **Empty Collections**: Use []
+   - Empty lists should be represented as `[]`, not null
+   - Format: `related: []`
+   - Format: `children: []`
+
+7. **Null Values**: Treat as unset
+   - If a field is explicitly set to null, treat it as not provided
+   - Plugin should use defaults for null fields
+   - Null values should not trigger errors
+
+### Example Frontmatter with Parsing Rules Applied
+
+```yaml
+---
+type: hypothesis
+product: mobile-app
+created: 2026-04-14
+skill: brainstorm-features
+skill_version: 1.2.3
+tags: [funnel/checkout, platform/mobile, impact/high]
+category: conversion-optimization
+platform: [ios, android]
+related: ["[[Analysis/metrics/mobile-app/metrics-review-q1-2026-2026-04-14.md]]"]
+parent: "[[Projects/mobile-checkout-modernization/project-overview.md]]"
+children: []
+status: active
+confidence: 0.75
+last_reviewed: 2026-04-14
+source_session: abc123def456
+ice_score: 78
+ice_impact: 8
+ice_confidence: 0.8
+ice_ease: 6
+funnel_stage: checkout
+hypothesis_status: testing
+validated_by: sarah@company.com
+custom_field: any-value
+---
+```
+
+---
+
+## Template Files
+
+> **Removed in v2.1.1.** This section documented seven flat master template files
+> (research.md, concept.md, …) with a `[placeholder]` + HTML-comment convention —
+> the pre-v2.0 template system that `references/template-protocol.md` replaced with the
+> `templates/built-in/` tree, `builtin://` resolution and Handlebars variables.
+> `vault-protocol.md` → `vault_init` already forbids writing those files, so this
+> section described a layout the plugin must not create, in a document declared the
+> single source of truth for vault layout.
+>
+> Templates live in `{storage_root}/Templates/` and are owned by `template-library`.
+> For the artifact frontmatter each type needs, see **Frontmatter Standard** above.
+
+## MOC Templates
+
+Maps of Content (MOCs) are auto-generated index pages that help navigate the vault. Two primary MOC templates are provided.
+
+### Dashboard.md Template
+
+The main navigation and overview page for the vault.
+
+```markdown
+---
+type: moc
+product: general
+created: YYYY-MM-DD
+status: active
+---
+
+# Product Manager Vault — Dashboard
+
+Welcome to your Grow Product Manager Plugin vault. This dashboard provides navigation to all artifacts across research, strategy, analysis, and decisions.
+
+## Quick Navigation
+
+- **[Products](#products)** — Product-specific overviews and artifacts
+- **[Research](#research)** — Competitive analysis, market research, UX studies
+- **[Strategy & Concepts](#strategy--concepts)** — Product concepts and PRDs
+- **[Analysis](#analysis)** — Metrics, A/B tests, post-release analysis
+- **[Decisions](#decisions)** — Key product and technical decisions
+- **[Meetings](#meetings)** — Meeting notes and summaries
+- **[Projects](#projects)** — Active projects and initiatives
+- **[Knowledge Library](#knowledge-library)** — Curated external sources
+- **[Hypotheses](#hypotheses)** — Feature ideas and hypotheses (prioritized backlog)
+
+## Products
+
+Overview of artifacts organized by product:
+
+### [[_MOC/Products/mobile-app]]
+Latest artifacts: [Recent research], [Recent concepts], [Recent analyses]
+
+### [[_MOC/Products/web]]
+Latest artifacts: [Recent research], [Recent concepts], [Recent analyses]
+
+### [[_MOC/Products/general]]
+Cross-product research and strategy
+
+---
+
+## Research
+
+Latest research across competitive, market, and UX dimensions.
+
+### Competitive Analysis
+- [[Research/mobile-app/competitive-analysis-stripe-checkout-2026-04-14]]
+- [[Research/mobile-app/competitive-analysis-square-checkout-2026-04-10]]
+
+### Market Research
+- [[Research/mobile-app/market-research-bnpl-market-2026-04-12]]
+
+### UX Benchmarks
+- [[Research/mobile-app/ux-benchmark-mobile-checkout-2026-04-08]]
+
+---
+
+## Strategy & Concepts
+
+Product concepts and strategic initiatives.
+
+### Active Concepts
+- [[Concepts/mobile-app/concept-one-click-checkout-2026-04-14]]
+- [[Concepts/web/concept-guest-checkout-2026-04-10]]
+
+---
+
+## Analysis
+
+Metrics, tests, and post-release analysis.
+
+### Recent Metrics Reviews
+- [[Analysis/metrics/mobile-app/metrics-review-march-2026-2026-04-14]]
+
+### A/B Test Results
+- [[Analysis/ab-tests/web/ab-test-results-checkout-mobile-2026-04-08]]
+
+### Post-Release Analysis
+- [[Analysis/post-release/web/post-release-guest-checkout-2026-04-10]]
+
+---
+
+## CJM & Anomalies
+
+Customer Journey Map health and anomaly tracking.
+
+### Latest Health Checks
+- [[CJM/health-checks/mobile-app/cjm-health-check-q1-2026-summary-2026-04-14]]
+- [[CJM/health-checks/web/cjm-health-check-q1-2026-summary-2026-04-12]]
+
+### Critical Anomalies
+- [[CJM/anomalies/mobile-app/funnel-anomaly-checkout-mobile-drop-2026-04-14]]
+
+---
+
+## Decisions
+
+Key product and technical decisions.
+
+### Recent Decisions
+- [[Decisions/mobile-app/decision-postgres-vs-mongodb-2026-04-10]]
+- [[Decisions/mobile-app/decision-feature-flag-strategy-2026-04-08]]
+
+---
+
+## Meetings
+
+Recent meeting notes and summaries.
+
+### Latest Meetings
+- [[Meetings/mobile-app/meeting-notes-sprint-planning-2026-04-14]]
+- [[Meetings/mobile-app/meeting-notes-stakeholder-update-2026-04-12]]
+
+---
+
+## Projects
+
+Active projects and initiatives.
+
+### Current Projects
+- [[Projects/checkout-modernization/project-overview]]
+- [[Projects/mobile-app-redesign/project-overview]]
+
+---
+
+## Knowledge Library
+
+Curated external knowledge sources organized by category.
+
+- **[Research & Studies](Knowledge/categories#research--studies)**
+- **[Product Strategy](Knowledge/categories#product-strategy)**
+- **[UX & Design](Knowledge/categories#ux--design)**
+- **[Analytics & Metrics](Knowledge/categories#analytics--metrics)**
+- **[Payment Systems](Knowledge/categories#payment-systems)**
+
+**[View All Sources →](Knowledge/library.md)**
+
+---
+
+## Hypotheses
+
+Feature ideas and hypotheses organized by funnel stage. See full prioritized backlog: [[Hypotheses/backlog]]
+
+### High ICE Score (Ready to Test)
+- [[Hypotheses/mobile-app/hypothesis-guest-checkout-2026-04-14]] (ICE: 78)
+- [[Hypotheses/web/hypothesis-simplified-shipping-2026-04-12]] (ICE: 72)
+
+### Medium Priority
+- [[Hypotheses/mobile-app/hypothesis-one-click-checkout-2026-04-10]] (ICE: 65)
+
+### Archive
+- [[Hypotheses/mobile-app/hypothesis-saved-payment-methods-2026-03-15]] (status: archived)
+
+---
+
+## Timeline
+
+Key milestones and upcoming events.
+
+- **Q1 2026 Review** — [[_MOC/Timeline#q1-2026]]
+- **Q2 2026 Planning** — [[_MOC/Timeline#q2-2026]]
+
+---
+
+## Tags
+
+Browse all artifacts by tag.
+
+[[_MOC/Tags]]
+
+---
+
+## Recent Updates
+
+Latest artifacts created or modified:
+- 2026-04-14 — [[Hypotheses/mobile-app/hypothesis-guest-checkout-2026-04-14]]
+- 2026-04-14 — [[Analysis/metrics/mobile-app/metrics-review-march-2026-2026-04-14]]
+- 2026-04-12 — [[CJM/health-checks/web/cjm-health-check-q1-2026-summary-2026-04-12]]
+
+```
+
+### Product MOC Template
+
+A template for per-product overview and navigation.
+
+```markdown
+---
+type: moc
+product: {ProductName}
+created: YYYY-MM-DD
+status: active
+---
+
+# {ProductName} — Overview
+
+Complete view of all artifacts for {ProductName}, including research, strategy, analysis, and decisions.
+
+## Product Overview
+
+**Product Name:** {ProductName}
+**Status:** [Active | Paused | Beta]
+**Team:** [Team names]
+**Last Updated:** YYYY-MM-DD
+
+---
+
+## Research
+
+Research specific to {ProductName}:
+
+### Competitive Analysis
+- [[Research/{ProductName}/competitive-analysis-...]]
+
+### Market Research
+- [[Research/{ProductName}/market-research-...]]
+
+### UX Benchmarks
+- [[Research/{ProductName}/ux-benchmark-...]]
+
+---
+
+## Strategy & Concepts
+
+Product concepts and PRDs:
+
+### Active Concepts
+- [[Concepts/{ProductName}/concept-...]]
+
+### Concept Backlog
+- [[Concepts/{ProductName}/concept-... (draft status)]]
+
+---
+
+## Customer Journey
+
+CJM analysis and health:
+
+### Full CJM Analysis
+- [[CJM/full-reports/{ProductName}/cjm-analysis-...]]
+
+### Funnel Health Checks
+- [[CJM/health-checks/{ProductName}/cjm-health-check-...]]
+
+### Detected Anomalies
+- [[CJM/anomalies/{ProductName}/funnel-anomaly-...]]
+
+---
+
+## Feature Requirements
+
+Feature specifications ready for development:
+
+- [[Requirements/{ProductName}/requirements-...]]
+
+---
+
+## Analysis & Insights
+
+Metrics, tests, and post-launch analysis:
+
+### Metrics Reviews
+- [[Analysis/metrics/{ProductName}/metrics-review-...]]
+
+### A/B Test Results
+- [[Analysis/ab-tests/{ProductName}/ab-test-results-...]]
+
+### Post-Release Analysis
+- [[Analysis/post-release/{ProductName}/post-release-...]]
+
+---
+
+## Hypotheses & Ideas
+
+Feature hypotheses organized by priority:
+
+### High Priority (ICE > 70)
+- [[Hypotheses/{ProductName}/hypothesis-... (ICE: XX)]]
+
+### Medium Priority (ICE 50-70)
+- [[Hypotheses/{ProductName}/hypothesis-... (ICE: XX)]]
+
+### Backlog & Archive
+- [[Hypotheses/{ProductName}/hypothesis-... (draft status)]]
+- [[Hypotheses/{ProductName}/hypothesis-...]] (status: archived)
+
+---
+
+## Decisions
+
+Key decisions affecting {ProductName}:
+
+### Product Decisions
+- [[Decisions/{ProductName}/decision-...]]
+
+### Technical Decisions
+- [[Decisions/ADR/decision-...]]
+
+---
+
+## Meetings
+
+Meeting notes related to {ProductName}:
+
+- [[Meetings/meeting-notes-...]]
+
+---
+
+## Key Metrics
+
+Latest performance data for {ProductName}:
+
+| Metric | Value | Trend | Target |
+|--------|-------|-------|--------|
+| Conversion Rate | X.X% | ↑ | X% |
+| Retention Rate | X% | → | X% |
+| Revenue per User | $X.XX | ↓ | $X.XX |
+
+---
+
+## Upcoming Initiatives
+
+Planned work for {ProductName}:
+
+- [[Projects/{project-name}/project-overview]]
+
+---
+
+## Related Products
+
+- [[_MOC/Products/{RelatedProductName}]]
+
+```
+
+---
+
+## Summary
+
+The Vault Schema defines a consistent, extensible structure for storing and organizing product artifacts in an Obsidian Vault. It includes:
+
+- **Frontmatter Standard** — Base and type-specific fields for classification, relations, and lifecycle management
+- **Type Taxonomy** — 37 artifact types mapped to skills, folders, and purposes
+- **Tag Taxonomy** — Hierarchical tags for funnel, platform, metric, status, impact, research, and phase classification
+- **Folder Structure** — Complete directory organization for {Vault}/{PluginFolder}/
+- **Naming Convention** — Consistent {type}-{topic-slug}-{YYYY-MM-DD}.md pattern
+- **Parsing Rules** — Tolerant parsing strategy for robustness and extensibility
+- **Templates** — 7 complete artifact templates + MOC navigation templates
+
+This schema is **referenced by `vault-protocol.md`** and enables automated indexing, filtering, linking, and publication of product artifacts across teams and systems.

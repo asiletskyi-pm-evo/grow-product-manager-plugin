@@ -17,6 +17,10 @@ Run it before every push of a branch (release-manager Step 1). Stdlib + git only
 """
 import argparse, os, re, subprocess, sys
 
+# The registry copy (testing/registry_copy.py) is a byte copy of files this scan reads at
+# their own path; rebuilt, it re-adds lines already on main (old CHANGELOG entries among them).
+COPIES = (".ai-registry/",)
+
 
 def tokens_rx(path):
     if not os.path.isfile(path):
@@ -50,6 +54,8 @@ def main():
     for line in git("diff", "--unified=0", "--no-color", "%s...HEAD" % a.base).split("\n"):
         if line.startswith("+++ "):
             cur = line[6:] if line.startswith("+++ b/") else line[4:]
+        elif cur and cur.startswith(COPIES):
+            continue
         elif line.startswith("+") and not line.startswith("+++"):
             m = rx.search(line)
             if m:

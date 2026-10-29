@@ -1,0 +1,113 @@
+---
+name: context-connect
+version: 0.8.0
+description: Shared team core — connect, refresh bundle, daily sync, add MCP provider, enrich your context. Not your Obsidian vault or plugin setup (plugin-configurator), not curated sources (knowledge-library). UA — «онови мій пакет з ядра», «підключи мене до спільного контексту», «збагати мій контекст блоками ядра». EN — "refresh my bundle", "connect me to the team vault".
+---
+
+# Context Connect
+
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
+Connects the user's own context to a **shared-context provider** — a team's or an organisation's core knowledge — so that within ten minutes the user has the part of the core that is relevant to their team and role, the core's context blocks proposed into their `local-context.md`, a focus note, and a provider registration every other skill can search. Works for any provider that follows `references/context-provider-protocol.md`; everything provider-specific (folders, labels, note templates, what is personal) comes from the provider's manifest.
+
+This is a model of **relevance, not security**: never promise that the bundle "hides" anything from the user.
+
+## Prerequisites
+- `references/local-context-protocol.md` — Step 0; the `GROW_PM_SESSION` digest's `providers:` and `bundle:` lines say what is already connected.
+- `references/context-provider-protocol.md` — contract `vault/v1`, the provider manifest (§3a), the registration (§3b), the `### Vault Search MCP` declaration (§3c), the write boundary (§7), the provider kit (§9).
+- `references/context-protocol.md` §5f — the slots, the cascade and `ctx explain` (a refresh with a store ends with Step 4a).
+- `references/persistent-storage.md` — backups before `local-context.md` is written (last 5 kept).
+- `references/data-policy.md` — provider content is internal data.
+- `references/connect-steps.md` (skill-local) — the full procedure with every command; `references/focus-interview.md` (skill-local) — the five-question interview.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
+
+The connect run has no judgment points: it copies, proposes and records what the user confirms.
+
+## Three rules about the user's context
+
+1. **The context is the user's.** The skill never generates `local-context.md` "from the core" and never overwrites it. The core supplies **blocks** between markers (`<!-- <namespace>:begin id=… -->`); a refresh updates only those. With a context store the user's edits inside a block are kept, and a block the core changed too is a question.
+2. **A discrepancy is a question, not an edit.** A different e-mail, product, Jira project or team name in the user's context goes to the merge report; the skill asks, and only the answer decides: keep the user's value, take the core's (the core is fixed by its owner), or record an alias. The user's context is presumed right.
+3. **Backup before writing, changelog after.** Before the proposal replaces `local-context.md`, the old file is copied to `~/.grow-pm/backups/`; the proposal already ends with a `Section | Was | Became` table. With a context store the snapshot `ctx` takes before it writes is the backup (`ctx undo`), the plan is the changelog, and a refresh adds no table.
+
+## Modes
+
+| Mode | Trigger | What happens |
+|---|---|---|
+| **Connect** | first connection to a provider | Steps 0–6; with a context store the blocks go in through `ctx provider apply` and `adopt` (Step 4) |
+| **Refresh** | «онови мій пакет з ядра» / "refresh my bundle"; a newer core version; the digest marks the provider stale | Steps 0, 3, 4, 6 — the same run without `--force`: new files added, the user's notes kept. With a store: `ctx provider plan` → one message about `⚠`, `+`, `?` rows only → `ctx provider apply` (Step 4), then the slots (Step 4a: bindings to confirm, divergences, blocks switched off); without: the blocks proposed again (usually one confirmation) |
+| **Enrich** | only the context blocks, no bundle | Steps 0, 3 (`--propose-only` with the user's context), 4 |
+| **Daily sync** | «увімкни щоденний синк ядра», «вимкни синк ядра» / "turn on the daily core sync"; also the last question of Connect and Refresh | Step 6 item 2 only, with a store: to switch on, every `?` settled first, then the one question; to switch off, nothing to settle or ask; `sync: daily` or `sync: off` in the registration |
+| **Register an MCP provider** | a provider reachable only as an MCP server (no folder) | Step 0, then `references/connect-steps.md` §7 — and, since v3.24.0, the offer of the plugin's own copy of the core (§7 items 5–6) |
+| **Overlay** (since v3.23.0) | «перенеси мої поправки до ядра», «мої поправки до ядра», a held correction (✋ in `ctx health`); also the end of Refresh when the user keeps a prose «поправки до ядра» note | with a store: `references/connect-steps.md` §8 — the note drafted into operations, `ctx overlay plan --file` → the report → one «так» → `ctx overlay apply`; a held correction is one question (`references/context-protocol.md` §5n) |
+| **Local MCP of your vault** (since v4.0.0) | «підключи мій вейлт як MCP», «локальний MCP для Claude Desktop / Cowork», "serve my vault over MCP"; also offered once at the end of Connect on a host whose sessions often have no shell | `references/connect-steps.md` §10: `ctx serve --install` → the launcher and the lines for the client's config, which the user adds themselves |
+| **A kit in one command** (since v3.23.0) | a provider kit folder (`_System/provider-manifest.yaml` + `access-bundles.json`) and «підключи набір», with a store and no registration of it yet | `references/connect-steps.md` §9: `ctx repo add <folder> --email E` → the dry run in one message → «так» → `--apply --code`; then the daily-sync question (Step 6 item 2) |
+
+## Step 0 — where things are
+Run Step 0-host and Step 0. Then locate: (a) the **provider** — a connected folder holding `_System/provider-manifest.yaml` (at its root or one level down), or the digest's `providers:` line, or a server in the session exposing `vault_search` and `vault_get_note`; (b) the **target** — the provider folder itself (in-place) when it has no bundle manifest yet, since the user unpacked the core as their copy; a separate folder only when the user names one; a bundle manifest means refresh — never ask where the bundle goes; (c) the **user's context** — the digest path. No provider found → say that the core folder (or its server) is not connected, name how to connect it, and stop. Details and the two placements (a separate folder vs a folder nested in the user's vault, with its link-collision warning): `references/connect-steps.md` §0.
+
+## Step 1 — e-mail → team → role (dry run)
+Take the e-mail from the host account, else from the User Profile (`Work Email`, then `Email`); ask only when neither exists. Run the bundle builder in dry-run mode (`references/connect-steps.md` §1) and say in one sentence: "I see you as `<role>` in team `<title>`; the bundle is N files (pages M). Correct?" When the line says the inferred role is not in the role model, name the profile used and offer another. On a Refresh with a store, also `ctx identity check <repo> --bundle <the JSON>` (`references/connect-steps.md` §1): a team or a role that differs from yours is said with both sources and answered with `ctx identity keep|take` — never asked again until the core says something else. `UNKNOWN_TEAM` → the provider's directory (its `directory_label`), else one question with the teams and roles from the role model; then repeat with `--team` / `--role`.
+
+## Step 2 — Jira write scope (ask, never guess)
+One question: "Do you have your own Jira project where you create tasks yourself?" — yes, the key on the team card · yes, another key · no, read only. The answer becomes `--jira-write own|none` and the `jira_write_scope` line of the team block; plugin skills write to Jira only inside that project, through the write gate.
+
+## Step 3 — bundle and proposal
+Run the builder for real (`references/connect-steps.md` §3): it copies the bundle (in-place: copies nothing), writes the user's focus and to-do notes when absent, and prepares the proposal in `<target>/<plugin_folder>/_System/` — or, when the target is a core that syncs back to others, in a private folder passed as `--proposal-dir`, because the proposal holds the user's whole context: `local-context.proposed.md`, `context-merge-report.md`, `team-context.md`, `provider-registration.proposed.yaml`. Its `CONTEXT_REPORT` line says what was added, updated, kept as reference only, and every discrepancy. Exit 3 (the core, its manifest or role model cannot be used) or exit 4 (a provider block matches a deny pattern, or nested markers) → nothing was written; show the builder's one line — it names the file, key or block — and stop. With a context store the proposal's `local-context.proposed.md` is not applied (Step 4); the registration it proposes is `provider-registration/2`, the one `ctx provider` reads.
+
+## Step 4 — discrepancies → questions → apply
+1. One question per discrepancy (keep mine · take the core's · same thing, add an alias); batch them in one message when the host allows.
+2. Show in five lines what will change: blocks added and updated, and — without a store — the provider entry and the changelog.
+3. **With a context store** (the digest's `context: records …` line, SHELL available; `references/connect-steps.md` §4a): the provider is registered first (Step 6.1), then the blocks go in through `ctx`. **Refresh:** `ctx provider plan <repo>` → **one** message asking only about `⚠`, `+` and `?` rows, the recommended answer first (`⚠` mine · `+` add · `?` theirs, mine when the core removed the block) → `ctx provider apply <repo> --choose … --add …`. The `~` and `−` rows are never asked, in either case; with no `⚠`, `+` or `?` row the order is the plan in one line → `apply` → the report. **Connect:** after "yes", `ctx provider apply <repo> --add <blocks>`, then `ctx provider adopt <repo> --apply`. One `--choose` takes several answers (`--choose okr=theirs teams=mine`), one `--add` several blocks, and the repository goes first (`references/connect-steps.md` §4a). Exit 5 → the repository is unavailable (unreachable, or its blocks file is empty, cut or another repository's) and nothing changed — say so. A refresh through the store never stamps `Updated:`, never appends a `### Changelog — <ns>` table and never rewrites the `### Vault Search MCP` bullet.
+4. **Without a store**, after "yes": backup, copy the proposal over `~/.grow-pm/local-context.md`, refresh the vault mirror if one exists (`references/connect-steps.md` §4b). When the shell cannot reach `~/.grow-pm/`, give the user the one command to run.
+5. A new context (none existed) → after copying, recommend `plugin-configurator` Validate / Update — never start it yourself.
+
+## Step 4a — slots after a refresh (with a store, since v3.15.0)
+After the blocks are settled (Step 4 item 3), run `python3 "<plugin root>/scripts/ctx.py" validate` and read its slot lines and `CTX_RESULT.slot_proposals`; the commands and the screens are in `references/connect-steps.md` §4c. A slot is the place in a record where an answer lives (`references/context-protocol.md` §5f); a block of the core answers one only when it is **bound**; this skill binds only what the user confirms (`ctx slot bind`) — the publisher's `slot=` and the plugin's own `team#Members` bind without a yes. Three things, each as **one** message per refresh, in `user.language`, the recommended answer first — except a divergence, which recommends no side:
+1. **Bindings to confirm** — every `proposal: ctx slot bind <repo> <block>[#<sub>] <slot>` line as one package: for each block, the slot and what it holds. A yes runs `ctx slot bind …` for each confirmed proposal; what is declined comes back at the next refresh.
+2. **Divergences** — every `slot <slot> diverges between <a>, <b>` line as one screen: for each slot the two texts with their repositories. Show the texts with their sources and the day each was last checked, and recommend nothing. The answer is `ctx slot decide <slot> <repo>`, remembered until a repository publishes a new text; «not now» leaves both texts shown to every skill, named.
+3. **Blocks the user switched off** (`skip_blocks`) that now have a slot — offered at a refresh, in one message (a no is offered again at the next refresh), saying plainly that the user's own text still wins and the core's shows as a «також» line and in `ctx explain`. A yes **for a block** binds it (`ctx slot bind`), takes that one id out of the registration's `skip_blocks` (the second exception of `references/context-provider-protocol.md` §3b) and adds it as the `+` row it now is; a no changes nothing.
+A `slot binding:` warning (a binding that does nothing, a block that cannot be given to one team) is said in one line and not asked. A line that says a registration, the slots memory or a block state was not read ends the step: ranks, rules or decisions are unknown, and an answer now would rest on them.
+
+## Step 5 — focus note (five questions, one at a time)
+`references/focus-interview.md`. Write each answer into the focus note right away; link every mission the user names to the provider's mission cards; never invent one.
+
+## Step 6 — register and finish
+1. No registration yet → write it from the proposed file to `{vault}/{plugin_folder}/_System/providers/<id>.yaml` (no vault: `~/.grow-pm/providers/`), with the provider root as the user's machine sees it (and the mounted path too in a hosted session); with a store, a first connection writes it before the blocks go in (Step 4). A registration already there is the user's and a Refresh keeps it: only `synced_at` and `source_version` are updated, plus any v2 key the file lacks (a nested one too) — a key that is present is never changed, except `sync` (item 2) and the removal of one id from `skip_blocks` on the user's yes for that block (Step 4a); `endpoint.headers_env`, `products`, `blocks_source`, `home_record` and `status: paused` are the user's: the proposal lacks some and carries a default for the others. A v1 file gets only the two dates. A core-derived key that is present and differs from the proposal (`core_root`, `namespace`, `blocks_file`, `paths`, `endpoint.url`, `endpoint.root`, `rank`) is kept and reported, one line per key, with the replacement offered on a yes; an exit 5 points to it when the core moved. Replacing the whole file by the proposal needs the user's explicit "yes", after the differences are shown (`references/connect-steps.md` §6).
+2. **Turn on the daily sync** (with a store and SHELL; a registration that publishes blocks, is not paused and does not yet say `sync: daily` or `sync: off`; an explicit request to turn it on or off comes here whatever the key says, and turning it off needs no `?` settling and no question — write `sync: off`). **Settle every `?` first** — `ctx provider plan <repo>`, one message about each `?` row as in Step 4, apply, read the plan again; the sync leaves a `?` waiting (unless the block is a core rule), so none may be left. Then the one question, in `user.language`, saying plainly what the sync will do without asking — the facts and the answers are in `references/connect-steps.md` §6 item 2, the rules in `references/context-provider-protocol.md` §12.11 — yes writes `sync: daily`, no writes `sync: off`. The key is changed only on the user's own yes (`references/connect-steps.md` §6 item 2), never by a refresh.
+3. Three entry points in three lines: the provider's dashboard → its rules (`playbook`) → the focus note. One test question answered from the graph through `context-navigator`.
+4. E-mail missing from the provider's registry, or team members missing → one line per person for the provider's owner (`owner_label`): e-mail · name · team · role. Only the owner writes into the core.
+5. The provider's `people_resolver`, when declared: check that the user's e-mail resolves to a registry card.
+
+## What is forbidden
+- Writing into the provider's core or the provider's copy outside its `writable` paths (`references/context-provider-protocol.md` §7).
+- Overwriting the user's `local-context.md`, focus note or to-do note without an explicit "yes" after the changes are shown. The one exception names `local-context.md` only: a `ctx provider apply` run after its plan was shown is snapshot-backed (`ctx undo` takes it back), so a Refresh with no `⚠`, `+` or `?` row applies the `~` and `−` rows and reports them in one message; the focus note, the to-do note and everything else keep the "yes".
+- Copying the owner's personal layer, even when asked for "everything".
+- Inventing a team, a role or a mission; editing the provider's role model or blocks (only the owner's generators do that).
+- Writing an MCP server into the host's configuration — show the entry; the user adds it.
+- Writing `sync: daily` (or changing the `sync` key) without the user's own yes, switching the daily sync on while a `?` row waits, or asking the sync question again after an answer.
+- Binding a block to a slot, deciding a divergence or taking an id out of `skip_blocks` without the user's own yes for that block or slot, taking out an id on a yes meant for another, adding an id to `skip_blocks` in Step 4a (the first connection does add the ids the user declined, `references/context-provider-protocol.md` §3b), or changing anything else of the registration while doing it.
+
+## Quality Standards
+- One sentence per finding, in `user.language`; paths and field names only when the user must act on them.
+- Every question offers the recommended answer first (a divergence between repositories is the exception: both texts with their sources and dates, no side recommended).
+- The proposal, the report and the registration always exist before anything is applied.
+- Refresh never re-asks a discrepancy the user already answered with "keep mine" unless the core changed that field again.
+- With a store, the user is asked only about `⚠`, `+` and `?` rows, once; `=`, `~`, `✎`, `−`, `✂` and `·` are said in one line.
+- The daily sync is offered once per repository, after the blocks are settled, with the plain list of what it will do without asking; `no` is kept as `sync: off`.
+- Slots: bindings, divergences and switched-off blocks are each one message per refresh, never one question per block; an answer given is kept by `ctx slot …` and not asked again (a divergence returns only when a repository publishes a new text), while a proposal the user declines stays a proposal and comes back at the next refresh.
+
+## Skill Chaining
+→ `plugin-configurator` (Validate / Update after a new context; the provider row in Validate; the same slot package — unconfirmed bindings and divergences — in Validate) · → `context-navigator` (answers from the provider's graph) · → `task-creator` (writes only into the project the Jira write scope names).
+
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0 and with the daily-sync phrases of v3.14.0:
+
+> Connect to a team's shared context (core folder or MCP), refresh your bundle from the core («онови пакет з ядра»), enrich your context. Since v3.23.0 also your declared corrections to a core — «перенеси мої поправки до ядра в оверлей», «мої поправки до ядра», «прибрати поправку, ядро виправили» — and a provider kit in one command («підключи набір провайдера», "connect this provider kit"). Since v3.24.0 the plugin's own copy of a core that lives only on a server — «зроби копію ядра», «власна копія ядра», «щоб ядро працювало без VPN», "make a local copy of the core". Not your Obsidian vault (plugin-configurator). Not curated sources (knowledge-library); the plugin's own setup is plugin-configurator too. UA — «підключи мене до спільного контексту», «підключи мене до вейлта команди», «онови мій пакет з ядра», «збагати мій контекст блоками ядра», «додай провайдер контексту», «увімкни щоденний синк ядра», «вимкни синк ядра». EN — "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", "register a context MCP", "turn on the daily core sync", "turn off the core sync". Resolves your team and role from your e-mail, copies the bundle that is relevant to you, proposes the core's context blocks for your local-context.md (never overwrites it; every discrepancy is a question), and registers the provider so every skill can search it.
+
+Since v4.0.0 (the local MCP of your vault, `ctx serve`): UA — «підключи мій вейлт як MCP», «локальний MCP для Claude Desktop», «щоб Cowork бачив мій вейлт», «встанови ctx serve»; EN — "serve my vault over MCP", "set up the local MCP server". The audit and the normaliser of the vault are plugin-configurator.

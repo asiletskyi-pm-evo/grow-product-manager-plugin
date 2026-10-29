@@ -498,6 +498,22 @@ else
   ok "region registry: vault-schema.md's table = ctx_regions.NAMESPACES"
 fi
 
+# --- 22. The registry copy carries this release -------------------------------
+# A registry that syncs .ai-registry/skills/<name>/ never reads the root, so that folder is a copy that
+# testing/registry_copy.py rebuilds at release. Between releases it lags main on purpose — only its
+# manifests are read here: a release that bumps plugin.json and skips the rebuild would hand the registry
+# the previous release under the new version. Its full content is checked with --check after the release commit.
+if [ -f testing/registry_copy.py ]; then
+  COPY_ERRS=$(python3 testing/registry_copy.py --manifests 2>&1)
+  if [ -n "$COPY_ERRS" ]; then
+    while IFS= read -r line; do err "registry copy: $line — rebuild it: python3 testing/registry_copy.py"; done <<EOF
+$COPY_ERRS
+EOF
+  else
+    ok "registry copy: its three manifests carry plugin.json's name and version $PLUGIN_VER"
+  fi
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.

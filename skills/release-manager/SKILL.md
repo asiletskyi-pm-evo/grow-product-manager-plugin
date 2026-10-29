@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.4.2
+version: 0.5.0
 description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…». EN — "release the plugin", "ship vX.Y.Z".
 ---
 
@@ -42,13 +42,14 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 2. Classify per the versioning table: wording/formatting → PATCH; new skill/step/section → MINOR; workflow restructure/breaking → MAJOR.
 3. Propose `vX.Y.Z` + draft scope summary. **Gate: user confirms version and scope.**
 
-### Step 3 — Apply the bump (the 6 mandatory places)
+### Step 3 — Apply the bump (the mandatory places)
 1. `.claude-plugin/plugin.json` — the `"version"` field. The description is not touched: since v3.20.0 it is one sentence of at most 200 characters with no version, no counts and no release history — what Claude shows on the plugin's card (validator check 1). A release that changes what the plugin is for rewrites that sentence; nothing else does.
 2. `.claude-plugin/marketplace.json` — the plugin entry's `"version"`; its description stays the same sentence as plugin.json.
 2a. `.codex-plugin/plugin.json` (since v3.0.1) — `"version"`; its `description` and `interface.shortDescription` are the same sentence as plugin.json, and `interface.longDescription` carries no component count (validator check 1).
 3. `README.md` — header + footer `**Version:**`; if skills changed: section headers, Skills Summary rows, "New in vX.Y.Z" overview paragraph.
 4. `CHANGELOG.md` — prepend the entry (Added/Changed/Fixed, files table with skill version bumps, Backwards compatibility note). No editorial placeholders — write the final text directly (pitfall P3).
 5. **Component counts** (since v2.5.0; README alone since v3.20.0) — the phrase `N skills, N agents, N commands, N connectors, N hooks` in README must equal what is on disk (`skills/*/`, `agents/*.md`, `commands/*.md`, `.mcp.json` keys, the events wired in `hooks/hooks.json`). Validator check 10 fails the release otherwise. Adding an agent, a command or a connector is a MINOR bump.
+6. **Registry copy** — only when the repo has `testing/registry_copy.py`. A registry that syncs a subfolder (`.ai-registry/skills/<name>/`) never reads the root, so that folder is a generated copy. Last, once every file above is final: stage the release's files (`git add <explicit list>`), then run `python3 testing/registry_copy.py`. It rebuilds the copy from the index — unstaged work in progress never reaches it — and derives the Cursor manifest from plugin.json. Never edit the copy by hand; a file fixed after this point means staging and rebuilding again. Validator check 22 fails while the copy's version lags plugin.json.
 
 This pipeline is also reachable as `/grow-product-manager:release [patch|minor|major]` — the command pre-answers Step 2's classification and changes nothing else.
 
@@ -66,10 +67,12 @@ Claude's sandbox has no user git credentials — generate one copy-paste termina
 cd <repo>
 git checkout -b release/vX.Y.Z
 git add <explicit file list — never git add -A>
+git add .ai-registry                 # only with a registry copy (Step 3.6)
 git commit -F - <<'MSG' … MSG
+python3 testing/registry_copy.py --check   # only with a registry copy: must print "in sync"
 git push -u <canonical> release/vX.Y.Z
 ```
-Guards: push rejected with "workflow scope" → token lacks Workflows permission (pitfall P4); "could not resolve host" → VPN (pitfall P5).
+Guards: push rejected with "workflow scope" → token lacks Workflows permission (pitfall P4); "could not resolve host" → VPN (pitfall P5); `--check` lists differences → a file changed after the rebuild: rebuild, `git add .ai-registry`, `git commit --amend --no-edit`, check again, then push.
 
 ### Step 6 — PR → merge → Release (GitHub)
 Via browser (user's session) or `gh` CLI if available:
@@ -87,6 +90,8 @@ git push <mirror> main --tags        # per mirror; VPN reminder if host is in vp
 git branch -d release/vX.Y.Z
 ```
 Mirror push rejected non-fast-forward → mirror diverged: never force into a protected main; use the reconciliation-merge recipe from release-pitfalls.md (P6).
+
+With a registry copy, the mirror push is what a registry's sync bot reads: it opens its own merge request in the registry, which the registry's owners merge. Nothing is pushed to the registry from here.
 
 ### Step 8 — Post-release
 1. **Verify:** fetch `releases/latest` on the canonical host → must show `vX.Y.Z`. Raw-file CDN may lag a few minutes — don't panic on stale `raw.githubusercontent.com` (pitfall P7).

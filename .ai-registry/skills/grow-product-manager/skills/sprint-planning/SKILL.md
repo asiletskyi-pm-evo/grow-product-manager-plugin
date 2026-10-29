@@ -1,0 +1,102 @@
+---
+name: sprint-planning
+version: 0.6.2
+description: Sprint pre-planning — focuses from the roadmap, what is READY to pull, dependencies, capacity per member, assignees. Not daily focus (focus-advisor), not a quarter plan (quarterly-planning). UA — «сплануй спринт», «що можна взяти у спринт», «розподіли задачі спринта», «фокуси спринта».
+---
+
+# Sprint Planning
+
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
+PM advisor for sprint pre-planning (finest slice). It doesn't just fill the sprint — it **highlights readiness and work-order violations**, computes per-person capacity, accounts for carryover risk, and suggests assignees. **The PM decides.**
+
+Part of the planning-suite: takes scope from `quarterly-planning` and direction priority from `project-planning`; tasks → `task-creator`. Integrates with `product-reporter` (last sprint ← `sprint-review`+`member-review`; approved plan → rendered as a `sprint-plan` report).
+
+## Prerequisites
+- `references/local-context-protocol.md` — Step 0 + Planning (capacity rules, sprint cadence + anchor, board, Development Flow).
+- `references/planning-core.md` — model, labeling, statuses, Development Flow.
+- `references/capacity-model.md` — per-member capacity (sec. 3), carryover-risk, auto-estimation, sprint ceiling (sec. 9).
+- `references/dependency-model.md` — **work-type DAG + readiness rule** (sec. 4), violations.
+- `references/roadmap-artifacts.md` — sprint-plan format (demarcation from ops-report).
+- `references/jira-data-protocol.md` — Jira plumbing (reuse).
+- `references/people-frameworks.md` — GTD-index (planned→done conversion); D-type for assignee fit.
+- `references/people-context-protocol.md` — read `d_type`/`delegation`; write the `gtd_index` datapoint (read-mostly).
+- `references/integration-strategy.md`, `references/persistent-storage.md`, `references/template-protocol.md`.
+
+## Step T — Template Resolution
+`artifact_type: roadmap`, `subtype: sprint-plan`, `product_id`, `language`. (The reporting sprint-plan lives in product-reporter; this is the planning one.)
+
+**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a).
+
+## Modes
+
+| Mode | Output |
+|------|--------|
+| `groom` | Pre-planning: estimate + readiness + dependency check (before commit) |
+| `plan` | Fill the next sprint to capacity + goal |
+| `review` | committed vs done + carryover (feeds carryover-risk) |
+| `forecast` | Which sprints the quarter's remainder lands in |
+
+## Pipeline
+
+### Step 0 — Local context
+Per `local-context-protocol.md` + Planning + Development Flow (work-type sequence, readiness threshold).
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
+
+### Step 1 — Scope (3 candidate sources)
+Which sprint (default: next). **Sources:** (a) backlog; (b) approved quarterly roadmap (`quarterly-planning`); (c) **future sprints** — tasks spread across upcoming sprints (Ready ones can be pulled forward / rebalanced). Jira board id.
+
+### Step 2 — Sprint focuses
+Derive from the active quarterly roadmap + project arcs (`project-planning`): which directions we pull this sprint and why. **Gate.**
+
+### Step 3 — Per-sprint per-member capacity
+The members are the team's people by `ctx entity "<team>" --slot team.members` (`references/people-context-protocol.md` → Find a person) — one line per person, your team record's members and the cards' joined, so nobody is counted twice; without SHELL, the team record's Members as written (not joined). Gather from the PM a forecast of **working days / capacity for each person** (time off, partial days, parallel directions) — `capacity-model` sec. 3. **Gate.**
+
+### Step 3b — Carryover-risk + GTD-index (last sprint)
+**Delegate `product-reporter` `sprint-review`+`member-review`** for committed vs done and per-person throughput. Compute carryover risk (`capacity-model` sec. 3: capacity ÷ remainder) → reduce load on at-risk members, flag chronic overload.
+**GTD-index** (`references/people-frameworks.md`): from the same committed-vs-done data, compute the **planned→done conversion** per sprint and per person (the person's GTD-index for the period). If a person profile exists (`references/people-context-protocol.md`), **write the datapoint** to `gtd_index` (append, read-only elsewhere) — this feeds `performance-review`. No profile → report the number in the plan only.
+
+### Step 4 — Readiness scan
+For each candidate check the status of prerequisites along the **work-type DAG** (`dependency-model` sec. 4) → **Ready** (prerequisites cleared) / **Blocked** (by what and up to which status). Example: BE+Design+Analytics in review/testing → client-side implementation = Ready.
+
+### Step 5 — Sequence violations
+If a downstream candidate is planned while upstream is below the readiness threshold (e.g. client-side ahead of analytics within the feature scope) → **highlight the violation** with an explanation; conscious PM confirmation, not a hard block.
+
+### Step 6 — Estimate + fill
+Auto-estimate missing ones (analogy); fill to the sprint ceiling by platform/person from **Ready** candidates only; **sprint-gate** (don't exceed the platform ceiling); sprint goal. Free capacity → **pull-forward** Ready tasks from future sprints (sync the shift with `project-planning` arcs).
+
+**Capacity view (since v3.6.0, `references/planning-core.md` §7).** When `role_defaults.planning_view` is `slice`, the sprint ceiling table by platform shows the tech-debt reserve as its own row (`references/capacity-model.md` §7); `rollup` opens the plan with the Step 2 focuses and the initiatives they serve, then the per-person table. Only the rows shown and their order change — ceilings, the Ready-only fill, the gates and Jira writes are the same for every profile; an automated run keeps the pre-v3.6.0 view.
+
+### Step 6b — Assignee suggestion
+For unowned tasks — propose assignment, **prioritizing those with no tasks yet / free capacity**; role-platform matching; account for the per-member budget (Step 3) and risk (Step 3b). **Delegation-level fit** (`references/people-context-protocol.md` → `delegation`, `d_type`): where profiles exist, prefer routing work a person owns at a high delegation level (5–7) or that fits their D-type; a stretch assignment to a D1/D2 is flagged as needing closer support (chains to `delegation-coach` for a transfer plan). Writing assignee to Jira — **gate**; respect team convention (where assignee is left empty until work starts — the suggestion stays in the plan, not on the task).
+
+### Step 7 — Correction loop with PM
+Show what doesn't fit / is blocked → choice. Live recompute.
+
+### Step 8 — Artifacts
+Sprint plan (Confluence / assignment into the Jira sprint) — **gate before writing to Jira**. Approved plan → can be rendered as a `sprint-plan` report via product-reporter.
+
+### Step 9 — Save to Vault (Optional)
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "sprint-planning", skill_version: "0.6.2", tags: [sprint id, focuses], content: approved sprint plan, related: [[quarterly roadmap]], extra_frontmatter: { subtype: "sprint-plan", sprint } })` → "Saved to Vault: Roadmaps/{product}/…"
+
+## Quality Standards
+- Only Ready candidates go into the fill; Blocked — with an explanation, not silently.
+- Sequence violations — always highlight; the PM decides.
+- Per-member: don't double-count (Assignee/Developer/QA separate — `jira-data-protocol`).
+- Estimates/assignments — marked "pending TL confirmation"; the PM decides.
+- Work-type flow and readiness threshold — from the team's Development Flow, not hardcoded.
+- Write to Jira only after approval. Language — `user.language`.
+
+## Additional Resources
+`references/capacity-model.md`, `dependency-model.md`, `planning-core.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`, `jira-data-protocol.md`.
+
+**End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Sprint pre-planning — focuses from the roadmap, what is READY to pull, dependencies, capacity per member, assignees. Not daily focus (focus-advisor), not a quarter plan (quarterly-planning). UA — «сплануй спринт», «що можна взяти у спринт», «розподіли задачі спринта», «фокуси спринта». EN — "plan the sprint", "sprint pre-planning", "what can we pull into the next sprint", "what's ready from the backlog", "check sprint dependencies", "who takes the tasks". Also UA — «передпланування спринта», «що готове з беклогу», «хто візьме задачі», «випусти фічу в реліз наступного спринта».

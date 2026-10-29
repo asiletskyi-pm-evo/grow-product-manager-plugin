@@ -1,0 +1,482 @@
+# Persistent Storage Protocol
+
+This document defines how the Grow Product Manager plugin stores user data persistently across plugin reinstalls, updates, and deletions. **All skills that read or write user data MUST follow this protocol.**
+
+## Design Principle
+
+User configuration, templates, and knowledge are **the user's data**, not plugin data. They MUST survive plugin lifecycle events (uninstall, reinstall, update). The plugin stores all user-generated data in a dedicated directory in the user's home folder, separate from the plugin installation directory.
+
+
+> **One storage story (since v3.10.0).** `~/.grow-pm/` holds `local-context.md`, service data (registries, caches, journals, evidence packs, shared-context provider registrations when no vault is configured) and the backups. When a vault is configured it is `storage_root`: templates and every artifact are saved there, and the context file and the knowledge library are mirrored into it after every change, so the vault can restore `~/.grow-pm/` (Vault Recovery below). There is no pointer file and no separate "custom" storage mode — an early design that release notes before v2.0 describe was never implemented.
+## Storage Location
+
+All persistent user data is stored under:
+
+```
+~/.grow-pm/
+```
+
+Resolved as `$HOME/.grow-pm/` on the user's machine. In Cowork sessions, this translates to the user's home directory (e.g., `/Users/username/.grow-pm/`).
+
+> Every path in this document is written for `storage_mode: local` (see below). Under `connector` the same layout hangs off a connector-backed root; under `session` it does not exist at all.
+
+### `storage_root` resolution
+
+`storage_root` is the base that `template-protocol.md` (Step T-1, registry lookup) and `template-library` resolve `Templates/` against. Resolve it in this order:
+
+0. **Host capability check** — before anything else, run Step 0-host (`host-profiles.md` §3) and fix `storage_mode` for the whole run:
+
+   | `storage_mode` | When | Root |
+   |---|---|---|
+   | `local` | capability **FS** present — the default | resolved by points 1–2 below; current behaviour, unchanged |
+   | `connector` | no FS, but capability **MCP** present | the Google Drive folder or Confluence space named in `local-context.md` under `storage.connector_root` |
+   | `session` | neither FS nor a usable connector | none — the artifact lives in the session and **MUST** be exported at the end |
+
+   In `connector` mode the `Templates/` layout, the vault mirror and every other tree below are read and written through the connector's tools (`integration-strategy.md` Step 1) relative to `storage.connector_root`. In `session` mode the skill states it in one line at the start — "no persistent storage on this host: the artifact stays in the chat and is exported at the end" — and skips every write step; contours that have no meaningful degraded mode are listed in `host-profiles.md` §5 and say so instead of pretending.
+
+1. **Obsidian Vault configured** (`vault_level ≥ L1`, `sync_mode != "off"`) → `storage_root = {vault_path}/{plugin_folder}` — templates live beside the artifacts they render, so the whole knowledge base moves as one unit.
+2. **Otherwise** → `storage_root = ~/.grow-pm` — the standalone home. `Templates/` sits directly under it.
+
+Both modes use the **same** `Templates/` layout (registry + partials + scopes), defined once in `template-protocol.md` → storage layout. The mode only changes where that folder lives.
+
+> Until v2.0.2 this rule existed nowhere: `template-protocol.md` deferred the resolution to this document, which never defined `storage_root`, while the only concrete statement lived in the configurator's onboarding step — and it named `~/.grow-pm/template-library/`, a path `template-protocol.md` simultaneously called *legacy*. If you find that folder, it is pre-v2.0 data: migrate it per "Legacy Data Discovery" below.
+
+### Directory Structure
+
+```
+~/.grow-pm/
+├── local-context.md              # Main plugin configuration (user profile, orgs, products, teams)
+├── .schema-version               # Schema version marker (for migration compatibility)
+├── Templates/                    # storage_root/Templates — layout per template-protocol.md
+│   ├── _registry.json            # Template registry (the resolution index)
+│   ├── _partials/
+│   ├── _System/
+│   ├── _archive/
+│   ├── user-global/
+│   │   └── {artifact_type}/
+│   └── {product}/
+│       └── {artifact_type}/
+├── knowledge-library/
+│   ├── library.md                # Master index
+│   ├── categories.md             # Category definitions
+│   ├── trust-scores.yaml         # Trust scores metadata
+│   ├── sources/                  # Individual source detail files
+│   └── health-checks/            # CJM health-check snapshots
+├── people/                       # Person profiles (Step P) — highest-sensitivity, L0 fallback
+│   ├── _roster.md
+│   └── <slug>.md
+├── experiments/                  # experiment-tracker registry
+├── decisions/                    # decision-log records (L0 fallback)
+├── focus/                        # focus-advisor journal + board.html
+├── walkthroughs/                 # flow-walkthrough evidence packs: <date>-<product>-<flow>/ (run.yaml, steps.yaml, steps/NN.png, findings.md)
+├── landscape/                    # product-landscape registry: registry.yaml, products/<slug>.md, scans/, maps/
+├── cores/<id>/                   # since v3.24.0: the plugin's own copy of a core that lives only on a server (ctx repo copy;
+│                                 #   context-provider-protocol.md §12.12) — a cache of the server, not in ctx undo
+├── conflicts/<id>/<day>/         # …and the server's version of a note you changed in that copy
+├── audit/last.json               # since v4.0.0: the last `ctx audit` — counts and signatures, a cache (ctx health reads it)
+├── bin/ctx-serve                 # since v4.0.0: the launcher of `ctx serve` a client's config names (`serve --install`)
+└── backups/                      # Auto-backups before migrations
+    ├── pre-migration-1.4.0/      # Backup taken before migrating to v1.4.0
+    │   ├── local-context.md
+    │   ├── .schema-version
+    │   └── ...
+    └── ...
+```
+
+> When a vault is configured, the `people/`, `experiments/`, `decisions/` and `focus/` trees have vault counterparts (`People/`, `Hypotheses/`, `Decisions/`, `Focus/` — see `vault-schema.md`); `~/.grow-pm/` remains the L0 fallback so every contour works standalone.
+
+### .schema-version File
+
+A plain-text file containing the plugin version that last wrote/migrated the data:
+
+```
+1.4.0
+```
+
+This is used by the migration protocol to determine if data needs to be migrated.
+
+---
+
+## File Search Priority
+
+When any skill needs to locate `local-context.md` (or any other persistent file), search in this order:
+
+| Priority | Location | Description |
+|----------|----------|-------------|
+| 1 (highest) | `~/.grow-pm/local-context.md` | **Persistent home directory** — primary location |
+| 2 | Plugin root directory (`../../local-context.md` from skill folder) | Legacy location (pre-v1.4.0 installs) |
+| 3 | User's workspace/outputs folder | Session workspace (Cowork outputs) |
+| 4 | Session working directory | Current session directory |
+
+**Important:** In `storage_mode: local`, when saving files ALWAYS write to `~/.grow-pm/`. The lower-priority locations are only checked for backward compatibility with pre-v1.4.0 data.
+
+Similarly for `knowledge-library/` and `template-library/`:
+
+| Priority | Location | Description |
+|----------|----------|-------------|
+| 1 (highest) | `~/.grow-pm/knowledge-library/` | Persistent home directory |
+| 2 | `workspace/knowledge-library/` | Legacy workspace location |
+
+---
+
+## Directory Initialization
+
+When the `~/.grow-pm/` directory does not exist, the Plugin Configurator creates it during Onboarding:
+
+1. Create `~/.grow-pm/` directory
+2. Create `.schema-version` file with current plugin version
+3. Proceed with normal Onboarding workflow
+4. Save all generated files to `~/.grow-pm/`
+
+If the directory exists but `.schema-version` is missing — treat as legacy data and run migration (see below).
+
+---
+
+## Migration Protocol (on reinstall / update)
+
+When a user installs or updates the plugin, the Plugin Configurator runs a **Persistent Data Check** before any other operation.
+
+### Step M-0. Detect existing data
+
+Check if `~/.grow-pm/` exists:
+
+- **Directory does not exist** → fresh install, proceed to Onboarding
+- **Directory exists** → existing user data found, proceed to Step M-1
+
+### Step M-1. Read schema version
+
+Read `~/.grow-pm/.schema-version`:
+
+- **File exists** → compare with current plugin version
+- **File missing** → legacy data (pre-v1.4.0), needs full migration scan
+
+### Step M-2. Present findings to user
+
+Always inform the user what was found and ask how to proceed:
+
+> "I found existing plugin data from a previous installation:"
+>
+> | Component | Status | Details |
+> |-----------|--------|---------|
+> | Configuration | ✅ Found | local-context.md (last updated: [date]) |
+> | Template Library | ✅ Found | [N] templates in [M] categories |
+> | Knowledge Library | ✅ Found | [N] sources, avg trust: [score] |
+> | Schema version | [version or "unknown"] | Current plugin: [current version] |
+>
+> "How would you like to proceed?"
+
+Present options via AskUserQuestion:
+
+- **Use existing data** — keep everything as is, validate and update schema if needed
+- **Use existing data + reconfigure** — keep data but re-run configuration to update/add sections
+- **Start fresh** — archive existing data to `~/.grow-pm/backups/` and run full Onboarding
+- **View existing config first** — show current configuration before deciding
+
+### Step M-3. Schema compatibility check
+
+If user chose to keep existing data, verify compatibility:
+
+**3a. Compare schema versions:**
+
+| Scenario | Action |
+|----------|--------|
+| Same version | No migration needed, proceed normally |
+| Newer plugin, minor version diff | Auto-migrate: add new optional fields with defaults |
+| Newer plugin, major version diff | Guided migration: show what will change, ask for confirmation |
+| Older plugin than data | Warn: "Your data was created by a newer plugin version. Some features may not work correctly." |
+| No schema version | Legacy data: run full compatibility scan |
+
+**3b. Auto-migration (minor version changes):**
+
+1. Create backup in `~/.grow-pm/backups/pre-migration-[version]/`
+2. Read current `local-context.md`
+3. Add new fields introduced in the current version (with sensible defaults or empty)
+4. Remove deprecated fields (if any)
+5. Update `.schema-version`
+6. Show migration changelog to user
+
+**3c. Guided migration (major version changes):**
+
+1. Create backup in `~/.grow-pm/backups/pre-migration-[version]/`
+2. Read current data
+3. Show a detailed comparison: "Here's what will change in the new version:"
+4. For each breaking change — ask user to provide updated values
+5. Apply changes
+6. Update `.schema-version`
+7. Show complete migration changelog
+8. Run validation (Validate mode)
+
+### Step M-4. Validate migrated data
+
+After migration:
+1. Run Plugin Configurator in Validate mode
+2. Check all MCP connections still work
+3. Check all referenced resources (Jira projects, Confluence spaces) are accessible
+4. Report any issues
+
+---
+
+## Legacy Data Discovery
+
+For users upgrading from pre-v1.4.0 (where data was stored in workspace/outputs):
+
+### L-1. Search for legacy data
+
+During first plugin launch, after checking `~/.grow-pm/`, also search legacy locations:
+1. User's workspace/outputs folder
+2. Plugin root directory
+3. Session working directory
+
+### L-2. If legacy data found
+
+Inform the user:
+
+> "I found plugin data from an older version in your workspace folder. Would you like to migrate it to the persistent storage (~/.grow-pm/) so it's preserved across plugin reinstalls?"
+
+Options:
+- **Yes, migrate** — copy data to `~/.grow-pm/`, run schema migration, validate
+- **No, start fresh** — ignore legacy data, run Onboarding with fresh `~/.grow-pm/`
+- **Let me review first** — show the found data before deciding
+
+### L-3. Migration from legacy location
+
+1. Copy all found files to `~/.grow-pm/` (preserving structure):
+   - `local-context.md` → `~/.grow-pm/local-context.md`
+   - `knowledge-library/` → `~/.grow-pm/knowledge-library/`
+   - `template-library/` → `~/.grow-pm/template-library/` (if exists)
+2. Create `.schema-version` with the version that best matches the data format
+3. Run schema migration if needed (Step M-3)
+4. Validate (Step M-4)
+5. Inform user: "Data migrated successfully. Your configuration is now stored in ~/.grow-pm/ and will persist across plugin reinstalls."
+
+---
+
+## Backup Protocol
+
+### Automatic backups
+
+Backups are created automatically:
+- Before any schema migration (Step M-3)
+- Before major configuration changes (full Onboarding re-run)
+
+### Backup structure
+
+```
+~/.grow-pm/backups/pre-migration-[version]/
+├── local-context.md
+├── .schema-version
+├── knowledge-library/     (if exists)
+│   ├── library.md
+│   ├── trust-scores.yaml
+│   └── ...
+└── template-library/      (if exists)
+    ├── _registry.json
+    └── ...
+```
+
+### Backup cleanup
+
+Keep the last 5 backups — the one rotation rule for every backup in this document (PU-2 below uses the same). When creating a new backup and there are already 5 — delete the oldest one.
+
+---
+
+## Symlink to Workspace (optional)
+
+After saving data to `~/.grow-pm/`, the plugin can optionally create a **symlink** in the workspace folder for easy access:
+
+```
+workspace/.grow-pm-data → ~/.grow-pm/
+```
+
+This is offered during Onboarding:
+> "Would you like a shortcut to your plugin data in the workspace folder? This makes it easy to view and edit configuration files directly."
+
+This is purely for convenience and is not required for plugin operation.
+
+---
+
+## Deletion Behavior
+
+When the plugin is uninstalled:
+- **`~/.grow-pm/` is NOT deleted** — user data persists
+- Only plugin code/skills are removed
+- On next install, migration protocol detects and reuses existing data
+
+If the user explicitly wants to delete all data:
+> "To completely remove all Grow Product Manager data, delete the ~/.grow-pm/ directory."
+
+**CRITICAL: Plugin uninstall / reinstall MUST NOT touch `~/.grow-pm/`.** This directory is outside the plugin installation path specifically to survive any plugin lifecycle event. No cleanup script, no pre-uninstall hook, no post-update migration should ever delete files from `~/.grow-pm/` without explicit user consent.
+
+---
+
+## Pre-Update Backup Protocol
+
+**Before ANY plugin update**, the system MUST create an automatic backup of all user data. This is the primary defense against data loss during plugin updates.
+
+### PU-1. Trigger conditions
+
+A pre-update backup is triggered:
+- Before plugin update (version change detected)
+- Before plugin reinstall (existing `~/.grow-pm/` found during fresh install)
+- Before any schema migration (already covered in Migration Protocol)
+- Manually by user via Plugin Configurator → "Backup" action
+
+### PU-2. Backup procedure
+
+1. **Create timestamped backup directory:**
+   ```
+   ~/.grow-pm/backups/pre-update-[old-version]-to-[new-version]-[YYYY-MM-DD]/
+   ```
+   If no version info available:
+   ```
+   ~/.grow-pm/backups/pre-update-[YYYY-MM-DD-HHmmss]/
+   ```
+
+2. **Copy ALL user data files:**
+   - `local-context.md`
+   - `.schema-version`
+   - `knowledge-library/` (entire directory recursively)
+   - `template-library/` (entire directory recursively)
+
+3. **Write backup manifest:**
+   ```
+   ~/.grow-pm/backups/pre-update-.../MANIFEST.md
+   ```
+   Contents:
+   ```markdown
+   # Backup Manifest
+   - Date: [ISO timestamp]
+   - Trigger: [update / reinstall / migration / manual]
+   - Plugin version (before): [version or unknown]
+   - Plugin version (after): [new version]
+   - Files backed up: [count]
+   - Knowledge Library sources: [count]
+   - Template Library templates: [count]
+   ```
+
+4. **Keep last 5 backups** — the same rotation as every other backup here. Delete the oldest when exceeding the limit.
+
+### PU-3. Backup verification
+
+After creating backup:
+1. Verify backup directory exists and is non-empty
+2. Verify `local-context.md` was copied (compare file size)
+3. If `knowledge-library/library.md` existed — verify it was copied
+4. Log success or failure
+
+### PU-4. Backup restore
+
+If user data is lost or corrupted, recovery follows this priority:
+
+| Priority | Source | How to restore |
+|----------|--------|---------------|
+| 1 (best) | `~/.grow-pm/snapshots/` (with a context store) | `ctx undo` takes back the last change; an old backup turned into a snapshot by `ctx snapshot import` (since v3.21.0) is `snapshots/<time>-imported/copies/0.md` — copy that file to `~/.grow-pm/local-context.md` |
+| 1a | `~/.grow-pm/backups/` | Copy latest backup → `~/.grow-pm/` (after `ctx snapshot import` the `local-context.md` copies are in the snapshots, the originals 30 days in `~/.grow-pm/trash/`) |
+| 2 | Obsidian Vault (if configured) | Reconstruct from vault mirror (see Vault Recovery Protocol) |
+| 3 | Legacy locations | Search workspace/outputs, session dirs |
+| 4 | Manual | User re-creates via Onboarding |
+
+---
+
+## Context store (since v3.11.0)
+
+- **Records** of the user's context: `{storage_root}/_System/context/` (`records/`, `INDEX.md` — the context card, `.state/`) — in the vault when one is configured, else under `~/.grow-pm/_System/context/`. `local-context.md` is compiled from them (`references/context-protocol.md`).
+- **Snapshots** before every change: `~/.grow-pm/snapshots/` — the last 20 plus one per day for 14 days; `ctx undo` restores one. They are separate from `backups/` (pre-migration and pre-apply, last 5).
+- **Lock**: `~/.grow-pm/.ctx.lock` — one `ctx` writer at a time.
+- **Archive** (since v3.12.0): `{storage_root}/_System/context/archive/<year>/` — archived records, kept in the vault and restorable with `ctx restore`. **Trash**: `~/.grow-pm/trash/` — records a sync removed, 30 days, outside any vault. `~/.grow-pm/.ctx-last-store` notes the last store root, only to say "store unavailable" when a vault is not mounted.
+- **Where ctx may write**: under `~/.grow-pm/` and the storage root only; a target outside them (a link pointing elsewhere included) is refused.
+- With a store, `ctx compile` writes the vault copy of `local-context.md` (VM-1's first row); the manual mirror copy is skipped.
+
+## Vault Mirror Protocol (Obsidian as secondary storage)
+
+When Obsidian Vault is configured, `~/.grow-pm/` data MUST be mirrored to the vault. This provides a secondary backup that is:
+- Visible and browsable by the user
+- Synced via Obsidian Sync / Git / iCloud (user's choice)
+- Recoverable even if `~/.grow-pm/` is deleted
+
+### VM-1. What gets mirrored
+
+| Source | Vault destination |
+|--------|-------------------|
+| `~/.grow-pm/local-context.md` | `{vault}/{plugin_folder}/_System/local-context.md` |
+| `~/.grow-pm/.schema-version` | `{vault}/{plugin_folder}/_System/.schema-version` |
+| `~/.grow-pm/knowledge-library/library.md` | `{vault}/{plugin_folder}/Knowledge/library.md` |
+| `~/.grow-pm/knowledge-library/categories.md` | `{vault}/{plugin_folder}/Knowledge/categories.md` |
+| `~/.grow-pm/knowledge-library/trust-scores.yaml` | `{vault}/{plugin_folder}/Knowledge/trust-scores.yaml` |
+| `~/.grow-pm/knowledge-library/sources/*` | `{vault}/{plugin_folder}/Knowledge/sources/*` |
+| `~/.grow-pm/knowledge-library/glossary/*`, `style/*` | `{vault}/{plugin_folder}/Knowledge/glossary/*`, `Knowledge/style/*` |
+| `~/.grow-pm/experiments/registry.yaml` | `{vault}/{plugin_folder}/_System/experiments-registry.yaml` |
+
+`people/` and `decisions/` under `~/.grow-pm/` are fallbacks used only without a vault (with one, those records live in the vault's `People/` and `Decisions/`). `landscape/` and `walkthroughs/` stay local by design — the vault receives their map and report notes, not the registry or the screenshots.
+
+### VM-2. When to sync
+
+Mirror sync happens:
+- After every write to `~/.grow-pm/` (local-context.md update, knowledge-library change, etc.)
+- After migration completes
+- After backup restore
+- On explicit user request ("sync to vault")
+
+### VM-3. Sync direction
+
+**Primary: `~/.grow-pm/` → Vault** (write-through)
+
+Every write to `~/.grow-pm/` is immediately followed by a write to the vault mirror location. This is a one-way sync — the vault is a replica.
+
+**Recovery: Vault → `~/.grow-pm/`** (restore)
+
+If `~/.grow-pm/` data is missing but vault mirror exists, the system can restore from vault. See Vault Recovery Protocol below.
+
+---
+
+## Vault Recovery Protocol
+
+When `~/.grow-pm/` is empty or missing but a configured Obsidian Vault exists with mirrored data:
+
+### VR-1. Detection
+
+During Step 0 (context loading), if `~/.grow-pm/local-context.md` is NOT found:
+1. Check if vault paths are known (from Cowork session memory, previous conversation, or user input)
+2. Search vault for `_System/local-context.md`
+3. Search vault for `Knowledge/library.md`
+
+### VR-2. Recovery prompt
+
+If vault data is found:
+
+> "I couldn't find your plugin data at ~/.grow-pm/, but I found a copy in your Obsidian Vault at [path]. This may have happened due to a plugin update or reinstall."
+>
+> | Component | Vault status | Details |
+> |-----------|-------------|---------|
+> | Configuration | ✅ Found | [user name], [N] products |
+> | Knowledge Library | ✅ Found | [N] sources |
+> | Schema version | [version] | |
+>
+> "Would you like to restore from the vault?"
+
+Options:
+- **Yes, restore** — copy vault data → `~/.grow-pm/`, validate, continue
+- **No, start fresh** — run Onboarding
+- **Let me check first** — show vault data contents
+
+### VR-3. Restore procedure
+
+1. Create `~/.grow-pm/` directory
+2. Copy `_System/local-context.md` → `~/.grow-pm/local-context.md`
+3. Copy `_System/.schema-version` → `~/.grow-pm/.schema-version`
+4. Copy `Knowledge/library.md` → `~/.grow-pm/knowledge-library/library.md`
+5. Copy `Knowledge/categories.md` → `~/.grow-pm/knowledge-library/categories.md`
+6. Copy `Knowledge/trust-scores.yaml` → `~/.grow-pm/knowledge-library/trust-scores.yaml`
+7. Copy `Knowledge/sources/*` → `~/.grow-pm/knowledge-library/sources/`; `Knowledge/glossary/*` and `Knowledge/style/*` → `~/.grow-pm/knowledge-library/glossary/`, `style/`; `_System/experiments-registry.yaml` → `~/.grow-pm/experiments/registry.yaml`
+8. Run schema compatibility check (Step M-3 from Migration Protocol)
+9. Validate restored data
+10. Inform user: "Data restored successfully from Obsidian Vault."
+
+---
+
+## Security Considerations
+
+- `local-context.md` contains organization-specific configuration (Jira URLs, project keys, team members) — it should not be shared publicly
+- `~/.grow-pm/` should have user-only permissions (chmod 700 on Unix systems)
+- Backups inherit the same permission model
+- Skills should never log or expose the full path of `~/.grow-pm/` to external services

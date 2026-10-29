@@ -1,0 +1,112 @@
+---
+name: goal-setter
+version: 0.2.2
+description: Set and audit goals — SMARTCBP for a person, OKR for a product or direction; goal letters, cascades. Not progress reports (product-reporter), not a performance review (performance-review). UA — «постав ціль», «OKR на квартал», «аудит цілі», «лист цілей». EN — "set a goal", "cascade goals".
+---
+
+# Goal Setter
+
+> **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
+
+Formulates and audits **goals** — the foundation of the People-contour. Without a well-set goal, neither reporting (3T5F), nor performance review, nor a hiring offer works. The skill chooses the right methodology (SMARTCBP for personal goals, OKR for product/direction), produces or audits the goal, drives it to **commitment** (Tell and Sell), and records it on the person's profile.
+
+The PM decides; the skill formulates, audits, and records. It never invents a baseline or a link it cannot source.
+
+## Prerequisites
+- `references/local-context-protocol.md` — Step 0. Context used: active product, `product.current_okrs`, Planning `goal_map`/Mission Atlas, `user.language`.
+- `references/people-context-protocol.md` — **Step P**, when the goal is for a specific person (load/create profile; write `active_goal_letter`, commitment).
+- `references/goal-frameworks.md` — SMARTCBP (8 checks), MBO vs OKR selection, Tell and Sell, goal letter, cascade.
+- `references/planning-core.md` — Mission/Goal Atlas as the top of the cascade.
+- `references/reporting-3t5f.md` — Comparable baseline source; chain to set up reporting.
+- `references/roi-frameworks.md` — quantify goal value where relevant.
+- `references/template-protocol.md` — **Step T** (`goal-letter` template).
+- `references/data-policy.md` — a person's goals are People-data (local/vault).
+- `references/self-improvement.md` — learn from corrections.
+
+## Objects & methodology
+
+| Goal object | Default methodology |
+|-------------|---------------------|
+| A person / individual accountability | **SMARTCBP** |
+| A candidate offer (goal letter) | **SMARTCBP** on a 3/6/12-month horizon |
+| A team | SMARTCBP (per-person) or OKR — ask |
+| A product / direction (ambitious, public, quarterly) | **OKR** (Objective + 2–5 Key Results) |
+| A project / initiative | OKR at the top, SMARTCBP for owners |
+
+Selection follows the MBO-vs-OKR table in `goal-frameworks.md`. When both could apply, prefer SMARTCBP for the individual and cascade it under the OKR/Mission.
+
+## Modes
+
+| Mode | Trigger | What it does |
+|------|---------|--------------|
+| `formulate` (default) | "постав ціль", "set a goal" | Draft **2–3 variants** of a goal from the user's intent, each passing all 8 SMARTCBP checks (or an OKR set). |
+| `audit` | "проведи аудит цілі", "is this goal SMART" | Score a draft goal against the 8 checks in a **requirement / status / fix** table; return the corrected one-sentence goal. |
+| `cascade` | "каскад цілей", "cascade goals" | Ladder Mission/Goal (Atlas) → direction → team → person; flag marking gaps, don't invent links. |
+| `goal-letter` | "лист цілей", "goal for the offer" | Build a full goal letter (purpose, 3–5 SMARTCBP results, traits, culture) for an offer or a periodic review. |
+
+## Pipeline
+
+### Step 0 — Local context
+Per `local-context-protocol.md`. Load the active product, Mission Atlas / `goal_map`, and `product.current_okrs`.
+
+> **Judgment contract (Step 0j).** Per `references/local-context-protocol.md` Step 0j and `references/pm-mental-model.md`: note this run's
+> judgment points (score, rank, verdict, priority, ship/kill, debate question) internally, with no output. A principle acts only through
+> a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
+
+### Step P — Person context (when the goal is for a person)
+Per `people-context-protocol.md`. Find the person (`references/people-context-protocol.md` → Find a person: `ctx entity "<e-mail or name>" --kind person --skill goal-setter`), then load or offer to create the profile; read `d_type` (a D4 gets a goal, not tasks — confirm scope fits), reporting cadence, and any existing `active_goal_letter`.
+
+### Step T — Template resolution
+For `goal-letter` (and optionally `formulate`): `artifact_type: goal-letter`, resolve per `template-protocol.md`.
+
+### Step 1 — Object & methodology
+Confirm the goal object and pick the methodology (table above). State the choice and why ("Personal goal → SMARTCBP: realistic, personal accountability, bonus-compatible").
+
+### Step 2 — Comparable baseline
+For **C (Comparable)**, offer to pull the prior-period fact:
+- Chain to `product-reporter` / Tableau for the person's or direction's last-period number.
+- If no history → benchmark the market, or use "+N p.p. on the measured KPI".
+Never leave C empty; never fabricate the number — mark it "to confirm" if unsourced.
+
+### Step 3 — Formulate / audit
+- **formulate:** produce 2–3 one-sentence variants; each verified against all 8 letters + the common-sense filter; confirm each goal sits **outside** the performer's process.
+- **audit:** render the before→after table (requirement / status / issue / rewrite), then the single corrected sentence. Run the AI self-check ("can progress be judged unambiguously from a report?").
+- **cascade:** build the tree; every child ladders to its parent (SMARTCBP-P traceability); surface any gap as "pending PM confirmation".
+- **OKR path:** 1 Objective + 2–5 measurable Key Results; ambitious (70–80% = success), public, decoupled from bonuses.
+
+Keep it to **3 goals per person, max 5**. Each goal one sentence.
+
+### Step 4 — Commitment (Tell and Sell)
+Run the Tell-and-Sell checklist (`goal-frameworks.md`): participation, restatement, baseline acceptance, risk named, explicit "I commit". Record commitment status.
+
+### Step 5 — Record & chain
+- **Step P write:** save `active_goal_letter`, `goal_methodology`, commitment to the person's profile (gated show-before-save). People-data stays local/vault.
+- Chain: → `product-reporter` (set up 3T5F reporting at the chosen cadence) · → `one-on-one` (discuss/commit the goal) · → `hiring-designer` (goal letter into the offer) · → `decision-log` (if a strategic goal decision was made).
+
+### Step 6 — Feedback + self-improvement
+Per `self-improvement.md`.
+
+## Quality standards
+- A goal is **one sentence**; 3 per person (max 5); always outside the performer's process.
+- All 8 SMARTCBP letters pass, or the gap is named — never a silent partial.
+- Comparable is sourced or explicitly marked "to confirm"; never fabricated.
+- Personal goals → SMARTCBP (realistic, <100% = miss); product/direction → OKR (stretch, public). State the choice.
+- Commitment is explicit before a goal is marked committed.
+- People-data locality: a person's goals live in the vault/local only.
+- Language — `user.language`.
+
+## Skill chaining
+→ `product-reporter` (3T5F reporting) · → `one-on-one` (commit/review) · → `hiring-designer` (offer goal letter) · → `performance-review` (goals become review inputs) · → `decision-log` (strategic goal decisions) · ← `focus-advisor`, `performance-review`, `offboarding-guide` (request goals be set/revised).
+
+## Example dialogues
+- *"Постав ціль аналітику <ім’я> на друге півріччя"* → Step P loads the person (D3, weekly reporting) → SMARTCBP → pulls their H1 fact via product-reporter for Comparable → 2–3 variants → Tell-and-Sell → writes `active_goal_letter`, offers to set up their 3T5F cadence.
+- *"Це нормальна ціль: 'покращити конверсію'?"* → `audit` mode → 8-check table shows S/M/C/T failures → returns "increase checkout conversion from 2.1% to 3.0% (+0.9 p.p. vs H1) by 2026-12-31".
+- *"Зроби OKR для напрямку Q&A на квартал"* → OKR path: 1 Objective + 3 Key Results, public, stretch → offers to cascade personal SMARTCBP goals for the owners underneath.
+
+**End of run — no deltas (since v3.21.0).** This skill proposes nothing to the inbox: its context lives in person profiles, which never go through it (`references/context-protocol.md` §5i).
+
+## Routing
+
+The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
+
+> Set and audit goals — SMARTCBP for a person, OKR for a product or direction; goal letters, cascades. Not progress reports (product-reporter), not a performance review (performance-review). UA — «постав ціль», «сформулюй цілі для…», «OKR на квартал», «аудит цілі». EN — "set a goal", "write goals for <person>", "audit this goal", "is this goal SMART", "goal letter", "cascade goals", "objectives and key results". Also UA — «ціль за SMARTCBP», «лист цілей», «каскад цілей», «цілі напрямку». Formulates and commits goals; other skills track and report them. Do NOT use for delivery roadmaps (quarterly-/project-planning).

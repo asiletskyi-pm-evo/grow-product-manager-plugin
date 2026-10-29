@@ -1,0 +1,738 @@
+# Vault Protocol
+
+## Overview
+
+This document defines how every skill in the Grow Product Manager Plugin interacts with Obsidian Vault for persistent knowledge accumulation. All skills **SHOULD** follow this protocol, but Vault is **OPTIONAL** — if not configured, skills work normally without any vault functionality.
+
+**Related documentation:**
+- For Vault schema (frontmatter, types, tags): see `references/vault-schema.md`
+- For local configuration reading: see `references/local-context-protocol.md`
+
+---
+
+## Vault Level Detection
+
+Vault detection is executed during **Step 0** (after reading `local-context.md`). Detection establishes one of three operational levels:
+
+### Levels
+
+- **L0: No vault configured** → Skip all vault operations silently
+- **L1: Vault path configured, file system access only** → Read/write `.md` files, search via glob + grep
+- **L2: Vault path + at least one provider answering `vault/v1`** — the user's own index or a shared-context provider (`context-provider-protocol.md` §4) → L1 + full-text search, backlinks, graph traversal
+
+### Detection Algorithm
+
+```
+1. Read local-context.md section "Obsidian Vaults"
+2. If section missing OR no vault paths found
+   → return L0
+3. For each vault in list:
+   a. Check directory exists: stat(path)
+   b. Check plugin folder exists: stat(path/{plugin_folder}/)
+   c. If either fails → skip this vault
+4. If valid vault(s) found AND MCP detection != "disabled"
+   → probe every provider per context-provider-protocol.md §4
+     (brain_status, else vault_list_by_folder(""); 3 s budget each)
+   → at least one answers → L2
+   → none answers → L1 (one line naming the unreachable provider, once per session)
+5. Store vault_level and vault_configs in session context
+6. If no valid vaults found → downgrade to L0
+```
+
+### Session Context Storage
+
+After detection, store in session (since v3.10.0 also `session.providers`, built by Step 0h per `context-provider-protocol.md` §4 — id, mode, access, local paths, reachable, stale):
+```
+session.vault = {
+  level: L0 | L1 | L2,
+  vaults: [
+    {
+      path: string,
+      product_binding: "product_key" | "all",
+      mcp_available: boolean
+    }
+  ]
+}
+```
+
+---
+
+## Multi-Vault Resolution
+
+The plugin supports multiple vaults with intelligent routing:
+
+### When Saving
+
+```
+resolve_vault(product) → vault_config:
+1. For each vault in vault_configs:
+   a. If vault.product_binding == product → return vault
+2. If no exact match:
+   a. Find vault with product_binding == "all"
+   b. If found → return it (default vault)
+3. If no default vault:
+   a. Return first vault in list (fallback)
+4. If no vaults → return null (L0 behavior)
+```
+
+### When Searching
+
+```
+search_all_vaults(criteria):
+1. For each vault in vault_configs:
+   a. Execute search (L1 or L2) against vault
+   b. Collect results with vault_path metadata
+2. Merge results across vaults
+3. Deduplicate by artifact path
+4. Sort by relevance/date
+5. Return merged result set
+```
+
+---
+
+## Step 0.5 — Vault Context Search (OPTIONAL)
+
+Vault context search is inserted between **Step 0** and **Step 1** of every skill execution: the skill brings in what the user's base already knows about the request. Since v3.16.0 the whole step is **`references/search-protocol.md`** — the request and its variants, `ctx search`, the rating «прямо / частково / ні», what is taken silently and what never is, doubt and conflict, live sources, the block of variants at the end and the memory of the user's choices. It asks nothing in the middle of a run: the "Use as context? [Yes / Select specific / Skip]" question of earlier versions is gone.
+
+### Precondition
+Nothing to search (L0 and no registered repository or local index), an empty `SKILL_CONTEXT_MAP` row, or a request with no topic → **skip silently**, continue to Step 1 normally (`search-protocol.md` §1).
+
+### In short
+
+```
+1. The request (the topic in the user's words) + 3–4 variants written before any result
+2. ctx search --q <request> --q <variant> … --skill <skill> --product <product> --json
+     (the section index of the plugin folders and the cores, a registered local index,
+      the MCP of a repository with no folder on disk; RRF, the priors, no duplicates)
+   No SHELL → the words of the request, file by file, or vault_search per variant
+     (search-protocol.md §12)
+3. Rate the candidates; read the "direct" ones (ctx search --get <id>)
+4. Take at most 3 direct sections silently, with one provenance line
+5. A doubt or a conflict → maybe live sources (level 2; triggers in search-protocol §8); the block of variants at the end
+6. The user's choice → ctx search remember
+```
+
+### SKILL_CONTEXT_MAP
+
+Defines which artifact types are relevant to each skill. `local-context-protocol.md` sends **every** skill to Step 0.5, so every skill needs a row; a skill with no entry silently skips vault context. Since v3.16.0 the types are a **weight, not a filter**: `ctx search --skill <name>` weighs a candidate of these types × 1.2, and a note without a type is found as well. The search reads them from `search_types` in `references/context-manifest.yaml`; this table stays for people and for hosts without a shell, and validator check 19 keeps the two the same (the types before a `;` of a row, without a remark in brackets).
+
+| Skill | Relevant Types |
+|-------|---|
+| cjm-research | cjm-analysis, cjm-health-check, funnel-anomaly, ab-test-results, hypothesis |
+| write-concept | competitive-analysis, market-research, ux-benchmark, hypothesis, decision, requirements; while `judgment.build_first` is `on` also walkthrough, ab-test-results, prototype (note below) |
+| product-analysis | cjm-analysis, ab-test-results, metrics-review, post-release, hypothesis |
+| brainstorm-features | cjm-analysis, competitive-analysis, ab-test-results, ux-benchmark, decision, debate |
+| requirements-creator | concept, hypothesis, competitive-analysis, decision, ab-test-results, walkthrough |
+| flow-walkthrough | walkthrough, ux-benchmark, cjm-analysis, requirements |
+| product-landscape | landscape, competitive-analysis, ux-benchmark, walkthrough |
+| meeting-processor | meeting-notes, decision, concept, requirements |
+| product-research | competitive-analysis, market-research, ux-benchmark, knowledge-source |
+| knowledge-library | knowledge-source |
+| task-creator | requirements, concept, task-breakdown |
+| diagram-prototyper | diagram, concept, requirements |
+| design-bridge | concept, requirements, competitive-analysis, presentation, prototype, handoff |
+| feedback-triage | feedback-triage, hypothesis, cjm-analysis |
+| experiment-tracker | hypothesis, ab-test-results, requirements, decision |
+| decision-log | decision, meeting-notes, hypothesis, debate |
+| roadmap-architect | roadmap, project-overview |
+| project-planning | roadmap, project-overview, ops-report |
+| quarterly-planning | roadmap, ops-report, decision |
+| sprint-planning | roadmap, ops-report, task-breakdown |
+| product-reporter | ops-report, report-3t5f, roadmap, goal-letter |
+| focus-advisor | focus-brief, roadmap, ops-report, decision, hypothesis |
+| goal-setter | goal-letter, people, report-3t5f |
+| one-on-one | people, one-on-one-notes, goal-letter |
+| performance-review | people, report-3t5f, one-on-one-notes, goal-letter, performance-review |
+| hiring-designer | vacancy-profile, goal-letter, people |
+| offboarding-guide | people, performance-review, report-3t5f, offboarding-plan |
+| delegation-coach | people, delegation-audit, goal-letter |
+| template-library | (none — operates on Templates/, not artifacts) |
+| plugin-configurator | (none — configures, does not consume artifacts) |
+| context-connect | (none — operates on provider folders and `local-context.md`) |
+| context-navigator | decision, meeting-notes, knowledge-source (own vault); provider notes through `vault/v1` |
+| release-manager | decision |
+
+> People types are only ever surfaced to People-contour skills. A product skill must not pull a people type (the list: `data-policy.md` → Search, rule 1) into its context. Since v3.16.0 the same holds for any note marked `sensitive: true`: outside the People contour it is never taken and its content never shown — the block of variants may name it only by its title, on a line with no number (`search-protocol.md` §6, §9).
+
+> Since v3.9.0, while `judgment.build_first` is `on`, the write-concept row also carries `walkthrough`, `ab-test-results` and `prototype` — Step 0.5 hits of these suppress the build-first line (`judgment-points.md` §8), and a resumed run links the prototype it finds. On their own they never raise the block of variants (since v3.16.0; until then the "Use as context?" question): they join it only when other candidates already raise it, and otherwise only do those two things, silently (`search-protocol.md` §11). They are not in the skill's `search_types`, so they carry no weight. A prototype used as the spec reaches requirements-creator in design-bridge's payload, not through this map. A prototype is context, never validation: it stays `reported (file, frame)`.
+
+---
+
+## File Search (L1)
+
+Searching the vault through the file system alone (no external tools required). It has two callers:
+
+- **Step 0.5 on a host without SHELL** — by the **words of the request**, never "the 10 newest of a type" (since v3.16.0): `search-protocol.md` §12 is that procedure, and this section does not restate it.
+- **Vault Save step 7** (related artifacts) — by type and product:
+
+```
+file_search(criteria: SearchCriteria) → [ArtifactSummary]:   # Vault Save step 7
+
+1. Folders: {vault_path}/{plugin_folder}/{TYPE_FOLDER_MAP[type]}/ for each type in
+   criteria.artifact_types (vault-schema.md); with criteria.product, its {product_slug}/
+2. files = glob("{folder}/**/*.md", recursive=true)
+3. Parse each file's frontmatter (type, product, status, created) and its ## Summary;
+   a frontmatter that does not parse leaves the file as text — never skip the file for it
+4. KEEP IF type in criteria.artifact_types, status in criteria.status,
+   product == criteria.product (if specified); sort by created DESC, first N (default 10)
+5. Return {path, title, type, status, created, summary} per file
+```
+
+---
+
+## MCP Search (L2)
+
+Enhancement over L1 through the providers that speak `vault/v1` — the user's own local index and any shared-context provider (`context-provider-protocol.md` §2, §4–§6). Tool names are the contract's; a provider without one of them is skipped for that call.
+
+Since v3.16.0 Step 0.5 searches at L1 and L2 alike as `search-protocol.md` says: with SHELL through `ctx search` (§3 there; which sources it asks and how it merges them: `context-provider-protocol.md` §5), without SHELL through `vault_search` per variant (§12 there). The rule "the own vault wins over a provider copy of the same note" still holds — for the same file (`context-provider-protocol.md` §5).
+
+A relational question (who owns what, what depends on what) may follow up with `vault_get_links(path, direction="in")` or `vault_graph_context(entity, depth=1|2)` on the provider that holds the entity.
+
+---
+
+## Vault Save
+
+Called after a skill completes its main work to persist the output artifact.
+
+### Algorithm
+
+```
+vault_save(artifact, product, options):
+
+1. Precondition checks:
+   IF vault_level == L0 → return (skip silently)
+   IF sync_mode == "off" → return (skip silently)
+   IF sync_mode == "read-only" → return (the vault is searched, never written)
+   IF the target vault lies under a registered provider root
+      (context-provider-protocol.md §7) → return, one line: the folder is a
+      provider's and read-only — connect your own vault for saves
+   IF sync_mode == "manual":
+     → ask user: "Save to vault? [Yes / No]"
+     → if No → return
+
+2. Resolve target vault:
+   target_vault = resolve_vault(product)
+   IF null → log warning, return
+
+3. Build file path:
+   type_folder = TYPE_FOLDER_MAP[artifact.type]
+   product_slug = slugify(product)
+   filename = "{artifact_type}-{topic_slug}-{YYYY-MM-DD}.md"
+     Examples (the type prefix is the artifact_type verbatim — not an abbreviation):
+       - competitive-analysis-checkout-flow-2026-04-14.md
+       - cjm-health-check-2026-04-14.md
+       - hypothesis-ai-personalization-2026-04-14.md
+
+   key_slug = slugify(product)                    # product artifacts
+     IF type_folder.startswith("People/"): key_slug = slugify(person_name)
+     (People areas key by person — vault-schema.md → Path composition)
+
+   file_path = {target_vault.path}/{type_folder}/{key_slug}/{filename}
+     (layout per vault-schema.md — the map gives the area path, the key is the
+      last level. There is no `artifacts/` level.)
+     IF artifact.type == "people": file_path = {target_vault.path}/People/{slugify(name)}.md
+     (profiles are addressed by person, not by date — see people-context-protocol.md)
+
+4. Create directory structure:
+   mkdir -p {file_path_parent_dir}
+
+5. Build frontmatter — field names come from vault-schema.md, which is the schema
+   this function serves; do not invent near-synonyms here:
+   frontmatter = {
+     type: artifact.type,
+     product: product,
+     created: today ISO8601,
+     skill: calling_skill_name,          # REQUIRED — omitted until v2.1.1
+     skill_version: calling_skill_version,# REQUIRED — omitted until v2.1.1
+     title: artifact.title,
+     tags: artifact.tags,
+     status: "active",                   # lifecycle only: active|archived|superseded|draft
+     last_reviewed: today ISO8601,       # NOT `last_updated` — no such field exists
+     related: [],
+     ...type-specific fields per vault-schema.md → Type-specific frontmatter
+        (e.g. hypothesis: hypothesis_status, ice_*; ab-test-results:
+         tested_hypothesis, result — NOT `linked_hypothesis`/`winner_id`)
+   }
+   Judgment Fields (since v3.8.0; vault-schema.md → Judgment Fields), derived here
+   for every caller — the call sites pass nothing new (except decision-log, below):
+     evidence_classes = the classes the body's labels use (§4 order, deduplicated);
+                        left out when none, and on People-contour notes, knowledge
+                        sources, prototypes and handoffs. decision-log sets its own per
+                        judgment-points.md §4; any other `decision` writer
+                        (release-manager) takes it only from body labels.
+     altitude         = the value of the body's judgment footer (T-5 step 3a);
+                        left out when the body has none (People contour, decision,
+                        debate, knowledge source, prototype, handoff).
+
+6. Build content:
+   REQUIRE: ## Summary section at start
+     - 2-5 sentences
+     - Captures key findings/output
+     - Written for someone discovering vault artifact cold
+     - Any item it mentions keeps its `simulated` / `assumed` label, a 6c claim
+       keeps its "coincides with" wording, and `simulated` content is never stated
+       as a finding (since v3.8.0) — Step 0.5
+       may take the Summary as a section of its own (since v3.16.0 it takes
+       sections, search-protocol.md), so a label lost here re-enters later
+       runs as evidence
+   
+   content = "## Summary\n\n{summary_text}\n\n{full_artifact_content}"
+
+7. Find and link related artifacts (if auto-link enabled):
+   Related types are the reverse of SKILL_CONTEXT_MAP: the types whose producing
+   skills consume this artifact's type. Derive it, do not hardcode a second map.
+   FOR each related_type in reverse_of(SKILL_CONTEXT_MAP)[artifact.type]:
+     search_results = file_search({
+       artifact_types: [related_type],
+       product: product,
+       status: [active],
+       limit: 5
+     })
+     FOR each result in search_results:
+       - Add result.path to frontmatter.related[]
+       - Read result file
+       - Add [[{current_artifact_path}]] to result.related[]
+       - Write result file back (every other key kept as it was — a rewrite never
+         adds or derives `evidence_classes` / `altitude` on an older note)
+
+8. Write artifact file:
+   write_file(file_path, frontmatter + content)
+
+9. Update MOC indexes (if auto-update enabled):
+   - update_dashboard_moc(artifact, target_vault)
+   - update_product_moc(artifact, target_vault)
+   - update_timeline_moc(artifact, target_vault)
+
+10. Inform user:
+    log: "Saved to Vault: {relative_path}"
+```
+
+### Special Cases
+
+**Hypothesis Lifecycle**: If skill is `product-analysis` saving `ab-test-results` with linked hypothesis:
+- See [Hypothesis Lifecycle Updates](#hypothesis-lifecycle-updates) section
+
+**Duplicate Prevention**: If file already exists:
+- Append incrementing suffix: `-2`, `-3`, etc.
+- Example: `competitive-checkout-flow-2026-04-14-2.md`
+
+---
+
+## Vault Initialization
+
+Called once by Plugin Configurator when Vault is first connected.
+
+### Algorithm
+
+```
+vault_init(vault_path, plugin_folder_name):
+
+   ROOT = {vault_path}/{plugin_folder_name}     # every path below is relative to ROOT
+   (The plugin never writes to the vault root itself — the user's vault is theirs.
+    `vault_structure_check` and the Context Mirror resolve the same ROOT; until
+    v2.1.1 this function ignored plugin_folder_name and wrote one level too high.)
+
+1. Create the folder structure — derive it, do not restate it:
+   FOR each distinct folder in TYPE_FOLDER_MAP (vault-schema.md):
+     mkdir -p {ROOT}/{folder}
+   (Deriving from the map is what keeps init from drifting behind the taxonomy:
+    the previous hardcoded list had fallen 7 types behind.)
+
+   Plus the non-artifact areas from vault-schema.md → Folder Structure:
+   - _MOC/            (Dashboard, Products/, Timeline, Tags)
+   - _System/         (local-context mirror — see Context Mirror below)
+   - Templates/       (template-library storage — see template-protocol.md)
+   (No top-level archive/: lifecycle status lives in frontmatter and is filtered
+    by search, never by folder — vault-schema.md → Folder Structure. The only
+    archive folder in the vault is Templates/_archive/, created in step 3.)
+
+2. Create the key subfolder per area — the key is the product, except in People/:
+   FOR each distinct folder in TYPE_FOLDER_MAP where NOT folder.startswith("People/"):
+     FOR each product in local-context.products:
+       mkdir -p {ROOT}/{folder}/{slugify(product)}/
+   (People/ areas key by person, not product — vault-schema.md → Path composition.
+    Person subfolders are created on first write by vault_save, not at init: the
+    roster is not known here, and an empty folder per person is noise in Obsidian.)
+
+3. Initialize Templates/ per `template-protocol.md` → storage layout
+   (_registry.json + _partials/ + _System/ + _archive/ + user-global/).
+   Do NOT write the pre-v2.0 flat template files here — template-library owns them.
+
+4. Create initial Dashboard MOC:
+   Write: {ROOT}/_MOC/Dashboard.md
+     - Section: Recent Activity (empty table)
+     - Section: Product Stats (table with product names)
+     - Section: Quick Links (to Templates, Timeline, Tags)
+
+5. Mirror local-context into the vault:
+   Copy local-context.md → {ROOT}/_System/local-context.md
+   Mark as read-only
+   (One mirror location, shared with "Context Mirror to Vault" below and asserted
+    by the setup guide's smoke test S-8.2. It must not be written anywhere else.)
+
+6. Migrate existing knowledge-library:
+   IF knowledge-library/ folder exists in vault:
+     FOR each .md file:
+       - Move to {ROOT}/Knowledge/sources/{product_slug}/
+       - Update frontmatter with type: knowledge-source
+       - Add to MOC Dashboard
+
+7. Create schema version file:
+   Write: {ROOT}/.vault-schema-version
+   Content: {current_version} (e.g., "1.0")
+
+8. Return success
+```
+
+---
+
+## MOC Update Protocol
+
+MOC (Map of Contents) files provide navigation and overview of vault artifacts. They are updated automatically by vault_save.
+
+### Dashboard.md Update
+
+```
+update_dashboard_moc(artifact, vault):
+
+1. Open: {vault_path}/_MOC/Dashboard.md
+
+2. Update Recent Activity table:
+   - Prepend new artifact entry to table (at top)
+   - Format: | date | type | product | title_link |
+   - Example: | 2026-04-14 | hypothesis | MyApp | [[hypothesis-ai-personalization-2026-04-14]] |
+   - Keep last 20 entries only (prune old ones)
+
+3. Update product stats:
+   - Find product row in "Product Stats" section
+   - Increment artifact_count
+   - Update last_activity date
+
+4. Update quick links:
+   - Add link to recently updated product MOC if new
+
+5. Write file back
+```
+
+### Product MOC Update
+
+```
+update_product_moc(artifact, vault):
+
+1. Determine MOC path:
+   product_slug = slugify(product)
+   moc_path = {vault_path}/_MOC/Products/{product_slug}.md
+
+2. If MOC doesn't exist:
+   → Create new MOC with standard sections (see below)
+
+3. Update based on artifact type:
+   
+   IF artifact.type == cjm-analysis:
+     → Update "CJM Artifacts" section
+     → Add entry to recent CJM analyses
+   
+   IF artifact.type == hypothesis:
+     → Update "Hypothesis Pipeline" section
+     → Add entry under status (active/validated/rejected)
+   
+   IF artifact.type == ab-test-results:
+     → Update "Test Results" section
+     → Link to hypothesis (if applicable)
+   
+   IF artifact.type == decision:
+     → Update "Recent Decisions" section
+     → Prepend to decision list
+
+4. Write file back
+
+### MOC Structure (for new MOC creation):
+
+---
+type: moc
+product: {product_name}
+created: {today}
+---
+
+## {Product Name} Map of Contents
+
+### Active Work
+| Type | Latest | Status |
+|------|--------|--------|
+
+### CJM Health
+- Latest health check: [none]
+
+### Hypothesis Pipeline
+- Active: [none]
+- Validated: [none]
+- Rejected: [none]
+
+### Recent Decisions
+[none]
+
+### Test Results
+[none]
+
+### Related MOCs
+- [[_MOC/Dashboard]]
+```
+
+### Timeline.md Update
+
+```
+update_timeline_moc(artifact, vault):
+
+1. Open or create: {vault_path}/_MOC/Timeline.md
+
+2. Append chronological entry:
+   Format: {YYYY-MM-DD} | {type} | {product} | {title_link}
+   Example: 2026-04-14 | hypothesis | MyApp | [[hypothesis-ai-personalization-2026-04-14]]
+
+3. Keep entries in reverse chronological order (newest first)
+
+4. Write file back
+```
+
+---
+
+## Backlink Management
+
+Backlinking creates explicit relationship between artifacts in the vault.
+
+### Algorithm
+
+```
+add_backlinks(source_artifact_path, target_artifact_paths):
+
+FOR each target_path in target_artifact_paths:
+  1. Read target file
+  2. Parse frontmatter
+  3. Check if source_path already in related[] → if yes, skip
+  4. Add source_path to related[] in frontmatter
+  5. Rewrite target file with updated frontmatter (every other key kept as it was;
+     no Judgment Field is added to an older note)
+  6. Store relative wikilink path (from plugin folder)
+     Format: [[CJM/health-checks/my-app/cjm-health-check-2026-04-14]]
+     (no .md extension, relative from vault plugin folder root)
+```
+
+### Wikilink Format
+
+- **Format**: `[[relative_path_from_plugin_root]]`
+- **No file extension**: `.md` is omitted
+- **Example paths**:
+  - `[[Research/my-app/competitive-analysis-checkout-flow-2026-04-14]]`
+  - `[[Hypotheses/my-app/hypothesis-ai-personalization-2026-04-14]]`
+  - `[[_MOC/Products/MyApp]]`
+
+---
+
+## Hypothesis Lifecycle Updates
+
+Special handling for hypothesis artifacts when linked test results are saved.
+
+### Algorithm
+
+```
+update_hypothesis_lifecycle(hypothesis_artifact_path, ab_test_artifact):
+
+   Field names are the ab-test-results and hypothesis schemas in vault-schema.md.
+   (Until v2.1.1 this algorithm read `winner_id`/`loser_id`/`hypothesis.id` — none
+    of which exist in any schema — and wrote a status outside the enum, so it
+    could not have run as written.)
+
+1. Read hypothesis file
+2. Parse frontmatter
+3. Read the A/B test's frontmatter:
+   - The link is `ab_test.tested_hypothesis` — a wikilink to the hypothesis file.
+     Confirm it resolves to hypothesis_artifact_path; if not, abort (wrong pair).
+   - Branch on `ab_test.result` (enum: winner | loser | inconclusive):
+       "winner"       → hypothesis.hypothesis_status = "validated"
+                        hypothesis.confidence = 0.95
+       "loser"        → hypothesis.hypothesis_status = "rejected"
+                        hypothesis.confidence = 0.2
+       "inconclusive" → hypothesis.hypothesis_status stays "testing"
+                        hypothesis.confidence = 0.5
+                        (there is no "inconclusive" hypothesis_status: the enum is
+                         proposed|testing|validated|rejected. An inconclusive test
+                         did not decide the hypothesis — it leaves it under test,
+                         which is also what keeps it visible to experiment-tracker.)
+
+4. Update hypothesis frontmatter:
+   - hypothesis_status: per the branch above
+   - test_result: "{one-line outcome} — see [[{ab_test_artifact_path}]]"
+                  (schema: a description of the outcome, not a path)
+   - validated_by: {person who ran/approved the readout}
+                  (schema: email or name of a person — the artifact link belongs
+                   in test_result / related, not here)
+   - related: += "[[{ab_test_artifact_path}]]"
+   - last_reviewed: {today ISO8601}
+
+5. Write hypothesis file back
+
+6. Update hypothesis status in Product MOC
+```
+
+---
+
+## Error Handling
+
+All vault errors are **NON-BLOCKING**. The main skill workflow must never fail due to vault issues. Graceful degradation applies throughout.
+
+### Error Handling Table
+
+| Scenario | Behavior |
+|----------|----------|
+| Vault path doesn't exist | Log warning, fallback to L0 (no vault) |
+| No write permissions on vault | Log warning, fallback to L0 |
+| MCP unavailable (connection fails) | Log info, fallback to L1 (file search only) |
+| MCP timeout (>3s on any call) | Abort MCP call, use L1 results; `ctx search` (since v3.16.0) gives a source 20 s and the whole search 60 s, then says `<id> не відповів — без нього` and goes on (`search-protocol.md` §3) |
+| Frontmatter parse error in artifact | Log error with file path, skip broken file, continue search |
+| File write error (disk full, permissions) | Log error, inform user "Could not save to vault", skip vault save |
+| MOC update fails | Log warning, artifact still saved (MOC update non-critical) |
+| Duplicate filename on save | Append suffix: `-2`, `-3`, etc., retry write |
+| Directory creation fails | Log error, fallback to L0 |
+| Backlink write fails | Log warning, continue (non-critical) |
+| Multi-vault merge fails | Use single vault results, continue |
+
+### User Notification
+
+Vault errors are communicated to user only if they block the skill's primary output:
+
+```
+IF artifact saved successfully:
+  → Show: "Saved to Vault: {relative_path}"
+  
+IF vault save failed but artifact generated:
+  → Show warning: "Could not save to vault (reason). Your artifact is ready above."
+  
+IF MCP degraded to L1:
+  → Silent (no user notification, automatic graceful downgrade)
+```
+
+---
+
+## Vault Structure Check
+
+Performed on each skill start as part of **Step 0** vault detection.
+
+### Algorithm
+
+```
+vault_structure_check(vault_path, plugin_folder):
+
+1. Check vault root directory:
+   IF NOT exists(vault_path):
+     → log warning "Vault path does not exist"
+     → fallback to L0
+     → return
+
+2. Check plugin folder — this is ROOT for every path below (same as vault_init):
+   ROOT = {vault_path}/{plugin_folder}
+   IF NOT exists(ROOT):
+     → create directory
+
+3. For each expected artifact type folder:
+   IF NOT exists({ROOT}/{TYPE_FOLDER_MAP[type]}):
+     → create directory silently
+
+4. For each product in local-context:
+   FOR each artifact type folder NOT under People/:
+     IF NOT exists({ROOT}/{TYPE_FOLDER_MAP[type]}/{product_slug}):
+       → create directory silently
+   (People/ keys by person and its subfolders appear on first write — vault_init step 2)
+
+5. Check the MOC folder:
+   IF NOT exists({ROOT}/_MOC):
+     → create directory
+   (The Dashboard is the file {ROOT}/_MOC/Dashboard.md — there is no `dashboard/`
+    folder in the schema; this check used to create one.)
+
+6. Do NOT delete unexpected files/folders:
+   → User may have created custom structure
+   → Log info only if unexpected folders detected
+
+7. Return success
+```
+
+---
+
+## Context Mirror to Vault
+
+When Obsidian Vault is configured, the plugin MUST maintain a mirror copy of all user context data in the vault. This serves as a **secondary backup** and enables recovery when `~/.grow-pm/` is lost (e.g., during plugin update).
+
+### Mirror folder structure
+
+```
+{vault}/{plugin_folder}/
+├── _System/                          # Mirrored system files
+│   ├── local-context.md              # Copy of ~/.grow-pm/local-context.md
+│   └── .schema-version               # Copy of ~/.grow-pm/.schema-version
+├── Knowledge/                        # Mirrored knowledge library
+│   ├── library.md                    # Copy of ~/.grow-pm/knowledge-library/library.md
+│   ├── categories.md                 # Copy of ~/.grow-pm/knowledge-library/categories.md
+│   ├── trust-scores.yaml             # Copy of ~/.grow-pm/knowledge-library/trust-scores.yaml
+│   └── sources/                      # Copy of ~/.grow-pm/knowledge-library/sources/*
+│       ├── source-1.md
+│       └── ...
+└── ... (existing artifact folders)
+```
+
+### Sync triggers
+
+Mirror sync MUST happen after:
+1. **Any write to `~/.grow-pm/local-context.md`** — Plugin Configurator (Onboarding, Update, View, Enrichment)
+2. **Any write to `~/.grow-pm/knowledge-library/`** — Knowledge Library skill (Add, Import, Manage, Verify)
+3. **Migration completion** — after schema migration or legacy data migration
+4. **Backup restore** — after restoring from backup
+5. **User request** — explicit "sync to vault" command
+
+### Sync algorithm
+
+```
+vault_mirror_sync(source_path, vault_config):
+
+1. Resolve vault path and plugin folder
+2. Ensure _System/ directory exists in vault
+3. Ensure Knowledge/ directory exists in vault
+
+4. For each file in mirror map (see persistent-storage.md VM-1):
+   a. Read source file from ~/.grow-pm/
+   b. If source exists:
+      - Write to vault mirror location
+      - Preserve file content exactly (no transformation)
+   c. If source does NOT exist but vault copy exists:
+      - Do NOT delete vault copy (it may be the only remaining copy)
+      - Log warning: "Source file missing but vault copy preserved"
+
+5. For knowledge-library/sources/:
+   a. List all .md files in ~/.grow-pm/knowledge-library/sources/
+   b. Copy each to {vault}/Knowledge/sources/
+   c. Do NOT delete vault files that don't have a source counterpart
+      (user may have manually added files to vault)
+
+6. Write sync timestamp to {vault}/{plugin_folder}/_System/.last-sync
+   Content: ISO timestamp + source version
+```
+
+### Recovery from vault
+
+See **Vault Recovery Protocol (VR-1 through VR-3)** in `references/persistent-storage.md`. This protocol is the primary defense against data loss during plugin updates.
+
+**Key principle:** The vault mirror is a **write-through replica** — every write to `~/.grow-pm/` is immediately followed by a write to the vault. During recovery, the vault → `~/.grow-pm/` direction is used.
+
+---
+
+## Related Documents
+
+- **vault-schema.md** — Frontmatter schema, artifact types, folder structure, templates
+- **local-context-protocol.md** — How skills read configuration and local context
+- **persistent-storage.md** — Persistent storage protocol, backup, mirror, and recovery protocols
+- **search-protocol.md** — Step 0.5: the search, the rating, what is taken, the block of variants (since v3.16.0)
+- **SKILL.md** — Individual skill documentation (includes Step 0.5 vault context integration)
+
+---
+
+**Version**: 1.1  
+**Last Updated**: 2026-04-15

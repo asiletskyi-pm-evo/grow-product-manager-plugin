@@ -1,0 +1,3 @@
+# The registry copy is generated (testing/registry_copy.py): collapsed in diffs.
+# Never mark it export-ignore — a registry downloads an archive of that folder.
+.ai-registry/** linguist-generated=true
