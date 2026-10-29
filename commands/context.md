@@ -1,6 +1,6 @@
 ---
-description: Typed command /grow-product-manager:context only — never for a conversational «що ти про мене знаєш» (that is context-navigator). show · health · inbox · recheck · consolidate · overlay (your corrections to a core) · history (what changed, a note a month).
-argument-hint: "show [запис] | health | inbox | recheck | consolidate | overlay | history [YYYY-MM]"
+description: Typed command /grow-product-manager:context only — never for a conversational «що ти про мене знаєш» (that is context-navigator). show · health · inbox · recheck · consolidate · overlay (your corrections to a core) · history (what changed, a note a month) · audit (your vault's links).
+argument-hint: "show [запис] | health | inbox | recheck | consolidate | overlay | history [YYYY-MM] | audit"
 disable-model-invocation: true
 ---
 
@@ -12,9 +12,9 @@ Your context, typed — what `context-navigator` does with the same words. No re
 
 ## What was typed
 
-The first word is the action — `show [id …]`, `health`, `inbox`, `recheck`, `consolidate`, `overlay`, `history [YYYY-MM]`; nothing → `health`, then the inbox's one line. What each runs, the one question it may ask and what it never does: **`references/context-protocol.md` §5q** — read it before the first step.
+The first word is the action — `show [id …]`, `health`, `inbox`, `recheck`, `consolidate`, `overlay`, `history [YYYY-MM]`, `audit`; nothing → `health`, then the inbox's one line. What each runs, the one question it may ask and what it never does: **`references/context-protocol.md` §5q** — read it before the first step.
 
-Any other first word → one line, `Невідома дія: <слово> — /grow-product-manager:context show [запис] | health | inbox | recheck | consolidate | overlay | history`, and stop.
+Any other first word → one line, `Невідома дія: <слово> — /grow-product-manager:context show [запис] | health | inbox | recheck | consolidate | overlay | history | audit`, and stop.
 
 ## Run
 

@@ -154,5 +154,16 @@ with tempfile.TemporaryDirectory() as d:                 # the line in `ctx heal
           any(l["level"] == "warn" and "виправних" in l["text"] and l["fix"] == "ctx vault normalize" for l in lines)
           and any(l["level"] == "act" and "регіони" in l["text"] for l in lines), lines)
 
+FA = read(ROOT, "skills", "focus-advisor", "SKILL.md")
+CM = read(ROOT, "commands", "context.md")
+check("v4.0.0 the health lines reach the morning brief: focus-advisor names the two prefixes ctx_audit.health writes "
+      "(«аудит вейлта», «регіони зламані») and the command, and /context takes `audit`",
+      "begins `аудит вейлта`" in FA and "`регіони зламані`" in FA and "/grow-product-manager:context audit" in FA
+      and "`audit`" in CM)
+import ctx_show as csh  # noqa: E402
+lines = ca.health(os.path.join(tempfile.gettempdir(), "no-such-home"), True, "2026-10-29")
+check("…and ctx_audit.health's lines begin so", all(t.startswith(("аудит вейлта", "регіони зламані")) for _, t, _ in lines)
+      and lines, lines)
+
 print("RESULT:", "GREEN ✅ — 0 failure(s)" if not fails else "RED ❌ — %d failure(s)" % fails)
 sys.exit(1 if fails else 0)

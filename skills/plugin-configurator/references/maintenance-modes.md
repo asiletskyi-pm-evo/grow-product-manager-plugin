@@ -504,3 +504,24 @@ The plugin version is bumped to reflect the **highest-impact** change among all 
 ### This skill's versioning
 
 This skill (`plugin-configurator`) must bump its own version when its SKILL.md is modified, following the same rules above.
+
+---
+
+## Workflow — Vault upkeep (since v4.0.0)
+
+What breaks the links of the user's layer, and what a machine can fix, with the user's word for every write (`references/context-protocol.md` §5s). Needs SHELL and a context store in the vault (`ctx undo` lives there); without SHELL one line — `Аудит і лад у вейлті потребують shell — тут недоступні` — and stop; with the store in `~/.grow-pm` the normaliser's own line says why it writes nothing.
+
+### VU-1. Audit
+`python3 "<plugin root>/scripts/ctx.py" audit` — give its lines as they are: each kind with a few examples, what is fixable, `не перевірено (iCloud): N`. With many evicted notes say once that the audit sees only what iCloud keeps on this Mac and how to widen it: `ctx index rebuild --download` (with the user's yes) or «Завжди зберігати на цьому пристрої» for the plugin folder in Finder. Exit 5 → the index is busy, try in a minute.
+
+### VU-2. The normaliser's report
+`python3 "<plugin root>/scripts/ctx.py" vault normalize` — numbered rows per operation (frontmatter, links, hubs, «Пов'язане», AGENTS.md, Bases), what is skipped and why, `код звіту: <code>`. Nothing to do → say so and stop.
+
+### VU-3. One question
+«Записати все / без номерів … / лише операції … / ні?» — one question, the recommended answer first (everything the report shows). Never a write without the user's answer in this conversation.
+
+### VU-4. The write
+`ctx vault normalize --apply --code <code> [--skip N,…] [--only …]` with the same `--only` as the report. Exit 4 (`звіт змінився`) → show the new report (VU-2) and ask again; never another code on your own.
+
+### VU-5. After it
+What was written (the lines), then `ctx audit` once more in one line (what is left and why it is not fixable — a dead link with no or several candidates, a region of another script, a type outside the taxonomy), and `Скасувати: ctx undo`.

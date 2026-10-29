@@ -416,7 +416,7 @@ check("connect-steps uses plan and apply", "ctx.py\" provider plan" in steps and
 check("connect-steps: the answers are --choose and --add, an unreachable repository (exit 5) writes nothing, the old path stays for no store",
       "--choose" in steps and "--add" in steps and "exit 5" in steps and "unreachable" in steps and "provider_bundle.py" in steps, "")
 check("the skill is 0.5.0 and a refresh with a store never stamps Updated or appends a changelog",
-      "version: 0.7.0" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
+      "version: 0.8.0" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
 
 # 11 — fix round 1: a refresh keeps a registration the user completed; a removed block recommends keeping the text; the apply carve-out
 # (the builder only proposes the registration — it never writes the file in the user's vault, so the rule lives in the procedure)
