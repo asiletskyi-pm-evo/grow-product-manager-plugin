@@ -207,6 +207,13 @@ with tempfile.TemporaryDirectory() as d:                 # the review of tasks 4
     rc, out, res = env.run("vault", "normalize", "--json")
     rows = (res or {}).get("rows", [])
     hubs = {r["path"]: r for r in rows if r["op"] == "hubs"}
+    for i in range(5):
+        write(env.note("Notes/People/p%d.md" % i), "---\ntype: people\ncreated: 2026-10-01\n---\n# P%d\n" % i)
+    rc, out, ppl = env.run("vault", "normalize", "--only", "bases", "--json")
+    check("acceptance: a People folder gets no .base, whatever its count", rc == 0
+          and not any(r["path"].startswith("Notes/People/") for r in ppl["rows"]), [r["path"] for r in ppl["rows"]])
+    for i in range(5):
+        os.remove(env.note("Notes/People/p%d.md" % i))
     check("review I-3: a Cyrillic type gets a hub whose id the parser reads; a type with a path in it a safe file name",
           "Notes/_MOC/зустріч — хаб.md" in hubs and "Notes/_MOC/templates-x — хаб.md" in hubs
           and not any("/Templates/" in h for h in hubs), sorted(hubs))
@@ -246,6 +253,12 @@ with tempfile.TemporaryDirectory() as d:                 # the review of tasks 4
           hr and hr[0]["path"] == "Notes/_MOC/зустріч — хаб.md" and [t for t, _ in hr[0]["links"]] == ["Notes/Lonely ru 2"],
           (hr, ru))
 
+roots_ = [("Notes", "/v/Notes")]
+check("acceptance: a relative link names one note from its own folder, or none — never the shortest path elsewhere",
+      cnz._choose(["Notes/A/_index.md", "Notes/_System/x/_index.md"], "Notes/A/B/n.md", roots_, "../_index") == "Notes/A/_index.md"
+      and cnz._choose(["Notes/A/2015/_index.md", "Notes/_System/x/_index.md"], "Notes/A/B/n.md", roots_, "../_index") is None
+      and cnz._choose(["Notes/_System/_index.md", "Notes/Deep/er/zz/_index.md"], "Notes/q.md", roots_, "_index")
+      == "Notes/Deep/er/zz/_index.md")
 import ctx_regions as rg  # noqa: E402
 ids = [cnz.hub_id(t) for t in ("зустріч", "нарада", "meeting-notes", "Weekly Sync")]
 check("review I-3: two types the id cannot spell get two ids, each read back by the region parser",

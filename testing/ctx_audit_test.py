@@ -139,6 +139,15 @@ with tempfile.TemporaryDirectory() as d:                 # a note indexed, then 
           and not any(f["path"] == "Notes/Two related.md" for f in res["findings"] if f["kind"] == "region")
           and any(p.endswith("Broken region.md") for p in opened), [p for p in opened if p.endswith(".md")][:8])
 
+with tempfile.TemporaryDirectory() as d:                 # acceptance: a note that is not UTF-8
+    env = VaultEnv(d)
+    open(env.note("Notes/Meetings/Latin1 2026-10-23.md"), "wb").write(b"---\ntype: meeting-notes\n---\n# Caf\xe9\n\n[[bea]]\n")
+    rc, out, res = env.run("audit", "--json")
+    mine = [f for f in res["findings"] if f["path"] == "Notes/Meetings/Latin1 2026-10-23.md"]
+    check("acceptance: a note that is not UTF-8 — named in the information, none of its findings fixable",
+          rc == 0 and res["info"]["not_utf8"] == ["Notes/Meetings/Latin1 2026-10-23.md"]
+          and mine and not any(f["fixable"] for f in mine if f["kind"] != "orphan"), mine)
+
 with tempfile.TemporaryDirectory() as d:                 # final review B1: a sensitive note's links never said
     env = VaultEnv(d)
     write(env.note("Notes/Meetings/1-1 Bea 2026-10-20.md"), "---\ntype: meeting-notes\ncreated: 2026-10-20\n"

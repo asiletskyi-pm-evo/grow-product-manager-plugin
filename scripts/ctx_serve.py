@@ -300,6 +300,9 @@ class Server:
         except Exception:  # noqa: BLE001 — without the answers the registry still answers
             pass
         reg, _ = ce.load(self.sctx, self.idx, mem, hints=False)
+        for e in reg.entities:                   # acceptance: the cards of another tool's local index are never served
+            e["cards"] = [c for c in e["cards"] if c.get("origin") != "local"] or e["cards"]
+            e["related"] = [c for c in e.get("related") or [] if c.get("origin") != "local"]
         return reg
 
     def t_vault_graph_context(self, args):
@@ -401,10 +404,12 @@ class Server:
         q = self._arg(args, "query")
         reg = self._registry()
         found, how = reg.find(q)
+        found = [e for e in found if any(c.get("origin") != "local" for c in e["cards"])]
         if not found:
             raise ToolError("nothing found: %s" % q)
         e = found[0]
-        hub = next((c for c in e["cards"] if c["path"] == e["id"]), e["cards"][0])
+        own = [c for c in e["cards"] if c.get("origin") != "local"]
+        hub = next((c for c in own if c["path"] == e["id"]), own[0])
         def mark(c, d):
             return dict(d, sensitive=True) if c.get("sensitive") else d
 

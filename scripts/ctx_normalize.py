@@ -263,10 +263,18 @@ def rewrite(rel, text, rows, today=None):
 
 
 # ------------------------------------------------------------------ the plan
-def _choose(cands, src, roots):
-    """The one of an ambiguous link's candidates Obsidian means for us: in your layer, then the source's folder, then
-    the shortest path; never one outside every vault (`@…`)."""
-    inside = [c for c in cands if not c.startswith("@")]
+def _choose(cands, src, roots, target=""):
+    """The one of an ambiguous link's candidates Obsidian means for us: a relative link (`./`, `../`) — the note it
+    names from the source's folder, or none (acceptance: never a guess); else in your layer, then the source's folder,
+    then the shortest path; never one outside every vault (`@…`), never one in `_System/` or `Templates/` of a plugin
+    folder (the plugin's own)."""
+    t = (target or "").strip()
+    if t.startswith(("./", "../")):
+        want = os.path.normpath(os.path.join(src.rsplit("/", 1)[0], t.split("|", 1)[0].split("#", 1)[0])).replace(os.sep, "/")
+        hit = [c for c in cands if c in (want, want + ".md")]
+        return hit[0] if len(hit) == 1 else None
+    inside = [c for c in cands if not c.startswith("@")
+              and not ((ca._inside(c, roots) or (None, ""))[1].startswith(ca.SKIP))]
     if not inside:
         return None
     folder = src.rsplit("/", 1)[0]
@@ -286,7 +294,7 @@ def _texts(rows, roots):
                 continue
             with open(w[2], "rb") as f:
                 out[path] = f.read().decode("utf-8")
-        except (OSError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError):    # a text that is not UTF-8 is never rewritten (the audit says so)
             continue
     return out
 
@@ -407,7 +415,7 @@ def plan(sctx, context, store, home, only=None, today=None):
                 continue
             d = f["detail"]
             here = [c for c in d["candidates"] if vault(c) is not None and vault(c) == vault(f["path"])]
-            new = _choose(here, f["path"], roots) if f["kind"] == "ambiguous" else (
+            new = _choose(here, f["path"], roots, d["target"]) if f["kind"] == "ambiguous" else (
                 here[0] if len(here) == 1 and len(d["candidates"]) == 1 else None)
             if not new:
                 skipped[SKIP["outside"]].append(f["path"])
@@ -534,6 +542,8 @@ def plan(sctx, context, store, home, only=None, today=None):
         for root_rel, disk in roots:
             for t, folder in sorted(tmap.items()):
                 f = folder.strip("/")
+                if t.lower() in ci.PEOPLE_TYPES or cg_people(f + "/x.md"):
+                    continue                     # acceptance: a People folder gets no table (its notes stay where they are)
                 if not os.path.isdir(os.path.join(disk, *f.split("/"))):
                     continue
                 pre = (root_rel + "/" if root_rel else "") + f + "/"

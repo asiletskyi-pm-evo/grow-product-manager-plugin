@@ -185,7 +185,8 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
     vault = vault_of(sctx)
     findings, types, no_inbound = [], collections.Counter(), 0
     checked, outside = 0, {}                     # outside: {path: the link targets outside every region and code}
-    broken = set()                               # the notes normalize never writes: regions not sound, an open fence
+    broken = set()                               # the notes normalize never writes: regions not sound, an open fence,
+    not_utf8 = []                                # a text that is not UTF-8
     for nid, path, title, typ, source in rows:
         where = _inside(path, roots) if source == "own" else None
         if not where or where[1].startswith(SKIP):
@@ -201,10 +202,16 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
         try:
             if ci.is_dataless(disk) or os.path.getsize(disk) > ci.MAX_BYTES:
                 continue
-            with open(disk, encoding="utf-8", errors="replace") as fh:
-                text = fh.read().replace("\r\n", "\n")
+            with open(disk, "rb") as fh:
+                data = fh.read()
         except OSError:
             continue
+        try:
+            text = data.decode("utf-8").replace("\r\n", "\n")
+        except UnicodeDecodeError:              # acceptance: a note that is not UTF-8 is never written — so not fixable
+            text = data.decode("utf-8", errors="replace").replace("\r\n", "\n")
+            broken.add(path)
+            not_utf8.append(path)
         outside[path] = rg.outside_targets(text)
         _, problems = rg.parse(text, providers=providers)
         if problems or rg.ends_in_fence(text):
@@ -283,7 +290,7 @@ def run(sctx, context, store=None, all_=False, budget=None, now=None, save=True)
     counts.update(fixable=sum(1 for f in findings if f["fixable"]), notes=checked,
                   unchecked=sum(1 for p, dl, md in own_names if md and dl))
     res.update(findings=findings, counts=counts,
-               info={"no_inbound": no_inbound, "shared_names": shared, "repeated_names": repeated,
+               info={"no_inbound": no_inbound, "shared_names": shared, "repeated_names": repeated, "not_utf8": not_utf8,
                      "types": dict(types.most_common())})
     if all_:
         res["cores"] = _cores(rows, out_ids, in_paths, dead)
@@ -398,6 +405,8 @@ def render(res):
         bits.append("назви, що є й в іншому шарі: %s" % ", ".join(info["shared_names"][:SHOWN]))
     if info.get("repeated_names"):
         bits.append("назви, повторені у твоєму шарі: %s" % ", ".join(info["repeated_names"][:SHOWN]))
+    if info.get("not_utf8"):
+        bits.append("не UTF-8 (не правлю): %s" % ", ".join(info["not_utf8"][:SHOWN]))
     if info.get("types"):
         bits.append("типи поза таксономією: %s" % ", ".join("%s %d" % kv for kv in list(info["types"].items())[:SHOWN]))
     out.append("  інформація: %s\n" % "; ".join(bits))

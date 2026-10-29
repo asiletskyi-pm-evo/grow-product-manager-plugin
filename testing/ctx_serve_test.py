@@ -170,6 +170,23 @@ with tempfile.TemporaryDirectory() as d:
     ans, _ = talk(env, [call(1, "vault_get_note", path="Notes/Roadmap.md")])
     check("v4.0.0 a call while the start's refresh runs waits for it — the note, not «busy»",
           ans and ans[0]["result"]["isError"] is False, ans)
+    import sqlite3
+    li = os.path.join(env.home, "zorg-brain.sqlite")
+    con = sqlite3.connect(li)
+    con.execute("CREATE TABLE meta(k TEXT, v TEXT)")
+    con.execute("CREATE TABLE notes(path TEXT PRIMARY KEY, title TEXT, type TEXT, fm_json TEXT)")
+    con.execute("CREATE VIRTUAL TABLE notes_fts USING fts5(path, title, body)")
+    con.execute("INSERT INTO notes VALUES ('Partner/People/bea-g.md', 'bea-g', 'person', ?)",
+                (json.dumps({"type": "person", "email": "bea@zorg.example"}),))
+    con.execute("INSERT INTO notes_fts VALUES ('Partner/People/bea-g.md', 'bea-g', 'text')")
+    con.commit()
+    con.close()
+    env.text = env.text + "\n### Vault Search MCP\n- zorg-brain: scope = own vault, index = %s\n" % li
+    write(env.ctx, env.text)
+    ans, _ = talk(env, [call(1, "brain_find_entity", query="bea@zorg.example")])
+    s1, _ = result(ans, 1)
+    check("acceptance: brain_find_entity serves the plugin's index alone — a card of another tool's local index never",
+          s1 and "Partner/" not in json.dumps(s1) and s1["hub"]["path"] == "ZorgCore/People/bea.md", s1)
     ans, _ = talk(env, [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}}])
     check("…a protocol version it does not speak: its newest", ans[0]["result"]["protocolVersion"] == csv_.PROTOCOLS[0], ans)
 
