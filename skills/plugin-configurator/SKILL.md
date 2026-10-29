@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.16.0
+version: 2.17.0
 description: Configure the plugin and your Obsidian vault — organization, products, teams, data sources — validate or view the config. Not the typed /status or /config commands. UA — «налаштуй плагін», «підключи Obsidian-вейлт», «покажи мій конфіг», «статус плагіна», «змінити роль», «налаштуй тестові акаунти», «налаштуй карту конкурентів». EN — "set my role".
 ---
 
@@ -32,13 +32,14 @@ Supports multiple organizations, products, and projects simultaneously.
 | **Reinstall / Migration** | Plugin reinstalled, `~/.grow-pm/` contains existing data | Detect existing data, show to user, ask: use as-is / reconfigure / start fresh. Migrate schema if needed. Includes Vault Recovery fallback | `references/maintenance-modes.md` → RM |
 | **Update** | `local-context.md` exists, user wants to change something | Edit a specific section: add product, update team, change dashboard URLs, add OKRs, manage Obsidian Vaults, Planning/Focus sections, etc. Always shows changelog | `references/maintenance-modes.md` → U |
 | **Validate** | User wants to check everything works | Test all MCP connections, verify data access, check context completeness, validate Obsidian Vault connectivity, produce readiness report | `references/maintenance-modes.md` → V |
+| **Vault upkeep** (since v4.0.0) | «аудит вейлта», «наведи лад у вейлті», «орфани», «мертві лінки», «нормалізуй вейлт» | `ctx audit` → `ctx vault normalize` (a dry run and a code) → your choice of operations and rows → `--apply --code` → `ctx undo` names what to do to take it back. Your layer only, downloaded notes only | `references/maintenance-modes.md` → VU |
 | **View** | User asks to see current config | Display current `local-context.md` contents in a readable format, allow inline edits via dialogue | `references/maintenance-modes.md` → VW |
 
 **Mode selection on launch** — evaluate in this order, first match wins (exception since v3.5.0: `set role` / «змінити роль», «яка моя роль у плагіні» and the write-gate explanation on an existing `local-context.md` go straight to their step — after RM-0 and RM-4 when `.schema-version` differs from the plugin version; every other request, `add CJM` / `add Planning` included, follows this list as before):
 
 1. **Any data exists under `~/.grow-pm/` or in a vault mirror** (even if `local-context.md` itself is gone) → **Reinstall/Migration**, RM-0 backup FIRST. RM-1 handles the "no local-context.md but a vault mirror exists" case by restoring it — which is precisely the state a naive "no context → Onboarding" rule would destroy by starting fresh over live data.
 2. **Nothing exists anywhere** → Onboarding.
-3. Otherwise route by the user's request: change something → Update; check → Validate; show → View; "dry-run onboarding" → Test.
+3. Otherwise route by the user's request: change something → Update; check → Validate; show → View; "dry-run onboarding" → Test; audit or tidy the vault → Vault upkeep.
 
 > Rules 1 and 2 both matched the data-recovery state until v2.1.0, and textual order sent it to Onboarding — bypassing the backup and the vault-recovery branch that exist for exactly that case.
 
@@ -108,6 +109,7 @@ The configurator's own setup run has no judgment points; the contract binds the 
 - **Update:** read `references/maintenance-modes.md` → U-1..U-4. Mandatory changelog after every save.
 - **Validate:** read `references/maintenance-modes.md` → V-1..V-6. Produces the readiness report.
 - **View:** read `references/maintenance-modes.md` → VW-1..VW-4.
+- **Vault upkeep (since v4.0.0):** read `references/maintenance-modes.md` → VU-1..VU-5. Needs SHELL and a context store in the vault; without them one line and stop.
 
 ---
 
@@ -207,4 +209,4 @@ Full protocol (skill/plugin version rules, required steps when modifying a skill
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
 
-> Configure the plugin and your Obsidian vault — organization, products, teams, data sources — validate or view the config; also when local-context.md is missing. Not the typed /status or /config commands. UA — «налаштуй плагін», «підключи Obsidian-вейлт», «додай продукт», «додай/налаштуй тестові акаунти», «налаштуй карту конкурентів», «перевір налаштування», «покажи мій конфіг», «статус плагіна, чи все підключено», «змінити роль», «яка моя роль у плагіні». EN — "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", "what is the plugin status", "set role", "change my role". Also UA — «сетап плагіна», «налаштувати контекст», «оновити конфігурацію». Since v3.22.0 also UA — «онови мій контекст із конекторів», «що ти можеш дізнатися про мене з конекторів»; EN — "bootstrap my context from the connectors".
+> Configure the plugin and your Obsidian vault — organization, products, teams, data sources — validate or view the config; also when local-context.md is missing. Not the typed /status or /config commands. UA — «налаштуй плагін», «підключи Obsidian-вейлт», «додай продукт», «додай/налаштуй тестові акаунти», «налаштуй карту конкурентів», «перевір налаштування», «покажи мій конфіг», «статус плагіна, чи все підключено», «змінити роль», «яка моя роль у плагіні». EN — "configure plugin", "set up plugin", "set up context", "add a product", "update configuration", "validate setup", "show config", "what is the plugin status", "set role", "change my role". Also UA — «сетап плагіна», «налаштувати контекст», «оновити конфігурацію». Since v3.22.0 also UA — «онови мій контекст із конекторів», «що ти можеш дізнатися про мене з конекторів»; EN — "bootstrap my context from the connectors". Since v4.0.0 (vault upkeep, `ctx audit` and `ctx vault normalize`): UA — «аудит вейлта», «наведи лад у вейлті», «знайди орфани», «мертві лінки у вейлті», «нормалізуй вейлт», «створи AGENTS.md для вейлту», «зроби Bases-індекси тек»; EN — "audit my vault", "tidy my vault", "fix orphans and dead links". «Що пов'язано з X» is context-navigator (`ctx graph`).

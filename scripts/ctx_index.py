@@ -147,12 +147,24 @@ CREATE TABLE IF NOT EXISTS links(note_id INTEGER, field TEXT, target TEXT, tkey 
 CREATE INDEX IF NOT EXISTS links_tkey ON links(tkey);
 CREATE INDEX IF NOT EXISTS links_note ON links(note_id);
 CREATE TABLE IF NOT EXISTS mentions(note_id INTEGER, key TEXT, browse INTEGER);
+CREATE TABLE IF NOT EXISTS facts(note_id INTEGER, hash TEXT, attribute TEXT, value TEXT, period TEXT, observed_at TEXT,
+                                 field TEXT);
+CREATE TABLE IF NOT EXISTS facts_src(note_id INTEGER PRIMARY KEY, hash TEXT);
+CREATE INDEX IF NOT EXISTS facts_note ON facts(note_id);
 CREATE INDEX IF NOT EXISTS mentions_key ON mentions(key);
 CREATE INDEX IF NOT EXISTS mentions_note ON mentions(note_id);
 """                                 # v3.18.0: one `ents` row per note (kind "" for a note that is no card) with the
                                     # note's hash and path, so a row an older build left behind is known as stale
                                     # (plan C11) — the path too, as SQLite gives a removed note's id to the next one
-ENTITY_TABLES = ("ents", "links", "mentions")
+ENTITY_TABLES = ("ents", "links", "mentions", "facts", "facts_src")        # facts since v4.0.0 (a card's numbers, ctx_facts)
+FACT_FIELDS = ("actual", "target", "value", "baseline", "current")
+FACTS_VERSION = 3                   # meta `facts_version`: an index of another value reads its cards once more for their
+                                    # facts (2: never a person's card or a sensitive one — review B1 of tasks 7–9)
+GRAPH_DDL = """
+CREATE TABLE IF NOT EXISTS names(path TEXT PRIMARY KEY, source TEXT, dataless INTEGER, md INTEGER);
+"""                                 # v4.0.0: every file a link may land on (`names`, evicted ones too), added in
+                                    # place to an earlier build's file; the derived tables (edges, unresolved,
+                                    # graph_src) are ctx_graph.EDGE_DDL, made anew whenever their rules change
 ENTITY_COLS = ("kind", "label", "emails_json", "team", "role", "slug", "aliases_json", "key", "bridges_json",
                "prefixes_json", "fields_json")       # fields_json since v3.19.0: an earlier build's table gets it in place
 NOTE_COLS = ("path", "source", "title", "type", "product", "status", "date", "ttl_date", "confluence_id",
@@ -878,6 +890,21 @@ def mentions_of(text):
     return [(k, k in browse) for k in sorted(keys)]
 
 
+def facts_of(fm):
+    """[(attribute, value, period, observed_at, field)] of a card's frontmatter (v4.0.0): every FACT_FIELDS field with a
+    value — its period `<field>_period`, else `period`; its day `<field>_updated`, else `snapshot`, else `updated`."""
+    fm = fm if isinstance(fm, dict) else {}
+    out = []
+    for f in FACT_FIELDS:
+        v = fm.get(f)
+        if not _text(v).strip():                     # _text: a list or a map says nothing
+            continue
+        period = _text(fm.get(f + "_period") or fm.get("period")).strip()
+        seen = (_date(fm.get(f + "_updated")) or _date(fm.get("snapshot")) or _date(fm.get("updated")) or "")[:10]
+        out.append((f, _text(v).strip(), period, seen, f))
+    return out
+
+
 def entity_rows(rel, text, title):
     """(identity or None, links, mentions) of a note's text — what the walk writes beside its row (v3.18.0)."""
     fm, body = _frontmatter((text or "").replace("\r\n", "\n"))
@@ -1161,6 +1188,7 @@ class Index:
                 cols = {r[1] for r in con.execute("PRAGMA table_info(notes)").fetchall()}
                 if row and row[0] == SCHEMA and set(NOTE_COLS) <= cols:    # a column short (an earlier build): rebuilt
                     con.executescript(ENTITY_DDL)       # an earlier build's file gets the tables in place (v3.18.0)
+                    con.executescript(GRAPH_DDL)        # and those of the graph (v4.0.0)
                     if "fields_json" not in {r[1] for r in con.execute("PRAGMA table_info(ents)").fetchall()}:
                         con.execute("ALTER TABLE ents ADD COLUMN fields_json TEXT")   # v3.19.0, in place
                         con.commit()
@@ -1178,7 +1206,7 @@ class Index:
 
     def _create(self):
         con = sqlite3.connect(self.db_path, timeout=5)
-        con.executescript(DDL + ENTITY_DDL)
+        con.executescript(DDL + ENTITY_DDL + GRAPH_DDL)
         con.execute("INSERT INTO meta(key, value) VALUES ('schema', ?)", (SCHEMA,))
         con.execute("INSERT INTO meta(key, value) VALUES ('near_version', ?)", (str(NEAR_VERSION),))
         con.execute("INSERT INTO meta(key, value) VALUES ('meta_version', ?)", (str(META_VERSION),))
@@ -1315,7 +1343,32 @@ class Index:
     def _walk(con, roots, store_rel, blocks_rels, deadline, res, saved, reread=False):
         """One walk into `con`, then the day and the counts: (files, sections, queue, when). `reread`: every downloaded
         file is read again for its metadata (META_VERSION); the version is written once a walk ends with nothing left."""
-        queue = _Walk(con, roots, store_rel, blocks_rels, deadline, res, reread=reread).run(saved)
+        walk = _Walk(con, roots, store_rel, blocks_rels, deadline, res, reread=reread)
+        queue = walk.run(saved)
+        if not res["pending"]:
+            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('facts_version', ?)", (str(FACTS_VERSION),))
+        con.commit()
+        import ctx_graph as cg                       # v4.0.0: the links resolved (imported here: it imports this one)
+        try:
+            pairs = sorted(((r["rel"], r.get("vault") or "") for r in walk.roots), key=lambda x: -len(x[0]))
+
+            def vault_of(path):                      # the vault an index name lies in, None outside every vault
+                if path.startswith("@"):
+                    return None
+                return next((v or None for rel, v in pairs if not rel or path == rel or path.startswith(rel + "/")),
+                            None)
+
+            cg.build(con, [r["rel"] for r in walk.roots if r["source"] == "own"], walk.touched, walk.name_keys,
+                     vault_of=vault_of)
+        except Exception:  # noqa: BLE001 — the graph is a cache of the section index: its fault never costs the index
+            con.rollback()                           # (review I-6); the next refresh builds the graph again
+            try:
+                con.execute("DELETE FROM meta WHERE key = 'graph_version'")
+                con.executescript(cg.EDGE_DDL.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ")
+                                  .replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS "))   # read as empty meanwhile
+                con.commit()
+            except sqlite3.DatabaseError:
+                pass
         if reread and not res["pending"]:
             con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('meta_version', ?)", (str(META_VERSION),))
         when = _now()
@@ -1585,6 +1638,11 @@ class Index:
         return out
 
 
+def _dotted(rel):
+    """Does an index name lie under a dot-folder or name a dot-file (`.git/…`, `.DS_Store`)? Never a name (review I-3)."""
+    return any(part.startswith(".") for part in rel.split("/"))
+
+
 def _alive(pid):
     try:
         os.kill(int(pid), 0)
@@ -1614,12 +1672,19 @@ class _Walk:
         self.rows = {}
         for nid, path, mtime, size, digest, source in con.execute("SELECT id, path, mtime, size, hash, source FROM notes"):
             self.rows[path] = {"id": nid, "mtime": mtime, "size": size, "hash": digest, "source": source}
+        self.names = {}                              # v4.0.0: every file a link may land on, evicted ones too
+        for path, source, dataless, md in con.execute("SELECT path, source, dataless, md FROM names"):
+            self.names[path] = {"source": source, "dataless": dataless, "md": md}
+        self.name_keys = set()                       # the name keys of the names that came or went: the links that
+        self.names_changed = False                   # name them are resolved again (ctx_graph)
+        self.touched = set()                         # the notes read again: their links are resolved again
         self.children = collections.defaultdict(set)
-        for path in self.rows:
+        for path in list(self.rows) + list(self.names):
             self._know(path)
         self.writes = 0
         for tb in ENTITY_TABLES:                     # the rows of a note an older build removed (v3.18.0, plan C11)
             con.execute("DELETE FROM %s WHERE note_id NOT IN (SELECT id FROM notes)" % tb)
+        facts_ok = (con.execute("SELECT value FROM meta WHERE key='facts_version'").fetchone() or [None])[0]
         self.stale_ents = {r[0] for r in con.execute(
             "SELECT n.id FROM notes n LEFT JOIN ents e ON e.note_id = n.id "
             "WHERE e.note_id IS NULL OR e.hash IS NOT n.hash OR e.path IS NOT n.path%s"
@@ -1629,10 +1694,16 @@ class _Walk:
                                                      # read again whatever their mtime: no identity row, or one an older
                                                      # build left behind when it changed the note (v3.18.0 wrote no
                                                      # slot fields: such a row is read again too, v3.19.0)
+        if facts_ok != str(FACTS_VERSION):           # v4.0.0: an earlier index's cards, read once more for their facts
+            self.stale_ents |= {r[0] for r in con.execute("SELECT note_id FROM ents WHERE kind != ''")}
+        else:                                        # a card an older build read again: its facts are of another hash
+            self.stale_ents |= {r[0] for r in con.execute(   # (facts_src; final review I1)
+                "SELECT e.note_id FROM ents e JOIN notes n ON n.id = e.note_id LEFT JOIN facts_src f ON f.note_id = n.id "
+                "WHERE e.kind != '' AND f.hash IS NOT n.hash")}
 
     def _outside(self, path):
         """Is this index name one of a root outside every vault (`@<its source>/…`)? A vault's own `@Name.md` is not."""
-        row = self.rows.get(path)
+        row = self.rows.get(path) or self.names.get(path)
         return bool(row) and path.startswith("@%s/" % row["source"])
 
     def _know(self, path):
@@ -1682,8 +1753,14 @@ class _Walk:
 
     def _drop_orphans(self):
         """The rows no root owns, gone in one pass; then the folder → name steps the walk knows, again from the rows."""
+        for path in [p for p in self.names if self._owner(p) is None]:
+            self._forget(path)
         orphans = [p for p in self.rows if self._owner(p) is None]
         if not orphans:
+            if self.names_changed:
+                self.children = collections.defaultdict(set)
+                for path in list(self.rows) + list(self.names):
+                    self._know(path)
             return
         for path in orphans:
             nid = self.rows.pop(path)["id"]
@@ -1692,7 +1769,7 @@ class _Walk:
             self.con.execute("DELETE FROM notes WHERE id=?", (nid,))
             self.res["removed"] += 1
         self.children = collections.defaultdict(set)
-        for path in self.rows:
+        for path in list(self.rows) + list(self.names):
             self._know(path)
 
     def _pending(self, left):
@@ -1741,22 +1818,59 @@ class _Walk:
         return files + dirs
 
     def _file(self, ri, path, rel):
+        try:
+            info = os.stat(path, follow_symlinks=False)    # once for the note and its name (v4.0.0, review I-5)
+        except OSError:
+            info = None
+        regular = info is not None and stat.S_ISREG(info.st_mode)
+        md = rel.lower().endswith(".md")
+        dataless = bool(regular and md and is_dataless(path))
+        try:
+            self._note(ri, path, rel, info, dataless)
+        finally:
+            if regular and not _skip_folder(rel, self.store_rel) and not _dotted(rel):
+                self._name(ri, rel, dataless, md)
+            elif rel in self.names:
+                self._forget(rel)
+
+    def _name(self, ri, rel, dataless, md):
+        """The file's row in `names` (v4.0.0): a regular file — a note, evicted or not, or any other file but one under
+        a dot-folder or a dot-file (`.git/…`) — is a name a link may land on; written only when it is new or its flags
+        changed."""
+        want = {"source": self.roots[ri]["source"], "dataless": int(dataless), "md": int(md)}
+        have = self.names.get(rel)
+        if have == want:
+            return
+        self.con.execute("INSERT OR REPLACE INTO names(path, source, dataless, md) VALUES (?, ?, ?, ?)",
+                         (rel, want["source"], want["dataless"], want["md"]))
+        self.names[rel] = want
+        if have is None:
+            self.names_changed = True
+            self.name_keys.add(name_key(rel))
+            self._know(rel)
+
+    def _forget(self, rel):
+        self.names.pop(rel, None)
+        self.con.execute("DELETE FROM names WHERE path=?", (rel,))
+        self.names_changed = True
+        self.name_keys.add(name_key(rel))
+
+    def _note(self, ri, path, rel, info, dataless):
         if excluded(rel, self.store_rel, self.blocks):
             if rel in self.rows:
                 self._remove(rel)
             return
-        try:
-            info = os.stat(path, follow_symlinks=False)    # a link to a file is not followed, a queued one neither
-        except OSError:
+        if info is None:                                     # a link to a file is not followed, a queued one neither
             return
         if not stat.S_ISREG(info.st_mode):
             if rel in self.rows:                             # a queued link to a file: its earlier row goes
                 self._remove(rel)
             return
-        if is_dataless(path):
+        if dataless:
             self.res["skipped_dataless"] += 1
             row = self.rows.get(rel)
-            if self.reread and row:                  # read once it comes down, its mtime as it was (v3.17.0)
+            if row and (self.reread or row["id"] in self.stale_ents):   # read once it comes down (v3.17.0; since
+                                                     # v4.0.0 a card to read again for its facts too — review I5)
                 self.con.execute("UPDATE notes SET mtime=-1 WHERE id=?", (row["id"],))
                 row["mtime"] = -1.0
             return
@@ -1805,6 +1919,7 @@ class _Walk:
                               values).lastrowid
             self.res["added"] += 1
         self.rows[rel] = {"id": nid, "mtime": info.st_mtime, "size": info.st_size, "hash": digest, "source": source}
+        self.touched.add(nid)
         if not row:
             self._know(rel)
         name = rel.rsplit("/", 1)[-1]
@@ -1841,7 +1956,15 @@ class _Walk:
                               for l in links])
         self.con.executemany("INSERT INTO mentions(note_id, key, browse) VALUES (?, ?, ?)",
                              [(nid, k, int(b)) for k, b in mentions])
+        fm, _ = _frontmatter((text or "").replace("\r\n", "\n"))
+        if ident.get("kind"):                        # the hash a card's facts were taken from, none or some
+            self.con.execute("INSERT OR REPLACE INTO facts_src(note_id, hash) VALUES (?, ?)", (nid, digest))
+        if ident.get("kind") and ident.get("kind") != "person" and not sensitive_of(fm or {}) \
+                and not one_on_one(rel, title):      # v4.0.0: a card's facts — never a person's, never a sensitive one
+            self.con.executemany("INSERT INTO facts(note_id, hash, attribute, value, period, observed_at, field) "
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?)", [(nid, digest) + f for f in facts_of(fm)])
         self.stale_ents.discard(nid)
+        self.touched.add(nid)
 
     def _drop_entities(self, nid):
         for tb in ENTITY_TABLES:
@@ -1862,7 +1985,10 @@ class _Walk:
             self._drop_entities(nid)
             self.con.execute("DELETE FROM notes WHERE id=?", (nid,))
             self.res["removed"] += 1
-        if any(p == prefix or p.startswith(prefix + "/") for p in self.rows):
+        for path in [p for p in self.names if (p == prefix or p.startswith(prefix + "/"))
+                     and (owner is None or self._owner(p) == owner)]:
+            self._forget(path)
+        if any(p == prefix or p.startswith(prefix + "/") for p in list(self.rows) + list(self.names)):
             return                                   # another root's rows by the same name: their names stay known
         parent, _, child = prefix.rpartition("/")
         self.children[parent].discard(child)

@@ -73,6 +73,8 @@ Both modes use the **same** `Templates/` layout (registry + partials + scopes), 
 ├── cores/<id>/                   # since v3.24.0: the plugin's own copy of a core that lives only on a server (ctx repo copy;
 │                                 #   context-provider-protocol.md §12.12) — a cache of the server, not in ctx undo
 ├── conflicts/<id>/<day>/         # …and the server's version of a note you changed in that copy
+├── audit/last.json               # since v4.0.0: the last `ctx audit` — counts and signatures, a cache (ctx health reads it)
+├── bin/ctx-serve                 # since v4.0.0: the launcher of `ctx serve` a client's config names (`serve --install`)
 └── backups/                      # Auto-backups before migrations
     ├── pre-migration-1.4.0/      # Backup taken before migrating to v1.4.0
     │   ├── local-context.md

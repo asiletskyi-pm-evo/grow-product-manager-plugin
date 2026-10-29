@@ -245,3 +245,15 @@ The user asks the base itself — «знайди в моєму контекст�
   - never the card's body or a judgement field.
 
   The profile itself belongs to the People contour (`one-on-one`, `performance-review`).
+
+## 14. The trust of a source (since v4.0.0)
+
+`ctx search --get` prints, under its provenance line, one more line — `> довіра 0,72 (джерело 0,9 · свіжість 0,8 · стан 1)` — and gives the same in its `CTX_RESULT` as `trust {score, parts, kind}`; `ctx entity` gives it with each fact of a card, and `ctx serve`'s `vault_get_note` with the note. It is shown so the reader can weigh a source; **it never changes the order of the list, the score or a rating of §5–§8**. `scripts/ctx_trust.py` holds the weights, and this table says the same:
+
+| Part | Values |
+|---|---|
+| source | your note 0.9 · a core's block or card (its folder, or the plugin's copy of it) 0.85 · a note of a local index 0.8 · a note a server gave 0.75 · a Confluence page mirrored into a core (`confluence_id`, a page id in its name) 0.7 |
+| freshness | 1 within the TTL of its class (a core's `ttl_days`, `context-provider-protocol.md` §6; a year when the class names none), then down in a straight line to 0.5 at three TTLs, never below 0.5; 0.6 without a day — counted from the later of the note's day and its `last_verified` / `last_reviewed` |
+| state | `superseded`, `archived`, `outdated` — the search's `застаріле` — 0.3 · `draft` 0.8 · else 1 |
+
+`trust = source × freshness × state`, two decimals. Cite a low trust as it is («довіра 0,4 — нотатка дворічна»), never drop a source for it: what to take is §6's decision.

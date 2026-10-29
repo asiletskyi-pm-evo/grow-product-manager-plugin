@@ -31,7 +31,7 @@ OP_WORDS = {"sync": "імпорт прямих правок", "set": "поле",
             "invalidate": "неактуальне", "archive": "в архів", "restore": "повернено", "verify": "перевірено", "assign": "хто читає",
             "slot": "слоти", "propose": "у скриньку", "inbox-accept": "прийнято зі скриньки", "inbox-reject": "відхилено зі скриньки",
             "bootstrap": "налаштування з конекторів", "overlay": "поправки до ядра", "provider-adopt": "бази ядра",
-            "entity": "сутності", "entity-apply": "мости в нотатках", "undo": "↩ ctx undo", "snapshot": "знімок",
+            "entity": "сутності", "entity-apply": "мости в нотатках", "vault-normalize": "лад у вейлті", "undo": "↩ ctx undo", "snapshot": "знімок",
             "compile": "компіляція", "search": "вибір у пошуку", "snapshot-import": "старі бекапи як знімки"}
 
 

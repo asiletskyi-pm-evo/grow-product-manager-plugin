@@ -444,6 +444,27 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
 - A skill that needs to change generated content changes its source and re-runs the generator; the user's own notes about it go outside the markers.
 - **Who owns the text inside.** Generated sections, maps of content and the other regions of a note belong to their script: the next run rewrites them, a hand edit included. A shared-context provider's block in the user's context is the exception when a context store exists: a human's edit inside it — in `local-context.md` or in a record file — is kept by `ctx provider apply`, which asks only when the provider changed the same block (`context-provider-protocol.md` §12, `context-protocol.md` §5e). Without a store the connect flow's proposal rewrites the provider's blocks as before.
 
+**Registry.** The namespaces a region may carry (since v4.0.0; `scripts/ctx_regions.py` `NAMESPACES` is the same set, and `testing/validate-consistency.sh` keeps the two equal). The id of every registered shared-context provider is a namespace too.
+
+| Namespace | Written by | `id` |
+|---|---|---|
+| `generated` | any generator of the vault — a script's own section | required, unless it is the only `generated` region of the note |
+| `related` | a «Пов'язане» block a script writes at a note's end — your own scripts write it without an id | as `generated` |
+| `person-context` | the person-context block of a meeting or a card | as `generated` |
+| `person-profile` | the profile block of a person card | as `generated` |
+| `ff-summary` | a summary a script keeps at a note's top | as `generated` |
+| `audit` | an audit's findings kept in a note | as `generated` |
+| `ctx` | the plugin itself: hubs (`hub-<type>`), «Пов'язане» (`related`), `_System/AGENTS.md` (`agents`), a record's status (`status`) | required |
+
+`ctx audit` reads every region of your layer by this table (`context-protocol.md` → `ctx audit`): a begin with no end, an end with no begin, an id twice, two regions of one namespace without an id, a namespace outside the table, a region inside another, a heading both inside a region and outside it. Since v4.0.0 the write gate asks before a Write or an Edit that changes a region of a note in a vault (`hooks/hooks.json`, `scripts/write_gate.py`).
+
+**What the plugin keeps in your layer (since v4.0.0, `ctx vault normalize` — `context-protocol.md` §5s).** Only with your code, a snapshot and `ctx undo`:
+- **Hubs.** A note with no link either way is listed in the region `ctx:hub-<type>` (the type in the letters an id takes, else with a short hash) of the hub of its type: the `type: moc` note that already links most notes of that type, else a new `_MOC/<type> — хаб.md` (`type: moc`; the type in the letters a file name takes — no folder separators or leading dots — and ` (ctx)` added when the name is taken). The hub keeps what it listed; a note gone leaves it; a People note is never listed.
+- **«Пов'язане».** The region `ctx:related` at a note's end: `**Пов'язане**` and a list of links — the work card of a Jira key the note mentions, a participant's person card the registry knows by an e-mail, an alias or a link. A note with a `related` region of your own scripts gets none.
+- **`_System/AGENTS.md`** of the plugin folder — the rules for an agent that writes in this vault, in the region `ctx:agents` (the regions and their registry, the core folders not to write into, unique names, the required fields, TYPE_FOLDER_MAP); the text outside the region is yours. The AGENTS.md at the vault's root is never touched.
+- **Bases.** `<folder>/<name>.base` for a TYPE_FOLDER_MAP folder with 5 notes or more — never a People folder: an Obsidian Bases table (Obsidian 1.9+) of the folder — `file.name`, `type`, `created`, `status`, sorted by `created`. Its first line `# ctx:generated — …` says the plugin rewrites it; a `.base` without that line is yours and stays.
+- **Links and fields.** A link Obsidian could open two ways becomes `[[<path>|<as written>]]` (`\|` on a table line); a missing `type` or `created` is added when the folder or a date says it. A value already there is never changed and a key never removed; a file is never renamed.
+
 **Layers.** TYPE_FOLDER_MAP folders are the user's layer — the only place skills write. A folder registered as a shared-context provider's local copy is read-only except for the paths the provider declares as the user's overlay (`context-provider-protocol.md` §7).
 
 ---

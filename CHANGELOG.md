@@ -12,6 +12,55 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.0.0 (2026-10-29)
+
+**«Вейлт: аудит і граф»: the links of your vault, seen and tidied.** The index now knows every file a link may land on and resolves every link once: `ctx graph` shows what is around a note or an entity, `ctx audit` names what breaks the links of your layer, and `ctx vault normalize` fixes what a machine can — with a report, your code, a snapshot and `ctx undo`. A card's numbers become facts with their period and day, every answer from a note can show the trust of its source, and `ctx serve` gives all of it to a host without a shell as a local MCP server. The last release of the programme «Петля контексту».
+
+MAJOR, by the programme's promise (concept §6 «Ціль v4.0»). **Breaking:** the write gate now asks before a Write, Edit or MultiEdit that changes a generated region of a note in a vault (`<!-- <ns>:begin … -->`) — a flow that edited such a region by hand gets a question; `/grow-product-manager:setup --write-gate off` turns every question of the gate off. Everything else is added: the index gains tables in place (no rebuild), the existing commands answer as in v3.24.
+
+### Added
+
+- **The graph of the index** (`scripts/ctx_graph.py`, `context-provider-protocol.md` §10):
+  - `names` — every file a link may land on, an evicted note and a picture too (never a dot-folder), so a link to a note iCloud evicted is no dead link;
+  - `edges` (wikilink · embed · fm:<field> · same_as · mention of a Jira key → its work cards) and `unresolved` (dead with the notes of its name as candidates · ambiguous with every note of the name), resolved by the rules of `ctx search --get`; a link lands only in its own vault;
+  - built at the end of a refresh that changed something: a changed note's links, the links that name a name that came or went, every note whose hash moved since (an older build sharing the index); everything only when the rules or the work cards change; a fault of the build costs the graph, never the index.
+- **`ctx graph <request> [--depth 1|2] [--kind …]`** — hops with `→` / `←` and the kind of each edge, 200 a hop at most; a sensitive note by title and path only and never walked through; the query alone under 300 ms on 6 500 notes.
+- **`ctx audit [--all]`** (`scripts/ctx_audit.py`) — orphans, dead and ambiguous links, broken generated regions, missing `type` / `created`, vault backups, cards that disagree on a fact — each fixable or not by the normaliser's own rules; `не перевірено (iCloud): N`; the last result in `~/.grow-pm/audit/last.json`, «нових від минулого аудиту»; `ctx health` lines → the morning brief.
+- **`ctx vault normalize [--only …]` · `--apply --code C [--skip N,…]`** (`scripts/ctx_normalize.py`) — in your layer, in downloaded notes only:
+  - `frontmatter` — a missing `type` (TYPE_FOLDER_MAP) and `created` (`date`, `created_at`, a date in the file name); an empty key filled in place; never a value changed or a key removed;
+  - `links` — an ambiguous name → your layer's note; a moved note → the one note of its name; the text a reader sees stays (`|as written`, `|Note > Heading`, `\|` in a table);
+  - `hubs` — an orphan listed in `ctx:hub-<type>` of the hub of its type (or a new `_MOC/<type> — хаб.md`); a People note never;
+  - `related` — «Пов'язане» from the Jira keys a note mentions and participants the registry knows by an e-mail, an alias or a link; not where your own scripts keep `related`;
+  - `agents` — the region `ctx:agents` of `_System/AGENTS.md`; `bases` — Obsidian Bases tables of the type folders with 5 notes or more, never a People folder;
+  - never a core, a copy, the store, an evicted note, a note that is not UTF-8, a code block, another script's region, a note with broken regions or an open code block at its end, a link into another vault; a relative link only to the note it names from its folder; a sensitive note's links are counted, never named; one snapshot, one journal line; `ctx undo` byte for byte, files it created removed, and the audit run again.
+- **The registry of generated regions** (`scripts/ctx_regions.py`, `vault-schema.md` → Registry; validate-consistency check 21) and the write gate on regions.
+- **Facts and trust** (`scripts/ctx_facts.py`, `ctx_trust.py`, `search-protocol.md` §14) — `actual`, `target`, `value`, `baseline`, `current` of a card (never a person's or a sensitive card) with their period and day; `ctx entity` «факти:» with ⚠ where two cards disagree; trust = source × freshness × state under the provenance line of `ctx search --get` and in its `CTX_RESULT` — shown, never ranked.
+- **`ctx serve [--install]`** (`scripts/ctx_serve.py`, `context-provider-protocol.md` §2) — a local stdio MCP server of `vault/v1` over the section index alone (never another tool's local index): the six `vault_*` tools, `brain_status`, `brain_find_entity`; read only, no network; batches; a sensitive note — by its index row or by its file as it is now — without its text or the links its text holds; `--install` writes `~/.grow-pm/bin/ctx-serve`, which `provider sync --if-due` keeps pointing at the plugin's current folder.
+- `testing/vault-evals.md`; tests `ctx_graph_test`, `ctx_regions_test`, `ctx_audit_test`, `ctx_normalize_test`, `ctx_facts_test`, `ctx_serve_test` (+ `ctx_vaultenv.py`), cases in `write_gate_test`.
+
+### Changed
+
+- **plugin-configurator 2.17.0** — mode «Vault upkeep» (`maintenance-modes.md` → VU): audit → report → one question → write with the code → `ctx undo`. **context-navigator 0.5.0** — «що пов'язано з X» from `ctx graph`; a card's facts with trust. **context-connect 0.8.0** — §10, the local MCP of your vault. **focus-advisor 0.9.7** — the audit's health line in the brief.
+- `/grow-product-manager:context audit`.
+- `references/context-protocol.md` §3, §5q, §5s, §9, §10; `context-provider-protocol.md` §2, §10; `search-protocol.md` §14; `vault-schema.md`; `data-policy.md`; `host-profiles.md`; `persistent-storage.md`.
+
+### Acceptance
+
+On a full scratch copy of the author's vault (`Context-Loop-Acceptance.md` §5; 7 309 notes; the real state fingerprinted before and after — no change from the acceptance's calls): index 33 s; `ctx audit` 3 s; `ctx vault normalize` — 219 rows, written in 14 s (178 files, no line removed but rewritten links, the core untouched), then 0 orphans and 0 fixable findings, a second run 0 rows, `ctx undo` — 8 100 files byte for byte; `ctx graph` two hops 9–19 ms; `ctx serve` — 8 tools, a 1-1 note without its text; a real metric card's facts with trust, and ⚠ on a staged disagreement. Found there and fixed: a relative link's choice, a note that is not UTF-8, Bases for People folders, `brain_find_entity` reading another tool's index. Four independent reviews (tasks 1–3, 4–6, 7–9 and the whole branch) found 4 blockers and 22 important defects; each was reproduced, fixed with a test and its mutants killed.
+
+### Known limits
+
+- A note iCloud evicted is neither audited nor fixed: «не перевірено N» (`ctx index rebuild --download`, or «Keep downloaded» in Finder).
+- A dead link with no candidate or several stays in the report; the normaliser never guesses, never renames a file, never changes a value (your own types outside the taxonomy are information).
+- «Пов'язане» only from strong keys; a note with your own `related` region is left alone.
+- Facts only from a card's frontmatter; the trust weights are a heuristic, shown and never ranked.
+- `ctx serve` asks neither a core's server nor another tool's local index; a sensitive note comes without its text.
+- Bases need Obsidian 1.9+.
+- `ctx undo --steps 2` and then `undo` of that undo cannot bring back a hub that was created by one normalisation and grown by the next; an older plugin's `ctx undo` of a normalisation is partial (and says so).
+- The `ctx serve` launcher keeps naming an older copy of the plugin while that copy is still on disk.
+- The plugin's reader of local indexes calls one shape of a user's own index «unknown» (seen on the author's; v3.24 the same) — a separate task.
+- No SHELL — no graph, audit or normaliser; `ctx serve` serves a host that starts a local MCP server.
+
 ## v3.24.0 (2026-10-29)
 
 **«Власна копія ядра для MCP»: a core that lives only on a server becomes a folder on your machine.** A registration with an endpoint and no folder of its own can now keep the plugin's own copy of the core in `~/.grow-pm/cores/<id>/` — made in one command, refreshed daily in the background, never deleting a note — and from its first complete pass the plugin reads the repository as a folder: blocks, the team block, search, entities and the bridges' boundary, with no VPN for search and entities.

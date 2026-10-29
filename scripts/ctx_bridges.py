@@ -296,8 +296,9 @@ def write_refusal(sctx, regs, store_root, home, rel):
         return "сховище в ~/.grow-pm (синк вейлту off) — мости пишуться лише у вейлт зі сховищем"
     if not _under(path, storage):
         return "інший вейлт — поза коренем сховища"
-    if "_system" in [x.casefold() for x in os.path.relpath(path, root).split(os.sep)[:-1]]:
-        return "_System/"
+    inner = os.path.relpath(path, root).split(os.sep)
+    if "_system" in [x.casefold() for x in inner[:-1]] and [x.casefold() for x in inner] != ["_system", "agents.md"]:
+        return "_System/"                    # since v4.0.0 its AGENTS.md is written (ctx vault normalize --only agents)
     for repo in sctx.get("repos") or ():
         for d in [repo.get("core_root")] + list(repo.get("paths") or ()):
             if d and _under(path, d):
@@ -638,6 +639,24 @@ def revert_notes(sctx, regs, store_root, home, items):
             kept[rel] = BOUNDARY % why
             continue
         path, _ = own_file(sctx, rel)
+        if n.get("removed") and not os.path.lexists(path):       # since v4.0.0: a file an undo removed comes back
+            copy = _kept_copy(mark, rel)
+            if copy is None or _sha(copy) != n.get("before"):
+                kept[rel] = ROTATED
+                continue
+            try:
+                cs.check_target(path)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "xb") as f:
+                    f.write(copy)
+            except (OSError, cs.PathRefused) as e:
+                kept[rel] = NOT_WRITTEN % (getattr(e, "strerror", None) or e)
+                continue
+            done.append({"path": rel, "line": "", "before": None, "after": _sha(copy), "created": True})
+            kept.pop(rel, None)
+            if rel not in reverted:
+                reverted.append(rel)
+            continue
         if not os.path.lexists(path):
             kept[rel] = GONE
             continue
@@ -648,6 +667,21 @@ def revert_notes(sctx, regs, store_root, home, items):
             cur = cs.read_bytes(path)
         except (OSError, cs.StoreError) as e:
             kept[rel] = "%s (%s)" % (UNREAD, getattr(e, "strerror", None) or e)
+            continue
+        if n.get("created"):                                     # since v4.0.0: a file the change created goes,
+            if _sha(cur) != n.get("after"):                      # only while it holds what the change wrote
+                kept[rel] = EDITED
+                continue
+            try:
+                cs.check_target(path)
+                os.remove(path)
+            except (OSError, cs.PathRefused) as e:
+                kept[rel] = NOT_WRITTEN % (getattr(e, "strerror", None) or e)
+                continue
+            done.append({"path": rel, "line": "", "before": _sha(cur), "after": None, "removed": True})
+            kept.pop(rel, None)
+            if rel not in reverted:
+                reverted.append(rel)
             continue
         line = n.get("line") if isinstance(n.get("line"), str) else ""
         adds = mark.get("op") == OP or bool(n.get("added"))       # the change put our line in

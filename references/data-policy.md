@@ -81,6 +81,12 @@ Step 0.5 of every skill searches the user's own base and, when it is not enough,
 
 `ctx entity apply` writes one frontmatter line into a note of the user's own plugin folder — a link to another card of the same entity and that card's title, identity alone, never a field, a value or a line of a profile — only after the user's «так» to the report, never into a core's folder; `ctx undo` takes it back (`references/context-protocol.md` §5h). The snapshot taken before keeps a copy of each note written — local, in `~/.grow-pm/snapshots/`, readable by the user alone (0600), rotated with the snapshots.
 
+## The vault's audit, normaliser and local MCP (since v4.0.0)
+
+- **`ctx graph`, `ctx audit`** read the index and the downloaded notes of your layer on your machine; a sensitive note is its title and path in their answers — no type, no field it links from, no text, and the graph never walks on through it. The audit's last result (`~/.grow-pm/audit/last.json`) keeps counts and short signatures of findings, never a note's text.
+- **`ctx vault normalize`** writes only into your own layer, after your code, with a snapshot (local, 0600) and `ctx undo`. A People note is never listed in a hub, so its title never reaches a note outside the People contour; «Пов'язане» names a person's card only by what the registry knows from an e-mail, an alias or a link — the card's path and title, identity alone.
+- **`ctx serve`** answers only a local MCP client the user configured (stdio — no port, no network) and only from the section index and the files of your layer and the core folders it names (a note's text is read from its file when it is downloaded): a note the search marks sensitive — or whose file says so now — is given as its path and title with `sensitive: true`, never its text, frontmatter or the links its text holds; its other answers mark such notes the same way. A person's or a sensitive card's numbers are never facts (`ctx entity` and `ctx audit` alike). It sends nothing anywhere: what a client does with an answer is that client's, under this policy as any session.
+
 ---
 
 ## What the context store never keeps (since v3.21.0)

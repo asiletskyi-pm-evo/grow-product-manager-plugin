@@ -3225,7 +3225,7 @@ need_cst = ["`sync: daily`", "`sync: off`", "except `sync`", "`--choose <block>=
             "One `--choose` takes several answers", "ctx provider sync <repo>"]
 check("connect-steps asks about `sync: daily` once, settles every `?` before it, carves `sync` out of the kept-keys rule and shows several answers per --choose",
       not lacks(cst3, need_cst) and 0 <= i_first < i_q, (lacks(cst3, need_cst), i_first, i_q))
-need_skl = ["version: 0.7.0", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
+need_skl = ["version: 0.8.0", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
 check("the skill is 0.5.0 (slots, v3.15.0) and asks the daily-sync question only on the user's own yes", not lacks(skl3, need_skl), lacks(skl3, need_skl))
 
 # the registry: one case per area, above v3.13.1
@@ -4182,9 +4182,10 @@ need_15 = [
             "a new key, or a new meaning of one, needs a new schema, `context-slots-memory/2`", "v3.15.0 treats a `/2` file as a memory it cannot read",
             "One line, printed once before `Відсутнє:` and not under each candidate", "`jira_team_field` is a team's name, not a Jira Team ID",
             "a block id that is not an id (`bind` does not check that the block exists", "the publisher's `slot=` in the begin marker of the block's base",
-            # §10's roadmap since v3.21.0 (the programme «Петля контексту»): what shipped, what is next
+            # §10's roadmap since v3.21.0 (the programme «Петля контексту»): what shipped — since v4.0.0 all of it
             "Shipped by v3.20.0: search across repositories (§5g)", "entities and cross-links (§5h)",
-            "the declared overlay `overlays/<repo>.yaml`", "the configurator as a loop", "— v3.24.0"]),
+            "the declared overlay `overlays/<repo>.yaml`", "the configurator as a loop",
+            "By v3.24.0: the plugin's own copy of a core", "Shipped by v4.0.0: the graph of the index"]),
     (pp15, ["**A slot — `slot=`** (since v3.15.0)", "`<!-- <namespace>:begin id=<block> v=<version> slot=<slot> -->`", "`xslot=` is no attribute",
             "A holder's own binding of the block (`ctx slot bind`) wins over the attribute for the whole block",
             "the plugin binds the block itself", "nothing else of the block is bound",
@@ -4202,15 +4203,15 @@ need_15 = [
              "for the second kind keep `ctx slot bind <repo> <block> <slot> --team <team record>` ready",
              "holds for every key except `sync` (and, since v3.15.0, the taking of one id out of `skip_blocks`, below)",
              "**The second exception: one id out of `skip_blocks`** (since v3.15.0)"]),
-    (skl15, ["version: 0.7.0", "## Step 4a — slots after a refresh (with a store, since v3.15.0)", "this skill binds only what the user confirms (`ctx slot bind`)", "the publisher's `slot=` and the plugin's own `team#Members` bind without a yes",
+    (skl15, ["version: 0.8.0", "## Step 4a — slots after a refresh (with a store, since v3.15.0)", "this skill binds only what the user confirms (`ctx slot bind`)", "the publisher's `slot=` and the plugin's own `team#Members` bind without a yes",
              "offered at a refresh, in one message (a no is offered again at the next refresh)", "except a divergence, which recommends no side",
              "and the removal of one id from `skip_blocks` on the user's yes for that block (Step 4a)", "adding an id to `skip_blocks` in Step 4a",
              "(the second exception of `references/context-provider-protocol.md` §3b)", "a no changes nothing",
              "without the user's own yes for that block or slot"]),
     (mm15, ["since v3.15.0 the slots (`references/context-protocol.md` §5f)", "the answer per slot being `ctx slot decide <slot> <repo>`",
             "a yes being `ctx slot bind …` for each confirmed one", "### Context slots (only with a context store)"]),
-    (cfg15, ["version: 2.16.0"]),
-    (readme15, ["### 32. Context Connect (v0.7.0)", "| Context Connect | v0.7.0 |", "### 10. Plugin Configurator (v2.16.0)", "| Plugin Configurator | v2.16.0 |",
+    (cfg15, ["version: 2.17.0"]),
+    (readme15, ["### 32. Context Connect (v0.8.0)", "| Context Connect | v0.8.0 |", "### 10. Plugin Configurator (v2.17.0)", "| Plugin Configurator | v2.17.0 |",
                 "**Slots, the cascade and `ctx explain`** (since v3.15.0)", "and — at a refresh — the blocks you had switched off", "since v3.15.0 `explain` and `slot bind|map|prefer|decide|forget`"]),
     (hp15, ["since v3.15.0 slots and the cascade in `ctx read`, `ctx explain`, `ctx slot …`"]),
 ]
@@ -4759,7 +4760,8 @@ with tempfile.TemporaryDirectory() as d:
           and res["text"].startswith("# Team Alpha\n\n"), (rc, res, out[-300:]))
     rc, out, res = run_ok(env, "search", "--get", TEAM5 + "#Members")
     check("U6: …`<шлях>#<заголовок>` prints that section under its heading path", rc == 0
-          and out.startswith("> [zorg-core · %s › Team Alpha › Members · 2026-01-01 · team]\n- Alex One" % TEAM5), (rc, out[:300]))
+          and out.startswith("> [zorg-core · %s › Team Alpha › Members · 2026-01-01 · team]\n> довіра " % TEAM5)
+          and out.split("\n")[2].startswith("- Alex One"), (rc, out[:300]))   # v4.0.0: the trust line under it
     rc, out, res = run_ok(env, "search", "--get", "Delivery slots (900100200)")
     check("U1: a name two notes carry: exit 3, the line naming them", rc == 3 and out.startswith(
         "search: кілька нотаток із назвою «Delivery slots (900100200)»: Notes/Knowledge/Delivery slots (900100200).md · "

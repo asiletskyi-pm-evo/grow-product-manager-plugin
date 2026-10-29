@@ -15,7 +15,7 @@ cards apart whatever the keys say. Nothing is written into a note.
 - empty_memory, load_memory, save_memory, answer   read, write and change it (`ctx entity same|not-same`)
 - local_cards                   the cards of every registered local index the plugin's own index does not hold —
                                 their frontmatter alone (ctx_index.identity_of), read only, as `ctx search` opens one
-- Resolver                      a link's target as written → the note it means, by the rules of `ctx search --get`:
+- Resolver                      (since v4.0.0 ctx_graph.Resolver) a link's target as written → the note it means, by the rules of `ctx search --get`:
                                 the exact path, the plugin folder's path, the end of a path, the name; several → a list
 - build, Registry               the entities: cards joined by the keys, the related teams (a link under another name),
                                 the open pairs; `find` — a request as an e-mail, a Jira key, a path, a name, then alike
@@ -42,6 +42,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_overlay as ov  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_index as ci  # noqa: E402
+import ctx_graph as cg  # noqa: E402
 import ctx_search as cs_  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_slots as sl  # noqa: E402
@@ -368,62 +369,7 @@ def local_edges(sctx, ent, own_paths, people=False, notes=None, cache=None):
 
 
 # ------------------------------------------------------------------ links
-class Resolver:
-    """The note a link's target means (plan C5, the rules of `ctx search --get`). `notes`: {path: title, or {title,
-    source, sensitive, date}} — every note a link may land on; `plugin_prefixes`: the index names of the plugin folders."""
-
-    def __init__(self, notes, plugin_prefixes=()):
-        self.meta = {}
-        for p, v in (notes or {}).items():
-            self.meta[N(p)] = dict(v) if isinstance(v, dict) else {"title": v}
-        self.prefixes = [N(p).strip("/") for p in plugin_prefixes or () if p]
-        self.exact, self.tails, self.names, self.local = {}, {}, {}, set()
-        for p in self.meta:
-            cf = p.casefold()
-            self.exact.setdefault(cf, []).append(p)
-            parts = cf.split("/")
-            for i in range(1, len(parts)):
-                self.tails.setdefault("/".join(parts[i:]), []).append(p)
-            self.names.setdefault(ci.name_key(p), []).append(p)
-            if self.meta[p].get("origin") == "local":
-                self.local.add(p)
-
-    @staticmethod
-    def clean(target):
-        """A target as a path to look up: `[[…]]`, `|label`, `#anchor`, `\\`, `./` and `../` gone."""
-        t = N(target or "").strip()
-        if t.startswith("[[") and t.endswith("]]"):
-            t = t[2:-2]
-        t = t.split("|", 1)[0].split("#", 1)[0].replace("\\", "/").strip()
-        while t.startswith(("../", "./")):
-            t = t[3:] if t.startswith("../") else t[2:]
-        return t.lstrip("/")
-
-    @staticmethod
-    def _one(found):
-        found = sorted(set(found or ()))
-        return None if not found else found[0] if len(found) == 1 else found
-
-    def resolve(self, target):
-        """The path of the one note `target` means, a sorted list when several do, None when none does."""
-        t = self.clean(target)
-        if not t:
-            return None
-        base = t[:-3] if t.lower().endswith(".md") else t
-        want = (base + ".md").casefold()
-        if want in self.exact:
-            return self._one(self.exact[want])
-        if "/" not in base:                     # a name: the own index's notes first, as --get looks (`_by_name`)
-            hits = self.names.get(ci.name_key(base)) or []
-            return self._one([p for p in hits if p not in self.local] or hits)
-        for pre in self.prefixes:               # a path: the plugin folder's, then the end of a path (`_by_tail`)
-            hit = self.exact.get((pre + "/" + base + ".md").casefold())
-            if hit:
-                return self._one(hit)
-        return self._one(self.tails.get(want))
-
-    def title(self, path):
-        return (self.meta.get(path) or {}).get("title") or _stem(path)
+Resolver = cg.Resolver                  # since v4.0.0 in ctx_graph (the edges of the index use it too)
 
 
 # ------------------------------------------------------------------ the registry
@@ -851,6 +797,8 @@ def run(sctx, query, kind=None, skill=None, store=None, budget=None, slots=None,
                 notes.append(idx.problem)
             one["mentions"] = mentions(idx, e["key"], {c["path"] for c in e["cards"]}, people) if e["key"] else \
                 {"count": 0, "items": []}
+            import ctx_facts as cf               # v4.0.0: the numbers its cards carry, with their trust
+            one["facts"] = cf.of_entity(sctx, idx, e)
             if idx.problem and idx.problem not in notes:
                 notes.append(idx.problem)
         out["entities"].append(one)
@@ -1004,6 +952,10 @@ def render(res):
         for m in e["maybe"]:
             lines.append("  можливо той самий: %s%s — ctx entity same|not-same \"%s\" \"%s\""
                          % (m["path"], " (%s)" % (HINT % m["hint"]) if m.get("hint") else "", m["mine"], m["path"]))
+        if e.get("facts"):                             # v4.0.0
+            import ctx_facts as cf
+            lines.append("  факти:")
+            lines.extend(cf.lines(e["facts"]))
         for name, part in (("хто посилається", e.get("backlinks")), ("згадки", e.get("mentions"))):
             if part is None:                            # --slot: no backlinks, no mentions
                 continue

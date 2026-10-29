@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 3.24.0
+**Version:** 4.0.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.0.0** — **«Вейлт: аудит і граф»: the links of your vault, seen and tidied** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). The index now knows every file a link may land on — an evicted note and a picture too — and resolves every link once, in its own vault: `ctx graph <note or entity>` shows what is one or two hops around it in milliseconds. `ctx audit` names what breaks the links of your layer — orphans, dead and ambiguous links, broken generated regions, missing `type`/`created`, backups, two cards that disagree on a number — and says which of them a machine can fix; `ctx vault normalize` fixes those with a report, your code, a snapshot and `ctx undo` (a link keeps the text a reader sees, a value is never changed, a file never renamed, People notes never listed), and adds `_System/AGENTS.md` and Obsidian Bases tables. A card's numbers become facts with their period and day, and every answer from a note can show the trust of its source. `ctx serve` gives all of it to a host without a shell as a local MCP server of `vault/v1`. **Breaking:** the write gate now asks before a write that changes a generated region of a note (`/grow-product-manager:setup --write-gate off` turns it off). Measured on a full copy of the author's vault (7.3k notes): the audit in 3 s, 178 files normalised and every one of them back byte for byte after `ctx undo`, 0 orphans and 0 fixable findings after the write, a two-hop graph in 19 ms. The last release of the programme «Петля контексту».
 
 **New in v3.24.0** — **«Власна копія ядра для MCP»: a core that lives only on a server becomes a folder on your machine** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). When a team's core is reachable only as an MCP server, `ctx repo copy <id>` makes the plugin's own copy of it in `~/.grow-pm/cores/<id>/` in one command — every note under the server's root, at its path there. From then on the plugin reads the repository as a folder: the blocks, the team block, the search, who-is-who and the bridges' boundary — and the search and entities answer without the VPN. The daily sync refreshes the copy in the background with a full pass and never deletes anything: a note gone from the server moves into `.removed/` only after two complete listings without it, and an incomplete listing from the server writes nothing and moves nothing. A note you changed in the copy stays yours; when the server changed it too, its version waits in `~/.grow-pm/conflicts/`. For the team block through a server that serves notes only, the core's owner publishes the manifest and the role model as two `.md` wrappers (`ctx repo kit-check` checks them). Measured on the author's real core: 4 865 notes in one command, a rerun with 0 writes, every semantic hash equal to the author's own sync script, and the team block from the copy byte for byte the one from the folder.
 
@@ -363,7 +365,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.16.0)
+### 10. Plugin Configurator (v2.17.0)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -519,7 +521,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 20. Focus Advisor (v0.9.6) — NEW in v1.31.0, complete in v1.33.0
+### 20. Focus Advisor (v0.9.7) — NEW in v1.31.0, complete in v1.33.0
 
 **Description:** PM attention dispatcher — the 4th height of the suite, above structure/quarter/sprint. Scans the PM's context (sprint cycle position, calendar meetings needing preparation, important unanswered emails, open action items from recent meetings, Jira tails), ranks the signals, and recommends 1–3 focuses with reasons, cost of delay, and a chained next step. Recommends and chains — never executes another skill's work; the PM decides.
 
@@ -624,13 +626,13 @@ The second contour of the plugin: **manager → people → goals → communicati
 **Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
 
 
-### 32. Context Connect (v0.7.0) — NEW in v3.10.0
+### 32. Context Connect (v0.8.0) — NEW in v3.10.0
 
 **Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. With a context store a refresh ends with the slots (since v3.15.0): in one message each, the bindings of the core's blocks to slots for you to confirm, the divergences between repositories to settle, and — at a refresh — the blocks you had switched off that now have a slot, with a yes per block to bring one back (a no is offered again at the next refresh; `references/context-protocol.md` §5f). Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
-### 33. Context Navigator (v0.4.4) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0, bridges in your notes since v3.20.0
+### 33. Context Navigator (v0.5.0) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0, bridges in your notes since v3.20.0
 
 **Description:** Since v3.17.0 it answers and searches from your whole context — your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct — with or without a shared core: an answer with a source and a date for every statement, or a list of notes, and a «Де шукав» line naming each source; `/grow-product-manager:find` runs the same search. With a shared core it answers from it instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
 
@@ -652,7 +654,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.18.2 | Process meetings and extract action items |
-| Plugin Configurator | v2.16.0 | Configure plugin for your organization |
+| Plugin Configurator | v2.17.0 | Configure plugin for your organization |
 | Knowledge Library | v0.9.2 | Manage curated knowledge sources |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
@@ -662,7 +664,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Quarterly Planning | v0.8.1 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.2 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.4.2 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
-| Focus Advisor | v0.9.6 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
+| Focus Advisor | v0.9.7 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.1 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
 | Feedback Triage | v0.7.1 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
@@ -672,8 +674,8 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Hiring Designer | v0.2.2 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
 | Offboarding Guide | v0.2.2 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
-| Context Connect | v0.7.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
-| Context Navigator | v0.4.4 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
+| Context Connect | v0.8.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
+| Context Navigator | v0.5.0 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---
 
@@ -1089,5 +1091,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 3.24.0  
+**Version:** 4.0.0  
 **Last Updated:** October 2026

@@ -332,6 +332,10 @@ import ctx_common as cc  # noqa: E402
 import ctx_consolidate as ccn  # noqa: E402
 import ctx_copy as ccp  # noqa: E402
 import ctx_entity as ce  # noqa: E402
+import ctx_graph as cg  # noqa: E402
+import ctx_audit as ca  # noqa: E402
+import ctx_normalize as cnz  # noqa: E402
+import ctx_trust as ctt  # noqa: E402
 import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
 import ctx_history as chi  # noqa: E402
@@ -413,6 +417,8 @@ def writes(a):
     if a.cmd == "entity" and _entity_action(a)[0] in ("same", "not-same"):
         return True
     if a.cmd == "entity" and _entity_action(a)[0] == "apply":
+        return getattr(a, "apply", False)
+    if a.cmd == "vault":                                # since v4.0.0: normalize writes only with --apply
         return getattr(a, "apply", False)
     if a.cmd == "migrate" or (a.cmd == "provider" and getattr(a, "action", None) == "adopt"):
         return getattr(a, "apply", False)
@@ -1042,6 +1048,11 @@ def cmd_undo(a, c):
                     print("бекап не повернуто: %s — %s" % (path, why))
         for rel, why in notes_kept:
             print("не повернуто: %s — %s" % (rel, why))
+        if any(m.get("op") == "vault-normalize" for m in marks[-a.steps:]):    # since v4.0.0: ctx health tells the truth
+            try:
+                ca.run(sctx or cs_.context_for(c.home, c.text, store_root=c.store.root), c.context, store=c.store, now=now())
+            except Exception:  # noqa: BLE001 — a cache never changes the undo's result
+                pass
         reverted, kept, rejected, rejected_failed = [], [], {}, {}
         hist = os.path.join(c.store.root, "history")
         if not existed and os.path.isdir(hist):         # since v3.23.0: the changelog is derived — no store, no notes of it
@@ -1322,7 +1333,8 @@ def cmd_health(a, c):
                        len(c.store.stray_files()), warnings, errors, csh.index_state(c.home), csh.snapshots(c.home),
                        csh.backups(c.home, c.context, c.text), today, unread_regs=skipped,
                        recheck=_recheck_health(c, today), consolidate=_consolidate_health(c, today),
-                       overlays=_overlay_health(c))
+                       overlays=_overlay_health(c),
+                       audit=ca.health(c.home, bool(cc.vault_entries(c.text)), today))
     for level, text, fix in lines:
         print("%s %s%s" % (csh.MARK[level], text, (" — " + fix) if fix else ""))
     n = {k: sum(1 for l in lines if l[0] == k) for k in (csh.OK, csh.WARN, csh.ACT)}
@@ -1951,10 +1963,14 @@ def cmd_search(a, c):
         except cs_.GetError as e:
             print("search: %s" % e)
             return e.code, {"command": "search", "action": "get", "id": a.get, "error": str(e)}
+        trust = _get_trust(sctx, header)                    # since v4.0.0: shown, never ranked
         if not a.json:
             print(header)
+            if trust:
+                print("> " + ctt.line(trust))
             print(text)
-        return 0, {"command": "search", "action": "get", "id": a.get, "header": header, "text": text if a.json else None}
+        return 0, {"command": "search", "action": "get", "id": a.get, "header": header, "text": text if a.json else None,
+                   "trust": trust}
     if not a.q:
         raise Usage("search takes --q TEXT (once or more) or --get ID|PATH|NAME")
     which = _search_kinds(a.sources)
@@ -2079,6 +2095,151 @@ def cmd_entity(a, c):
         return 5, dict(res, error="not read")
     if not a.json:
         sys.stdout.write(ce.render(res))
+    return 0, res
+
+
+def cmd_graph(a, c):
+    """`graph <request> [--depth 1|2] [--kind K,…]` (since v4.0.0, ctx_graph.run): the notes around a note or an entity,
+    from the edges of the index. Reads the index (refreshed as `entity` does); writes nothing else."""
+    kinds = [k.strip() for k in (a.kind or "").split(",") if k.strip()]
+    for k in kinds:
+        if k not in GRAPH_KINDS and not k.startswith("fm:"):
+            raise Usage("--kind takes %s or fm:<field>" % ", ".join(GRAPH_KINDS))
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    if not sctx["roots"]:
+        print("graph: nothing to walk — no vault in local-context.md, no registered repository with a folder on disk")
+        return 3, {"command": "graph", "error": "nothing to walk"}
+    res = cg.run(sctx, " ".join(a.words).strip(), depth=a.depth, kinds=kinds, store=c.store)
+    if not res["read"]:
+        print(cg.NOT_READ % ("; ".join(res["notes"]) or "індексу немає"))
+        return 5, dict(res, error="not read")
+    if not a.json:
+        sys.stdout.write(cg.render(res))
+    return (3 if res["how"] in ("none", "several") else 0), res
+
+
+GRAPH_KINDS = ("wikilink", "embed", "fm", "same_as", "mention")
+
+
+def _get_trust(sctx, header):
+    """The trust of what `search --get` gave: from the note's row and frontmatter when the index holds its path (the
+    same as `ctx serve` gives), else from the provenance line (review I8 of tasks 7–9)."""
+    h = (header or "").strip()
+    if h.startswith("> [") and " · " in h:
+        rest = h[3:].split(" · ", 1)[1]
+        path = re.split(r" › | · ", rest, 1)[0]
+        try:
+            t = ctt.for_path(sctx, path, now()[:10])
+        except Exception:  # noqa: BLE001 — a trust that cannot be read is no trust line, never a failed --get
+            t = None
+        if t:
+            return t
+    return ctt.for_header(sctx, header, now()[:10])
+def cmd_serve(a, c):
+    """`serve` (since v4.0.0, ctx_serve): the local MCP server of vault/v1 over the plugin's index — stdio, read only; it
+    prints nothing but the protocol on stdout (no CTX_RESULT: main leaves it out). `serve --install`: the launcher
+    ~/.grow-pm/bin/ctx-serve and the lines a client's config takes."""
+    import ctx_serve as csv_
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if a.install:
+        path, written = csv_.install(c.home, root)
+        print("ctx serve: %s %s" % ("записано" if written else "уже є", path))
+        print("Claude Desktop — claude_desktop_config.json → mcpServers:")
+        print("  " + csv_.config_lines(path)[0])
+        print("Codex CLI:")
+        print("  " + csv_.config_lines(path)[1])
+        return 0, {"command": "serve", "action": "install", "launcher": path, "written": written,
+                   "config": csv_.config_lines(path)}
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    version = ""
+    try:
+        with open(os.path.join(root, ".claude-plugin", "plugin.json"), encoding="utf-8") as f:
+            version = json.load(f).get("version") or ""
+    except (OSError, ValueError):
+        pass
+    return csv_.serve(sctx, sys.stdin, sys.stdout, version=version), {"command": "serve"}
+
+
+NO_STORE_NORMALIZE = "немає сховища — нормалізатор не пише: `ctx undo` живе у сховищі (ctx migrate --apply)"
+
+
+def cmd_vault(a, c):
+    """`vault normalize [--only OPS] [--skip N,…]` (since v4.0.0, ctx_normalize): what the audit finds and a machine can
+    fix in your layer — a report and its code; `--apply --code <code>` writes it (a snapshot of the files changed, one
+    journal line, `ctx undo`). No store: the report only (exit 3 on --apply); an index that did not answer: exit 5."""
+    only = [o.strip() for o in (a.only or "").split(",") if o.strip()] or list(cnz.OPS)
+    for o in only:
+        if o not in cnz.OPS:
+            raise Usage("--only takes %s" % ", ".join(cnz.OPS))
+    try:
+        skip = [int(x) for x in (a.skip or "").split(",") if x.strip()]
+    except ValueError:
+        raise Usage("--skip takes the numbers of the report's rows: --skip 2,5")
+    if a.apply and not a.code:
+        raise Usage("vault normalize --apply takes --code <the report's code>: run `ctx vault normalize` first")
+    if a.code and not a.apply:
+        raise Usage("--code goes with --apply: `ctx vault normalize --apply --code <code>`")
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    if not ca.own_roots(sctx):
+        print("vault normalize: nothing to normalize — no vault in local-context.md")
+        return 3, {"command": "vault", "action": "normalize", "error": "nothing to normalize"}
+    if not a.apply:
+        res = cnz.plan(sctx, c.context, c.store, c.home, only, now())
+        if not res["read"]:
+            print("vault normalize: індекс не відповів — %s" % ("; ".join(res["notes"]) or "індексу немає"))
+            return 5, dict(res, error="not read")
+        if not a.json:
+            sys.stdout.write(cnz.render(res))
+            if not c.store.exists() and res["rows"]:
+                print(NO_STORE_NORMALIZE)
+        return 0, res
+    if not c.store.exists():
+        print(NO_STORE_NORMALIZE)
+        return 3, {"command": "vault", "action": "normalize", "error": NO_STORE_NORMALIZE}
+    with co.lock(c.home):
+        c.guard()
+        res = cnz.plan(sctx, c.context, c.store, c.home, only, now())
+        if not res["read"]:
+            print("vault normalize: індекс не відповів — %s" % ("; ".join(res["notes"]) or "індексу немає"))
+            return 5, dict(res, error="not read", written=[])
+        if res["code"] != a.code.strip().lower():
+            raise co.Refused("звіт змінився — переглянь ще раз: ctx vault normalize")
+        if res["rows"]:
+            c.import_first()
+        t = now()
+        done = cnz.apply(sctx, res, skip, lambda notes: co.snapshot(c.store, c.copies, c.home, "vault-normalize",
+                                                                    notes=notes), c.store.journal, t)
+    merged = {k: list(v) for k, v in res["skipped"].items()}
+    for k, v in done["skipped"].items():
+        merged[k] = list(dict.fromkeys(merged.get(k, []) + v))
+    shown = dict(res, rows=done["written"], skipped=merged)
+    if done["written"]:                             # the audit's last result says what is left (review M-3)
+        try:
+            ca.run(sctx, c.context, store=c.store, now=now())
+        except Exception:  # noqa: BLE001 — a cache never changes the write's result
+            pass
+    if not a.json:
+        sys.stdout.write(cnz.render(shown, written=True))
+        if done["written"]:
+            print("скасувати: ctx undo")
+    return 0, dict(res, rows=done["written"], planned=res["rows"], written=done["written"], skipped=merged,
+                   snapshot=done["snapshot"])
+
+
+def cmd_audit(a, c):
+    """`audit [--all]` (since v4.0.0, ctx_audit.run): what breaks the links of your layer. Reads the index (refreshed as
+    `entity` does) and the downloaded notes of your layer; writes only its last result in ~/.grow-pm/audit/. Exit 0;
+    3 with nothing to audit; 5 when the index did not answer."""
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    if not ca.own_roots(sctx):
+        print("audit: nothing to audit — no vault in local-context.md")
+        return 3, {"command": "audit", "error": "nothing to audit"}
+    res = ca.run(sctx, c.context, store=c.store, all_=a.all_, now=now())
+    if not res["read"]:
+        print("audit: індекс не відповів — %s" % ("; ".join(res["notes"]) or "індексу немає"))
+        return 5, dict(res, error="not read")
+    if not a.json:
+        sys.stdout.write(ca.render(res))
     return 0, res
 
 
@@ -2588,6 +2749,14 @@ def cmd_provider_sync(a, c):
         copies = {}
     if copies:
         out = dict(out, copy=copies)
+    try:                                                # since v4.0.0: the launcher of `ctx serve` follows the plugin
+        if not a.if_due:                                # (review of tasks 7–9: at the check of every skill alone)
+            raise StopIteration
+        import ctx_serve as csv_
+        if csv_.relaunch_if_moved(c.home, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
+            out = dict(out, launcher="rewritten")
+    except Exception:  # noqa: BLE001 — a launcher never changes the sync's own result
+        pass
     return rc, out
 
 
@@ -3523,6 +3692,15 @@ def build_parser():
     sp.add_argument("--slot", action="append")
     sp.add_argument("--kind"); sp.add_argument("--skill"); sp.add_argument("--json", action="store_true")
     sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
+    vp = sub.add_parser("vault").add_subparsers(dest="action", required=True, parser_class=Parser)
+    sp = vp.add_parser("normalize", parents=[common]); sp.add_argument("--only"); sp.add_argument("--skip")
+    sp.add_argument("--apply", action="store_true"); sp.add_argument("--code"); sp.add_argument("--json", action="store_true")
+    sp = sub.add_parser("serve", parents=[common]); sp.add_argument("--install", action="store_true")
+    sp = sub.add_parser("audit", parents=[common]); sp.add_argument("--all", dest="all_", action="store_true")
+    sp.add_argument("--json", action="store_true")
+    sp = sub.add_parser("graph", parents=[common]); sp.add_argument("words", nargs="+")
+    sp.add_argument("--depth", type=int, choices=(1, 2), default=1); sp.add_argument("--kind")
+    sp.add_argument("--json", action="store_true")
     ip_ = sub.add_parser("identity").add_subparsers(dest="action", required=True, parser_class=Parser)
     sp = ip_.add_parser("check", parents=[common]); sp.add_argument("repo"); sp.add_argument("--bundle", required=True)
     sp.add_argument("--json", action="store_true")
@@ -3568,7 +3746,7 @@ COMMANDS = {"status": cmd_status, "migrate": cmd_migrate, "compile": lambda a, c
             "add": cmd_add, "snapshot": cmd_snapshot, "undo": cmd_undo, "validate": cmd_validate, "card": cmd_card,
             "read": cmd_read, "explain": cmd_explain, "invalidate": cmd_invalidate, "archive": cmd_archive, "restore": cmd_restore,
             "verify": cmd_verify, "assign": cmd_assign, "repo": cmd_repo, "provider": cmd_provider, "slot": cmd_slot, "overlay": cmd_overlay, "history": cmd_history, "identity": cmd_identity,
-            "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
+            "index": cmd_index, "search": cmd_search, "entity": cmd_entity, "graph": cmd_graph, "audit": cmd_audit, "vault": cmd_vault, "serve": cmd_serve, "propose": cmd_propose, "show": cmd_show, "health": cmd_health,
             "inbox": cmd_inbox, "bootstrap": cmd_bootstrap, "consolidate": cmd_consolidate}
 
 
@@ -3613,7 +3791,9 @@ def main(argv=None):
                     co.summary_in_time(c.found, home=c.home)
                 except Exception:  # noqa: BLE001 — a cache never changes the command's result
                     pass
-        emit(dict(res, ok=rc == 0))
+        if a.cmd == "serve" and not a.install:          # stdout is the protocol's: nothing after it ends
+            return rc
+        emit(dict({k: v for k, v in res.items() if not str(k).startswith("_")}, ok=rc == 0))
         return rc
     except co.Conflict as e:
         print("ctx: %s" % e)
