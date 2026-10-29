@@ -116,7 +116,15 @@ def _index_date(index_path):
     if not index_path or not os.path.isfile(p):
         return None
     try:
-        con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(p), uri=True, timeout=1)
+        uri = "file:%s?mode=ro" % urllib.parse.quote(p)
+        con = sqlite3.connect(uri, uri=True, timeout=1)
+        try:
+            con.execute("PRAGMA schema_version").fetchone()
+        except sqlite3.OperationalError as e:    # a WAL file alone, read as immutable (ctx_search.open_local, v4.0.1)
+            con.close()
+            if "unable to open" not in str(e).lower() or os.path.exists(p + "-wal"):
+                raise
+            con = sqlite3.connect(uri + "&immutable=1", uri=True, timeout=1)
         try:
             row = None
             for key, value in (("key", "value"), ("k", "v")):

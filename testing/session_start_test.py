@@ -92,13 +92,20 @@ with tempfile.TemporaryDirectory() as d:
 
 # --- v3.10.1: short meta columns, an index path that needs URI escapes, placeholder steps, unreadable registration
 import sqlite3
-def brain(dirpath, cols=("key", "value")):
+def brain(dirpath, cols=("key", "value"), wal=False):
     os.makedirs(dirpath, exist_ok=True)
     p = os.path.join(dirpath, "brain.sqlite")
     con = sqlite3.connect(p)
+    if wal:
+        con.execute("PRAGMA journal_mode=WAL").fetchall()
     con.execute("CREATE TABLE meta(%s TEXT PRIMARY KEY, %s TEXT)" % cols)
     con.execute("INSERT INTO meta VALUES ('last_index', '2026-10-01T08:00:00')")
-    con.commit(); con.close()
+    con.commit()
+    if wal:
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
+    con.close()
+    for end in ("-wal", "-shm") if wal else ():
+        os.remove(p + end)
     return p
 
 def with_index(p):
@@ -110,6 +117,11 @@ with tempfile.TemporaryDirectory() as d:
     check("index date read from a meta table with k/v columns", "zorg-brain (live, local, index 2026-10-01" in out, out)
     out = run(with_index(brain(os.path.join(d, "odd ?dir %41"))))
     check("index path with ? and % still read", "zorg-brain (live, local, index 2026-10-01" in out, out)
+    p = brain(os.path.join(d, "wal"), cols=("k", "v"), wal=True)
+    out = run(with_index(p))
+    check("v4.0.1 an index in WAL mode with no -wal or -shm beside it (a copy of the file alone) is still read, and "
+          "nothing is made beside it", "zorg-brain (live, local, index 2026-10-01" in out
+          and sorted(os.listdir(os.path.dirname(p))) == ["brain.sqlite"], "%s %s" % (out, os.listdir(os.path.dirname(p))))
 
 t5 = re.sub(r"^- \*\*Deferred steps:\*\*\n(?:  - .+\n)+", "- **Deferred steps:** _none_\n", example, count=1, flags=re.M)
 out = run(t5)

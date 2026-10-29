@@ -36,7 +36,6 @@ import re
 import sqlite3
 import sys
 import time
-import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_overlay as ov  # noqa: E402
@@ -196,7 +195,7 @@ def local_cards(sctx, own_paths):
     own_folded = {p.casefold() for p in own_paths}    # one note under another case on a case-insensitive disk (v3.19.0)
     for src in cs_.sources(sctx["text"], sctx["repos"], ("local",)):
         try:
-            con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=cs_.OPEN_S)
+            con = cs_.open_local(src["path"])
         except sqlite3.Error:
             notes.append(cs_.SILENT_NOTE % src["id"])
             continue
@@ -248,7 +247,7 @@ def _hint_sources(sctx, notes):
     for src in cs_.sources(sctx["text"], sctx["repos"], ("local",)):
         con = None
         try:
-            con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=cs_.OPEN_S)
+            con = cs_.open_local(src["path"])
             until = time.monotonic() + cs_.SOURCE_S
             con.set_progress_handler(lambda until=until: time.monotonic() > until, 10000)
             tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}

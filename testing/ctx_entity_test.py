@@ -9,7 +9,7 @@ request is looked up in. Stdlib only; run from the repo root:
 
   env -u GROW_PM_CONTEXT_PATH -u GROW_PM_PROVIDER_PATHS python3 testing/ctx_entity_test.py
 """
-import json, os, shutil, sqlite3, stat, subprocess, sys, tempfile
+import hashlib, json, os, shutil, sqlite3, stat, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -51,9 +51,54 @@ LOCAL_NOTES = (   # path, type, frontmatter — the user's own local index holds
 )
 
 
+BRAIN_DDL = (     # the tables of a user's own vault index as its tool builds them, in WAL mode (seen 2026-10-29)
+    "CREATE TABLE notes(path TEXT PRIMARY KEY, top TEXT, folder TEXT, title TEXT, type TEXT, kind TEXT, date TEXT, "
+    "status TEXT, mtime REAL, size INTEGER, hash TEXT, fm_json TEXT, headings TEXT, n_words INTEGER, indexed_at TEXT)",
+    "CREATE VIRTUAL TABLE notes_fts USING fts5(path UNINDEXED, title, aliases, tags, headings, body, "
+    "tokenize='unicode61 remove_diacritics 2')",
+    "CREATE TABLE raw_links(src TEXT, target TEXT, kind TEXT)",
+    "CREATE TABLE edges(src TEXT, dst TEXT, kind TEXT, PRIMARY KEY(src, dst, kind)) WITHOUT ROWID",
+    "CREATE TABLE unresolved(src TEXT, target TEXT, kind TEXT)",
+    "CREATE TABLE tags(path TEXT, tag TEXT)",
+    "CREATE TABLE aliases(alias TEXT, path TEXT)",
+    "CREATE TABLE entities(key TEXT, kind TEXT, path TEXT, label TEXT)",
+    "CREATE TABLE changes(ts TEXT, path TEXT, change TEXT)",
+    "CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT)",
+)
+
+
+def brain_note(con, p, t, fm, body="zorgquasar text"):
+    top = p.split("/")[0]
+    con.execute("INSERT OR REPLACE INTO notes VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 1790000000.0, 10, 'h', ?, '', 2, "
+                "'2026-10-29T07:40:00+02:00')", (p, top, os.path.dirname(p), os.path.basename(p)[:-3], t, json.dumps(fm)))
+    con.execute("INSERT INTO notes_fts VALUES (?, ?, '', '', '', ?)", (p, os.path.basename(p)[:-3], body))
+
+
+def brain_index(path, vault):
+    """The user's own vault index (shape "brain"): the tables above, meta `vault` and `last_index`, the journal in WAL
+    mode — checkpointed and closed, its `-wal` and `-shm` gone: the database file alone, as a copy of it is."""
+    con = sqlite3.connect(path)
+    con.execute("PRAGMA journal_mode=WAL")
+    for ddl in BRAIN_DDL:
+        con.execute(ddl)
+    con.executemany("INSERT INTO meta VALUES (?, ?)", [("vault", vault), ("last_index", "2026-10-29T07:40:00+02:00")])
+    for p, t, fm in LOCAL_NOTES:
+        brain_note(con, p, t, fm)
+    con.execute("INSERT INTO entities VALUES ('person:bea', 'person', 'Partner/People/bea-g.md', 'Bea')")
+    con.execute("INSERT INTO edges VALUES ('Partner/Notes/plan.md', 'Partner/People/bea-g.md', 'wikilink')")
+    con.commit()
+    con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
+    con.close()
+    for end in ("-wal", "-shm"):
+        if os.path.exists(path + end):
+            os.remove(path + end)
+
+
 def local_index(path, vault, shape="wild"):
     """A local index of the user's: `notes_fts` with a path column beside `notes(path, title, type, fm_json)`, meta
-    `vault_root` — or, with shape "odd", a `notes` table with no path."""
+    `vault_root` — or, with shape "odd", a `notes` table with no path; with shape "brain", brain_index."""
+    if shape == "brain":
+        return brain_index(path, vault)
     con = sqlite3.connect(path)
     con.execute("CREATE TABLE meta(k TEXT, v TEXT)")
     con.execute("INSERT INTO meta VALUES ('vault_root', ?)", (vault,))
@@ -747,6 +792,39 @@ with tempfile.TemporaryDirectory() as d:
     hints_index(os.path.join(env.home, "zorg-brain.sqlite"), env.vault, odd=True)
     rc, out, _ = env.cli("entity", "Team Alpha")
     check("v3.18.1 Task 3 review M1: the unknown-schema line comes once", human(out).count("незнайома схема") == 1, out[-500:])
+
+
+def beside(path):
+    return sorted(n for n in os.listdir(os.path.dirname(path)) if n.startswith(os.path.basename(path)))
+
+
+def digest(path):
+    return hashlib.sha256(open(path, "rb").read()).hexdigest()
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d, "brain")
+    db = os.path.join(env.home, "zorg-brain.sqlite")
+    before = digest(db)
+    rc, out, res = env.cli("search", "--q", "zorgquasar", "--sources", "local", "--json")
+    paths = {c.get("path") for c in (res or {}).get("candidates") or []}
+    check("v4.0.1 the user's own vault index (its tool's tables, WAL mode, closed: no -wal or -shm beside it) — "
+          "`ctx search` reads it, never «незнайому схему»", rc == 0 and "незнайому схему" not in out
+          and "Partner/Notes/plan.md" in paths, (rc, sorted(paths), out[-500:]))
+    rc, out, _ = env.cli("entity", "bea.two@zorg.example")
+    check("…`ctx entity`: the partner card comes from it", rc == 0 and "zorg-brain · Partner/People/bea-g.md" in out
+          and "незнайому схему" not in out and "незнайома схема" not in out, out[-700:])
+    check("…the index is only read: its bytes the same, no -wal, -shm or -journal made beside it",
+          digest(db) == before and beside(db) == ["zorg-brain.sqlite"], beside(db))
+    live = sqlite3.connect(db)                  # the tool that writes it is running: -wal and -shm are there
+    live.execute("PRAGMA wal_autocheckpoint=0")
+    brain_note(live, "Partner/Notes/fresh.md", "note", {"type": "note"}, body="zorgnebula text")
+    live.commit()
+    rc, out, res = env.cli("search", "--q", "zorgnebula", "--sources", "local", "--json")
+    paths = {c.get("path") for c in (res or {}).get("candidates") or []}
+    check("…while its tool holds it open, a note still only in its -wal is found", rc == 0
+          and "Partner/Notes/fresh.md" in paths, (rc, sorted(paths), out[-500:]))
+    live.close()
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

@@ -37,10 +37,10 @@ priors then weigh a candidate by what it is — the skill's artifact types × 1.
                     characters at most (60 000 with --full), then the LONG_NOTE line (long_note, since v3.16.1).
 - render            the human output of `ctx search`.
 
-Reads the vaults, the cores, the index under <home>/.grow-pm/index/, a local index (mode=ro), the glossary, the block
-states and the search memory (`.state/search.json`) of the store; the network only for an MCP source. Writes only
-<home>/.grow-pm/index/ — the index (run refreshes it) and last.json (save_last) — never the store or a vault. Stdlib
-only.
+Reads the vaults, the cores, the index under <home>/.grow-pm/index/, a local index (mode=ro, open_local), the glossary,
+the block states and the search memory (`.state/search.json`) of the store; the network only for an MCP source. Writes
+only <home>/.grow-pm/index/ — the index (run refreshes it) and last.json (save_last) — never the store or a vault.
+Stdlib only.
 """
 import datetime
 import hashlib
@@ -397,8 +397,28 @@ class _Shape(Exception):
 
 
 def _busy(e):
+    """An error of an index that is there but cannot be read now — held by its writer, the time out, or a database in
+    WAL mode SQLite cannot open read only (no `-shm` it may use) — said as `<id> не відповів`, never as a schema."""
     text = str(e).lower()
-    return "locked" in text or "busy" in text or "interrupted" in text
+    return "locked" in text or "busy" in text or "interrupted" in text or "unable to open" in text
+
+
+def open_local(path, timeout=OPEN_S):
+    """A read-only connection to a registered local index (`mode=ro`). A database in WAL mode with no `-wal` beside it
+    (its writer closed it and the `-shm` went too, or it is a copy of the file alone) SQLite cannot open so — a reader
+    may not make the `-shm` —, and then the file alone is the whole index: it is read as `immutable`. Neither way writes
+    to the index or makes a file beside it; an error is the first query's (`_busy` says which are not of a schema)."""
+    uri = "file:%s?mode=ro" % urllib.parse.quote(path)
+    con = sqlite3.connect(uri, uri=True, timeout=timeout)
+    try:
+        con.execute("PRAGMA schema_version").fetchone()
+    except sqlite3.OperationalError as e:
+        if "unable to open" in str(e).lower() and not os.path.exists(path + "-wal"):
+            con.close()
+            con = sqlite3.connect(uri + "&immutable=1", uri=True, timeout=timeout)
+    except sqlite3.DatabaseError:
+        pass
+    return con
 
 
 def _columns(con, table):
@@ -496,7 +516,7 @@ def _yes(v):
 def _local(sctx, src, plans, until, box):
     vaults = sctx.get("vaults") or []
     try:
-        con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=OPEN_S)
+        con = open_local(src["path"])
     except sqlite3.Error:
         box["silent"] = True
         return
@@ -1433,7 +1453,7 @@ def _local_body(sctx, path, found):
     the body). `path` is the note's index name, `found` its file."""
     for src in sources(sctx["text"], sctx["repos"], ("local",)):
         try:
-            con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=OPEN_S)
+            con = open_local(src["path"])
         except sqlite3.Error:
             continue
         until = time.monotonic() + SOURCE_S
@@ -1569,7 +1589,7 @@ def _local_paths(sctx, match):
     out = []
     for src in sources(sctx["text"], sctx["repos"], ("local",)):
         try:
-            con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(src["path"]), uri=True, timeout=OPEN_S)
+            con = open_local(src["path"])
         except sqlite3.Error:
             continue
         until = time.monotonic() + SOURCE_S
