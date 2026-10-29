@@ -2,7 +2,7 @@
 
 # Grow Product Manager
 
-**Version:** 4.0.1
+**Version:** 4.0.2
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
@@ -10,7 +10,7 @@ AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figm
 
 ## Overview
 
-**New in v4.0.1** — **Локальний індекс у WAL: a vault index of your own is read, not called an unknown schema** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A registered local index in WAL mode with no `-wal` beside it — a copy of the database file alone, or one whose writer removed `-wal` and `-shm` on close — is now read as `immutable` instead of being left out as «незнайома схема»: `ctx search`, `ctx entity`, the registry's cards and hints and the SessionStart index date take notes from it again; nothing is written to it or made beside it, and an index that cannot be opened now says «не відповів». Checked on a scratch copy of the author's own index (6 951 notes): the same results as a copy with its `-shm`.
+**New in v4.0.2** — **Atlassian MCP v2: a page written on v2 is asked about first, and a page is read whole** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). On the Atlassian MCP v2 server the Confluence writes are `createConfluenceContent` / `updateConfluenceContent`, and the host write gate knew only their v1 names — a page was published on v2 without its question; now both names are gated. `references/integration-strategy.md` 1c maps every Atlassian tool the skills name from v1 to v2 and names the three differences that change a result silently: read a page with `detail: "full"` (the default is an excerpt), update with a fresh `snapshotToken`, ping with `getAccessibleAtlassianResources`. The release also ships the registry copy of the plugin (`.ai-registry/skills/grow-product-manager/`), rebuilt at every release.
 
 **New in v4.0.0** — **«Вейлт: аудит і граф»: the links of your vault, seen and tidied** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). The index now knows every file a link may land on — an evicted note and a picture too — and resolves every link once, in its own vault: `ctx graph <note or entity>` shows what is one or two hops around it in milliseconds. `ctx audit` names what breaks the links of your layer — orphans, dead and ambiguous links, broken generated regions, missing `type`/`created`, backups, two cards that disagree on a number — and says which of them a machine can fix; `ctx vault normalize` fixes those with a report, your code, a snapshot and `ctx undo` (a link keeps the text a reader sees, a value is never changed, a file never renamed, People notes never listed), and adds `_System/AGENTS.md` and Obsidian Bases tables. A card's numbers become facts with their period and day, and every answer from a note can show the trust of its source. `ctx serve` gives all of it to a host without a shell as a local MCP server of `vault/v1`. **Breaking:** the write gate now asks before a write that changes a generated region of a note (`/grow-product-manager:setup --write-gate off` turns it off). Measured on a full copy of the author's vault (7.3k notes): the audit in 3 s, 178 files normalised and every one of them back byte for byte after `ctx undo`, 0 orphans and 0 fixable findings after the write, a two-hop graph in 19 ms. The last release of the programme «Петля контексту».
 
@@ -1093,5 +1093,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.0.1  
+**Version:** 4.0.2  
 **Last Updated:** October 2026
