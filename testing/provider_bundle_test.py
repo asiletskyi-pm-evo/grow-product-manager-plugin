@@ -540,6 +540,13 @@ out_c = os.path.join(d, "out-c")
 rc, o = run("--core", core, "--out", out_c, "--email", "a.one@zorg.example", "--jira-write", "own")
 check("a tools_file outside the core is never copied", rc == 0 and
       not [f for f in files_under(d) if f.endswith("outside.yaml") and f != "outside.yaml"], files_under(d))
+os.symlink(os.path.join(d, "outside.yaml"), os.path.join(core, "Core", "_System", "linked.yaml"))
+with open(mp, "w", encoding="utf-8") as f:
+    f.write(mt.replace("tools_file: Core/_System/tools.yaml", "tools_file: Core/_System/linked.yaml"))
+out_d = os.path.join(d, "out-d")
+rc, o = run("--core", core, "--out", out_d, "--email", "a.one@zorg.example", "--jira-write", "own")
+check("a tools_file that is a link out of the core is never copied", rc == 0 and
+      not os.path.exists(os.path.join(out_d, "Core", "_System", "linked.yaml")), files_under(out_d)[-5:])
 shutil.rmtree(d)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

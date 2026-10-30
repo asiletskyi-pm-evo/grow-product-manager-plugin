@@ -209,7 +209,7 @@ Present options based on the visualization type. Not all tools are suitable for 
 
 Mark the recommended option with "(Recommended)" in the AskUserQuestion options.
 
-**A board or visual tool you do not have (since v0.16.0).** Before the question, `references/tool-registry.md` §4: `scripts/tools_scan.py suggest --skill diagram-prototyper --need <the visualization type: flowchart, bpmn, diagram, board, mind-map, wireframe, prototype, infographic, presentation>` gives at most one record — say its one line, once per run, never in a headless run, and go on; «ні» → `decline`. No registry or nothing to suggest → no line.
+**A board or visual tool you do not have (since v0.16.0).** After the answer, `references/tool-registry.md` §4: `scripts/tools_scan.py suggest --skill diagram-prototyper --need <the visualization type: flowchart, bpmn, diagram, board, mind-map, wireframe, prototype, infographic, presentation> --exclude gemini,chatgpt,notebooklm,figma,drawio` (the question already offers those) gives at most one record — say its one line, once per run, never in a headless run, and go on; «ні» → `decline`. No registry or nothing to suggest → no line.
 
 ### Step 5 — Prompt construction
 

@@ -180,5 +180,27 @@ for mode in ("auto", "off"):                                    # final review I
         rc, out, res = ctx(home, ctxp, "repo", "list")
         check("a vault with sync %s: the registration lands where repo list reads it" % mode, rc == 0 and "zorg-core" in out, out[-400:])
 
+# since v4.2.0: the kit's tools list must read as `tools_scan team` reads it — records with a name
+import ctx_kit as ck  # noqa: E402
+_d = tempfile.mkdtemp(prefix="kit-tools-")
+try:
+    _k = os.path.join(_d, "zorg-core")
+    shutil.copytree(KIT, _k)
+    _m, _model, _probs = ck.check(_k)
+    check("the kit's tools list reads", not [p for p in _probs if "tools.yaml" in p], _probs)
+    _tf = os.path.join(_k, "Core", "_System", "tools.yaml")
+    with open(_tf, "w", encoding="utf-8") as f:
+        f.write('tools:\n  - "Zorg Board"\n')
+    _md = os.path.join(_k, "Core", "_System", "tools.md")
+    with open(_md, encoding="utf-8") as f:
+        _wrap = f.read()
+    with open(_md, "w", encoding="utf-8") as f:
+        f.write(_wrap.split("```yaml")[0] + '```yaml\ntools:\n  - "Zorg Board"\n```\n')
+    _m, _model, _probs = ck.check(_k)
+    check("a tools list of plain strings is a kit fault, named by its file",
+          [p for p in _probs if p.startswith("Core/_System/tools.yaml")], _probs)
+finally:
+    shutil.rmtree(_d, ignore_errors=True)
+
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

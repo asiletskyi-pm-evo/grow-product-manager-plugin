@@ -58,7 +58,7 @@ A skill that a tool would help at one of its steps asks `tools_scan.py suggest -
 
 | Skill | Step | The work | `--need` |
 |---|---|---|---|
-| `diagram-prototyper` | Step 4 — tool selection | boards and visuals | the visualization type |
+| `diagram-prototyper` | Step 4 — after the tool question, never the tools it offers | boards and visuals | the visualization type |
 | `product-research` | Step 2 — gather data | market data | «market-data» |
 | `meeting-processor` | M1 — the meeting source | transcripts | «transcript» |
 
@@ -88,7 +88,7 @@ A core may publish its own list: the optional key `tools_file` of its provider m
 |---|---|
 | `scan [--no-apps]` | the names of §3.2, one JSON line each |
 | `merge [--scan FILE] [--observed FILE] [--rescan]` | seed + scan + observed rows → `registry.json`, «tools.md», `scans/<date>.jsonl` |
-| `suggest --skill S [--need TAG]` | at most one record (§4); `S` must be a skill of the plugin |
+| `suggest --skill S [--need TAG] [--exclude ID,…]` | at most one record (§4); `S` must be a skill of the plugin; `--exclude` — what the step's own question already offers |
 | `decline --skill S --id ID [--undo]` | the user's «ні» for one skill |
 | `add --name N --kind K [--source user\|registry-search\|catalog] [--state connected\|not-installed] [field=value …]` · `add --from-team NAME` | a record by hand or from a search the user asked for · a team's record taken over |
 | `set --id ID field=value …` | the user's fields: `verdict`, `shared`, `recommended_by`, `connect`, `job`, `access`, `skills`, `contours`, `publishes`, `checked`, `notes` |

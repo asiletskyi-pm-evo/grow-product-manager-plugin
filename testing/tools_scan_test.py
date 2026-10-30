@@ -274,6 +274,10 @@ try:
     check("3.10 no registry → no record and no error", rc == 0 and not rows and res.get("suggest") is None, out)
     rc, out, res, rows = run("suggest", "--store", store, "--skill", "goal-setter")
     check("3.11 a skill no tool serves → nothing", rc == 0 and not rows, out)
+    rc, out, res, rows = run("suggest", "--store", store, "--skill", "diagram-prototyper", "--need", "mind-map",
+                             "--exclude", "gemini,chatgpt,notebooklm,figma,drawio,miro")
+    check("3.12a --exclude drops what the step's own question offers (nothing else does mind maps here)",
+          rc == 0 and not rows, rows)
     rc, out, res, rows = run("suggest", "--store", store, "--skill", "product-research", "--need", "market-data")
     check("3.12 product-research gets a market-data tool", rows and rows[0]["id"] == "similarweb", rows)
     before = open(os.path.join(store, "registry.json")).read()

@@ -132,6 +132,14 @@ def check(folder, warnings=None):
         if hits:
             warn.append("особистий шар власника в теці (%s): %s — у пакет колеги не піде, але в спільній теці його видно"
                         % (glob, ", ".join(hits[:3])))
+    if m.s("tools_file"):                           # since v4.2.0: the team's tools list, read as tools_scan team reads it
+        tf = str(m.s("tools_file"))
+        try:
+            recs = cc.read_yaml_records(_read(os.path.join(folder, tf)), "tools")
+            if not recs or [r for r in recs if not isinstance(r, dict) or not r.get("name")]:
+                out.append("%s: не список інструментів із name (tool-registry.md §5)" % tf)
+        except (OSError, UnicodeDecodeError, ValueError) as e:
+            out.append("%s: не читається (%s)" % (tf, e))
     out.extend(_wrapper_problems(folder, files, m))
     return m, model, out
 
@@ -156,7 +164,7 @@ def _wrapper_problems(folder, files, m):
             continue
         if not cw.is_wrapper(fm):
             continue
-        name, inner, why = cw.unwrap(fm, body, cw.allowed_names(m))
+        name, inner, why = cw.unwrap(fm, body, cw.allowed_names(m), cw.records_names(m))
         if why:
             out.append("%s: обгортка не розгортається — %s" % (rel, why))
             continue

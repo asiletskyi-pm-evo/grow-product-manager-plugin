@@ -713,7 +713,7 @@ def cmd_merge(args):
     return 0
 
 
-def _candidates(store, skill, need=None):
+def _candidates(store, skill, need=None, exclude=()):
     own = load_registry(store)
     team = load_team(store)
     declined_team = {(norm(d.get("name")), d.get("skill")) for d in load_team_declined(store)}
@@ -727,6 +727,8 @@ def _candidates(store, skill, need=None):
         if skill not in skills:
             continue
         if need and need not in (t.get("needs") or []):
+            continue
+        if t.get("id") in exclude:                          # the step already offers it in its own question
             continue
         if t.get("state") in ("installed", "connected") or t.get("verdict") == "deprecated":
             continue
@@ -761,7 +763,7 @@ def cmd_suggest(args):
         result(suggest=None, why="no registry")
         return 0
     try:
-        c = _candidates(store, args.skill, args.need)
+        c = _candidates(store, args.skill, args.need, tuple(x.strip() for x in (args.exclude or "").split(",") if x.strip()))
     except Unreadable:
         result(suggest=None, why="registry.json does not read")
         return 0
@@ -1108,6 +1110,7 @@ def main(argv=None):
     p = common(sub.add_parser("suggest"))
     p.add_argument("--skill", required=True)
     p.add_argument("--need", help="what the step needs (a tag of the seed's `needs`), e.g. mind-map, transcript")
+    p.add_argument("--exclude", help="ids the step already offers in its own question, comma-separated")
     p = common(sub.add_parser("decline"))
     p.add_argument("--skill", required=True)
     p.add_argument("--id", required=True)

@@ -121,6 +121,19 @@ try:
         check("a sound wrapper again: unpacked again, no problem",
               os.path.isfile(os.path.join(sysd, "access-bundles.json")) and cp.wrapper_problem(cp.load_state(folder)) == "")
 
+        print("— a manifest whose YAML does not read, with a tools: list inside")
+        good_m = dict(tree["Zorg/" + MAN])
+        fake.tree["Zorg/" + MAN] = dict(good_m, content=good_m["content"].replace(
+            "schema: provider-manifest/1", "schema: provider-manifest/1\nbroken: [a\ntools:\n  - name: \"x\"", 1))
+        t += datetime.timedelta(hours=1)
+        cp.run(home, repo, t)
+        st = cp.load_state(folder)
+        check("the manifest is refused as before — the records reading is the tools list's only",
+              "YAML не читається" in cp.wrapper_problem(st), cp.wrapper_problem(st))
+        fake.tree["Zorg/" + MAN] = good_m
+        t += datetime.timedelta(hours=1)
+        cp.run(home, repo, t)
+
         print("— the team's tools list (v4.2.0)")
         good_t = dict(tree["Zorg/" + TOOLS])
         fake.tree["Zorg/" + TOOLS] = dict(good_t, content=good_t["content"] + "\n```yaml\n{}\n```\n")
@@ -171,7 +184,7 @@ try:
     check("the kit folder itself is never written", snapshot(KIT) == kit_before)
 
     print("— a server with no wrappers at all")
-    plain = {k: v for k, v in served(KIT).items() if k not in ("Zorg/" + MAN, "Zorg/" + MODEL, "Zorg/" + TOOLS)}
+    plain = {k: v for k, v in served(KIT).items() if k not in ("Zorg/" + MAN, "Zorg/" + MODEL)}   # tools.md still served
     with FakeMcp(tree=plain) as fake:
         repo = {"id": "zorg-bare", "endpoint": {"url": fake.url, "root": "Zorg/", "headers_env": ""}, "writable": []}
         cp.run(home, repo, NOW)

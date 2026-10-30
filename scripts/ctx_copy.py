@@ -714,7 +714,7 @@ class Pass:
 
     def _unpack(self, state):
         """The wrappers of this pass (ctx_wrappers) unpacked beside them — the manifest first, so that the basename of its
-        `bundles_file` may be unpacked too. A file is written only when it differs. A wrapper that does not unpack, and one
+        `bundles_file` (and, since v4.2.0, of its `tools_file`) may be unpacked too. A file is written only when it differs. A wrapper that does not unpack, and one
         the state no longer knows (moved into `.removed/`), leaves no file: one unpacked before is moved into
         `.removed/` (never left stale, never deleted); `wrappers` keeps the reason (`wrapper_problem`). A wrapper that did
         not arrive this pass leaves its file as it is."""
@@ -737,7 +737,7 @@ class Pass:
             body = content
             if content.startswith("---\n"):                  # a server that serves the note whole
                 body = re.sub(r"\A---\n.*?\n---\n?", "", content, count=1, flags=re.S)
-            name, text, why = cw.unwrap(fm, body, cw.allowed_names(manifest))
+            name, text, why = cw.unwrap(fm, body, cw.allowed_names(manifest), cw.records_names(manifest))
             target = "/".join([x for x in rel.split("/")[:-1]] + [name]) if name and not why else ""
             if why:
                 faults[rel] = {"file": name, "why": why}
@@ -888,13 +888,17 @@ def wrapper_problem(state, manifest=None):
     its `bundles_file`) counts; with no manifest, one in a `_System/` folder where it would be looked for. A broken
     wrapper elsewhere in the copy is no reason."""
     dirs = _manifest_dirs(manifest)
-    tools = os.path.basename(str((manifest or {}).get("tools_file") or "")) if isinstance(manifest, dict) else ""
+    needed = list(cw.FIXED)                         # the wrappers the team block is built from — nothing else (v4.2.0)
+    if isinstance(manifest, dict) and manifest.get("bundles_file"):
+        needed.append(os.path.basename(str(manifest["bundles_file"])))
+    stems = {os.path.splitext(n)[0] for n in needed}
     for rel, row in sorted(((state or {}).get("wrappers") or {}).items()):
         where = os.path.dirname(rel)
         if dirs is not None and where not in dirs:
             continue
-        if tools and isinstance(row, dict) and row.get("file") == tools:   # the team's tools list (v4.2.0) is no
-            continue                                                          # part of the team block
+        if not (isinstance(row, dict) and (row.get("file") in needed
+                                           or os.path.splitext(os.path.basename(rel))[0] in stems)):
+            continue                                # e.g. the team's tools list: a fault of its own, never the block's
         if dirs is None and not re.fullmatch(r"(?:[^/]+/)?_System", where):
             continue
         if isinstance(row, dict) and row.get("why"):
