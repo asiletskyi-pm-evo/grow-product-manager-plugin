@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.1.1
+**Version:** 4.2.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.2.0** — **«Реєстр інструментів»: the plugin knows what else helps your work, and says so in one line** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `knowledge-library` keeps a tools registry — other plugins, skills, MCP connectors, apps, sites, portals, courses — with what each is for, whether it is on this machine, how to connect it and what you think of it (`references/tool-registry.md`). A scan finds what is installed by itself: the host files on this machine (names only — never a command, an argument, a key or a URL), the session's own tools, the account's plugins and skills, the apps the plugin knows; the MCP registry and your organisation's plugin catalogue are searched only when you ask. `diagram-prototyper`, `product-research` and `meeting-processor` offer a missing tool at their step in one line, once per run, never again after «ні». A team's core can publish its own list (`tools_file` in the provider manifest), shown read-only as «Від команди»; your shared records export as one file for the core's owner — the plugin never writes into a core.
 
 **New in v4.1.1** — **The marketplace installs from the registry copy — releases reach Claude desktop and Cowork again** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). The marketplace that Claude desktop and Cowork install from imports the whole repository and refuses a plugin whose tree holds a second plugin manifest; since v4.0.2 the tree carries the registry copy (`.ai-registry/skills/grow-product-manager/`), so with `"source": "./"` it stayed at 4.0.1. The entry now points at the copy, which is rebuilt at every release, and validator check 22 keeps it there. Reported, not reproduced locally: `claude plugin validate` accepts both forms. No skill behaves differently.
 
@@ -1099,5 +1101,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.1.1  
+**Version:** 4.2.0  
 **Last Updated:** October 2026
